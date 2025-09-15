@@ -127,7 +127,15 @@ window.closeVendaModal = closeVendaModal;
 window.__openEditFromUI = (item) => openEditModal(item);
 window.__updateStatusQuick = (id, status) => updateStatusQuick(id, status);
 
-export function openAddModal() {
+export function openAddModal(preselectProfId) {
+  let preselectedId = '';
+  if (preselectProfId && typeof preselectProfId === 'object') {
+    if (typeof preselectProfId.preventDefault === 'function') {
+      try { preselectProfId.preventDefault(); } catch {}
+    }
+  } else if (preselectProfId != null) {
+    preselectedId = String(preselectProfId);
+  }
   state.editing = null;
   if (!els.modal) { console.warn('Modal #modal-add-servico nÃ£o encontrado'); return; }
   state.tempServicos = [];
@@ -151,7 +159,7 @@ export function openAddModal() {
     }
     const sid = state.selectedStoreId || els.storeSelect?.value || '';
     els.addStoreSelect.value = sid;
-    try { if (sid) { populateModalProfissionais(sid); } } catch{}
+    try { if (sid) { populateModalProfissionais(sid, preselectedId); } } catch{}
   }
   if (els.addDateInput) {
     const date = (els.dateInput?.value) || todayStr();
@@ -162,6 +170,9 @@ export function openAddModal() {
   if (els.horaInput) els.horaInput.value = hh;
   if (els.obsInput) { els.obsInput.value = ''; }
   if (els.statusSelect) els.statusSelect.value = 'agendado';
+  if (preselectedId && els.profSelect) {
+    try { els.profSelect.value = preselectedId; } catch {}
+  }
   if (els.modalDelete) els.modalDelete.classList.add('hidden');
   els.modal.classList.remove('hidden');
   els.modal.classList.add('flex');

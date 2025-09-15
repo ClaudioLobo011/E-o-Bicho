@@ -5,6 +5,7 @@ import {
   updateHeaderLabel, localDateStr, addDays, startOfWeek, startOfMonth, startOfNextMonth,
   renderStatusBadge, statusMeta
 } from './core.js';
+import { openAddModal } from './modal.js';
 
 export function renderGrid() {
   if (!els.agendaList) return;
@@ -35,11 +36,36 @@ export function renderGrid() {
       cell.textContent = label;
     } else {
       cell.style.textAlign = 'center';
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex items-center justify-center gap-2';
+
       const span = document.createElement('span');
       span.className = 'agenda-head-label inline-block';
       span.textContent = label || '';
-      cell.dataset.profId = String(profs[idx - 1]._id);
-      cell.appendChild(span);
+      wrapper.appendChild(span);
+
+      const prof = profs[idx - 1];
+      if (prof && prof._id) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'agenda-head-add inline-flex h-7 w-7 items-center justify-center rounded-md border shadow-sm transition';
+        btn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false">
+            <path fill-rule="evenodd" d="M10 3a.75.75 0 0 1 .75.75v5.5h5.5a.75.75 0 0 1 0 1.5h-5.5v5.5a.75.75 0 0 1-1.5 0v-5.5h-5.5a.75.75 0 0 1 0-1.5h5.5v-5.5A.75.75 0 0 1 10 3Z" clip-rule="evenodd" />
+          </svg>
+        `;
+        btn.setAttribute('aria-label', `Adicionar agendamento para ${label}`);
+        btn.dataset.profId = String(prof._id);
+        btn.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          openAddModal(String(prof._id));
+        });
+        wrapper.appendChild(btn);
+      }
+
+      cell.dataset.profId = prof && prof._id ? String(prof._id) : '';
+      cell.appendChild(wrapper);
     }
     header.appendChild(cell);
   });

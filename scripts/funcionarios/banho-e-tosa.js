@@ -582,11 +582,32 @@
         else {
           // >>> centraliza o nome do profissional
           cell.style.textAlign = 'center';
+          const wrapper = document.createElement('div');
+          wrapper.className = 'flex items-center justify-center gap-2';
+
           const span = document.createElement('span');
           span.className = 'agenda-head-label inline-block';
           span.textContent = label || '';
-          cell.dataset.profId = String(profs[idx - 1]._id);
-          cell.appendChild(span);
+          wrapper.appendChild(span);
+
+          const prof = profs[idx - 1];
+          if (prof && prof._id) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'agenda-head-add inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-500 text-white transition hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-1';
+            btn.textContent = '+';
+            btn.setAttribute('aria-label', `Adicionar agendamento para ${label}`);
+            btn.dataset.profId = String(prof._id);
+            btn.addEventListener('click', (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              openAddModal(String(prof._id));
+            });
+            wrapper.appendChild(btn);
+          }
+
+          cell.dataset.profId = prof && prof._id ? String(prof._id) : '';
+          cell.appendChild(wrapper);
         }
         header.appendChild(cell);
       });
@@ -1041,7 +1062,14 @@
   }
 
   // Modal — modo adicionar
-  function openAddModal() {
+  function openAddModal(preselectProfId) {
+    let preselectedId = '';
+    if (preselectProfId && typeof preselectProfId === 'object' && typeof preselectProfId.preventDefault === 'function') {
+      preselectProfId.preventDefault?.();
+    } else if (preselectProfId != null) {
+      preselectedId = String(preselectProfId);
+    }
+
     state.editing = null;
     if (!modal) { console.warn('Modal #modal-add-servico não encontrado'); return; }
 
@@ -1075,7 +1103,7 @@
       addStoreSelect.value = sid;
 
       // Carrega os profissionais correspondentes à empresa escolhida no modal (sem travar a abertura)
-      try { if (sid) { populateModalProfissionais(sid); } } catch(_) {}
+      try { if (sid) { populateModalProfissionais(sid, preselectedId); } } catch(_) {}
     }
 
     // Data (usa a data visível na página)
@@ -1094,6 +1122,10 @@
 
     // Status default
     if (statusSelect) statusSelect.value = 'agendado';
+
+    if (preselectedId && profSelect) {
+      try { profSelect.value = preselectedId; } catch (_) {}
+    }
 
     // Botão Excluir só em edição
     if (modalDelete) modalDelete.classList.add('hidden');
