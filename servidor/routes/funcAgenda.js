@@ -189,7 +189,10 @@ router.get('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res) 
   try {
     const ownerId = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(ownerId)) return res.json([]);
-    const pets = await Pet.find({ owner: ownerId }).select('_id nome porte').sort({ nome: 1 }).lean();
+    const pets = await Pet.find({ owner: ownerId })
+      .select('_id nome tipo raca porte sexo dataNascimento peso')
+      .sort({ nome: 1 })
+      .lean();
     res.json(pets);
   } catch (e) {
     console.error('GET /func/clientes/:id/pets', e);

@@ -167,16 +167,16 @@
         const nome = (pet.nome || '').trim();
         if (els.petNome) els.petNome.textContent = nome || '—';
 
-        const tipo = (pet.tipo || pet.tipoPet || '').trim();
-        const raca = (pet.raca || '').trim();
+        const tipo = (pet.tipo || pet.tipoPet || pet.especie || pet.porte || '').trim();
+        const raca = (pet.raca || pet.breed || '').trim();
         let tipoRaca = '—';
         if (tipo && raca) tipoRaca = `${tipo} - ${raca}`;
         else if (tipo) tipoRaca = tipo;
         else if (raca) tipoRaca = raca;
         if (els.petTipoRaca) els.petTipoRaca.textContent = tipoRaca;
 
-        const nascimento = formatDateDisplay(pet.dataNascimento);
-        const peso = formatPetWeight(pet.peso);
+        const nascimento = formatDateDisplay(pet.dataNascimento || pet.nascimento);
+        const peso = formatPetWeight(pet.peso || pet.pesoAtual);
         let nascimentoPeso = '—';
         if (nascimento && peso) nascimentoPeso = `${nascimento} - ${peso}`;
         else if (nascimento) nascimentoPeso = nascimento;
