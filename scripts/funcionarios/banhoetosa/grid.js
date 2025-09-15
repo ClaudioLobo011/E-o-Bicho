@@ -5,6 +5,7 @@ import {
   updateHeaderLabel, localDateStr, addDays, startOfWeek, startOfMonth, startOfNextMonth,
   renderStatusBadge, statusMeta
 } from './core.js';
+import { openAddModal } from './modal.js';
 
 export function renderGrid() {
   if (!els.agendaList) return;
@@ -35,11 +36,32 @@ export function renderGrid() {
       cell.textContent = label;
     } else {
       cell.style.textAlign = 'center';
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex items-center justify-center gap-2';
+
       const span = document.createElement('span');
       span.className = 'agenda-head-label inline-block';
       span.textContent = label || '';
-      cell.dataset.profId = String(profs[idx - 1]._id);
-      cell.appendChild(span);
+      wrapper.appendChild(span);
+
+      const prof = profs[idx - 1];
+      if (prof && prof._id) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'agenda-head-add inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-500 text-white transition hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-1';
+        btn.textContent = '+';
+        btn.setAttribute('aria-label', `Adicionar agendamento para ${label}`);
+        btn.dataset.profId = String(prof._id);
+        btn.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          openAddModal(String(prof._id));
+        });
+        wrapper.appendChild(btn);
+      }
+
+      cell.dataset.profId = prof && prof._id ? String(prof._id) : '';
+      cell.appendChild(wrapper);
     }
     header.appendChild(cell);
   });
