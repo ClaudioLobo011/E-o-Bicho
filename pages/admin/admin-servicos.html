@@ -39,33 +39,33 @@
           <div class="mt-8 space-y-10">
             <!-- Tab: Cadastro -->
             <section id="tab-cadastro" class="space-y-10">
-              <form id="serv-form" class="space-y-8">
+              <form id="serv-form" class="space-y-6">
                 <input type="hidden" id="serv-id" />
 
-                <div class="grid gap-6 md:grid-cols-3">
-                  <div class="md:col-span-2">
+                <div class="grid gap-4 lg:grid-cols-12">
+                  <div class="lg:col-span-6 xl:col-span-7">
                     <label for="serv-nome" class="mb-1 block text-sm font-medium text-gray-700">Nome do serviço</label>
                     <input id="serv-nome" type="text" required maxlength="120"
                            class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
                            placeholder="Ex.: Banho Completo" />
                   </div>
-                  <div>
-                    <label for="serv-duracao" class="mb-1 block text-sm font-medium text-gray-700">Tempo de duração (minutos)</label>
-                    <input id="serv-duracao" type="number" min="1" max="600" step="1" required value="30"
-                           class="w-full max-w-[10rem] rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
-                  </div>
-                </div>
-
-                <div class="grid gap-6 md:grid-cols-3">
-                  <div>
+                  <div class="lg:col-span-3 xl:col-span-3">
                     <label for="serv-grupo" class="mb-1 block text-sm font-medium text-gray-700">Grupo</label>
                     <select id="serv-grupo" required
                             class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
                       <option value="" disabled selected>Selecione um grupo</option>
                     </select>
-                    <p class="mt-1 text-xs text-gray-500">Os grupos são cadastrados em “Cadastro de Grupo de Serviço”.</p>
+                    <p class="mt-1 text-xs text-gray-500">Cadastre novos grupos em "Cadastro de Grupo de Serviço".</p>
                   </div>
-                  <div class="md:col-span-2">
+                  <div class="lg:col-span-3 xl:col-span-2">
+                    <label for="serv-duracao" class="mb-1 block text-sm font-medium text-gray-700">Tempo de duração (minutos)</label>
+                    <input id="serv-duracao" type="number" min="1" max="600" step="1" required value="30"
+                           class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                  </div>
+                </div>
+
+                <div class="grid gap-4 lg:grid-cols-12">
+                  <div class="lg:col-span-5 xl:col-span-4">
                     <label for="serv-porte" class="mb-1 block text-sm font-medium text-gray-700">Portes atendidos</label>
                     <select id="serv-porte" multiple size="6"
                             class="h-full w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
@@ -75,28 +75,27 @@
                       <option value="Grande">Grande</option>
                       <option value="Gigante">Gigante</option>
                     </select>
-                    <p class="mt-1 text-xs text-gray-500">Selecione um ou mais portes (Ctrl/Cmd+clique). Se nenhum porte for selecionado, o serviço valerá para todos.</p>
+                    <p class="mt-1 text-xs text-gray-500">Deixe sem seleção para aplicar o serviço a todos os portes.</p>
                   </div>
+                  <fieldset class="lg:col-span-7 xl:col-span-8 flex flex-col rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4">
+                    <legend class="px-2 text-sm font-semibold text-gray-700">Categorias</legend>
+                    <p class="mb-3 text-xs text-gray-600">Marque as categorias que melhor descrevem o serviço. Elas alimentam filtros, buscas e relatórios.</p>
+                    <div class="overflow-x-auto">
+                      <div id="serv-categorias" class="flex min-h-[3.25rem] flex-wrap gap-3"></div>
+                    </div>
+                  </fieldset>
                 </div>
 
-                <fieldset class="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-5">
-                  <legend class="px-2 text-sm font-semibold text-gray-700">Categorias</legend>
-                  <p class="mb-4 text-sm text-gray-600">Selecione as categorias que melhor descrevem o serviço. Elas serão usadas em filtros, buscas e relatórios.</p>
-                  <div class="overflow-x-auto">
-                    <div id="serv-categorias" class="flex min-h-[3.25rem] flex-wrap gap-3"></div>
-                  </div>
-                </fieldset>
-
-                <div class="grid gap-6 md:grid-cols-2">
-                  <div>
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div class="sm:col-span-1 lg:col-span-2">
                     <label for="serv-custo" class="mb-1 block text-sm font-medium text-gray-700">Custo (R$)</label>
                     <input id="serv-custo" type="number" inputmode="decimal" min="0" step="0.01" value="0"
-                           class="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                           class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
                   </div>
-                  <div>
+                  <div class="sm:col-span-1 lg:col-span-2">
                     <label for="serv-valor" class="mb-1 block text-sm font-medium text-gray-700">Valor (R$)</label>
                     <input id="serv-valor" type="number" inputmode="decimal" min="0" step="0.01" required value="0"
-                           class="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                           class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
                   </div>
                 </div>
 
