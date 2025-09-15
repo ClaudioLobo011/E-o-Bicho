@@ -53,6 +53,46 @@
         selectedPetId: null,
     };
 
+    const STORAGE_KEYS = {
+        cliente: 'vetFichaSelectedCliente',
+        petId: 'vetFichaSelectedPetId',
+    };
+
+    function persistCliente(cli) {
+        try {
+            if (cli && cli._id) {
+                localStorage.setItem(STORAGE_KEYS.cliente, JSON.stringify(cli));
+            } else {
+                localStorage.removeItem(STORAGE_KEYS.cliente);
+            }
+        } catch { }
+    }
+
+    function persistPetId(petId) {
+        try {
+            if (petId) {
+                localStorage.setItem(STORAGE_KEYS.petId, petId);
+            } else {
+                localStorage.removeItem(STORAGE_KEYS.petId);
+            }
+        } catch { }
+    }
+
+    function getPersistedState() {
+        let cliente = null;
+        try {
+            const raw = localStorage.getItem(STORAGE_KEYS.cliente);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed._id) {
+                    cliente = parsed;
+                }
+            }
+        } catch { }
+        const petId = localStorage.getItem(STORAGE_KEYS.petId) || null;
+        return { cliente, petId };
+    }
+
     function updatePageVisibility() {
         if (!els.pageContent) return;
         const hasTutor = !!(state.selectedCliente && state.selectedCliente._id);
@@ -102,9 +142,20 @@
         }
     }
 
-    async function onSelectCliente(cli) {
+    async function onSelectCliente(cli, opts = {}) {
+        const {
+            skipPersistCliente = false,
+            clearPersistedPet = true,
+            persistedPetId = null,
+        } = opts;
         state.selectedCliente = cli || null;
         state.selectedPetId = null;
+        if (!skipPersistCliente) {
+            persistCliente(state.selectedCliente);
+        }
+        if (clearPersistedPet) {
+            persistPetId(null);
+        }
         updatePageVisibility();
         if (els.cliInput) els.cliInput.value = cli?.nome || '';
         hideSugestoes();
@@ -128,8 +179,19 @@
                     els.petSelect.innerHTML = [`<option value="">Selecione o pet</option>`]
                         .concat(pets.map(p => `<option value="${p._id}">${p.nome}</option>`))
                         .join('');
+                    let petSelecionado = false;
+                    if (persistedPetId) {
+                        const match = pets.find(p => p._id === persistedPetId);
+                        if (match) {
+                            els.petSelect.value = persistedPetId;
+                            onSelectPet(persistedPetId);
+                            petSelecionado = true;
+                        } else if (!clearPersistedPet) {
+                            persistPetId(null);
+                        }
+                    }
                     // se só houver 1 pet, selecionar automaticamente
-                    if (pets.length === 1) {
+                    if (!petSelecionado && pets.length === 1) {
                         els.petSelect.value = pets[0]._id;
                         onSelectPet(pets[0]._id);
                     }
@@ -141,8 +203,12 @@
         updatePageVisibility();
     }
 
-    function onSelectPet(petId) {
+    function onSelectPet(petId, opts = {}) {
+        const { skipPersistPet = false } = opts;
         state.selectedPetId = petId || null;
+        if (!skipPersistPet) {
+            persistPetId(state.selectedPetId);
+        }
         // aqui poderemos preencher outros campos específicos do pet, caso a página venha a ter (ex.: raça/porte).
         // por enquanto, mantemos o comportamento: seleção do pet no topo + tutor no card.
         updatePageVisibility();
@@ -159,13 +225,28 @@
         if (els.tutorNome) els.tutorNome.textContent = 'Nome Tutor';
         if (els.tutorEmail) els.tutorEmail.textContent = '—';
         // não forçamos limpar telefone se a UI já tiver valor útil
+        persistCliente(null);
         updatePageVisibility();
     }
 
     function clearPet() {
         state.selectedPetId = null;
         if (els.petSelect) els.petSelect.value = '';
+        persistPetId(null);
         updatePageVisibility();
+    }
+
+    function restorePersistedSelection() {
+        const { cliente, petId } = getPersistedState();
+        if (cliente) {
+            onSelectCliente(cliente, {
+                clearPersistedPet: false,
+                persistedPetId: petId,
+            });
+        } else if (petId) {
+            // pet salvo sem tutor selecionado não é válido
+            persistPetId(null);
+        }
     }
 
     // --- eventos ---
@@ -187,5 +268,6 @@
     if (els.petClear) {
         els.petClear.addEventListener('click', (e) => { e.preventDefault(); clearPet(); });
     }
+    restorePersistedSelection();
     updatePageVisibility();
 })();
