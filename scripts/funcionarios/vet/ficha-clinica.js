@@ -42,20 +42,41 @@
         cliClear: document.getElementById('vet-cli-clear'),
         petSelect: document.getElementById('vet-pet-select'),
         petClear: document.getElementById('vet-pet-clear'),
+        cardIcon: document.getElementById('vet-info-icon'),
+        cardIconSymbol: document.getElementById('vet-info-icon-symbol'),
+        tutorInfo: document.getElementById('vet-tutor-info'),
         tutorNome: document.getElementById('vet-tutor-nome'),
         tutorEmail: document.getElementById('vet-tutor-email'),
         tutorTelefone: document.getElementById('vet-tutor-telefone'),
+        petInfo: document.getElementById('vet-pet-info'),
+        petNome: document.getElementById('vet-pet-nome'),
+        petTipoRaca: document.getElementById('vet-pet-type-raca'),
+        petNascimentoPeso: document.getElementById('vet-pet-nascimento-peso'),
+        toggleTutor: document.getElementById('vet-card-show-tutor'),
+        togglePet: document.getElementById('vet-card-show-pet'),
         pageContent: document.getElementById('vet-ficha-content')
     };
 
     const state = {
         selectedCliente: null,
         selectedPetId: null,
+        petsById: {},
+        currentCardMode: 'tutor',
     };
 
     const STORAGE_KEYS = {
         cliente: 'vetFichaSelectedCliente',
         petId: 'vetFichaSelectedPetId',
+    };
+
+    const CARD_TUTOR_ACTIVE_CLASSES = ['bg-sky-100', 'text-sky-700'];
+    const CARD_PET_ACTIVE_CLASSES = ['bg-emerald-100', 'text-emerald-700'];
+    const CARD_BUTTON_INACTIVE_CLASSES = ['bg-gray-100', 'text-gray-600'];
+    const CARD_BUTTON_DISABLED_CLASSES = ['opacity-50', 'cursor-not-allowed'];
+    const PET_PLACEHOLDERS = {
+        nome: 'Nome do Pet',
+        tipoRaca: 'Tipo de Pet - Raça',
+        nascimentoPeso: 'Data Nascimento - Peso (Kg)',
     };
 
     function persistCliente(cli) {
@@ -104,6 +125,113 @@
         }
     }
 
+    function formatDateDisplay(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        try {
+            return new Intl.DateTimeFormat('pt-BR').format(date);
+        } catch {
+            return date.toLocaleDateString('pt-BR');
+        }
+    }
+
+    function formatPetWeight(value) {
+        if (value === null || value === undefined || value === '') return '';
+        const num = Number(value);
+        if (Number.isFinite(num)) {
+            return `${num.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Kg`;
+        }
+        const str = String(value).trim();
+        if (!str) return '';
+        return /kg$/i.test(str) ? str : `${str} Kg`;
+    }
+
+    function getSelectedPet() {
+        const petId = state.selectedPetId;
+        if (!petId) return null;
+        return (state.petsById && state.petsById[petId]) || null;
+    }
+
+    function setPetPlaceholders() {
+        if (els.petNome) els.petNome.textContent = PET_PLACEHOLDERS.nome;
+        if (els.petTipoRaca) els.petTipoRaca.textContent = PET_PLACEHOLDERS.tipoRaca;
+        if (els.petNascimentoPeso) els.petNascimentoPeso.textContent = PET_PLACEHOLDERS.nascimentoPeso;
+    }
+
+    function updatePetInfo(pet = getSelectedPet()) {
+        if (!pet) {
+            setPetPlaceholders();
+            return;
+        }
+        const nome = (pet.nome || '').trim();
+        if (els.petNome) els.petNome.textContent = nome || '—';
+
+        const tipo = (pet.tipo || pet.tipoPet || '').trim();
+        const raca = (pet.raca || '').trim();
+        let tipoRaca = '—';
+        if (tipo && raca) tipoRaca = `${tipo} - ${raca}`;
+        else if (tipo) tipoRaca = tipo;
+        else if (raca) tipoRaca = raca;
+        if (els.petTipoRaca) els.petTipoRaca.textContent = tipoRaca;
+
+        const nascimento = formatDateDisplay(pet.dataNascimento);
+        const peso = formatPetWeight(pet.peso);
+        let nascimentoPeso = '—';
+        if (nascimento && peso) nascimentoPeso = `${nascimento} - ${peso}`;
+        else if (nascimento) nascimentoPeso = nascimento;
+        else if (peso) nascimentoPeso = peso;
+        if (els.petNascimentoPeso) els.petNascimentoPeso.textContent = nascimentoPeso;
+    }
+
+    function updateToggleButtons(showPet, petAvailable) {
+        const toggleStates = [...CARD_TUTOR_ACTIVE_CLASSES, ...CARD_PET_ACTIVE_CLASSES, ...CARD_BUTTON_INACTIVE_CLASSES];
+        if (els.toggleTutor) {
+            els.toggleTutor.classList.remove(...toggleStates);
+            els.toggleTutor.classList.add(...(showPet ? CARD_BUTTON_INACTIVE_CLASSES : CARD_TUTOR_ACTIVE_CLASSES));
+        }
+        if (els.togglePet) {
+            els.togglePet.classList.remove(...toggleStates, ...CARD_BUTTON_DISABLED_CLASSES);
+            if (petAvailable) {
+                els.togglePet.classList.add(...(showPet ? CARD_PET_ACTIVE_CLASSES : CARD_BUTTON_INACTIVE_CLASSES));
+                els.togglePet.removeAttribute('disabled');
+            } else {
+                els.togglePet.classList.add(...CARD_BUTTON_INACTIVE_CLASSES, ...CARD_BUTTON_DISABLED_CLASSES);
+                els.togglePet.setAttribute('disabled', 'disabled');
+            }
+        }
+    }
+
+    function updateCardDisplay() {
+        const pet = getSelectedPet();
+        const hasPet = !!pet;
+        if (hasPet) {
+            updatePetInfo(pet);
+        } else {
+            setPetPlaceholders();
+        }
+        const wantsPet = state.currentCardMode === 'pet';
+        const showPet = wantsPet && hasPet;
+        if (wantsPet && !hasPet) {
+            state.currentCardMode = 'tutor';
+        }
+        if (els.tutorInfo) els.tutorInfo.classList.toggle('hidden', showPet);
+        if (els.petInfo) els.petInfo.classList.toggle('hidden', !showPet);
+        if (els.cardIcon) {
+            els.cardIcon.classList.remove(...CARD_TUTOR_ACTIVE_CLASSES, ...CARD_PET_ACTIVE_CLASSES);
+            els.cardIcon.classList.add(...(showPet ? CARD_PET_ACTIVE_CLASSES : CARD_TUTOR_ACTIVE_CLASSES));
+        }
+        if (els.cardIconSymbol) {
+            els.cardIconSymbol.className = `fas ${showPet ? 'fa-paw' : 'fa-user'} text-xl`;
+        }
+        updateToggleButtons(showPet, hasPet);
+    }
+
+    function setCardMode(mode) {
+        state.currentCardMode = mode === 'pet' ? 'pet' : 'tutor';
+        updateCardDisplay();
+    }
+
     // --- busca clientes (igual fluxo da Agenda) ---
     async function searchClientes(term) {
         if (!term || term.trim().length < 2) {
@@ -150,6 +278,8 @@
         } = opts;
         state.selectedCliente = cli || null;
         state.selectedPetId = null;
+        state.petsById = {};
+        state.currentCardMode = 'tutor';
         if (!skipPersistCliente) {
             persistCliente(state.selectedCliente);
         }
@@ -167,6 +297,8 @@
             ? formatPhone(cli.celular)
             : '—';
 
+        updateCardDisplay();
+
         // carrega pets do tutor e popular select
         try {
             if (els.petSelect) {
@@ -174,6 +306,14 @@
             }
             const resp = await api(`/func/clientes/${cli._id}/pets`);
             const pets = await resp.json().catch(() => []);
+            state.petsById = {};
+            if (Array.isArray(pets)) {
+                pets.forEach(p => {
+                    if (p && p._id) {
+                        state.petsById[p._id] = p;
+                    }
+                });
+            }
             if (els.petSelect) {
                 if (Array.isArray(pets) && pets.length) {
                     els.petSelect.innerHTML = [`<option value="">Selecione o pet</option>`]
@@ -200,6 +340,7 @@
                 }
             }
         } catch { }
+        updateCardDisplay();
         updatePageVisibility();
     }
 
@@ -209,13 +350,14 @@
         if (!skipPersistPet) {
             persistPetId(state.selectedPetId);
         }
-        // aqui poderemos preencher outros campos específicos do pet, caso a página venha a ter (ex.: raça/porte).
-        // por enquanto, mantemos o comportamento: seleção do pet no topo + tutor no card.
+        updateCardDisplay();
         updatePageVisibility();
     }
 
     function clearCliente() {
         state.selectedCliente = null;
+        state.petsById = {};
+        state.currentCardMode = 'tutor';
         if (els.cliInput) els.cliInput.value = '';
         hideSugestoes();
         if (els.petSelect) {
@@ -233,6 +375,8 @@
         state.selectedPetId = null;
         if (els.petSelect) els.petSelect.value = '';
         persistPetId(null);
+        state.currentCardMode = 'tutor';
+        updateCardDisplay();
         updatePageVisibility();
     }
 
@@ -268,6 +412,19 @@
     if (els.petClear) {
         els.petClear.addEventListener('click', (e) => { e.preventDefault(); clearPet(); });
     }
+    if (els.toggleTutor) {
+        els.toggleTutor.addEventListener('click', (e) => {
+            e.preventDefault();
+            setCardMode('tutor');
+        });
+    }
+    if (els.togglePet) {
+        els.togglePet.addEventListener('click', (e) => {
+            e.preventDefault();
+            setCardMode('pet');
+        });
+    }
+    updateCardDisplay();
     restorePersistedSelection();
     updatePageVisibility();
 })();
