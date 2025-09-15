@@ -3,7 +3,7 @@
     "activeCommit": 0,
     "commits": [
         {
-            "activePatchIndex": 30,
+            "activePatchIndex": 33,
             "patches": [
                 {
                     "date": 1757803289151,
@@ -128,6 +128,18 @@
                 {
                     "date": 1757953974926,
                     "content": "Index: \n===================================================================\n--- \n+++ \n@@ -136,10 +136,11 @@\n                                     <span id=\"vet-tutor-email\">email@email.com.br</span>\r\n                                     <span class=\"ml-1 align-baseline text-[10px] text-gray-400\">· E-mail</span>\r\n                                 </div>\r\n                                 <!-- telefone abaixo do e-mail quando existir -->\r\n-                                <div id=\"vet-tutor-telefone\" class=\"mt-0.5 text-[11px] text-gray-600 leading-tight break-words\">\r\n-                                    (##)#####-#### · Celular\r\n+                                <div class=\"mt-0.5 text-xs text-gray-600 leading-tight break-words\">\r\n+                                    <span id=\"vet-tutor-telefone\">(##)#####-####</span>\r\n+                                    <span class=\"ml-1 align-baseline text-[10px] text-gray-400\">· Celular</span>\r\n                                 </div>\r\n                             </div>\r\n                         </div>\r\n                         <div class=\"mt-1 flex flex-col gap-2\">\r\n"
+                },
+                {
+                    "date": 1757955938588,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -81,9 +81,9 @@\n             </div>\r\n         </section>\r\n \r\n         <!-- GRID principal: esquerda (prancha) + direita (cards do cliente e ações) -->\r\n-        <div class=\"grid grid-cols-12 gap-6\">\r\n+        <div id=\"vet-ficha-content\" class=\"grid grid-cols-12 gap-6 hidden\">\r\n             <!-- ESQUERDA -->\r\n             <section class=\"col-span-12 lg:col-span-9\">\r\n                 <div class=\"bg-white rounded-xl shadow-sm ring-1 ring-black/5\">\r\n                     <!-- Toolbar interna (Histórico/Consulta) -->\r\n"
+                },
+                {
+                    "date": 1757956148576,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -81,9 +81,9 @@\n             </div>\r\n         </section>\r\n \r\n         <!-- GRID principal: esquerda (prancha) + direita (cards do cliente e ações) -->\r\n-        <div id=\"vet-ficha-content\" class=\"grid grid-cols-12 gap-6 hidden\">\r\n+        <div class=\"grid grid-cols-12 gap-6\">\r\n             <!-- ESQUERDA -->\r\n             <section class=\"col-span-12 lg:col-span-9\">\r\n                 <div class=\"bg-white rounded-xl shadow-sm ring-1 ring-black/5\">\r\n                     <!-- Toolbar interna (Histórico/Consulta) -->\r\n"
+                },
+                {
+                    "date": 1757956415153,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -81,9 +81,9 @@\n             </div>\r\n         </section>\r\n \r\n         <!-- GRID principal: esquerda (prancha) + direita (cards do cliente e ações) -->\r\n-        <div class=\"grid grid-cols-12 gap-6\">\r\n+        <div id=\"vet-ficha-content\" class=\"grid grid-cols-12 gap-6 hidden\">\r\n             <!-- ESQUERDA -->\r\n             <section class=\"col-span-12 lg:col-span-9\">\r\n                 <div class=\"bg-white rounded-xl shadow-sm ring-1 ring-black/5\">\r\n                     <!-- Toolbar interna (Histórico/Consulta) -->\r\n"
                 }
             ],
             "date": 1757803289151,
