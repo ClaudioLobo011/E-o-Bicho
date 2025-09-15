@@ -119,35 +119,129 @@
 
             <!-- DIREITA -->
             <aside class="col-span-12 lg:col-span-3 space-y-4">
-                <!-- Card do Tutor -->
+                <!-- Card do Tutor/Pet -->
                 <div class="bg-white rounded-xl shadow-sm ring-1 ring-black/5 p-4">
                     <div class="flex items-start gap-3">
-                        <div class="h-12 w-12 rounded-lg bg-sky-100 text-sky-700 grid place-content-center">
-                            <i class="fas fa-user text-xl"></i>
+                        <div id="vet-info-icon"
+                            class="h-12 w-12 rounded-lg grid place-content-center bg-sky-100 text-sky-700 transition-colors">
+                            <i id="vet-info-icon-symbol" class="fas fa-user text-xl"></i>
                         </div>
                         <div class="flex-1">
-                            <!-- empilhar conteúdo e reduzir tamanhos -->
-                            <div class="flex flex-col">
+                            <!-- Informações do tutor -->
+                            <div id="vet-tutor-info" class="flex flex-col">
                                 <h3 id="vet-tutor-nome" class="font-medium text-gray-800 text-sm leading-tight break-words">
                                     Nome Tutor
                                 </h3>
-                                <!-- e-mail logo abaixo do nome -->
                                 <div class="mt-0.5 text-xs text-gray-600 leading-tight break-words">
                                     <span id="vet-tutor-email">email@email.com.br</span>
                                     <span class="ml-1 align-baseline text-[10px] text-gray-400">· E-mail</span>
                                 </div>
-                                <!-- telefone abaixo do e-mail quando existir -->
                                 <div class="mt-0.5 text-xs text-gray-600 leading-tight break-words">
                                     <span id="vet-tutor-telefone">(##)#####-####</span>
                                     <span class="ml-1 align-baseline text-[10px] text-gray-400">· Celular</span>
                                 </div>
                             </div>
+                            <!-- Informações do pet -->
+                            <div id="vet-pet-info" class="hidden flex w-full flex-col gap-3">
+                                <div>
+                                    <h3 id="vet-pet-nome"
+                                        class="text-sm font-semibold leading-tight text-gray-800 break-words">
+                                        Nome do Pet
+                                    </h3>
+                                </div>
+                                <div id="vet-pet-main-details"
+                                    class="flex flex-col gap-2 text-xs font-medium text-gray-700">
+                                    <div id="vet-pet-tipo-wrapper"
+                                        class="flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-paw text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">
+                                                Tipo de pet
+                                            </span>
+                                            <span id="vet-pet-tipo" class="break-words">—</span>
+                                        </div>
+                                    </div>
+                                    <div id="vet-pet-raca-wrapper"
+                                        class="flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-dna text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">
+                                                Raça
+                                            </span>
+                                            <span id="vet-pet-raca" class="break-words">—</span>
+                                        </div>
+                                    </div>
+                                    <div id="vet-pet-nascimento-wrapper"
+                                        class="flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-cake-candles text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">
+                                                Nascimento
+                                            </span>
+                                            <span id="vet-pet-nascimento" class="break-words">—</span>
+                                        </div>
+                                    </div>
+                                    <div id="vet-pet-peso-wrapper"
+                                        class="flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-weight-scale text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">
+                                                Peso (Kg)
+                                            </span>
+                                            <span id="vet-pet-peso" class="break-words">—</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="vet-pet-extra"
+                                    class="hidden mt-1 flex flex-col gap-2 text-xs font-medium text-gray-700">
+                                    <div id="vet-pet-cor-wrapper"
+                                        class="hidden flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-palette text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span
+                                                class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">Cor</span>
+                                            <span id="vet-pet-cor" class="break-words">—</span>
+                                        </div>
+                                    </div>
+                                    <div id="vet-pet-sexo-wrapper"
+                                        class="hidden flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-venus-mars text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span
+                                                class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">Sexo</span>
+                                            <span id="vet-pet-sexo" class="break-words">—</span>
+                                        </div>
+                                    </div>
+                                    <div id="vet-pet-rga-wrapper"
+                                        class="hidden flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-id-card text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span
+                                                class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">RG</span>
+                                            <span id="vet-pet-rga" class="break-words">—</span>
+                                        </div>
+                                    </div>
+                                    <div id="vet-pet-microchip-wrapper"
+                                        class="hidden flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-microchip text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span
+                                                class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">Microchip</span>
+                                            <span id="vet-pet-microchip" class="break-words">—</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="mt-1 flex flex-col gap-2">
-                            <button class="h-7 w-7 grid place-content-center rounded-md bg-gray-100 text-gray-600"><i
-                                    class="fas fa-user"></i></button>
-                            <button class="h-7 w-7 grid place-content-center rounded-md bg-gray-100 text-gray-600"><i
-                                    class="fas fa-paw"></i></button>
+                            <button id="vet-card-show-tutor"
+                                class="h-7 w-7 grid place-content-center rounded-md bg-gray-100 text-gray-600 transition-colors">
+                                <i class="fas fa-user"></i>
+                            </button>
+                            <button id="vet-card-show-pet"
+                                class="h-7 w-7 grid place-content-center rounded-md bg-gray-100 text-gray-600 transition-colors">
+                                <i class="fas fa-paw"></i>
+                            </button>
                         </div>
                     </div>
                 </div>

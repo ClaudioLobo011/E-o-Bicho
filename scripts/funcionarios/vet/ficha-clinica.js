@@ -42,21 +42,147 @@
         cliClear: document.getElementById('vet-cli-clear'),
         petSelect: document.getElementById('vet-pet-select'),
         petClear: document.getElementById('vet-pet-clear'),
+        cardIcon: document.getElementById('vet-info-icon'),
+        cardIconSymbol: document.getElementById('vet-info-icon-symbol'),
+        tutorInfo: document.getElementById('vet-tutor-info'),
         tutorNome: document.getElementById('vet-tutor-nome'),
         tutorEmail: document.getElementById('vet-tutor-email'),
         tutorTelefone: document.getElementById('vet-tutor-telefone'),
+        petInfo: document.getElementById('vet-pet-info'),
+        petNome: document.getElementById('vet-pet-nome'),
+        petMainDetails: document.getElementById('vet-pet-main-details'),
+        petTipoWrapper: document.getElementById('vet-pet-tipo-wrapper'),
+        petTipo: document.getElementById('vet-pet-tipo'),
+        petRacaWrapper: document.getElementById('vet-pet-raca-wrapper'),
+        petRaca: document.getElementById('vet-pet-raca'),
+        petNascimentoWrapper: document.getElementById('vet-pet-nascimento-wrapper'),
+        petNascimento: document.getElementById('vet-pet-nascimento'),
+        petPesoWrapper: document.getElementById('vet-pet-peso-wrapper'),
+        petPeso: document.getElementById('vet-pet-peso'),
+        petExtraContainer: document.getElementById('vet-pet-extra'),
+        petCorWrapper: document.getElementById('vet-pet-cor-wrapper'),
+        petCor: document.getElementById('vet-pet-cor'),
+        petSexoWrapper: document.getElementById('vet-pet-sexo-wrapper'),
+        petSexo: document.getElementById('vet-pet-sexo'),
+        petRgaWrapper: document.getElementById('vet-pet-rga-wrapper'),
+        petRga: document.getElementById('vet-pet-rga'),
+        petMicrochipWrapper: document.getElementById('vet-pet-microchip-wrapper'),
+        petMicrochip: document.getElementById('vet-pet-microchip'),
+        toggleTutor: document.getElementById('vet-card-show-tutor'),
+        togglePet: document.getElementById('vet-card-show-pet'),
         pageContent: document.getElementById('vet-ficha-content')
     };
 
     const state = {
         selectedCliente: null,
         selectedPetId: null,
+        petsById: {},
+        currentCardMode: 'tutor',
     };
 
     const STORAGE_KEYS = {
         cliente: 'vetFichaSelectedCliente',
         petId: 'vetFichaSelectedPetId',
     };
+
+    const CARD_TUTOR_ACTIVE_CLASSES = ['bg-sky-100', 'text-sky-700'];
+    const CARD_PET_ACTIVE_CLASSES = ['bg-emerald-100', 'text-emerald-700'];
+    const CARD_BUTTON_INACTIVE_CLASSES = ['bg-gray-100', 'text-gray-600'];
+    const CARD_BUTTON_DISABLED_CLASSES = ['opacity-50', 'cursor-not-allowed'];
+    const PET_PLACEHOLDERS = {
+        nome: 'Nome do Pet',
+        tipo: '—',
+        raca: '—',
+        nascimento: '—',
+        peso: '—',
+    };
+
+    function pickFirst(...values) {
+        for (const value of values) {
+            if (value === null || value === undefined) continue;
+            const str = String(value).trim();
+            if (str) return str;
+        }
+        return '';
+    }
+
+    function normalizeForCompare(value) {
+        const str = String(value || '');
+        if (typeof String.prototype.normalize === 'function') {
+            return str
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase();
+        }
+        return str.toLowerCase();
+    }
+
+    function capitalize(value) {
+        const str = String(value || '').trim();
+        if (!str) return '';
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    function formatPetSex(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        const normalized = normalizeForCompare(raw);
+        if (['m', 'macho', 'male', 'masculino'].includes(normalized)) return 'Macho';
+        if (['f', 'femea', 'female', 'feminino'].includes(normalized)) return 'Fêmea';
+        return capitalize(raw);
+    }
+
+    function formatPetRga(value) {
+        const raw = String(value || '').trim();
+        return raw ? raw.toUpperCase() : '';
+    }
+
+    function formatPetMicrochip(value) {
+        return String(value || '').trim();
+    }
+
+    function setPetDetailField(value, valueEl, wrapperEl, { forceShow = false } = {}) {
+        if (!valueEl || !wrapperEl) return false;
+        const str = String(value || '').trim();
+        if (str) {
+            valueEl.textContent = str;
+            wrapperEl.classList.remove('hidden');
+            return true;
+        }
+        valueEl.textContent = '—';
+        if (forceShow) {
+            wrapperEl.classList.remove('hidden');
+        } else {
+            wrapperEl.classList.add('hidden');
+        }
+        return false;
+    }
+
+    function setPetExtraField(value, valueEl, wrapperEl) {
+        if (!valueEl || !wrapperEl) return false;
+        const str = String(value || '').trim();
+        if (str) {
+            valueEl.textContent = str;
+            wrapperEl.classList.remove('hidden');
+            return true;
+        }
+        valueEl.textContent = '—';
+        wrapperEl.classList.add('hidden');
+        return false;
+    }
+
+    function clearPetExtras() {
+        if (els.petExtraContainer) {
+            els.petExtraContainer.classList.add('hidden');
+        }
+        [els.petCorWrapper, els.petSexoWrapper, els.petRgaWrapper, els.petMicrochipWrapper].forEach((wrapper) => {
+            if (wrapper) wrapper.classList.add('hidden');
+        });
+        if (els.petCor) els.petCor.textContent = '—';
+        if (els.petSexo) els.petSexo.textContent = '—';
+        if (els.petRga) els.petRga.textContent = '—';
+        if (els.petMicrochip) els.petMicrochip.textContent = '—';
+    }
 
     function persistCliente(cli) {
         try {
@@ -102,6 +228,132 @@
         } else {
             els.pageContent.classList.add('hidden');
         }
+    }
+
+    function formatDateDisplay(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        try {
+            return new Intl.DateTimeFormat('pt-BR').format(date);
+        } catch {
+            return date.toLocaleDateString('pt-BR');
+        }
+    }
+
+    function formatPetWeight(value) {
+        if (value === null || value === undefined || value === '') return '';
+        const num = Number(value);
+        if (Number.isFinite(num)) {
+            return `${num.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Kg`;
+        }
+        const str = String(value).trim();
+        if (!str) return '';
+        return /kg$/i.test(str) ? str : `${str} Kg`;
+    }
+
+    function getSelectedPet() {
+        const petId = state.selectedPetId;
+        if (!petId) return null;
+        return (state.petsById && state.petsById[petId]) || null;
+    }
+
+    function setPetPlaceholders() {
+        if (els.petNome) els.petNome.textContent = PET_PLACEHOLDERS.nome;
+        setPetDetailField(PET_PLACEHOLDERS.tipo, els.petTipo, els.petTipoWrapper, { forceShow: true });
+        setPetDetailField(PET_PLACEHOLDERS.raca, els.petRaca, els.petRacaWrapper, { forceShow: true });
+        setPetDetailField(PET_PLACEHOLDERS.nascimento, els.petNascimento, els.petNascimentoWrapper, { forceShow: true });
+        setPetDetailField(PET_PLACEHOLDERS.peso, els.petPeso, els.petPesoWrapper, { forceShow: true });
+        if (els.petMainDetails) {
+            els.petMainDetails.classList.remove('hidden');
+        }
+        clearPetExtras();
+    }
+
+    function updatePetInfo(pet = getSelectedPet()) {
+        if (!pet) {
+            setPetPlaceholders();
+            return;
+        }
+        clearPetExtras();
+        const nome = (pet.nome || '').trim();
+        if (els.petNome) els.petNome.textContent = nome || '—';
+
+        const tipo = (pet.tipo || pet.tipoPet || pet.especie || pet.porte || '').trim();
+        const raca = (pet.raca || pet.breed || '').trim();
+        const nascimento = formatDateDisplay(pet.dataNascimento || pet.nascimento);
+        const peso = formatPetWeight(pet.peso || pet.pesoAtual);
+
+        const hasTipo = setPetDetailField(tipo, els.petTipo, els.petTipoWrapper);
+        const hasRaca = setPetDetailField(raca, els.petRaca, els.petRacaWrapper);
+        const hasNascimento = setPetDetailField(nascimento, els.petNascimento, els.petNascimentoWrapper);
+        const hasPeso = setPetDetailField(peso, els.petPeso, els.petPesoWrapper);
+        if (els.petMainDetails) {
+            const hasMainDetails = hasTipo || hasRaca || hasNascimento || hasPeso;
+            els.petMainDetails.classList.toggle('hidden', !hasMainDetails);
+        }
+
+        const cor = pickFirst(pet.pelagemCor, pet.cor, pet.corPelagem, pet.corPelo);
+        const sexo = formatPetSex(pet.sexo);
+        const rga = formatPetRga(pickFirst(pet.rga, pet.rg));
+        const microchip = formatPetMicrochip(pickFirst(pet.microchip, pet.microChip, pet.chip));
+
+        const hasCor = setPetExtraField(cor, els.petCor, els.petCorWrapper);
+        const hasSexo = setPetExtraField(sexo, els.petSexo, els.petSexoWrapper);
+        const hasRga = setPetExtraField(rga, els.petRga, els.petRgaWrapper);
+        const hasMicrochip = setPetExtraField(microchip, els.petMicrochip, els.petMicrochipWrapper);
+        const hasExtras = hasCor || hasSexo || hasRga || hasMicrochip;
+        if (els.petExtraContainer) {
+            els.petExtraContainer.classList.toggle('hidden', !hasExtras);
+        }
+    }
+
+    function updateToggleButtons(showPet, petAvailable) {
+        const toggleStates = [...CARD_TUTOR_ACTIVE_CLASSES, ...CARD_PET_ACTIVE_CLASSES, ...CARD_BUTTON_INACTIVE_CLASSES];
+        if (els.toggleTutor) {
+            els.toggleTutor.classList.remove(...toggleStates);
+            els.toggleTutor.classList.add(...(showPet ? CARD_BUTTON_INACTIVE_CLASSES : CARD_TUTOR_ACTIVE_CLASSES));
+        }
+        if (els.togglePet) {
+            els.togglePet.classList.remove(...toggleStates, ...CARD_BUTTON_DISABLED_CLASSES);
+            if (petAvailable) {
+                els.togglePet.classList.add(...(showPet ? CARD_PET_ACTIVE_CLASSES : CARD_BUTTON_INACTIVE_CLASSES));
+                els.togglePet.removeAttribute('disabled');
+            } else {
+                els.togglePet.classList.add(...CARD_BUTTON_INACTIVE_CLASSES, ...CARD_BUTTON_DISABLED_CLASSES);
+                els.togglePet.setAttribute('disabled', 'disabled');
+            }
+        }
+    }
+
+    function updateCardDisplay() {
+        const pet = getSelectedPet();
+        const hasPet = !!pet;
+        if (hasPet) {
+            updatePetInfo(pet);
+        } else {
+            setPetPlaceholders();
+        }
+        const wantsPet = state.currentCardMode === 'pet';
+        const showPet = wantsPet && hasPet;
+        if (wantsPet && !hasPet) {
+            state.currentCardMode = 'tutor';
+        }
+        if (els.tutorInfo) els.tutorInfo.classList.toggle('hidden', showPet);
+        if (els.petInfo) els.petInfo.classList.toggle('hidden', !showPet);
+        if (els.cardIcon) {
+            els.cardIcon.classList.remove(...CARD_TUTOR_ACTIVE_CLASSES, ...CARD_PET_ACTIVE_CLASSES);
+            els.cardIcon.classList.add(...(showPet ? CARD_PET_ACTIVE_CLASSES : CARD_TUTOR_ACTIVE_CLASSES));
+        }
+        if (els.cardIconSymbol) {
+            els.cardIconSymbol.className = `fas ${showPet ? 'fa-paw' : 'fa-user'} text-xl`;
+        }
+        updateToggleButtons(showPet, hasPet);
+    }
+
+    function setCardMode(mode) {
+        state.currentCardMode = mode === 'pet' ? 'pet' : 'tutor';
+        updateCardDisplay();
     }
 
     // --- busca clientes (igual fluxo da Agenda) ---
@@ -150,6 +402,8 @@
         } = opts;
         state.selectedCliente = cli || null;
         state.selectedPetId = null;
+        state.petsById = {};
+        state.currentCardMode = 'tutor';
         if (!skipPersistCliente) {
             persistCliente(state.selectedCliente);
         }
@@ -167,6 +421,8 @@
             ? formatPhone(cli.celular)
             : '—';
 
+        updateCardDisplay();
+
         // carrega pets do tutor e popular select
         try {
             if (els.petSelect) {
@@ -174,6 +430,14 @@
             }
             const resp = await api(`/func/clientes/${cli._id}/pets`);
             const pets = await resp.json().catch(() => []);
+            state.petsById = {};
+            if (Array.isArray(pets)) {
+                pets.forEach(p => {
+                    if (p && p._id) {
+                        state.petsById[p._id] = p;
+                    }
+                });
+            }
             if (els.petSelect) {
                 if (Array.isArray(pets) && pets.length) {
                     els.petSelect.innerHTML = [`<option value="">Selecione o pet</option>`]
@@ -200,6 +464,7 @@
                 }
             }
         } catch { }
+        updateCardDisplay();
         updatePageVisibility();
     }
 
@@ -209,13 +474,14 @@
         if (!skipPersistPet) {
             persistPetId(state.selectedPetId);
         }
-        // aqui poderemos preencher outros campos específicos do pet, caso a página venha a ter (ex.: raça/porte).
-        // por enquanto, mantemos o comportamento: seleção do pet no topo + tutor no card.
+        updateCardDisplay();
         updatePageVisibility();
     }
 
     function clearCliente() {
         state.selectedCliente = null;
+        state.petsById = {};
+        state.currentCardMode = 'tutor';
         if (els.cliInput) els.cliInput.value = '';
         hideSugestoes();
         if (els.petSelect) {
@@ -233,6 +499,8 @@
         state.selectedPetId = null;
         if (els.petSelect) els.petSelect.value = '';
         persistPetId(null);
+        state.currentCardMode = 'tutor';
+        updateCardDisplay();
         updatePageVisibility();
     }
 
@@ -268,6 +536,19 @@
     if (els.petClear) {
         els.petClear.addEventListener('click', (e) => { e.preventDefault(); clearPet(); });
     }
+    if (els.toggleTutor) {
+        els.toggleTutor.addEventListener('click', (e) => {
+            e.preventDefault();
+            setCardMode('tutor');
+        });
+    }
+    if (els.togglePet) {
+        els.togglePet.addEventListener('click', (e) => {
+            e.preventDefault();
+            setCardMode('pet');
+        });
+    }
+    updateCardDisplay();
     restorePersistedSelection();
     updatePageVisibility();
 })();
