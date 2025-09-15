@@ -44,13 +44,25 @@
         petClear: document.getElementById('vet-pet-clear'),
         tutorNome: document.getElementById('vet-tutor-nome'),
         tutorEmail: document.getElementById('vet-tutor-email'),
-        tutorTelefone: document.getElementById('vet-tutor-telefone')
+        tutorTelefone: document.getElementById('vet-tutor-telefone'),
+        pageContent: document.getElementById('vet-ficha-content')
     };
 
     const state = {
         selectedCliente: null,
         selectedPetId: null,
     };
+
+    function updatePageVisibility() {
+        if (!els.pageContent) return;
+        const hasTutor = !!(state.selectedCliente && state.selectedCliente._id);
+        const hasPet = !!state.selectedPetId;
+        if (hasTutor && hasPet) {
+            els.pageContent.classList.remove('hidden');
+        } else {
+            els.pageContent.classList.add('hidden');
+        }
+    }
 
     // --- busca clientes (igual fluxo da Agenda) ---
     async function searchClientes(term) {
@@ -92,6 +104,8 @@
 
     async function onSelectCliente(cli) {
         state.selectedCliente = cli || null;
+        state.selectedPetId = null;
+        updatePageVisibility();
         if (els.cliInput) els.cliInput.value = cli?.nome || '';
         hideSugestoes();
 
@@ -124,12 +138,14 @@
                 }
             }
         } catch { }
+        updatePageVisibility();
     }
 
     function onSelectPet(petId) {
         state.selectedPetId = petId || null;
         // aqui poderemos preencher outros campos específicos do pet, caso a página venha a ter (ex.: raça/porte).
         // por enquanto, mantemos o comportamento: seleção do pet no topo + tutor no card.
+        updatePageVisibility();
     }
 
     function clearCliente() {
@@ -139,14 +155,17 @@
         if (els.petSelect) {
             els.petSelect.innerHTML = `<option value="">Selecione o tutor para listar os pets</option>`;
         }
+        clearPet();
         if (els.tutorNome) els.tutorNome.textContent = 'Nome Tutor';
         if (els.tutorEmail) els.tutorEmail.textContent = '—';
         // não forçamos limpar telefone se a UI já tiver valor útil
+        updatePageVisibility();
     }
 
     function clearPet() {
         state.selectedPetId = null;
         if (els.petSelect) els.petSelect.value = '';
+        updatePageVisibility();
     }
 
     // --- eventos ---
@@ -168,4 +187,6 @@
     if (els.petClear) {
         els.petClear.addEventListener('click', (e) => { e.preventDefault(); clearPet(); });
     }
+
+    updatePageVisibility();
 })();
