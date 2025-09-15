@@ -2,11 +2,11 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Admin â€” Cadastro de ServiÃ§o</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Cadastro de Serviço</title>
 
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <link rel="stylesheet" href="../../src/output.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="../../src/output.css" />
 </head>
 <body class="bg-gray-100">
   <!-- Header Admin -->
@@ -19,199 +19,191 @@
         <div id="admin-sidebar-placeholder"></div>
       </aside>
 
-          <form id="serv-form" class="space-y-6">
-            <div class="grid gap-6">
-              <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <div class="xl:col-span-2">
-                  <label for="serv-nome" class="block text-sm font-medium text-gray-700 mb-1">Nome do serviço</label>
-                  <input id="serv-nome" type="text" required maxlength="120"
-                         class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
-                         placeholder="Ex.: Banho Completo">
-                </div>
-                <div>
-                  <label for="serv-duracao" class="block text-sm font-medium text-gray-700 mb-1">Tempo de duração (minutos)</label>
-                  <input id="serv-duracao" type="number" min="1" max="600" step="1" required value="30"
-                         class="w-full max-w-[10rem] border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+      <div class="md:col-span-4">
+        <div class="bg-white rounded-lg shadow p-6">
+          <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 class="text-2xl font-bold text-gray-900">Cadastro de serviços</h1>
+              <p class="text-gray-600 mt-1">Gerencie os serviços oferecidos e ajuste valores ou preços diferenciados por raça.</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button id="tab-btn-cadastro" type="button" class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40">
+                Cadastro
+              </button>
+              <button id="tab-btn-precos" type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40">
+                Alteração de preços
+              </button>
+            </div>
+          </header>
+
+          <div class="mt-8 space-y-10">
+            <!-- Tab: Cadastro -->
+            <section id="tab-cadastro" class="space-y-10">
+              <form id="serv-form" class="space-y-8">
+                <input type="hidden" id="serv-id" />
+
+                <div class="grid gap-6 md:grid-cols-3">
+                  <div class="md:col-span-2">
+                    <label for="serv-nome" class="mb-1 block text-sm font-medium text-gray-700">Nome do serviço</label>
+                    <input id="serv-nome" type="text" required maxlength="120"
+                           class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                           placeholder="Ex.: Banho Completo" />
+                  </div>
+                  <div>
+                    <label for="serv-duracao" class="mb-1 block text-sm font-medium text-gray-700">Tempo de duração (minutos)</label>
+                    <input id="serv-duracao" type="number" min="1" max="600" step="1" required value="30"
+                           class="w-full max-w-[10rem] rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                  </div>
                 </div>
 
-              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                  <label for="serv-grupo" class="block text-sm font-medium text-gray-700 mb-1">Grupo</label>
-                  <select id="serv-grupo" required
-                          class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
-                    <option value="" disabled selected>Selecione um grupo</option>
-                  </select>
-                  <p class="text-xs text-gray-500 mt-1">Os grupos são cadastrados em “Cadastro de Grupo de Serviço”.</p>
+                <div class="grid gap-6 md:grid-cols-3">
+                  <div>
+                    <label for="serv-grupo" class="mb-1 block text-sm font-medium text-gray-700">Grupo</label>
+                    <select id="serv-grupo" required
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+                      <option value="" disabled selected>Selecione um grupo</option>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">Os grupos são cadastrados em “Cadastro de Grupo de Serviço”.</p>
+                  </div>
+                  <div class="md:col-span-2">
+                    <label for="serv-porte" class="mb-1 block text-sm font-medium text-gray-700">Portes atendidos</label>
+                    <select id="serv-porte" multiple size="6"
+                            class="h-full w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+                      <option value="Mini">Mini</option>
+                      <option value="Pequeno">Pequeno</option>
+                      <option value="Médio">Médio</option>
+                      <option value="Grande">Grande</option>
+                      <option value="Gigante">Gigante</option>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">Selecione um ou mais portes (Ctrl/Cmd+clique). Se nenhum porte for selecionado, o serviço valerá para todos.</p>
+                  </div>
                 </div>
-                    Selecione um ou mais portes (Ctrl/Cmd+clique). Se nenhum porte for selecionado, valerá para todos os portes.
-                  </p>
-              <fieldset class="rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-4">
-                <legend class="px-2 text-sm font-semibold text-gray-700">Categorias</legend>
-                <div class="space-y-3">
-                  <p class="text-sm text-gray-600">Selecione as categorias que melhor descrevem o serviço. Elas serão usadas nos filtros e relatórios.</p>
+
+                <fieldset class="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-5">
+                  <legend class="px-2 text-sm font-semibold text-gray-700">Categorias</legend>
+                  <p class="mb-4 text-sm text-gray-600">Selecione as categorias que melhor descrevem o serviço. Elas serão usadas em filtros, buscas e relatórios.</p>
                   <div class="overflow-x-auto">
                     <div id="serv-categorias" class="flex min-h-[3.25rem] flex-wrap gap-3"></div>
                   </div>
-                </div>
-              </fieldset>
+                </fieldset>
 
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div>
-                  <label for="serv-custo" class="block text-sm font-medium text-gray-700 mb-1">Custo (R$)</label>
-                  <input id="serv-custo" type="number" inputmode="decimal" min="0" step="0.01" value="0"
-                         class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40 sm:max-w-[12rem]">
-                </div>
-                <div>
-                  <label for="serv-valor" class="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
-                  <input id="serv-valor" type="number" inputmode="decimal" min="0" step="0.01" required value="0"
-                         class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40 sm:max-w-[12rem]">
-                </div>
-                  <th class="px-3 py-2">Categorias</th>
-                  <th class="px-3 py-2 w-40">Ações</th>
-                <p class="text-xs text-gray-500 mt-1">Os grupos sÃ£o cadastrados em â€œCadastro de Grupo de ServiÃ§oâ€.</p>
-              </div>
-
-              <div>
-                <label for="serv-duracao" class="block text-sm font-medium text-gray-700 mb-1">Tempo de duraÃ§Ã£o (minutos)</label>
-                <input id="serv-duracao" type="number" min="1" max="600" step="1" required value="30"
-                       class="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
-              </div>
-
-                <div>
-                  <label for="serv-porte" class="block text-sm font-medium text-gray-700 mb-1">Porte</label>
-                  <select id="serv-porte" multiple size="6"
-                          class="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary/40">
-                    <option value="Mini">Mini</option>
-                    <option value="Pequeno">Pequeno</option>
-                    <option value="MÃ©dio">MÃ©dio</option>
-                    <option value="Grande">Grande</option>
-                    <option value="Gigante">Gigante</option>
-                  </select>
-                  <p class="text-xs text-gray-500 mt-1">
-                    Selecione um ou mais portes (Ctrl/Cmd+clique). Se nenhum porte for selecionado, valerá para todos os portes.</p>
+                <div class="grid gap-6 md:grid-cols-2">
+                  <div>
+                    <label for="serv-custo" class="mb-1 block text-sm font-medium text-gray-700">Custo (R$)</label>
+                    <input id="serv-custo" type="number" inputmode="decimal" min="0" step="0.01" value="0"
+                           class="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                  </div>
+                  <div>
+                    <label for="serv-valor" class="mb-1 block text-sm font-medium text-gray-700">Valor (R$)</label>
+                    <input id="serv-valor" type="number" inputmode="decimal" min="0" step="0.01" required value="0"
+                           class="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                  </div>
                 </div>
 
-            </div>
+                <div class="flex flex-wrap items-center gap-3 pt-2">
+                  <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary/40">
+                    <i class="fas fa-save"></i>
+                    <span id="serv-submit-label">Salvar</span>
+                  </button>
+                  <button type="button" id="serv-cancelar" class="hidden text-sm text-gray-600 underline decoration-gray-400 transition hover:text-gray-800">
+                    Cancelar edição
+                  </button>
+                </div>
+              </form>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label for="serv-custo" class="block text-sm font-medium text-gray-700 mb-1">Custo (R$)</label>
-                <input id="serv-custo" type="number" inputmode="decimal" min="0" step="0.01" value="0"
-                       class="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+              <div class="space-y-4">
+                <div class="flex items-center gap-3">
+                  <i class="fas fa-list text-gray-400"></i>
+                  <h2 class="text-lg font-semibold text-gray-900">Serviços cadastrados</h2>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full text-sm">
+                    <thead>
+                      <tr class="text-left text-gray-500">
+                        <th class="px-3 py-2">Nome</th>
+                        <th class="px-3 py-2">Categorias</th>
+                        <th class="px-3 py-2">Grupo</th>
+                        <th class="px-3 py-2">Duração (min)</th>
+                        <th class="px-3 py-2">Custo</th>
+                        <th class="px-3 py-2">Valor</th>
+                        <th class="w-40 px-3 py-2">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="serv-tbody" class="divide-y divide-gray-200"></tbody>
+                  </table>
+                </div>
+                <p id="serv-empty" class="hidden text-sm italic text-gray-400">Nenhum serviço cadastrado.</p>
+              </div>
+            </section>
+
+            <!-- Tab: Alteração de preços -->
+            <section id="tab-precos" class="hidden space-y-6">
+              <div class="flex items-center gap-3">
+                <i class="fas fa-tags text-gray-400"></i>
+                <h2 class="text-xl font-semibold text-gray-900">Alteração de preços por raça</h2>
               </div>
 
-              <div>
-                <label for="serv-valor" class="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
-                <input id="serv-valor" type="number" inputmode="decimal" min="0" step="0.01" required value="0"
-                       class="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+              <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div class="md:col-span-4">
+                  <label class="mb-1 block text-sm font-medium text-gray-700">Serviço</label>
+                  <input id="ap-serv-input" type="text" placeholder="Buscar serviço..."
+                         class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                  <ul id="ap-serv-sug" class="mt-1 hidden max-h-40 divide-y divide-gray-200 overflow-y-auto rounded-lg border border-gray-200"></ul>
+                  <input type="hidden" id="ap-serv-id" />
+                  <p id="ap-serv-porte-info" class="mt-1 text-xs text-gray-500"></p>
+                </div>
+                <div class="md:col-span-3">
+                  <label class="mb-1 block text-sm font-medium text-gray-700">Tipo de pet</label>
+                  <select id="ap-tipo" class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"></select>
+                </div>
+                <div class="md:col-span-3">
+                  <label class="mb-1 block text-sm font-medium text-gray-700">Porte (para cachorro)</label>
+                  <select id="ap-porte" class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"></select>
+                </div>
+                <div class="md:col-span-2">
+                  <label class="mb-1 block text-sm font-medium text-gray-700">Empresa</label>
+                  <select id="ap-store" class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"></select>
+                </div>
               </div>
-            </div>
 
-            <div class="flex items-center gap-3 pt-2">
-              <button type="submit" class="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90 transition">
-                <i class="fas fa-save"></i>
-                <span id="serv-submit-label">Salvar</span>
-              </button>
-              <button type="button" id="serv-cancelar" class="hidden text-sm text-gray-600 hover:text-gray-800 underline">Cancelar ediÃ§Ã£o</button>
-            </div>
-          </form>
-        </div>
-
-        <!-- Lista -->
-        <div class="bg-white rounded-lg shadow p-6 mt-6">
-          <div class="flex items-center gap-3 mb-4">
-            <i class="fas fa-list text-gray-400"></i>
-            <h2 class="text-lg font-bold text-gray-800">ServiÃ§os cadastrados</h2>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-              <thead>
-                <tr class="text-left text-gray-500">
-                  <th class="px-3 py-2">Nome</th>
-                  <th class="px-3 py-2">Grupo</th>
-                  <th class="px-3 py-2">DuraÃ§Ã£o (min)</th>
-                  <th class="px-3 py-2">Custo</th>
-                  <th class="px-3 py-2">Valor</th>
-                  <th class="px-3 py-2 w-36">AÃ§Ãµes</th>
-                </tr>
-              </thead>
-              <tbody id="serv-tbody" class="divide-y divide-gray-200"></tbody>
-            </table>
-          </div>
-          <p id="serv-empty" class="text-gray-400 text-sm italic hidden mt-3">Nenhum serviÃ§o cadastrado.</p>
-        </div>
-        </div>
-        </div>
-
-        <!-- ConteÃºdo: AlteraÃ§Ã£o de PreÃ§os -->
-        <div id="tab-precos" class="bg-white rounded-lg shadow p-6 hidden">
-          <div class="flex items-center gap-3 mb-6">
-            <i class="fas fa-tags text-gray-400"></i>
-            <h2 class="text-xl font-bold text-gray-800">AlteraÃ§Ã£o de PreÃ§os por RaÃ§a</h2>
-          </div>
-
-          <!-- Filtros -->
-          <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
-            <div class="md:col-span-4">
-              <label class="block text-sm font-medium text-gray-700 mb-1">ServiÃ§o</label>
-              <input id="ap-serv-input" type="text" placeholder="Buscar serviÃ§o..." class="w-full rounded-lg border-gray-300 focus:ring-primary focus:border-primary" />
-              <ul id="ap-serv-sug" class="mt-1 divide-y divide-gray-200 border border-gray-200 rounded-lg max-h-40 overflow-y-auto hidden"></ul>
-              <input type="hidden" id="ap-serv-id" />
-              <p id="ap-serv-porte-info" class="text-xs text-gray-500 mt-1"></p>
-            </div>
-            <div class="md:col-span-3">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de pet</label>
-              <select id="ap-tipo" class="w-full rounded-lg border-gray-300 focus:ring-primary focus:border-primary"></select>
-            </div>
-            <div class="md:col-span-3">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Porte (para cachorro)</label>
-              <select id="ap-porte" class="w-full rounded-lg border-gray-300 focus:ring-primary focus:border-primary"></select>
-            </div>
-            <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Empresa</label>
-              <select id="ap-store" class="w-full rounded-lg border-gray-300 focus:ring-primary focus:border-primary"></select>
-            </div>
-          </div>
-
-          <!-- Replicar -->
-          <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-2">
-            <div class="md:col-span-3 flex items-end gap-2">
-              <div class="w-full">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Replicar Custo</label>
-                <input id="ap-repl-custo" type="number" step="0.01" class="w-full rounded-lg border-gray-300" />
+              <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div class="md:col-span-3 flex items-end gap-2">
+                  <div class="w-full">
+                    <label class="mb-1 block text-sm font-medium text-gray-700">Replicar custo</label>
+                    <input id="ap-repl-custo" type="number" step="0.01" class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                  </div>
+                  <button id="ap-repl-custo-btn" type="button" class="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 transition hover:bg-gray-100">Aplicar</button>
+                </div>
+                <div class="md:col-span-3 flex items-end gap-2">
+                  <div class="w-full">
+                    <label class="mb-1 block text-sm font-medium text-gray-700">Replicar venda</label>
+                    <input id="ap-repl-valor" type="number" step="0.01" class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                  </div>
+                  <button id="ap-repl-valor-btn" type="button" class="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 transition hover:bg-gray-100">Aplicar</button>
+                </div>
               </div>
-              <button id="ap-repl-custo-btn" class="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">Aplicar</button>
-            </div>
-            <div class="md:col-span-3 flex items-end gap-2">
-              <div class="w-full">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Replicar Venda</label>
-                <input id="ap-repl-valor" type="number" step="0.01" class="w-full rounded-lg border-gray-300" />
+
+              <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-gray-500">
+                      <th class="px-3 py-2">Raça</th>
+                      <th class="w-40 px-3 py-2">Custo</th>
+                      <th class="w-40 px-3 py-2">Venda</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ap-grid-tbody" class="divide-y divide-gray-200"></tbody>
+                </table>
+                <p id="ap-grid-empty" class="mt-3 hidden text-sm italic text-gray-400">Selecione serviço, tipo e empresa.</p>
               </div>
-              <button id="ap-repl-valor-btn" class="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">Aplicar</button>
-            </div>
-          </div>
 
-          <!-- Grade -->
-          <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-              <thead>
-                <tr class="text-left text-gray-500">
-                  <th class="px-3 py-2">RaÃ§a</th>
-                  <th class="px-3 py-2 w-40">Custo</th>
-                  <th class="px-3 py-2 w-40">Venda</th>
-                </tr>
-              </thead>
-              <tbody id="ap-grid-tbody" class="divide-y divide-gray-200"></tbody>
-            </table>
-            <p id="ap-grid-empty" class="text-gray-400 text-sm italic hidden mt-3">Selecione serviÃ§o, tipo e empresa.</p>
-          </div>
-
-          <div class="mt-4 flex justify-end">
-            <button id="ap-save-btn" class="px-4 py-2 rounded-lg bg-primary text-white hover:opacity-90">Salvar preÃ§os</button>
+              <div class="flex justify-end">
+                <button id="ap-save-btn" type="button" class="rounded-lg bg-primary px-4 py-2 font-medium text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary/40">Salvar preços</button>
+              </div>
+            </section>
           </div>
         </div>
-      </section>
+      </div>
     </div>
   </main>
 
@@ -222,7 +214,7 @@
   <!-- Footer Admin -->
   <div id="admin-footer-placeholder"></div>
 
-  <!-- Base path relativo Ã  pasta /pages -->
+  <!-- Base path relativo à pasta /pages -->
   <script>var basePath = '../../';</script>
 
   <!-- Core -->
@@ -233,8 +225,7 @@
   <!-- Guarda Admin (se houver) -->
   <script src="../../scripts/admin/admin.js"></script>
 
-  <!-- PÃ¡gina -->
+  <!-- Página -->
   <script type="module" src="../../scripts/admin/cadastro-de-servicos/index.js"></script>
 </body>
 </html>
-
