@@ -60,10 +60,13 @@ async function loadComponents() {
 window.loadComponents = loadComponents;
 
 function updateActiveAdminLink() {
-    const sidebar = document.getElementById('admin-sidebar-placeholder');
-    if (!sidebar) return;
-    const currentPageUrl = window.location.href;
-    const navLinks = sidebar.querySelectorAll('nav a');
+    const wrapper = document.getElementById('admin-sidebar-placeholder');
+    if (!wrapper) return;
+
+    const inactiveClasses = ['text-gray-600', 'hover:bg-gray-100'];
+    const activeClasses   = ['bg-primary/10', 'text-primary', 'font-bold', 'border-l-4', 'border-primary'];
+
+    const navLinks = wrapper.querySelectorAll('nav a');
     navLinks.forEach(link => {
       const href = link.getAttribute('href');
       // Deixa os links reais com a marcação automática
@@ -73,7 +76,7 @@ function updateActiveAdminLink() {
         if (isActive) {
           link.classList.remove(...inactiveClasses);
           link.classList.add(...activeClasses);
-          link.classList.remove('hover:bg-gray-100'); 
+          link.classList.remove('hover:bg-gray-100');
         } else {
           link.classList.remove(...activeClasses);
           link.classList.add(...inactiveClasses);
