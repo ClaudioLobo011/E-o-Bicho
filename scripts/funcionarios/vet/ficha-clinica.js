@@ -35,6 +35,78 @@
         return d || '';
     }
 
+    function formatPetPeso(peso) {
+        const str = String(peso || '').trim();
+        if (!str) return '';
+        if (/kg/i.test(str)) return str;
+        return /[a-zA-Z]/.test(str) ? str : `${str} kg`;
+    }
+
+    function renderPetInfo() {
+        const pet = state.selectedPet;
+        if (els.petNome) {
+            els.petNome.textContent = pet?.nome || 'Nome do Pet';
+        }
+        if (els.petTipoRaca) {
+            const tipo = (pet?.tipo || '').trim();
+            const raca = (pet?.raca || '').trim();
+            let composed = '—';
+            if (tipo && raca) {
+                composed = `${tipo} - ${raca}`;
+            } else if (tipo || raca) {
+                composed = tipo || raca;
+            }
+            els.petTipoRaca.textContent = composed;
+        }
+        if (els.petPeso) {
+            const peso = formatPetPeso(pet?.peso);
+            els.petPeso.textContent = peso || '—';
+        }
+    }
+
+    function setCardView(view) {
+        const effectiveView = view === CARD_VIEWS.PET && !state.selectedPet
+            ? CARD_VIEWS.TUTOR
+            : view;
+        state.cardView = effectiveView;
+        const showingTutor = state.cardView === CARD_VIEWS.TUTOR;
+        const showingPet = state.cardView === CARD_VIEWS.PET;
+
+        if (els.tutorInfo) {
+            els.tutorInfo.classList.toggle('hidden', !showingTutor);
+        }
+        if (els.petInfo) {
+            els.petInfo.classList.toggle('hidden', !showingPet);
+        }
+        if (els.toggleTutor) {
+            els.toggleTutor.classList.toggle('bg-sky-600', showingTutor);
+            els.toggleTutor.classList.toggle('text-white', showingTutor);
+            els.toggleTutor.classList.toggle('shadow-sm', showingTutor);
+            els.toggleTutor.classList.toggle('bg-gray-100', !showingTutor);
+            els.toggleTutor.classList.toggle('text-gray-600', !showingTutor);
+            els.toggleTutor.classList.toggle('hover:bg-gray-200', !showingTutor);
+        }
+        if (els.togglePet) {
+            els.togglePet.classList.toggle('bg-sky-600', showingPet);
+            els.togglePet.classList.toggle('text-white', showingPet);
+            els.togglePet.classList.toggle('shadow-sm', showingPet);
+            els.togglePet.classList.toggle('bg-gray-100', !showingPet);
+            els.togglePet.classList.toggle('text-gray-600', !showingPet);
+            els.togglePet.classList.toggle('hover:bg-gray-200', !showingPet && !!state.selectedPet);
+            els.togglePet.classList.toggle('opacity-50', !state.selectedPet);
+            els.togglePet.classList.toggle('cursor-not-allowed', !state.selectedPet);
+            if (state.selectedPet) {
+                els.togglePet.removeAttribute('disabled');
+            } else {
+                els.togglePet.setAttribute('disabled', 'disabled');
+            }
+        }
+        if (els.cardAvatarIcon) {
+            els.cardAvatarIcon.classList.remove('fa-user', 'fa-paw');
+            els.cardAvatarIcon.classList.add(showingTutor ? 'fa-user' : 'fa-paw');
+        }
+    }
+
     // --- elementos da página ---
     const els = {
         cliInput: document.getElementById('vet-cli-input'),
@@ -45,13 +117,69 @@
         tutorNome: document.getElementById('vet-tutor-nome'),
         tutorEmail: document.getElementById('vet-tutor-email'),
         tutorTelefone: document.getElementById('vet-tutor-telefone'),
+        tutorInfo: document.getElementById('vet-tutor-info'),
+        petInfo: document.getElementById('vet-pet-info'),
+        petNome: document.getElementById('vet-pet-nome'),
+        petTipoRaca: document.getElementById('vet-pet-tipo-raca'),
+        petPeso: document.getElementById('vet-pet-peso'),
+        cardAvatarIcon: document.getElementById('vet-card-avatar-icon'),
+        toggleTutor: document.getElementById('vet-card-show-tutor'),
+        togglePet: document.getElementById('vet-card-show-pet'),
         pageContent: document.getElementById('vet-ficha-content')
+    };
+
+    const CARD_VIEWS = {
+        TUTOR: 'tutor',
+        PET: 'pet',
     };
 
     const state = {
         selectedCliente: null,
         selectedPetId: null,
+        selectedPet: null,
+        pets: [],
+        cardView: CARD_VIEWS.TUTOR,
     };
+
+    const STORAGE_KEYS = {
+        cliente: 'vetFichaSelectedCliente',
+        petId: 'vetFichaSelectedPetId',
+    };
+
+    function persistCliente(cli) {
+        try {
+            if (cli && cli._id) {
+                localStorage.setItem(STORAGE_KEYS.cliente, JSON.stringify(cli));
+            } else {
+                localStorage.removeItem(STORAGE_KEYS.cliente);
+            }
+        } catch { }
+    }
+
+    function persistPetId(petId) {
+        try {
+            if (petId) {
+                localStorage.setItem(STORAGE_KEYS.petId, petId);
+            } else {
+                localStorage.removeItem(STORAGE_KEYS.petId);
+            }
+        } catch { }
+    }
+
+    function getPersistedState() {
+        let cliente = null;
+        try {
+            const raw = localStorage.getItem(STORAGE_KEYS.cliente);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed._id) {
+                    cliente = parsed;
+                }
+            }
+        } catch { }
+        const petId = localStorage.getItem(STORAGE_KEYS.petId) || null;
+        return { cliente, petId };
+    }
 
     function updatePageVisibility() {
         if (!els.pageContent) return;
@@ -102,9 +230,24 @@
         }
     }
 
-    async function onSelectCliente(cli) {
+    async function onSelectCliente(cli, opts = {}) {
+        const {
+            skipPersistCliente = false,
+            clearPersistedPet = true,
+            persistedPetId = null,
+        } = opts;
         state.selectedCliente = cli || null;
         state.selectedPetId = null;
+        state.selectedPet = null;
+        state.pets = [];
+        if (!skipPersistCliente) {
+            persistCliente(state.selectedCliente);
+        }
+        if (clearPersistedPet) {
+            persistPetId(null);
+        }
+        renderPetInfo();
+        setCardView(CARD_VIEWS.TUTOR);
         updatePageVisibility();
         if (els.cliInput) els.cliInput.value = cli?.nome || '';
         hideSugestoes();
@@ -123,13 +266,25 @@
             }
             const resp = await api(`/func/clientes/${cli._id}/pets`);
             const pets = await resp.json().catch(() => []);
+            state.pets = Array.isArray(pets) ? pets : [];
             if (els.petSelect) {
                 if (Array.isArray(pets) && pets.length) {
                     els.petSelect.innerHTML = [`<option value="">Selecione o pet</option>`]
                         .concat(pets.map(p => `<option value="${p._id}">${p.nome}</option>`))
                         .join('');
+                    let petSelecionado = false;
+                    if (persistedPetId) {
+                        const match = state.pets.find(p => p._id === persistedPetId);
+                        if (match) {
+                            els.petSelect.value = persistedPetId;
+                            onSelectPet(persistedPetId);
+                            petSelecionado = true;
+                        } else if (!clearPersistedPet) {
+                            persistPetId(null);
+                        }
+                    }
                     // se só houver 1 pet, selecionar automaticamente
-                    if (pets.length === 1) {
+                    if (!petSelecionado && pets.length === 1) {
                         els.petSelect.value = pets[0]._id;
                         onSelectPet(pets[0]._id);
                     }
@@ -138,18 +293,26 @@
                 }
             }
         } catch { }
+        setCardView(state.cardView);
         updatePageVisibility();
     }
 
-    function onSelectPet(petId) {
-        state.selectedPetId = petId || null;
-        // aqui poderemos preencher outros campos específicos do pet, caso a página venha a ter (ex.: raça/porte).
-        // por enquanto, mantemos o comportamento: seleção do pet no topo + tutor no card.
+    function onSelectPet(petId, opts = {}) {
+        const { skipPersistPet = false } = opts;
+        const foundPet = state.pets.find(p => p._id === petId) || null;
+        state.selectedPet = foundPet;
+        state.selectedPetId = foundPet ? petId : null;
+        if (!skipPersistPet) {
+            persistPetId(state.selectedPetId);
+        }
+        renderPetInfo();
+        setCardView(state.cardView);
         updatePageVisibility();
     }
 
     function clearCliente() {
         state.selectedCliente = null;
+        state.pets = [];
         if (els.cliInput) els.cliInput.value = '';
         hideSugestoes();
         if (els.petSelect) {
@@ -159,13 +322,34 @@
         if (els.tutorNome) els.tutorNome.textContent = 'Nome Tutor';
         if (els.tutorEmail) els.tutorEmail.textContent = '—';
         // não forçamos limpar telefone se a UI já tiver valor útil
+        persistCliente(null);
         updatePageVisibility();
     }
 
-    function clearPet() {
+    function clearPet(opts = {}) {
+        const { skipPersistPet = false } = opts;
         state.selectedPetId = null;
+        state.selectedPet = null;
         if (els.petSelect) els.petSelect.value = '';
+        if (!skipPersistPet) {
+            persistPetId(null);
+        }
+        renderPetInfo();
+        setCardView(CARD_VIEWS.TUTOR);
         updatePageVisibility();
+    }
+
+    function restorePersistedSelection() {
+        const { cliente, petId } = getPersistedState();
+        if (cliente) {
+            onSelectCliente(cliente, {
+                clearPersistedPet: false,
+                persistedPetId: petId,
+            });
+        } else if (petId) {
+            // pet salvo sem tutor selecionado não é válido
+            persistPetId(null);
+        }
     }
 
     // --- eventos ---
@@ -187,5 +371,21 @@
     if (els.petClear) {
         els.petClear.addEventListener('click', (e) => { e.preventDefault(); clearPet(); });
     }
+    if (els.toggleTutor) {
+        els.toggleTutor.addEventListener('click', (e) => {
+            e.preventDefault();
+            setCardView(CARD_VIEWS.TUTOR);
+        });
+    }
+    if (els.togglePet) {
+        els.togglePet.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (!state.selectedPet) return;
+            setCardView(CARD_VIEWS.PET);
+        });
+    }
+    renderPetInfo();
+    setCardView(state.cardView);
+    restorePersistedSelection();
     updatePageVisibility();
 })();

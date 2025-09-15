@@ -122,32 +122,48 @@
                 <!-- Card do Tutor -->
                 <div class="bg-white rounded-xl shadow-sm ring-1 ring-black/5 p-4">
                     <div class="flex items-start gap-3">
-                        <div class="h-12 w-12 rounded-lg bg-sky-100 text-sky-700 grid place-content-center">
-                            <i class="fas fa-user text-xl"></i>
+                        <div id="vet-card-avatar"
+                            class="h-12 w-12 rounded-lg grid place-content-center bg-sky-100 text-sky-700 transition-colors">
+                            <i id="vet-card-avatar-icon" class="fas fa-user text-xl"></i>
                         </div>
                         <div class="flex-1">
-                            <!-- empilhar conteúdo e reduzir tamanhos -->
-                            <div class="flex flex-col">
+                            <div id="vet-tutor-info" class="flex flex-col">
                                 <h3 id="vet-tutor-nome" class="font-medium text-gray-800 text-sm leading-tight break-words">
                                     Nome Tutor
                                 </h3>
-                                <!-- e-mail logo abaixo do nome -->
                                 <div class="mt-0.5 text-xs text-gray-600 leading-tight break-words">
                                     <span id="vet-tutor-email">email@email.com.br</span>
                                     <span class="ml-1 align-baseline text-[10px] text-gray-400">· E-mail</span>
                                 </div>
-                                <!-- telefone abaixo do e-mail quando existir -->
                                 <div class="mt-0.5 text-xs text-gray-600 leading-tight break-words">
                                     <span id="vet-tutor-telefone">(##)#####-####</span>
                                     <span class="ml-1 align-baseline text-[10px] text-gray-400">· Celular</span>
                                 </div>
                             </div>
+                            <div id="vet-pet-info" class="flex flex-col hidden">
+                                <h3 id="vet-pet-nome" class="font-medium text-gray-800 text-sm leading-tight break-words">
+                                    Nome do Pet
+                                </h3>
+                                <div class="mt-0.5 text-xs text-gray-600 leading-tight break-words">
+                                    <span id="vet-pet-tipo-raca">—</span>
+                                    <span class="ml-1 align-baseline text-[10px] text-gray-400">· Tipo / Raça</span>
+                                </div>
+                                <div class="mt-0.5 text-xs text-gray-600 leading-tight break-words">
+                                    <span id="vet-pet-peso">—</span>
+                                    <span class="ml-1 align-baseline text-[10px] text-gray-400">· Peso</span>
+                                </div>
+                            </div>
                         </div>
                         <div class="mt-1 flex flex-col gap-2">
-                            <button class="h-7 w-7 grid place-content-center rounded-md bg-gray-100 text-gray-600"><i
-                                    class="fas fa-user"></i></button>
-                            <button class="h-7 w-7 grid place-content-center rounded-md bg-gray-100 text-gray-600"><i
-                                    class="fas fa-paw"></i></button>
+                            <button id="vet-card-show-tutor" type="button"
+                                class="h-7 w-7 grid place-content-center rounded-md bg-sky-600 text-white shadow-sm">
+                                <i class="fas fa-user"></i>
+                            </button>
+                            <button id="vet-card-show-pet" type="button"
+                                class="h-7 w-7 grid place-content-center rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 opacity-50 cursor-not-allowed"
+                                disabled>
+                                <i class="fas fa-paw"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
