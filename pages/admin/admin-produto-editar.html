@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin: Editar Produto - E o Bicho</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+
+    <div id="admin-header-placeholder"></div>
+
+    <main class="container mx-auto px-4 py-8 min-h-screen">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+
+            <aside class="md:col-span-4">
+                <div id="admin-sidebar-placeholder"></div>
+            </aside>
+            
+            <div class="md:col-span-4">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <div class="mb-4">
+                        <a href="admin-produtos.html" class="text-sm text-primary hover:underline"><i class="fas fa-arrow-left mr-2"></i>Voltar para a lista de produtos</a>
+                    </div>
+                    <h1 id="product-page-title" class="text-2xl font-bold text-gray-800">Editar Produto</h1>
+                    <p class="text-gray-600 mt-1">Altere os dados do produto abaixo.</p>
+
+                    <form id="edit-product-form" class="mt-6 space-y-6">
+                        <div class="border-b mb-4">
+                            <nav id="product-tabs" class="flex space-x-6">
+                                <button type="button" class="tab-link text-sm font-semibold text-primary border-b-2 border-primary pb-2" data-tab="tab-geral">Geral</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2" data-tab="tab-especificacoes">Especificações</button>
+                            </nav>
+                        </div>
+
+                        <div id="tab-geral" class="space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="nome" class="block text-sm font-medium text-gray-700">Nome do Produto</label>
+                                    <input type="text" id="nome" name="nome" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div>
+                                    <label for="marca" class="block text-sm font-medium text-gray-700">Marca</label>
+                                    <input type="text" id="marca" name="marca" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label for="cod" class="block text-sm font-medium text-gray-700">Código Interno (SKU)</label>
+                                    <input type="text" id="cod" name="cod" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div>
+                                    <label for="codbarras" class="block text-sm font-medium text-gray-700">Código de Barras (EAN)</label>
+                                    <input type="text" id="codbarras" name="codbarras" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label for="descricao" class="block text-sm font-medium text-gray-700">Descrição</label>
+                                    <textarea id="descricao" name="descricao" rows="4" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"></textarea>
+                                </div>
+                                <div>
+                                    <label for="custo" class="block text-sm font-medium text-gray-700">Preço de Custo (R$)</label>
+                                    <input type="number" step="0.01" id="custo" name="custo" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div>
+                                    <label for="venda" class="block text-sm font-medium text-gray-700">Preço de Venda (R$)</label>
+                                    <input type="number" step="0.01" id="venda" name="venda" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div>
+                                    <label for="stock" class="block text-sm font-medium text-gray-700">Stock</label>
+                                    <input type="number" id="stock" name="stock" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Categorias Atuais</label>
+                                <div id="category-tags-container" class="flex flex-wrap gap-2 items-center min-h-[2.5rem] p-2 border border-gray-200 rounded-md bg-gray-50"></div>
+                                <button type="button" id="add-category-btn" class="mt-3 text-sm text-primary font-semibold hover:underline flex items-center">
+                                    <i class="fas fa-plus-circle mr-2"></i>
+                                    Adicionar / Remover Categorias
+                                </button>
+                            </div>
+
+                            <div class="border-t pt-6">
+                                <h3 class="text-lg font-medium text-gray-800">Gerir Imagens</h3>
+                                <div id="existing-images-grid" class="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4"></div>
+                                <div class="mt-6">
+                                    <label for="imageUpload" class="block text-sm font-medium text-gray-700">Adicionar novas imagens</label>
+                                    <input type="file" id="imageUpload" name="imagens" multiple class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-especificacoes" class="space-y-6 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Idade</label>
+                                    <div class="mt-2 flex flex-wrap gap-3">
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-idade" value="Filhotes" class="form-checkbox"> Filhotes</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-idade" value="Adulto" class="form-checkbox"> Adulto</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-idade" value="Sênior" class="form-checkbox"> Sênior</label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Porte Raça</label>
+                                    <div class="mt-2 flex flex-wrap gap-3">
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-porte" value="Mini" class="form-checkbox"> Mini</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-porte" value="Pequeno" class="form-checkbox"> Pequeno</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-porte" value="Médio" class="form-checkbox"> Médio</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-porte" value="Grande" class="form-checkbox"> Grande</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-porte" value="Gigante" class="form-checkbox"> Gigante</label>
+                                    </div>
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700">Pet</label>
+                                    <div class="mt-2 flex flex-wrap gap-3">
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Cachorro" class="form-checkbox"> Cachorro</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Gato" class="form-checkbox"> Gato</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Pássaros" class="form-checkbox"> Pássaros</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Peixes" class="form-checkbox"> Peixes</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Coelhos" class="form-checkbox"> Coelhos</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Roedores" class="form-checkbox"> Roedores</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Tartarugas" class="form-checkbox"> Tartarugas</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Lagartos" class="form-checkbox"> Lagartos</label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label for="spec-apresentacao" class="block text-sm font-medium text-gray-700">Apresentação</label>
+                                    <input type="text" id="spec-apresentacao" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label for="spec-codbarras" class="block text-sm font-medium text-gray-700">Código de Barras (EAN)</label>
+                                    <input type="text" id="spec-codbarras" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end space-x-3 border-t pt-6">
+                            <a href="admin-produtos.html" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">Cancelar</a>
+                            <button type="submit" class="bg-primary text-white font-bold py-2 px-4 rounded-lg hover:bg-secondary">Salvar Alterações</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="admin-footer-placeholder"></div>
+
+    <div id="category-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full flex flex-col">
+            <div class="p-4 border-b flex justify-between items-center">
+                <h3 class="text-lg font-semibold text-gray-800">Selecionar Categorias</h3>
+                <button type="button" id="close-category-modal-btn" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <div id="category-tree-container" class="p-6 overflow-y-auto" style="max-height: 60vh;"></div>
+            <div class="p-4 bg-gray-50 border-t flex justify-end space-x-3">
+                <button type="button" id="cancel-category-modal-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">Cancelar</button>
+                <button type="button" id="save-category-modal-btn" class="bg-primary text-white font-bold py-2 px-4 rounded-lg hover:bg-secondary">Confirmar Seleção</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="modal-placeholder"></div>
+    <div id="confirm-modal-placeholder"></div>
+    
+    <script>var basePath = '../../';</script>
+    <script src="../../scripts/core/config.js"></script>
+    <script src="../../scripts/core/ui.js"></script>
+    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/admin/admin.js"></script>
+    <script src="../../scripts/admin/admin-produto-form.js"></script>
+</body>
+</html>

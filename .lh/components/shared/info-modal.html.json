@@ -1,0 +1,18 @@
+{
+    "sourceFile": "components/shared/info-modal.html",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1757706908714,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1757706908714,
+            "name": "Commit-0",
+            "content": "  <div id=\"info-modal\" class=\"hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4\">\r\n  <!-- AUMENTEI AQUI: w-full max-w-lg md:max-w-xl + p-6 -->\r\n  <div class=\"bg-white rounded-lg shadow-xl w-full max-w-lg md:max-w-xl p-6 text-center\">\r\n    <div class=\"text-4xl text-blue-500 mb-3\">\r\n      <i class=\"fas fa-info-circle\"></i>\r\n    </div>\r\n    <h2 class=\"text-xl font-bold text-gray-800 mb-2\">Atenção</h2>\r\n    <p id=\"info-modal-message\" class=\"text-gray-600 mb-6 text-base\">Mensagem de exemplo.</p>\r\n\r\n    <button id=\"info-modal-btn\"\r\n            class=\"min-w-[120px] px-6 py-2 rounded-lg bg-primary text-white font-semibold hover:bg-secondary transition-colors\">\r\n      OK\r\n    </button>\r\n  </div>\r\n</div>\r\n"
+        }
+    ]
+}

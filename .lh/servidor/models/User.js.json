@@ -1,0 +1,30 @@
+{
+    "sourceFile": "servidor/models/User.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 3,
+            "patches": [
+                {
+                    "date": 1756570031979,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1756831742760,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -87,7 +87,13 @@\n     enum: ['admin_master', 'admin', 'funcionario', 'cliente'],\r\n     default: 'cliente'\r\n   },\r\n \r\n+  emailVerified: { type: Boolean, default: false },\r\n+  emailVerificationToken: { type: String },\r\n+  emailVerificationExpires: { type: Date },\r\n+  passwordResetToken: { type: String },\r\n+  passwordResetExpires: { type: Date },\r\n+\r\n });\r\n \r\n module.exports = mongoose.model('User', userSchema);\n\\ No newline at end of file\n"
+                },
+                {
+                    "date": 1757178501049,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -87,13 +87,30 @@\n     enum: ['admin_master', 'admin', 'funcionario', 'cliente'],\r\n     default: 'cliente'\r\n   },\r\n \r\n+  grupos: {\r\n+    type: [String],\r\n+    enum: ['gerente','vendedor','esteticista','veterinario'],\r\n+    default: []\r\n+  },\r\n+\r\n   emailVerified: { type: Boolean, default: false },\r\n   emailVerificationToken: { type: String },\r\n   emailVerificationExpires: { type: Date },\r\n\\ No newline at end of file\n   passwordResetToken: { type: String },\r\n   passwordResetExpires: { type: Date },\r\n \r\n+  // --- 2FA (TOTP) ---\r\n+  totpEnabled: { type: Boolean, default: false },\r\n+  totpSecretEnc: { type: String }, // secreto criptografado (AES-GCM)\r\n+  totpTempSecretEnc: { type: String }, // secreto temporário para setup\r\n+  totpTempCreatedAt: { type: Date },\r\n+\r\n+  // --- Quick Login por e-mail (OTP curto) ---\r\n+  quickEmailCodeHash: { type: String },\r\n+  quickEmailCodeExpires: { type: Date },\r\n+  quickEmailCodeAttempts: { type: Number, default: 0 },\r\n+\r\n });\r\n \r\n-module.exports = mongoose.model('User', userSchema);\n+module.exports = mongoose.model('User', userSchema);\r\n"
+                },
+                {
+                    "date": 1757195429010,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -92,8 +92,12 @@\n     type: [String],\r\n     enum: ['gerente','vendedor','esteticista','veterinario'],\r\n     default: []\r\n   },\r\n+  empresas: [{\r\n+    type: Schema.Types.ObjectId,\r\n+    ref: 'Store'\r\n+  }],\r\n \r\n   emailVerified: { type: Boolean, default: false },\r\n   emailVerificationToken: { type: String },\r\n   emailVerificationExpires: { type: Date },\r\n@@ -112,5 +116,5 @@\n   quickEmailCodeAttempts: { type: Number, default: 0 },\r\n \r\n });\r\n \r\n-module.exports = mongoose.model('User', userSchema);\n\\ No newline at end of file\n+module.exports = mongoose.model('User', userSchema);\r\n"
+                }
+            ],
+            "date": 1756570031979,
+            "name": "Commit-0",
+            "content": "const mongoose = require('mongoose');\r\nconst Schema = mongoose.Schema;\r\n\r\n// Esta é a \"planta\" para cada novo utilizador na nossa base de dados.\r\nconst userSchema = new Schema({\r\n  // Campo para diferenciar o tipo de conta\r\n  tipoConta: {\r\n    type: String,\r\n    enum: ['pessoa_fisica', 'pessoa_juridica'], // Só aceita um destes dois valores\r\n    required: true\r\n  },\r\n\r\n  // --- Campos Comuns ---\r\n  email: {\r\n    type: String,\r\n    required: true,\r\n    unique: true, // Garante que não haja dois emails iguais na base de dados\r\n    trim: true,   // Remove espaços em branco desnecessários\r\n    lowercase: true // Guarda sempre o email em minúsculas\r\n  },\r\n  senha: {\r\n    type: String,\r\n    required: true\r\n  },\r\n  celular: {\r\n    type: String,\r\n    required: true,\r\n    unique: true,\r\n    sparse: true\r\n  },\r\n  telefone: {\r\n    type: String // Opcional\r\n  },\r\n\r\n  // --- Campos Específicos de Pessoa Física ---\r\n  nomeCompleto: { type: String },\r\n  cpf: { type: String, unique: true, sparse: true },\r\n  genero: { type: String },\r\n  dataNascimento: { type: Date },\r\n\r\n  // --- Campos Específicos de Pessoa Jurídica ---\r\n  razaoSocial: { type: String },\r\n  cnpj: { type: String, unique: true, sparse: true },\r\n  nomeContato: { type: String },\r\n  inscricaoEstadual: { type: String },\r\n  estadoIE: { type: String },\r\n  isentoIE: { type: Boolean, default: false },\r\n\r\n  // --- Campos do Carrinho ---\r\n  cart: [\r\n    {\r\n      product: {\r\n        type: mongoose.Schema.Types.ObjectId,\r\n        ref: 'Product',\r\n        required: true\r\n      },\r\n      quantity: {\r\n        type: Number,\r\n        required: true,\r\n        min: 1,\r\n        default: 1\r\n      },\r\n      isSubscribed: {\r\n        type: Boolean,\r\n        default: false // Por padrão, um item adicionado não é uma assinatura\r\n      },\r\n      subscriptionFrequency: {\r\n        type: Number, // Guardaremos a frequência em dias (ex: 30, 45)\r\n        default: 30   // Um valor padrão de 30 dias\r\n      }\r\n    }\r\n  ],\r\n  \r\n  // --- Favoritos ---\r\n  favorites: [{\r\n    type: mongoose.Schema.Types.ObjectId,\r\n    ref: 'Product'\r\n  }],\r\n\r\n  // --- Dados de Controlo ---\r\n  criadoEm: {\r\n    type: Date,\r\n    default: Date.now // Define a data de criação automaticamente\r\n  },\r\n  role: {\r\n    type: String,\r\n    enum: ['admin_master', 'admin', 'funcionario', 'cliente'],\r\n    default: 'cliente'\r\n  },\r\n\r\n});\r\n\r\nmodule.exports = mongoose.model('User', userSchema);"
+        }
+    ]
+}

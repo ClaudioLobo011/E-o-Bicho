@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin — Cadastro de Grupo de Serviço</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <!-- Header Admin -->
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 py-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <!-- Barra Admin horizontal -->
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <!-- Conteúdo -->
+      <section class="md:col-span-4">
+        <div class="bg-white rounded-lg shadow p-6">
+          <!-- Título -->
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div class="flex items-center gap-3">
+              <i class="fas fa-folder-tree text-gray-400 text-2xl"></i>
+              <h1 class="text-2xl font-bold text-gray-800">Cadastro de Grupo de Serviço</h1>
+            </div>
+            <a href="/pages/admin/admin-servicos-grupos.html" class="text-sm text-gray-500 hover:text-gray-700 underline">Atualizar</a>
+          </div>
+
+          <!-- Formulário -->
+          <form id="grupo-form" class="space-y-4">
+            <input type="hidden" id="grupo-id">
+
+            <div>
+              <label for="grupo-nome" class="block text-sm font-medium text-gray-700 mb-1">Nome do grupo</label>
+              <input id="grupo-nome" type="text" required maxlength="80"
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                     placeholder="Ex.: Banho">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tipos de funcionário permitidos</label>
+              <div id="grupo-tipos" class="grid grid-cols-2 gap-2">
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" value="esteticista" class="rounded border-gray-300">
+                  <span>Esteticista</span>
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" value="veterinario" class="rounded border-gray-300">
+                  <span>Veterinário</span>
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" value="vendedor" class="rounded border-gray-300">
+                  <span>Vendedor</span>
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" value="gerente" class="rounded border-gray-300">
+                  <span>Gerente</span>
+                </label>
+              </div>
+              <p class="text-xs text-gray-500 mt-1">Selecione um ou mais tipos.</p>
+            </div>
+
+            <div>
+              <label for="grupo-comissao" class="block text-sm font-medium text-gray-700 mb-1">Comissão geral (%)</label>
+              <input id="grupo-comissao" type="number" inputmode="decimal" min="0" max="100" step="0.01" value="0"
+                     class="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+            </div>
+
+            <div class="flex items-center gap-3 pt-2">
+              <button type="submit" class="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90 transition">
+                <i class="fas fa-save"></i>
+                <span id="grupo-submit-label">Salvar</span>
+              </button>
+              <button type="button" id="grupo-cancelar" class="hidden text-sm text-gray-600 hover:text-gray-800 underline">Cancelar edição</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Lista -->
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+          <div class="flex items-center gap-3 mb-4">
+            <i class="fas fa-list text-gray-400"></i>
+            <h2 class="text-lg font-bold text-gray-800">Grupos cadastrados</h2>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="text-left text-gray-500">
+                  <th class="px-3 py-2">Nome</th>
+                  <th class="px-3 py-2">Tipos permitidos</th>
+                  <th class="px-3 py-2">Comissão (%)</th>
+                  <th class="px-3 py-2 w-36">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="grupo-tbody" class="divide-y divide-gray-200"></tbody>
+            </table>
+          </div>
+          <p id="grupo-empty" class="text-gray-400 text-sm italic hidden mt-3">Nenhum grupo cadastrado.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Modais compartilhados -->
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <!-- Footer Admin -->
+  <div id="admin-footer-placeholder"></div>
+
+  <!-- Base path relativo à pasta /pages -->
+  <script>var basePath = '../../';</script>
+
+  <!-- Core -->
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+
+  <!-- (Se houver) Guarda do Admin -->
+  <script src="../../scripts/admin/admin.js"></script>
+
+  <!-- Página -->
+  <script src="../../scripts/admin/admin-servicos-grupos.js"></script>
+</body>
+</html>

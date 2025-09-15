@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nossas Lojas - E o Bicho</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="../src/output.css">
+</head>
+<body class="bg-gray-100">
+
+    <div id="header-placeholder"></div>
+
+    <main class="container mx-auto px-4 py-8 pt-[200px]">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+
+            <aside class="md:col-span-1">
+                 <div id="nossas-lojas-sidebar-placeholder"></div>
+            </aside>
+
+            <div class="md:col-span-3">
+                <section class="bg-white p-6 rounded-lg shadow">
+                    <h1 class="text-2xl font-bold text-gray-800 border-b pb-4">Nossas Lojas</h1>
+                    
+                    <div id="stores-list-container" class="mt-6 grid grid-cols-1 md:grid-cols-1 gap-6">
+                       <p class="col-span-full text-center text-gray-400 py-10">A carregar as nossas lojas...</p>
+                    </div>
+                    
+                </section>
+            </div>
+
+        </div>
+    </main>
+    
+    <div id="cart-placeholder"></div>
+    <div id="footer-placeholder"></div>
+    <div id="modal-placeholder"></div>
+    <div id="confirm-modal-placeholder"></div>
+
+    <script>var basePath = '../';</script>
+    <script src="../scripts/core/config.js"></script>
+    <script src="../scripts/core/ui.js"></script>
+    <script src="../scripts/cartManager.js"></script>
+    <script src="../scripts/favoritesManager.js"></script>
+    <script src="../scripts/cart.js"></script>
+    <script src="../scripts/core/main.js"></script>
+    <script src="../scripts/nossas-lojas.js"></script>
+
+</body>
+</html>

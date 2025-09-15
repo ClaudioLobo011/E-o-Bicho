@@ -1,0 +1,26 @@
+{
+    "sourceFile": "servidor/models/ServiceGroup.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 2,
+            "patches": [
+                {
+                    "date": 1757180565430,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1757181660279,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -0,0 +1,40 @@\n+# PATH: SiteEoBichoTW/servidor/models/ServiceGroup.js\r\n+# BEGIN FILE\r\n+const mongoose = require('mongoose');\r\n+\r\n+const STAFF_TYPES = ['esteticista', 'veterinario', 'vendedor', 'gerente'];\r\n+\r\n+const ServiceGroupSchema = new mongoose.Schema({\r\n+  nome: {\r\n+    type: String,\r\n+    required: true,\r\n+    trim: true,\r\n+    unique: true // mantém o índice único apenas aqui (sem schema.index duplicado)\r\n+  },\r\n+  tiposPermitidos: {\r\n+    type: [String],\r\n+    enum: STAFF_TYPES,\r\n+    default: [],\r\n+    validate: {\r\n+      validator: (arr) => Array.isArray(arr) && arr.length > 0,\r\n+      message: 'Selecione ao menos um tipo de funcionário.'\r\n+    }\r\n+  },\r\n+  comissaoPercent: {\r\n+    type: Number,\r\n+    min: 0,\r\n+    max: 100,\r\n+    default: 0\r\n+  },\r\n+  ativo: {\r\n+    type: Boolean,\r\n+    default: true\r\n+  }\r\n+}, { timestamps: true });\r\n+\r\n+// NÃO declarar ServiceGroupSchema.index({ nome: 1 }, { unique: true })\r\n+// para evitar o warning de índice duplicado\r\n+\r\n+module.exports = mongoose.model('ServiceGroup', ServiceGroupSchema);\r\n+module.exports.STAFF_TYPES = STAFF_TYPES;\r\n+# END FILE\r\n"
+                },
+                {
+                    "date": 1757181674827,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -0,0 +1,37 @@\n+const mongoose = require('mongoose');\r\n+\r\n+const STAFF_TYPES = ['esteticista', 'veterinario', 'vendedor', 'gerente'];\r\n+\r\n+const ServiceGroupSchema = new mongoose.Schema({\r\n+  nome: {\r\n+    type: String,\r\n+    required: true,\r\n+    trim: true,\r\n+    unique: true // mantém o índice único apenas aqui (sem schema.index duplicado)\r\n+  },\r\n+  tiposPermitidos: {\r\n+    type: [String],\r\n+    enum: STAFF_TYPES,\r\n+    default: [],\r\n+    validate: {\r\n+      validator: (arr) => Array.isArray(arr) && arr.length > 0,\r\n+      message: 'Selecione ao menos um tipo de funcionário.'\r\n+    }\r\n+  },\r\n+  comissaoPercent: {\r\n+    type: Number,\r\n+    min: 0,\r\n+    max: 100,\r\n+    default: 0\r\n+  },\r\n+  ativo: {\r\n+    type: Boolean,\r\n+    default: true\r\n+  }\r\n+}, { timestamps: true });\r\n+\r\n+// NÃO declarar ServiceGroupSchema.index({ nome: 1 }, { unique: true })\r\n+// para evitar o warning de índice duplicado\r\n+\r\n+module.exports = mongoose.model('ServiceGroup', ServiceGroupSchema);\r\n+module.exports.STAFF_TYPES = STAFF_TYPES;\r\n"
+                }
+            ],
+            "date": 1757180565430,
+            "name": "Commit-0",
+            "content": "const mongoose = require('mongoose');\r\n\r\nconst STAFF_TYPES = ['esteticista','veterinario','vendedor','gerente'];\r\n\r\nconst ServiceGroupSchema = new mongoose.Schema({\r\n  nome: {\r\n    type: String,\r\n    required: true,\r\n    trim: true,\r\n    unique: true\r\n  },\r\n  tiposPermitidos: {\r\n    type: [String],\r\n    enum: STAFF_TYPES,\r\n    default: [],\r\n    validate: {\r\n      validator: (arr) => Array.isArray(arr) && arr.length > 0,\r\n      message: 'Selecione ao menos um tipo de funcionário.'\r\n    }\r\n  },\r\n  comissaoPercent: {\r\n    type: Number,\r\n    min: 0,\r\n    max: 100,\r\n    default: 0\r\n  },\r\n  ativo: { type: Boolean, default: true }\r\n}, { timestamps: true });\r\n\r\nServiceGroupSchema.index({ nome: 1 }, { unique: true });\r\n\r\nmodule.exports = mongoose.model('ServiceGroup', ServiceGroupSchema);\r\nmodule.exports.STAFF_TYPES = STAFF_TYPES;"
+        }
+    ]
+}

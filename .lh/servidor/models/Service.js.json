@@ -1,0 +1,26 @@
+{
+    "sourceFile": "servidor/models/Service.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 2,
+            "patches": [
+                {
+                    "date": 1757182615477,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1757185260080,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,7 +1,9 @@\n const mongoose = require('mongoose');\r\n const { Schema } = mongoose;\r\n \r\n+const PORTES = ['Todos', 'Mini', 'Pequeno', 'Médio', 'Grande', 'Gigante'];\r\n+\r\n const ServiceSchema = new Schema({\r\n   nome: {\r\n     type: String,\r\n     required: true,\r\n@@ -27,8 +29,13 @@\n     type: Number,\r\n     min: 0,\r\n     required: true\r\n   },\r\n+  porte: {\r\n+    type: String,\r\n+    enum: PORTES,\r\n+    default: 'Todos'\r\n+  },\r\n   ativo: {\r\n     type: Boolean,\r\n     default: true\r\n   }\r\n@@ -37,5 +44,6 @@\n // Nome único dentro do mesmo grupo\r\n ServiceSchema.index({ nome: 1, grupo: 1 }, { unique: true });\r\n ServiceSchema.index({ grupo: 1 });\r\n \r\n-module.exports = mongoose.model('Service', ServiceSchema);\n\\ No newline at end of file\n+module.exports = mongoose.model('Service', ServiceSchema);\r\n+module.exports.PORTES = PORTES;\n\\ No newline at end of file\n"
+                },
+                {
+                    "date": 1757186292961,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -2,8 +2,24 @@\n const { Schema } = mongoose;\r\n \r\n const PORTES = ['Todos', 'Mini', 'Pequeno', 'Médio', 'Grande', 'Gigante'];\r\n \r\n+/**\r\n+ * Normaliza o campo \"porte\":\r\n+ * - aceita string ou array;\r\n+ * - remove duplicados;\r\n+ * - se incluir \"Todos\" ou ficar vazio, vira [\"Todos\"].\r\n+ */\r\n+function normalizePorte(value) {\r\n+  let arr = Array.isArray(value) ? value : (value != null ? [value] : []);\r\n+  arr = arr.map(v => String(v)).filter(Boolean);\r\n+  // dedup\r\n+  arr = [...new Set(arr)];\r\n+  if (arr.length === 0) return ['Todos'];\r\n+  if (arr.includes('Todos')) return ['Todos'];\r\n+  return arr;\r\n+}\r\n+\r\n const ServiceSchema = new Schema({\r\n   nome: {\r\n     type: String,\r\n     required: true,\r\n@@ -29,12 +45,14 @@\n     type: Number,\r\n     min: 0,\r\n     required: true\r\n   },\r\n+  // AGORA: array de portes\r\n   porte: {\r\n-    type: String,\r\n+    type: [String],\r\n     enum: PORTES,\r\n-    default: 'Todos'\r\n+    default: ['Todos'],\r\n+    set: normalizePorte\r\n   },\r\n   ativo: {\r\n     type: Boolean,\r\n     default: true\r\n"
+                }
+            ],
+            "date": 1757182615477,
+            "name": "Commit-0",
+            "content": "const mongoose = require('mongoose');\r\nconst { Schema } = mongoose;\r\n\r\nconst ServiceSchema = new Schema({\r\n  nome: {\r\n    type: String,\r\n    required: true,\r\n    trim: true,\r\n  },\r\n  grupo: {\r\n    type: Schema.Types.ObjectId,\r\n    ref: 'ServiceGroup',\r\n    required: true\r\n  },\r\n  duracaoMinutos: {\r\n    type: Number,\r\n    min: 1,\r\n    max: 600,\r\n    required: true\r\n  },\r\n  custo: {\r\n    type: Number,\r\n    min: 0,\r\n    default: 0\r\n  },\r\n  valor: {\r\n    type: Number,\r\n    min: 0,\r\n    required: true\r\n  },\r\n  ativo: {\r\n    type: Boolean,\r\n    default: true\r\n  }\r\n}, { timestamps: true });\r\n\r\n// Nome único dentro do mesmo grupo\r\nServiceSchema.index({ nome: 1, grupo: 1 }, { unique: true });\r\nServiceSchema.index({ grupo: 1 });\r\n\r\nmodule.exports = mongoose.model('Service', ServiceSchema);"
+        }
+    ]
+}

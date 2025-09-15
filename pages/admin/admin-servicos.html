@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin — Cadastro de Serviço</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <!-- Header Admin -->
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 py-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <!-- Barra Admin horizontal -->
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <!-- Conteúdo -->
+      <section class="md:col-span-4">
+        <!-- Tabs -->
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+          <button id="tab-btn-cadastro" class="px-4 py-2 rounded-lg bg-primary text-white hover:opacity-90">Cadastro</button>
+          <button id="tab-btn-precos" class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">Alteração de Preços</button>
+        </div>
+
+        <!-- Conteúdo: Cadastro -->
+        <div id="tab-cadastro" class="bg-white rounded-lg shadow p-6">
+          <!-- Título -->
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div class="flex items-center gap-3">
+              <i class="fas fa-scissors text-gray-400 text-2xl"></i>
+              <h1 class="text-2xl font-bold text-gray-800">Cadastro de Serviço</h1>
+            </div>
+            <a href="/pages/admin/admin-servicos.html" class="text-sm text-gray-500 hover:text-gray-700 underline">Atualizar</a>
+          </div>
+
+          <!-- Formulário -->
+          <form id="serv-form" class="space-y-4">
+            <input type="hidden" id="serv-id">
+
+            <div>
+              <label for="serv-nome" class="block text-sm font-medium text-gray-700 mb-1">Nome do serviço</label>
+              <input id="serv-nome" type="text" required maxlength="120"
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                     placeholder="Ex.: Banho Completo">
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label for="serv-grupo" class="block text-sm font-medium text-gray-700 mb-1">Grupo</label>
+                <select id="serv-grupo" required
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+                  <option value="" disabled selected>Selecione um grupo</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Os grupos são cadastrados em “Cadastro de Grupo de Serviço”.</p>
+              </div>
+
+              <div>
+                <label for="serv-duracao" class="block text-sm font-medium text-gray-700 mb-1">Tempo de duração (minutos)</label>
+                <input id="serv-duracao" type="number" min="1" max="600" step="1" required value="30"
+                       class="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+              </div>
+
+                <div>
+                  <label for="serv-porte" class="block text-sm font-medium text-gray-700 mb-1">Porte</label>
+                  <select id="serv-porte" multiple size="6"
+                          class="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary/40">
+                    <option value="Mini">Mini</option>
+                    <option value="Pequeno">Pequeno</option>
+                    <option value="Médio">Médio</option>
+                    <option value="Grande">Grande</option>
+                    <option value="Gigante">Gigante</option>
+                  </select>
+                  <p class="text-xs text-gray-500 mt-1">
+                    Selecione um ou mais portes (Ctrl/Cmd+clique). Se nenhum porte for selecionado, valer� para todos os portes.</p>
+                </div>
+
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label for="serv-custo" class="block text-sm font-medium text-gray-700 mb-1">Custo (R$)</label>
+                <input id="serv-custo" type="number" inputmode="decimal" min="0" step="0.01" value="0"
+                       class="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+              </div>
+
+              <div>
+                <label for="serv-valor" class="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
+                <input id="serv-valor" type="number" inputmode="decimal" min="0" step="0.01" required value="0"
+                       class="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3 pt-2">
+              <button type="submit" class="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90 transition">
+                <i class="fas fa-save"></i>
+                <span id="serv-submit-label">Salvar</span>
+              </button>
+              <button type="button" id="serv-cancelar" class="hidden text-sm text-gray-600 hover:text-gray-800 underline">Cancelar edição</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Lista -->
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+          <div class="flex items-center gap-3 mb-4">
+            <i class="fas fa-list text-gray-400"></i>
+            <h2 class="text-lg font-bold text-gray-800">Serviços cadastrados</h2>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="text-left text-gray-500">
+                  <th class="px-3 py-2">Nome</th>
+                  <th class="px-3 py-2">Grupo</th>
+                  <th class="px-3 py-2">Duração (min)</th>
+                  <th class="px-3 py-2">Custo</th>
+                  <th class="px-3 py-2">Valor</th>
+                  <th class="px-3 py-2 w-36">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="serv-tbody" class="divide-y divide-gray-200"></tbody>
+            </table>
+          </div>
+          <p id="serv-empty" class="text-gray-400 text-sm italic hidden mt-3">Nenhum serviço cadastrado.</p>
+        </div>
+        </div>
+        </div>
+
+        <!-- Conteúdo: Alteração de Preços -->
+        <div id="tab-precos" class="bg-white rounded-lg shadow p-6 hidden">
+          <div class="flex items-center gap-3 mb-6">
+            <i class="fas fa-tags text-gray-400"></i>
+            <h2 class="text-xl font-bold text-gray-800">Alteração de Preços por Raça</h2>
+          </div>
+
+          <!-- Filtros -->
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
+            <div class="md:col-span-4">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Serviço</label>
+              <input id="ap-serv-input" type="text" placeholder="Buscar serviço..." class="w-full rounded-lg border-gray-300 focus:ring-primary focus:border-primary" />
+              <ul id="ap-serv-sug" class="mt-1 divide-y divide-gray-200 border border-gray-200 rounded-lg max-h-40 overflow-y-auto hidden"></ul>
+              <input type="hidden" id="ap-serv-id" />
+              <p id="ap-serv-porte-info" class="text-xs text-gray-500 mt-1"></p>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de pet</label>
+              <select id="ap-tipo" class="w-full rounded-lg border-gray-300 focus:ring-primary focus:border-primary"></select>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Porte (para cachorro)</label>
+              <select id="ap-porte" class="w-full rounded-lg border-gray-300 focus:ring-primary focus:border-primary"></select>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Empresa</label>
+              <select id="ap-store" class="w-full rounded-lg border-gray-300 focus:ring-primary focus:border-primary"></select>
+            </div>
+          </div>
+
+          <!-- Replicar -->
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-2">
+            <div class="md:col-span-3 flex items-end gap-2">
+              <div class="w-full">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Replicar Custo</label>
+                <input id="ap-repl-custo" type="number" step="0.01" class="w-full rounded-lg border-gray-300" />
+              </div>
+              <button id="ap-repl-custo-btn" class="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">Aplicar</button>
+            </div>
+            <div class="md:col-span-3 flex items-end gap-2">
+              <div class="w-full">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Replicar Venda</label>
+                <input id="ap-repl-valor" type="number" step="0.01" class="w-full rounded-lg border-gray-300" />
+              </div>
+              <button id="ap-repl-valor-btn" class="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">Aplicar</button>
+            </div>
+          </div>
+
+          <!-- Grade -->
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="text-left text-gray-500">
+                  <th class="px-3 py-2">Raça</th>
+                  <th class="px-3 py-2 w-40">Custo</th>
+                  <th class="px-3 py-2 w-40">Venda</th>
+                </tr>
+              </thead>
+              <tbody id="ap-grid-tbody" class="divide-y divide-gray-200"></tbody>
+            </table>
+            <p id="ap-grid-empty" class="text-gray-400 text-sm italic hidden mt-3">Selecione serviço, tipo e empresa.</p>
+          </div>
+
+          <div class="mt-4 flex justify-end">
+            <button id="ap-save-btn" class="px-4 py-2 rounded-lg bg-primary text-white hover:opacity-90">Salvar preços</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Modais compartilhados -->
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <!-- Footer Admin -->
+  <div id="admin-footer-placeholder"></div>
+
+  <!-- Base path relativo à pasta /pages -->
+  <script>var basePath = '../../';</script>
+
+  <!-- Core -->
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+
+  <!-- Guarda Admin (se houver) -->
+  <script src="../../scripts/admin/admin.js"></script>
+
+  <!-- Página -->
+  <script type="module" src="../../scripts/admin/cadastro-de-servicos/index.js"></script>
+</body>
+</html>
+

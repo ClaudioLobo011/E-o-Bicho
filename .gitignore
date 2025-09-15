@@ -1,0 +1,14 @@
+﻿node_modules
+dist
+build
+.next
+.out
+coverage
+.env
+.env.*
+*.log
+.DS_Store
+.vercel
+.vscode
+.idea
+Thumbs.db

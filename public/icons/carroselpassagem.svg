@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 20" width="120" height="20">
+  <defs>
+    <style>
+      .bg { fill: #ffffff; stroke: #1f2937; stroke-width: 2; }
+      .fill { fill: var(--color-primary); stroke: #1f2937; stroke-width: 2; }
+      .empty { fill: var(--color-secondary); stroke: #1f2937; stroke-width: 2; }
+      .progress {
+        animation: fillBar 5s linear forwards;
+      }
+      @keyframes fillBar {
+        from { width: 0; }
+        to { width: 80; }
+      }
+    </style>
+  </defs>
+
+  <!-- Exemplo: uma bolinha inativa -->
+  <circle class="empty" cx="10" cy="10" r="6"/>
+
+  <!-- Exemplo: uma barrinha ativa com preenchimento animado -->
+  <rect class="bg" x="30" y="4" width="80" height="12" rx="6"/>
+  <rect class="fill progress" x="30" y="4" width="0" height="12" rx="6"/>
+</svg>

@@ -1,0 +1,18 @@
+{
+    "sourceFile": "servidor/routes/profile.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1756760586407,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1756760586407,
+            "name": "Commit-0",
+            "content": "// servidor/routes/profile.js\r\nconst express = require('express');\r\nconst router = express.Router();\r\n\r\nconst authMiddleware = require('../middlewares/authMiddleware');\r\nconst User = require('../models/User');\r\n\r\n// Normaliza o \"nome\" para front (PF/PJ)\r\nfunction userToDTO(u) {\r\n  const nomeNorm =\r\n    (u.nomeCompleto && String(u.nomeCompleto).trim()) ||\r\n    (u.nomeContato && String(u.nomeContato).trim()) ||\r\n    (u.razaoSocial && String(u.razaoSocial).trim()) ||\r\n    '';\r\n\r\n  return {\r\n    _id: u._id,\r\n    email: u.email,\r\n    role: u.role,\r\n    tipoConta: u.tipoConta,\r\n    celular: u.celular,\r\n    cpf: u.cpf,\r\n    cnpj: u.cnpj,\r\n    nome: nomeNorm,\r\n  };\r\n}\r\n\r\n// GET /api/profile/me  -> retorna usuário logado (token)\r\nrouter.get('/me', authMiddleware, async (req, res) => {\r\n  try {\r\n    const u = await User.findById(\r\n      req.user?.id,\r\n      'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj'\r\n    ).lean();\r\n\r\n    if (!u) return res.status(404).json({ message: 'Usuário não encontrado.' });\r\n    return res.json(userToDTO(u));\r\n  } catch (err) {\r\n    console.error(err);\r\n    return res.status(500).json({ message: 'Erro ao obter perfil.' });\r\n  }\r\n});\r\n\r\nmodule.exports = router;\r\n"
+        }
+    ]
+}

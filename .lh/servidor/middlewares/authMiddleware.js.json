@@ -1,0 +1,18 @@
+{
+    "sourceFile": "servidor/middlewares/authMiddleware.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1756592990441,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1756592990441,
+            "name": "Commit-0",
+            "content": "const jwt = require('jsonwebtoken');\r\n\r\nfunction authMiddleware(req, res, next) {\r\n    const authHeader = req.headers['authorization'];\r\n    if (!authHeader) {\r\n        return res.status(401).json({ message: 'Token não fornecido' });\r\n    }\r\n\r\n    const token = authHeader.split(' ')[1]; // formato: \"Bearer xxx\"\r\n    if (!token) {\r\n        return res.status(401).json({ message: 'Token inválido' });\r\n    }\r\n\r\n    try {\r\n        const decoded = jwt.verify(token, process.env.JWT_SECRET);\r\n        req.user = decoded; // agora o usuário está disponível no req.user\r\n        next();\r\n    } catch (error) {\r\n        return res.status(403).json({ message: 'Token inválido ou expirado' });\r\n    }\r\n}\r\n\r\nmodule.exports = authMiddleware;"
+        }
+    ]
+}

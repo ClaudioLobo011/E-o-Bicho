@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gerir Funcionários - Admin</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
+  <link rel="stylesheet" href="../../src/output.css"/>
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 py-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <section class="md:col-span-4">
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h1 class="text-2xl font-bold">Gerir Funcionários</h1>
+            <button id="btn-add-funcionario" class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-lg">
+              <i class="fa-solid fa-user-plus"></i>
+              Adicionar Funcionário
+            </button>
+          </div>
+
+          <div id="tabela-funcionarios"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- MODAL: EDITAR/CRIAR -->
+  <div id="modal-edit-funcionario" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white w-full max-w-xl rounded-lg shadow-lg">
+      <div class="flex justify-between items-center px-6 py-4 border-b">
+        <h2 id="modal-title" class="text-xl font-semibold">Editar Funcionário</h2>
+        <button id="modal-close" class="text-gray-500 hover:text-gray-700">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+
+      <form id="edit-funcionario-form" class="px-6 py-5 space-y-4">
+        <input type="hidden" id="edit-id"/>
+
+        <div>
+          <label for="edit-nome" class="block text-sm font-medium mb-1">Nome</label>
+          <input id="edit-nome" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nome completo" required/>
+        </div>
+
+        <div>
+          <label for="edit-email" class="block text-sm font-medium mb-1">Email</label>
+          <input id="edit-email" type="email" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="email@dominio.com" required/>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center">
+            <label for="edit-password" class="block text-sm font-medium mb-1">Senha</label>
+            <button type="button" id="toggle-password" class="text-sm text-emerald-600 hover:underline">Mostrar</button>
+          </div>
+          <input id="edit-password" type="password" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Definir/alterar senha (opcional)"/>
+          <div class="mt-1 flex items-center gap-2">
+            <div id="password-strength" class="h-1 w-full bg-gray-200 rounded">
+              <div id="password-bar" class="h-1 w-0 bg-emerald-600 rounded transition-all"></div>
+            </div>
+            <span id="password-hint" class="text-xs text-gray-500">Mín. 8 + letra + número + símbolo</span>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">Preencha apenas se quiser definir/alterar a senha.</p>
+        </div>
+
+        <div>
+          <label for="edit-role" class="block text-sm font-medium mb-1">Cargo</label>
+          <select id="edit-role" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" required></select>
+        </div>
+        <div id="field-grupos" class="mb-2">
+          <label class="block text-sm font-medium mb-1">Grupos</label>
+          <div id="edit-grupos" class="grid grid-cols-2 gap-2">
+            <label class="inline-flex items-center gap-2">
+              <input type="checkbox" value="gerente" class="rounded border-gray-300">
+              <span>Gerente</span>
+            </label>
+            <label class="inline-flex items-center gap-2">
+              <input type="checkbox" value="vendedor" class="rounded border-gray-300">
+              <span>Vendedor</span>
+            </label>
+            <label class="inline-flex items-center gap-2">
+              <input type="checkbox" value="esteticista" class="rounded border-gray-300">
+              <span>Esteticista</span>
+            </label>
+            <label class="inline-flex items-center gap-2">
+              <input type="checkbox" value="veterinario" class="rounded border-gray-300">
+              <span>Veterinário</span>
+            </label>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">Selecione um ou mais grupos.</p>
+        </div>
+
+        <div id="field-empresas" class="mb-2">
+          <label class="block text-sm font-medium mb-1">Empresas</label>
+          <div id="edit-empresas" class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <!-- Opções carregadas dinamicamente -->
+          </div>
+          <p class="text-xs text-gray-500 mt-1">Selecione uma ou mais empresas (lojas) para o funcionário.</p>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-3">
+          <button type="button" id="btn-cancelar" class="px-4 py-2 rounded-lg border">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: PESQUISAR USUÁRIOS -->
+  <div id="modal-search-user" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white w-full max-w-2xl rounded-lg shadow-lg">
+      <div class="flex justify-between items-center px-6 py-4 border-b">
+        <h2 class="text-xl font-semibold">Selecionar usuário para transformar em Funcionário</h2>
+        <button id="modal-search-close" class="text-gray-500 hover:text-gray-700">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+
+      <div class="px-6 py-4 space-y-4">
+        <div>
+          <label for="search-term" class="block text-sm font-medium mb-1">Buscar por Nome, CPF ou CNPJ</label>
+          <input id="search-term" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Ex.: Maria / 123.456.789-00 / 12.345.678/0001-99"/>
+          <p class="text-xs text-gray-500 mt-1">Mostrando até 5 resultados.</p>
+        </div>
+
+        <div id="search-results" class="divide-y rounded-lg border">
+          <!-- resultados renderizados via JS -->
+        </div>
+
+        <div class="flex justify-end">
+          <button id="btn-search-cancel" class="px-4 py-2 rounded-lg border">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>var basePath='../../';</script>
+    <script src="../../scripts/core/config.js"></script>
+    <script src="../../scripts/core/ui.js"></script>
+    <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-funcionarios.js"></script>
+</body>
+</html>

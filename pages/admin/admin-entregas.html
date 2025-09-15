@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin: Entregas - E o Bicho</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+
+    <div id="admin-header-placeholder"></div>
+
+    <main class="container mx-auto px-4 py-8 min-h-screen">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <aside class="md:col-span-4">
+                <div id="admin-sidebar-placeholder"></div>
+            </aside>
+            <div class="md:col-span-4">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h1 class="text-2xl font-bold text-gray-800">Configurações de Entrega</h1>
+                    <p class="text-gray-600 mt-1">Defina os veículos e as zonas de entrega.</p>
+                    
+                    <div class="border-b border-gray-200 mt-6">
+                        <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                            <a href="#" id="tab-veiculos" class="tab-link shrink-0 border-b-2 border-primary px-1 pb-4 text-sm font-medium text-primary">Veículos</a>
+                            <a href="#" id="tab-mapa" class="tab-link shrink-0 border-b-2 border-transparent px-1 pb-4 text-sm font-medium text-gray-500 hover:border-gray-300">Mapa</a>
+                        </nav>
+                    </div>
+
+                    <div id="content-veiculos" class="mt-6">
+                        <div class="flex justify-end mb-4">
+                            <button id="add-vehicle-btn" class="bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center space-x-2">
+                                <i class="fas fa-plus"></i>
+                                <span>Adicionar Veículo</span>
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3">Tipo</th>
+                                        <th class="px-6 py-3">Peso Máx. (kg)</th>
+                                        <th class="px-6 py-3">Taxa Mín. (R$)</th>
+                                        <th class="px-6 py-3">Taxa/KM (R$)</th>
+                                        <th class="px-6 py-3 text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="vehicles-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div id="content-mapa" class="hidden mt-6">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="space-y-6">
+                                <div>
+                                    <label for="store-select" class="block text-sm font-medium text-gray-700">Selecione a Loja Base</label>
+                                    <select id="store-select" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm"></select>
+                                </div>
+                                <fieldset>
+                                    <legend class="text-sm font-medium">Definir área por:</legend>
+                                    <div class="mt-2 flex items-center space-x-4">
+                                        <label><input type="radio" name="area_type" value="raio" class="form-radio text-primary" checked> Raio (km)</label>
+                                        <label><input type="radio" name="area_type" value="bairro" class="form-radio text-primary"> Bairro</label>
+                                    </div>
+                                </fieldset>
+                                <div id="raio-controls">
+                                    <label for="raio-input" class="block text-sm font-medium">Raio em KM</label>
+                                    <input type="number" id="raio-input" min="1" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                                </div>
+                                <div id="bairro-controls" class="hidden">
+                                    <div class="p-4 border rounded-md bg-gray-50 max-h-[400px] flex flex-col">
+                                        <label for="bairro-search" class="font-semibold text-gray-700 mb-2">Buscar e selecionar bairros:</label>
+                                        <input type="text" id="bairro-search" placeholder="Digite para filtrar..." class="w-full border-gray-300 rounded-md shadow-sm mb-3 text-sm">
+                                        <div class="flex items-center space-x-4 mb-3 text-sm">
+                                            <button id="select-all-bairros" class="text-blue-600 hover:underline font-medium">Marcar todos</button>
+                                            <button id="deselect-all-bairros" class="text-blue-600 hover:underline font-medium">Desmarcar todos</button>
+                                        </div>
+
+                                        <div id="bairros-list" class="flex-grow overflow-y-auto space-y-2 pr-2">
+                                            <p class="text-gray-400">A carregar bairros...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="zone-name" class="block text-sm font-medium text-gray-700">Nome da Zona</label>
+                                    <input type="text" id="zone-name" class="mt-1 block w-full border rounded p-2" placeholder="Ex: Zona Sul - até 5km">
+                                </div>
+                                <div class="mb-3 flex items-center">
+                                    <input id="zone-free" type="checkbox" class="h-4 w-4 text-primary border-gray-300 rounded">
+                                    <label for="zone-free" class="ml-2 block text-sm text-gray-700">Entrega grátis nesta zona</label>
+                                </div>
+                                <div>
+                                    <button id="save-zone-btn" class="bg-primary hover:bg-secondary text-white font-bold py-2 px-6 rounded-lg">Salvar Zona</button>
+                                    <button id="cancel-zone-btn" type="button" class="ml-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-6 rounded-lg">Cancelar</button>
+                                </div>
+                                <div id="zones-list" class="mt-4 border rounded p-2 bg-gray-50">
+                                <p class="text-gray-500">Selecione uma loja para ver as zonas configuradas.</p>
+                                </div>
+                            </div>
+                            <div>
+                                <div id="map" class="h-96 w-full rounded-lg shadow border"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <div id="admin-footer-placeholder"></div>
+    <div id="modal-placeholder"></div>
+    <div id="confirm-modal-placeholder"></div>
+
+    <div id="vehicle-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full">
+            <form id="vehicle-form">
+                <div class="p-4 border-b"><h3 id="vehicle-modal-title" class="text-lg font-semibold">Adicionar Veículo</h3></div>
+                <div class="p-6 space-y-4">
+                    <input type="hidden" id="vehicle-id">
+                    <div>
+                        <label for="vehicle-tipo" class="block text-sm font-medium">Tipo</label>
+                        <select id="vehicle-tipo" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                            <option value="Moto">Moto</option>
+                            <option value="Carro">Carro</option>
+                            <option value="Caminhão">Caminhão</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label for="vehicle-pesoMax" class="block text-sm font-medium">Peso Máx. (kg)</label>
+                            <input type="number" id="vehicle-pesoMax" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" step="0.1">
+                        </div>
+                        <div>
+                            <label for="vehicle-taxaMin" class="block text-sm font-medium">Taxa Mín. (R$)</label>
+                            <input type="number" id="vehicle-taxaMin" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" step="0.01">
+                        </div>
+                        <div>
+                            <label for="vehicle-taxaKm" class="block text-sm font-medium">Taxa/KM (R$)</label>
+                            <input type="number" id="vehicle-taxaKm" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" step="0.01">
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 bg-gray-50 border-t flex justify-end space-x-3">
+                    <button type="button" id="cancel-vehicle-modal-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancelar</button>
+                    <button type="submit" id="save-vehicle-modal-btn" class="bg-primary text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>var basePath = '../../';</script>
+    <script src="../../scripts/core/config.js"></script>
+    <script src="../../scripts/core/ui.js"></script>
+    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/admin/admin.js"></script>
+    <script src="../../scripts/admin/admin-entregas.js"></script> 
+</body>
+</html>

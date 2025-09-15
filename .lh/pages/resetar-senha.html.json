@@ -1,0 +1,18 @@
+{
+    "sourceFile": "pages/resetar-senha.html",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1756831945705,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1756831945705,
+            "name": "Commit-0",
+            "content": "<!DOCTYPE html><html lang=\"pt-BR\"><head>\r\n<meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n<title>Redefinir Senha</title><link rel=\"stylesheet\" href=\"../src/output.css\">\r\n</head><body class=\"bg-gray-100\">\r\n<div id=\"header-placeholder\"></div>\r\n<main class=\"container mx-auto px-4 py-24\">\r\n  <div class=\"bg-white p-8 rounded-xl shadow max-w-md mx-auto\">\r\n    <h1 class=\"text-xl font-semibold mb-6 text-center\">Defina sua nova senha</h1>\r\n    <form id=\"form-reset\" class=\"space-y-4\">\r\n      <input id=\"password\" type=\"password\" placeholder=\"Nova senha\" class=\"w-full border rounded px-3 py-2\">\r\n      <input id=\"confirm\" type=\"password\" placeholder=\"Confirmar nova senha\" class=\"w-full border rounded px-3 py-2\">\r\n      <button class=\"w-full px-4 py-2 rounded bg-primary text-white\">Salvar</button>\r\n    </form>\r\n    <p id=\"msg\" class=\"text-center text-sm text-gray-600 mt-4\"></p>\r\n  </div>\r\n</main>\r\n<div id=\"footer-placeholder\"></div>\r\n<script src=\"../scripts/config.js\"></script>\r\n<script>\r\ndocument.getElementById('form-reset').addEventListener('submit', async (e) => {\r\n  e.preventDefault();\r\n  const p = new URLSearchParams(location.search);\r\n  const token = p.get('token');\r\n  const pass = document.getElementById('password').value;\r\n  const conf = document.getElementById('confirm').value;\r\n  const msg = document.getElementById('msg');\r\n\r\n  if (!token) { msg.textContent = 'Link inválido.'; return; }\r\n  if (pass !== conf) { msg.textContent = 'As senhas não coincidem.'; return; }\r\n\r\n  try {\r\n    const r = await fetch(`${API_CONFIG.BASE_URL}/auth/password/reset`, {\r\n      method: 'POST',\r\n      headers: {'Content-Type':'application/json'},\r\n      body: JSON.stringify({ token, password: pass })\r\n    });\r\n    const j = await r.json().catch(()=>({}));\r\n    if (r.ok && j.ok) {\r\n      msg.textContent = 'Senha alterada com sucesso! Você já pode entrar.';\r\n      setTimeout(() => location.href='/pages/login.html', 1500);\r\n    } else {\r\n      msg.textContent = j.message || 'Não foi possível alterar sua senha.';\r\n    }\r\n  } catch (e) {\r\n    msg.textContent = 'Erro ao alterar senha.';\r\n  }\r\n});\r\n</script>\r\n</body></html>\r\n"
+        }
+    ]
+}

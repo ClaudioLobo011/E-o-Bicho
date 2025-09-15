@@ -1,0 +1,49 @@
+<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redefinir Senha</title><link rel="stylesheet" href="../src/output.css">
+</head><body class="bg-gray-100">
+<div id="header-placeholder"></div>
+<main class="container mx-auto px-4 py-24">
+  <div class="bg-white p-8 rounded-xl shadow max-w-md mx-auto">
+    <h1 class="text-xl font-semibold mb-6 text-center">Defina sua nova senha</h1>
+    <form id="form-reset" class="space-y-4">
+      <input id="password" type="password" placeholder="Nova senha" class="w-full border rounded px-3 py-2">
+      <input id="confirm" type="password" placeholder="Confirmar nova senha" class="w-full border rounded px-3 py-2">
+      <button class="w-full px-4 py-2 rounded bg-primary text-white">Salvar</button>
+    </form>
+    <p id="msg" class="text-center text-sm text-gray-600 mt-4"></p>
+  </div>
+</main>
+<div id="footer-placeholder"></div>
+<script src="../scripts/core/config.js"></script>
+<script>
+document.getElementById('form-reset').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const p = new URLSearchParams(location.search);
+  const token = p.get('token');
+  const pass = document.getElementById('password').value;
+  const conf = document.getElementById('confirm').value;
+  const msg = document.getElementById('msg');
+
+  if (!token) { msg.textContent = 'Link inválido.'; return; }
+  if (pass !== conf) { msg.textContent = 'As senhas não coincidem.'; return; }
+
+  try {
+    const r = await fetch(`${API_CONFIG.BASE_URL}/auth/password/reset`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ token, password: pass })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (r.ok && j.ok) {
+      msg.textContent = 'Senha alterada com sucesso! Você já pode entrar.';
+      setTimeout(() => location.href='/pages/login.html', 1500);
+    } else {
+      msg.textContent = j.message || 'Não foi possível alterar sua senha.';
+    }
+  } catch (e) {
+    msg.textContent = 'Erro ao alterar senha.';
+  }
+});
+</script>
+</body></html>

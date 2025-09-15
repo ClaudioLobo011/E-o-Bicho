@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin: Produtos - E o Bicho</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+
+    <div id="admin-header-placeholder"></div>
+
+    <main class="container mx-auto px-4 py-8 min-h-screen">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+
+            <aside class="md:col-span-4">
+                <div id="admin-sidebar-placeholder"></div>
+            </aside>
+
+            <div class="md:col-span-4">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-800">Gerir Produtos</h1>
+                            <p class="text-gray-600 mt-1">Adicione, edite ou remova produtos da sua loja.</p>
+                        </div>
+                        <button class="bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center space-x-2">
+                            <i class="fas fa-plus"></i>
+                            <span>Adicionar Novo Produto</span>
+                        </button>
+                    </div>
+                    
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center">
+                            <label for="limit-select" class="text-sm font-medium text-gray-700 mr-2">Mostrar:</label>
+                            <select id="limit-select" class="rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary text-sm">
+                                <option value="20">20</option>
+                                <option value="50">50</option>
+                                <option value="200">200</option>
+                            </select>
+                        </div>
+                        <div class="relative w-1/2">
+                            <input type="text" id="search-input" placeholder="Pesquisar por nome ou código..." class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="fas fa-search text-gray-400"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="bulk-actions-toolbar" class="hidden bg-gray-100 p-3 rounded-md mb-4 flex items-center justify-between">
+                        <span id="selection-count" class="text-sm font-semibold text-gray-700"></span>
+                        <div class="flex items-center space-x-3">
+                            <label for="bulk-category-select" class="text-sm font-medium">Alterar categoria para:</label>
+                            <select id="bulk-category-select" class="rounded-md border-gray-300 shadow-sm text-sm">
+                                </select>
+                            <button id="apply-bulk-action-btn" class="bg-primary text-white font-bold py-2 px-4 rounded-lg text-sm hover:bg-secondary">Aplicar</button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-500">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="p-4">
+                                        <input type="checkbox" id="select-all-checkbox" class="form-checkbox h-4 w-4 text-primary rounded border-gray-300">
+                                    </th>
+                                    <th scope="col" class="px-6 py-3">Imagem</th>
+                                    <th scope="col" class="px-6 py-3">Nome do Produto</th>
+                                    <th scope="col" class="px-6 py-3">Preço de Venda</th>
+                                    <th scope="col" class="px-6 py-3">Stock</th>
+                                    <th scope="col" class="px-6 py-3 text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="products-table-body">
+                                </tbody>
+                        </table>
+                    </div>
+
+                    <div id="pagination-controls" class="flex items-center justify-between mt-6">
+                        <div>
+                            <span id="page-info" class="text-sm text-gray-700"></span>
+                            <span id="total-products-info" class="ml-2 text-sm text-gray-500"></span>
+                        </div>
+                        
+                        <div class="flex items-center space-x-2">
+                            <button id="prev-page-btn" class="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button>
+                            <button id="next-page-btn" class="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Próxima</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="modal-placeholder"></div>
+    <div id="confirm-modal-placeholder"></div>
+
+    <div id="admin-footer-placeholder"></div>
+    
+    <script>var basePath = '../../';</script>
+    <script src="../../scripts/core/config.js"></script>
+    <script src="../../scripts/core/ui.js"></script>
+    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/admin/admin.js"></script> 
+    <script src="../../scripts/admin/admin-produtos.js"></script> 
+</body>
+</html>

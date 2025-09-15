@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../src/output.css">
+  <script src="https://unpkg.com/imask"></script>
+</head>
+<body class="bg-gray-50">
+
+  <header class="bg-white shadow-sm">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <a href="../index.html">
+        <img src="../public/image/logo.svg" alt="Logotipo E o Bicho" class="h-20 w-auto">
+      </a>
+      <div class="flex items-center text-gray-500">
+        <span class="border-r border-gray-300 h-6 mr-4"></span>
+        <i class="fas fa-lock mr-2"></i>
+        <span class="font-semibold text-sm">Ambiente Seguro</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex items-center justify-center py-10 px-4">
+    <div class="container mx-auto max-w-screen-md flex shadow-lg rounded-lg overflow-hidden">
+
+      <div class="w-full md:w-1/2 bg-white p-8">
+        <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Acesse sua Conta</h2>
+        <form id="login-form">
+          <div class="mb-4">
+            <label for="identifier" class="block text-gray-700 text-sm font-bold mb-2">E-mail, CPF ou CNPJ</label>
+            <input type="text" id="identifier" name="identifier" placeholder="Digite seu e-mail, CPF ou CNPJ" data-mask="identifier" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+          </div>
+
+          <div class="mb-6">
+            <label for="password" class="block text-gray-700 text-sm font-bold mb-2">Senha</label>
+            <input type="password" id="password" name="senha" placeholder="********" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+          </div>
+
+          <div class="flex items-center justify-between mb-6">
+            <label class="flex items-center text-sm">
+              <input id="remember-me" type="checkbox" class="form-checkbox h-4 w-4 text-primary focus:ring-primary">
+              <span class="ml-2 text-gray-700">Lembrar-me</span>
+            </label>
+            <a href="#" id="forgot-link" class="text-sm text-primary hover:underline">Esqueci minha senha</a>
+          </div>
+
+          <button type="submit" class="w-full bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition duration-300 flex items-center justify-center disabled:opacity-75 disabled:cursor-not-allowed">
+            ENTRAR
+          </button>
+
+          <div class="flex items-center my-6">
+            <div class="flex-grow border-t border-gray-300"></div>
+            <span class="mx-4 text-gray-500 font-semibold text-sm">Acesso rápido</span>
+            <div class="flex-grow border-t border-gray-300"></div>
+          </div>
+
+          <button type="button" class="w-full bg-white text-gray-700 border border-gray-300 hover:bg-gray-100 font-semibold py-2 px-4 rounded-lg transition duration-300 text-sm">
+            Receber código de acesso rápido
+          </button>
+        </form>
+      </div>
+
+      <div class="w-full md:w-1/2 bg-gray-100 p-8 flex flex-col justify-center items-center">
+        <h3 class="text-xl font-bold text-primary mb-4 text-center">Criar uma conta é rápido,<br>fácil e gratuito!</h3>
+        <p class="text-gray-700 text-center mb-4 text-sm">Com a sua conta da E o Bicho você tem acesso a Ofertas exclusivas, descontos, pode criar e gerenciar a sua Lista de Desejos e muito mais!</p>
+        <a href="cadastro.html">
+          <button class="bg-white hover:bg-gray-200 text-primary font-bold py-2 px-6 rounded-lg border border-primary transition duration-300">
+            Criar minha conta
+          </button>
+        </a>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="container mx-auto max-w-screen-md py-6">
+    <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
+      <p>
+        Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.
+      </p>
+    </div>
+  </footer>
+
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../';</script>
+  <script src="../scripts/core/config.js"></script>
+  <script src="../scripts/core/ui.js"></script>
+  <script src="../scripts/core/main.js"></script>
+  <script src="../scripts/core/masks.js"></script>
+  <script src="../scripts/auth.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // -------- Fluxo: Esqueci minha senha --------
+      const forgot = document.getElementById('forgot-link');
+      forgot?.addEventListener('click', async (e)=>{
+        e.preventDefault();
+        const idEl = document.getElementById('identifier');
+        const identifier = (idEl?.value || '').trim();
+        if (!identifier) { showToast?.('Digite seu e-mail, CPF ou CNPJ.', 'warning'); return; }
+        try {
+          const r = await fetch(`${API_CONFIG.BASE_URL}/auth/quick/options?identifier=${encodeURIComponent(identifier)}`);
+          const j = await r.json().catch(()=>({}));
+          const emailData = j.email; const emailOk = !!emailData; const totpOk = !!j.totp;
+          if (!emailOk && !totpOk) {
+            showModal?.({
+              title: 'Não foi possível continuar',
+              message: 'Não encontramos nenhum método verificado para alterar sua senha. Você pode falar com nosso suporte para ajuda.',
+              confirmText: 'Fechar',
+              cancelText: 'Suporte',
+              onCancel: ()=> location.href = '/pages/ajuda.html'
+            });
+            return;
+          }
+
+          const maskEmail = (em) => {
+            if (typeof em !== 'string' || !em.includes('@')) return 'e-mail cadastrado';
+            const [user, domainFull] = em.split('@');
+            const [domain, ...tldParts] = domainFull.split('.');
+            const tld = tldParts.join('.') || '';
+            const u = user.length <= 2 ? user[0] + '*' : user.slice(0,2) + '*'.repeat(Math.max(1, user.length-2));
+            const d = domain.length <= 2 ? domain[0] + '*' : domain.slice(0,2) + '*'.repeat(Math.max(1, domain.length-2));
+            return `${u}@${d}${tld ? '.'+tld : ''}`;
+          };
+
+          const w = document.createElement('div');
+          w.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4';
+          w.innerHTML = `
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+              <div class="flex items-center justify-between px-5 py-4 border-b">
+                <h3 class="text-lg font-semibold">Recuperar senha</h3>
+                <button id="fp-close" class="text-gray-500 hover:text-gray-700"><i class="fa-solid fa-xmark text-xl"></i></button>
+              </div>
+              <div class="p-5" id="fp-step"></div>
+            </div>`;
+          document.body.appendChild(w);
+          const close = ()=> w.remove();
+          w.addEventListener('click', (e)=>{ if (e.target===w) close(); });
+          w.querySelector('#fp-close').addEventListener('click', close);
+          const step = w.querySelector('#fp-step');
+          let authToken = '';
+
+          const renderSelect = () => {
+            const onlyOne = (emailOk?1:0) + (totpOk?1:0) === 1;
+            step.innerHTML = `
+              <p class="text-gray-600 text-sm mb-4">Vamos verificar sua identidade para permitir a alteração da senha.</p>
+              <p class="font-semibold mb-2">Escolha um método de verificação:</p>
+              <div class="space-y-3">
+                ${emailOk ? `
+                <label class="block border rounded-lg p-3 flex items-start gap-3 hover:border-primary cursor-pointer">
+                  <input type="radio" name="fp-method" value="email" class="mt-1">
+                  <div>
+                    <div class="font-semibold">E-mail</div>
+                    <div class="text-gray-600 text-sm">${typeof emailData==='string' ? maskEmail(emailData) : 'E-mail cadastrado'}</div>
+                  </div>
+                </label>` : ''}
+                ${totpOk ? `
+                <label class="block border rounded-lg p-3 flex items-start gap-3 hover:border-primary cursor-pointer">
+                  <input type="radio" name="fp-method" value="totp" class="mt-1">
+                  <div>
+                    <div class="font-semibold">Aplicativo autenticador (QR Code)</div>
+                    <div class="text-gray-600 text-sm">Abra seu app e gere o código de 6 dígitos</div>
+                  </div>
+                </label>` : ''}
+              </div>
+              <button id="fp-continue" class="mt-5 w-full rounded-lg bg-primary text-white py-2 disabled:opacity-50" disabled>Continuar</button>
+            `;
+            const radios = step.querySelectorAll('input[name="fp-method"]');
+            const cont = step.querySelector('#fp-continue');
+            radios.forEach(r=>r.addEventListener('change', ()=>{ cont.disabled = false; }));
+            if (onlyOne) { const r = step.querySelector('input[name="fp-method"]'); if (r) { r.checked = true; cont.disabled = false; } }
+            cont.addEventListener('click', ()=>{
+              const sel = step.querySelector('input[name="fp-method"]:checked')?.value;
+              if (sel==='email') renderEmail();
+              else if (sel==='totp') renderTotp();
+            });
+          };
+
+          const renderEmail = async () => {
+            step.innerHTML = `
+              <p class="text-gray-600 text-sm mb-3">Enviamos um código de 6 dígitos para seu e-mail. Digite abaixo para continuar:</p>
+              <div class="flex gap-2">
+                <input id="fp-email-code" maxlength="6" inputmode="numeric" class="flex-1 border rounded px-3 py-2" placeholder="000000" />
+              </div>
+              <div class="flex gap-2 mt-4">
+                <button id="fp-back" class="flex-1 border rounded px-3 py-2 hover:bg-gray-50">Voltar</button>
+                <button id="fp-email-ok" class="flex-1 bg-primary text-white rounded px-3 py-2">Validar</button>
+              </div>
+              <p id="fp-msg" class="text-sm text-gray-600 mt-2"></p>
+            `;
+            step.querySelector('#fp-msg').textContent = 'Enviando código...';
+            await fetch(`${API_CONFIG.BASE_URL}/auth/quick/email/send`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ identifier }) }).catch(()=>{});
+            step.querySelector('#fp-msg').textContent = '';
+            step.querySelector('#fp-back').addEventListener('click', renderSelect);
+            step.querySelector('#fp-email-ok').addEventListener('click', async ()=>{
+              const code = step.querySelector('#fp-email-code').value.trim();
+              if (code.length<6) { showToast?.('Digite o código de 6 dígitos.', 'warning'); return; }
+              const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/quick/email/verify`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ identifier, code }) });
+              const jr = await resp.json().catch(()=>({}));
+              if (!resp.ok || !jr.ok) { showToast?.(jr.message || 'Código inválido.', 'error'); return; }
+              authToken = jr.token;
+              renderChangePassword();
+            });
+          };
+
+          const renderTotp = () => {
+            step.innerHTML = `
+              <p class="text-gray-600 text-sm mb-3">Digite o código de 6 dígitos do seu aplicativo autenticador:</p>
+              <div class="flex gap-2">
+                <input id="fp-totp" maxlength="6" inputmode="numeric" class="flex-1 border rounded px-3 py-2" placeholder="000000" />
+              </div>
+              <div class="flex gap-2 mt-4">
+                <button id="fp-back" class="flex-1 border rounded px-3 py-2 hover:bg-gray-50">Voltar</button>
+                <button id="fp-totp-ok" class="flex-1 bg-primary text-white rounded px-3 py-2">Validar</button>
+              </div>
+            `;
+            step.querySelector('#fp-back').addEventListener('click', renderSelect);
+            step.querySelector('#fp-totp-ok').addEventListener('click', async ()=>{
+              const code = step.querySelector('#fp-totp').value.trim();
+              if (code.length<6) { showToast?.('Digite o código do autenticador.', 'warning'); return; }
+              const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/quick/totp/verify`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ identifier, token: code }) });
+              const jr = await resp.json().catch(()=>({}));
+              if (!resp.ok || !jr.ok) { showToast?.(jr.message || 'Código inválido.', 'error'); return; }
+              authToken = jr.token;
+              renderChangePassword();
+            });
+          };
+
+          const renderChangePassword = () => {
+            step.innerHTML = `
+              <p class="text-gray-700 text-sm mb-3">Defina sua nova senha.</p>
+              <div class="space-y-3">
+                <input id="fp-pass" type="password" class="w-full border rounded px-3 py-2" placeholder="Nova senha" />
+                <input id="fp-conf" type="password" class="w-full border rounded px-3 py-2" placeholder="Confirmar nova senha" />
+              </div>
+              <button id="fp-save" class="mt-4 w-full rounded-lg bg-primary text-white py-2">Salvar</button>
+              <p id="fp-err" class="text-sm text-red-600 mt-2"></p>
+            `;
+            step.querySelector('#fp-save').addEventListener('click', async ()=>{
+              const p1 = step.querySelector('#fp-pass').value;
+              const p2 = step.querySelector('#fp-conf').value;
+              const err = step.querySelector('#fp-err');
+              err.textContent = '';
+              if (p1 !== p2) { err.textContent = 'As senhas não coincidem.'; return; }
+              const strong = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+              if (!strong.test(p1)) { err.textContent = 'A senha deve ter 8+ caracteres, com maiúscula, minúscula e número.'; return; }
+              const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/password/change`, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ password: p1 }) });
+              const jr = await resp.json().catch(()=>({}));
+              if (!resp.ok || !jr.ok) { showToast?.(jr.message || 'Não foi possível alterar a senha.', 'error'); return; }
+              showToast?.('Senha alterada com sucesso!', 'success');
+              close();
+            });
+          };
+
+          renderSelect();
+        } catch (e) {
+          console.error(e);
+          showToast?.('Não foi possível iniciar a recuperação de senha.', 'error');
+        }
+      });
+
+      const btn = document.getElementById('quick-access-btn') || document.querySelector('#login-form button[type="button"]');
+      if (!btn) return;
+      btn.addEventListener('click', async () => {
+        const idEl = document.getElementById('identifier');
+        const identifier = (idEl?.value || '').trim();
+        if (!identifier) { if (window.showToast) showToast('Digite seu e-mail, CPF ou CNPJ.', 'warning'); return; }
+        try {
+          const r = await fetch(`${API_CONFIG.BASE_URL}/auth/quick/options?identifier=${encodeURIComponent(identifier)}`);
+          const j = await r.json().catch(()=>({}));
+          const emailData = j.email; // pode vir boolean ou string
+          const emailOk = !!emailData;
+          const totpOk = !!j.totp;
+          if (!emailOk && !totpOk) {
+            if (window.showModal) showModal({ title: 'Acesso rápido', message: ':( Você ainda não possui método de acesso rápido disponível. Verifique seu e-mail ou ative o autenticador.', confirmText: 'OK' });
+            return;
+          }
+
+          const maskEmail = (em) => {
+            if (typeof em !== 'string' || !em.includes('@')) return 'e-mail cadastrado';
+            const [user, domainFull] = em.split('@');
+            const [domain, ...tldParts] = domainFull.split('.');
+            const tld = tldParts.join('.') || '';
+            const u = user.length <= 2 ? user[0] + '*' : user.slice(0,2) + '*'.repeat(Math.max(1, user.length-2));
+            const d = domain.length <= 2 ? domain[0] + '*' : domain.slice(0,2) + '*'.repeat(Math.max(1, domain.length-2));
+            return `${u}@${d}${tld ? '.'+tld : ''}`;
+          };
+
+          const w = document.createElement('div');
+          w.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4';
+          w.innerHTML = `
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+              <div class="flex items-center justify-between px-5 py-4 border-b">
+                <h3 class="text-lg font-semibold">Verificação de segurança</h3>
+                <button id="qa-close" class="text-gray-500 hover:text-gray-700"><i class="fa-solid fa-xmark text-xl"></i></button>
+              </div>
+              <div class="p-5" id="qa-step"></div>
+            </div>`;
+          document.body.appendChild(w);
+          const close = () => w.remove();
+          w.addEventListener('click', (e)=>{ if (e.target === w) close(); });
+          w.querySelector('#qa-close').addEventListener('click', close);
+          const step = w.querySelector('#qa-step');
+
+          const renderSelect = () => {
+            const onlyOne = (emailOk?1:0) + (totpOk?1:0) === 1;
+            step.innerHTML = `
+              <p class="text-gray-600 text-sm mb-4">Vamos enviar um código de segurança pra validar seu acesso nesse dispositivo.</p>
+              <p class="font-semibold mb-2">Escolha um método de verificação:</p>
+              <div class="space-y-3">
+                ${emailOk ? `
+                <label class="block border rounded-lg p-3 flex items-start gap-3 hover:border-primary cursor-pointer">
+                  <input type="radio" name="qa-method" value="email" class="mt-1">
+                  <div>
+                    <div class="font-semibold">E-mail</div>
+                    <div class="text-gray-600 text-sm">${typeof emailData === 'string' ? maskEmail(emailData) : 'E-mail cadastrado'}</div>
+                  </div>
+                </label>` : ''}
+                ${totpOk ? `
+                <label class="block border rounded-lg p-3 flex items-start gap-3 hover:border-primary cursor-pointer">
+                  <input type="radio" name="qa-method" value="totp" class="mt-1">
+                  <div>
+                    <div class="font-semibold">Aplicativo autenticador (QR Code)</div>
+                    <div class="text-gray-600 text-sm">Abra seu app e gere o código de 6 dígitos</div>
+                  </div>
+                </label>` : ''}
+              </div>
+              <button id="qa-continue" class="mt-5 w-full rounded-lg bg-primary text-white py-2 disabled:opacity-50" disabled>Continuar</button>
+            `;
+            const radios = step.querySelectorAll('input[name="qa-method"]');
+            const cont = step.querySelector('#qa-continue');
+            radios.forEach(r=>r.addEventListener('change', ()=>{ cont.disabled = false; }));
+            if (onlyOne) { const r = step.querySelector('input[name="qa-method"]'); if (r) { r.checked = true; cont.disabled = false; } }
+            cont.addEventListener('click', ()=>{
+              const sel = step.querySelector('input[name="qa-method"]:checked')?.value;
+              if (sel === 'email') renderEmail();
+              else if (sel === 'totp') renderTotp();
+            });
+          };
+
+          const renderEmail = async () => {
+            step.innerHTML = `
+              <p class="text-gray-600 text-sm mb-3">Enviamos um código de 6 dígitos para seu e-mail. Digite abaixo para entrar:</p>
+              <div class="flex gap-2">
+                <input id="qa-email-code" maxlength="6" inputmode="numeric" class="flex-1 border rounded px-3 py-2" placeholder="000000" />
+              </div>
+              <div class="flex gap-2 mt-4">
+                <button id="qa-back" class="flex-1 border rounded px-3 py-2 hover:bg-gray-50">Voltar</button>
+                <button id="qa-email-ok" class="flex-1 bg-primary text-white rounded px-3 py-2">Continuar</button>
+              </div>
+              <p id="qa-msg" class="text-sm text-gray-600 mt-2"></p>
+            `;
+            step.querySelector('#qa-msg').textContent = 'Enviando código...';
+            await fetch(`${API_CONFIG.BASE_URL}/auth/quick/email/send`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ identifier }) }).catch(()=>{});
+            step.querySelector('#qa-msg').textContent = '';
+            step.querySelector('#qa-back').addEventListener('click', renderSelect);
+            step.querySelector('#qa-email-ok').addEventListener('click', async ()=>{
+              const code = step.querySelector('#qa-email-code').value.trim();
+              if (code.length < 6) { if (window.showToast) showToast('Digite o código de 6 dígitos.', 'warning'); return; }
+              const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/quick/email/verify`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ identifier, code }) });
+              const jr = await resp.json().catch(()=>({}));
+              if (!resp.ok || !jr.ok) { if (window.showToast) showToast(jr.message || 'Código inválido.', 'error'); return; }
+              localStorage.setItem('loggedInUser', JSON.stringify({ id: jr.user._id, token: jr.token, ...jr.user }));
+              close(); location.href = '/index.html';
+            });
+          };
+
+          const renderTotp = () => {
+            step.innerHTML = `
+              <p class="text-gray-600 text-sm mb-3">Digite o código de 6 dígitos do seu aplicativo autenticador:</p>
+              <div class="flex gap-2">
+                <input id="qa-totp" maxlength="6" inputmode="numeric" class="flex-1 border rounded px-3 py-2" placeholder="000000" />
+              </div>
+              <div class="flex gap-2 mt-4">
+                <button id="qa-back" class="flex-1 border rounded px-3 py-2 hover:bg-gray-50">Voltar</button>
+                <button id="qa-totp-ok" class="flex-1 bg-primary text-white rounded px-3 py-2">Continuar</button>
+              </div>
+              <p class="text-xs text-gray-500 mt-2">Se ainda não tiver configurado, ative o autenticador nas configurações da sua conta.</p>
+            `;
+            step.querySelector('#qa-back').addEventListener('click', renderSelect);
+            step.querySelector('#qa-totp-ok').addEventListener('click', async ()=>{
+              const code = step.querySelector('#qa-totp').value.trim();
+              if (code.length < 6) { if (window.showToast) showToast('Digite o código do autenticador.', 'warning'); return; }
+              const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/quick/totp/verify`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ identifier, token: code }) });
+              const jr = await resp.json().catch(()=>({}));
+              if (!resp.ok || !jr.ok) { if (window.showToast) showToast(jr.message || 'Código inválido.', 'error'); return; }
+              localStorage.setItem('loggedInUser', JSON.stringify({ id: jr.user._id, token: jr.token, ...jr.user }));
+              close(); location.href = '/index.html';
+            });
+          };
+
+          renderSelect();
+        } catch(e) {
+          console.error(e);
+          if (window.showToast) showToast('Não foi possível iniciar o acesso rápido.', 'error');
+        }
+      });
+    });
+  </script>
+
+  <div id="login-success-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 transition-opacity duration-300">
+    <div class="bg-white rounded-lg shadow-xl p-6 max-w-xs w-full text-center">
+      <div class="text-3xl text-primary mb-3">
+        <i class="fas fa-check-circle"></i>
+      </div>
+      <h2 class="text-xl font-bold text-gray-800 mb-2">Sucesso!</h2>
+      <p id="login-modal-message" class="text-gray-600 mb-4 text-sm">Login bem-sucedido!</p>
+      <div class="flex items-center justify-center text-gray-700">
+        <i class="fas fa-spinner fa-spin mr-2"></i>
+        <span id="login-redirect-timer">A redirecionar em 3...</span>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+    "sourceFile": "scripts/admin/admin-importar.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1756594001693,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1756594001693,
+            "name": "Commit-0",
+            "content": "document.addEventListener('DOMContentLoaded', () => {\r\n    const startBtn = document.getElementById('start-import-btn');\r\n    const logContainer = document.getElementById('log-container');\r\n\r\n    if (!startBtn || !logContainer) {\r\n        return;\r\n    }\r\n    \r\n    // Conecta ao servidor WebSocket (Socket.IO)\r\n    const socket = io(API_CONFIG.SERVER_URL);\r\n\r\n    const addLog = (message) => {\r\n        logContainer.innerHTML += `> ${message}\\n`;\r\n        // Faz a consola rolar para a última mensagem\r\n        logContainer.scrollTop = logContainer.scrollHeight;\r\n    };\r\n    \r\n    // --- Eventos do Socket.IO ---\r\n    socket.on('connect', () => {\r\n        addLog('Conectado ao servidor em tempo real...');\r\n    });\r\n\r\n    socket.on('import-log', (message) => {\r\n        addLog(message);\r\n    });\r\n\r\n    socket.on('import-finished', () => {\r\n        addLog('✅ Importação finalizada com sucesso!');\r\n        startBtn.disabled = false; // Reativa o botão\r\n    });\r\n    \r\n    socket.on('import-error', () => {\r\n        addLog('❌ ERRO: A importação falhou. Verifique a consola do servidor para mais detalhes.');\r\n        startBtn.disabled = false; // Reativa o botão\r\n    });\r\n\r\n    // --- Evento do Botão ---\r\n    startBtn.addEventListener('click', async () => {\r\n        startBtn.disabled = true;\r\n        logContainer.innerHTML = ''; // Limpa a consola\r\n        addLog('A enviar pedido de importação para o servidor...');\r\n\r\n        try {\r\n            const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));\r\n            const token = loggedInUser?.token;\r\n            const response = await fetch(`${API_CONFIG.BASE_URL}/jobs/import-products`, {\r\n                method: 'POST',\r\n                headers: {\r\n                    'Authorization': `Bearer ${token}`\r\n                }\r\n            });\r\n\r\n            const data = await response.json();\r\n\r\n            if (!response.ok) {\r\n                throw new Error(data.message || 'Erro desconhecido ao iniciar o processo.');\r\n            }\r\n            \r\n            addLog(`Servidor respondeu: ${data.message}`);\r\n        } catch (error) {\r\n            addLog(`❌ ERRO: Não foi possível iniciar o processo. ${error.message}`);\r\n            startBtn.disabled = false;\r\n        }\r\n    });\r\n});"
+        }
+    ]
+}

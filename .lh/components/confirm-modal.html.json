@@ -1,0 +1,18 @@
+{
+    "sourceFile": "components/confirm-modal.html",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1756764031362,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1756764031362,
+            "name": "Commit-0",
+            "content": "<div id=\"confirm-modal\" class=\"hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4\">\r\n  <!-- AUMENTEI AQUI: w-full max-w-lg md:max-w-xl + p-6 -->\r\n  <div class=\"bg-white rounded-lg shadow-xl w-full max-w-lg md:max-w-xl p-6 text-center\">\r\n    <div class=\"text-4xl text-yellow-500 mb-3\">\r\n      <i class=\"fas fa-exclamation-triangle\"></i>\r\n    </div>\r\n    <h2 id=\"confirm-modal-title\" class=\"text-xl font-bold text-gray-800 mb-2\">Atenção</h2>\r\n    <p id=\"confirm-modal-message\" class=\"text-gray-600 mb-6 text-base\">Tem a certeza?</p>\r\n\r\n    <div class=\"flex justify-center gap-3\">\r\n      <button id=\"confirm-modal-cancel-btn\"\r\n              class=\"min-w-[120px] px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-medium hover:bg-gray-300 transition-colors\">\r\n        Cancelar\r\n      </button>\r\n      <button id=\"confirm-modal-confirm-btn\"\r\n              class=\"min-w-[120px] px-4 py-2 rounded-lg bg-primary text-white font-semibold hover:bg-secondary transition-colors\">\r\n        Confirmar\r\n      </button>\r\n    </div>\r\n  </div>\r\n</div>"
+        }
+    ]
+}

@@ -1,0 +1,18 @@
+{
+    "sourceFile": "servidor/routes/favorites.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1756579650454,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1756579650454,
+            "name": "Commit-0",
+            "content": "const express = require('express');\r\nconst router = express.Router();\r\nconst User = require('../models/User');\r\nconst requireAuth = require('../middlewares/requireAuth');\r\n\r\n// Middleware para garantir que o usuário só acesse os próprios favoritos (ou admin_master)\r\nfunction authorizeFavoritesAccess(req, res, next) {\r\n    if (req.user.id !== req.params.userId && req.user.role !== 'admin_master') {\r\n        return res.status(403).json({ message: 'Acesso negado' });\r\n    }\r\n    next();\r\n}\r\n\r\n// GET /api/favorites/:userId - Busca a lista de IDs de favoritos de um utilizador\r\nrouter.get('/:userId', requireAuth, authorizeFavoritesAccess, async (req, res) => {\r\n    try {\r\n        const user = await User.findById(req.params.userId).select('favorites');\r\n        if (!user) return res.status(404).json({ message: 'Utilizador não encontrado.' });\r\n        res.json(user.favorites);\r\n    } catch (error) {\r\n        console.error('Erro ao buscar favoritos:', error);\r\n        res.status(500).json({ message: 'Erro no servidor.' });\r\n    }\r\n});\r\n\r\n// POST /api/favorites/:userId - Adiciona um produto aos favoritos\r\nrouter.post('/:userId', requireAuth, authorizeFavoritesAccess, async (req, res) => {\r\n    const { productId } = req.body;\r\n    try {\r\n        const user = await User.findByIdAndUpdate(\r\n            req.params.userId,\r\n            { $addToSet: { favorites: productId } },\r\n            { new: true }\r\n        );\r\n        if (!user) return res.status(404).json({ message: 'Utilizador não encontrado.' });\r\n        res.status(200).json(user.favorites);\r\n    } catch (error) {\r\n        console.error('Erro ao adicionar favorito:', error);\r\n        res.status(500).json({ message: 'Erro no servidor.' });\r\n    }\r\n});\r\n\r\n// DELETE /api/favorites/:userId/:productId - Remove um produto dos favoritos\r\nrouter.delete('/:userId/:productId', requireAuth, authorizeFavoritesAccess, async (req, res) => {\r\n    try {\r\n        const user = await User.findByIdAndUpdate(\r\n            req.params.userId,\r\n            { $pull: { favorites: req.params.productId } },\r\n            { new: true }\r\n        );\r\n        if (!user) return res.status(404).json({ message: 'Utilizador não encontrado.' });\r\n        res.status(200).json(user.favorites);\r\n    } catch (error) {\r\n        console.error('Erro ao remover favorito:', error);\r\n        res.status(500).json({ message: 'Erro no servidor.' });\r\n    }\r\n});\r\n\r\nmodule.exports = router;\r\n"
+        }
+    ]
+}

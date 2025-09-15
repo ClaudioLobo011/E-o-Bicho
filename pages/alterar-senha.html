@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Verificação de segurança - E o Bicho</title>
+
+  <!-- Bloqueia acesso se não estiver logado (antes de renderizar a página) -->
+  <script src="../scripts/protect-page.js"></script>
+
+  <!-- Estilos -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../src/output.css">
+</head>
+<body class="bg-gray-100">
+
+  <!-- Cabeçalho (injetado por main.js) -->
+  <div id="header-placeholder"></div>
+
+  <main class="container mx-auto px-4 py-8 pt-[200px]">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+
+      <!-- Sidebar -->
+      <aside class="md:col-span-1">
+        <div id="account-sidebar-placeholder"></div>
+      </aside>
+
+      <!-- Conteúdo -->
+      <section class="md:col-span-3">
+        <div class="bg-white rounded-lg shadow p-6 space-y-6">
+
+          <div>
+            <h1 class="text-2xl font-semibold text-gray-900">Verificação de segurança</h1>
+            <p class="text-gray-600 mt-1">
+              Vamos enviar um código/link de segurança para validar a alteração de senha. Escolha como deseja receber.
+            </p>
+          </div>
+
+          <div>
+            <h2 class="text-base font-medium text-gray-900 mb-3">Como quer receber o código?</h2>
+
+            <!-- Opções em cartões -->
+            <div id="method-group" class="space-y-3">
+
+              <!-- E-MAIL -->
+              <label class="block">
+                <input type="radio" name="method" value="email" id="method-email" class="sr-only" checked>
+                <div class="flex items-center justify-between rounded-lg border p-4 cursor-pointer hover:border-primary transition-colors" data-card="email">
+                  <div class="flex items-center gap-3">
+                    <span class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                      <i class="fa-regular fa-envelope"></i>
+                    </span>
+                    <div>
+                      <div class="font-medium text-gray-900">E-mail</div>
+                      <div id="email-masked" class="text-sm text-gray-600">—</div>
+                      <div class="mt-1">
+                        <span id="email-status-badge" class="inline-block text-xs px-2 py-1 rounded bg-gray-200 text-gray-700">—</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="shrink-0">
+                    <span class="radio-dot w-5 h-5 inline-flex items-center justify-center rounded-full border"></span>
+                  </div>
+                </div>
+              </label>
+
+              <!-- App Autenticador (TOTP) -->
+              <label class="block">
+                <input type="radio" name="method" value="totp" id="method-totp" class="sr-only">
+                <div class="flex items-center justify-between rounded-lg border p-4 cursor-pointer hover:border-primary transition-colors" data-card="totp">
+                  <div class="flex items-center gap-3">
+                    <span class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                      <i class="fa-regular fa-circle-user"></i>
+                    </span>
+                    <div>
+                      <div class="font-medium text-gray-900">App Autenticador</div>
+                      <div id="totp-status" class="text-sm text-gray-600">Use Google/Microsoft Authenticator</div>
+                    </div>
+                  </div>
+                  <div class="shrink-0">
+                    <span class="radio-dot w-5 h-5 inline-flex items-center justify-center rounded-full border"></span>
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <!-- Painel de setup do TOTP -->
+            <div id="totp-setup" class="hidden mt-4 border rounded-lg p-4">
+              <div class="flex items-start gap-4">
+                <img id="totp-qr" alt="QR do autenticador" class="w-40 h-40 rounded border bg-white" src="" />
+                <div>
+                  <p id="totp-instr-1" class="text-sm text-gray-700">1) Abra o Google/Microsoft Authenticator e escaneie o QR.</p>
+                  <p id="totp-instr-2" class="text-sm text-gray-700">2) Digite abaixo o código de 6 dígitos para confirmar.</p>
+                  <div class="mt-3 flex items-center gap-2">
+                    <input id="totp-code" type="text" inputmode="numeric" maxlength="6" placeholder="000000" class="w-28 px-3 py-2 border rounded" />
+                    <button id="totp-verify-btn" class="bg-primary text-white px-4 py-2 rounded hover:bg-secondary">Confirmar</button>
+                  </div>
+                  <p id="totp-secret-text" class="text-[12px] text-gray-500 mt-2"></p>
+                </div>
+              </div>
+            </div>
+
+            <button id="btn-receber" class="mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:bg-secondary transition-colors">
+              Receber código
+            </button>
+
+          </div>
+
+          <div class="border-t pt-4">
+            <h3 class="text-sm font-semibold text-gray-900">Dicas de segurança</h3>
+            <ul class="mt-2 text-sm text-gray-600 list-disc pl-5 space-y-1">
+              <li>NÃO compartilhe códigos recebidos por e-mail.</li>
+              <li>Links de verificação e alteração expiram em até <strong>2 horas</strong> e são de <strong>uso único</strong>.</li>
+            </ul>
+          </div>
+
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Placeholders para componentes (carregados por main.js) -->
+  <div id="cart-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <!-- Rodapé simplificado -->
+  <footer class="container mx-auto py-6 px-4">
+    <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
+      <p>Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.</p>
+    </div>
+  </footer>
+
+  <!-- BasePath deve vir ANTES do main.js para injetar header/footer -->
+  <script>var basePath = '../';</script>
+
+  <!-- Scripts comuns do site -->
+  <script src="../scripts/core/config.js"></script>
+  <script src="../scripts/core/ui.js"></script>
+  <script src="../scripts/cartManager.js"></script>
+  <script src="../scripts/core/main.js"></script>
+  <script src="../scripts/user/hydrate-user.js"></script>
+  <script src="../scripts/favoritesManager.js"></script>
+  <script src="../scripts/cart.js"></script>
+
+  <!-- Scripts desta página -->
+  <script src="../scripts/alterar-senha.js"></script>
+
+</body>
+</html>
+

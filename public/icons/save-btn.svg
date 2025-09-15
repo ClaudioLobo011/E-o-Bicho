@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 48">
+  <defs>
+    <style>
+      .bg { fill: #ffffff; stroke: #1f2937; stroke-width: 2; }
+      .ear { fill: var(--color-secondary); stroke: #1f2937; stroke-width: 2; }
+      .label { fill: var(--color-primary); font-family: Arial, sans-serif; font-weight: bold; font-size: 14px; }
+    </style>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#soft)">
+    <rect class="bg" x="8" y="8" width="80" height="32" rx="8"/>
+  </g>
+
+  <path class="ear" d="M16 12 C10 9, 10 4, 16 2 C20 0, 24 2, 24 6 C24 9, 22 13, 20 15 C18 17, 16 15, 16 12 Z"/>
+  
+  <path class="ear" d="M80 12 C86 9, 86 4, 80 2 C76 0, 72 2, 72 6 C72 9, 74 13, 76 15 C78 17, 80 15, 80 12 Z"/>
+
+  <text class="label" x="48" y="29" text-anchor="middle">SALVAR</text>
+</svg>

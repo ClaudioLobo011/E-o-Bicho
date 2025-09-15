@@ -1,0 +1,18 @@
+{
+    "sourceFile": "servidor/routes/email.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1756829142559,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1756829142559,
+            "name": "Commit-0",
+            "content": "const express = require('express');\r\nconst router = express.Router();\r\n\r\nconst requireAuth = require('../middlewares/requireAuth');\r\nconst authorizeRoles = require('../middlewares/authorizeRoles');\r\nconst { sendMail } = require('../utils/mailer');\r\n\r\n/**\r\n * POST /api/email/test\r\n * Body: { to, subject, text?, html? }\r\n */\r\nrouter.post('/test', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {\r\n  try {\r\n    const { to, subject, text, html } = req.body || {};\r\n    if (!to || !subject) {\r\n      return res.status(400).json({ message: 'Parâmetros inválidos: \"to\" e \"subject\" são obrigatórios.' });\r\n    }\r\n\r\n    const result = await sendMail({\r\n      to,\r\n      subject,\r\n      text: text || undefined,\r\n      html: html || `<p>Teste de envio via Zoho SMTP – <b>${new Date().toLocaleString('pt-BR')}</b></p>`,\r\n    });\r\n\r\n    return res.json({ ok: true, ...result });\r\n  } catch (err) {\r\n    console.error('[email:test] erro:', err);\r\n    return res.status(500).json({ message: 'Erro ao enviar e-mail', detail: err.message });\r\n  }\r\n});\r\n\r\nmodule.exports = router;\r\n"
+        }
+    ]
+}

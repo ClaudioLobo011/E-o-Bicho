@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <style>
+      /* O cartão de fundo agora será branco com contorno preto */
+      .bg { fill: #ffffff; stroke: #1f2937; stroke-width: 2; }
+      
+      /* As orelhas, tampa e patas usarão as cores do tema do seu site */
+      .ear { fill: var(--color-secondary); stroke: #1f2937; stroke-width: 2; }
+      .bin { fill: #ffffff; stroke: #1f2937; stroke-width: 2; }
+      .lid { fill: var(--color-secondary); stroke: #1f2937; stroke-width: 2; }
+      .accent { fill: var(--color-primary); stroke: #1f2937; stroke-width: 2; }
+      .line { stroke: #1f2937; stroke-width: 2; fill: none; stroke-linecap: round; }
+    </style>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#soft)">
+    <rect class="bg" x="8" y="12" width="48" height="44" rx="14"/>
+  </g>
+
+  <path class="ear" d="M15 18 C10 15, 10 10, 15 8 C19 6, 23 8, 23 12 C23 15, 21 19, 19 21 C17 23, 15 21, 15 18 Z"/>
+  <path class="ear" d="M49 18 C54 15, 54 10, 49 8 C45 6, 41 8, 41 12 C41 15, 43 19, 45 21 C47 23, 49 21, 49 18 Z"/>
+  <g transform="rotate(-6 32 18)">
+    <rect class="lid" x="18" y="20" width="28" height="6" rx="3"/>
+    <rect class="lid" x="26" y="16" width="12" height="4" rx="2"/>
+  </g>
+  <rect class="bin" x="18" y="26" width="28" height="26" rx="10"/>
+  <path class="line" d="M26 30 V 48"/>
+  <path class="line" d="M32 30 V 48"/>
+  <path class="line" d="M38 30 V 48"/>
+
+</svg>

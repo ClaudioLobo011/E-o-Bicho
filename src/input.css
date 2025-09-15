@@ -1,0 +1,642 @@
+/* 1. Importa a base do Tailwind */
+@import "tailwindcss";
+
+/* 2. Define as nossas variáveis de tema diretamente no bloco @theme.
+   Isto vai INSTRUIR o Tailwind a criar as classes de utilitário correspondentes. */
+@theme {
+  --color-primary: #7A9A55;
+  --color-secondary: #5F7A41;
+  --color-accent: #D9534F;
+  --color-light: #f8f9fa;
+  --color-dark: #343a40;
+  --color-icon: #f6874f;
+}
+
+/* 3. Adiciona aqui os seus estilos de componentes personalizados. */
+@layer components {
+    .carousel-container {
+        scroll-behavior: smooth;
+        transition: transform 0.5s ease-in-out;
+    }
+    .product-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+    }
+    .category-card:hover {
+        border-color: var(--color-primary);
+    }
+    .benefit-card:hover {
+        transform: scale(1.03);
+    }
+    .pagination a.active {
+        background-color: var(--color-primary);
+        color: white;
+    }
+    .filter-section {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+    }
+    .filter-section.active {
+        max-height: 1000px;
+    }
+    .product-card .product-info {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+    .product-card .product-details {
+        flex-grow: 1;
+    }
+    .product-card .product-price {
+        min-height: 28px;
+    }
+    .product-card .add-to-cart {
+        margin-top: auto;
+    }
+    /* Estiliza a caixa de sugestões do Awesomplete */
+    .awesomplete > ul {
+        border-radius: 0.375rem;
+        border: 1px solid #d1d5db;
+        background: #fff;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        width: 100%;             /* iguala à largura do input */
+        max-width: none;
+    }
+    /* Estiliza o item selecionado na lista */
+    .awesomplete > ul > li[aria-selected="true"] {
+        background: var(--color-primary);
+        color: white;
+    }
+    /* Mantém cada item em uma linha, com elipse para nomes longos */
+    .awesomplete > ul > li {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    /* Garante que o wrapper ocupe toda a linha */
+    .awesomplete { width: 100%; }
+    @keyframes fillIndicator {
+        from { width: 0; }
+        to { width: 40px; }
+    }
+
+    /* Indicadores do banner (div-based, sem SVG) */
+    @keyframes indicatorFill { from { width: 0% } to { width: 100% } }
+    .indicator { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 10px; height: 10px; }
+    .indicator .dot { display: block; width: 10px; height: 10px; border-radius: 9999px; background: #d1d5db; }
+    .indicator .pill { display: none; width: 28px; height: 10px; border-radius: 9999px; background: #ffffff; border: 1px solid #1f2937; overflow: hidden; }
+    .indicator .fill { display: block; width: 0%; height: 100%; background: var(--color-primary); transform-origin: left center; }
+    .indicator.active { width: 28px; height: 10px; }
+    .indicator.active .dot { display: none !important; }
+    .indicator.active .pill { display: block; }
+    .indicator.active .fill { animation: indicatorFill 5s linear forwards; }
+
+    /* Corrige comportamento do sticky sem quebrar */
+    html, body {
+        overflow-x: hidden;
+    }
+
+    /* Esconder/mostrar a barra de categorias */
+    #category-nav.hide {
+        transform: translateY(-100%);
+    }
+
+    .slide {
+        @apply h-5/6 transition-all duration-500 ease-in-out opacity-60;
+    }
+    .slide.is-active {
+        @apply h-full opacity-100;
+    }
+    .no-transition {
+        transition: none !important;
+    }
+
+    /* Estilos para um carrossel 2D com deslize lateral e espaçamento CORRIGIDO */
+    #carousel {
+        position: relative;
+        height: 22rem; /* altura ligeiramente maior */
+        overflow: hidden; 
+    }
+
+    .carousel-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+
+    .slide {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        margin: auto;
+        width: 80%;
+        height: 100%;
+        opacity: 0;
+        transition: transform 0.5s ease-in-out, 
+                    opacity 0.5s ease-in-out;
+    }
+
+    .slide.slide-ativo {
+        transform: translateX(0);
+        opacity: 1;
+        z-index: 10;
+    }
+
+    /* ########## INÍCIO DA CORREÇÃO DE ESPAÇAMENTO ########## */
+
+    /* Estado: Anterior (visível à esquerda, com espaçamento) */
+    .slide.slide-anterior {
+        /* Valor aumentado para garantir o espaçamento */
+        transform: translateX(-102%);
+        opacity: 1;
+        z-index: 5;
+    }
+
+    /* Estado: Próximo (visível à direita, com espaçamento) */
+    .slide.slide-proximo {
+        /* Valor aumentado para garantir o espaçamento */
+        transform: translateX(102%);
+        opacity: 1;
+        z-index: 5;
+    }
+
+    /* Posição dos slides escondidos ajustada para a nova distância */
+    .slide.slide-escondido-esquerda {
+        transform: translateX(-210%);
+        opacity: 0;
+        z-index: 1;
+    }
+
+    /* Posição dos slides escondidos ajustada para a nova distância */
+    .slide.slide-escondido-direita {
+        transform: translateX(210%);
+        opacity: 0;
+        z-index: 1;
+    }
+    #prev, #next {
+        z-index: 20;
+    }
+
+    /* Animação para a barra de preenchimento */
+    @keyframes fillIndicator {
+        from { width: 0; }
+        to { width: 40px; }
+    }
+
+    /* ESTADO INATIVO (Padrão) */
+    .indicator .progress,
+    .indicator .bar-bg {
+        display: none; /* Esconde a barra de fundo e o progresso */
+    }
+    .indicator .dot {
+        display: block; /* Mostra apenas a bolinha */
+    }
+
+    /* ESTADO ATIVO */
+    .indicator.active .dot {
+        display: none; /* Esconde a bolinha */
+    }
+
+    .indicator.active .bar-bg,
+    .indicator.active .progress {
+        display: block; /* Mostra a barra de fundo e a de progresso */
+    }
+
+    .indicator.active .progress {
+        animation: fillIndicator 5s linear forwards;
+    }
+
+    .error-message {
+        color: #D9534F; /* --color-accent */
+        font-weight: 500;
+        max-height: 0;
+        opacity: 0;
+        /* A linha overflow: hidden; foi removida */
+        transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+    }
+
+    .error-message.show {
+        max-height: 100px; /* Altura máxima generosa, o elemento só usará o que precisar */
+        opacity: 1;
+    }
+    .input-error {
+        border-color: #D9534F !important;
+        --tw-ring-color: #D9534F !important;
+    }
+
+    .scroll-navigation-button {
+        @apply bg-white rounded-full shadow-md p-2 cursor-pointer;
+    }
+
+    .scroll-navigation-button:hover {
+        @apply bg-gray-100;
+    }
+
+    /* 1. Adiciona a animação de deslizamento suave ao clicar nos botões */
+    #featured-products-container {
+    transition: transform 0.5s ease-in-out;
+    }
+
+    /* 2. Esconde a barra de rolagem visual do slider */
+    #featured-slider-wrapper {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none;  /* IE e Edge */
+    }
+
+    #featured-slider-wrapper::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, etc. */
+    }
+
+    /*******************************************************
+    * Ajustes de Escala para a Seção "Quem viu, levou também"
+    * na Página de Checkout
+    ********************************************************/
+
+    /* 1. Diminui a largura máxima dos cards */
+    #featured-slider-wrapper .product-card {
+        width: 12rem; /* 192px */
+        flex-basis: 12rem;
+        flex-shrink: 0;
+    }
+
+    /* 2. Reduz a altura da imagem do produto e garante proporção (VERSÃO CORRIGIDA) */
+    #featured-slider-wrapper .product-card .relative {
+        height: 9rem; /* Mantém a altura do container da imagem */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #featured-slider-wrapper .product-card .relative img {
+        /* Força a imagem a se ajustar dentro do container, mantendo a proporção e sem cortar. */
+        /* O !important é crucial para sobrescrever a classe 'object-cover' que vem do JavaScript. */
+        object-fit: contain !important; 
+    }
+
+    /* 3. Ajusta o tamanho da fonte do nome do produto */
+    #featured-slider-wrapper .product-card .product-details h3 {
+        font-size: 0.875rem; /* Equivalente a text-sm */
+        height: 2.5rem;      /* Equivalente a h-10 */
+    }
+
+    /* 4. Diminui as fontes dos preços e tags promocionais */
+    #featured-slider-wrapper .product-card .product-price,
+    #featured-slider-wrapper .product-card .product-price .font-bold {
+        font-size: 1rem; /* Equivalente a text-base */
+    }
+
+    #featured-slider-wrapper .product-card .product-price .line-through {
+        font-size: 0.75rem; /* Equivalente a text-xs */
+    }
+
+    #featured-slider-wrapper .product-card .product-price .text-xs {
+        font-size: 0.7rem; /* Um pouco menor que text-xs */
+        padding: 2px 6px;
+    }
+
+    /* 5. Reduz o tamanho do botão "Adicionar ao Carrinho" */
+    #featured-slider-wrapper .product-card .add-to-cart {
+        width: 48px;
+        height: 48px;
+    }
+    #featured-slider-wrapper .product-card .add-to-cart [data-icon="sacola"] {
+        width: 48px;
+        height: 48px;
+    }
+
+    /* Dog Icon Animation */
+    .dog-icon {
+    transition: all 0.5s ease;
+    }
+
+    .dog-anim {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    }
+
+    .dog-anim.show-dog {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        transition: transform 300ms ease, opacity 300ms ease;
+    }
+
+    .dog-anim.hide-dog {
+        opacity: 0;
+        transform: translateY(8px) scale(0.85);
+        transition: transform 300ms ease, opacity 300ms ease;
+    }
+
+    /* Olhos piscando */
+    .dog-icon .eye {
+    animation: blink 3s infinite;
+    }
+
+    @keyframes blink {
+    0%, 90%, 100% { transform: scaleY(1); }
+    95% { transform: scaleY(0.1); }
+    }
+
+    /* Língua animada */
+    .dog-icon .tongue {
+    transform-origin: top center;
+    animation: tongue 2s infinite;
+    }
+
+    @keyframes tongue {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(5px); }
+    }
+
+  /* realce do card selecionado (Alterar Senha) */
+  [data-card].selected { 
+    border-color: rgb(34 197 94); 
+    box-shadow: 0 0 0 3px rgba(34,197,94,.15); 
+  }
+  [data-card] .radio-dot { 
+    border-color: #aaa; 
+  }
+  [data-card].selected .radio-dot { 
+    border-color: rgb(34 197 94); 
+    background: rgb(34 197 94); 
+    box-shadow: inset 0 0 0 3px #fff; 
+  }
+
+  #user-menu-wrapper.open #user-menu-panel {
+    opacity: 1 !important;
+    transform: none !important;
+    pointer-events: auto !important;
+  }
+  #user-menu-panel:hover {
+    opacity: 1 !important;
+    transform: none !important;
+    pointer-events: auto !important;
+  }
+
+    /* Linha dos painéis (Descrição + Especificações) */
+    .panels-row {
+    display: grid;
+    grid-template-columns: 1fr;      /* mobile: empilhado */
+    gap: 2rem;
+    align-items: start;               /* alinha topo */
+    }
+
+    /* a partir de md/desktop: lado a lado */
+    @media (min-width: 768px) {
+    .panels-row {
+        grid-template-columns: 1fr 1fr; /* duas colunas iguais */
+    }
+    }
+
+    /* Coluna: centraliza o SVG dentro da coluna */
+    .panel-col {
+    display: flex;
+    justify-content: center;
+    }
+
+    /* Painel SVG: mesmo tamanho para os dois */
+    .svg-panel {
+    width: 100%;
+    max-width: 620px;                 /* escolha única p/ ambos */
+    aspect-ratio: 800 / 520;          /* bate com viewBox dos SVGs */
+    }
+
+    /* O <svg> inline ocupa todo o contêiner acima */
+    .svg-panel > svg {
+    width: 100%;
+    height: 100%;
+    display: block;                   /* remove espaços extras */
+    }
+
+  /* ===== Agenda (zebra, sublinha de 30min, ações, linha do agora) ===== */
+  .agenda-slot {
+    background-image: linear-gradient(to bottom, transparent calc(50% - 0.5px), #e5e7eb 50%, transparent calc(50% + 0.5px));
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+  }
+  .agenda-nowline { position: absolute; left: 0; right: 0; border-top: 2px solid #f43f5e; pointer-events: none; z-index: 4; }
+
+  /* ===== Cards Padrão ===== */
+  .agenda-card {
+    position: relative;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06);
+    padding: 10px 12px 8px 16px;
+    min-height: 72px;
+    /* ocupar 100% da célula/coluna para alinhar às linhas verticais */
+    width: 100%;
+    max-width: 100%;
+    transition: box-shadow .2s ease, transform .06s ease;
+  }
+  .agenda-card:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+
+  .agenda-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 6px;
+    background: var(--stripe, #334155);
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+  }
+
+  .agenda-card__actions { z-index: 5; }
+  .agenda-card:hover .agenda-card__actions { display: flex !important; }
+
+  .clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Chips */
+  .chip {
+    display:inline-flex; align-items:center; gap:.35rem;
+    padding:.25rem .5rem; font-size:12px;
+    border:1px solid #cbd5e1; border-radius:9999px;
+    background:#fff; color:#334155; cursor:pointer;
+  }
+  .chip:hover { background:#f8fafc; }
+  .chip-active { background:#e2e8f0; border-color:#94a3b8; }
+  .chip-badge { background:#f1f5f9; color:#475569; border-radius:9999px; padding:0 .35rem; font-weight:600; }
+  .chip-clear { color:#ef4444; border-color:#fecaca; background:#fff7f7; }
+  .chip-sep { width:1px; height:20px; background:#e5e7eb; margin:0 .25rem; }
+
+  /* KPIs */
+  .kpi-chip { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:.35rem .5rem; font-size:12px; color:#334155; }
+  .kpi-chip strong { font-weight:700; }
+  .kpi-muted { opacity:.75; }
+
+}
+
+/* =========================================================
+   Agenda (Banho e Tosa) — melhorias visuais
+   - largura fixa um pouco maior nos cards
+   - divisórias verticais entre colunas
+   - modo compacto (scale) + impressão limpa
+   Escopo limitado a #agenda-list/#agenda-wrapper para não vazar.
+   ========================================================= */
+
+@layer components {
+  /* ==================== CARDS ==================== */
+  /* Largura fixa maior e com prioridade.
+     Motivo: há uma regra base (.agenda-card) que limita com var(--card-max-w, 240px).
+     Aqui garantimos que dentro do #agenda-list o card fique realmente maior. */
+    /* === Agenda: largura fixa de coluna e cabeçalho central === */
+    #agenda-wrapper { --agenda-col-w: 360px; }               /* card 340 + 8px + 8px de padding + folga */
+
+    #agenda-list > div:first-child > div:not(:first-child):not(.col-span-full) {
+    text-align: center;
+    }
+
+    /* (opcional, já sugerido) divisórias verticais */
+    #agenda-list .agenda-slot { border-left: 1px solid #e5e7eb; box-sizing: border-box; }
+    #agenda-list > div:first-child > div:not(:first-child):not(.col-span-full) { border-left: 1px solid #e5e7eb; }
+
+    /* ==================== VERTICAIS ==================== */
+    /* Funciona com TABLE e DIVs, independente de border-collapse,
+        desenhando as linhas com pseudo-elementos. */
+
+    /* 1) Se for <table>, garanta separação para não “comer” as linhas */
+    #agenda-list table {
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+    }
+
+  /* 2) Cada célula (th/td) cria sua própria linha à esquerda,
+        exceto a primeira. Fechamos a última com uma linha à direita. */
+  #agenda-list table tr > * { position: relative; }
+  #agenda-list table tr > * + *::before {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    width: 1px;
+    background: #e5e7eb; /* slate-200 */
+  }
+  #agenda-list table tr > *:last-child::after {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; right: 0;
+    width: 1px;
+    background: #e5e7eb;
+  }
+
+  /* 3) Fallback universal para layouts em DIV/GRID/ARIA */
+  #agenda-list .agenda-row > * { position: relative; }
+  #agenda-list .agenda-row > * + *::before,
+  #agenda-list .row > * + *::before,
+  #agenda-list .grid > div + div::before,
+  #agenda-list [role="row"] > * + *::before {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    width: 1px;
+    background: #e5e7eb;
+  }
+  #agenda-list .agenda-row > *:last-child::after,
+  #agenda-list .row > *:last-child::after,
+  #agenda-list .grid > div:last-child::after,
+  #agenda-list [role="row"] > *:last-child::after {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; right: 0;
+    width: 1px;
+    background: #e5e7eb;
+  }
+
+  /* ==================== COMPACTO ==================== */
+  #agenda-wrapper #agenda-list { @apply transition-transform; transform-origin: top left; }
+  #agenda-wrapper.is-compact #agenda-list { transform: scale(.92); }
+}
+
+/* =========================================================
+   Agenda (Banho e Tosa) — linhas verticais nas colunas
+   - separa visualmente os cards e os funcionários no topo
+   - compatível com table, grid e “rows” de divs
+   - escopo limitado ao #agenda-list / #agenda-wrapper
+   ========================================================= */
+@layer components {
+  /* 1) Garante que cada célula/coluna possa receber pseudo-elementos */
+  #agenda-list .agenda-row > *,
+  #agenda-list .row > *,
+  #agenda-list .grid > div,
+  #agenda-list [role="row"] > *,
+  #agenda-list thead tr > *,
+  #agenda-list tbody tr > * {
+    position: relative;
+  }
+
+  /* 2) Linha à esquerda de cada coluna (exceto a primeira) */
+  #agenda-list .agenda-row > *:not(:first-child)::before,
+  #agenda-list .row > *:not(:first-child)::before,
+  #agenda-list .grid > div:not(:first-child)::before,
+  #agenda-list [role="row"] > *:not(:first-child)::before,
+  #agenda-list thead tr > *:not(:first-child)::before,
+  #agenda-list tbody tr > *:not(:first-child)::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 1px;                /* espessura da divisória */
+    background: #e5e7eb;       /* Tailwind gray-200 */
+    pointer-events: none;
+  }
+
+  /* 3) Linha à direita da última coluna — fecha a grade */
+  #agenda-list .agenda-row > *:last-child::after,
+  #agenda-list .row > *:last-child::after,
+  #agenda-list .grid > div:last-child::after,
+  #agenda-list [role="row"] > *:last-child::after,
+  #agenda-list thead tr > *:last-child::after,
+  #agenda-list tbody tr > *:last-child::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 1px;
+    background: #e5e7eb;
+    pointer-events: none;
+  }
+
+  /* 4) Opcional: ligeiro destaque no cabeçalho dos funcionários */
+  #agenda-list thead tr > *,
+  #agenda-list .cabecalho-funcionarios > * {
+    background: #ffffff;       /* mantém limpo */
+    z-index: 1;
+  }
+}
+/* ==== (continua o arquivo) ==== */
+
+/* === Agenda: divisórias verticais por coluna (corpo + topo) === */
+/* Corpo: cada célula de profissional já tem a classe .agenda-slot */
+#agenda-list .agenda-slot {
+  border-left: 1px solid #e5e7eb; /* gray-200 */
+  box-sizing: border-box;
+}
+
+/* Cabeçalho: filhos diretos do primeiro grid dentro de #agenda-list.
+   Aplica borda à esquerda em todas as células exceto a primeira (Hora)
+   e o bloco-resumo (ganha .col-span-full). */
+#agenda-list > div:first-child > div:not(:first-child):not(.col-span-full) {
+  border-left: 1px solid #e5e7eb;
+  box-sizing: border-box;
+}
+
+/* 4) Impressão limpa (oculta navegação/ação e remove sombras) */
+@media print {
+  body { background: #fff !important; }
+
+  #func-header-placeholder,
+  #func-sidebar-placeholder,
+  #modal-add-servico,
+  .no-print { display: none !important; }
+
+  .shadow, .shadow-sm, .shadow-md,
+  .ring-1, .ring-2 { box-shadow: none !important; }
+}

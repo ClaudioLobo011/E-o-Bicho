@@ -1,0 +1,18 @@
+{
+    "sourceFile": "pages/verificar-email.html",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1756831926258,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1756831926258,
+            "name": "Commit-0",
+            "content": "<!DOCTYPE html><html lang=\"pt-BR\"><head>\r\n<meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n<title>Verificar e-mail</title><link rel=\"stylesheet\" href=\"../src/output.css\">\r\n</head><body class=\"bg-gray-100\">\r\n<div id=\"header-placeholder\"></div>\r\n<main class=\"container mx-auto px-4 py-24 text-center\">\r\n  <div class=\"bg-white p-8 rounded-xl shadow max-w-xl mx-auto\">\r\n    <h1 class=\"text-xl font-semibold mb-2\">Verificar e-mail</h1>\r\n    <p id=\"msg\" class=\"text-gray-700\">Verificando…</p>\r\n    <a href=\"/pages/alterar-senha.html\" class=\"mt-6 inline-block px-4 py-2 rounded bg-primary text-white\">Ir para Alterar Senha</a>\r\n  </div>\r\n</main>\r\n<div id=\"footer-placeholder\"></div>\r\n<script src=\"../scripts/config.js\"></script>\r\n<script>\r\n(async () => {\r\n  const p = new URLSearchParams(location.search);\r\n  const token = p.get('token');\r\n  const el = document.getElementById('msg');\r\n  if (!token) { el.textContent = 'Token não informado.'; return; }\r\n  try {\r\n    const r = await fetch(`${API_CONFIG.BASE_URL}/auth/email/verify?token=${encodeURIComponent(token)}`);\r\n    const j = await r.json().catch(()=>({}));\r\n    if (r.ok && j.ok) el.textContent = 'Seu e-mail foi verificado com sucesso!';\r\n    else el.textContent = j.message || 'Não foi possível verificar seu e-mail.';\r\n  } catch (e) { el.textContent = 'Erro ao verificar e-mail.'; }\r\n})();\r\n</script>\r\n</body></html>\r\n"
+        }
+    ]
+}

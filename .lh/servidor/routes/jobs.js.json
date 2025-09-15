@@ -1,0 +1,22 @@
+{
+    "sourceFile": "servidor/routes/jobs.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1756571744408,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1756579688124,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,19 +1,25 @@\n const express = require('express');\r\n const router = express.Router();\r\n const { importProducts } = require('../utils/productImporter');\r\n+const requireAuth = require('../middlewares/requireAuth');\r\n const authorizeRoles = require('../middlewares/authorizeRoles');\r\n \r\n // ROTA: POST /api/jobs/import-products\r\n // DESCRIÇÃO: Inicia o processo de importação de produtos da planilha.\r\n-router.post('/import-products', authorizeRoles('admin', 'admin_master'), (req, res) => {\r\n-    // A mágica do Socket.IO é pega do objeto 'req'\r\n+router.post(\r\n+  '/import-products',\r\n+  requireAuth,\r\n+  authorizeRoles('admin', 'admin_master'),\r\n+  (req, res) => {\r\n     const io = req.app.get('socketio');\r\n-    \r\n-    // Responde imediatamente ao navegador a dizer que o processo começou\r\n-    res.status(202).json({ message: 'Processo de importação iniciado. Acompanhe o progresso em tempo real.' });\r\n\\ No newline at end of file\n \r\n+    res\r\n+      .status(202)\r\n+      .json({ message: 'Processo de importação iniciado. Acompanhe o progresso em tempo real.' });\r\n+\r\n     // Inicia a importação em segundo plano, passando o socket para feedback\r\n     importProducts(io);\r\n-});\r\n+  }\r\n+);\r\n \r\n-module.exports = router;\n+module.exports = router;\r\n"
+                }
+            ],
+            "date": 1756571744408,
+            "name": "Commit-0",
+            "content": "const express = require('express');\r\nconst router = express.Router();\r\nconst { importProducts } = require('../utils/productImporter');\r\nconst authorizeRoles = require('../middlewares/authorizeRoles');\r\n\r\n// ROTA: POST /api/jobs/import-products\r\n// DESCRIÇÃO: Inicia o processo de importação de produtos da planilha.\r\nrouter.post('/import-products', authorizeRoles('admin', 'admin_master'), (req, res) => {\r\n    // A mágica do Socket.IO é pega do objeto 'req'\r\n    const io = req.app.get('socketio');\r\n    \r\n    // Responde imediatamente ao navegador a dizer que o processo começou\r\n    res.status(202).json({ message: 'Processo de importação iniciado. Acompanhe o progresso em tempo real.' });\r\n\r\n    // Inicia a importação em segundo plano, passando o socket para feedback\r\n    importProducts(io);\r\n});\r\n\r\nmodule.exports = router;"
+        }
+    ]
+}

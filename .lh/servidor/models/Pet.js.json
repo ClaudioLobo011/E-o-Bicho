@@ -1,0 +1,18 @@
+{
+    "sourceFile": "servidor/models/Pet.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1757184270745,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1757184270745,
+            "name": "Commit-0",
+            "content": "const mongoose = require('mongoose');\r\nconst Schema = mongoose.Schema;\r\n\r\nconst petSchema = new Schema({\r\n  // Campo para associar o pet ao seu dono (o utilizador logado)\r\n  owner: {\r\n    type: Schema.Types.ObjectId,\r\n    ref: 'User', // Cria uma referência ao nosso modelo 'User'\r\n    required: true\r\n  },\r\n  nome: { type: String, required: true },\r\n  tipo: { type: String, required: true },\r\n  raca: { type: String, required: true },\r\n  porte: { type: String },\r\n  sexo: { type: String, required: true },\r\n  dataNascimento: { type: Date, required: true },\r\n  microchip: { type: String },\r\n  pelagemCor: { type: String },\r\n  rga: { type: String },\r\n  peso: { type: String },\r\n}, { timestamps: true }); // timestamps adiciona os campos createdAt e updatedAt automaticamente\r\n\r\n\r\n\r\nmodule.exports = mongoose.model('Pet', petSchema);"
+        }
+    ]
+}

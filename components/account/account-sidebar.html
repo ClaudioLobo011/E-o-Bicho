@@ -1,0 +1,52 @@
+  <div class="bg-white p-4 rounded-lg shadow h-full">
+  <div class="mb-4">
+    <p class="text-sm">Olá,</p>
+    <!-- Mantém compatível com hydrate-user.js -->
+    <h2 id="sidebar-user-name" data-user-name class="font-bold text-lg text-gray-800">—</h2>
+  </div>
+
+  <nav class="space-y-2">
+    <a href="/pages/meus-dados.html" class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+      <i class="fas fa-user w-6 text-center"></i>
+      <span class="ml-3 font-medium">Meus dados</span>
+    </a>
+
+    <a href="/pages/meus-pedidos.html" class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+      <i class="fas fa-box w-6 text-center"></i>
+      <span class="ml-3 font-medium">Meus pedidos</span>
+    </a>
+
+    <a href="/pages/meus-pets.html" class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+      <i class="fas fa-paw w-6 text-center"></i>
+      <span class="ml-3 font-medium">Meus pets</span>
+    </a>
+
+    <a href="/pages/favoritos.html" class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+      <i class="fas fa-heart w-6 text-center"></i>
+      <span class="ml-3 font-medium">Favoritos</span>
+    </a>
+
+    <a href="/pages/alterar-senha.html" class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+      <i class="fas fa-key w-6 text-center"></i>
+      <span class="ml-3 font-medium">Alterar Senha</span>
+    </a>
+
+    <!-- Este ID é usado por checkAdminLink() para esconder se não for admin -->
+    <a href="/pages/admin.html" id="admin-link" class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors hidden">
+      <i class="fas fa-user-shield w-6 text-center"></i>
+      <span class="ml-3 font-medium">Administrador</span>
+    </a>
+
+    <!-- Novo link: visível para funcionario, admin e admin_master -->
+    <a href="/pages/funcionarios.html" id="funcionarios-link" class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors hidden">
+      <i class="fas fa-people-group w-6 text-center"></i>
+      <span class="ml-3 font-medium">Funcionários</span>
+    </a>
+
+    <!-- Sem id para não conflitar com o botão de logout do header -->
+    <a href="/pages/login.html" data-logout class="flex items-center p-3 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+      <i class="fas fa-right-from-bracket w-6 text-center"></i>
+      <span class="ml-3 font-medium">Sair da conta</span>
+    </a>
+  </nav>
+</div>

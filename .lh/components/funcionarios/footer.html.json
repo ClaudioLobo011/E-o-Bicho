@@ -1,0 +1,18 @@
+{
+    "sourceFile": "components/funcionarios/footer.html",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1757115583304,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1757115583304,
+            "name": "Commit-0",
+            "content": "<footer class=\"container mx-auto py-6 px-4\">\r\n  <div class=\"border-t border-gray-200 text-center text-gray-400 text-xs pt-6\">\r\n    <p>Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.</p>\r\n  </div>\r\n</footer>"
+        }
+    ]
+}

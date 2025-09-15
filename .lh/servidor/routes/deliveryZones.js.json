@@ -1,0 +1,18 @@
+{
+    "sourceFile": "servidor/routes/deliveryZones.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1756579609822,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1756579609822,
+            "name": "Commit-0",
+            "content": "const express = require('express');\r\nconst router = express.Router();\r\nconst DeliveryZone = require('../models/DeliveryZone');\r\nconst requireAuth = require('../middlewares/requireAuth');\r\nconst authorizeRoles = require('../middlewares/authorizeRoles');\r\n\r\n// GET /api/delivery-zones/by-store/:storeId - Todas as zonas da loja (pública)\r\nrouter.get('/by-store/:storeId', async (req, res) => {\r\n    try {\r\n        const zones = await DeliveryZone.find({ store: req.params.storeId });\r\n        res.json(zones);\r\n    } catch (error) {\r\n        console.error('Erro ao buscar zonas:', error);\r\n        res.status(500).json({ message: 'Erro no servidor.' });\r\n    }\r\n});\r\n\r\n// POST /api/delivery-zones - Cria nova zona (restrito a admin/admin_master)\r\nrouter.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {\r\n    try {\r\n        const { store, nome, tipo, raioKm, bairros, gratis } = req.body;\r\n        const newZone = new DeliveryZone({ store, nome, tipo, raioKm, bairros, gratis });\r\n        await newZone.save();\r\n        res.status(201).json(newZone);\r\n    } catch (error) {\r\n        console.error('Erro ao salvar zona:', error);\r\n        res.status(500).json({ message: 'Erro ao salvar a zona de entrega.' });\r\n    }\r\n});\r\n\r\n// PUT /api/delivery-zones/:id - Atualiza zona existente (restrito a admin/admin_master)\r\nrouter.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {\r\n    try {\r\n        const { store, nome, tipo, raioKm, bairros, gratis } = req.body;\r\n\r\n        const updatedZone = await DeliveryZone.findByIdAndUpdate(\r\n            req.params.id,\r\n            { store, nome, tipo, raioKm, bairros, gratis },\r\n            { new: true, runValidators: true }\r\n        );\r\n\r\n        if (!updatedZone) {\r\n            return res.status(404).json({ message: 'Zona não encontrada.' });\r\n        }\r\n\r\n        res.json(updatedZone);\r\n    } catch (error) {\r\n        console.error('Erro ao atualizar zona:', error);\r\n        res.status(500).json({ message: 'Erro ao atualizar a zona de entrega.' });\r\n    }\r\n});\r\n\r\n// DELETE /api/delivery-zones/:id (restrito a admin/admin_master)\r\nrouter.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {\r\n    try {\r\n        const deleted = await DeliveryZone.findByIdAndDelete(req.params.id);\r\n        if (!deleted) return res.status(404).json({ message: 'Zona não encontrada.' });\r\n        res.json({ message: 'Zona excluída com sucesso.' });\r\n    } catch (error) {\r\n        console.error('Erro ao excluir zona:', error);\r\n        res.status(500).json({ message: 'Erro ao excluir a zona de entrega.' });\r\n    }\r\n});\r\n\r\nmodule.exports = router;\r\n"
+        }
+    ]
+}

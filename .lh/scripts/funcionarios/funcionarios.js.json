@@ -1,0 +1,22 @@
+{
+    "sourceFile": "scripts/funcionarios/funcionarios.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1757115638099,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1757440654007,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -7,8 +7,9 @@\n     const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');\r\n     const token = cached?.token;\r\n \r\n     if (!token) {\r\n+      console.error('[Funcionários] Token não encontrado no cache local.');\r\n       alert('Você precisa estar logado para acessar o painel de Funcionários.');\r\n       window.location.replace('/pages/login.html');\r\n       return;\r\n     }\r\n@@ -17,8 +18,9 @@\n       headers: { 'Authorization': `Bearer ${token}` }\r\n     });\r\n \r\n     if (!resp.ok) {\r\n+      console.error('[Funcionários] Sessão inválida ou expirada. Resposta:', resp.status);\r\n       alert('Sessão inválida ou expirada. Faça login novamente.');\r\n       window.location.replace('/pages/login.html');\r\n       return;\r\n     }\r\n@@ -27,8 +29,9 @@\n     const role = data?.role || cached?.role;\r\n \r\n     // Apenas funcionario, admin e admin_master entram.\r\n     if (!['funcionario', 'admin', 'admin_master'].includes(role)) {\r\n+      console.error('[Funcionários] Acesso negado para o papel:', role);\r\n       alert('Acesso restrito aos Funcionários.');\r\n       window.location.replace('/index.html');\r\n       return;\r\n     }\r\n@@ -37,12 +40,14 @@\n     if (cached && role && cached.role !== role) {\r\n       localStorage.setItem('loggedInUser', JSON.stringify({ ...cached, role }));\r\n     }\r\n \r\n+    console.log('[Funcionários] Acesso validado com sucesso para o papel:', role);\r\n+\r\n     // Conteúdo liberado\r\n     document.body.style.visibility = 'visible';\r\n   } catch (err) {\r\n-    console.error('Erro ao validar acesso de Funcionários:', err);\r\n+    console.error('[Funcionários] Erro ao validar acesso:', err);\r\n     alert('Não foi possível validar sua sessão.');\r\n     window.location.replace('/pages/login.html');\r\n   }\r\n })();\n\\ No newline at end of file\n"
+                }
+            ],
+            "date": 1757115638099,
+            "name": "Commit-0",
+            "content": "// Guarda de acesso: permite funcionario, admin e admin_master.\r\n// Esconde o conteúdo até validar o papel do usuário.\r\n(async function () {\r\n  try {\r\n    document.body.style.visibility = 'hidden';\r\n\r\n    const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');\r\n    const token = cached?.token;\r\n\r\n    if (!token) {\r\n      alert('Você precisa estar logado para acessar o painel de Funcionários.');\r\n      window.location.replace('/pages/login.html');\r\n      return;\r\n    }\r\n\r\n    const resp = await fetch(`${API_CONFIG.BASE_URL}/auth/check`, {\r\n      headers: { 'Authorization': `Bearer ${token}` }\r\n    });\r\n\r\n    if (!resp.ok) {\r\n      alert('Sessão inválida ou expirada. Faça login novamente.');\r\n      window.location.replace('/pages/login.html');\r\n      return;\r\n    }\r\n\r\n    const data = await resp.json();\r\n    const role = data?.role || cached?.role;\r\n\r\n    // Apenas funcionario, admin e admin_master entram.\r\n    if (!['funcionario', 'admin', 'admin_master'].includes(role)) {\r\n      alert('Acesso restrito aos Funcionários.');\r\n      window.location.replace('/index.html');\r\n      return;\r\n    }\r\n\r\n    // Atualiza o cache local com o role confirmado (sem perder outras infos)\r\n    if (cached && role && cached.role !== role) {\r\n      localStorage.setItem('loggedInUser', JSON.stringify({ ...cached, role }));\r\n    }\r\n\r\n    // Conteúdo liberado\r\n    document.body.style.visibility = 'visible';\r\n  } catch (err) {\r\n    console.error('Erro ao validar acesso de Funcionários:', err);\r\n    alert('Não foi possível validar sua sessão.');\r\n    window.location.replace('/pages/login.html');\r\n  }\r\n})();"
+        }
+    ]
+}

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu Carrinho - E o Bicho</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="../src/output.css">
+</head>
+<body class="bg-gray-100">
+
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <a href="../index.html">
+                <img src="../public/image/logo.svg" alt="Logotipo E o Bicho" class="h-20 w-auto">
+            </a>
+            <div class="flex items-center text-gray-500">
+                <span class="border-r border-gray-300 h-6 mr-4"></span>
+                <i class="fas fa-lock mr-2"></i>
+                <span class="font-semibold text-sm">Ambiente Seguro</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">Meu Carrinho</h1>
+        <div class="flex items-center text-sm text-gray-600 mb-6">
+            <span class="font-bold text-primary">1. Sacola</span>
+            <i class="fas fa-chevron-right text-xs mx-2 text-gray-400"></i>
+            <span class="text-gray-400">2. Pagamento</span>
+        </div>
+        
+        <div class="flex flex-col lg:flex-row gap-8 items-start">
+            
+            <div class="lg:w-2/3 w-full">
+                <div class="bg-white p-2 rounded-lg shadow">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="text-gray-600">
+                                <tr>
+                                    <th class="py-3 px-4 text-left font-semibold w-2/5">Produto</th>
+                                    <th class="py-3 px-2 text-center font-semibold">Preço</th>
+                                    <th class="py-3 px-2 text-center font-semibold">Quantidade</th>
+                                    <th class="py-3 px-2 text-center font-semibold">Total</th>
+                                    <th class="py-3 px-2"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="checkout-items-body">
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="free-shipping-progress-bar" class="bg-white rounded-lg shadow p-4 mt-6 hidden">
+                    <div class="flex items-center justify-between mb-2 text-sm">
+                        <span id="free-shipping-text" class="font-medium"></span>
+                        <span id="free-shipping-values" class="text-gray-500"></span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="free-shipping-fill" class="bg-primary h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="mt-12">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold text-gray-800">Quem viu, levou também</h2>
+                        <div class="flex items-center space-x-2">
+                            <button id="prev-featured-btn" class="w-8 h-8 rounded-full shadow-md bg-white flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <button id="next-featured-btn" class="w-8 h-8 rounded-full shadow-md bg-white flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="featured-slider-wrapper" class="overflow-x-auto scroll-smooth pb-4 -mb-4">
+                        <div id="featured-products-container" class="flex space-x-4">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:w-1/3 w-full bg-white p-6 rounded-lg shadow sticky top-24">
+                
+            <div class="mb-4 pb-4 border-b">
+            <label class="block text-sm font-medium mb-2 text-gray-800">Calcular frete e prazo</label>
+            <div class="flex">
+                <input id="cep-input" type="text" placeholder="Digite seu CEP"
+                    class="w-full border border-gray-300 rounded-l px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                <button id="cep-ok-btn"
+                        class="bg-primary text-white px-4 py-2 rounded-r text-sm font-bold hover:bg-secondary">
+                OK
+                </button>
+            </div>
+            <a href="https://buscacepinter.correios.com.br/app/localidade_logradouro/index.php"
+                target="_blank" rel="noopener"
+                class="text-xs text-primary hover:underline mt-1 inline-block">Não sei meu CEP</a>
+            </div>
+
+                <div id="delivery-options-container" class="mb-4 pb-4 border-b">
+                    <h3 class="text-sm font-medium text-gray-800 mb-2">Formas de entrega</h3>
+                    <div class="space-y-3">
+                        
+                        <button data-cost="0" data-type="Padrão" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-primary bg-primary/10">
+                            <div class="flex items-center text-left">
+                                <i class="fas fa-truck text-gray-500 mr-3 w-5 text-center"></i>
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-800">Padrão</p>
+                                    <p class="text-xs text-gray-500">Receba em até 5 dias úteis</p>
+                                </div>
+                            </div>
+                            <span class="delivery-price-span text-sm font-bold text-primary">Grátis</span>
+                        </button>
+
+                        <button data-cost="14.90" data-type="Express" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-gray-200 bg-transparent hover:border-gray-300">
+                            <div class="flex items-center text-left">
+                                <i class="fas fa-clock text-gray-500 mr-3 w-5 text-center"></i>
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-800">Express</p>
+                                    <p class="text-xs text-gray-500">Receba no próximo dia útil</p>
+                                </div>
+                            </div>
+                            <span class="delivery-price-span text-sm font-bold">R$ 14,90</span>
+                        </button>
+
+                        <button data-cost="9.90" data-type="Agendada" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-gray-200 bg-transparent hover:border-gray-300">
+                            <div class="flex items-center text-left">
+                                <i class="far fa-calendar-alt text-gray-500 mr-3 w-5 text-center"></i>
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-800">Agendada</p>
+                                    <p class="text-xs text-gray-500">Escolha o melhor dia e horário</p>
+                                </div>
+                            </div>
+                            <span class="delivery-price-span text-sm font-bold">R$ 9,90</span>
+                        </button>
+                        
+                        <button data-cost="0" data-type="Retire na Loja" class="delivery-option-btn w-full flex items-center justify-between p-3 rounded-lg border-2 border-gray-200 bg-transparent hover:border-gray-300">
+                            <div class="flex items-center text-left">
+                                <i class="fas fa-store text-gray-500 mr-3 w-5 text-center"></i>
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-800">Retire na Loja</p>
+                                    <p class="text-xs text-gray-500">Disponível em 2 horas</p>
+                                </div>
+                            </div>
+                            <span class="delivery-price-span text-sm font-bold text-gray-500">Grátis</span>
+                        </button>
+
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2 text-gray-800">Cupom de desconto</label>
+                    <div class="flex">
+                        <input type="text" placeholder="Digite seu cupom" class="flex-1 border rounded-l px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                        <button class="bg-gray-200 text-gray-700 px-4 py-2 rounded-r text-sm font-bold hover:bg-gray-300">Aplicar</button>
+                    </div>
+                </div>
+
+                <div class="border-t pt-4">
+                    <h2 class="text-xl font-semibold mb-4">Sumário do Pedido</h2>
+                        <div class="space-y-2 text-sm">                    
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Subtotal (<span id="summary-item-count">0</span> itens)</span>
+                                <span id="summary-subtotal" class="font-medium text-gray-800">R$ 0,00</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Descontos</span>
+                                <span id="summary-discounts" class="font-medium text-primary">- R$ 0,00</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Entrega</span>
+                                <span id="summary-delivery" class="font-medium text-gray-800">A calcular</span>
+                            </div>                            
+                            <div class="flex justify-between font-bold text-lg pt-2 border-t mt-2">
+                                <span>TOTAL</span>
+                                <span id="summary-total" class="text-gray-800">R$ 0,00</span>
+                            </div>
+                        </div>
+                    <button class="mt-6 w-full bg-primary text-white py-3 rounded-lg font-bold hover:bg-secondary transition-colors">
+                        Ir para o pagamento
+                    </button>
+                    <a href="/index.html" class="block text-center mt-3 w-full border border-primary text-primary py-3 rounded-lg font-bold hover:bg-primary/10 transition-colors">
+                        Escolher mais produtos
+                    </a>
+                </div>
+
+                <div class="mt-6 pt-4 border-t">
+                    <p class="text-sm font-medium text-gray-800 mb-3">Formas de pagamento</p>
+                    <div class="flex flex-wrap justify-center sm:justify-between items-center gap-4">
+                        
+                        <img src="../public/image/payment-methods/visa.svg" alt="Visa" class="h-8 object-contain">
+                        <img src="../public/image/payment-methods/mastercard.svg" alt="Mastercard" class="h-8 object-contain">
+                        <img src="../public/image/payment-methods/amex.svg" alt="American Express" class="h-8 object-contain">
+                        <img src="../public/image/payment-methods/hipercard.svg" alt="Hipercard" class="h-8 object-contain">
+                        <img src="../public/image/payment-methods/elo.svg" alt="Elo" class="h-8 object-contain">
+                        <img src="../public/image/payment-methods/barcode.svg" alt="Barcode" class="h-8 object-contain">
+                        
+                    </div>
+                </div>
+                
+                <div class="mt-6 pt-4 border-t text-center text-sm text-gray-600">
+                    <p>Tem alguma dúvida?</p>
+                    <p class="font-semibold mt-1 text-gray-800">(21) 99999-9999 | Atendimento</p>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <footer class="container mx-auto py-6 px-4">
+        <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
+            <p>Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.</p>
+        </div>
+    </footer>
+    
+<div id="modal-placeholder"></div>
+<div id="confirm-modal-placeholder"></div>
+
+<script>var basePath = '../';</script>
+<script src="../scripts/core/config.js"></script>
+<script src="../scripts/core/main.js"></script>     <!-- injeta header/footer/cart e os MODAIS -->
+<script src="../scripts/core/ui.js"></script>       <!-- ESTE arquivo -->
+<script src="../scripts/cartManager.js"></script>
+<script src="../scripts/checkout.js"></script>
+<script src="../scripts/addressSidebar.js"></script>
+    </body>
+</html>

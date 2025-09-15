@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <style>
+      .bg { fill: #ffffff; stroke: #1f2937; stroke-width: 2; }
+      .ear { fill: var(--color-secondary); stroke: #1f2937; stroke-width: 2; }
+      .arrow { fill: var(--color-primary); stroke: #1f2937; stroke-width: 2; }
+    </style>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- Fundo -->
+  <g filter="url(#soft)">
+    <rect class="bg" x="8" y="12" width="48" height="40" rx="14"/>
+  </g>
+
+  <!-- Orelhas -->
+  <path class="ear" d="M15 18 C10 15, 10 10, 15 8 C19 6, 23 8, 23 12 C23 15, 21 19, 19 21 C17 23, 15 21, 15 18 Z"/>
+  <path class="ear" d="M49 18 C54 15, 54 10, 49 8 C45 6, 41 8, 41 12 C41 15, 43 19, 45 21 C47 23, 49 21, 49 18 Z"/>
+
+  <!-- Seta -->
+  <path class="arrow" d="M28 20 L40 32 L28 44" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

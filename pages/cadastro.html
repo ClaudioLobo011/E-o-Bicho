@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crie sua Conta - E o Bicho</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="../src/output.css">
+    <script src="https://unpkg.com/imask"></script>
+</head>
+<body class="bg-gray-50">
+
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <a href="../index.html">
+                <img src="../public/image/logo.svg" alt="Logotipo E o Bicho" class="h-20 w-auto">
+            </a>
+            <div class="flex items-center text-gray-500">
+                <span class="border-r border-gray-300 h-6 mr-4"></span>
+                <i class="fas fa-lock mr-2"></i>
+                <span class="font-semibold text-sm">Ambiente Seguro</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex items-center justify-center py-10 px-4">
+        <div class="container mx-auto max-w-screen-md flex flex-col md:flex-row shadow-lg rounded-lg overflow-hidden">
+            <div class="w-full md:w-1/2 bg-white p-8">
+                <h2 class="text-xl font-bold text-gray-800 mb-6">Crie sua conta</h2>
+                <div class="flex items-center space-x-6 mb-6">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="account_type" id="radio-pf" class="form-radio text-primary" checked>
+                        <span class="ml-2 text-sm font-medium text-gray-700">Pessoa Física</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="account_type" id="radio-pj" class="form-radio text-primary">
+                        <span class="ml-2 text-sm font-medium text-gray-700">Pessoa Jurídica</span>
+                    </label>
+                </div>
+
+                <form id="signup-form" class="space-y-4">
+                    <div id="form-pf" class="space-y-4 overflow-hidden transition-all duration-500 ease-in-out">
+                        <div>
+                            <label for="name" class="block text-gray-700 text-sm font-bold mb-1">Nome e sobrenome</label>
+                            <input type="text" id="name" name="nomeCompleto" placeholder="Digite seu nome e sobrenome" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                            <div class="error-message text-xs mt-1"></div>
+                        </div>
+                        <div>
+                            <label for="email-pf" class="block text-gray-700 text-sm font-bold mb-1">E-mail</label>
+                            <input type="email" id="email-pf" name="email" placeholder="Digite seu e-mail" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                            <div class="error-message text-xs mt-1"></div>
+                        </div>
+                        <div>
+                            <label for="celular-pf" class="block text-gray-700 text-sm font-bold mb-1">Celular</label>
+                            <input type="tel" id="celular-pf" name="celular" placeholder="(00) 00000-0000" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="celular">
+                            <div class="error-message text-xs mt-1"></div>
+                        </div>
+                        <div>
+                            <label for="telefone-pf" class="block text-gray-700 text-sm font-bold mb-1">Telefone <span class="text-gray-500 font-normal">(opcional)</span></label>
+                            <input type="tel" id="telefone-pf" name="telefone" placeholder="(00) 0000-0000" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="telefone">
+                        </div>
+                        <div class="flex flex-col md:flex-row md:space-x-4">
+                            <div class="w-full md:w-1/2">
+                                <label for="genero" class="block text-gray-700 text-sm font-bold mb-1">Gênero</label>
+                                <select id="genero" name="genero" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary appearance-none bg-white">
+                                    <option value="">Escolha o gênero</option>
+                                    <option value="masculino">Masculino</option>
+                                    <option value="feminino">Feminino</option>
+                                </select>
+                            </div>
+                            <div class="w-full md:w-1/2 mt-4 md:mt-0">
+                                <label for="data_nascimento" class="block text-gray-700 text-sm font-bold mb-1">Data de nascimento</label>
+                                <input type="date" id="data_nascimento" name="dataNascimento" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="cpf" class="block text-gray-700 text-sm font-bold mb-1">CPF</label>
+                            <input type="text" id="cpf" name="cpf" placeholder="000.000.000-00" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="cpf">
+                            <div class="error-message text-xs mt-1"></div>
+                        </div>
+                    </div>
+
+                    <div id="form-pj" class="space-y-4 overflow-hidden transition-all duration-500 ease-in-out">
+                        <div>
+                            <label for="razao_social" class="block text-gray-700 text-sm font-bold mb-1">Razão Social</label>
+                            <input type="text" id="razao_social" name="razaoSocial" placeholder="Digite a Razão Social" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                            <div class="error-message text-xs mt-1"></div>
+                        </div>
+                        <div>
+                            <label for="email-pj" class="block text-gray-700 text-sm font-bold mb-1">E-mail</label>
+                            <input type="email" id="email-pj" name="email" placeholder="Digite seu e-mail" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                            <div class="error-message text-xs mt-1"></div>
+                        </div>
+                        <div>
+                            <label for="celular-pj" class="block text-gray-700 text-sm font-bold mb-1">Celular</label>
+                            <input type="tel" id="celular-pj" name="celular" placeholder="(00) 00000-0000" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="celular">
+                            <div class="error-message text-xs mt-1"></div>
+                        </div>
+                        <div>
+                            <label for="telefone-pj" class="block text-gray-700 text-sm font-bold mb-1">Telefone <span class="text-gray-500 font-normal">(opcional)</span></label>
+                            <input type="tel" id="telefone-pj" name="telefone" placeholder="(00) 0000-0000" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="telefone">
+                        </div>
+                        <div>
+                            <label for="nome_contato" class="block text-gray-700 text-sm font-bold mb-1">Nome do Contato <span class="text-gray-500 font-normal">(opcional)</span></label>
+                            <input type="text" id="nome_contato" name="nomeContato" placeholder="Digite o nome do contato" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                        </div>
+                        <div>
+                            <label for="cnpj" class="block text-gray-700 text-sm font-bold mb-1">CNPJ</label>
+                            <input type="text" id="cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" data-mask="cnpj">
+                            <div class="error-message text-xs mt-1"></div>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <div class="flex-shrink-0 flex items-center">
+                                <input type="checkbox" id="isento_ie" name="isentoIE" class="form-checkbox h-4 w-4 text-primary focus:ring-primary">
+                                <label for="isento_ie" class="ml-2 text-sm text-gray-700">Isento de IE?</label>
+                            </div>
+                            <div class="flex-grow">
+                                <label for="ie" class="block text-gray-700 text-sm font-bold mb-1">IE</label>
+                                <input type="text" id="ie" name="inscricaoEstadual" placeholder="Inscrição Estadual" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                                <div class="error-message text-xs mt-1"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="estado_ie" class="block text-gray-700 text-sm font-bold mb-1">Estado da IE</label>
+                            <div class="relative">
+                                <select id="estado_ie" name="estadoIE" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary bg-white appearance-none pr-8">
+                                    <option value="">Selecione o Estado</option>
+                                    <option value="AC">Acre</option>
+                                    <option value="AL">Alagoas</option>
+                                    <option value="AP">Amapá</option>
+                                    <option value="AM">Amazonas</option>
+                                    <option value="BA">Bahia</option>
+                                    <option value="CE">Ceará</option>
+                                    <option value="DF">Distrito Federal</option>
+                                    <option value="ES">Espírito Santo</option>
+                                    <option value="GO">Goiás</option>
+                                    <option value="MA">Maranhão</option>
+                                    <option value="MT">Mato Grosso</option>
+                                    <option value="MS">Mato Grosso do Sul</option>
+                                    <option value="MG">Minas Gerais</option>
+                                    <option value="PA">Pará</option>
+                                    <option value="PB">Paraíba</option>
+                                    <option value="PR">Paraná</option>
+                                    <option value="PE">Pernambuco</option>
+                                    <option value="PI">Piauí</option>
+                                    <option value="RJ">Rio de Janeiro</option>
+                                    <option value="RN">Rio Grande do Norte</option>
+                                    <option value="RS">Rio Grande do Sul</option>
+                                    <option value="RO">Rondônia</option>
+                                    <option value="RR">Roraima</option>
+                                    <option value="SC">Santa Catarina</option>
+                                    <option value="SP">São Paulo</option>
+                                    <option value="SE">Sergipe</option>
+                                    <option value="TO">Tocantins</option>
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col md:flex-row md:space-x-4 pt-4">
+                        <div class="w-full md:w-1/2 relative">
+                            <label for="password" class="block text-gray-700 text-sm font-bold mb-1">Senha</label>
+                            <input type="password" name="senha" id="password" placeholder="Digite sua senha" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                            <div class="error-message text-xs mt-1"></div>
+                        </div>
+                        <div class="w-full md:w-1/2 mt-4 md:mt-0 relative">
+                            <label for="confirm_password" class="block text-gray-700 text-sm font-bold mb-1">Confirmar a senha</label>
+                            <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirme sua senha" class="w-full py-2 px-4 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                            <div class="error-message text-xs mt-1"></div>
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-600">
+                        <p class="font-bold mb-1">Padrão de Senha</p>
+                        <ul class="list-disc list-inside space-y-1">
+                            <li>Mínimo 8 caracteres</li>
+                            <li>Letra Maiúscula</li>
+                            <li>Letra Minúscula</li>
+                            <li>Números</li>
+                        </ul>
+                    </div>
+                    <div class="pt-2">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="terms" name="terms" value="on" class="form-checkbox h-4 w-4 text-primary focus:ring-primary">
+                            <label for="terms" class="ml-2 text-sm text-gray-700">Concordo com os <a href="#" class="text-primary hover:underline">termos e condições</a></label>
+                        </div>
+                        <div class="error-message text-xs mt-1"></div>
+                    </div>
+                    <button type="submit" class="w-full bg-primary hover:bg-secondary text-white font-bold py-3 px-4 rounded-lg transition duration-300 !mt-6 flex items-center justify-center disabled:opacity-75 disabled:cursor-not-allowed">Cadastrar</button>
+                </form>
+            </div>
+
+            <div class="w-full md:w-1/2 bg-gray-100 p-8 flex-col justify-center items-center hidden md:flex">
+                <h3 class="text-xl font-bold text-primary mb-4 text-center">Criar uma conta é rápido,<br>fácil e gratuito!</h3>
+                <p class="text-gray-700 text-center mb-4 text-sm">Com a sua conta da E o Bicho você tem acesso a Ofertas exclusivas, descontos, pode criar e gerenciar a sua Lista de Desejos e muito mais!</p>
+                <a href="login.html">
+                    <button class="bg-white hover:bg-gray-200 text-primary font-bold py-2 px-6 rounded-lg border border-primary transition duration-300">
+                        Já tenho conta
+                    </button>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer class="container mx-auto max-w-screen-md py-6">
+        <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
+            <p>
+                Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.
+            </p>
+        </div>
+    </footer>
+
+    <div id="modal-placeholder"></div>
+    <div id="confirm-modal-placeholder"></div>
+
+    <script>var basePath = '../';</script>
+    <script src="../scripts/core/config.js"></script>
+    <script src="../scripts/core/ui.js"></script>
+    <script src="../scripts/core/main.js"></script>
+    <script src="../scripts/core/masks.js"></script>
+    <script src="../scripts/auth.js"></script>
+
+    <div id="success-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 transition-opacity duration-300 ease-in-out">
+        <div class="bg-white rounded-lg shadow-xl p-6 max-w-xs w-full text-center transition-transform duration-300 ease-out">
+            <div class="text-3xl text-primary mb-3">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <h2 class="text-xl font-bold text-gray-800 mb-2">Sucesso!</h2>
+            <p id="modal-message" class="text-gray-600 mb-4 text-sm">Utilizador registado com sucesso!</p>
+            <div class="flex items-center justify-center text-gray-700">
+                <i class="fas fa-spinner fa-spin mr-2"></i>
+                <span id="redirect-timer">A redirecionar em 3...</span>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

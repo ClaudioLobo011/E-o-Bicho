@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Busca de Produtos - E o Bicho</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+
+    <div id="header-placeholder"></div>
+
+    <main class="container mx-auto px-4 py-8 pt-[200px]">
+        
+        <nav class="mb-4 text-sm" aria-label="Breadcrumb">
+            <ol id="breadcrumb-container" class="list-none p-0 inline-flex items-center space-x-2">
+                </ol>
+        </nav>
+
+        <h1 id="page-title" class="text-3xl font-bold text-gray-800 mb-8"></h1>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <aside class="md:col-span-1">
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="font-bold text-lg mb-4">Categorias</h3>
+                    <nav id="subcategory-list-container" class="space-y-2">
+                        <p class="text-xs text-gray-400">A carregar...</p>
+                    </nav>
+                </div>
+            </aside>
+            <div class="md:col-span-3">
+                <div id="product-list-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <p id="loading-message" class="col-span-full text-center text-gray-500">A carregar produtos...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="cart-placeholder"></div>
+    <div id="footer-placeholder"></div>
+    <div id="modal-placeholder"></div>
+    <div id="confirm-modal-placeholder"></div>
+
+    <script>var basePath = '../../';</script>
+    <script src="../../scripts/core/config.js"></script>
+    <script src="../../scripts/core/ui.js"></script>
+    <script src="../../scripts/cartManager.js"></script> 
+    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/user/hydrate-user.js"></script>
+    <script src="../../scripts/cart.js"></script>
+    <script src="../../scripts/favoritesManager.js"></script>
+    <script src="../../scripts/search/search.js"></script>
+
+</body>
+</html>

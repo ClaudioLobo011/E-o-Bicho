@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meus Favoritos - E o Bicho</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="../src/output.css">
+    <script src="https://unpkg.com/imask"></script>
+</head>
+<body class="bg-gray-100">
+
+    <div id="header-placeholder"></div>
+
+    <main class="container mx-auto px-4 py-8 pt-[200px]">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+
+            <aside class="md:col-span-1">
+                <div id="account-sidebar-placeholder"></div>
+            </aside>
+
+            <div class="md:col-span-3">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h1 class="text-2xl font-bold text-gray-800">Meus Dados</h1>
+                    <p class="text-gray-600 mt-1">Confira ou altere seus dados de cadastro.</p>
+
+                    <div class="border-b border-gray-200 mt-6">
+                        <nav id="account-type-tabs" class="-mb-px flex space-x-6">
+                            <button id="tab-pf" class="py-4 px-1 border-b-2 border-primary font-semibold text-primary">
+                                Pessoa Física
+                            </button>
+                            <button id="tab-pj" class="py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium">
+                                Pessoa Jurídica
+                            </button>
+                        </nav>
+                    </div>
+
+                    <div id="form-pf" class="mt-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                            <div class="md:col-span-2">
+                                <label for="name" class="block text-sm font-medium text-gray-700">Nome completo</label>
+                                <input type="text" id="name" value="Claudio Henrique Da Silva Lobo Mendes" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                            </div>
+
+                            <div>
+                                <label for="email-pf" class="block text-sm font-medium text-gray-700">E-mail</label>
+                                <input type="email" id="email-pf" value="ch.lobo2000@hotmail.com" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                            </div>
+                            <div>
+                                <label for="data_nascimento" class="block text-sm font-medium text-gray-700">Data de nascimento</label>
+                                <input type="text" id="data_nascimento" value="28/02/2001" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                            </div>
+
+                            <div>
+                                <label for="cpf" class="block text-sm font-medium text-gray-700">CPF</label>
+                                <input type="text" id="cpf" value="000.000.000-00" data-mask="cpf" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                            </div>
+                            <div>
+                                <label for="genero" class="block text-sm font-medium text-gray-700">Gênero</label>
+                                <select id="genero" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary bg-white appearance-none">
+                                    <option value="">Selecione...</option>
+                                    <option value="masculino">Masculino</option>
+                                    <option value="feminino">Feminino</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Celular</label>
+                                <div class="grid grid-cols-3 gap-3 mt-1">
+                                    <div class="col-span-1">
+                                        <input type="text" id="ddd-cel" value="21" placeholder="DDD" data-mask="ddd" class="block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm">
+                                    </div>
+                                    <div class="col-span-2">
+                                        <input type="text" id="celular" value="98675-4310" placeholder="00000-0000" data-mask="celular2" class="block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Telefone <span class="font-normal text-gray-500">(opcional)</span></label>
+                                <div class="grid grid-cols-3 gap-3 mt-1">
+                                    <div class="col-span-1">
+                                        <input type="text" id="ddd-tel" value="21" placeholder="DDD" data-mask="ddd" class="block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm">
+                                    </div>
+                                    <div class="col-span-2">
+                                        <input type="text" id="telefone" value="2222-3333" placeholder="Número" data-mask="telefone2" class="block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm">
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                        <div class="mt-6 text-right">
+                            <button type="button" id="save-pf-btn" class="transition hover:opacity-80">
+                                <div data-icon="savealt-btn" class="w-58 h-44"></div>
+                                <span class="sr-only">Salvar Alterações</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="form-pj" class="mt-6 hidden">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+
+                            <div>
+                                <label for="razao_social" class="block text-sm font-medium text-gray-700">Razão Social</label>
+                                <input type="text" id="razao_social" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm">
+                            </div>
+                            <div>
+                                <label for="cnpj" class="block text-sm font-medium text-gray-700">CNPJ</label>
+                                <input type="text" id="cnpj" data-mask="cnpj" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                            </div>
+
+                            <div>
+                                <label for="email-pj" class="block text-sm font-medium text-gray-700">E-mail</label>
+                                <input type="email" id="email-pj" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm">
+                            </div>
+                            <div>
+                                <label for="nome_contato" class="block text-sm font-medium text-gray-700">Nome do Contato <span class="font-normal text-gray-500">(opcional)</span></label>
+                                <input type="text" id="nome_contato" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Celular</label>
+                                <div class="grid grid-cols-3 gap-3 mt-1">
+                                    <div class="col-span-1"><input type="text" id="ddd-cel-pj" placeholder="DDD" class="block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm"></div>
+                                    <div class="col-span-2"><input type="text" id="celular-pj" placeholder="Número" data-mask="celular2" class="block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Telefone <span class="font-normal text-gray-500">(opcional)</span></label>
+                                <div class="grid grid-cols-3 gap-3 mt-1">
+                                    <div class="col-span-1"><input type="text" id="ddd-tel-pj" placeholder="DDD" class="block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm"></div>
+                                    <div class="col-span-2"><input type="text" id="telefone-pj" placeholder="Número" data-mask="telefone2" class="block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="ie" class="block text-sm font-medium text-gray-700">Inscrição Estadual (IE)</label>
+                                <div class="flex items-center space-x-4 mt-1">
+                                    <input type="text" id="ie" placeholder="Digite a Inscrição Estadual" class="block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm">
+                                    <div class="flex items-center flex-shrink-0">
+                                        <input type="checkbox" id="isento_ie" class="h-4 w-4 text-primary border-gray-300 rounded">
+                                        <label for="isento_ie" class="ml-2 block text-sm text-gray-900">Isento</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="estado_ie" class="block text-sm font-medium text-gray-700">Estado da IE</label>
+                                <div class="relative mt-1">
+                                    <select id="estado_ie" name="estadoIE" class="w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm bg-white appearance-none pr-8 focus:ring-primary focus:border-primary">
+                                        <option value="">Selecione o Estado</option>
+                                        <option value="AC">Acre</option>
+                                        <option value="AL">Alagoas</option>
+                                        <option value="AP">Amapá</option>
+                                        <option value="AM">Amazonas</option>
+                                        <option value="BA">Bahia</option>
+                                        <option value="CE">Ceará</option>
+                                        <option value="DF">Distrito Federal</option>
+                                        <option value="ES">Espírito Santo</option>
+                                        <option value="GO">Goiás</option>
+                                        <option value="MA">Maranhão</option>
+                                        <option value="MT">Mato Grosso</option>
+                                        <option value="MS">Mato Grosso do Sul</option>
+                                        <option value="MG">Minas Gerais</option>
+                                        <option value="PA">Pará</option>
+                                        <option value="PB">Paraíba</option>
+                                        <option value="PR">Paraná</option>
+                                        <option value="PE">Pernambuco</option>
+                                        <option value="PI">Piauí</option>
+                                        <option value="RJ">Rio de Janeiro</option>
+                                        <option value="RN">Rio Grande do Norte</option>
+                                        <option value="RS">Rio Grande do Sul</option>
+                                        <option value="RO">Rondônia</option>
+                                        <option value="RR">Roraima</option>
+                                        <option value="SC">Santa Catarina</option>
+                                        <option value="SP">São Paulo</option>
+                                        <option value="SE">Sergipe</option>
+                                        <option value="TO">Tocantins</option>
+                                    </select>
+                                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-8 text-right">
+                            <button type="button" id="save-pj-btn" class="bg-primary text-white font-bold py-2 px-6 rounded-lg hover:bg-secondary">Salvar Alterações</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <div id="cart-placeholder"></div>
+    <div id="modal-placeholder"></div>
+    <div id="confirm-modal-placeholder"></div>
+
+    <footer class="container mx-auto py-6 px-4">
+        <div class="border-t border-gray-200 text-center text-gray-400 text-xs pt-6">
+            <p>
+                Copyright &copy; 2025 Vila E o Bicho LTDA - ME. Todos os direitos reservados.
+            </p>
+        </div>
+    </footer>
+
+    <script>var basePath = '../';</script>
+    <script src="../scripts/core/config.js"></script>
+    <script src="../scripts/core/ui.js"></script>
+    <script src="../scripts/cartManager.js"></script> 
+    <script src="../scripts/core/main.js"></script>
+    <script src="../scripts/user/hydrate-user.js"></script>
+    <script src="../scripts/favoritesManager.js"></script>
+    <script src="../scripts/cart.js"></script>
+    <script src="../scripts/account.js"></script>
+
+</body>
+</html>

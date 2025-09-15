@@ -1,0 +1,18 @@
+{
+    "sourceFile": "servidor/routes/users.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1756580404211,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1756580404211,
+            "name": "Commit-0",
+            "content": "const express = require('express');\r\nconst router = express.Router();\r\nconst User = require('../models/User');\r\nconst requireAuth = require('../middlewares/requireAuth');\r\nconst authorizeRoles = require('../middlewares/authorizeRoles');\r\n\r\n// GET /api/users/:id - Buscar dados de um utilizador\r\nrouter.get('/:id', requireAuth, async (req, res) => {\r\n    try {\r\n        // Se não for admin, só pode buscar o próprio perfil\r\n        if (req.user.role !== 'admin' && req.user.role !== 'admin_master' && req.user.id !== req.params.id) {\r\n            return res.status(403).json({ message: 'Acesso negado.' });\r\n        }\r\n\r\n        const user = await User.findById(req.params.id).select('-senha');\r\n        if (!user) {\r\n            return res.status(404).json({ message: 'Utilizador não encontrado.' });\r\n        }\r\n        res.json(user);\r\n    } catch (error) {\r\n        console.error(\"Erro ao buscar utilizador:\", error);\r\n        res.status(500).json({ message: 'Erro no servidor.' });\r\n    }\r\n});\r\n\r\n// PUT /api/users/:id - Atualizar dados de um utilizador\r\nrouter.put('/:id', requireAuth, async (req, res) => {\r\n    try {\r\n        // Se não for admin, só pode atualizar o próprio perfil\r\n        if (req.user.role !== 'admin' && req.user.role !== 'admin_master' && req.user.id !== req.params.id) {\r\n            return res.status(403).json({ message: 'Acesso negado.' });\r\n        }\r\n\r\n        const {\r\n            nomeCompleto, email, dataNascimento, genero, celular, telefone,\r\n            razaoSocial, nomeContato, inscricaoEstadual, isentoIE, estadoIE\r\n        } = req.body;\r\n\r\n        const updateFields = {\r\n            nomeCompleto, email, dataNascimento, genero, celular, telefone,\r\n            razaoSocial, nomeContato, inscricaoEstadual, isentoIE, estadoIE\r\n        };\r\n        \r\n        Object.keys(updateFields).forEach(key => updateFields[key] === undefined && delete updateFields[key]);\r\n\r\n        const updatedUser = await User.findByIdAndUpdate(\r\n            req.params.id,\r\n            { $set: updateFields },\r\n            { new: true, runValidators: true }\r\n        ).select('-senha');\r\n\r\n        if (!updatedUser) {\r\n            return res.status(404).json({ message: 'Utilizador não encontrado.' });\r\n        }\r\n        \r\n        const userForLocalStorage = {\r\n            id: updatedUser._id,\r\n            nome: updatedUser.nomeCompleto || updatedUser.razaoSocial,\r\n            email: updatedUser.email,\r\n            role: updatedUser.role\r\n        };\r\n\r\n        res.json({ message: 'Dados atualizados com sucesso!', user: userForLocalStorage });\r\n\r\n    } catch (error) {\r\n        console.error(\"Erro ao atualizar utilizador:\", error);\r\n        res.status(500).json({ message: 'Erro no servidor.' });\r\n    }\r\n});\r\n\r\nmodule.exports = router;\r\n"
+        }
+    ]
+}

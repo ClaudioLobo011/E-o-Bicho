@@ -1,0 +1,22 @@
+{
+    "sourceFile": "pages/menu-departments-item/search.html",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1756761075868,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1756761132561,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -46,8 +46,9 @@\n     <script src=\"../../scripts/config.js\"></script>\r\n     <script src=\"../../scripts/ui.js\"></script>\r\n     <script src=\"../../scripts/cartManager.js\"></script> \r\n     <script src=\"../../scripts/main.js\"></script>\r\n+    <script src=\"../scripts/user/hydrate-user.js\"></script>\r\n     <script src=\"../../scripts/cart.js\"></script>\r\n     <script src=\"../../scripts/favoritesManager.js\"></script>\r\n     <script src=\"../../scripts/search/search.js\"></script>\r\n \r\n"
+                }
+            ],
+            "date": 1756761075868,
+            "name": "Commit-0",
+            "content": "<!DOCTYPE html>\r\n<html lang=\"pt-BR\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>Busca de Produtos - E o Bicho</title>\r\n    <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css\">\r\n    <link rel=\"stylesheet\" href=\"../../src/output.css\">\r\n</head>\r\n<body class=\"bg-gray-100\">\r\n\r\n    <div id=\"header-placeholder\"></div>\r\n\r\n    <main class=\"container mx-auto px-4 py-8 pt-[200px]\">\r\n        \r\n        <nav class=\"mb-4 text-sm\" aria-label=\"Breadcrumb\">\r\n            <ol id=\"breadcrumb-container\" class=\"list-none p-0 inline-flex items-center space-x-2\">\r\n                </ol>\r\n        </nav>\r\n\r\n        <h1 id=\"page-title\" class=\"text-3xl font-bold text-gray-800 mb-8\"></h1>\r\n\r\n        <div class=\"grid grid-cols-1 md:grid-cols-4 gap-8\">\r\n            <aside class=\"md:col-span-1\">\r\n                <div class=\"bg-white p-4 rounded-lg shadow\">\r\n                    <h3 class=\"font-bold text-lg mb-4\">Categorias</h3>\r\n                    <nav id=\"subcategory-list-container\" class=\"space-y-2\">\r\n                        <p class=\"text-xs text-gray-400\">A carregar...</p>\r\n                    </nav>\r\n                </div>\r\n            </aside>\r\n            <div class=\"md:col-span-3\">\r\n                <div id=\"product-list-container\" class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6\">\r\n                    <p id=\"loading-message\" class=\"col-span-full text-center text-gray-500\">A carregar produtos...</p>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </main>\r\n\r\n    <div id=\"cart-placeholder\"></div>\r\n    <div id=\"footer-placeholder\"></div>\r\n    <div id=\"modal-placeholder\"></div>\r\n    <div id=\"confirm-modal-placeholder\"></div>\r\n\r\n    <script>var basePath = '../../';</script>\r\n    <script src=\"../../scripts/config.js\"></script>\r\n    <script src=\"../../scripts/ui.js\"></script>\r\n    <script src=\"../../scripts/cartManager.js\"></script> \r\n    <script src=\"../../scripts/main.js\"></script>\r\n    <script src=\"../../scripts/cart.js\"></script>\r\n    <script src=\"../../scripts/favoritesManager.js\"></script>\r\n    <script src=\"../../scripts/search/search.js\"></script>\r\n\r\n</body>\r\n</html>"
+        }
+    ]
+}

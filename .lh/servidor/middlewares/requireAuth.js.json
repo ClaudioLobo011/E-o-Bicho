@@ -1,0 +1,18 @@
+{
+    "sourceFile": "servidor/middlewares/requireAuth.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1756578059127,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1756578059127,
+            "name": "Commit-0",
+            "content": "const jwt = require('jsonwebtoken');\r\nconst User = require('../models/User');\r\n\r\nmodule.exports = async function requireAuth(req, res, next) {\r\n  try {\r\n    const authHeader = req.headers['authorization'];\r\n    if (!authHeader) return res.status(401).json({ message: 'Token não fornecido' });\r\n\r\n    const token = authHeader.split(' ')[1];\r\n    if (!token) return res.status(401).json({ message: 'Token inválido' });\r\n\r\n    const decoded = jwt.verify(token, process.env.JWT_SECRET);\r\n\r\n    // Buscar usuário no banco (garante que não foi deletado ou alterado)\r\n    const user = await User.findById(decoded.id);\r\n    if (!user) return res.status(401).json({ message: 'Usuário não encontrado' });\r\n\r\n    // Anexa os dados do usuário no request\r\n    req.user = {\r\n      id: user._id.toString(),\r\n      email: user.email,\r\n      role: user.role\r\n    };\r\n\r\n    next();\r\n  } catch (err) {\r\n    console.error(err);\r\n    return res.status(401).json({ message: 'Não autorizado' });\r\n  }\r\n};\r\n"
+        }
+    ]
+}

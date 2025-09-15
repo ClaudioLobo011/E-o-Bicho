@@ -1,0 +1,29 @@
+<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verificar e-mail</title><link rel="stylesheet" href="../src/output.css">
+</head><body class="bg-gray-100">
+<div id="header-placeholder"></div>
+<main class="container mx-auto px-4 py-24 text-center">
+  <div class="bg-white p-8 rounded-xl shadow max-w-xl mx-auto">
+    <h1 class="text-xl font-semibold mb-2">Verificar e-mail</h1>
+    <p id="msg" class="text-gray-700">Verificando…</p>
+    <a href="/pages/alterar-senha.html" class="mt-6 inline-block px-4 py-2 rounded bg-primary text-white">Ir para Alterar Senha</a>
+  </div>
+</main>
+<div id="footer-placeholder"></div>
+<script src="../scripts/core/config.js"></script>
+<script>
+(async () => {
+  const p = new URLSearchParams(location.search);
+  const token = p.get('token');
+  const el = document.getElementById('msg');
+  if (!token) { el.textContent = 'Token não informado.'; return; }
+  try {
+    const r = await fetch(`${API_CONFIG.BASE_URL}/auth/email/verify?token=${encodeURIComponent(token)}`);
+    const j = await r.json().catch(()=>({}));
+    if (r.ok && j.ok) el.textContent = 'Seu e-mail foi verificado com sucesso!';
+    else el.textContent = j.message || 'Não foi possível verificar seu e-mail.';
+  } catch (e) { el.textContent = 'Erro ao verificar e-mail.'; }
+})();
+</script>
+</body></html>

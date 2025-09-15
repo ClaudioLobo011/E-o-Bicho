@@ -1,0 +1,18 @@
+{
+    "sourceFile": "data/racas.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1757701126263,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1757701126263,
+            "name": "Commit-0",
+            "content": "const BREED_DATA = {\r\n    cachorro: [\r\n        'SRD (Sem Raça Definida)', 'Afghan Hound', 'Airedale Terrier', 'Akita', 'Basset Hound', \r\n        'Beagle', 'Bichon Frisé', 'Border Collie', 'Boxer', 'Bull Terrier', 'Bulldog Francês', \r\n        'Bulldog Inglês', 'Chihuahua', 'Chow Chow', 'Cocker Spaniel', 'Dachshund (Salsicha)', \r\n        'Dálmata', 'Doberman', 'Dogue Alemão', 'Fila Brasileiro', 'Golden Retriever', \r\n        'Husky Siberiano', 'Jack Russell Terrier', 'Labrador Retriever', 'Lhasa Apso', \r\n        'Maltês', 'Mastiff', 'Pastor Alemão', 'Pequinês', 'Pinscher', 'Pit Bull', 'Poodle', \r\n        'Pug', 'Rottweiler', 'Schnauzer', 'Shar-Pei', 'Shih Tzu', 'Spitz Alemão (Lulu)', \r\n        'Staffordshire Bull Terrier', 'Yorkshire Terrier'\r\n    ],\r\n    gato: [\r\n        'SRD (Sem Raça Definida)', 'Abissínio', 'Angorá', 'Ashera', 'Bengal', 'Bobtail japonês',\r\n        'Bombay', 'Burmês', 'Cornish Rex', 'Devon Rex', 'Exótico', 'Himalaio', 'Maine Coon',\r\n        'Norueguês da Floresta', 'Persa', 'Ragdoll', 'Sagrado da Birmânia', 'Savannah',\r\n        'Scottish Fold', 'Siamês', 'Siberiano', 'Sphynx'\r\n    ],\r\n    passaro: [\r\n        'Agapornis', 'Calopsita', 'Canário', 'Caturrita', 'Diamante-de-gould', 'Manon', \r\n        'Mandarim', 'Papagaio', 'Periquito', 'Ring Neck'\r\n    ]\r\n};"
+        }
+    ]
+}

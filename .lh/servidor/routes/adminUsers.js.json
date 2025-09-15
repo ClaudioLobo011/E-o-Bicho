@@ -1,0 +1,22 @@
+{
+    "sourceFile": "servidor/routes/adminUsers.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1756570335282,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1756579146264,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,21 +1,23 @@\n const express = require('express');\r\n const router = express.Router();\r\n const User = require('../models/User');\r\n+const requireAuth = require('../middlewares/requireAuth');\r\n const authorizeRoles = require('../middlewares/authorizeRoles');\r\n \r\n // Listar todos usuários (somente admin_master)\r\n-router.get('/', authorizeRoles('admin_master'), async (req, res) => {\r\n+router.get('/', requireAuth, authorizeRoles('admin_master'), async (req, res) => {\r\n   try {\r\n     const users = await User.find({}, 'nomeCompleto username email role createdAt updatedAt');\r\n     res.json(users);\r\n   } catch (error) {\r\n+    console.error('Erro ao listar usuários:', error);\r\n     res.status(500).json({ message: 'Erro ao listar usuários' });\r\n   }\r\n });\r\n \r\n // Atualizar role de usuário (somente admin_master)\r\n-router.put('/:id/role', authorizeRoles('admin_master'), async (req, res) => {\r\n+router.put('/:id/role', requireAuth, authorizeRoles('admin_master'), async (req, res) => {\r\n   const { role } = req.body;\r\n   if (!['admin_master', 'admin', 'funcionario', 'cliente'].includes(role)) {\r\n     return res.status(400).json({ message: 'Role inválida' });\r\n   }\r\n@@ -27,8 +29,9 @@\n     ).select('nomeCompleto username email role');\r\n     if (!updated) return res.status(404).json({ message: 'Usuário não encontrado' });\r\n     res.json(updated);\r\n   } catch (error) {\r\n+    console.error('Erro ao atualizar role:', error);\r\n     res.status(500).json({ message: 'Erro ao atualizar role' });\r\n   }\r\n });\r\n \r\n"
+                }
+            ],
+            "date": 1756570335282,
+            "name": "Commit-0",
+            "content": "const express = require('express');\r\nconst router = express.Router();\r\nconst User = require('../models/User');\r\nconst authorizeRoles = require('../middlewares/authorizeRoles');\r\n\r\n// Listar todos usuários (somente admin_master)\r\nrouter.get('/', authorizeRoles('admin_master'), async (req, res) => {\r\n  try {\r\n    const users = await User.find({}, 'nomeCompleto username email role createdAt updatedAt');\r\n    res.json(users);\r\n  } catch (error) {\r\n    res.status(500).json({ message: 'Erro ao listar usuários' });\r\n  }\r\n});\r\n\r\n// Atualizar role de usuário (somente admin_master)\r\nrouter.put('/:id/role', authorizeRoles('admin_master'), async (req, res) => {\r\n  const { role } = req.body;\r\n  if (!['admin_master', 'admin', 'funcionario', 'cliente'].includes(role)) {\r\n    return res.status(400).json({ message: 'Role inválida' });\r\n  }\r\n  try {\r\n    const updated = await User.findByIdAndUpdate(\r\n      req.params.id,\r\n      { role },\r\n      { new: true, runValidators: true }\r\n    ).select('nomeCompleto username email role');\r\n    if (!updated) return res.status(404).json({ message: 'Usuário não encontrado' });\r\n    res.json(updated);\r\n  } catch (error) {\r\n    res.status(500).json({ message: 'Erro ao atualizar role' });\r\n  }\r\n});\r\n\r\nmodule.exports = router;\r\n"
+        }
+    ]
+}

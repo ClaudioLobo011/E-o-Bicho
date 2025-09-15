@@ -1,0 +1,22 @@
+{
+    "sourceFile": "scripts/user/hydrate-user.js",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1756760634860,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1756842749808,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -77,5 +77,7 @@\n     document.addEventListener('DOMContentLoaded', hydrateUserUI);\r\n   } else {\r\n     hydrateUserUI();\r\n   }\r\n+  document.addEventListener('components:ready', hydrateUserUI);\r\n+\r\n })();\r\n"
+                }
+            ],
+            "date": 1756760634860,
+            "name": "Commit-0",
+            "content": "// scripts/user/hydrate-user.js\r\n(function () {\r\n  // Extrai um \"primeiro nome\" amigável para saudação\r\n  function firstNameFrom(str) {\r\n    if (!str || typeof str !== 'string') return '';\r\n    const clean = str.trim();\r\n    if (!clean) return '';\r\n    // pega a primeira palavra não vazia\r\n    return clean.split(/\\s+/)[0];\r\n  }\r\n\r\n  // Deriva o nome de exibição a partir do objeto de usuário (PF ou PJ)\r\n  function getDisplayName(u) {\r\n    if (!u) return '';\r\n    const nome =\r\n      (u.nome && String(u.nome).trim()) ||\r\n      (u.nomeCompleto && String(u.nomeCompleto).trim()) ||\r\n      (u.nomeContato && String(u.nomeContato).trim()) ||\r\n      (u.razaoSocial && String(u.razaoSocial).trim()) ||\r\n      '';\r\n    if (nome) return firstNameFrom(nome);\r\n    if (u.email && typeof u.email === 'string') {\r\n      return firstNameFrom(u.email.split('@')[0]);\r\n    }\r\n    return '';\r\n  }\r\n\r\n  async function fetchCurrentUser() {\r\n    try {\r\n      const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');\r\n      const token = cached?.token;\r\n      if (!token) return { user: null, cached };\r\n\r\n      const resp = await fetch(`${API_CONFIG.BASE_URL}/profile/me`, {\r\n        headers: { Authorization: `Bearer ${token}` },\r\n      });\r\n      if (!resp.ok) return { user: null, cached };\r\n\r\n      const user = await resp.json();\r\n      // Atualiza cache com role/nome se não existirem\r\n      const next = { ...cached };\r\n      if (user?.role) next.role = user.role;\r\n      if (user?.nome) next.nome = user.nome;\r\n      localStorage.setItem('loggedInUser', JSON.stringify(next));\r\n\r\n      return { user, cached: next };\r\n    } catch (e) {\r\n      console.error('hydrate-user: fetchCurrentUser error', e);\r\n      return { user: null, cached: null };\r\n    }\r\n  }\r\n\r\n  async function hydrateUserUI() {\r\n    const { user, cached } = await fetchCurrentUser();\r\n\r\n    // decide o nome a exibir (prioriza do backend)\r\n    const display =\r\n      getDisplayName(user) ||\r\n      getDisplayName(cached) ||\r\n      'Cliente';\r\n\r\n    // Preenche todos os lugares com data-user-name\r\n    document.querySelectorAll('[data-user-name]').forEach((el) => {\r\n      el.textContent = display;\r\n    });\r\n\r\n    // IDs comuns (caso prefira usar IDs fixos também)\r\n    const topbar = document.getElementById('topbar-user-name');\r\n    if (topbar) topbar.textContent = display;\r\n\r\n    const sidebar = document.getElementById('sidebar-user-name');\r\n    if (sidebar) sidebar.textContent = display;\r\n  }\r\n\r\n  // Executa após DOM pronto\r\n  if (document.readyState === 'loading') {\r\n    document.addEventListener('DOMContentLoaded', hydrateUserUI);\r\n  } else {\r\n    hydrateUserUI();\r\n  }\r\n})();\r\n"
+        }
+    ]
+}
