@@ -453,6 +453,36 @@
     overflow: hidden;
   }
 
+  /* Botão rápido no cabeçalho da agenda */
+  .agenda-head-add {
+    background: #ffffff;
+    color: var(--color-sky-600, #0284c7);
+    border-color: var(--color-sky-500, #0ea5e9);
+    box-shadow: 0 4px 10px -6px rgba(14, 165, 233, 0.55);
+    transition: background-color .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease;
+  }
+
+  .agenda-head-add svg {
+    display: block;
+  }
+
+  .agenda-head-add:hover {
+    background: var(--color-sky-500, #0ea5e9);
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 18px -12px rgba(14, 165, 233, 0.9);
+  }
+
+  .agenda-head-add:active {
+    transform: translateY(0);
+    box-shadow: 0 6px 14px -10px rgba(14, 165, 233, 0.75);
+  }
+
+  .agenda-head-add:focus-visible {
+    outline: 2px solid rgba(14, 165, 233, 0.6);
+    outline-offset: 2px;
+  }
+
   /* Chips */
   .chip {
     display:inline-flex; align-items:center; gap:.35rem;

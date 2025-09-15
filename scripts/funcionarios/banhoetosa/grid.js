@@ -48,8 +48,12 @@ export function renderGrid() {
       if (prof && prof._id) {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'agenda-head-add inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-500 text-white transition hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-1';
-        btn.textContent = '+';
+        btn.className = 'agenda-head-add inline-flex h-7 w-7 items-center justify-center rounded-md border shadow-sm transition';
+        btn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false">
+            <path fill-rule="evenodd" d="M10 3a.75.75 0 0 1 .75.75v5.5h5.5a.75.75 0 0 1 0 1.5h-5.5v5.5a.75.75 0 0 1-1.5 0v-5.5h-5.5a.75.75 0 0 1 0-1.5h5.5v-5.5A.75.75 0 0 1 10 3Z" clip-rule="evenodd" />
+          </svg>
+        `;
         btn.setAttribute('aria-label', `Adicionar agendamento para ${label}`);
         btn.dataset.profId = String(prof._id);
         btn.addEventListener('click', (ev) => {
