@@ -2,6 +2,17 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const PORTES = ['Todos', 'Mini', 'Pequeno', 'Médio', 'Grande', 'Gigante'];
+const SERVICE_CATEGORIES = [
+  'banho',
+  'taxi_pet',
+  'internacao',
+  'hotel',
+  'vacina',
+  'day_care',
+  'outros',
+  'veterinario',
+  'banho_tosa',
+];
 
 /**
  * Normaliza o campo "porte":
@@ -17,6 +28,14 @@ function normalizePorte(value) {
   if (arr.length === 0) return ['Todos'];
   if (arr.includes('Todos')) return ['Todos'];
   return arr;
+}
+
+function normalizeCategorias(value) {
+  let arr = Array.isArray(value) ? value : (value != null ? [value] : []);
+  arr = arr.map(v => String(v).trim()).filter(Boolean);
+  const allowed = new Set(SERVICE_CATEGORIES);
+  arr = arr.filter(v => allowed.has(v));
+  return [...new Set(arr)];
 }
 
 const ServiceSchema = new Schema({
@@ -53,6 +72,12 @@ const ServiceSchema = new Schema({
     default: ['Todos'],
     set: normalizePorte
   },
+  categorias: {
+    type: [String],
+    enum: SERVICE_CATEGORIES,
+    default: [],
+    set: normalizeCategorias,
+  },
   ativo: {
     type: Boolean,
     default: true
@@ -65,3 +90,4 @@ ServiceSchema.index({ grupo: 1 });
 
 module.exports = mongoose.model('Service', ServiceSchema);
 module.exports.PORTES = PORTES;
+module.exports.CATEGORIES = SERVICE_CATEGORIES;

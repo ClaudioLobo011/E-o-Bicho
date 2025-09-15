@@ -1,4 +1,5 @@
 import { els, getSelectedValues, setSelectedValues, selectOnlyTodos } from './core.js';
+import { getSelectedCategories, setSelectedCategories } from './categories.js';
 
 export function validarESerializar() {
   const nome = (els.inputNome?.value || '').trim();
@@ -18,7 +19,9 @@ export function validarESerializar() {
   if (portes.length === 0) portes = ['Todos'];
   if (portes.includes('Todos')) portes = ['Todos'];
 
-  const payload = { nome, grupo, duracaoMinutos: dur, custo, valor, porte: portes };
+  const categorias = getSelectedCategories();
+
+  const payload = { nome, grupo, duracaoMinutos: dur, custo, valor, porte: portes, categorias };
   return { ok: erros.length === 0, erros, payload };
 }
 
@@ -31,6 +34,7 @@ export function resetForm() {
   if (els.inputCusto) els.inputCusto.value = '0';
   if (els.inputValor) els.inputValor.value = '0';
   if (els.selectPorte) selectOnlyTodos();
+  setSelectedCategories([]);
   if (els.submitLabel) els.submitLabel.textContent = 'Salvar';
   els.btnCancelar?.classList.add('hidden');
 }
@@ -49,6 +53,7 @@ export function fillForm(item) {
     const valores = arr.includes('Todos') ? [] : arr;
     setSelectedValues(els.selectPorte, valores);
   }
+  setSelectedCategories(Array.isArray(item.categorias) ? item.categorias : []);
   if (els.submitLabel) els.submitLabel.textContent = 'Atualizar';
   els.btnCancelar?.classList.remove('hidden');
 }

@@ -14,6 +14,7 @@ export const els = {
   inputCusto: document.getElementById('serv-custo'),
   inputValor: document.getElementById('serv-valor'),
   selectPorte: document.getElementById('serv-porte'),
+  categoriesBar: document.getElementById('serv-categorias'),
   submitLabel: document.getElementById('serv-submit-label'),
   btnCancelar: document.getElementById('serv-cancelar'),
 

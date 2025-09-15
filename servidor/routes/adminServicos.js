@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
 
-const Service = require('../models/Service');
+const ServiceModel = require('../models/Service');
 const ServiceGroup = require('../models/ServiceGroup');
 const authMiddleware = require('../middlewares/authMiddleware');
 
-const { PORTES } = require('../models/Service');
+const Service = ServiceModel;
+const { PORTES, CATEGORIES: SERVICE_CATEGORIES } = ServiceModel;
 
 // Apenas administradores
 function requireAdmin(req, res, next) {
@@ -27,6 +28,20 @@ function parsePorte(input) {
     if (!PORTES.includes(p)) throw new Error('Porte inválido.');
   }
   return arr.includes('Todos') ? ['Todos'] : arr;
+}
+
+const CATEGORIES_SET = new Set(SERVICE_CATEGORIES || []);
+
+function parseCategorias(input) {
+  const raw = typeof input?.categorias !== 'undefined'
+    ? input.categorias
+    : (typeof input?.categoria !== 'undefined' ? input.categoria : []);
+  let arr = Array.isArray(raw) ? raw : (raw != null ? [raw] : []);
+  arr = arr.map(v => String(v).trim()).filter(Boolean);
+  if (arr.some(v => !CATEGORIES_SET.has(v))) {
+    throw new Error('Categorias inválidas.');
+  }
+  return [...new Set(arr)];
 }
 
 // LISTAR
@@ -94,6 +109,14 @@ function validarPayload(body, isUpdate = false) {
       out.porte = parsePorte(body);
     } catch (e) {
       erros.push(e.message || 'Porte inválido.');
+    }
+  }
+
+  if (!isUpdate || typeof body.categorias !== 'undefined' || typeof body.categoria !== 'undefined') {
+    try {
+      out.categorias = parseCategorias(body);
+    } catch (e) {
+      erros.push(e.message || 'Categorias inválidas.');
     }
   }
 
