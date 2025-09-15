@@ -142,23 +142,58 @@
                                 </div>
                             </div>
                             <!-- Informações do pet -->
-                            <div id="vet-pet-info" class="hidden flex w-full flex-col gap-2">
+                            <div id="vet-pet-info" class="hidden flex w-full flex-col gap-3">
                                 <div>
                                     <h3 id="vet-pet-nome"
                                         class="text-sm font-semibold leading-tight text-gray-800 break-words">
                                         Nome do Pet
                                     </h3>
-                                    <div id="vet-pet-type-raca"
-                                        class="mt-1 text-xs leading-tight text-gray-600 break-words">
-                                        Tipo de Pet - Raça
+                                </div>
+                                <div id="vet-pet-main-details"
+                                    class="flex flex-col gap-2 text-xs font-medium text-gray-700">
+                                    <div id="vet-pet-tipo-wrapper"
+                                        class="flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-paw text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">
+                                                Tipo de pet
+                                            </span>
+                                            <span id="vet-pet-tipo" class="break-words">—</span>
+                                        </div>
                                     </div>
-                                    <div id="vet-pet-nascimento-peso"
-                                        class="mt-1 text-xs leading-tight text-gray-600 break-words">
-                                        Data Nascimento - Peso (Kg)
+                                    <div id="vet-pet-raca-wrapper"
+                                        class="flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-dna text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">
+                                                Raça
+                                            </span>
+                                            <span id="vet-pet-raca" class="break-words">—</span>
+                                        </div>
+                                    </div>
+                                    <div id="vet-pet-nascimento-wrapper"
+                                        class="flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-cake-candles text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">
+                                                Nascimento
+                                            </span>
+                                            <span id="vet-pet-nascimento" class="break-words">—</span>
+                                        </div>
+                                    </div>
+                                    <div id="vet-pet-peso-wrapper"
+                                        class="flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                                        <i class="fas fa-weight-scale text-emerald-500"></i>
+                                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="uppercase text-[10px] font-semibold tracking-wide text-gray-400">
+                                                Peso (Kg)
+                                            </span>
+                                            <span id="vet-pet-peso" class="break-words">—</span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div id="vet-pet-extra"
-                                    class="hidden mt-3 grid grid-cols-1 gap-2 text-[11px] text-gray-600 sm:grid-cols-2">
+                                    class="hidden mt-1 grid grid-cols-1 gap-2 text-[11px] text-gray-600 sm:grid-cols-2">
                                     <div id="vet-pet-cor-wrapper"
                                         class="hidden flex flex-col gap-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
                                         <div

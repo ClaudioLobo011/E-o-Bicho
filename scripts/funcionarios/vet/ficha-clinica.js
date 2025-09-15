@@ -50,8 +50,15 @@
         tutorTelefone: document.getElementById('vet-tutor-telefone'),
         petInfo: document.getElementById('vet-pet-info'),
         petNome: document.getElementById('vet-pet-nome'),
-        petTipoRaca: document.getElementById('vet-pet-type-raca'),
-        petNascimentoPeso: document.getElementById('vet-pet-nascimento-peso'),
+        petMainDetails: document.getElementById('vet-pet-main-details'),
+        petTipoWrapper: document.getElementById('vet-pet-tipo-wrapper'),
+        petTipo: document.getElementById('vet-pet-tipo'),
+        petRacaWrapper: document.getElementById('vet-pet-raca-wrapper'),
+        petRaca: document.getElementById('vet-pet-raca'),
+        petNascimentoWrapper: document.getElementById('vet-pet-nascimento-wrapper'),
+        petNascimento: document.getElementById('vet-pet-nascimento'),
+        petPesoWrapper: document.getElementById('vet-pet-peso-wrapper'),
+        petPeso: document.getElementById('vet-pet-peso'),
         petExtraContainer: document.getElementById('vet-pet-extra'),
         petCorWrapper: document.getElementById('vet-pet-cor-wrapper'),
         petCor: document.getElementById('vet-pet-cor'),
@@ -84,8 +91,10 @@
     const CARD_BUTTON_DISABLED_CLASSES = ['opacity-50', 'cursor-not-allowed'];
     const PET_PLACEHOLDERS = {
         nome: 'Nome do Pet',
-        tipoRaca: 'Tipo de Pet - Raça',
-        nascimentoPeso: 'Data Nascimento - Peso (Kg)',
+        tipo: '—',
+        raca: '—',
+        nascimento: '—',
+        peso: '—',
     };
 
     function pickFirst(...values) {
@@ -130,6 +139,23 @@
 
     function formatPetMicrochip(value) {
         return String(value || '').trim();
+    }
+
+    function setPetDetailField(value, valueEl, wrapperEl, { forceShow = false } = {}) {
+        if (!valueEl || !wrapperEl) return false;
+        const str = String(value || '').trim();
+        if (str) {
+            valueEl.textContent = str;
+            wrapperEl.classList.remove('hidden');
+            return true;
+        }
+        valueEl.textContent = '—';
+        if (forceShow) {
+            wrapperEl.classList.remove('hidden');
+        } else {
+            wrapperEl.classList.add('hidden');
+        }
+        return false;
     }
 
     function setPetExtraField(value, valueEl, wrapperEl) {
@@ -234,8 +260,13 @@
 
     function setPetPlaceholders() {
         if (els.petNome) els.petNome.textContent = PET_PLACEHOLDERS.nome;
-        if (els.petTipoRaca) els.petTipoRaca.textContent = PET_PLACEHOLDERS.tipoRaca;
-        if (els.petNascimentoPeso) els.petNascimentoPeso.textContent = PET_PLACEHOLDERS.nascimentoPeso;
+        setPetDetailField(PET_PLACEHOLDERS.tipo, els.petTipo, els.petTipoWrapper, { forceShow: true });
+        setPetDetailField(PET_PLACEHOLDERS.raca, els.petRaca, els.petRacaWrapper, { forceShow: true });
+        setPetDetailField(PET_PLACEHOLDERS.nascimento, els.petNascimento, els.petNascimentoWrapper, { forceShow: true });
+        setPetDetailField(PET_PLACEHOLDERS.peso, els.petPeso, els.petPesoWrapper, { forceShow: true });
+        if (els.petMainDetails) {
+            els.petMainDetails.classList.remove('hidden');
+        }
         clearPetExtras();
     }
 
@@ -250,19 +281,17 @@
 
         const tipo = (pet.tipo || pet.tipoPet || pet.especie || pet.porte || '').trim();
         const raca = (pet.raca || pet.breed || '').trim();
-        let tipoRaca = '—';
-        if (tipo && raca) tipoRaca = `${tipo} - ${raca}`;
-        else if (tipo) tipoRaca = tipo;
-        else if (raca) tipoRaca = raca;
-        if (els.petTipoRaca) els.petTipoRaca.textContent = tipoRaca;
-
         const nascimento = formatDateDisplay(pet.dataNascimento || pet.nascimento);
         const peso = formatPetWeight(pet.peso || pet.pesoAtual);
-        let nascimentoPeso = '—';
-        if (nascimento && peso) nascimentoPeso = `${nascimento} - ${peso}`;
-        else if (nascimento) nascimentoPeso = nascimento;
-        else if (peso) nascimentoPeso = peso;
-        if (els.petNascimentoPeso) els.petNascimentoPeso.textContent = nascimentoPeso;
+
+        const hasTipo = setPetDetailField(tipo, els.petTipo, els.petTipoWrapper);
+        const hasRaca = setPetDetailField(raca, els.petRaca, els.petRacaWrapper);
+        const hasNascimento = setPetDetailField(nascimento, els.petNascimento, els.petNascimentoWrapper);
+        const hasPeso = setPetDetailField(peso, els.petPeso, els.petPesoWrapper);
+        if (els.petMainDetails) {
+            const hasMainDetails = hasTipo || hasRaca || hasNascimento || hasPeso;
+            els.petMainDetails.classList.toggle('hidden', !hasMainDetails);
+        }
 
         const cor = pickFirst(pet.pelagemCor, pet.cor, pet.corPelagem, pet.corPelo);
         const sexo = formatPetSex(pet.sexo);
