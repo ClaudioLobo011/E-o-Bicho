@@ -190,7 +190,7 @@ router.get('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res) 
     const ownerId = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(ownerId)) return res.json([]);
     const pets = await Pet.find({ owner: ownerId })
-      .select('_id nome tipo raca porte sexo dataNascimento peso')
+      .select('_id nome tipo raca porte sexo dataNascimento peso microchip pelagemCor rga')
       .sort({ nome: 1 })
       .lean();
     res.json(pets);
