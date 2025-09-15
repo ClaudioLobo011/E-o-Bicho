@@ -1,6 +1,7 @@
 import { els } from './core.js';
 
 export const SERVICE_CATEGORIES = [
+  { id: 'tosa', label: 'Tosa', icon: 'fas fa-scissors' },
   { id: 'banho', label: 'Banho', icon: 'fas fa-bath' },
   { id: 'taxi_pet', label: 'Taxi Pet', icon: 'fas fa-taxi' },
   { id: 'internacao', label: 'Internação', icon: 'fas fa-hospital' },
@@ -9,7 +10,7 @@ export const SERVICE_CATEGORIES = [
   { id: 'day_care', label: 'Day Care', icon: 'fas fa-paw' },
   { id: 'outros', label: 'Outros', icon: 'fas fa-ellipsis-h' },
   { id: 'veterinario', label: 'Veterinário', icon: 'fas fa-stethoscope' },
-  { id: 'banho_tosa', label: 'Banho & Tosa', icon: 'fas fa-scissors' },
+  { id: 'banho_tosa', label: 'Banho & Tosa', icon: 'fas fa-brush' },
 ];
 
 export const CATEGORY_MAP = Object.freeze(
