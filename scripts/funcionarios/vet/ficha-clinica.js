@@ -73,7 +73,8 @@
         pageContent: document.getElementById('vet-ficha-content'),
         consultaArea: document.getElementById('vet-consulta-area'),
         historicoTab: document.getElementById('vet-tab-historico'),
-        consultaTab: document.getElementById('vet-tab-consulta')
+        consultaTab: document.getElementById('vet-tab-consulta'),
+        addConsultaBtn: document.getElementById('vet-add-consulta-btn'),
     };
 
     const state = {
@@ -82,6 +83,20 @@
         petsById: {},
         currentCardMode: 'tutor',
         agendaContext: null,
+        consultas: [],
+    };
+
+    const consultaModal = {
+        overlay: null,
+        dialog: null,
+        form: null,
+        titleEl: null,
+        submitBtn: null,
+        cancelBtn: null,
+        fields: {},
+        mode: 'create',
+        editingId: null,
+        keydownHandler: null,
     };
 
     const STORAGE_KEYS = {
@@ -413,6 +428,312 @@
         return STATUS_LABELS[key] || (status ? capitalize(status) : '');
     }
 
+    function generateConsultaId() {
+        return `consulta_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    function createConsultaFieldSection(label, value) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'space-y-1';
+
+        const labelEl = document.createElement('span');
+        labelEl.className = 'text-xs font-semibold uppercase tracking-wide text-gray-500';
+        labelEl.textContent = label;
+        wrapper.appendChild(labelEl);
+
+        const valueEl = document.createElement('p');
+        valueEl.className = 'text-sm text-gray-800 whitespace-pre-wrap break-words';
+        valueEl.textContent = value ? value : '—';
+        wrapper.appendChild(valueEl);
+
+        return wrapper;
+    }
+
+    function createManualConsultaCard(consulta) {
+        const card = document.createElement('article');
+        card.className = 'group relative cursor-pointer rounded-xl border border-sky-200 bg-white p-4 shadow-sm transition hover:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-400';
+        card.tabIndex = 0;
+        card.dataset.consultaId = consulta?.id || '';
+        card.setAttribute('role', 'button');
+        card.setAttribute('title', 'Clique para editar a consulta');
+
+        const header = document.createElement('div');
+        header.className = 'flex items-start gap-3';
+        card.appendChild(header);
+
+        const icon = document.createElement('div');
+        icon.className = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-600';
+        icon.innerHTML = '<i class="fas fa-stethoscope"></i>';
+        header.appendChild(icon);
+
+        const headerText = document.createElement('div');
+        headerText.className = 'flex-1';
+        header.appendChild(headerText);
+
+        const title = document.createElement('h3');
+        title.className = 'text-sm font-semibold text-sky-700';
+        title.textContent = 'Registro de consulta';
+        headerText.appendChild(title);
+
+        const metaParts = [];
+        if (consulta?.createdAt) {
+            const created = formatDateTimeDisplay(consulta.createdAt);
+            if (created) metaParts.push(`Registrado em ${created}`);
+        }
+        if (consulta?.updatedAt && consulta.updatedAt !== consulta.createdAt) {
+            const updated = formatDateTimeDisplay(consulta.updatedAt);
+            if (updated) metaParts.push(`Atualizado em ${updated}`);
+        }
+        if (metaParts.length) {
+            const meta = document.createElement('p');
+            meta.className = 'mt-0.5 text-xs text-gray-500';
+            meta.textContent = metaParts.join(' · ');
+            headerText.appendChild(meta);
+        }
+
+        const content = document.createElement('div');
+        content.className = 'mt-4 grid gap-3';
+        content.appendChild(createConsultaFieldSection('Anamnese', consulta?.anamnese || ''));
+        content.appendChild(createConsultaFieldSection('Exame Físico', consulta?.exameFisico || ''));
+        content.appendChild(createConsultaFieldSection('Diagnóstico', consulta?.diagnostico || ''));
+        card.appendChild(content);
+
+        const openForEdit = (event) => {
+            event.preventDefault();
+            openConsultaModal(consulta?.id || null);
+        };
+        card.addEventListener('click', openForEdit);
+        card.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openForEdit(event);
+            }
+        });
+
+        return card;
+    }
+
+    function createModalTextareaField(label, fieldName) {
+        const id = `vet-consulta-${fieldName}`;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'flex flex-col gap-2';
+
+        const labelEl = document.createElement('label');
+        labelEl.className = 'text-sm font-medium text-gray-700';
+        labelEl.setAttribute('for', id);
+        labelEl.textContent = label;
+        wrapper.appendChild(labelEl);
+
+        const textarea = document.createElement('textarea');
+        textarea.id = id;
+        textarea.name = fieldName;
+        textarea.className = 'min-h-[120px] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200';
+        textarea.placeholder = `Descreva ${label.toLowerCase()}`;
+        wrapper.appendChild(textarea);
+
+        return { wrapper, textarea };
+    }
+
+    function ensureConsultaModal() {
+        if (consultaModal.overlay) return consultaModal;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'vet-consulta-modal';
+        overlay.className = 'hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4';
+        overlay.setAttribute('aria-hidden', 'true');
+
+        const dialog = document.createElement('div');
+        dialog.className = 'w-full max-w-3xl rounded-xl bg-white shadow-xl focus:outline-none';
+        dialog.tabIndex = -1;
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        overlay.appendChild(dialog);
+
+        const form = document.createElement('form');
+        form.className = 'flex flex-col gap-6 p-6';
+        dialog.appendChild(form);
+
+        const header = document.createElement('div');
+        header.className = 'flex items-start justify-between gap-3';
+        form.appendChild(header);
+
+        const title = document.createElement('h2');
+        title.className = 'text-lg font-semibold text-gray-800';
+        title.textContent = 'Nova consulta';
+        header.appendChild(title);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'text-gray-400 transition hover:text-gray-600';
+        closeBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+        closeBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            closeConsultaModal();
+        });
+        header.appendChild(closeBtn);
+
+        const fieldsWrapper = document.createElement('div');
+        fieldsWrapper.className = 'grid gap-4';
+        form.appendChild(fieldsWrapper);
+
+        const anamneseField = createModalTextareaField('Anamnese', 'anamnese');
+        fieldsWrapper.appendChild(anamneseField.wrapper);
+
+        const exameField = createModalTextareaField('Exame Físico', 'exameFisico');
+        fieldsWrapper.appendChild(exameField.wrapper);
+
+        const diagnosticoField = createModalTextareaField('Diagnóstico', 'diagnostico');
+        fieldsWrapper.appendChild(diagnosticoField.wrapper);
+
+        const footer = document.createElement('div');
+        footer.className = 'flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3';
+        form.appendChild(footer);
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'w-full rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 sm:w-auto';
+        cancelBtn.textContent = 'Cancelar';
+        cancelBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            closeConsultaModal();
+        });
+        footer.appendChild(cancelBtn);
+
+        const submitBtn = document.createElement('button');
+        submitBtn.type = 'submit';
+        submitBtn.className = 'w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-400 sm:w-auto';
+        submitBtn.textContent = 'Adicionar';
+        footer.appendChild(submitBtn);
+
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            handleConsultaSubmit();
+        });
+
+        overlay.addEventListener('click', (event) => {
+            if (event.target === overlay) {
+                event.preventDefault();
+                closeConsultaModal();
+            }
+        });
+
+        document.body.appendChild(overlay);
+
+        consultaModal.overlay = overlay;
+        consultaModal.dialog = dialog;
+        consultaModal.form = form;
+        consultaModal.titleEl = title;
+        consultaModal.submitBtn = submitBtn;
+        consultaModal.cancelBtn = cancelBtn;
+        consultaModal.fields = {
+            anamnese: anamneseField.textarea,
+            exameFisico: exameField.textarea,
+            diagnostico: diagnosticoField.textarea,
+        };
+
+        return consultaModal;
+    }
+
+    function closeConsultaModal() {
+        if (!consultaModal.overlay) return;
+        consultaModal.overlay.classList.add('hidden');
+        consultaModal.overlay.setAttribute('aria-hidden', 'true');
+        if (consultaModal.form) consultaModal.form.reset();
+        consultaModal.mode = 'create';
+        consultaModal.editingId = null;
+        if (consultaModal.keydownHandler) {
+            document.removeEventListener('keydown', consultaModal.keydownHandler);
+            consultaModal.keydownHandler = null;
+        }
+    }
+
+    function openConsultaModal(consultaId = null) {
+        const modal = ensureConsultaModal();
+        const isEditing = !!consultaId;
+        const existing = isEditing ? state.consultas.find((c) => c.id === consultaId) || null : null;
+
+        modal.mode = isEditing && existing ? 'edit' : 'create';
+        modal.editingId = modal.mode === 'edit' ? consultaId : null;
+
+        if (modal.titleEl) {
+            modal.titleEl.textContent = modal.mode === 'edit' ? 'Editar consulta' : 'Nova consulta';
+        }
+        if (modal.submitBtn) {
+            modal.submitBtn.textContent = modal.mode === 'edit' ? 'Salvar alterações' : 'Adicionar';
+        }
+
+        if (modal.fields.anamnese) {
+            modal.fields.anamnese.value = existing?.anamnese || '';
+        }
+        if (modal.fields.exameFisico) {
+            modal.fields.exameFisico.value = existing?.exameFisico || '';
+        }
+        if (modal.fields.diagnostico) {
+            modal.fields.diagnostico.value = existing?.diagnostico || '';
+        }
+
+        modal.overlay.classList.remove('hidden');
+        modal.overlay.removeAttribute('aria-hidden');
+        if (modal.dialog) {
+            modal.dialog.focus();
+        }
+
+        if (modal.keydownHandler) {
+            document.removeEventListener('keydown', modal.keydownHandler);
+        }
+        modal.keydownHandler = (event) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closeConsultaModal();
+            }
+        };
+        document.addEventListener('keydown', modal.keydownHandler);
+
+        setTimeout(() => {
+            if (modal.fields.anamnese) {
+                modal.fields.anamnese.focus();
+            }
+        }, 50);
+    }
+
+    function handleConsultaSubmit() {
+        const modal = ensureConsultaModal();
+        const now = new Date().toISOString();
+        const values = {
+            anamnese: (modal.fields.anamnese?.value || '').trim(),
+            exameFisico: (modal.fields.exameFisico?.value || '').trim(),
+            diagnostico: (modal.fields.diagnostico?.value || '').trim(),
+        };
+
+        if (modal.mode === 'edit' && modal.editingId) {
+            const idx = state.consultas.findIndex((c) => c.id === modal.editingId);
+            if (idx >= 0) {
+                state.consultas[idx] = {
+                    ...state.consultas[idx],
+                    ...values,
+                    updatedAt: now,
+                };
+            } else {
+                state.consultas.unshift({
+                    id: modal.editingId,
+                    createdAt: now,
+                    updatedAt: now,
+                    ...values,
+                });
+            }
+        } else {
+            state.consultas.unshift({
+                id: generateConsultaId(),
+                createdAt: now,
+                updatedAt: now,
+                ...values,
+            });
+        }
+
+        closeConsultaModal();
+        updateConsultaAgendaCard();
+    }
+
     function getSelectedPet() {
         const petId = state.selectedPetId;
         if (!petId) return null;
@@ -503,140 +824,165 @@
         if (!area) return;
         setConsultaTabActive();
 
-        const applyPlaceholder = (message = CONSULTA_PLACEHOLDER_TEXT) => {
-            area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
-            area.innerHTML = '';
-            const paragraph = document.createElement('p');
-            paragraph.textContent = message;
-            area.appendChild(paragraph);
-        };
-
+        const consultas = Array.isArray(state.consultas) ? state.consultas : [];
         const context = state.agendaContext;
         const selectedPetId = normalizeId(state.selectedPetId);
         const selectedTutorId = normalizeId(state.selectedCliente?._id);
         const contextPetId = normalizeId(context?.petId);
         const contextTutorId = normalizeId(context?.tutorId);
 
-        if (!context || !selectedPetId || !selectedTutorId || !contextPetId || !contextTutorId || contextPetId !== selectedPetId || contextTutorId !== selectedTutorId) {
-            applyPlaceholder();
-            return;
+        let agendaElement = null;
+        let hasAgendaContent = false;
+
+        const contextMatches = !!(context && selectedPetId && selectedTutorId && contextPetId && contextTutorId && contextPetId === selectedPetId && contextTutorId === selectedTutorId);
+
+        if (contextMatches) {
+            const allServices = Array.isArray(context.servicos) ? context.servicos : [];
+            const vetServices = getVetServices(allServices);
+            const filteredOut = Math.max(allServices.length - vetServices.length, 0);
+
+            if (!vetServices.length) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'rounded-xl border border-gray-200 bg-white p-5 text-sm text-slate-600 shadow-sm text-center';
+
+                const emptyBox = document.createElement('div');
+                emptyBox.className = 'w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-sm text-slate-600';
+                emptyBox.textContent = 'Nenhum serviço veterinário encontrado para este agendamento.';
+                wrapper.appendChild(emptyBox);
+
+                if (filteredOut > 0) {
+                    const note = document.createElement('p');
+                    note.className = 'mt-3 text-xs text-slate-500';
+                    note.textContent = `${filteredOut} serviço(s) de outras categorias foram ocultados.`;
+                    wrapper.appendChild(note);
+                }
+
+                agendaElement = wrapper;
+                hasAgendaContent = true;
+            } else {
+                const card = document.createElement('div');
+                card.className = 'bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4';
+
+                const header = document.createElement('div');
+                header.className = 'flex flex-wrap items-start justify-between gap-3';
+                card.appendChild(header);
+
+                const info = document.createElement('div');
+                header.appendChild(info);
+
+                const title = document.createElement('h3');
+                title.className = 'text-base font-semibold text-gray-800';
+                title.textContent = 'Serviços veterinários agendados';
+                info.appendChild(title);
+
+                const metaList = document.createElement('div');
+                metaList.className = 'mt-1 space-y-1 text-sm text-gray-600';
+                const when = formatDateTimeDisplay(context.scheduledAt);
+                if (when) {
+                    const whenEl = document.createElement('div');
+                    whenEl.textContent = `Atendimento em ${when}`;
+                    metaList.appendChild(whenEl);
+                }
+                if (context.profissionalNome) {
+                    const profEl = document.createElement('div');
+                    profEl.textContent = `Profissional: ${context.profissionalNome}`;
+                    metaList.appendChild(profEl);
+                }
+                if (metaList.children.length) info.appendChild(metaList);
+
+                if (context.status) {
+                    const statusEl = document.createElement('span');
+                    statusEl.className = 'inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700';
+                    statusEl.textContent = getStatusLabel(context.status);
+                    header.appendChild(statusEl);
+                }
+
+                const list = document.createElement('div');
+                list.className = 'rounded-lg border border-gray-200 overflow-hidden';
+                card.appendChild(list);
+
+                let total = 0;
+                vetServices.forEach((service, idx) => {
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center justify-between px-4 py-2 text-sm text-gray-700 bg-white';
+                    if (idx > 0) row.classList.add('border-t', 'border-gray-200');
+                    const nameEl = document.createElement('span');
+                    nameEl.className = 'pr-3';
+                    nameEl.textContent = service.nome || '—';
+                    const valueEl = document.createElement('span');
+                    valueEl.className = 'font-semibold text-gray-900';
+                    valueEl.textContent = formatMoney(service.valor);
+                    row.appendChild(nameEl);
+                    row.appendChild(valueEl);
+                    list.appendChild(row);
+                    total += Number(service.valor || 0);
+                });
+
+                const totalRow = document.createElement('div');
+                totalRow.className = 'flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3 text-sm font-semibold text-gray-800 border border-gray-200';
+                const totalLabel = document.createElement('span');
+                totalLabel.textContent = 'Total dos serviços';
+                const totalValue = document.createElement('span');
+                totalValue.textContent = formatMoney(total);
+                totalRow.appendChild(totalLabel);
+                totalRow.appendChild(totalValue);
+                card.appendChild(totalRow);
+
+                if (filteredOut > 0) {
+                    const note = document.createElement('p');
+                    note.className = 'text-xs text-gray-500';
+                    note.textContent = `${filteredOut} serviço(s) de outras categorias foram ocultados.`;
+                    card.appendChild(note);
+                }
+
+                if (context.observacoes) {
+                    const obsWrap = document.createElement('div');
+                    obsWrap.className = 'rounded-lg border border-gray-200 bg-slate-50 p-3';
+                    const obsTitle = document.createElement('div');
+                    obsTitle.className = 'text-xs font-semibold uppercase tracking-wide text-gray-500';
+                    obsTitle.textContent = 'Observações';
+                    const obsText = document.createElement('p');
+                    obsText.className = 'mt-1 text-sm text-gray-700';
+                    obsText.style.whiteSpace = 'pre-line';
+                    obsText.textContent = context.observacoes;
+                    obsWrap.appendChild(obsTitle);
+                    obsWrap.appendChild(obsText);
+                    card.appendChild(obsWrap);
+                }
+
+                agendaElement = card;
+                hasAgendaContent = true;
+            }
         }
 
-        const allServices = Array.isArray(context.servicos) ? context.servicos : [];
-        const vetServices = getVetServices(allServices);
-        const filteredOut = Math.max(allServices.length - vetServices.length, 0);
+        const hasManualConsultas = consultas.length > 0;
+        const shouldShowPlaceholder = !hasManualConsultas && !hasAgendaContent;
 
-        if (!vetServices.length) {
-            area.className = `${CONSULTA_CARD_CLASSNAMES} flex flex-col items-center justify-center p-5`;
+        if (shouldShowPlaceholder) {
+            area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
             area.innerHTML = '';
-            const emptyBox = document.createElement('div');
-            emptyBox.className = 'w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center text-sm text-slate-600';
-            emptyBox.textContent = 'Nenhum serviço veterinário encontrado para este agendamento.';
-            area.appendChild(emptyBox);
-            if (filteredOut > 0) {
-                const note = document.createElement('p');
-                note.className = 'mt-3 text-xs text-slate-500 text-center';
-                note.textContent = `${filteredOut} serviço(s) de outras categorias foram ocultados.`;
-                area.appendChild(note);
-            }
+            const paragraph = document.createElement('p');
+            paragraph.textContent = CONSULTA_PLACEHOLDER_TEXT;
+            area.appendChild(paragraph);
             return;
         }
 
         area.className = CONSULTA_CARD_CLASSNAMES;
         area.innerHTML = '';
+
         const scroll = document.createElement('div');
-        scroll.className = 'h-full w-full overflow-y-auto p-5';
+        scroll.className = 'h-full w-full overflow-y-auto p-5 space-y-4';
         area.appendChild(scroll);
 
-        const card = document.createElement('div');
-        card.className = 'bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4';
-        scroll.appendChild(card);
-
-        const header = document.createElement('div');
-        header.className = 'flex flex-wrap items-start justify-between gap-3';
-        card.appendChild(header);
-
-        const info = document.createElement('div');
-        header.appendChild(info);
-
-        const title = document.createElement('h3');
-        title.className = 'text-base font-semibold text-gray-800';
-        title.textContent = 'Serviços veterinários agendados';
-        info.appendChild(title);
-
-        const metaList = document.createElement('div');
-        metaList.className = 'mt-1 space-y-1 text-sm text-gray-600';
-        const when = formatDateTimeDisplay(context.scheduledAt);
-        if (when) {
-            const whenEl = document.createElement('div');
-            whenEl.textContent = `Atendimento em ${when}`;
-            metaList.appendChild(whenEl);
-        }
-        if (context.profissionalNome) {
-            const profEl = document.createElement('div');
-            profEl.textContent = `Profissional: ${context.profissionalNome}`;
-            metaList.appendChild(profEl);
-        }
-        if (metaList.children.length) info.appendChild(metaList);
-
-        if (context.status) {
-            const statusEl = document.createElement('span');
-            statusEl.className = 'inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700';
-            statusEl.textContent = getStatusLabel(context.status);
-            header.appendChild(statusEl);
+        if (hasManualConsultas) {
+            consultas.forEach((consulta) => {
+                const card = createManualConsultaCard(consulta);
+                scroll.appendChild(card);
+            });
         }
 
-        const list = document.createElement('div');
-        list.className = 'rounded-lg border border-gray-200 overflow-hidden';
-        card.appendChild(list);
-
-        let total = 0;
-        vetServices.forEach((service, idx) => {
-            const row = document.createElement('div');
-            row.className = 'flex items-center justify-between px-4 py-2 text-sm text-gray-700 bg-white';
-            if (idx > 0) row.classList.add('border-t', 'border-gray-200');
-            const nameEl = document.createElement('span');
-            nameEl.className = 'pr-3';
-            nameEl.textContent = service.nome || '—';
-            const valueEl = document.createElement('span');
-            valueEl.className = 'font-semibold text-gray-900';
-            valueEl.textContent = formatMoney(service.valor);
-            row.appendChild(nameEl);
-            row.appendChild(valueEl);
-            list.appendChild(row);
-            total += Number(service.valor || 0);
-        });
-
-        const totalRow = document.createElement('div');
-        totalRow.className = 'flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3 text-sm font-semibold text-gray-800 border border-gray-200';
-        const totalLabel = document.createElement('span');
-        totalLabel.textContent = 'Total dos serviços';
-        const totalValue = document.createElement('span');
-        totalValue.textContent = formatMoney(total);
-        totalRow.appendChild(totalLabel);
-        totalRow.appendChild(totalValue);
-        card.appendChild(totalRow);
-
-        if (filteredOut > 0) {
-            const note = document.createElement('p');
-            note.className = 'text-xs text-gray-500';
-            note.textContent = `${filteredOut} serviço(s) de outras categorias foram ocultados.`;
-            card.appendChild(note);
-        }
-
-        if (context.observacoes) {
-            const obsWrap = document.createElement('div');
-            obsWrap.className = 'rounded-lg border border-gray-200 bg-slate-50 p-3';
-            const obsTitle = document.createElement('div');
-            obsTitle.className = 'text-xs font-semibold uppercase tracking-wide text-gray-500';
-            obsTitle.textContent = 'Observações';
-            const obsText = document.createElement('p');
-            obsText.className = 'mt-1 text-sm text-gray-700';
-            obsText.style.whiteSpace = 'pre-line';
-            obsText.textContent = context.observacoes;
-            obsWrap.appendChild(obsTitle);
-            obsWrap.appendChild(obsText);
-            card.appendChild(obsWrap);
+        if (agendaElement) {
+            scroll.appendChild(agendaElement);
         }
     }
 
@@ -934,6 +1280,12 @@
         els.togglePet.addEventListener('click', (e) => {
             e.preventDefault();
             setCardMode('pet');
+        });
+    }
+    if (els.addConsultaBtn) {
+        els.addConsultaBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            openConsultaModal();
         });
     }
     updateCardDisplay();
