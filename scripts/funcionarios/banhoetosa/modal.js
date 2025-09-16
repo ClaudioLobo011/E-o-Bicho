@@ -1,5 +1,5 @@
 ﻿import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole } from './core.js';
-import { populateModalProfissionais } from './profissionais.js';
+import { populateModalProfissionais, updateModalProfissionalLabel } from './profissionais.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
@@ -172,6 +172,7 @@ export function openAddModal(preselectProfId) {
   if (els.statusSelect) els.statusSelect.value = 'agendado';
   if (preselectedId && els.profSelect) {
     try { els.profSelect.value = preselectedId; } catch {}
+    updateModalProfissionalLabel(preselectedId);
   }
   if (els.modalDelete) els.modalDelete.classList.add('hidden');
   els.modal.classList.remove('hidden');
@@ -230,7 +231,10 @@ export function openEditModal(a) {
     const match = state.profissionais.find(p => String(p.nome || '').trim().toLowerCase() === key);
     if (match) profId = String(match._id);
   }
-  if (els.profSelect && profId) els.profSelect.value = profId;
+  if (els.profSelect && profId) {
+    els.profSelect.value = profId;
+    updateModalProfissionalLabel(profId);
+  }
   try {
     const sid = els.addStoreSelect?.value || a.storeId || '';
     if (sid) { populateModalProfissionais(sid, profId); }
@@ -561,7 +565,14 @@ export function bindModalAndActionsEvents() {
   els.valorInput?.addEventListener('input', () => { try { els.valorInput.classList.remove('border-red-500'); const e=els.valorInput.parentElement.querySelector('.form-err'); if(e) e.remove(); } catch{} });
   els.addStoreSelect?.addEventListener('change', () => { try { els.addStoreSelect.classList.remove('border-red-500'); const e=els.addStoreSelect.parentElement.querySelector('.form-err'); if(e) e.remove(); } catch{} });
   els.horaInput?.addEventListener('input', () => { try { els.horaInput.classList.remove('border-red-500'); const e=els.horaInput.parentElement.querySelector('.form-err'); if(e) e.remove(); } catch{} });
-  els.profSelect?.addEventListener('change', () => { try { els.profSelect.classList.remove('border-red-500'); const e=els.profSelect.parentElement.querySelector('.form-err'); if(e) e.remove(); } catch{} });
+  els.profSelect?.addEventListener('change', () => {
+    try {
+      els.profSelect.classList.remove('border-red-500');
+      const e = els.profSelect.parentElement.querySelector('.form-err');
+      if (e) e.remove();
+    } catch {}
+    updateModalProfissionalLabel();
+  });
   els.addServAddBtn?.addEventListener('click', (e) => {
     e.preventDefault();
     const s = state.selectedServico;
