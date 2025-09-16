@@ -9,6 +9,7 @@ import { openAddModal } from './modal.js';
 
 const VET_FICHA_CLIENTE_KEY = 'vetFichaSelectedCliente';
 const VET_FICHA_PET_KEY = 'vetFichaSelectedPetId';
+const VET_FICHA_AGENDA_CONTEXT_KEY = 'vetFichaAgendaContext';
 
 function pickFirst(...values) {
   for (const value of values) {
@@ -161,6 +162,78 @@ function extractPetId(appointment) {
   return '';
 }
 
+function normalizeCategories(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map(item => {
+        if (!item) return '';
+        if (typeof item === 'object' && item.nome) return String(item.nome).trim();
+        return String(item).trim();
+      })
+      .filter(Boolean);
+  }
+  if (typeof value === 'object' && value.nome) {
+    return [String(value.nome).trim()].filter(Boolean);
+  }
+  const str = String(value || '').trim();
+  return str ? [str] : [];
+}
+
+function normalizeServiceEntry(entry, fallbackNome = '', fallbackValor = null) {
+  if (!entry) return null;
+  const id = normalizeId(entry._id || entry.id || entry.servico || entry.servicoId);
+  const nome = pickFirst(
+    entry.nome,
+    entry.servicoNome,
+    entry.descricao,
+    typeof entry === 'string' ? entry : '',
+    typeof entry.servico === 'string' ? entry.servico : '',
+    entry?.servico?.nome,
+    fallbackNome
+  );
+  const valorRaw = typeof entry.valor === 'number'
+    ? entry.valor
+    : (typeof entry.valor === 'string' ? Number(entry.valor.replace(',', '.')) : null);
+  const valor = Number.isFinite(valorRaw) ? Number(valorRaw) : (Number(fallbackValor) || 0);
+  const categorias = normalizeCategories(
+    entry.categorias || entry.categoria || entry.category || entry.categoriaPrincipal || entry?.servico?.categorias
+  );
+  if (!nome && !id) return null;
+  return {
+    _id: id || null,
+    nome,
+    valor,
+    categorias,
+  };
+}
+
+function extractAppointmentServices(appointment) {
+  const services = [];
+  if (!appointment) return services;
+  if (Array.isArray(appointment.servicos) && appointment.servicos.length) {
+    appointment.servicos.forEach((svc, index) => {
+      const normalized = normalizeServiceEntry(svc, appointment.servico || '', appointment.valor);
+      if (normalized) services.push(normalized);
+    });
+  } else {
+    const fallback = normalizeServiceEntry({
+      _id: appointment.servicoId || appointment.servico?._id || appointment.servico,
+      nome: appointment.servico || appointment.servicoNome || appointment?.servico?.nome,
+      valor: appointment.valor,
+      categorias: appointment?.servico?.categorias || appointment.categorias || appointment.categoria
+    }, appointment.servico || '', appointment.valor);
+    if (fallback) services.push(fallback);
+  }
+  const seen = new Set();
+  return services.filter(svc => {
+    const key = `${svc._id || ''}|${svc.nome}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function persistFichaClinicaContext(appointment) {
   try {
     const tutor = extractTutorPayload(appointment);
@@ -174,9 +247,33 @@ function persistFichaClinicaContext(appointment) {
     };
     localStorage.setItem(VET_FICHA_CLIENTE_KEY, JSON.stringify(payload));
     localStorage.setItem(VET_FICHA_PET_KEY, petId);
+    const appointmentId = normalizeId(appointment._id);
+    const profissionalNome = pickFirst(
+      typeof appointment.profissional === 'string' ? appointment.profissional : '',
+      appointment.profissionalNome,
+      appointment?.profissional?.nome,
+      appointment?.profissional?.nomeCompleto,
+      appointment?.profissional?.nomeContato,
+      appointment?.profissional?.razaoSocial
+    );
+    const agendaContext = {
+      tutorId: tutor._id,
+      petId,
+      appointmentId,
+      scheduledAt: appointment.h || appointment.scheduledAt || appointment.data || appointment.dataHora || '',
+      profissionalId: normalizeId(appointment.profissionalId || appointment?.profissional?._id),
+      profissionalNome,
+      status: appointment.status || 'agendado',
+      valor: Number(appointment.valor || 0),
+      observacoes: typeof appointment.observacoes === 'string' ? appointment.observacoes.trim() : '',
+      servicos: extractAppointmentServices(appointment),
+      totalServicos: Array.isArray(appointment.servicos) ? appointment.servicos.length : (appointment.servico ? 1 : 0),
+    };
+    localStorage.setItem(VET_FICHA_AGENDA_CONTEXT_KEY, JSON.stringify(agendaContext));
     return true;
   } catch (err) {
     console.error('persistFichaClinicaContext', err);
+    try { localStorage.removeItem(VET_FICHA_AGENDA_CONTEXT_KEY); } catch (_) {}
     return false;
   }
 }
