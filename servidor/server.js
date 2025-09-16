@@ -54,6 +54,7 @@ const routes = [
 
 // Registrar rotas adicionais (Agenda - funcionários)
 routes.push({ path: '/api/func', file: './routes/funcAgenda' });
+routes.push({ path: '/api/func', file: './routes/funcVet' });
 
 // Carrega cada rota
 routes.forEach(r => app.use(r.path, require(r.file)));

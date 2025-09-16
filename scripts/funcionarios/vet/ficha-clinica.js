@@ -20,6 +20,24 @@
         });
     }
 
+    function notify(message, type = 'info') {
+        const text = String(message || '').trim();
+        if (!text) return;
+        if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+            try {
+                window.showToast(text, type);
+                return;
+            } catch (err) {
+                console.error('notify/showToast', err);
+            }
+        }
+        try {
+            alert(text);
+        } catch (_) {
+            console.log(text);
+        }
+    }
+
     // --- debounce simples (mesmo comportamento da Agenda) ---
     function debounce(fn, wait) {
         let t;
@@ -84,6 +102,8 @@
         currentCardMode: 'tutor',
         agendaContext: null,
         consultas: [],
+        consultasLoading: false,
+        consultasLoadKey: null,
     };
 
     const consultaModal = {
@@ -94,9 +114,13 @@
         submitBtn: null,
         cancelBtn: null,
         fields: {},
+        contextInfo: null,
         mode: 'create',
         editingId: null,
         keydownHandler: null,
+        isSubmitting: false,
+        activeServiceId: null,
+        activeServiceName: '',
     };
 
     const STORAGE_KEYS = {
@@ -428,8 +452,235 @@
         return STATUS_LABELS[key] || (status ? capitalize(status) : '');
     }
 
-    function generateConsultaId() {
-        return `consulta_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    function toIsoOrNull(value) {
+        if (!value) return null;
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) return null;
+        try {
+            return date.toISOString();
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function normalizeConsultaRecord(raw) {
+        if (!raw || typeof raw !== 'object') return null;
+        const id = normalizeId(raw.id || raw._id);
+        if (!id) return null;
+
+        const clienteId = normalizeId(raw.clienteId || raw.cliente);
+        const petId = normalizeId(raw.petId || raw.pet);
+        const servicoId = normalizeId(raw.servicoId || raw?.servico?._id || raw?.servico);
+        const appointmentId = normalizeId(raw.appointmentId || raw.appointment);
+
+        const servicoNome = pickFirst(
+            raw.servicoNome,
+            raw.servicoLabel,
+            raw.servicoDescricao,
+            raw?.servico?.nome,
+        );
+
+        const createdAt = toIsoOrNull(raw.createdAt || raw.criadoEm || raw.dataCriacao);
+        const updatedAt = toIsoOrNull(raw.updatedAt || raw.atualizadoEm || raw.dataAtualizacao) || createdAt;
+
+        return {
+            id,
+            _id: id,
+            clienteId,
+            petId,
+            servicoId,
+            servicoNome: servicoNome || '',
+            appointmentId,
+            anamnese: typeof raw.anamnese === 'string' ? raw.anamnese : '',
+            exameFisico: typeof raw.exameFisico === 'string' ? raw.exameFisico : '',
+            diagnostico: typeof raw.diagnostico === 'string' ? raw.diagnostico : '',
+            createdAt,
+            updatedAt,
+        };
+    }
+
+    function getConsultasKey(clienteId, petId) {
+        const tutor = normalizeId(clienteId);
+        const pet = normalizeId(petId);
+        if (!(tutor && pet)) return null;
+        return `${tutor}|${pet}`;
+    }
+
+    function getCurrentAgendaService() {
+        const context = state.agendaContext || null;
+        if (!context) return null;
+
+        const services = Array.isArray(context.servicos) ? context.servicos : [];
+        const normalized = services
+            .map((svc) => {
+                const id = normalizeId(svc?._id || svc?.id || svc?.servicoId || svc?.servico);
+                if (!id) return null;
+                const nome = pickFirst(
+                    svc?.nome,
+                    svc?.servicoNome,
+                    svc?.descricao,
+                    typeof svc === 'string' ? svc : '',
+                );
+                const categoriasRaw = Array.isArray(svc?.categorias)
+                    ? svc.categorias
+                    : (svc?.categorias ? [svc.categorias] : []);
+                const categorias = categoriasRaw.map((cat) => String(cat || '').trim()).filter(Boolean);
+                return {
+                    id,
+                    nome: nome || '',
+                    categorias,
+                };
+            })
+            .filter(Boolean);
+
+        const vetServices = normalized.filter((svc) => svc.categorias.some((cat) => normalizeForCompare(cat) === 'veterinario'));
+        const chosen = vetServices[0] || normalized[0] || null;
+        if (chosen) {
+            return { id: chosen.id, nome: chosen.nome || '' };
+        }
+
+        const fallbackId = normalizeId(context.servicoId || context.servico);
+        if (fallbackId) {
+            const fallbackNome = pickFirst(context.servicoNome, context.servico);
+            return { id: fallbackId, nome: fallbackNome || '' };
+        }
+
+        return null;
+    }
+
+    function findConsultaById(consultaId) {
+        const targetId = normalizeId(consultaId);
+        if (!targetId) return null;
+        return (state.consultas || []).find((consulta) => normalizeId(consulta?.id || consulta?._id) === targetId) || null;
+    }
+
+    function setConsultaModalSubmitting(isSubmitting) {
+        consultaModal.isSubmitting = !!isSubmitting;
+        if (consultaModal.submitBtn) {
+            consultaModal.submitBtn.disabled = !!isSubmitting;
+            consultaModal.submitBtn.classList.toggle('opacity-60', !!isSubmitting);
+            consultaModal.submitBtn.classList.toggle('cursor-not-allowed', !!isSubmitting);
+            consultaModal.submitBtn.textContent = isSubmitting
+                ? 'Salvando...'
+                : (consultaModal.mode === 'edit' ? 'Salvar alterações' : 'Adicionar');
+        }
+        if (consultaModal.cancelBtn) {
+            consultaModal.cancelBtn.disabled = !!isSubmitting;
+            consultaModal.cancelBtn.classList.toggle('opacity-50', !!isSubmitting);
+            consultaModal.cancelBtn.classList.toggle('cursor-not-allowed', !!isSubmitting);
+        }
+    }
+
+    function ensureTutorAndPetSelected() {
+        const tutorId = normalizeId(state.selectedCliente?._id);
+        const petId = normalizeId(state.selectedPetId);
+        if (tutorId && petId) return true;
+        notify('Selecione um tutor e um pet para registrar a consulta.', 'warning');
+        return false;
+    }
+
+    function ensureAgendaServiceAvailable() {
+        const service = getCurrentAgendaService();
+        if (service && service.id) return service;
+        notify('Nenhum serviço veterinário disponível para vincular à consulta. Abra a ficha pela agenda com um serviço veterinário.', 'warning');
+        return null;
+    }
+
+    function upsertConsultaInState(record) {
+        const normalized = normalizeConsultaRecord(record);
+        if (!normalized) return null;
+        const targetId = normalizeId(normalized.id || normalized._id);
+        if (!targetId) return null;
+
+        const next = Array.isArray(state.consultas) ? [...state.consultas] : [];
+        const existingIdx = next.findIndex((item) => normalizeId(item?.id || item?._id) === targetId);
+        const payload = { ...normalized, id: targetId, _id: targetId };
+        if (existingIdx >= 0) {
+            next[existingIdx] = { ...next[existingIdx], ...payload };
+        } else {
+            next.unshift(payload);
+        }
+
+        const deduped = [];
+        const seen = new Set();
+        next.forEach((item) => {
+            const cid = normalizeId(item?.id || item?._id);
+            if (!cid || seen.has(cid)) return;
+            seen.add(cid);
+            const createdAt = item.createdAt ? toIsoOrNull(item.createdAt) : null;
+            const updatedAt = item.updatedAt ? toIsoOrNull(item.updatedAt) : createdAt;
+            deduped.push({
+                ...item,
+                id: cid,
+                _id: cid,
+                createdAt,
+                updatedAt,
+            });
+        });
+
+        deduped.sort((a, b) => {
+            const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return bTime - aTime;
+        });
+
+        state.consultas = deduped;
+        const key = getConsultasKey(state.selectedCliente?._id, state.selectedPetId);
+        if (key) state.consultasLoadKey = key;
+
+        return deduped.find((item) => normalizeId(item?.id || item?._id) === targetId) || payload;
+    }
+
+    async function loadConsultasFromServer(options = {}) {
+        const { force = false } = options || {};
+        const clienteId = normalizeId(state.selectedCliente?._id);
+        const petId = normalizeId(state.selectedPetId);
+
+        if (!(clienteId && petId)) {
+            state.consultas = [];
+            state.consultasLoadKey = null;
+            state.consultasLoading = false;
+            updateConsultaAgendaCard();
+            return;
+        }
+
+        const key = getConsultasKey(clienteId, petId);
+        if (!force && key && state.consultasLoadKey === key) return;
+
+        state.consultasLoading = true;
+        updateConsultaAgendaCard();
+
+        try {
+            const params = new URLSearchParams({ clienteId, petId });
+            const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+            if (appointmentId) params.set('appointmentId', appointmentId);
+
+            const resp = await api(`/func/vet/consultas?${params.toString()}`);
+            const payload = await resp.json().catch(() => (resp.ok ? [] : {}));
+            if (!resp.ok) {
+                const message = typeof payload?.message === 'string' ? payload.message : 'Erro ao carregar consultas.';
+                throw new Error(message);
+            }
+
+            const data = Array.isArray(payload) ? payload : [];
+            const normalized = data.map(normalizeConsultaRecord).filter(Boolean);
+            normalized.sort((a, b) => {
+                const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return bTime - aTime;
+            });
+
+            state.consultas = normalized;
+            state.consultasLoadKey = key;
+        } catch (error) {
+            console.error('loadConsultasFromServer', error);
+            state.consultas = [];
+            state.consultasLoadKey = null;
+            notify(error.message || 'Erro ao carregar consultas.', 'error');
+        } finally {
+            state.consultasLoading = false;
+            updateConsultaAgendaCard();
+        }
     }
 
     function createConsultaFieldSection(label, value) {
@@ -453,7 +704,8 @@
         const card = document.createElement('article');
         card.className = 'group relative cursor-pointer rounded-xl border border-sky-200 bg-white p-4 shadow-sm transition hover:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-400';
         card.tabIndex = 0;
-        card.dataset.consultaId = consulta?.id || '';
+        const consultaId = normalizeId(consulta?.id || consulta?._id);
+        card.dataset.consultaId = consultaId || '';
         card.setAttribute('role', 'button');
         card.setAttribute('title', 'Clique para editar a consulta');
 
@@ -474,6 +726,20 @@
         title.className = 'text-sm font-semibold text-sky-700';
         title.textContent = 'Registro de consulta';
         headerText.appendChild(title);
+
+        const serviceName = pickFirst(consulta?.servicoNome);
+        if (serviceName) {
+            const serviceBadge = document.createElement('span');
+            serviceBadge.className = 'mt-1 inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700';
+            const iconEl = document.createElement('i');
+            iconEl.className = 'fas fa-paw text-[10px]';
+            serviceBadge.appendChild(iconEl);
+            const textEl = document.createElement('span');
+            textEl.className = 'leading-none';
+            textEl.textContent = serviceName;
+            serviceBadge.appendChild(textEl);
+            headerText.appendChild(serviceBadge);
+        }
 
         const metaParts = [];
         if (consulta?.createdAt) {
@@ -500,7 +766,7 @@
 
         const openForEdit = (event) => {
             event.preventDefault();
-            openConsultaModal(consulta?.id || null);
+            openConsultaModal(consultaId || null);
         };
         card.addEventListener('click', openForEdit);
         card.addEventListener('keydown', (event) => {
@@ -576,6 +842,10 @@
         fieldsWrapper.className = 'grid gap-4';
         form.appendChild(fieldsWrapper);
 
+        const contextInfo = document.createElement('div');
+        contextInfo.className = 'hidden rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-700';
+        fieldsWrapper.appendChild(contextInfo);
+
         const anamneseField = createModalTextareaField('Anamnese', 'anamnese');
         fieldsWrapper.appendChild(anamneseField.wrapper);
 
@@ -605,9 +875,9 @@
         submitBtn.textContent = 'Adicionar';
         footer.appendChild(submitBtn);
 
-        form.addEventListener('submit', (event) => {
+        form.addEventListener('submit', async (event) => {
             event.preventDefault();
-            handleConsultaSubmit();
+            await handleConsultaSubmit();
         });
 
         overlay.addEventListener('click', (event) => {
@@ -630,6 +900,7 @@
             exameFisico: exameField.textarea,
             diagnostico: diagnosticoField.textarea,
         };
+        consultaModal.contextInfo = contextInfo;
 
         return consultaModal;
     }
@@ -641,6 +912,13 @@
         if (consultaModal.form) consultaModal.form.reset();
         consultaModal.mode = 'create';
         consultaModal.editingId = null;
+        consultaModal.activeServiceId = null;
+        consultaModal.activeServiceName = '';
+        setConsultaModalSubmitting(false);
+        if (consultaModal.contextInfo) {
+            consultaModal.contextInfo.textContent = '';
+            consultaModal.contextInfo.classList.add('hidden');
+        }
         if (consultaModal.keydownHandler) {
             document.removeEventListener('keydown', consultaModal.keydownHandler);
             consultaModal.keydownHandler = null;
@@ -648,19 +926,43 @@
     }
 
     function openConsultaModal(consultaId = null) {
+        if (!consultaId && !ensureTutorAndPetSelected()) {
+            return;
+        }
+
         const modal = ensureConsultaModal();
         const isEditing = !!consultaId;
-        const existing = isEditing ? state.consultas.find((c) => c.id === consultaId) || null : null;
+        const existing = isEditing ? findConsultaById(consultaId) : null;
 
         modal.mode = isEditing && existing ? 'edit' : 'create';
-        modal.editingId = modal.mode === 'edit' ? consultaId : null;
+        modal.editingId = modal.mode === 'edit' ? normalizeId(existing?.id || existing?._id || consultaId) : null;
+
+        if (modal.mode === 'edit' && !existing) {
+            notify('Não foi possível localizar os dados da consulta selecionada.', 'error');
+            return;
+        }
+
+        if (modal.mode === 'create') {
+            const service = ensureAgendaServiceAvailable();
+            if (!service) {
+                return;
+            }
+            modal.activeServiceId = normalizeId(service.id);
+            modal.activeServiceName = pickFirst(service.nome);
+        } else {
+            modal.activeServiceId = normalizeId(existing?.servicoId || existing?.servico);
+            modal.activeServiceName = pickFirst(existing?.servicoNome);
+        }
+
+        if (modal.mode === 'create' && !modal.activeServiceId) {
+            notify('Nenhum serviço veterinário disponível para vincular à consulta.', 'warning');
+            return;
+        }
 
         if (modal.titleEl) {
             modal.titleEl.textContent = modal.mode === 'edit' ? 'Editar consulta' : 'Nova consulta';
         }
-        if (modal.submitBtn) {
-            modal.submitBtn.textContent = modal.mode === 'edit' ? 'Salvar alterações' : 'Adicionar';
-        }
+        setConsultaModalSubmitting(false);
 
         if (modal.fields.anamnese) {
             modal.fields.anamnese.value = existing?.anamnese || '';
@@ -670,6 +972,23 @@
         }
         if (modal.fields.diagnostico) {
             modal.fields.diagnostico.value = existing?.diagnostico || '';
+        }
+
+        if (modal.contextInfo) {
+            const tutorNome = pickFirst(
+                state.selectedCliente?.nome,
+                state.selectedCliente?.nomeCompleto,
+                state.selectedCliente?.nomeContato,
+                state.selectedCliente?.razaoSocial,
+            );
+            const pet = getSelectedPet();
+            const petNome = pickFirst(pet?.nome, pet?.name);
+            const parts = [];
+            if (tutorNome) parts.push(`Tutor: ${tutorNome}`);
+            if (petNome) parts.push(`Pet: ${petNome}`);
+            if (modal.activeServiceName) parts.push(`Serviço: ${modal.activeServiceName}`);
+            modal.contextInfo.textContent = parts.join(' · ');
+            modal.contextInfo.classList.toggle('hidden', parts.length === 0);
         }
 
         modal.overlay.classList.remove('hidden');
@@ -696,42 +1015,95 @@
         }, 50);
     }
 
-    function handleConsultaSubmit() {
+    async function handleConsultaSubmit() {
         const modal = ensureConsultaModal();
-        const now = new Date().toISOString();
+        if (modal.isSubmitting) return;
+
+        const clienteId = normalizeId(state.selectedCliente?._id);
+        const petId = normalizeId(state.selectedPetId);
+        if (!(clienteId && petId)) {
+            notify('Selecione um tutor e um pet para registrar a consulta.', 'warning');
+            return;
+        }
+
         const values = {
             anamnese: (modal.fields.anamnese?.value || '').trim(),
             exameFisico: (modal.fields.exameFisico?.value || '').trim(),
             diagnostico: (modal.fields.diagnostico?.value || '').trim(),
         };
 
-        if (modal.mode === 'edit' && modal.editingId) {
-            const idx = state.consultas.findIndex((c) => c.id === modal.editingId);
-            if (idx >= 0) {
-                state.consultas[idx] = {
-                    ...state.consultas[idx],
-                    ...values,
-                    updatedAt: now,
-                };
-            } else {
-                state.consultas.unshift({
-                    id: modal.editingId,
-                    createdAt: now,
-                    updatedAt: now,
-                    ...values,
-                });
-            }
-        } else {
-            state.consultas.unshift({
-                id: generateConsultaId(),
-                createdAt: now,
-                updatedAt: now,
-                ...values,
-            });
+        const editingConsulta = modal.mode === 'edit' && modal.editingId
+            ? findConsultaById(modal.editingId)
+            : null;
+
+        const servicoId = normalizeId(
+            modal.mode === 'edit'
+                ? (editingConsulta?.servicoId || editingConsulta?.servico || modal.activeServiceId)
+                : modal.activeServiceId,
+        );
+        if (!servicoId) {
+            notify('Nenhum serviço veterinário disponível para vincular à consulta.', 'warning');
+            return;
         }
 
-        closeConsultaModal();
-        updateConsultaAgendaCard();
+        const appointmentId = normalizeId(
+            modal.mode === 'edit'
+                ? (editingConsulta?.appointmentId || editingConsulta?.appointment || state.agendaContext?.appointmentId)
+                : state.agendaContext?.appointmentId,
+        );
+
+        const payload = {
+            clienteId,
+            petId,
+            servicoId,
+            anamnese: values.anamnese,
+            exameFisico: values.exameFisico,
+            diagnostico: values.diagnostico,
+        };
+        if (appointmentId) payload.appointmentId = appointmentId;
+
+        setConsultaModalSubmitting(true);
+
+        try {
+            let response;
+            let data;
+            const isEdit = modal.mode === 'edit' && !!modal.editingId;
+            if (isEdit) {
+                response = await api(`/func/vet/consultas/${modal.editingId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(payload),
+                });
+            } else {
+                response = await api('/func/vet/consultas', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                });
+            }
+
+            data = await response.json().catch(() => (response.ok ? {} : {}));
+            if (!response.ok) {
+                const message = typeof data?.message === 'string'
+                    ? data.message
+                    : (isEdit ? 'Erro ao atualizar consulta.' : 'Erro ao salvar consulta.');
+                throw new Error(message);
+            }
+
+            const saved = upsertConsultaInState(data);
+            if (!saved) {
+                await loadConsultasFromServer({ force: true });
+            } else {
+                updateConsultaAgendaCard();
+            }
+
+            const wasEdit = isEdit;
+            closeConsultaModal();
+            notify(wasEdit ? 'Consulta atualizada com sucesso.' : 'Consulta registrada com sucesso.', 'success');
+        } catch (error) {
+            console.error('handleConsultaSubmit', error);
+            notify(error.message || 'Erro ao salvar consulta.', 'error');
+        } finally {
+            setConsultaModalSubmitting(false);
+        }
     }
 
     function getSelectedPet() {
@@ -825,6 +1197,9 @@
         setConsultaTabActive();
 
         const consultas = Array.isArray(state.consultas) ? state.consultas : [];
+        const manualConsultas = consultas.filter((consulta) => !!normalizeId(consulta?.id || consulta?._id));
+        const hasManualConsultas = manualConsultas.length > 0;
+        const isLoadingConsultas = !!state.consultasLoading;
         const context = state.agendaContext;
         const selectedPetId = normalizeId(state.selectedPetId);
         const selectedTutorId = normalizeId(state.selectedCliente?._id);
@@ -955,8 +1330,16 @@
             }
         }
 
-        const hasManualConsultas = consultas.length > 0;
         const shouldShowPlaceholder = !hasManualConsultas && !hasAgendaContent;
+
+        if (isLoadingConsultas && !hasManualConsultas && !hasAgendaContent) {
+            area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
+            area.innerHTML = '';
+            const paragraph = document.createElement('p');
+            paragraph.textContent = 'Carregando consultas...';
+            area.appendChild(paragraph);
+            return;
+        }
 
         if (shouldShowPlaceholder) {
             area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
@@ -975,7 +1358,7 @@
         area.appendChild(scroll);
 
         if (hasManualConsultas) {
-            consultas.forEach((consulta) => {
+            manualConsultas.forEach((consulta) => {
                 const card = createManualConsultaCard(consulta);
                 scroll.appendChild(card);
             });
@@ -1107,6 +1490,9 @@
         state.selectedPetId = null;
         state.petsById = {};
         state.currentCardMode = 'tutor';
+        state.consultas = [];
+        state.consultasLoadKey = null;
+        state.consultasLoading = false;
         const tutorId = normalizeId(state.selectedCliente?._id);
         if (state.agendaContext) {
             const contextTutorId = normalizeId(state.agendaContext.tutorId);
@@ -1169,7 +1555,7 @@
                         const match = pets.find(p => p._id === persistedPetId);
                         if (match) {
                             els.petSelect.value = persistedPetId;
-                            onSelectPet(persistedPetId, { skipPersistPet: true });
+                            await onSelectPet(persistedPetId, { skipPersistPet: true });
                             petSelecionado = true;
                         } else if (!clearPersistedPet) {
                             persistPetId(null);
@@ -1177,7 +1563,7 @@
                     }
                     if (!petSelecionado && pets.length === 1) {
                         els.petSelect.value = pets[0]._id;
-                        onSelectPet(pets[0]._id);
+                        await onSelectPet(pets[0]._id);
                     }
                 } else {
                     els.petSelect.innerHTML = `<option value="">Nenhum pet encontrado</option>`;
@@ -1188,14 +1574,22 @@
         updatePageVisibility();
     }
 
-    function onSelectPet(petId, opts = {}) {
+    async function onSelectPet(petId, opts = {}) {
         const { skipPersistPet = false } = opts;
         state.selectedPetId = petId || null;
         if (!skipPersistPet) {
             persistPetId(state.selectedPetId);
         }
+        state.consultas = [];
+        state.consultasLoadKey = null;
+        state.consultasLoading = false;
         updateCardDisplay();
         updatePageVisibility();
+        if (!state.selectedPetId) {
+            updateConsultaAgendaCard();
+            return;
+        }
+        await loadConsultasFromServer({ force: true });
     }
 
     function clearCliente() {
@@ -1203,6 +1597,9 @@
         state.petsById = {};
         state.currentCardMode = 'tutor';
         state.agendaContext = null;
+        state.consultas = [];
+        state.consultasLoadKey = null;
+        state.consultasLoading = false;
         try { localStorage.removeItem(STORAGE_KEYS.agenda); } catch { }
         if (els.cliInput) els.cliInput.value = '';
         hideSugestoes();
@@ -1223,6 +1620,9 @@
         if (els.petSelect) els.petSelect.value = '';
         persistPetId(null);
         state.currentCardMode = 'tutor';
+        state.consultas = [];
+        state.consultasLoadKey = null;
+        state.consultasLoading = false;
         updateCardDisplay();
         updatePageVisibility();
     }
@@ -1241,10 +1641,13 @@
         }
         updateConsultaAgendaCard();
         if (cliente) {
-            onSelectCliente(cliente, {
+            const promise = onSelectCliente(cliente, {
                 clearPersistedPet: false,
                 persistedPetId: petId,
             });
+            if (promise && typeof promise.then === 'function') {
+                promise.catch(() => {});
+            }
         } else if (petId) {
             // pet salvo sem tutor selecionado não é válido
             persistPetId(null);
@@ -1265,7 +1668,12 @@
         els.cliClear.addEventListener('click', (e) => { e.preventDefault(); clearCliente(); });
     }
     if (els.petSelect) {
-        els.petSelect.addEventListener('change', (e) => onSelectPet(e.target.value));
+        els.petSelect.addEventListener('change', (e) => {
+            const result = onSelectPet(e.target.value);
+            if (result && typeof result.then === 'function') {
+                result.catch(() => {});
+            }
+        });
     }
     if (els.petClear) {
         els.petClear.addEventListener('click', (e) => { e.preventDefault(); clearPet(); });
