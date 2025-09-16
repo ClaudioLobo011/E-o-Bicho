@@ -63,6 +63,7 @@ export const els = {
   obsInput: document.getElementById('add-observacoes'),
   horaInput: document.getElementById('add-hora'),
   profSelect: document.getElementById('add-prof-select'),
+  profLabel: document.getElementById('add-prof-label'),
 };
 
 // ----- State -----
