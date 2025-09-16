@@ -15,6 +15,16 @@ const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
 function escapeRegex(s) { return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function userDisplayName(u) { return u?.nomeCompleto || u?.nomeContato || u?.razaoSocial || u?.email; }
 
+function extractAllowedStaffTypes(serviceDoc) {
+  if (!serviceDoc) return [];
+  const raw = [];
+  if (Array.isArray(serviceDoc.tiposPermitidos)) raw.push(...serviceDoc.tiposPermitidos);
+  if (serviceDoc.grupo && Array.isArray(serviceDoc.grupo.tiposPermitidos)) {
+    raw.push(...serviceDoc.grupo.tiposPermitidos);
+  }
+  return [...new Set(raw.map(v => String(v || '').trim()).filter(Boolean))];
+}
+
 router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) => {
   try {
     const { id } = req.params;
@@ -117,8 +127,16 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
     const full = await Appointment.findByIdAndUpdate(id, { $set: set }, { new: true })
       .select('_id store cliente pet servico itens profissional scheduledAt valor pago codigoVenda status observacoes')
       .populate('pet', 'nome')
-      .populate('servico', 'nome categorias')
-      .populate('itens.servico', 'nome categorias')
+      .populate({
+        path: 'servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
+      .populate({
+        path: 'itens.servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .lean();
 
@@ -132,7 +150,8 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       valor: Number(it.valor || 0),
       categorias: Array.isArray(it.servico?.categorias)
         ? it.servico.categorias.filter(Boolean)
-        : []
+        : [],
+      tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
     }));
     if (!servicosList.length && full.servico) {
       servicosList.push({
@@ -141,7 +160,8 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         valor: Number(full.valor || 0),
         categorias: Array.isArray(full.servico?.categorias)
           ? full.servico.categorias.filter(Boolean)
-          : []
+          : [],
+        tiposPermitidos: extractAllowedStaffTypes(full.servico || {})
       });
     }
     const servicosStr = servicosList.map(s => s.nome).join(', ');
@@ -400,8 +420,16 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       .select('_id store cliente pet servico itens profissional scheduledAt valor pago codigoVenda status observacoes')
       .populate('cliente', 'nomeCompleto nomeContato razaoSocial email')
       .populate('pet', 'nome')
-      .populate('servico', 'nome categorias')
-      .populate('itens.servico', 'nome categorias')
+      .populate({
+        path: 'servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
+      .populate({
+        path: 'itens.servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .sort({ scheduledAt: 1 })
       .lean();
@@ -417,7 +445,8 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
           valor: Number(it.valor || 0),
           categorias: Array.isArray(it.servico?.categorias)
             ? it.servico.categorias.filter(Boolean)
-            : []
+            : [],
+          tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
         }))
         : (a.servico ? [{
           _id: a.servico?._id || a.servico,
@@ -425,7 +454,8 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
           valor: Number(a.valor || 0),
           categorias: Array.isArray(a.servico?.categorias)
             ? a.servico.categorias.filter(Boolean)
-            : []
+            : [],
+          tiposPermitidos: extractAllowedStaffTypes(a.servico || {})
         }] : []);
       const servicosStr = servicosList.map(s => s.nome).join(', ');
       const valorTotal = (servicosList.reduce((s, x) => s + Number(x.valor || 0), 0)) || Number(a.valor || 0) || 0;
@@ -476,8 +506,16 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
       .select('_id store cliente pet servico itens profissional scheduledAt valor pago codigoVenda status observacoes')
       .populate('cliente', 'nomeCompleto nomeContato razaoSocial email')
       .populate('pet', 'nome')
-      .populate('servico', 'nome categorias')
-      .populate('itens.servico', 'nome categorias')
+      .populate({
+        path: 'servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
+      .populate({
+        path: 'itens.servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .sort({ scheduledAt: 1 })
       .lean();
@@ -489,7 +527,8 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
         valor: Number(it.valor || 0),
         categorias: Array.isArray(it.servico?.categorias)
           ? it.servico.categorias.filter(Boolean)
-          : []
+          : [],
+        tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
       }));
       if (!servicosList.length && a.servico) {
         servicosList.push({
@@ -498,7 +537,8 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
           valor: Number(a.valor || 0),
           categorias: Array.isArray(a.servico?.categorias)
             ? a.servico.categorias.filter(Boolean)
-            : []
+            : [],
+          tiposPermitidos: extractAllowedStaffTypes(a.servico || {})
         });
       }
       const valorTotal = servicosList.reduce((acc, s) => acc + Number(s.valor || 0), 0) || Number(a.valor || 0) || 0;

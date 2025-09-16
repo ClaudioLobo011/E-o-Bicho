@@ -180,6 +180,29 @@ function normalizeCategories(value) {
   return str ? [str] : [];
 }
 
+function normalizeStaffTypes(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    const arr = value
+      .map(item => {
+        if (!item) return '';
+        if (typeof item === 'object') {
+          if (item.tipo) return String(item.tipo).trim();
+          if (item.nome) return String(item.nome).trim();
+        }
+        return String(item).trim();
+      })
+      .filter(Boolean);
+    return Array.from(new Set(arr));
+  }
+  if (typeof value === 'object' && (value.tipo || value.nome)) {
+    const arr = [String(value.tipo || value.nome).trim()].filter(Boolean);
+    return Array.from(new Set(arr));
+  }
+  const str = String(value || '').trim();
+  return str ? [str] : [];
+}
+
 function normalizeServiceEntry(entry, fallbackNome = '', fallbackValor = null) {
   if (!entry) return null;
   const id = normalizeId(entry._id || entry.id || entry.servico || entry.servicoId);
@@ -199,12 +222,23 @@ function normalizeServiceEntry(entry, fallbackNome = '', fallbackValor = null) {
   const categorias = normalizeCategories(
     entry.categorias || entry.categoria || entry.category || entry.categoriaPrincipal || entry?.servico?.categorias
   );
+  const tiposPermitidos = normalizeStaffTypes(
+    entry.tiposPermitidos
+      || entry.allowedTipos
+      || entry.allowedStaffTypes
+      || entry.allowedStaff
+      || entry.grupoTiposPermitidos
+      || entry?.grupo?.tiposPermitidos
+      || entry?.servico?.tiposPermitidos
+      || entry?.servico?.grupo?.tiposPermitidos
+  );
   if (!nome && !id) return null;
   return {
     _id: id || null,
     nome,
     valor,
     categorias,
+    tiposPermitidos,
   };
 }
 
@@ -221,7 +255,10 @@ function extractAppointmentServices(appointment) {
       _id: appointment.servicoId || appointment.servico?._id || appointment.servico,
       nome: appointment.servico || appointment.servicoNome || appointment?.servico?.nome,
       valor: appointment.valor,
-      categorias: appointment?.servico?.categorias || appointment.categorias || appointment.categoria
+      categorias: appointment?.servico?.categorias || appointment.categorias || appointment.categoria,
+      tiposPermitidos: appointment?.servico?.tiposPermitidos
+        || appointment?.servico?.grupo?.tiposPermitidos
+        || appointment.tiposPermitidos
     }, appointment.servico || '', appointment.valor);
     if (fallback) services.push(fallback);
   }

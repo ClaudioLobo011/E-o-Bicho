@@ -326,6 +326,17 @@
         if (Array.isArray(service?.servico?.categorias)) categories.push(...service.servico.categorias);
         if (service.grupoNome) categories.push(service.grupoNome);
         if (service.grupo && service.grupo.nome) categories.push(service.grupo.nome);
+        if (Array.isArray(service.tiposPermitidos)) categories.push(...service.tiposPermitidos);
+        if (Array.isArray(service.allowedTipos)) categories.push(...service.allowedTipos);
+        if (Array.isArray(service.allowedStaffTypes)) categories.push(...service.allowedStaffTypes);
+        if (Array.isArray(service.allowedStaff)) categories.push(...service.allowedStaff);
+        if (Array.isArray(service.grupoTiposPermitidos)) categories.push(...service.grupoTiposPermitidos);
+        if (Array.isArray(service?.grupo?.tiposPermitidos)) categories.push(...service.grupo.tiposPermitidos);
+        if (Array.isArray(service?.servico?.tiposPermitidos)) categories.push(...service.servico.tiposPermitidos);
+        if (Array.isArray(service?.servico?.grupo?.tiposPermitidos)) categories.push(...service.servico.grupo.tiposPermitidos);
+        if (service.tipoPermitido) categories.push(service.tipoPermitido);
+        if (service.staffTipo) categories.push(service.staffTipo);
+        if (service.tipo) categories.push(service.tipo);
         if (categories.some(isVetCategory)) return true;
         const nomeNorm = normalizeForCompare(service.nome || service.descricao || service.titulo || '');
         if (nomeNorm.includes('veterin')) return true;
