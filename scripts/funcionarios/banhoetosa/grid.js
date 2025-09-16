@@ -7,6 +7,204 @@ import {
 } from './core.js';
 import { openAddModal } from './modal.js';
 
+const VET_FICHA_CLIENTE_KEY = 'vetFichaSelectedCliente';
+const VET_FICHA_PET_KEY = 'vetFichaSelectedPetId';
+
+function pickFirst(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+      continue;
+    }
+    if (typeof value === 'number') {
+      if (!Number.isNaN(value)) {
+        const numStr = String(value).trim();
+        if (numStr) return numStr;
+      }
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const nested = pickFirst(item);
+        if (nested) return nested;
+      }
+    }
+  }
+  return '';
+}
+
+function normalizeId(value) {
+  if (!value) return '';
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = normalizeId(item);
+      if (nested) return nested;
+    }
+    return '';
+  }
+  if (typeof value === 'object') {
+    if (value._id || value.id) {
+      return normalizeId(value._id || value.id);
+    }
+    return '';
+  }
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return '';
+    return String(value).trim();
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === '[object Object]') return '';
+    return trimmed;
+  }
+  return '';
+}
+
+function extractTutorPayload(appointment) {
+  if (!appointment) return null;
+
+  const candidateObjects = [];
+  if (appointment.cliente && typeof appointment.cliente === 'object') candidateObjects.push(appointment.cliente);
+  if (appointment.tutor && typeof appointment.tutor === 'object') candidateObjects.push(appointment.tutor);
+  if (appointment.responsavel && typeof appointment.responsavel === 'object') candidateObjects.push(appointment.responsavel);
+
+  const primaryObj = candidateObjects.find(obj => normalizeId(obj?._id || obj?.id));
+  const fallbackObj = primaryObj || candidateObjects[0] || null;
+
+  let tutorId = normalizeId(
+    appointment.clienteId ||
+    appointment.clientId ||
+    appointment.customerId ||
+    appointment.tutorId ||
+    (primaryObj && (primaryObj._id || primaryObj.id)) ||
+    (appointment.cliente && typeof appointment.cliente === 'object' ? (appointment.cliente._id || appointment.cliente.id) : '') ||
+    (appointment.tutor && typeof appointment.tutor === 'object' ? (appointment.tutor._id || appointment.tutor.id) : '') ||
+    (appointment.responsavel && typeof appointment.responsavel === 'object' ? (appointment.responsavel._id || appointment.responsavel.id) : '')
+  );
+
+  if (!tutorId && fallbackObj) {
+    tutorId = normalizeId(fallbackObj._id || fallbackObj.id);
+  }
+
+  if (!tutorId) {
+    const possibleIdString = typeof appointment.cliente === 'string' ? appointment.cliente : (typeof appointment.tutor === 'string' ? appointment.tutor : '');
+    if (/^[0-9a-fA-F]{24}$/.test((possibleIdString || '').trim())) {
+      tutorId = possibleIdString.trim();
+    }
+  }
+
+  if (!tutorId) return null;
+
+  const nameSource = fallbackObj || {};
+
+  const tutorNome = pickFirst(
+    appointment.clienteNome,
+    appointment.tutorNome,
+    typeof appointment.tutor === 'string' ? appointment.tutor : '',
+    typeof appointment.cliente === 'string' ? appointment.cliente : '',
+    nameSource.nome,
+    nameSource.nomeCompleto,
+    nameSource.nomeContato,
+    nameSource.razaoSocial,
+    nameSource.name
+  );
+
+  const tutorEmail = pickFirst(
+    appointment.clienteEmail,
+    appointment.emailCliente,
+    appointment.email,
+    nameSource.email,
+    nameSource.emailContato,
+    nameSource.emailPrincipal,
+    nameSource.emailSecundario,
+    Array.isArray(nameSource.emails) ? nameSource.emails[0] : ''
+  );
+
+  const tutorCelular = pickFirst(
+    appointment.clienteCelular,
+    appointment.clienteTelefone,
+    appointment.telefoneCliente,
+    appointment.telefone,
+    appointment.celular,
+    nameSource.celular,
+    nameSource.telefone,
+    nameSource.telefone1,
+    nameSource.telefone2,
+    nameSource.phone,
+    nameSource.fone,
+    nameSource.whatsapp,
+    nameSource.whatsApp
+  );
+
+  return {
+    _id: tutorId,
+    nome: tutorNome,
+    email: tutorEmail,
+    celular: tutorCelular,
+  };
+}
+
+function extractPetId(appointment) {
+  if (!appointment) return '';
+  const direct = normalizeId(appointment.petId);
+  if (direct) return direct;
+  if (appointment.pet && typeof appointment.pet === 'object') {
+    const nested = normalizeId(appointment.pet._id || appointment.pet.id || appointment.pet.petId);
+    if (nested) return nested;
+  }
+  if (typeof appointment.pet === 'string') {
+    const maybe = appointment.pet.trim();
+    if (/^[0-9a-fA-F]{24}$/.test(maybe)) return maybe;
+  }
+  return '';
+}
+
+function persistFichaClinicaContext(appointment) {
+  try {
+    const tutor = extractTutorPayload(appointment);
+    const petId = extractPetId(appointment);
+    if (!tutor || !tutor._id || !petId) return false;
+    const payload = {
+      _id: tutor._id,
+      nome: tutor.nome || '',
+      email: tutor.email || '',
+      celular: tutor.celular || '',
+    };
+    localStorage.setItem(VET_FICHA_CLIENTE_KEY, JSON.stringify(payload));
+    localStorage.setItem(VET_FICHA_PET_KEY, petId);
+    return true;
+  } catch (err) {
+    console.error('persistFichaClinicaContext', err);
+    return false;
+  }
+}
+
+function navigateToFichaClinica(appointment) {
+  const prepared = persistFichaClinicaContext(appointment);
+  if (!prepared) {
+    alert('Não foi possível preparar a ficha clínica. Tutor ou pet não encontrados.');
+    return;
+  }
+  window.location.href = 'vet-ficha-clinica.html';
+}
+
+function createFichaClinicaChip(appointment) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  const { badgeClass } = statusMeta('agendado');
+  btn.className = `agenda-ficha-chip inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap transition-colors duration-150 ${badgeClass} hover:bg-slate-200 hover:border-slate-300`;
+  btn.textContent = 'Ficha Clínica';
+  btn.title = 'Abrir ficha clínica';
+  btn.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    navigateToFichaClinica(appointment);
+  });
+  return btn;
+}
+
 export function renderGrid() {
   if (!els.agendaList) return;
   if (state.view === 'week')  { renderWeekGrid();  return; }
@@ -161,6 +359,7 @@ export function renderGrid() {
     const price = document.createElement('div');
     price.className = 'text-[13px] text-gray-800 font-medium';
     price.textContent = money(a.valor);
+    footerEl.appendChild(createFichaClinicaChip(a));
     footerEl.appendChild(price);
 
     card.appendChild(headerEl);
@@ -267,6 +466,7 @@ export function renderWeekGrid() {
     price.className = 'text-[12px] text-gray-800 font-semibold';
     price.textContent = money(a.valor);
     footerEl.appendChild(statusEl);
+    footerEl.appendChild(createFichaClinicaChip(a));
     footerEl.appendChild(price);
 
     card.appendChild(headerEl);
@@ -356,10 +556,11 @@ export function renderMonthGrid() {
       nameEl.className = 'text-[12px] font-medium text-gray-900 text-center truncate';
       nameEl.title = headLabel; nameEl.textContent = headLabel;
       const footerEl = document.createElement('div');
-      footerEl.className = 'flex items-center justify-end pt-0.5';
+      footerEl.className = 'flex items-center justify-end gap-2 pt-0.5';
       const price = document.createElement('div');
       price.className = 'text-[12px] text-gray-800 font-semibold';
       price.textContent = money(a.valor);
+      footerEl.appendChild(createFichaClinicaChip(a));
       footerEl.appendChild(price);
       card.appendChild(headerEl);
       card.appendChild(nameEl);
