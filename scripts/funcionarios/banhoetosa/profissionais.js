@@ -48,6 +48,19 @@ export function updateModalProfissionalLabel(preferredId) {
   els.profLabel.textContent = `Profissional (${label})`;
 }
 
+export function getModalProfissionalTipo(preferredId) {
+  const arr = modalProfissionais || [];
+  const currentId = preferredId != null ? String(preferredId) : (els.profSelect?.value || '');
+  if (currentId) {
+    const match = arr.find((p) => String(p._id) === currentId);
+    if (match && match.tipo) return String(match.tipo).trim();
+  }
+  if (arr.length && arr[0].tipo) {
+    return String(arr[0].tipo).trim();
+  }
+  return DEFAULT_PROF_TYPE;
+}
+
 function applyModalProfissionais(list, preselectId) {
   modalProfissionais = normalizeProfissionais(list);
   renderProfOptions(modalProfissionais);

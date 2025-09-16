@@ -206,19 +206,36 @@ router.get('/servicos/buscar', authMiddleware, requireStaff, async (req, res) =>
     const q = String(req.query.q || '').trim();
     const limit = Math.min(parseInt(req.query.limit || '8', 10), 30);
     const filter = q ? { nome: new RegExp(escapeRegex(q), 'i') } : {};
+    const normalizeTipo = (s) => String(s || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .trim().toLowerCase();
+    const profTipo = normalizeTipo(req.query.profTipo || req.query.staffType || '');
+
     const items = await Service.find(filter)
       .select('_id nome valor porte grupo')
-      .populate('grupo')
+      .populate({ path: 'grupo', select: 'nome tiposPermitidos' })
       .limit(limit)
       .sort({ nome: 1 })
       .lean();
 
-    res.json(items.map(s => ({
+    const filtered = profTipo
+      ? items.filter(s => {
+        const tipos = Array.isArray(s?.grupo?.tiposPermitidos) ? s.grupo.tiposPermitidos : [];
+        if (!tipos.length) return true;
+        return tipos.some(t => normalizeTipo(t) === profTipo);
+      })
+      : items;
+
+    res.json(filtered.map(s => ({
       _id: s._id,
       nome: s.nome,
       valor: s.valor || 0,
       porte: s.porte || [],
-      grupo: s.grupo ? { _id: s.grupo._id, nome: s.grupo.nome } : null
+      grupo: s.grupo ? {
+        _id: s.grupo._id,
+        nome: s.grupo.nome,
+        tiposPermitidos: Array.isArray(s.grupo.tiposPermitidos) ? s.grupo.tiposPermitidos : []
+      } : null
     })));
   } catch (e) {
     console.error('GET /func/servicos/buscar', e);

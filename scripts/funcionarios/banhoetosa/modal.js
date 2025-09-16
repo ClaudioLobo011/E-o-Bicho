@@ -1,5 +1,5 @@
 ﻿import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole } from './core.js';
-import { populateModalProfissionais, updateModalProfissionalLabel } from './profissionais.js';
+import { populateModalProfissionais, updateModalProfissionalLabel, getModalProfissionalTipo } from './profissionais.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
@@ -297,6 +297,23 @@ export async function searchClientes(term) {
   });
 }
 
+function normalizeProfTipo(v) {
+  return String(v || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().toLowerCase();
+}
+
+function filterServicesByProfTipo(list, tipo) {
+  const normTipo = normalizeProfTipo(tipo);
+  const arr = Array.isArray(list) ? list : [];
+  if (!normTipo) return arr;
+  return arr.filter((s) => {
+    const tipos = Array.isArray(s?.grupo?.tiposPermitidos) ? s.grupo.tiposPermitidos : [];
+    if (!tipos.length) return true;
+    return tipos.some((t) => normalizeProfTipo(t) === normTipo);
+  });
+}
+
 export async function searchServicos(term) {
   if (!term || term.length < 2) {
     if (els.servSug) { els.servSug.innerHTML = ''; els.servSug.classList.add('hidden'); }
@@ -304,14 +321,29 @@ export async function searchServicos(term) {
   }
   const storeId = els.addStoreSelect?.value || state.selectedStoreId || '';
   const petId   = els.petSelect?.value || '';
-  const resp = await api(`/func/servicos/buscar?q=${encodeURIComponent(term)}&storeId=${storeId || ''}&petId=${petId || ''}`);
-  const list = await resp.json().catch(() => []);
+  const profTipo = normalizeProfTipo(getModalProfissionalTipo());
+  const query = new URLSearchParams({
+    q: term,
+    storeId: storeId || '',
+    petId: petId || '',
+  });
+  if (profTipo) query.set('profTipo', profTipo);
+  const resp = await api(`/func/servicos/buscar?${query.toString()}`);
+  const listRaw = await resp.json().catch(() => []);
+  const list = filterServicesByProfTipo(listRaw, profTipo);
   if (!els.servSug) return;
-  els.servSug.innerHTML = list.map(s => `
-    <li class="px-3 py-2 hover:bg-gray-50 cursor-pointer" data-id="${s._id}" data-nome="${s.nome}" data-valor="${s.valor}">
+  els.servSug.innerHTML = list.map(s => {
+    const tiposPermitidos = Array.isArray(s?.grupo?.tiposPermitidos) ? s.grupo.tiposPermitidos : [];
+    const tiposAttr = tiposPermitidos
+      .map(t => normalizeProfTipo(t))
+      .filter(Boolean)
+      .join(',');
+    return `
+    <li class="px-3 py-2 hover:bg-gray-50 cursor-pointer" data-id="${s._id}" data-nome="${s.nome}" data-valor="${s.valor}" data-tipos="${tiposAttr}">
       <div class="font-medium text-gray-900">${s.nome}</div>
       <div class="text-xs text-gray-500">${money(s.valor)}</div>
-    </li>`).join('');
+    </li>`;
+  }).join('');
   els.servSug.classList.remove('hidden');
 
   // Atualiza os valores exibidos com preÃ§o por raÃ§a
@@ -352,7 +384,11 @@ export async function searchServicos(term) {
           }
         }
       } catch { /* ignore */ }
-      state.selectedServico = { _id: li.dataset.id, nome: li.dataset.nome, valor };
+      const allowedTipos = (li.dataset.tipos || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+      state.selectedServico = { _id: li.dataset.id, nome: li.dataset.nome, valor, tiposPermitidos: allowedTipos };
       if (els.servInput) els.servInput.value = state.selectedServico.nome;
       if (els.valorInput) els.valorInput.value = state.selectedServico.valor.toFixed(2);
       els.servSug.classList.add('hidden');
@@ -572,6 +608,22 @@ export function bindModalAndActionsEvents() {
       if (e) e.remove();
     } catch {}
     updateModalProfissionalLabel();
+    const currentTipo = normalizeProfTipo(getModalProfissionalTipo());
+    if (state.selectedServico && Array.isArray(state.selectedServico.tiposPermitidos)) {
+      const allowed = state.selectedServico.tiposPermitidos.map(t => normalizeProfTipo(t)).filter(Boolean);
+      if (currentTipo && allowed.length && !allowed.includes(currentTipo)) {
+        state.selectedServico = null;
+        if (els.servInput) els.servInput.value = '';
+        if (els.valorInput) els.valorInput.value = '';
+      }
+    }
+    const term = els.servInput?.value || '';
+    if (term.length >= 2) {
+      searchServicos(term);
+    } else if (els.servSug) {
+      els.servSug.innerHTML = '';
+      els.servSug.classList.add('hidden');
+    }
   });
   els.addServAddBtn?.addEventListener('click', (e) => {
     e.preventDefault();
