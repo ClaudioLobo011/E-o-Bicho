@@ -668,13 +668,21 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'ID inválido.' });
     }
     const u = await User.findById(id)
-      .select('_id nomeCompleto nomeContato razaoSocial email')
+      .select('_id nomeCompleto nomeContato razaoSocial email celular telefone')
       .lean();
     if (!u) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
     }
     const nome = u.nomeCompleto || u.nomeContato || u.razaoSocial || u.email || '';
-    res.json({ _id: u._id, nome });
+    const celular = u.celular || u.telefone || '';
+    const telefone = u.telefone || '';
+    res.json({
+      _id: u._id,
+      nome,
+      email: u.email || '',
+      celular,
+      telefone,
+    });
   } catch (e) {
     console.error('GET /func/clientes/:id', e);
     res.status(500).json({ message: 'Erro ao buscar cliente.' });

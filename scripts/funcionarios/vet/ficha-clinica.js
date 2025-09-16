@@ -210,8 +210,25 @@
 
     function persistCliente(cli) {
         try {
-            if (cli && cli._id) {
-                localStorage.setItem(STORAGE_KEYS.cliente, JSON.stringify(cli));
+            const id = normalizeId(cli?._id);
+            if (id) {
+                const nome = pickFirst(cli?.nome);
+                const email = pickFirst(cli?.email);
+                const primaryPhone = pickFirst(cli?.celular, cli?.telefone);
+                const secondaryPhone = pickFirst(
+                    cli?.telefone && cli?.telefone !== primaryPhone ? cli.telefone : '',
+                    cli?.celular && cli?.celular !== primaryPhone ? cli.celular : ''
+                );
+                const payload = {
+                    _id: id,
+                    nome,
+                    email,
+                    celular: primaryPhone,
+                };
+                if (secondaryPhone) {
+                    payload.telefone = secondaryPhone;
+                }
+                localStorage.setItem(STORAGE_KEYS.cliente, JSON.stringify(payload));
             } else {
                 localStorage.removeItem(STORAGE_KEYS.cliente);
             }
@@ -251,6 +268,26 @@
             }
         } catch { }
         return { cliente, petId, agendaContext };
+    }
+
+    async function fetchClienteById(id) {
+        const normalizedId = normalizeId(id);
+        if (!normalizedId) return null;
+        try {
+            const resp = await api(`/func/clientes/${normalizedId}`);
+            if (!resp.ok) return null;
+            const data = await resp.json().catch(() => null);
+            if (!data || !data._id) return null;
+            return {
+                _id: normalizeId(data._id),
+                nome: pickFirst(data.nome),
+                email: pickFirst(data.email),
+                celular: pickFirst(data.celular, data.telefone),
+                telefone: pickFirst(data.telefone, data.celular),
+            };
+        } catch {
+            return null;
+        }
     }
 
     function updatePageVisibility() {
@@ -678,11 +715,53 @@
             clearPersistedPet = true,
             persistedPetId = null,
         } = opts;
-        state.selectedCliente = cli || null;
+
+        let cliente = cli ? { ...cli } : null;
+        const clienteId = normalizeId(cliente?._id);
+        if (clienteId) {
+            const existingNome = pickFirst(cliente?.nome);
+            const existingEmail = pickFirst(cliente?.email);
+            const existingCelular = pickFirst(cliente?.celular);
+            const existingTelefone = pickFirst(cliente?.telefone);
+            const needsHydration = !existingNome || !existingEmail || !pickFirst(existingCelular, existingTelefone);
+            let fetched = null;
+            if (needsHydration) {
+                fetched = await fetchClienteById(clienteId);
+            }
+            const fetchedNome = pickFirst(fetched?.nome);
+            const fetchedEmail = pickFirst(fetched?.email);
+            const fetchedCelular = pickFirst(fetched?.celular);
+            const fetchedTelefone = pickFirst(fetched?.telefone);
+            const phoneCandidates = [existingCelular, existingTelefone, fetchedCelular, fetchedTelefone]
+                .map(value => String(value || '').trim())
+                .filter(Boolean);
+            const uniquePhones = [];
+            phoneCandidates.forEach((phone) => {
+                if (!uniquePhones.includes(phone)) uniquePhones.push(phone);
+            });
+            const primaryPhone = uniquePhones[0] || '';
+            const secondaryPhone = uniquePhones[1] || '';
+            cliente = {
+                ...cliente,
+                _id: clienteId,
+                nome: pickFirst(existingNome, fetchedNome),
+                email: pickFirst(existingEmail, fetchedEmail),
+                celular: primaryPhone,
+            };
+            if (secondaryPhone) {
+                cliente.telefone = secondaryPhone;
+            } else {
+                delete cliente.telefone;
+            }
+        } else {
+            cliente = null;
+        }
+
+        state.selectedCliente = cliente;
         state.selectedPetId = null;
         state.petsById = {};
         state.currentCardMode = 'tutor';
-        const tutorId = normalizeId(cli?._id);
+        const tutorId = normalizeId(state.selectedCliente?._id);
         if (state.agendaContext) {
             const contextTutorId = normalizeId(state.agendaContext.tutorId);
             if (!tutorId || !contextTutorId || contextTutorId !== tutorId) {
@@ -697,24 +776,34 @@
         }
         updatePageVisibility();
         updateConsultaAgendaCard();
-        if (els.cliInput) els.cliInput.value = cli?.nome || '';
+        if (els.cliInput) els.cliInput.value = state.selectedCliente?.nome || '';
         hideSugestoes();
 
-        // preenche card do tutor
-        if (els.tutorNome) els.tutorNome.textContent = cli?.nome || '—';
-        if (els.tutorEmail) els.tutorEmail.textContent = (cli?.email || '').trim() ? `${cli.email}` : '—';
-        if (els.tutorTelefone) els.tutorTelefone.textContent = (cli?.celular || '').trim()
-            ? formatPhone(cli.celular)
-            : '—';
+        const tutorNome = pickFirst(state.selectedCliente?.nome);
+        const tutorEmail = pickFirst(state.selectedCliente?.email);
+        const tutorPhone = pickFirst(state.selectedCliente?.celular, state.selectedCliente?.telefone);
+        if (els.tutorNome) els.tutorNome.textContent = tutorNome || '—';
+        if (els.tutorEmail) els.tutorEmail.textContent = tutorEmail || '—';
+        if (els.tutorTelefone) {
+            els.tutorTelefone.textContent = tutorPhone ? formatPhone(tutorPhone) : '—';
+        }
 
         updateCardDisplay();
 
-        // carrega pets do tutor e popular select
+        const normalizedTutorId = tutorId;
+        if (!normalizedTutorId) {
+            if (els.petSelect) {
+                els.petSelect.innerHTML = `<option value="">Selecione o tutor para listar os pets</option>`;
+            }
+            updatePageVisibility();
+            return;
+        }
+
         try {
             if (els.petSelect) {
                 els.petSelect.innerHTML = `<option value="">Carregando pets…</option>`;
             }
-            const resp = await api(`/func/clientes/${cli._id}/pets`);
+            const resp = await api(`/func/clientes/${normalizedTutorId}/pets`);
             const pets = await resp.json().catch(() => []);
             state.petsById = {};
             if (Array.isArray(pets)) {
@@ -734,13 +823,12 @@
                         const match = pets.find(p => p._id === persistedPetId);
                         if (match) {
                             els.petSelect.value = persistedPetId;
-                            onSelectPet(persistedPetId);
+                            onSelectPet(persistedPetId, { skipPersistPet: true });
                             petSelecionado = true;
                         } else if (!clearPersistedPet) {
                             persistPetId(null);
                         }
                     }
-                    // se só houver 1 pet, selecionar automaticamente
                     if (!petSelecionado && pets.length === 1) {
                         els.petSelect.value = pets[0]._id;
                         onSelectPet(pets[0]._id);
