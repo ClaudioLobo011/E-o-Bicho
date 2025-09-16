@@ -89,9 +89,10 @@
                     <!-- Toolbar interna (Histórico/Consulta) -->
                     <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
                         <div class="flex items-center gap-2">
-                            <button
+                            <button id="vet-tab-historico" type="button"
                                 class="px-3 py-1.5 rounded-md text-[13px] bg-gray-100 text-gray-700">Histórico</button>
-                            <button class="px-3 py-1.5 rounded-md text-[13px] bg-sky-600 text-white">Consulta</button>
+                            <button id="vet-tab-consulta" type="button"
+                                class="px-3 py-1.5 rounded-md text-[13px] bg-sky-600 text-white">Consulta</button>
                         </div>
                         <div class="ml-auto flex items-center gap-2">
                             <button
@@ -105,8 +106,10 @@
                     <!-- Corpo com “quadro” e coluna LOG à direita -->
                     <div class="relative">
                         <div class="p-4 lg:p-6 min-h-[520px] bg-gray-50 rounded-b-xl">
-                            <!-- espaço de conteúdo da consulta -->
-                            <div class="h-[420px] rounded-lg bg-white border border-dashed border-gray-300"></div>
+                            <div id="vet-consulta-area"
+                                class="h-[420px] rounded-lg bg-white border border-dashed border-gray-300 flex flex-col items-center justify-center text-sm text-gray-500 text-center px-6">
+                                Selecione um agendamento na agenda para carregar os serviços veterinários.
+                            </div>
                         </div>
 
                         <!-- Coluna LOG (fixa dentro do card) -->

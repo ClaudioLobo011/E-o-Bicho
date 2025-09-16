@@ -70,7 +70,10 @@
         petMicrochip: document.getElementById('vet-pet-microchip'),
         toggleTutor: document.getElementById('vet-card-show-tutor'),
         togglePet: document.getElementById('vet-card-show-pet'),
-        pageContent: document.getElementById('vet-ficha-content')
+        pageContent: document.getElementById('vet-ficha-content'),
+        consultaArea: document.getElementById('vet-consulta-area'),
+        historicoTab: document.getElementById('vet-tab-historico'),
+        consultaTab: document.getElementById('vet-tab-consulta')
     };
 
     const state = {
@@ -78,17 +81,28 @@
         selectedPetId: null,
         petsById: {},
         currentCardMode: 'tutor',
+        agendaContext: null,
     };
 
     const STORAGE_KEYS = {
         cliente: 'vetFichaSelectedCliente',
         petId: 'vetFichaSelectedPetId',
+        agenda: 'vetFichaAgendaContext',
     };
 
     const CARD_TUTOR_ACTIVE_CLASSES = ['bg-sky-100', 'text-sky-700'];
     const CARD_PET_ACTIVE_CLASSES = ['bg-emerald-100', 'text-emerald-700'];
     const CARD_BUTTON_INACTIVE_CLASSES = ['bg-gray-100', 'text-gray-600'];
     const CARD_BUTTON_DISABLED_CLASSES = ['opacity-50', 'cursor-not-allowed'];
+    const CONSULTA_PLACEHOLDER_CLASSNAMES = 'h-[420px] rounded-lg bg-white border border-dashed border-gray-300 flex flex-col items-center justify-center text-sm text-gray-500 text-center px-6';
+    const CONSULTA_CARD_CLASSNAMES = 'h-[420px] rounded-lg bg-white border border-gray-200 shadow-sm overflow-hidden';
+    const CONSULTA_PLACEHOLDER_TEXT = 'Selecione um agendamento na agenda para carregar os serviços veterinários.';
+    const STATUS_LABELS = {
+        agendado: 'Agendado',
+        em_espera: 'Em espera',
+        em_atendimento: 'Em atendimento',
+        finalizado: 'Finalizado',
+    };
     const PET_PLACEHOLDERS = {
         nome: 'Nome do Pet',
         tipo: '—',
@@ -115,6 +129,16 @@
                 .toLowerCase();
         }
         return str.toLowerCase();
+    }
+
+    function normalizeId(value) {
+        if (value === null || value === undefined) return '';
+        if (typeof value === 'object') {
+            if (value._id) return String(value._id).trim();
+            if (value.id) return String(value.id).trim();
+        }
+        if (typeof value === 'number') return String(value);
+        return String(value).trim();
     }
 
     function capitalize(value) {
@@ -186,8 +210,25 @@
 
     function persistCliente(cli) {
         try {
-            if (cli && cli._id) {
-                localStorage.setItem(STORAGE_KEYS.cliente, JSON.stringify(cli));
+            const id = normalizeId(cli?._id);
+            if (id) {
+                const nome = pickFirst(cli?.nome);
+                const email = pickFirst(cli?.email);
+                const primaryPhone = pickFirst(cli?.celular, cli?.telefone);
+                const secondaryPhone = pickFirst(
+                    cli?.telefone && cli?.telefone !== primaryPhone ? cli.telefone : '',
+                    cli?.celular && cli?.celular !== primaryPhone ? cli.celular : ''
+                );
+                const payload = {
+                    _id: id,
+                    nome,
+                    email,
+                    celular: primaryPhone,
+                };
+                if (secondaryPhone) {
+                    payload.telefone = secondaryPhone;
+                }
+                localStorage.setItem(STORAGE_KEYS.cliente, JSON.stringify(payload));
             } else {
                 localStorage.removeItem(STORAGE_KEYS.cliente);
             }
@@ -216,7 +257,37 @@
             }
         } catch { }
         const petId = localStorage.getItem(STORAGE_KEYS.petId) || null;
-        return { cliente, petId };
+        let agendaContext = null;
+        try {
+            const rawAgenda = localStorage.getItem(STORAGE_KEYS.agenda);
+            if (rawAgenda) {
+                const parsedAgenda = JSON.parse(rawAgenda);
+                if (parsedAgenda && typeof parsedAgenda === 'object') {
+                    agendaContext = parsedAgenda;
+                }
+            }
+        } catch { }
+        return { cliente, petId, agendaContext };
+    }
+
+    async function fetchClienteById(id) {
+        const normalizedId = normalizeId(id);
+        if (!normalizedId) return null;
+        try {
+            const resp = await api(`/func/clientes/${normalizedId}`);
+            if (!resp.ok) return null;
+            const data = await resp.json().catch(() => null);
+            if (!data || !data._id) return null;
+            return {
+                _id: normalizeId(data._id),
+                nome: pickFirst(data.nome),
+                email: pickFirst(data.email),
+                celular: pickFirst(data.celular, data.telefone),
+                telefone: pickFirst(data.telefone, data.celular),
+            };
+        } catch {
+            return null;
+        }
     }
 
     function updatePageVisibility() {
@@ -241,6 +312,21 @@
         }
     }
 
+    function formatDateTimeDisplay(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        try {
+            const dateStr = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+            const timeStr = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(date);
+            return `${dateStr} às ${timeStr}`;
+        } catch {
+            const dateStr = date.toLocaleDateString('pt-BR');
+            const timeStr = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            return `${dateStr} às ${timeStr}`;
+        }
+    }
+
     function formatPetWeight(value) {
         if (value === null || value === undefined || value === '') return '';
         const num = Number(value);
@@ -250,6 +336,81 @@
         const str = String(value).trim();
         if (!str) return '';
         return /kg$/i.test(str) ? str : `${str} Kg`;
+    }
+
+    function formatMoney(value) {
+        const num = Number(value || 0);
+        if (Number.isNaN(num)) return 'R$ 0,00';
+        try {
+            return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+        } catch {
+            return `R$ ${num.toFixed(2).replace('.', ',')}`;
+        }
+    }
+
+    function isVetCategory(value) {
+        const norm = normalizeForCompare(value);
+        if (!norm) return false;
+        return norm.replace(/[^a-z]/g, '').includes('veterinario');
+    }
+
+    function isVetService(service) {
+        if (!service) return false;
+        const categories = [];
+        if (Array.isArray(service.categorias)) categories.push(...service.categorias);
+        if (Array.isArray(service.category)) categories.push(...service.category);
+        if (service.categoria) categories.push(service.categoria);
+        if (Array.isArray(service?.servico?.categorias)) categories.push(...service.servico.categorias);
+        if (service.grupoNome) categories.push(service.grupoNome);
+        if (service.grupo && service.grupo.nome) categories.push(service.grupo.nome);
+        if (Array.isArray(service.tiposPermitidos)) categories.push(...service.tiposPermitidos);
+        if (Array.isArray(service.allowedTipos)) categories.push(...service.allowedTipos);
+        if (Array.isArray(service.allowedStaffTypes)) categories.push(...service.allowedStaffTypes);
+        if (Array.isArray(service.allowedStaff)) categories.push(...service.allowedStaff);
+        if (Array.isArray(service.grupoTiposPermitidos)) categories.push(...service.grupoTiposPermitidos);
+        if (Array.isArray(service?.grupo?.tiposPermitidos)) categories.push(...service.grupo.tiposPermitidos);
+        if (Array.isArray(service?.servico?.tiposPermitidos)) categories.push(...service.servico.tiposPermitidos);
+        if (Array.isArray(service?.servico?.grupo?.tiposPermitidos)) categories.push(...service.servico.grupo.tiposPermitidos);
+        if (service.tipoPermitido) categories.push(service.tipoPermitido);
+        if (service.staffTipo) categories.push(service.staffTipo);
+        if (service.tipo) categories.push(service.tipo);
+        if (categories.some(isVetCategory)) return true;
+        const nomeNorm = normalizeForCompare(service.nome || service.descricao || service.titulo || '');
+        if (nomeNorm.includes('veterin')) return true;
+        return false;
+    }
+
+    function mapServiceForDisplay(service) {
+        if (!service) return null;
+        const nome = pickFirst(
+            service.nome,
+            service.descricao,
+            service.titulo,
+            typeof service === 'string' ? service : ''
+        );
+        return {
+            _id: normalizeId(service._id || service.id || service.servico || service.servicoId),
+            nome: nome || '—',
+            valor: Number(service.valor || 0),
+        };
+    }
+
+    function getVetServices(list) {
+        if (!Array.isArray(list)) return [];
+        return list
+            .filter(isVetService)
+            .map(mapServiceForDisplay)
+            .filter(Boolean);
+    }
+
+    function getStatusKey(status) {
+        if (!status) return '';
+        return String(status).trim().toLowerCase().replace(/\s+/g, '_');
+    }
+
+    function getStatusLabel(status) {
+        const key = getStatusKey(status);
+        return STATUS_LABELS[key] || (status ? capitalize(status) : '');
     }
 
     function getSelectedPet() {
@@ -326,6 +487,159 @@
         }
     }
 
+    function setConsultaTabActive() {
+        if (els.consultaTab) {
+            els.consultaTab.classList.remove('bg-gray-100', 'text-gray-700', 'hover:bg-gray-50');
+            els.consultaTab.classList.add('bg-sky-600', 'text-white');
+        }
+        if (els.historicoTab) {
+            els.historicoTab.classList.remove('bg-sky-600', 'text-white');
+            els.historicoTab.classList.add('bg-gray-100', 'text-gray-700', 'hover:bg-gray-50');
+        }
+    }
+
+    function updateConsultaAgendaCard() {
+        const area = els.consultaArea;
+        if (!area) return;
+        setConsultaTabActive();
+
+        const applyPlaceholder = (message = CONSULTA_PLACEHOLDER_TEXT) => {
+            area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
+            area.innerHTML = '';
+            const paragraph = document.createElement('p');
+            paragraph.textContent = message;
+            area.appendChild(paragraph);
+        };
+
+        const context = state.agendaContext;
+        const selectedPetId = normalizeId(state.selectedPetId);
+        const selectedTutorId = normalizeId(state.selectedCliente?._id);
+        const contextPetId = normalizeId(context?.petId);
+        const contextTutorId = normalizeId(context?.tutorId);
+
+        if (!context || !selectedPetId || !selectedTutorId || !contextPetId || !contextTutorId || contextPetId !== selectedPetId || contextTutorId !== selectedTutorId) {
+            applyPlaceholder();
+            return;
+        }
+
+        const allServices = Array.isArray(context.servicos) ? context.servicos : [];
+        const vetServices = getVetServices(allServices);
+        const filteredOut = Math.max(allServices.length - vetServices.length, 0);
+
+        if (!vetServices.length) {
+            area.className = `${CONSULTA_CARD_CLASSNAMES} flex flex-col items-center justify-center p-5`;
+            area.innerHTML = '';
+            const emptyBox = document.createElement('div');
+            emptyBox.className = 'w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center text-sm text-slate-600';
+            emptyBox.textContent = 'Nenhum serviço veterinário encontrado para este agendamento.';
+            area.appendChild(emptyBox);
+            if (filteredOut > 0) {
+                const note = document.createElement('p');
+                note.className = 'mt-3 text-xs text-slate-500 text-center';
+                note.textContent = `${filteredOut} serviço(s) de outras categorias foram ocultados.`;
+                area.appendChild(note);
+            }
+            return;
+        }
+
+        area.className = CONSULTA_CARD_CLASSNAMES;
+        area.innerHTML = '';
+        const scroll = document.createElement('div');
+        scroll.className = 'h-full w-full overflow-y-auto p-5';
+        area.appendChild(scroll);
+
+        const card = document.createElement('div');
+        card.className = 'bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4';
+        scroll.appendChild(card);
+
+        const header = document.createElement('div');
+        header.className = 'flex flex-wrap items-start justify-between gap-3';
+        card.appendChild(header);
+
+        const info = document.createElement('div');
+        header.appendChild(info);
+
+        const title = document.createElement('h3');
+        title.className = 'text-base font-semibold text-gray-800';
+        title.textContent = 'Serviços veterinários agendados';
+        info.appendChild(title);
+
+        const metaList = document.createElement('div');
+        metaList.className = 'mt-1 space-y-1 text-sm text-gray-600';
+        const when = formatDateTimeDisplay(context.scheduledAt);
+        if (when) {
+            const whenEl = document.createElement('div');
+            whenEl.textContent = `Atendimento em ${when}`;
+            metaList.appendChild(whenEl);
+        }
+        if (context.profissionalNome) {
+            const profEl = document.createElement('div');
+            profEl.textContent = `Profissional: ${context.profissionalNome}`;
+            metaList.appendChild(profEl);
+        }
+        if (metaList.children.length) info.appendChild(metaList);
+
+        if (context.status) {
+            const statusEl = document.createElement('span');
+            statusEl.className = 'inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700';
+            statusEl.textContent = getStatusLabel(context.status);
+            header.appendChild(statusEl);
+        }
+
+        const list = document.createElement('div');
+        list.className = 'rounded-lg border border-gray-200 overflow-hidden';
+        card.appendChild(list);
+
+        let total = 0;
+        vetServices.forEach((service, idx) => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center justify-between px-4 py-2 text-sm text-gray-700 bg-white';
+            if (idx > 0) row.classList.add('border-t', 'border-gray-200');
+            const nameEl = document.createElement('span');
+            nameEl.className = 'pr-3';
+            nameEl.textContent = service.nome || '—';
+            const valueEl = document.createElement('span');
+            valueEl.className = 'font-semibold text-gray-900';
+            valueEl.textContent = formatMoney(service.valor);
+            row.appendChild(nameEl);
+            row.appendChild(valueEl);
+            list.appendChild(row);
+            total += Number(service.valor || 0);
+        });
+
+        const totalRow = document.createElement('div');
+        totalRow.className = 'flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3 text-sm font-semibold text-gray-800 border border-gray-200';
+        const totalLabel = document.createElement('span');
+        totalLabel.textContent = 'Total dos serviços';
+        const totalValue = document.createElement('span');
+        totalValue.textContent = formatMoney(total);
+        totalRow.appendChild(totalLabel);
+        totalRow.appendChild(totalValue);
+        card.appendChild(totalRow);
+
+        if (filteredOut > 0) {
+            const note = document.createElement('p');
+            note.className = 'text-xs text-gray-500';
+            note.textContent = `${filteredOut} serviço(s) de outras categorias foram ocultados.`;
+            card.appendChild(note);
+        }
+
+        if (context.observacoes) {
+            const obsWrap = document.createElement('div');
+            obsWrap.className = 'rounded-lg border border-gray-200 bg-slate-50 p-3';
+            const obsTitle = document.createElement('div');
+            obsTitle.className = 'text-xs font-semibold uppercase tracking-wide text-gray-500';
+            obsTitle.textContent = 'Observações';
+            const obsText = document.createElement('p');
+            obsText.className = 'mt-1 text-sm text-gray-700';
+            obsText.style.whiteSpace = 'pre-line';
+            obsText.textContent = context.observacoes;
+            obsWrap.appendChild(obsTitle);
+            obsWrap.appendChild(obsText);
+            card.appendChild(obsWrap);
+        }
+    }
+
     function updateCardDisplay() {
         const pet = getSelectedPet();
         const hasPet = !!pet;
@@ -349,6 +663,7 @@
             els.cardIconSymbol.className = `fas ${showPet ? 'fa-paw' : 'fa-user'} text-xl`;
         }
         updateToggleButtons(showPet, hasPet);
+        updateConsultaAgendaCard();
     }
 
     function setCardMode(mode) {
@@ -400,10 +715,59 @@
             clearPersistedPet = true,
             persistedPetId = null,
         } = opts;
-        state.selectedCliente = cli || null;
+
+        let cliente = cli ? { ...cli } : null;
+        const clienteId = normalizeId(cliente?._id);
+        if (clienteId) {
+            const existingNome = pickFirst(cliente?.nome);
+            const existingEmail = pickFirst(cliente?.email);
+            const existingCelular = pickFirst(cliente?.celular);
+            const existingTelefone = pickFirst(cliente?.telefone);
+            const needsHydration = !existingNome || !existingEmail || !pickFirst(existingCelular, existingTelefone);
+            let fetched = null;
+            if (needsHydration) {
+                fetched = await fetchClienteById(clienteId);
+            }
+            const fetchedNome = pickFirst(fetched?.nome);
+            const fetchedEmail = pickFirst(fetched?.email);
+            const fetchedCelular = pickFirst(fetched?.celular);
+            const fetchedTelefone = pickFirst(fetched?.telefone);
+            const phoneCandidates = [existingCelular, existingTelefone, fetchedCelular, fetchedTelefone]
+                .map(value => String(value || '').trim())
+                .filter(Boolean);
+            const uniquePhones = [];
+            phoneCandidates.forEach((phone) => {
+                if (!uniquePhones.includes(phone)) uniquePhones.push(phone);
+            });
+            const primaryPhone = uniquePhones[0] || '';
+            const secondaryPhone = uniquePhones[1] || '';
+            cliente = {
+                ...cliente,
+                _id: clienteId,
+                nome: pickFirst(existingNome, fetchedNome),
+                email: pickFirst(existingEmail, fetchedEmail),
+                celular: primaryPhone,
+            };
+            if (secondaryPhone) {
+                cliente.telefone = secondaryPhone;
+            } else {
+                delete cliente.telefone;
+            }
+        } else {
+            cliente = null;
+        }
+
+        state.selectedCliente = cliente;
         state.selectedPetId = null;
         state.petsById = {};
         state.currentCardMode = 'tutor';
+        const tutorId = normalizeId(state.selectedCliente?._id);
+        if (state.agendaContext) {
+            const contextTutorId = normalizeId(state.agendaContext.tutorId);
+            if (!tutorId || !contextTutorId || contextTutorId !== tutorId) {
+                state.agendaContext = null;
+            }
+        }
         if (!skipPersistCliente) {
             persistCliente(state.selectedCliente);
         }
@@ -411,24 +775,35 @@
             persistPetId(null);
         }
         updatePageVisibility();
-        if (els.cliInput) els.cliInput.value = cli?.nome || '';
+        updateConsultaAgendaCard();
+        if (els.cliInput) els.cliInput.value = state.selectedCliente?.nome || '';
         hideSugestoes();
 
-        // preenche card do tutor
-        if (els.tutorNome) els.tutorNome.textContent = cli?.nome || '—';
-        if (els.tutorEmail) els.tutorEmail.textContent = (cli?.email || '').trim() ? `${cli.email}` : '—';
-        if (els.tutorTelefone) els.tutorTelefone.textContent = (cli?.celular || '').trim()
-            ? formatPhone(cli.celular)
-            : '—';
+        const tutorNome = pickFirst(state.selectedCliente?.nome);
+        const tutorEmail = pickFirst(state.selectedCliente?.email);
+        const tutorPhone = pickFirst(state.selectedCliente?.celular, state.selectedCliente?.telefone);
+        if (els.tutorNome) els.tutorNome.textContent = tutorNome || '—';
+        if (els.tutorEmail) els.tutorEmail.textContent = tutorEmail || '—';
+        if (els.tutorTelefone) {
+            els.tutorTelefone.textContent = tutorPhone ? formatPhone(tutorPhone) : '—';
+        }
 
         updateCardDisplay();
 
-        // carrega pets do tutor e popular select
+        const normalizedTutorId = tutorId;
+        if (!normalizedTutorId) {
+            if (els.petSelect) {
+                els.petSelect.innerHTML = `<option value="">Selecione o tutor para listar os pets</option>`;
+            }
+            updatePageVisibility();
+            return;
+        }
+
         try {
             if (els.petSelect) {
                 els.petSelect.innerHTML = `<option value="">Carregando pets…</option>`;
             }
-            const resp = await api(`/func/clientes/${cli._id}/pets`);
+            const resp = await api(`/func/clientes/${normalizedTutorId}/pets`);
             const pets = await resp.json().catch(() => []);
             state.petsById = {};
             if (Array.isArray(pets)) {
@@ -448,13 +823,12 @@
                         const match = pets.find(p => p._id === persistedPetId);
                         if (match) {
                             els.petSelect.value = persistedPetId;
-                            onSelectPet(persistedPetId);
+                            onSelectPet(persistedPetId, { skipPersistPet: true });
                             petSelecionado = true;
                         } else if (!clearPersistedPet) {
                             persistPetId(null);
                         }
                     }
-                    // se só houver 1 pet, selecionar automaticamente
                     if (!petSelecionado && pets.length === 1) {
                         els.petSelect.value = pets[0]._id;
                         onSelectPet(pets[0]._id);
@@ -482,6 +856,8 @@
         state.selectedCliente = null;
         state.petsById = {};
         state.currentCardMode = 'tutor';
+        state.agendaContext = null;
+        try { localStorage.removeItem(STORAGE_KEYS.agenda); } catch { }
         if (els.cliInput) els.cliInput.value = '';
         hideSugestoes();
         if (els.petSelect) {
@@ -493,6 +869,7 @@
         // não forçamos limpar telefone se a UI já tiver valor útil
         persistCliente(null);
         updatePageVisibility();
+        updateConsultaAgendaCard();
     }
 
     function clearPet() {
@@ -505,7 +882,18 @@
     }
 
     function restorePersistedSelection() {
-        const { cliente, petId } = getPersistedState();
+        const { cliente, petId, agendaContext } = getPersistedState();
+        state.agendaContext = agendaContext || null;
+        if (state.agendaContext && cliente) {
+            const contextTutorId = normalizeId(state.agendaContext.tutorId);
+            const clienteId = normalizeId(cliente._id);
+            if (!contextTutorId || !clienteId || contextTutorId !== clienteId) {
+                state.agendaContext = null;
+            }
+        } else if (state.agendaContext && !cliente) {
+            state.agendaContext = null;
+        }
+        updateConsultaAgendaCard();
         if (cliente) {
             onSelectCliente(cliente, {
                 clearPersistedPet: false,

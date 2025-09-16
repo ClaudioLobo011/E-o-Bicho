@@ -15,6 +15,16 @@ const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
 function escapeRegex(s) { return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function userDisplayName(u) { return u?.nomeCompleto || u?.nomeContato || u?.razaoSocial || u?.email; }
 
+function extractAllowedStaffTypes(serviceDoc) {
+  if (!serviceDoc) return [];
+  const raw = [];
+  if (Array.isArray(serviceDoc.tiposPermitidos)) raw.push(...serviceDoc.tiposPermitidos);
+  if (serviceDoc.grupo && Array.isArray(serviceDoc.grupo.tiposPermitidos)) {
+    raw.push(...serviceDoc.grupo.tiposPermitidos);
+  }
+  return [...new Set(raw.map(v => String(v || '').trim()).filter(Boolean))];
+}
+
 router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) => {
   try {
     const { id } = req.params;
@@ -117,8 +127,16 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
     const full = await Appointment.findByIdAndUpdate(id, { $set: set }, { new: true })
       .select('_id store cliente pet servico itens profissional scheduledAt valor pago codigoVenda status observacoes')
       .populate('pet', 'nome')
-      .populate('servico', 'nome')
-      .populate('itens.servico', 'nome')
+      .populate({
+        path: 'servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
+      .populate({
+        path: 'itens.servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .lean();
 
@@ -126,7 +144,26 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       return res.status(404).json({ message: 'Agendamento não encontrado.' });
     }
 
-    const servicosList = (full.itens || []).map(it => ({ _id: it.servico?._id || it.servico, nome: it.servico?.nome || '—', valor: Number(it.valor || 0) }));
+    const servicosList = (full.itens || []).map(it => ({
+      _id: it.servico?._id || it.servico,
+      nome: it.servico?.nome || '—',
+      valor: Number(it.valor || 0),
+      categorias: Array.isArray(it.servico?.categorias)
+        ? it.servico.categorias.filter(Boolean)
+        : [],
+      tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
+    }));
+    if (!servicosList.length && full.servico) {
+      servicosList.push({
+        _id: full.servico?._id || full.servico,
+        nome: full.servico?.nome || '—',
+        valor: Number(full.valor || 0),
+        categorias: Array.isArray(full.servico?.categorias)
+          ? full.servico.categorias.filter(Boolean)
+          : [],
+        tiposPermitidos: extractAllowedStaffTypes(full.servico || {})
+      });
+    }
     const servicosStr = servicosList.map(s => s.nome).join(', ');
 
     return res.json({
@@ -383,8 +420,16 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       .select('_id store cliente pet servico itens profissional scheduledAt valor pago codigoVenda status observacoes')
       .populate('cliente', 'nomeCompleto nomeContato razaoSocial email')
       .populate('pet', 'nome')
-      .populate('servico', 'nome')
-      .populate('itens.servico', 'nome')
+      .populate({
+        path: 'servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
+      .populate({
+        path: 'itens.servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .sort({ scheduledAt: 1 })
       .lean();
@@ -394,8 +439,24 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
 
       const itens = Array.isArray(a.itens) ? a.itens : [];
       const servicosList = itens.length
-        ? itens.map(it => ({ _id: it.servico?._id || it.servico || null, nome: it.servico?.nome || '—', valor: Number(it.valor || 0) }))
-        : (a.servico ? [{ _id: a.servico?._id || a.servico, nome: a.servico?.nome || '—', valor: Number(a.valor || 0) }] : []);
+        ? itens.map(it => ({
+          _id: it.servico?._id || it.servico || null,
+          nome: it.servico?.nome || '—',
+          valor: Number(it.valor || 0),
+          categorias: Array.isArray(it.servico?.categorias)
+            ? it.servico.categorias.filter(Boolean)
+            : [],
+          tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
+        }))
+        : (a.servico ? [{
+          _id: a.servico?._id || a.servico,
+          nome: a.servico?.nome || '—',
+          valor: Number(a.valor || 0),
+          categorias: Array.isArray(a.servico?.categorias)
+            ? a.servico.categorias.filter(Boolean)
+            : [],
+          tiposPermitidos: extractAllowedStaffTypes(a.servico || {})
+        }] : []);
       const servicosStr = servicosList.map(s => s.nome).join(', ');
       const valorTotal = (servicosList.reduce((s, x) => s + Number(x.valor || 0), 0)) || Number(a.valor || 0) || 0;
 
@@ -445,14 +506,41 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
       .select('_id store cliente pet servico itens profissional scheduledAt valor pago codigoVenda status observacoes')
       .populate('cliente', 'nomeCompleto nomeContato razaoSocial email')
       .populate('pet', 'nome')
-      .populate('servico', 'nome')
-      .populate('itens.servico', 'nome')
+      .populate({
+        path: 'servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
+      .populate({
+        path: 'itens.servico',
+        select: 'nome categorias grupo',
+        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
+      })
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .sort({ scheduledAt: 1 })
       .lean();
 
     const map = (list || []).map(a => {
-      const servicosList = (a.itens || []).map(it => ({ _id: it.servico?._id, nome: it.servico?.nome || '—', valor: Number(it.valor || 0) }));
+      const servicosList = (a.itens || []).map(it => ({
+        _id: it.servico?._id,
+        nome: it.servico?.nome || '—',
+        valor: Number(it.valor || 0),
+        categorias: Array.isArray(it.servico?.categorias)
+          ? it.servico.categorias.filter(Boolean)
+          : [],
+        tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
+      }));
+      if (!servicosList.length && a.servico) {
+        servicosList.push({
+          _id: a.servico?._id || a.servico,
+          nome: a.servico?.nome || '—',
+          valor: Number(a.valor || 0),
+          categorias: Array.isArray(a.servico?.categorias)
+            ? a.servico.categorias.filter(Boolean)
+            : [],
+          tiposPermitidos: extractAllowedStaffTypes(a.servico || {})
+        });
+      }
       const valorTotal = servicosList.reduce((acc, s) => acc + Number(s.valor || 0), 0) || Number(a.valor || 0) || 0;
       const tutorNome = a.cliente
         ? (a.cliente.nomeCompleto || a.cliente.nomeContato || a.cliente.razaoSocial || '')
@@ -580,13 +668,21 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'ID inválido.' });
     }
     const u = await User.findById(id)
-      .select('_id nomeCompleto nomeContato razaoSocial email')
+      .select('_id nomeCompleto nomeContato razaoSocial email celular telefone')
       .lean();
     if (!u) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
     }
     const nome = u.nomeCompleto || u.nomeContato || u.razaoSocial || u.email || '';
-    res.json({ _id: u._id, nome });
+    const celular = u.celular || u.telefone || '';
+    const telefone = u.telefone || '';
+    res.json({
+      _id: u._id,
+      nome,
+      email: u.email || '',
+      celular,
+      telefone,
+    });
   } catch (e) {
     console.error('GET /func/clientes/:id', e);
     res.status(500).json({ message: 'Erro ao buscar cliente.' });
