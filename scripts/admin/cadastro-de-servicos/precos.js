@@ -10,7 +10,7 @@
     }
   }
 
-  ﻿// Elements
+  // Elements
   const E = {
     btnTabCadastro: document.getElementById('tab-btn-cadastro'),
     btnTabPrecos:   document.getElementById('tab-btn-precos'),
