@@ -296,6 +296,7 @@ function persistFichaClinicaContext(appointment) {
     const agendaContext = {
       tutorId: tutor._id,
       petId,
+      storeId: normalizeId(appointment.storeId || appointment.store?._id || appointment.store),
       appointmentId,
       scheduledAt: appointment.h || appointment.scheduledAt || appointment.data || appointment.dataHora || '',
       profissionalId: normalizeId(appointment.profissionalId || appointment?.profissional?._id),

@@ -249,7 +249,7 @@ router.get('/servicos/buscar', authMiddleware, requireStaff, async (req, res) =>
     const profTipo = normalizeTipo(req.query.profTipo || req.query.staffType || '');
 
     const items = await Service.find(filter)
-      .select('_id nome valor porte grupo')
+      .select('_id nome valor porte grupo categorias')
       .populate({ path: 'grupo', select: 'nome tiposPermitidos' })
       .limit(limit)
       .sort({ nome: 1 })
@@ -268,6 +268,7 @@ router.get('/servicos/buscar', authMiddleware, requireStaff, async (req, res) =>
       nome: s.nome,
       valor: s.valor || 0,
       porte: s.porte || [],
+      categorias: Array.isArray(s.categorias) ? s.categorias : [],
       grupo: s.grupo ? {
         _id: s.grupo._id,
         nome: s.grupo.nome,
