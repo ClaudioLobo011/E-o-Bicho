@@ -470,20 +470,20 @@ function createAnexoCard(anexo) {
 }
 
 function createVacinaDetail(label, value) {
-  const detail = document.createElement('div');
-  detail.className = 'flex flex-wrap items-center gap-2 text-xs text-emerald-700';
+  const wrapper = document.createElement('div');
+  wrapper.className = 'space-y-1';
 
-  const badge = document.createElement('span');
-  badge.className = 'inline-flex items-center justify-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide';
-  badge.textContent = label;
-  detail.appendChild(badge);
+  const labelEl = document.createElement('span');
+  labelEl.className = 'text-xs font-semibold uppercase tracking-wide text-gray-500';
+  labelEl.textContent = label;
+  wrapper.appendChild(labelEl);
 
-  const text = document.createElement('span');
-  text.className = 'font-medium text-emerald-700';
-  text.textContent = value || '—';
-  detail.appendChild(text);
+  const valueEl = document.createElement('p');
+  valueEl.className = 'text-sm text-gray-800 break-words';
+  valueEl.textContent = value ? value : '—';
+  wrapper.appendChild(valueEl);
 
-  return detail;
+  return wrapper;
 }
 
 function createVacinaCard(vacina) {
@@ -507,8 +507,22 @@ function createVacinaCard(vacina) {
 
   const title = document.createElement('h3');
   title.className = 'text-sm font-semibold text-emerald-700';
-  title.textContent = vacina?.servicoNome || 'Vacina';
+  title.textContent = 'Aplicação de vacina';
   headerText.appendChild(title);
+
+  const serviceName = pickFirst(vacina?.servicoNome);
+  if (serviceName) {
+    const badge = document.createElement('span');
+    badge.className = 'mt-1 inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700';
+    const iconEl = document.createElement('i');
+    iconEl.className = 'fas fa-paw text-[10px]';
+    badge.appendChild(iconEl);
+    const textEl = document.createElement('span');
+    textEl.className = 'leading-none';
+    textEl.textContent = serviceName;
+    badge.appendChild(textEl);
+    headerText.appendChild(badge);
+  }
 
   const metaParts = [];
   if (vacina.createdAt) {
@@ -517,33 +531,30 @@ function createVacinaCard(vacina) {
   }
   if (metaParts.length) {
     const meta = document.createElement('p');
-    meta.className = 'mt-0.5 text-xs text-emerald-600';
+    meta.className = 'mt-0.5 text-xs text-gray-500';
     meta.textContent = metaParts.join(' · ');
     headerText.appendChild(meta);
   }
 
-  const details = document.createElement('div');
-  details.className = 'mt-4 grid gap-2';
-  card.appendChild(details);
+  const quantity = Number(vacina.quantidade || 0) || 1;
+  const unitValue = Number(vacina.valorUnitario || 0);
+  const totalValue = Number(vacina.valorTotal || unitValue * quantity || 0);
+  const summary = document.createElement('p');
+  summary.className = 'mt-2 text-sm text-gray-700';
+  summary.textContent = `Quantidade: ${quantity} · Valor unitário: ${formatMoney(unitValue)} · Total: ${formatMoney(totalValue)}`;
+  headerText.appendChild(summary);
 
-  if (vacina.quantidade) {
-    details.appendChild(createVacinaDetail('Quantidade', `${vacina.quantidade}`));
-  }
-  if (vacina.valorTotal) {
-    details.appendChild(createVacinaDetail('Valor', formatMoney(vacina.valorTotal)));
-  }
-  if (vacina.aplicacao) {
-    details.appendChild(createVacinaDetail('Aplicação', formatDateDisplay(vacina.aplicacao)));
-  }
-  if (vacina.renovacao) {
-    details.appendChild(createVacinaDetail('Renovação', formatDateDisplay(vacina.renovacao)));
-  }
-  if (vacina.validade) {
-    details.appendChild(createVacinaDetail('Validade', formatDateDisplay(vacina.validade)));
-  }
-  if (vacina.lote) {
-    details.appendChild(createVacinaDetail('Lote', vacina.lote));
-  }
+  const grid = document.createElement('div');
+  grid.className = 'mt-4 grid gap-3 sm:grid-cols-2';
+  card.appendChild(grid);
+
+  grid.appendChild(createVacinaDetail('Lote', vacina.lote ? vacina.lote : '—'));
+  const validade = vacina.validade ? formatDateDisplay(vacina.validade) : '';
+  grid.appendChild(createVacinaDetail('Validade', validade || '—'));
+  const aplicacao = vacina.aplicacao ? formatDateDisplay(vacina.aplicacao) : '';
+  grid.appendChild(createVacinaDetail('Data de aplicação', aplicacao || '—'));
+  const renovacao = vacina.renovacao ? formatDateDisplay(vacina.renovacao) : '';
+  grid.appendChild(createVacinaDetail('Data de renovação', renovacao || '—'));
 
   return card;
 }
