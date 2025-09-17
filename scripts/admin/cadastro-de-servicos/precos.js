@@ -1,360 +1,687 @@
 (function (win) {
-  if (!win) return;
+  'use strict';
+
+  if (!win || !win.document) return;
+
+  var doc = win.document;
 
   function getToken() {
     try {
-      const raw = win.localStorage.getItem('loggedInUser') || 'null';
-      const parsed = JSON.parse(raw);
+      var raw = win.localStorage.getItem('loggedInUser') || 'null';
+      var parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && parsed.token) {
         return parsed.token;
       }
-      return '';
     } catch (err) {
       console.warn('cadastro-servicos/precos: token não disponível', err);
-      return '';
     }
+    return '';
   }
 
-  // Elements
-  const E = {
-    btnTabCadastro: document.getElementById('tab-btn-cadastro'),
-    btnTabPrecos:   document.getElementById('tab-btn-precos'),
-    tabCadastro:    document.getElementById('tab-cadastro'),
-    tabPrecos:      document.getElementById('tab-precos'),
+  var E = {
+    btnTabCadastro: doc.getElementById('tab-btn-cadastro'),
+    btnTabPrecos: doc.getElementById('tab-btn-precos'),
+    tabCadastro: doc.getElementById('tab-cadastro'),
+    tabPrecos: doc.getElementById('tab-precos'),
 
-    servInput:  document.getElementById('ap-serv-input'),
-    servSug:    document.getElementById('ap-serv-sug'),
-    servId:     document.getElementById('ap-serv-id'),
-    servPorteInfo: document.getElementById('ap-serv-porte-info'),
+    servInput: doc.getElementById('ap-serv-input'),
+    servSug: doc.getElementById('ap-serv-sug'),
+    servId: doc.getElementById('ap-serv-id'),
+    servPorteInfo: doc.getElementById('ap-serv-porte-info'),
 
-    tipo:       document.getElementById('ap-tipo'),
-    porte:      document.getElementById('ap-porte'),
-    store:      document.getElementById('ap-store'),
+    tipo: doc.getElementById('ap-tipo'),
+    porte: doc.getElementById('ap-porte'),
+    store: doc.getElementById('ap-store'),
 
-    replCusto:  document.getElementById('ap-repl-custo'),
-    replCustoBtn: document.getElementById('ap-repl-custo-btn'),
-    replValor:  document.getElementById('ap-repl-valor'),
-    replValorBtn: document.getElementById('ap-repl-valor-btn'),
+    replCusto: doc.getElementById('ap-repl-custo'),
+    replCustoBtn: doc.getElementById('ap-repl-custo-btn'),
+    replValor: doc.getElementById('ap-repl-valor'),
+    replValorBtn: doc.getElementById('ap-repl-valor-btn'),
 
-    gridBody:   document.getElementById('ap-grid-tbody'),
-    gridEmpty:  document.getElementById('ap-grid-empty'),
-    saveBtn:    document.getElementById('ap-save-btn'),
+    gridBody: doc.getElementById('ap-grid-tbody'),
+    gridEmpty: doc.getElementById('ap-grid-empty'),
+    saveBtn: doc.getElementById('ap-save-btn')
   };
 
-  const API_BASE = (
+  var API_BASE = (
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) ||
     (win.API_CONFIG && win.API_CONFIG.BASE_URL) ||
     ''
   );
 
-  // --- Species/breeds loader from data/Racas-leitura.js ---
-  let SPECIES_MAP = null; // { cachorro:{portes:{mini:[],...}, all:[], map:{}}, gato:[...], passaro:[...], ... }
-  let BREED_LOOKUP = null; // Map<normalizedName, Array<tipo>>
-  const norm = (s) => String(s || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .trim().toLowerCase();
+  var state = {
+    species: null,
+    lookup: null,
+    searchTimer: null,
+    eventsBound: false
+  };
 
-  const cleanList = (body) => body.split(/\n+/)
-    .map(x => x.trim())
-    .filter(x => x && !x.startsWith('//') && x !== '...')
-    .map(x => x.replace(/\*.*?\*/g, ''))
-    .map(x => x.replace(/\s*\(duplicata.*$/i, ''))
-    .map(x => x.replace(/\s*[ï¿½?"-].*$/,'').replace(/\s*-\s*registro.*$/i,''));
+  function hasOwn(obj, key) {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+  }
+
+  function ensureArray(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
+  function pushUnique(list, value) {
+    if (!list) return;
+    if (list.indexOf(value) === -1) {
+      list.push(value);
+    }
+  }
+
+  function unique(list) {
+    var result = [];
+    for (var i = 0; i < list.length; i += 1) {
+      var item = list[i];
+      if (item !== undefined && item !== null && result.indexOf(item) === -1) {
+        result.push(item);
+      }
+    }
+    return result;
+  }
+
+  function clone(obj) {
+    var copy = {};
+    for (var key in obj) {
+      if (hasOwn(obj, key)) {
+        copy[key] = obj[key];
+      }
+    }
+    return copy;
+  }
+
+  function stripDiacritics(value) {
+    var text = String(value || '');
+    if (!text) return '';
+    var normalizer = ''.normalize;
+    if (typeof normalizer === 'function') {
+      text = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    } else {
+      text = text
+        .replace(/[ÁÀÂÃÄÅ]/gi, 'A')
+        .replace(/[ÉÈÊË]/gi, 'E')
+        .replace(/[ÍÌÎÏ]/gi, 'I')
+        .replace(/[ÓÒÔÕÖ]/gi, 'O')
+        .replace(/[ÚÙÛÜ]/gi, 'U')
+        .replace(/[Ç]/gi, 'C')
+        .replace(/[Ñ]/gi, 'N');
+    }
+    return text.trim().toLowerCase();
+  }
+
+  function cleanLegacyList(body) {
+    return String(body || '')
+      .split(/\n+/)
+      .map(function (part) { return part.trim(); })
+      .filter(function (part) { return part && part.indexOf('//') !== 0 && part !== '...'; })
+      .map(function (part) { return part.replace(/\*.*?\*/g, ''); })
+      .map(function (part) { return part.replace(/\s*\(duplicata.*$/i, ''); })
+      .map(function (part) {
+        return part
+          .replace(/\s*[ï¿½?"-].*$/, '')
+          .replace(/\s*-\s*registro.*$/i, '');
+      });
+  }
 
   function buildFromJson(payload) {
     if (!payload || typeof payload !== 'object') {
       throw new Error('payload inválido');
     }
-    const species = {};
-    const lookupSets = new Map();
-    const ensureSet = (key) => {
-      if (!lookupSets.has(key)) lookupSets.set(key, new Set());
-      return lookupSets.get(key);
-    };
-    const addLookup = (name, tipo) => {
-      const key = norm(name);
+
+    var result = { species: {}, lookup: {} };
+
+    function addLookup(name, tipo) {
+      var key = stripDiacritics(name);
       if (!key) return;
-      ensureSet(key).add(tipo);
-    };
-
-    const dogPayload = payload.cachorro || {};
-    const portas = dogPayload.portes || {};
-    const dogMap = {
-      mini: Array.from(new Set(portas.mini || [])),
-      pequeno: Array.from(new Set(portas.pequeno || [])),
-      medio: Array.from(new Set(portas.medio || [])),
-      grande: Array.from(new Set(portas.grande || [])),
-      gigante: Array.from(new Set(portas.gigante || [])),
-    };
-    const dogAll = Array.from(new Set(dogPayload.all || [
-      ...dogMap.mini, ...dogMap.pequeno, ...dogMap.medio, ...dogMap.grande, ...dogMap.gigante
-    ]));
-    const dogLookup = {};
-    const dogMapPayload = dogPayload.map || {};
-    dogAll.forEach(nome => {
-      const normalized = norm(nome);
-      const porte = dogMapPayload[normalized] || dogMapPayload[nome] ||
-        (dogMap.mini.includes(nome) ? 'mini' :
-          dogMap.pequeno.includes(nome) ? 'pequeno' :
-          dogMap.medio.includes(nome) ? 'medio' :
-          dogMap.grande.includes(nome) ? 'grande' : 'gigante');
-      dogLookup[normalized] = porte;
-      addLookup(nome, 'cachorro');
-    });
-    species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
-
-    const simples = ['gato','passaro','peixe','roedor','lagarto','tartaruga','exotico'];
-    simples.forEach(tipo => {
-      const arr = Array.isArray(payload[tipo]) ? payload[tipo] : [];
-      const unique = Array.from(new Set(arr.filter(Boolean)));
-      species[tipo] = unique;
-      unique.forEach(nome => addLookup(nome, tipo));
-    });
-
-    if (payload.__lookup && typeof payload.__lookup === 'object') {
-      Object.entries(payload.__lookup).forEach(([key, tipos]) => {
-        if (!Array.isArray(tipos)) return;
-        const normalized = norm(key);
-        const set = ensureSet(normalized);
-        tipos.forEach(tipo => set.add(tipo));
-      });
+      if (!result.lookup[key]) result.lookup[key] = [];
+      pushUnique(result.lookup[key], tipo);
     }
 
-    const lookup = new Map();
-    lookupSets.forEach((set, key) => lookup.set(key, Array.from(set)));
-    return { species, lookup };
+    var dogPayload = payload.cachorro || {};
+    var portes = dogPayload.portes || {};
+    var dogMap = {
+      mini: unique(ensureArray(portes.mini)),
+      pequeno: unique(ensureArray(portes.pequeno)),
+      medio: unique(ensureArray(portes.medio)),
+      grande: unique(ensureArray(portes.grande)),
+      gigante: unique(ensureArray(portes.gigante))
+    };
+
+    var dogAll = unique([].concat(
+      ensureArray(dogPayload.all),
+      dogMap.mini,
+      dogMap.pequeno,
+      dogMap.medio,
+      dogMap.grande,
+      dogMap.gigante
+    ));
+
+    var dogLookup = {};
+    var dogMapPayload = dogPayload.map || {};
+    for (var i = 0; i < dogAll.length; i += 1) {
+      var nome = dogAll[i];
+      var normalized = stripDiacritics(nome);
+      var porte = dogMapPayload[normalized] || dogMapPayload[nome];
+      if (!porte) {
+        if (dogMap.mini.indexOf(nome) !== -1) porte = 'mini';
+        else if (dogMap.pequeno.indexOf(nome) !== -1) porte = 'pequeno';
+        else if (dogMap.medio.indexOf(nome) !== -1) porte = 'medio';
+        else if (dogMap.grande.indexOf(nome) !== -1) porte = 'grande';
+        else porte = 'gigante';
+      }
+      dogLookup[normalized] = porte;
+      addLookup(nome, 'cachorro');
+    }
+    result.species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
+
+    var simples = ['gato', 'passaro', 'peixe', 'roedor', 'lagarto', 'tartaruga', 'exotico'];
+    for (var s = 0; s < simples.length; s += 1) {
+      var tipo = simples[s];
+      var arr = ensureArray(payload[tipo]).filter(Boolean);
+      var uniqueArr = unique(arr);
+      result.species[tipo] = uniqueArr;
+      for (var j = 0; j < uniqueArr.length; j += 1) {
+        addLookup(uniqueArr[j], tipo);
+      }
+    }
+
+    var customLookup = payload.__lookup;
+    if (customLookup && typeof customLookup === 'object') {
+      for (var key in customLookup) {
+        if (hasOwn(customLookup, key)) {
+          var tipos = ensureArray(customLookup[key]);
+          for (var t = 0; t < tipos.length; t += 1) {
+            addLookup(key, tipos[t]);
+          }
+        }
+      }
+    }
+
+    return result;
   }
 
   function buildFromLegacy(txt) {
-    if (!txt) throw new Error('conteúdo vazio');
-    const species = {};
-    const lookupSets = new Map();
-    const ensureSet = (key) => {
-      if (!lookupSets.has(key)) lookupSets.set(key, new Set());
-      return lookupSets.get(key);
-    };
-    const addLookup = (name, tipo) => {
-      const key = norm(name);
+    if (!txt) {
+      throw new Error('conteúdo vazio');
+    }
+
+    var result = { species: {}, lookup: {} };
+
+    function addLookup(name, tipo) {
+      var key = stripDiacritics(name);
       if (!key) return;
-      ensureSet(key).add(tipo);
-    };
-
-    let dogMap = { mini:[], pequeno:[], medio:[], grande:[], gigante:[] };
-    const reDogGlobal = /porte[_\s-]?(mini|pequeno|medio|grande|gigante)\s*{([\s\S]*?)}\s*/gi;
-    let m;
-    while ((m = reDogGlobal.exec(txt))) {
-      const key = m[1].toLowerCase();
-      const list = cleanList(m[2]);
-      const unique = Array.from(new Set(list));
-      dogMap[key] = unique;
-      unique.forEach(nome => addLookup(nome, 'cachorro'));
-    }
-    const dogAll = Array.from(new Set([
-      ...dogMap.mini, ...dogMap.pequeno, ...dogMap.medio, ...dogMap.grande, ...dogMap.gigante
-    ]));
-    const dogLookup = {};
-    dogAll.forEach(n => {
-      dogLookup[norm(n)] =
-        dogMap.mini.includes(n) ? 'mini' :
-        dogMap.pequeno.includes(n) ? 'pequeno' :
-        dogMap.medio.includes(n) ? 'medio' :
-        dogMap.grande.includes(n) ? 'grande' : 'gigante';
-    });
-    species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
-
-    const simpleSpecies = ['gatos','gato','passaros','passaro','peixes','peixe','roedores','roedor','lagartos','lagarto','tartarugas','tartaruga','exoticos','exotico'];
-    for (const sp of simpleSpecies) {
-      const match = new RegExp(sp + "\\s*{([\\s\\S]*?)}","i").exec(txt);
-      if (!match) continue;
-      const list = cleanList(match[1]);
-      const singular =
-        /roedores$/i.test(sp)   ? 'roedor'     :
-        /gatos$/i.test(sp)      ? 'gato'       :
-        /passaros$/i.test(sp)   ? 'passaro'    :
-        /peixes$/i.test(sp)     ? 'peixe'      :
-        /lagartos$/i.test(sp)   ? 'lagarto'    :
-        /tartarugas$/i.test(sp) ? 'tartaruga'  :
-        /exoticos$/i.test(sp)   ? 'exotico'    :
-        sp.replace(/s$/, '');
-      const unique = Array.from(new Set(list));
-      species[singular] = unique;
-      unique.forEach(nome => addLookup(nome, singular));
+      if (!result.lookup[key]) result.lookup[key] = [];
+      pushUnique(result.lookup[key], tipo);
     }
 
-    const lookup = new Map();
-    lookupSets.forEach((set, key) => lookup.set(key, Array.from(set)));
-    return { species, lookup };
+    var dogMap = { mini: [], pequeno: [], medio: [], grande: [], gigante: [] };
+    var reDogGlobal = /porte[_\s-]?(mini|pequeno|medio|grande|gigante)\s*{([\s\S]*?)}\s*/gi;
+    var match;
+    while ((match = reDogGlobal.exec(txt))) {
+      var porteKey = match[1].toLowerCase();
+      var list = cleanLegacyList(match[2]);
+      var uniqueList = unique(list);
+      dogMap[porteKey] = uniqueList;
+      for (var i = 0; i < uniqueList.length; i += 1) {
+        addLookup(uniqueList[i], 'cachorro');
+      }
+    }
+
+    var dogAll = unique([].concat(
+      dogMap.mini,
+      dogMap.pequeno,
+      dogMap.medio,
+      dogMap.grande,
+      dogMap.gigante
+    ));
+    var dogLookup = {};
+    for (var di = 0; di < dogAll.length; di += 1) {
+      var name = dogAll[di];
+      var normalized = stripDiacritics(name);
+      var porte = 'gigante';
+      if (dogMap.mini.indexOf(name) !== -1) porte = 'mini';
+      else if (dogMap.pequeno.indexOf(name) !== -1) porte = 'pequeno';
+      else if (dogMap.medio.indexOf(name) !== -1) porte = 'medio';
+      else if (dogMap.grande.indexOf(name) !== -1) porte = 'grande';
+      dogLookup[normalized] = porte;
+    }
+    result.species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
+
+    var simpleGroups = [
+      ['gatos', 'gato'],
+      ['gato', 'gato'],
+      ['passaros', 'passaro'],
+      ['passaro', 'passaro'],
+      ['peixes', 'peixe'],
+      ['peixe', 'peixe'],
+      ['roedores', 'roedor'],
+      ['roedor', 'roedor'],
+      ['lagartos', 'lagarto'],
+      ['lagarto', 'lagarto'],
+      ['tartarugas', 'tartaruga'],
+      ['tartaruga', 'tartaruga'],
+      ['exoticos', 'exotico'],
+      ['exotico', 'exotico']
+    ];
+
+    for (var sg = 0; sg < simpleGroups.length; sg += 1) {
+      var group = simpleGroups[sg];
+      var token = group[0];
+      var tipo = group[1];
+      var regex = new RegExp(token + '\\s*{([\\s\\S]*?)}', 'i');
+      var resultMatch = regex.exec(txt);
+      if (resultMatch) {
+        var items = unique(cleanLegacyList(resultMatch[1]));
+        result.species[tipo] = items;
+        for (var it = 0; it < items.length; it += 1) {
+          addLookup(items[it], tipo);
+        }
+      }
+    }
+
+    return result;
   }
 
-  async function loadSpeciesMap() {
-    if (SPECIES_MAP) return SPECIES_MAP;
-    const base = (win.basePath || '../../');
-    const jsonUrl = base + 'data/racas.json';
-    const legacyUrl = base + 'data/Racas-leitura.js';
+  function applySpecies(result) {
+    state.species = result.species || {};
+    state.lookup = result.lookup || {};
+    return state.species;
+  }
 
-    const applyResult = ({ species, lookup }) => {
-      SPECIES_MAP = species;
-      BREED_LOOKUP = lookup;
-      return SPECIES_MAP;
-    };
+  function fetchJson(url) {
+    return fetch(url, { headers: { 'Accept': 'application/json' } })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      });
+  }
 
-    try {
-      const res = await fetch(jsonUrl, { headers: { 'Accept': 'application/json' } });
-      if (res.ok) {
-        const payload = await res.json();
-        return applyResult(buildFromJson(payload));
-      }
-      if (res.status && res.status !== 404) {
-        console.warn('cadastro-servicos/precos: falha ao obter racas.json', res.status);
-      }
-    } catch (err) {
-      console.warn('cadastro-servicos/precos: erro ao ler racas.json', err);
+  function loadLegacy(url) {
+    return fetch(url)
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.text();
+      })
+      .then(function (txt) {
+        return applySpecies(buildFromLegacy(txt));
+      });
+  }
+
+  function loadSpeciesMap() {
+    if (state.species) {
+      return Promise.resolve(state.species);
     }
 
-    try {
-      const res = await fetch(legacyUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const txt = await res.text();
-      return applyResult(buildFromLegacy(txt));
-    } catch (e) {
-      console.warn('Falha ao ler Racas-leitura.js', e);
-      SPECIES_MAP = null;
-      BREED_LOOKUP = null;
-      return null;
-    }
+    var base = win.basePath || '../../';
+    var jsonUrl = base + 'data/racas.json';
+    var legacyUrl = base + 'data/Racas-leitura.js';
+
+    return fetchJson(jsonUrl)
+      .then(function (payload) {
+        return applySpecies(buildFromJson(payload));
+      })
+      .catch(function (err) {
+        console.warn('cadastro-servicos/precos: falha ao ler racas.json', err);
+        return loadLegacy(legacyUrl)
+          .catch(function (legacyErr) {
+            console.warn('cadastro-servicos/precos: falha ao ler Racas-leitura.js', legacyErr);
+            state.species = null;
+            state.lookup = null;
+            return {};
+          });
+      });
   }
 
   function populateTiposSelect() {
     if (!E.tipo) return;
-    const opts = [
-      { v: 'todos', l: 'Todos' },
-      { v: 'cachorro', l: 'Cachorro' },
-      { v: 'gato', l: 'Gato' },
-      { v: 'passaro', l: 'Pássaro' },
-      { v: 'peixe', l: 'Peixe' },
-      { v: 'roedor', l: 'Roedor' },
-      { v: 'lagarto', l: 'Lagarto' },
-      { v: 'tartaruga', l: 'Tartaruga' },
-      { v: 'exotico', l: 'Exótico' },
+    var options = [
+      { value: 'todos', label: 'Todos' },
+      { value: 'cachorro', label: 'Cachorro' },
+      { value: 'gato', label: 'Gato' },
+      { value: 'passaro', label: 'Pássaro' },
+      { value: 'peixe', label: 'Peixe' },
+      { value: 'roedor', label: 'Roedor' },
+      { value: 'lagarto', label: 'Lagarto' },
+      { value: 'tartaruga', label: 'Tartaruga' },
+      { value: 'exotico', label: 'Exótico' }
     ];
     E.tipo.innerHTML = '';
-    opts.forEach(o => {
-      const opt = document.createElement('option');
-      opt.value = o.v; opt.textContent = o.l; E.tipo.appendChild(opt);
-    });
-
+    for (var i = 0; i < options.length; i += 1) {
+      var opt = doc.createElement('option');
+      opt.value = options[i].value;
+      opt.textContent = options[i].label;
+      E.tipo.appendChild(opt);
+    }
+  }
 
   function setPorteOptionsFromService(service) {
-    const el = E.porte; if (!el) return;
-    const portes = (service && Array.isArray(service.porte)) ? service.porte : [];
-    const all = ['Todos','Mini','Pequeno','Médio','Grande','Gigante'];
-    el.innerHTML = '';
-    const enabled = (portes.includes('Todos') || !portes.length)
-      ? all
-      : portes.map(s => String(s).replace('MǸdio','Médio').replace('M?dio','Médio').replace('M  dio','Médio'));
-    for (const p of all) {
-      const opt = document.createElement('option');
-      opt.value = p; opt.textContent = p; opt.disabled = !enabled.includes(p);
-      el.appendChild(opt);
-    if (enabled.includes('Todos')) el.value = 'Todos';
-    else el.value = enabled[0] || 'Mini';
-    const info = enabled.join(', ');
-    if (E.servPorteInfo) E.servPorteInfo.textContent = `Portes permitidos: ${info}`;
-  }
-
-  async function loadStores() {
-    const res = await fetch(`${API_BASE}/stores`);
-    const list = await res.json().catch(() => []);
-    E.store.innerHTML = '';
-    list.forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = s._id; opt.textContent = s.nome; E.store.appendChild(opt);
-    });
-  }
-
-  function clearSugList() { if (E.servSug) { E.servSug.innerHTML = ''; E.servSug.classList.add('hidden'); } }
-
-  async function searchServices(q) {
-    const res = await fetch(`${API_BASE}/func/servicos/buscar?q=${encodeURIComponent(q)}&limit=20`, {
-      headers: { 'Authorization': `Bearer ${getToken()}` }
-    });
-    if (!res.ok) return [];
-    return res.json();
-  }
-
-  function renderServiceSug(list) {
-    clearSugList();
-    if (!E.servSug || !list.length) return;
-    E.servSug.classList.remove('hidden');
-    list.forEach(item => {
-      const li = document.createElement('li');
-      li.className = 'px-3 py-2 hover:bg-gray-50 cursor-pointer';
-      li.textContent = `${item.nome} ${item.grupo ? '(' + item.grupo.nome + ')' : ''}`;
-      li.dataset.id = item._id;
-      li.__item = item;
-      E.servSug.appendChild(li);
-    });
-
-  function breedsForSelection(tipo, porte, service) {
-    const data = SPECIES_MAP || {};
-    const t = tipo || 'cachorro';
-    if (t === 'todos') {
-      const dog = data.cachorro || { all: [] };
-      const all = new Set([ ...(dog.all || []) ]);
-      for (const k of Object.keys(data)) {
-        if (k === 'cachorro') continue;
-        const arr = Array.isArray(data[k]) ? data[k] : [];
-        arr.forEach(n => all.add(n));
+    if (!E.porte) return;
+    var porteList = Array.isArray(service && service.porte) ? service.porte : [];
+    var all = ['Todos', 'Mini', 'Pequeno', 'Médio', 'Grande', 'Gigante'];
+    var enabled;
+    if (!porteList.length || porteList.indexOf('Todos') !== -1) {
+      enabled = all.slice();
+    } else {
+      enabled = [];
+      for (var i = 0; i < porteList.length; i += 1) {
+        var label = String(porteList[i] || '')
+          .replace('MǸdio', 'Médio')
+          .replace('M?dio', 'Médio')
+          .replace('M  dio', 'Médio');
+        enabled.push(label);
       }
-      return Array.from(all);
     }
-    if (t === 'cachorro') {
-      const dog = data.cachorro || { portes: {} };
-      const servicePortes = (service && Array.isArray(service.porte)) ? service.porte : [];
-      if (!porte || porte === 'Todos' || servicePortes.includes('Todos')) {
-        const { mini=[], pequeno=[], medio=[], grande=[], gigante=[] } = dog.portes || {};
-        return [...new Set([ ...mini, ...pequeno, ...medio, ...grande, ...gigante ])];
+
+    E.porte.innerHTML = '';
+    for (var j = 0; j < all.length; j += 1) {
+      var name = all[j];
+      var option = doc.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      option.disabled = enabled.indexOf(name) === -1;
+      E.porte.appendChild(option);
+    }
+
+    if (enabled.indexOf('Todos') !== -1) {
+      E.porte.value = 'Todos';
+    } else {
+      E.porte.value = enabled[0] || 'Mini';
+    }
+
+      E.servPorteInfo.textContent = service ? 'Portes permitidos: ' + enabled.join(', ') : '';
+      E.store.innerHTML = '';
+      if (!items || !items.length) return;
+      for (var i = 0; i < items.length; i += 1) {
+        var store = items[i];
+        if (store && typeof store === 'object') {
+          var opt = doc.createElement('option');
+          opt.value = store._id;
+          opt.textContent = store.nome;
+          E.store.appendChild(opt);
+        }
       }
-      const key = norm(porte);
-      return (dog.portes ? dog.portes[key] : undefined) || [];
-    return data[t] || [];
-
-  function tiposForBreed(nome) {
-    if (!nome) return [];
-    const key = norm(nome);
-    if (!key) return [];
-    if (BREED_LOOKUP && BREED_LOOKUP.has(key)) {
-      const arr = BREED_LOOKUP.get(key) || [];
-      return Array.isArray(arr) ? [...arr] : [];
     }
-    return [];
 
-  function groupItemsByTipo(items) {
-    const grouped = new Map();
-    (items || []).forEach(item => {
-      const tipos = tiposForBreed((item && item.raca)) || [];
-      if (!tipos.length) return;
-      tipos.forEach(tipo => {
-        if (!grouped.has(tipo)) grouped.set(tipo, []);
-        grouped.get(tipo).push({ ...item });
+    return fetch(API_BASE + '/stores')
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(function (payload) {
+        applyList(Array.isArray(payload) ? payload : []);
+      })
+      .catch(function (err) {
+        console.warn('cadastro-servicos/precos: falha ao carregar lojas', err);
+        applyList([]);
       });
-    return grouped;
+  function clearSuggestions() {
+  function searchServices(term) {
+    return fetch(
+      API_BASE + '/func/servicos/buscar?q=' + encodeURIComponent(term) + '&limit=20',
+      { headers: { 'Authorization': 'Bearer ' + getToken() } }
+    )
+      .then(function (res) {
+        if (!res.ok) return [];
+        return res.json();
+      })
+  function renderSuggestions(list) {
+    clearSuggestions();
+      if (item) {
+        var li = doc.createElement('li');
+        li.className = 'px-3 py-2 hover:bg-gray-50 cursor-pointer';
+        var label = item.nome + (item.grupo ? ' (' + item.grupo.nome + ')' : '');
+        li.textContent = label;
+        li.dataset.id = item._id;
+        li.__item = item;
+        E.servSug.appendChild(li);
+      }
+    if (selectedTipo === 'todos') {
+      var dog = species.cachorro || {};
+      var dogAll = ensureArray(dog.all);
+      for (var i = 0; i < dogAll.length; i += 1) {
+        pushUnique(all, dogAll[i]);
+      }
+      for (var key in species) {
+        if (hasOwn(species, key) && key !== 'cachorro') {
+          var list = ensureArray(species[key]);
+          for (var j = 0; j < list.length; j += 1) {
+            pushUnique(all, list[j]);
+          }
+        }
+      return all;
 
-  async function loadPrices(serviceId, storeId, tipo) {
-    if (!serviceId || !storeId) return [];
-    let url = `${API_BASE}/admin/servicos/precos?serviceId=${serviceId}&storeId=${storeId}`;
-    if (tipo && tipo !== 'todos') {
-      url += `&tipo=${encodeURIComponent(tipo)}`;
+    if (selectedTipo === 'cachorro') {
+      var dogData = species.cachorro || {};
+      var servicePortes = Array.isArray(service && service.porte) ? service.porte : [];
+      var porteKey;
+      if (!porte || porte === 'Todos' || permiteTodos) {
+        var portes = dogData.portes || {};
+        return unique([].concat(
+          ensureArray(portes.mini),
+          ensureArray(portes.pequeno),
+          ensureArray(portes.medio),
+          ensureArray(portes.grande),
+          ensureArray(portes.gigante)
+        ));
+      porteKey = stripDiacritics(porte);
+      if (dogData.portes && dogData.portes[porteKey]) {
+        return ensureArray(dogData.portes[porteKey]).slice();
+      }
+      return [];
+
+    var arr = ensureArray(species[selectedTipo]);
+    return arr.slice();
+  function tiposForBreed(name) {
+    if (!name) return [];
+    var key = stripDiacritics(name);
+    var list = state.lookup && state.lookup[key];
+    return list ? list.slice() : [];
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i];
+      var tipos = tiposForBreed(item.raca);
+        grouped[tipo].push(clone(item));
+      }
     }
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } });
-    if (!res.ok) return [];
-    return res.json();
+    var url = API_BASE + '/admin/servicos/precos?serviceId=' + serviceId + '&storeId=' + storeId;
+      url += '&tipo=' + encodeURIComponent(tipo);
+    }
+    return fetch(url, { headers: { 'Authorization': 'Bearer ' + getToken() } })
+      .then(function (res) { return res.ok ? res.json() : []; })
+      .catch(function () { return []; });
+    return fetch(API_BASE + '/admin/servicos/precos/bulk', {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + getToken()
+      },
+      body: JSON.stringify({ serviceId: serviceId, storeId: storeId, tipo: tipo, items: items })
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.json().catch(function () { return {}; }).then(function (err) {
+          throw new Error(err.message || 'Falha ao salvar');
+        });
+      }
+      return res.json();
+    });
+    var ovList = Array.isArray(overrides) ? overrides : [];
+    for (var i = 0; i < ovList.length; i += 1) {
+      var ov = ovList[i];
+      map[stripDiacritics(ov.raca)] = ov;
 
-  async function savePrices(serviceId, storeId, tipo, items) {
-    const res = await fetch(`${API_BASE}/admin/servicos/precos/bulk`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-      body: JSON.stringify({ serviceId, storeId, tipo, items })
+
+      var override = map[stripDiacritics(name)] || { custo: '', valor: '' };
+      var valor = override.valor === '' ? '' : Number(override.valor);
+      var tr = doc.createElement('tr');
+      tr.dataset.raca = name;
+      tr.innerHTML = '' +
+        '<td class="px-3 py-2 text-gray-800">' + name + '</td>' +
+        '<td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="' + custo + '" /></td>' +
+        '<td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="' + valor + '" /></td>';
+    if (!E.gridBody) return [];
+    var rows = E.gridBody.querySelectorAll('tr');
+    for (var i = 0; i < rows.length; i += 1) {
+      var row = rows[i];
+      var inputs = row.querySelectorAll('input');
+      var custo = parseFloat((inputs[0] && inputs[0].value) || '0');
+      var valor = parseFloat((inputs[1] && inputs[1].value) || '0');
+      items.push({
+        raca: row.dataset.raca || '',
+        valor: isFinite(valor) ? valor : 0
+      });
+    }
+    return items;
+    var serviceId = E.servId ? E.servId.value : '';
+    var storeId = E.store ? E.store.value : '';
+    var tipo = E.tipo ? E.tipo.value : '';
+    var service = E.servInput && E.servInput.__selectedService;
+    var porte = (E.porte ? E.porte.value : '') || 'Todos';
+    var breeds = breedsForSelection(tipo, porte, service || null);
+
+      .then(function (overrides) {
+      .catch(function (err) {
+    if (state.eventsBound) return;
+    for (var j = 0; j < ovList.length; j += 1) {
+      var item = ovList[j];
+      if (item && typeof item === 'object' && item.raca) {
+        var key = stripDiacritics(item.raca);
+        if (key) map[key] = item;
+      }
+    }
+
+    for (var k = 0; k < breeds.length; k += 1) {
+      var name = breeds[k];
+      var custo = override.custo;
+      var valor = override.valor;
+
+      if (custo !== '' && custo !== null && custo !== undefined) {
+        custo = Number(custo);
+        if (!isFinite(custo)) custo = '';
+      } else {
+        custo = '';
+      }
+
+      if (valor !== '' && valor !== null && valor !== undefined) {
+        valor = Number(valor);
+        if (!isFinite(valor)) valor = '';
+      } else {
+        valor = '';
+      }
+
+
+      var tdNome = doc.createElement('td');
+      tdNome.className = 'px-3 py-2 text-gray-800';
+      tdNome.textContent = name;
+      tr.appendChild(tdNome);
+
+      var tdCusto = doc.createElement('td');
+      tdCusto.className = 'px-3 py-2';
+      var inputCusto = doc.createElement('input');
+      inputCusto.type = 'number';
+      inputCusto.step = '0.01';
+      inputCusto.className = 'w-32 rounded border-gray-300';
+      inputCusto.value = custo;
+      tdCusto.appendChild(inputCusto);
+      tr.appendChild(tdCusto);
+
+      var tdValor = doc.createElement('td');
+      tdValor.className = 'px-3 py-2';
+      var inputValor = doc.createElement('input');
+      inputValor.type = 'number';
+      inputValor.step = '0.01';
+      inputValor.className = 'w-32 rounded border-gray-300';
+      inputValor.value = valor;
+      tdValor.appendChild(inputValor);
+      tr.appendChild(tdValor);
+
+        if (E.tabCadastro) E.tabCadastro.classList.add('hidden');
+        if (E.btnTabPrecos) E.btnTabPrecos.classList.add('bg-primary', 'text-white');
+        if (E.btnTabCadastro) {
+          E.btnTabCadastro.classList.remove('bg-primary', 'text-white');
+          E.btnTabCadastro.classList.add('border', 'border-gray-300', 'text-gray-700');
+        }
+      E.servInput.addEventListener('input', function () {
+        var term = E.servInput.value.trim();
+        if (state.searchTimer) {
+          clearTimeout(state.searchTimer);
+        }
+        if (!term) {
+          clearSuggestions();
+        state.searchTimer = setTimeout(function () {
+          searchServices(term)
+            .then(function (list) {
+              renderSuggestions(Array.isArray(list) ? list : []);
+            })
+              renderSuggestions([]);
+
+        var target = ev.target || ev.srcElement;
+        var li = target && target.closest ? target.closest('li') : null;
+        var item = li.__item;
+        if (E.servInput) E.servInput.value = item.nome;
+        if (E.servId) E.servId.value = item._id;
+        if (E.servInput) E.servInput.__selectedService = item;
+        setPorteOptionsFromService(item);
+        clearSuggestions();
+        var value = E.tipo.value || 'todos';
+        if (value === 'cachorro') {
+
+      E.porte.addEventListener('change', function () {
+        refreshGrid();
+      });
+
+      E.store.addEventListener('change', function () {
+        refreshGrid();
+      });
+    function applyToAll(index, value) {
+      var trimmed = String(value || '').trim();
+      if (trimmed === '') return;
+        if (inputs[index]) inputs[index].value = trimmed;
+      }
+    }
+
+      E.replCustoBtn.addEventListener('click', function () {
+        applyToAll(0, E.replCusto ? E.replCusto.value : '');
+      });
+
+      E.replValorBtn.addEventListener('click', function () {
+        applyToAll(1, E.replValor ? E.replValor.value : '');
+      });
+      E.saveBtn.addEventListener('click', function () {
+        var serviceId = E.servId ? E.servId.value : '';
+        var storeId = E.store ? E.store.value : '';
+        var tipo = E.tipo ? E.tipo.value : '';
+        if (!(serviceId && storeId && tipo)) {
+        }
+
+        var items = getGridItems();
+        function handleError(error) {
+          console.error(error);
+          alert(error && error.message ? error.message : 'Erro ao salvar preços');
+          var keys = Object.keys(grouped);
+          if (!keys.length) {
+          var chain = Promise.resolve();
+          for (var i = 0; i < keys.length; i += 1) {
+            (function (tipoAtual) {
+              var lista = grouped[tipoAtual];
+              if (!lista || !lista.length) return;
+              chain = chain.then(function () {
+                return savePrices(serviceId, storeId, tipoAtual, lista);
+              });
+            })(keys[i]);
+          }
+          chain.then(finalize).catch(handleError);
+        if (E.tipo) {
+          try { E.tipo.value = 'todos'; } catch (err) {}
+        }
+        if (E.porte) {
+          try {
+            E.porte.innerHTML = '<option>Todos</option>';
+            E.porte.value = 'Todos';
+          } catch (err) {}
+        }
+      .then(function () {
+})(typeof window !== 'undefined' ? window : null);
+    if (E.servPorteInfo) E.servPorteInfo.textContent = '';
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -430,7 +757,9 @@
         renderServiceSug(list);
       }, 200);
     });
-    E.servSug && E.servSug.addEventListener('click', (ev) => {
+        if (inputs[index]) {
+          inputs[index].value = trimmed;
+        }
       const target = ev.target;
       const li = (target && typeof target.closest === 'function') ? target.closest('li') : null;
       if (!li || !li.__item) return;
@@ -464,16 +793,14 @@
         if (inp) inp.value = v;
       });
     };
-    E.replCustoBtn && E.replCustoBtn.addEventListener('click', () => applyToAll(0, (E.replCusto ? E.replCusto.value : '')));
-    E.replValorBtn && E.replValorBtn.addEventListener('click', () => applyToAll(1, (E.replValor ? E.replValor.value : '')));
+      E.saveBtn.addEventListener('click', () => {
 
-    // Save
-    E.saveBtn && E.saveBtn.addEventListener('click', async () => {
-      const serviceId = (E.servId ? E.servId.value : undefined);
-      const storeId = (E.store ? E.store.value : undefined);
-      const tipo = (E.tipo ? E.tipo.value : undefined);
-      if (!serviceId || !storeId || !tipo) { alert('Selecione serviço, tipo e empresa.'); return; }
-      try {
+        const finalize = () => {
+          return refreshGrid();
+        };
+        const handleError = (e) => {
+        };
+
         const items = getGridItems();
         if (tipo === 'todos') {
           const grouped = groupItemsByTipo(items);
@@ -481,17 +808,33 @@
             alert('Não foi possível identificar os tipos das raças selecionadas.');
             return;
           }
-          for (const [tipoAtual, lista] of grouped.entries()) {
-            if (!lista.length) continue;
-            await savePrices(serviceId, storeId, tipoAtual, lista);
-          }
+          const entries = Array.from(grouped.entries());
+          let sequence = Promise.resolve();
+          entries.forEach(([tipoAtual, lista]) => {
+            if (!Array.isArray(lista) || !lista.length) return;
+            sequence = sequence.then(() => savePrices(serviceId, storeId, tipoAtual, lista));
+          });
+          sequence
+            .then(finalize)
+            .catch(handleError);
         } else {
-          await savePrices(serviceId, storeId, tipo, items);
-        }
-        alert('Preços salvos com sucesso.');
-        await refreshGrid();
-      } catch (e) {
-        console.error(e); alert((e && e.message) ? e.message : 'Erro ao salvar preços');
+          savePrices(serviceId, storeId, tipo, items)
+            .then(finalize)
+            .catch(handleError);
+  function initPrecosTab() {
+    if (!E.tabPrecos) return Promise.resolve();
+    return loadSpeciesMap()
+      .then(() => {
+        populateTiposSelect();
+        // Default: 'Todos' selecionado e porte bloqueado
+        try { if (E.tipo) E.tipo.value = 'todos'; } catch (err) {}
+        try { if (E.porte) { E.porte.disabled = true; E.porte.innerHTML = '<option>Todos</option>'; } } catch (err) {}
+        if (E.servPorteInfo) E.servPorteInfo.textContent = '';
+        return loadStores();
+      })
+      .then(() => {
+        bindEvents();
+      });
       }
     });
   }
