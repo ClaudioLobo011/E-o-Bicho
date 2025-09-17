@@ -1,11 +1,20 @@
 import { attachEvents } from './events.js';
 import { init } from './init.js';
-import { initPrecosTab } from './precos.js';
 
 // Attach handlers immediately (module scripts are deferred by default)
 attachEvents();
 init();
-initPrecosTab();
+
+try {
+  const precosApi = window?.cadastroServicosPrecos;
+  if (precosApi?.initPrecosTab) {
+    precosApi.initPrecosTab();
+  } else {
+    console.warn('cadastro-servicos: módulo de preços não disponível');
+  }
+} catch (err) {
+  console.error('Falha ao inicializar aba de preços', err);
+}
 
 // Patch alert -> toast for this page
 try {
