@@ -51,7 +51,7 @@
 
   var state = {
     species: null,
-    lookup: null,
+    lookup: {},
     searchTimer: null,
     eventsBound: false
   };
@@ -328,7 +328,7 @@
           .catch(function (legacyErr) {
             console.warn('cadastro-servicos/precos: falha ao ler Racas-leitura.js', legacyErr);
             state.species = null;
-            state.lookup = null;
+            state.lookup = {};
             return {};
           });
       });
@@ -356,22 +356,44 @@
     }
   }
 
+  function normalizePorteLabel(value) {
+    var txt = String(value || '').trim();
+    if (!txt) return '';
+    var normalized = stripDiacritics(txt);
+    switch (normalized) {
+      case 'todos': return 'Todos';
+      case 'mini': return 'Mini';
+      case 'pequeno': return 'Pequeno';
+      case 'medio':
+      case 'medio ': return 'Médio';
+      case 'grande': return 'Grande';
+      case 'gigante': return 'Gigante';
+      default: return txt;
+    }
+  }
+
   function setPorteOptionsFromService(service) {
     if (!E.porte) return;
     var porteList = Array.isArray(service && service.porte) ? service.porte : [];
     var all = ['Todos', 'Mini', 'Pequeno', 'Médio', 'Grande', 'Gigante'];
-    var enabled;
-    if (!porteList.length || porteList.indexOf('Todos') !== -1) {
+    var enabled = [];
+
+    if (!porteList.length) {
       enabled = all.slice();
     } else {
-      enabled = [];
       for (var i = 0; i < porteList.length; i += 1) {
-        var label = String(porteList[i] || '')
-          .replace('MǸdio', 'Médio')
-          .replace('M?dio', 'Médio')
-          .replace('M  dio', 'Médio');
-        enabled.push(label);
+        var label = normalizePorteLabel(porteList[i]);
+        if (label && enabled.indexOf(label) === -1) {
+          enabled.push(label);
+        }
       }
+      if (enabled.indexOf('Todos') !== -1) {
+        enabled = all.slice();
+      }
+    }
+
+    if (!enabled.length) {
+      enabled = all.slice();
     }
 
     E.porte.innerHTML = '';
@@ -384,40 +406,96 @@
       E.porte.appendChild(option);
     }
 
-    if (enabled.indexOf('Todos') !== -1) {
-      E.porte.value = 'Todos';
-    } else {
-      E.porte.value = enabled[0] || 'Mini';
-    }
+    var value = enabled.indexOf('Todos') !== -1 ? 'Todos' : enabled[0];
+    E.porte.value = value || 'Todos';
 
-      E.servPorteInfo.textContent = service ? 'Portes permitidos: ' + enabled.join(', ') : '';
+    if (E.servPorteInfo) {
+      if (service) {
+        E.servPorteInfo.textContent = 'Portes permitidos: ' + enabled.join(', ');
+      } else {
+        E.servPorteInfo.textContent = '';
+      }
+    }
+  }
+
+  function loadStores() {
+    if (!E.store) return Promise.resolve([]);
+
+    function applyList(items) {
       E.store.innerHTML = '';
-      if (!items || !items.length) return;
-      for (var i = 0; i < items.length; i += 1) {
-        var store = items[i];
+      var list = Array.isArray(items) ? items : [];
+      if (!list.length) {
+        var optEmpty = doc.createElement('option');
+        optEmpty.value = '';
+        optEmpty.textContent = 'Nenhuma loja encontrada';
+        optEmpty.disabled = true;
+        E.store.appendChild(optEmpty);
+        return list;
+      }
+      for (var i = 0; i < list.length; i += 1) {
+        var store = list[i];
         if (store && typeof store === 'object') {
           var opt = doc.createElement('option');
-          opt.value = store._id;
-          opt.textContent = store.nome;
+          opt.value = store._id || '';
+          opt.textContent = store.nome || store._id || 'Loja';
           E.store.appendChild(opt);
         }
       }
+      if (E.store.options.length) {
+        E.store.selectedIndex = 0;
+      }
+      return list;
     }
 
-    return fetch(API_BASE + '/stores')
+    return fetch(API_BASE + '/stores', { headers: { 'Authorization': 'Bearer ' + getToken() } })
       .then(function (res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
       })
       .then(function (payload) {
-        applyList(Array.isArray(payload) ? payload : []);
+        return applyList(payload);
       })
       .catch(function (err) {
         console.warn('cadastro-servicos/precos: falha ao carregar lojas', err);
         applyList([]);
+        return [];
       });
+  }
+
   function clearSuggestions() {
+    if (!E.servSug) return;
+    E.servSug.innerHTML = '';
+    if (E.servSug.classList) {
+      E.servSug.classList.add('hidden');
+    }
+  }
+
+  function renderSuggestions(list) {
+    if (!E.servSug) return;
+    clearSuggestions();
+    var items = Array.isArray(list) ? list : [];
+    if (!items.length) return;
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i];
+      if (!item) continue;
+      var li = doc.createElement('li');
+      li.className = 'px-3 py-2 hover:bg-gray-50 cursor-pointer';
+      var label = String(item.nome || '');
+      if (item.grupo && item.grupo.nome) {
+        label += ' (' + item.grupo.nome + ')';
+      }
+      li.textContent = label;
+      li.dataset.id = item._id || '';
+      li.__item = item;
+      E.servSug.appendChild(li);
+    }
+    if (E.servSug.classList) {
+      E.servSug.classList.remove('hidden');
+    }
+  }
+
   function searchServices(term) {
+    if (!term) return Promise.resolve([]);
     return fetch(
       API_BASE + '/func/servicos/buscar?q=' + encodeURIComponent(term) + '&limit=20',
       { headers: { 'Authorization': 'Bearer ' + getToken() } }
@@ -426,18 +504,14 @@
         if (!res.ok) return [];
         return res.json();
       })
-  function renderSuggestions(list) {
-    clearSuggestions();
-      if (item) {
-        var li = doc.createElement('li');
-        li.className = 'px-3 py-2 hover:bg-gray-50 cursor-pointer';
-        var label = item.nome + (item.grupo ? ' (' + item.grupo.nome + ')' : '');
-        li.textContent = label;
-        li.dataset.id = item._id;
-        li.__item = item;
-        E.servSug.appendChild(li);
-      }
+      .catch(function () { return []; });
+  }
+
+  function breedsForSelection(selectedTipo, porte, service) {
+    var species = state.species || {};
+    if (!selectedTipo) return [];
     if (selectedTipo === 'todos') {
+      var all = [];
       var dog = species.cachorro || {};
       var dogAll = ensureArray(dog.all);
       for (var i = 0; i < dogAll.length; i += 1) {
@@ -450,12 +524,21 @@
             pushUnique(all, list[j]);
           }
         }
+      }
       return all;
+    }
 
     if (selectedTipo === 'cachorro') {
       var dogData = species.cachorro || {};
       var servicePortes = Array.isArray(service && service.porte) ? service.porte : [];
-      var porteKey;
+      var permiteTodos = !servicePortes.length;
+      for (var sp = 0; sp < servicePortes.length; sp += 1) {
+        if (stripDiacritics(servicePortes[sp]) === 'todos') {
+          permiteTodos = true;
+          break;
+        }
+      }
+
       if (!porte || porte === 'Todos' || permiteTodos) {
         var portes = dogData.portes || {};
         return unique([].concat(
@@ -465,32 +548,58 @@
           ensureArray(portes.grande),
           ensureArray(portes.gigante)
         ));
-      porteKey = stripDiacritics(porte);
+      }
+
+      var porteKey = stripDiacritics(porte);
       if (dogData.portes && dogData.portes[porteKey]) {
         return ensureArray(dogData.portes[porteKey]).slice();
       }
       return [];
+    }
 
     var arr = ensureArray(species[selectedTipo]);
     return arr.slice();
+  }
+
   function tiposForBreed(name) {
     if (!name) return [];
     var key = stripDiacritics(name);
     var list = state.lookup && state.lookup[key];
     return list ? list.slice() : [];
+  }
+
+  function groupItemsByTipo(items) {
+    var map = new Map();
+    if (!Array.isArray(items)) return map;
     for (var i = 0; i < items.length; i += 1) {
       var item = items[i];
+      if (!item || !item.raca) continue;
       var tipos = tiposForBreed(item.raca);
-        grouped[tipo].push(clone(item));
+      for (var j = 0; j < tipos.length; j += 1) {
+        var tipo = tipos[j];
+        if (!map.has(tipo)) {
+          map.set(tipo, []);
+        }
+        map.get(tipo).push(clone(item));
       }
     }
-    var url = API_BASE + '/admin/servicos/precos?serviceId=' + serviceId + '&storeId=' + storeId;
+    return map;
+  }
+
+  function loadPrices(serviceId, storeId, tipo) {
+    if (!(serviceId && storeId)) return Promise.resolve([]);
+    var url = API_BASE + '/admin/servicos/precos?serviceId=' + encodeURIComponent(serviceId) + '&storeId=' + encodeURIComponent(storeId);
+    if (tipo && tipo !== 'todos') {
       url += '&tipo=' + encodeURIComponent(tipo);
     }
     return fetch(url, { headers: { 'Authorization': 'Bearer ' + getToken() } })
       .then(function (res) { return res.ok ? res.json() : []; })
       .catch(function () { return []; });
+  }
+
+  function savePrices(serviceId, storeId, tipo, items) {
     return fetch(API_BASE + '/admin/servicos/precos/bulk', {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + getToken()
@@ -504,53 +613,36 @@
       }
       return res.json();
     });
+  }
+
+  function renderGrid(breeds, overrides) {
+    if (!E.gridBody || !E.gridEmpty) return;
+    E.gridBody.innerHTML = '';
+    var list = Array.isArray(breeds) ? breeds : [];
+    var map = {};
     var ovList = Array.isArray(overrides) ? overrides : [];
     for (var i = 0; i < ovList.length; i += 1) {
-      var ov = ovList[i];
-      map[stripDiacritics(ov.raca)] = ov;
-
-
-      var override = map[stripDiacritics(name)] || { custo: '', valor: '' };
-      var valor = override.valor === '' ? '' : Number(override.valor);
-      var tr = doc.createElement('tr');
-      tr.dataset.raca = name;
-      tr.innerHTML = '' +
-        '<td class="px-3 py-2 text-gray-800">' + name + '</td>' +
-        '<td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="' + custo + '" /></td>' +
-        '<td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="' + valor + '" /></td>';
-    if (!E.gridBody) return [];
-    var rows = E.gridBody.querySelectorAll('tr');
-    for (var i = 0; i < rows.length; i += 1) {
-      var row = rows[i];
-      var inputs = row.querySelectorAll('input');
-      var custo = parseFloat((inputs[0] && inputs[0].value) || '0');
-      var valor = parseFloat((inputs[1] && inputs[1].value) || '0');
-      items.push({
-        raca: row.dataset.raca || '',
-        valor: isFinite(valor) ? valor : 0
-      });
-    }
-    return items;
-    var serviceId = E.servId ? E.servId.value : '';
-    var storeId = E.store ? E.store.value : '';
-    var tipo = E.tipo ? E.tipo.value : '';
-    var service = E.servInput && E.servInput.__selectedService;
-    var porte = (E.porte ? E.porte.value : '') || 'Todos';
-    var breeds = breedsForSelection(tipo, porte, service || null);
-
-      .then(function (overrides) {
-      .catch(function (err) {
-    if (state.eventsBound) return;
-    for (var j = 0; j < ovList.length; j += 1) {
-      var item = ovList[j];
-      if (item && typeof item === 'object' && item.raca) {
+      var item = ovList[i];
+      if (item && item.raca) {
         var key = stripDiacritics(item.raca);
         if (key) map[key] = item;
       }
     }
 
-    for (var k = 0; k < breeds.length; k += 1) {
-      var name = breeds[k];
+    if (!list.length) {
+      if (E.gridEmpty.classList) {
+        E.gridEmpty.classList.remove('hidden');
+      }
+      return;
+    }
+
+    if (E.gridEmpty.classList) {
+      E.gridEmpty.classList.add('hidden');
+    }
+
+    for (var j = 0; j < list.length; j += 1) {
+      var name = list[j];
+      var override = map[stripDiacritics(name)] || { custo: '', valor: '' };
       var custo = override.custo;
       var valor = override.valor;
 
@@ -568,6 +660,8 @@
         valor = '';
       }
 
+      var tr = doc.createElement('tr');
+      tr.dataset.raca = name;
 
       var tdNome = doc.createElement('td');
       tdNome.className = 'px-3 py-2 text-gray-800';
@@ -594,284 +688,248 @@
       tdValor.appendChild(inputValor);
       tr.appendChild(tdValor);
 
-        if (E.tabCadastro) E.tabCadastro.classList.add('hidden');
-        if (E.btnTabPrecos) E.btnTabPrecos.classList.add('bg-primary', 'text-white');
-        if (E.btnTabCadastro) {
-          E.btnTabCadastro.classList.remove('bg-primary', 'text-white');
-          E.btnTabCadastro.classList.add('border', 'border-gray-300', 'text-gray-700');
-        }
+      E.gridBody.appendChild(tr);
+    }
+  }
+
+  function getGridItems() {
+    var items = [];
+    if (!E.gridBody) return items;
+    var rows = E.gridBody.querySelectorAll('tr');
+    for (var i = 0; i < rows.length; i += 1) {
+      var row = rows[i];
+      if (!row || !row.dataset) continue;
+      var inputs = row.querySelectorAll('input');
+      var custo = parseFloat((inputs[0] && inputs[0].value) || '0');
+      var valor = parseFloat((inputs[1] && inputs[1].value) || '0');
+      items.push({
+        raca: row.dataset.raca || '',
+        custo: isFinite(custo) ? custo : 0,
+        valor: isFinite(valor) ? valor : 0
+      });
+    }
+    return items;
+  }
+
+  function updatePorteState() {
+    if (!E.porte) return;
+    var currentTipo = (E.tipo && E.tipo.value) || 'todos';
+    if (currentTipo === 'cachorro') {
+      E.porte.disabled = false;
+    } else {
+      E.porte.disabled = true;
+      E.porte.value = 'Todos';
+    }
+  }
+
+  function applyToAll(index, value) {
+    if (!E.gridBody) return;
+    var trimmed = String(value || '').trim();
+    if (trimmed === '') return;
+    var rows = E.gridBody.querySelectorAll('tr');
+    for (var i = 0; i < rows.length; i += 1) {
+      var inputs = rows[i].querySelectorAll('input');
+      if (inputs[index]) {
+        inputs[index].value = trimmed;
+      }
+    }
+  }
+
+  async function refreshGrid() {
+    try {
+      var serviceId = (E.servId && E.servId.value) || '';
+      var storeId = (E.store && E.store.value) || '';
+      var tipo = (E.tipo && E.tipo.value) || '';
+      if (!(serviceId && storeId && tipo)) {
+        renderGrid([], []);
+        return;
+      }
+      var service = (E.servInput && E.servInput.__selectedService) || null;
+      var porte = 'Todos';
+      if (E.porte && !E.porte.disabled) {
+        porte = E.porte.value || 'Todos';
+      }
+      var breeds = breedsForSelection(tipo, porte, service);
+      var overrides = await loadPrices(serviceId, storeId, tipo);
+      renderGrid(breeds, overrides);
+    } catch (err) {
+      console.error('cadastro-servicos/precos: falha ao atualizar grade', err);
+    }
+  }
+
+  function bindEvents() {
+    if (state.eventsBound) return;
+    state.eventsBound = true;
+
+    if (E.btnTabCadastro && E.btnTabPrecos && E.tabCadastro && E.tabPrecos) {
+      E.btnTabCadastro.addEventListener('click', function () {
+        E.tabCadastro.classList.remove('hidden');
+        E.tabPrecos.classList.add('hidden');
+        E.btnTabCadastro.classList.add('bg-primary', 'text-white');
+        E.btnTabPrecos.classList.remove('bg-primary', 'text-white');
+        E.btnTabPrecos.classList.add('border', 'border-gray-300', 'text-gray-700');
+      });
+      E.btnTabPrecos.addEventListener('click', function () {
+        E.tabPrecos.classList.remove('hidden');
+        E.tabCadastro.classList.add('hidden');
+        E.btnTabPrecos.classList.add('bg-primary', 'text-white');
+        E.btnTabCadastro.classList.remove('bg-primary', 'text-white');
+        E.btnTabCadastro.classList.add('border', 'border-gray-300', 'text-gray-700');
+      });
+    }
+
+    if (E.servInput) {
       E.servInput.addEventListener('input', function () {
         var term = E.servInput.value.trim();
+        if (E.servId) E.servId.value = '';
+        if (E.servInput) E.servInput.__selectedService = null;
+        setPorteOptionsFromService(null);
+        updatePorteState();
+        if (E.servPorteInfo) E.servPorteInfo.textContent = '';
         if (state.searchTimer) {
           clearTimeout(state.searchTimer);
+          state.searchTimer = null;
         }
         if (!term) {
           clearSuggestions();
+          refreshGrid();
+          return;
+        }
         state.searchTimer = setTimeout(function () {
           searchServices(term)
             .then(function (list) {
               renderSuggestions(Array.isArray(list) ? list : []);
             })
+            .catch(function () {
               renderSuggestions([]);
+            });
+        }, 200);
+      });
 
+      E.servInput.addEventListener('blur', function () {
+        setTimeout(clearSuggestions, 150);
+      });
+    }
+
+    if (E.servSug) {
+      E.servSug.addEventListener('mousedown', function (ev) {
         var target = ev.target || ev.srcElement;
-        var li = target && target.closest ? target.closest('li') : null;
+        var li = target && typeof target.closest === 'function' ? target.closest('li') : null;
+        if (!li || !li.__item) return;
+        ev.preventDefault();
         var item = li.__item;
-        if (E.servInput) E.servInput.value = item.nome;
-        if (E.servId) E.servId.value = item._id;
-        if (E.servInput) E.servInput.__selectedService = item;
+        if (E.servInput) {
+          E.servInput.value = item.nome || '';
+          E.servInput.__selectedService = item;
+        }
+        if (E.servId) E.servId.value = item._id || '';
         setPorteOptionsFromService(item);
+        updatePorteState();
         clearSuggestions();
-        var value = E.tipo.value || 'todos';
-        if (value === 'cachorro') {
+        refreshGrid();
+      });
+    }
 
+    if (E.tipo) {
+      E.tipo.addEventListener('change', function () {
+        updatePorteState();
+        refreshGrid();
+      });
+    }
+
+    if (E.porte) {
       E.porte.addEventListener('change', function () {
         refreshGrid();
       });
+    }
 
+    if (E.store) {
       E.store.addEventListener('change', function () {
         refreshGrid();
       });
-    function applyToAll(index, value) {
-      var trimmed = String(value || '').trim();
-      if (trimmed === '') return;
-        if (inputs[index]) inputs[index].value = trimmed;
-      }
     }
 
+    if (E.replCustoBtn) {
       E.replCustoBtn.addEventListener('click', function () {
         applyToAll(0, E.replCusto ? E.replCusto.value : '');
       });
+    }
 
+    if (E.replValorBtn) {
       E.replValorBtn.addEventListener('click', function () {
         applyToAll(1, E.replValor ? E.replValor.value : '');
       });
-      E.saveBtn.addEventListener('click', function () {
-        var serviceId = E.servId ? E.servId.value : '';
-        var storeId = E.store ? E.store.value : '';
-        var tipo = E.tipo ? E.tipo.value : '';
+    }
+
+    if (E.saveBtn) {
+      E.saveBtn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        var serviceId = (E.servId && E.servId.value) || '';
+        var storeId = (E.store && E.store.value) || '';
+        var tipo = (E.tipo && E.tipo.value) || '';
         if (!(serviceId && storeId && tipo)) {
+          alert('Selecione serviço, tipo e empresa.');
+          return;
         }
 
         var items = getGridItems();
+
+        function handleSuccess() {
+          alert('Preços salvos com sucesso.');
+          refreshGrid();
+        }
+
         function handleError(error) {
-          console.error(error);
+          console.error('cadastro-servicos/precos: erro ao salvar', error);
           alert(error && error.message ? error.message : 'Erro ao salvar preços');
-          var keys = Object.keys(grouped);
-          if (!keys.length) {
-          var chain = Promise.resolve();
-          for (var i = 0; i < keys.length; i += 1) {
-            (function (tipoAtual) {
-              var lista = grouped[tipoAtual];
-              if (!lista || !lista.length) return;
-              chain = chain.then(function () {
-                return savePrices(serviceId, storeId, tipoAtual, lista);
-              });
-            })(keys[i]);
-          }
-          chain.then(finalize).catch(handleError);
-        if (E.tipo) {
-          try { E.tipo.value = 'todos'; } catch (err) {}
         }
-        if (E.porte) {
-          try {
-            E.porte.innerHTML = '<option>Todos</option>';
-            E.porte.value = 'Todos';
-          } catch (err) {}
-        }
-      .then(function () {
-})(typeof window !== 'undefined' ? window : null);
-    if (E.servPorteInfo) E.servPorteInfo.textContent = '';
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || 'Falha ao salvar');
-    }
-    return res.json();
 
-  function renderGrid(breeds, overrides) {
-    const map = new Map((overrides || []).map(o => [norm(o.raca), o]));
-    if (!breeds.length) { E.gridEmpty.classList.remove('hidden'); return; }
-    E.gridEmpty.classList.add('hidden');
-    for (const name of breeds) {
-      const ov = map.get(norm(name)) || { custo: '', valor: '' };
-      const custo = ov.custo === '' ? '' : Number(ov.custo);
-      const valor = ov.valor === '' ? '' : Number(ov.valor);
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="px-3 py-2 text-gray-800">${name}</td>
-        <td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="${custo}" /></td>
-        <td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="${valor}" /></td>
-      `;
-      tr.dataset.raca = name;
-      E.gridBody.appendChild(tr);
-    }
-  function getGridItems() {
-    const rows = Array.from((E.gridBody ? E.gridBody.querySelectorAll('tr') : []) || []);
-    return rows.map(r => {
-      const inputs = r.querySelectorAll('input');
-      const custo = parseFloat((inputs[0] ? inputs[0].value : '') || '0');
-      const valor = parseFloat((inputs[1] ? inputs[1].value : '') || '0');
-      return { raca: r.dataset.raca || '', custo: Number.isFinite(custo) ? custo : 0, valor: Number.isFinite(valor) ? valor : 0 };
-  }
-  async function refreshGrid() {
-    const serviceId = (E.servId ? E.servId.value : undefined);
-    const storeId = (E.store ? E.store.value : undefined);
-    const tipo = (E.tipo ? E.tipo.value : undefined);
-      return;
-    }
-    const service = (E.servInput && E.servInput.__selectedService) ? E.servInput.__selectedService : null;
-    const porte = (E.porte ? E.porte.value : undefined) || 'Todos';
-    const breeds = breedsForSelection(tipo, porte, service);
-    const overrides = await loadPrices(serviceId, storeId, tipo);
-    renderGrid(breeds, overrides);
-  }
-
-  function bindEvents() {
-    // Tabs
-    E.btnTabCadastro && E.btnTabCadastro.addEventListener('click', () => {
-      E.tabCadastro && E.tabCadastro.classList.remove('hidden');
-      E.tabPrecos && E.tabPrecos.classList.add('hidden');
-      E.btnTabCadastro && E.btnTabCadastro.classList.add('bg-primary','text-white');
-      E.btnTabPrecos && E.btnTabPrecos.classList.remove('bg-primary','text-white');
-      E.btnTabPrecos && E.btnTabPrecos.classList.add('border','border-gray-300','text-gray-700');
-    });
-    E.btnTabPrecos && E.btnTabPrecos.addEventListener('click', () => {
-      E.tabPrecos && E.tabPrecos.classList.remove('hidden');
-      E.tabCadastro && E.tabCadastro.classList.add('hidden');
-      E.btnTabPrecos && E.btnTabPrecos.classList.add('bg-primary','text-white');
-      E.btnTabCadastro && E.btnTabCadastro.classList.remove('bg-primary','text-white');
-      E.btnTabCadastro && E.btnTabCadastro.classList.add('border','border-gray-300','text-gray-700');
-    });
-
-    // Serviço search + choose
-    let searchTimer = null;
-    E.servInput && E.servInput.addEventListener('input', () => {
-      const q = E.servInput.value.trim();
-      E.servId.value = '';
-      E.servInput.__selectedService = null;
-      if (searchTimer) clearTimeout(searchTimer);
-      if (!q) { clearSugList(); return; }
-      searchTimer = setTimeout(async () => {
-        const list = await searchServices(q);
-        renderServiceSug(list);
-      }, 200);
-    });
-        if (inputs[index]) {
-          inputs[index].value = trimmed;
-        }
-      const target = ev.target;
-      const li = (target && typeof target.closest === 'function') ? target.closest('li') : null;
-      if (!li || !li.__item) return;
-      const it = li.__item;
-      E.servInput.value = it.nome;
-      E.servId.value = it._id;
-      E.servInput.__selectedService = it;
-      setPorteOptionsFromService(it);
-      clearSugList();
-      refreshGrid();
-    });
-
-    // Filters
-    E.tipo && E.tipo.addEventListener('change', () => {
-      const t = (E.tipo ? E.tipo.value : undefined);
-      if (t === 'todos') {
-        if (E.porte) { E.porte.value = 'Todos'; E.porte.disabled = true; }
-        if (E.porte) { E.porte.disabled = false; }
-      refreshGrid();
-    });
-    E.porte && E.porte.addEventListener('change', refreshGrid);
-    E.store && E.store.addEventListener('change', refreshGrid);
-
-    // Replicate
-    const applyToAll = (idx, value) => {
-      const v = String(value || '').trim();
-      if (v === '') return;
-      if (!E.gridBody) return;
-      E.gridBody.querySelectorAll('tr').forEach(tr => {
-        const inp = tr.querySelectorAll('input')[idx];
-        if (inp) inp.value = v;
-      });
-    };
-      E.saveBtn.addEventListener('click', () => {
-
-        const finalize = () => {
-          return refreshGrid();
-        };
-        const handleError = (e) => {
-        };
-
-        const items = getGridItems();
         if (tipo === 'todos') {
-          const grouped = groupItemsByTipo(items);
+          var grouped = groupItemsByTipo(items);
           if (!grouped.size) {
             alert('Não foi possível identificar os tipos das raças selecionadas.');
             return;
           }
-          const entries = Array.from(grouped.entries());
-          let sequence = Promise.resolve();
-          entries.forEach(([tipoAtual, lista]) => {
+          var sequence = Promise.resolve();
+          grouped.forEach(function (lista, tipoAtual) {
             if (!Array.isArray(lista) || !lista.length) return;
-            sequence = sequence.then(() => savePrices(serviceId, storeId, tipoAtual, lista));
+            sequence = sequence.then(function () {
+              return savePrices(serviceId, storeId, tipoAtual, lista);
+            });
           });
-          sequence
-            .then(finalize)
-            .catch(handleError);
+          sequence.then(handleSuccess).catch(handleError);
         } else {
           savePrices(serviceId, storeId, tipo, items)
-            .then(finalize)
+            .then(handleSuccess)
             .catch(handleError);
-  function initPrecosTab() {
-    if (!E.tabPrecos) return Promise.resolve();
-    return loadSpeciesMap()
-      .then(() => {
-        populateTiposSelect();
-        // Default: 'Todos' selecionado e porte bloqueado
-        try { if (E.tipo) E.tipo.value = 'todos'; } catch (err) {}
-        try { if (E.porte) { E.porte.disabled = true; E.porte.innerHTML = '<option>Todos</option>'; } } catch (err) {}
-        if (E.servPorteInfo) E.servPorteInfo.textContent = '';
-        return loadStores();
-      })
-      .then(() => {
-        bindEvents();
+        }
       });
-      }
-    });
+    }
   }
 
   async function initPrecosTab() {
     if (!E.tabPrecos) return;
     await loadSpeciesMap();
     populateTiposSelect();
-    // Default: 'Todos' selecionado e porte bloqueado
-    try { if (E.tipo) E.tipo.value = 'todos'; } catch (err) {}
-    try { if (E.porte) { E.porte.disabled = true; E.porte.innerHTML = '<option>Todos</option>'; } } catch (err) {}
+    if (E.tipo) {
+      try { E.tipo.value = 'todos'; } catch (err) {}
+    }
+    if (E.porte) {
+      try {
+        E.porte.innerHTML = '<option>Todos</option>';
+        E.porte.value = 'Todos';
+        E.porte.disabled = true;
+      } catch (err) {}
+    }
+    if (E.servPorteInfo) {
+      E.servPorteInfo.textContent = '';
+    }
     await loadStores();
     bindEvents();
+    refreshGrid();
   }
 
   win.cadastroServicosPrecos = win.cadastroServicosPrecos || {};
   win.cadastroServicosPrecos.initPrecosTab = initPrecosTab;
   win.cadastroServicosPrecos.refreshGrid = refreshGrid;
 })(typeof window !== 'undefined' ? window : undefined);
-    try {
-      const items = getGridItems();
-      await savePrices(serviceId, storeId, tipo, items);
-      alert('Preços salvos com sucesso.');
-      await refreshGrid();
-    } catch (e) {
-      console.error(e); alert(e?.message || 'Erro ao salvar preços');
-    }
-  });
-}
-
-export async function initPrecosTab() {
-  if (!E.tabPrecos) return;
-  await loadSpeciesMap();
-  populateTiposSelect();
-  // Default: 'Todos' selecionado e porte bloqueado
-  try { if (E.tipo) E.tipo.value = 'todos'; } catch {}
-  try { if (E.porte) { E.porte.disabled = true; E.porte.innerHTML = '<option>Todos</option>'; } } catch {}
-  await loadStores();
-  bindEvents();
-}
