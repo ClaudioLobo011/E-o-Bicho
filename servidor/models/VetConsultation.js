@@ -18,7 +18,6 @@ const VetConsultationSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Service',
     required: true,
-    index: true,
   },
   appointment: {
     type: Schema.Types.ObjectId,
