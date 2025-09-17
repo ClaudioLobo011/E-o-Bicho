@@ -1,0 +1,1102 @@
+{
+  "cachorro": {
+    "portes": {
+      "mini": [
+        "Affenpinscher",
+        "Biewer Terrier",
+        "Bolonhês",
+        "Brussels Griffon",
+        "Griffon Belga",
+        "Petit Brabançon",
+        "Chihuahua",
+        "Chin Japonês",
+        "Coton de Tulear",
+        "Japanese Chin",
+        "Lowchen (Cão Leão)",
+        "Maltês",
+        "Papillon",
+        "Pequinês",
+        "Pinscher",
+        "Pomeranian (Spitz Alemão Anão)",
+        "Poodle Toy",
+        "Prazsky Krysarik",
+        "Russian Toy",
+        "Toy Fox Terrier",
+        "Toy Manchester Terrier",
+        "Xoloitzcuintli Toy"
+      ],
+      "pequeno": [
+        "Basenji",
+        "Basset Fauve de Bretagne",
+        "Beagle",
+        "Bichon Frisé",
+        "Border Terrier",
+        "Boston Terrier",
+        "Cairn Terrier",
+        "Cavalier King Charles Spaniel",
+        "Dachshund Miniatura (Pelo Curto)",
+        "Dachshund Miniatura (Pelo Duro)",
+        "Dachshund Miniatura (Pelo Longo)",
+        "Fox Terrier (Pelo Duro)",
+        "Fox Terrier (Pelo Liso)",
+        "Havanês",
+        "Italian Greyhound (Pequeno Italiano)",
+        "Jack Russell Terrier",
+        "Lhasa Apso",
+        "Manchester Terrier",
+        "Miniature Bull Terrier",
+        "Miniature Schnauzer",
+        "Norfolk Terrier",
+        "Norwich Terrier",
+        "Parson Russell Terrier",
+        "Poodle Miniatura",
+        "Pug",
+        "Schipperke",
+        "Schnauzer Miniatura",
+        "Scottish Terrier",
+        "Sealyham Terrier",
+        "Shetland Sheepdog",
+        "Shiba Inu",
+        "Shih Tzu",
+        "Silky Terrier",
+        "Skye Terrier",
+        "Spitz Alemão Pequeno",
+        "Spitz Japonês",
+        "Terrier Brasileiro (Fox Paulistinha)",
+        "Welsh Corgi Cardigan",
+        "Welsh Corgi Pembroke",
+        "West Highland White Terrier"
+      ],
+      "medio": [
+        "SRD (Sem Raça Definida)",
+        "Airedale Terrier",
+        "American Cocker Spaniel",
+        "Australian Cattle Dog (Boiadeiro Australiano)",
+        "Australian Shepherd (Pastor Australiano)",
+        "Basset Hound",
+        "Bearded Collie",
+        "Border Collie",
+        "Brittany (Epagneul Breton)",
+        "Bull Terrier (Standard)",
+        "Bulldog Inglês",
+        "Cão de Água Português",
+        "Chow Chow",
+        "Cocker Spaniel Inglês",
+        "Dálmata",
+        "Finnish Lapphund",
+        "Keeshond (Spitz Lobo)",
+        "Lagotto Romagnolo",
+        "Nova Scotia Duck Tolling Retriever",
+        "Norwegian Buhund",
+        "Poodle Médio",
+        "Podengo Português Médio",
+        "Schnauzer Standard",
+        "Shar",
+        "Springer Spaniel Inglês",
+        "Springer Spaniel Galês",
+        "Staffordshire Bull Terrier",
+        "Vizsla (Pointer Húngaro)",
+        "Whippet"
+      ],
+      "grande": [
+        "Akita Americano",
+        "Alaskan Malamute",
+        "Bernese Mountain Dog",
+        "Belgian Malinois (Pastor Belga Malinois)",
+        "Belgian Tervuren (Pastor Belga Tervuren)",
+        "Belgian Groenendael (Pastor Belga Groenendael)",
+        "Boxer",
+        "Cane Corso",
+        "Collie (Rough)",
+        "Collie (Smooth)",
+        "Doberman",
+        "Dogo Argentino",
+        "German Shepherd (Pastor Alemão)",
+        "Golden Retriever",
+        "Husky Siberiano",
+        "Labrador Retriever",
+        "Old English Sheepdog (Bobtail)",
+        "Rottweiler",
+        "Samoyed",
+        "Weimaraner",
+        "Rhodesian Ridgeback",
+        "Schnauzer Gigante"
+      ],
+      "gigante": [
+        "Akbash",
+        "Cão de Montanha dos Pirenéus",
+        "Cão Maremmano",
+        "Komondor",
+        "Kuvasz",
+        "Leonberger",
+        "Mastim Inglês",
+        "Mastim Napolitano",
+        "São Bernardo",
+        "Terra Nova (Newfoundland)",
+        "Tosa",
+        "Irish Wolfhound",
+        "Scottish Deerhound",
+        "Great Dane (Dogue Alemão)",
+        "Fila Brasileiro"
+      ]
+    },
+    "all": [
+      "Affenpinscher",
+      "Biewer Terrier",
+      "Bolonhês",
+      "Brussels Griffon",
+      "Griffon Belga",
+      "Petit Brabançon",
+      "Chihuahua",
+      "Chin Japonês",
+      "Coton de Tulear",
+      "Japanese Chin",
+      "Lowchen (Cão Leão)",
+      "Maltês",
+      "Papillon",
+      "Pequinês",
+      "Pinscher",
+      "Pomeranian (Spitz Alemão Anão)",
+      "Poodle Toy",
+      "Prazsky Krysarik",
+      "Russian Toy",
+      "Toy Fox Terrier",
+      "Toy Manchester Terrier",
+      "Xoloitzcuintli Toy",
+      "Basenji",
+      "Basset Fauve de Bretagne",
+      "Beagle",
+      "Bichon Frisé",
+      "Border Terrier",
+      "Boston Terrier",
+      "Cairn Terrier",
+      "Cavalier King Charles Spaniel",
+      "Dachshund Miniatura (Pelo Curto)",
+      "Dachshund Miniatura (Pelo Duro)",
+      "Dachshund Miniatura (Pelo Longo)",
+      "Fox Terrier (Pelo Duro)",
+      "Fox Terrier (Pelo Liso)",
+      "Havanês",
+      "Italian Greyhound (Pequeno Italiano)",
+      "Jack Russell Terrier",
+      "Lhasa Apso",
+      "Manchester Terrier",
+      "Miniature Bull Terrier",
+      "Miniature Schnauzer",
+      "Norfolk Terrier",
+      "Norwich Terrier",
+      "Parson Russell Terrier",
+      "Poodle Miniatura",
+      "Pug",
+      "Schipperke",
+      "Schnauzer Miniatura",
+      "Scottish Terrier",
+      "Sealyham Terrier",
+      "Shetland Sheepdog",
+      "Shiba Inu",
+      "Shih Tzu",
+      "Silky Terrier",
+      "Skye Terrier",
+      "Spitz Alemão Pequeno",
+      "Spitz Japonês",
+      "Terrier Brasileiro (Fox Paulistinha)",
+      "Welsh Corgi Cardigan",
+      "Welsh Corgi Pembroke",
+      "West Highland White Terrier",
+      "SRD (Sem Raça Definida)",
+      "Airedale Terrier",
+      "American Cocker Spaniel",
+      "Australian Cattle Dog (Boiadeiro Australiano)",
+      "Australian Shepherd (Pastor Australiano)",
+      "Basset Hound",
+      "Bearded Collie",
+      "Border Collie",
+      "Brittany (Epagneul Breton)",
+      "Bull Terrier (Standard)",
+      "Bulldog Inglês",
+      "Cão de Água Português",
+      "Chow Chow",
+      "Cocker Spaniel Inglês",
+      "Dálmata",
+      "Finnish Lapphund",
+      "Keeshond (Spitz Lobo)",
+      "Lagotto Romagnolo",
+      "Nova Scotia Duck Tolling Retriever",
+      "Norwegian Buhund",
+      "Poodle Médio",
+      "Podengo Português Médio",
+      "Schnauzer Standard",
+      "Shar",
+      "Springer Spaniel Inglês",
+      "Springer Spaniel Galês",
+      "Staffordshire Bull Terrier",
+      "Vizsla (Pointer Húngaro)",
+      "Whippet",
+      "Akita Americano",
+      "Alaskan Malamute",
+      "Bernese Mountain Dog",
+      "Belgian Malinois (Pastor Belga Malinois)",
+      "Belgian Tervuren (Pastor Belga Tervuren)",
+      "Belgian Groenendael (Pastor Belga Groenendael)",
+      "Boxer",
+      "Cane Corso",
+      "Collie (Rough)",
+      "Collie (Smooth)",
+      "Doberman",
+      "Dogo Argentino",
+      "German Shepherd (Pastor Alemão)",
+      "Golden Retriever",
+      "Husky Siberiano",
+      "Labrador Retriever",
+      "Old English Sheepdog (Bobtail)",
+      "Rottweiler",
+      "Samoyed",
+      "Weimaraner",
+      "Rhodesian Ridgeback",
+      "Schnauzer Gigante",
+      "Akbash",
+      "Cão de Montanha dos Pirenéus",
+      "Cão Maremmano",
+      "Komondor",
+      "Kuvasz",
+      "Leonberger",
+      "Mastim Inglês",
+      "Mastim Napolitano",
+      "São Bernardo",
+      "Terra Nova (Newfoundland)",
+      "Tosa",
+      "Irish Wolfhound",
+      "Scottish Deerhound",
+      "Great Dane (Dogue Alemão)",
+      "Fila Brasileiro"
+    ],
+    "map": {
+      "affenpinscher": "mini",
+      "biewer terrier": "mini",
+      "bolonhes": "mini",
+      "brussels griffon": "mini",
+      "griffon belga": "mini",
+      "petit brabancon": "mini",
+      "chihuahua": "mini",
+      "chin japones": "mini",
+      "coton de tulear": "mini",
+      "japanese chin": "mini",
+      "lowchen (cao leao)": "mini",
+      "maltes": "mini",
+      "papillon": "mini",
+      "pequines": "mini",
+      "pinscher": "mini",
+      "pomeranian (spitz alemao anao)": "mini",
+      "poodle toy": "mini",
+      "prazsky krysarik": "mini",
+      "russian toy": "mini",
+      "toy fox terrier": "mini",
+      "toy manchester terrier": "mini",
+      "xoloitzcuintli toy": "mini",
+      "basenji": "pequeno",
+      "basset fauve de bretagne": "pequeno",
+      "beagle": "pequeno",
+      "bichon frise": "pequeno",
+      "border terrier": "pequeno",
+      "boston terrier": "pequeno",
+      "cairn terrier": "pequeno",
+      "cavalier king charles spaniel": "pequeno",
+      "dachshund miniatura (pelo curto)": "pequeno",
+      "dachshund miniatura (pelo duro)": "pequeno",
+      "dachshund miniatura (pelo longo)": "pequeno",
+      "fox terrier (pelo duro)": "pequeno",
+      "fox terrier (pelo liso)": "pequeno",
+      "havanes": "pequeno",
+      "italian greyhound (pequeno italiano)": "pequeno",
+      "jack russell terrier": "pequeno",
+      "lhasa apso": "pequeno",
+      "manchester terrier": "pequeno",
+      "miniature bull terrier": "pequeno",
+      "miniature schnauzer": "pequeno",
+      "norfolk terrier": "pequeno",
+      "norwich terrier": "pequeno",
+      "parson russell terrier": "pequeno",
+      "poodle miniatura": "pequeno",
+      "pug": "pequeno",
+      "schipperke": "pequeno",
+      "schnauzer miniatura": "pequeno",
+      "scottish terrier": "pequeno",
+      "sealyham terrier": "pequeno",
+      "shetland sheepdog": "pequeno",
+      "shiba inu": "pequeno",
+      "shih tzu": "pequeno",
+      "silky terrier": "pequeno",
+      "skye terrier": "pequeno",
+      "spitz alemao pequeno": "pequeno",
+      "spitz japones": "pequeno",
+      "terrier brasileiro (fox paulistinha)": "pequeno",
+      "welsh corgi cardigan": "pequeno",
+      "welsh corgi pembroke": "pequeno",
+      "west highland white terrier": "pequeno",
+      "srd (sem raca definida)": "medio",
+      "airedale terrier": "medio",
+      "american cocker spaniel": "medio",
+      "australian cattle dog (boiadeiro australiano)": "medio",
+      "australian shepherd (pastor australiano)": "medio",
+      "basset hound": "medio",
+      "bearded collie": "medio",
+      "border collie": "medio",
+      "brittany (epagneul breton)": "medio",
+      "bull terrier (standard)": "medio",
+      "bulldog ingles": "medio",
+      "cao de agua portugues": "medio",
+      "chow chow": "medio",
+      "cocker spaniel ingles": "medio",
+      "dalmata": "medio",
+      "finnish lapphund": "medio",
+      "keeshond (spitz lobo)": "medio",
+      "lagotto romagnolo": "medio",
+      "nova scotia duck tolling retriever": "medio",
+      "norwegian buhund": "medio",
+      "poodle medio": "medio",
+      "podengo portugues medio": "medio",
+      "schnauzer standard": "medio",
+      "shar": "medio",
+      "springer spaniel ingles": "medio",
+      "springer spaniel gales": "medio",
+      "staffordshire bull terrier": "medio",
+      "vizsla (pointer hungaro)": "medio",
+      "whippet": "medio",
+      "akita americano": "grande",
+      "alaskan malamute": "grande",
+      "bernese mountain dog": "grande",
+      "belgian malinois (pastor belga malinois)": "grande",
+      "belgian tervuren (pastor belga tervuren)": "grande",
+      "belgian groenendael (pastor belga groenendael)": "grande",
+      "boxer": "grande",
+      "cane corso": "grande",
+      "collie (rough)": "grande",
+      "collie (smooth)": "grande",
+      "doberman": "grande",
+      "dogo argentino": "grande",
+      "german shepherd (pastor alemao)": "grande",
+      "golden retriever": "grande",
+      "husky siberiano": "grande",
+      "labrador retriever": "grande",
+      "old english sheepdog (bobtail)": "grande",
+      "rottweiler": "grande",
+      "samoyed": "grande",
+      "weimaraner": "grande",
+      "rhodesian ridgeback": "grande",
+      "schnauzer gigante": "grande",
+      "akbash": "gigante",
+      "cao de montanha dos pireneus": "gigante",
+      "cao maremmano": "gigante",
+      "komondor": "gigante",
+      "kuvasz": "gigante",
+      "leonberger": "gigante",
+      "mastim ingles": "gigante",
+      "mastim napolitano": "gigante",
+      "sao bernardo": "gigante",
+      "terra nova (newfoundland)": "gigante",
+      "tosa": "gigante",
+      "irish wolfhound": "gigante",
+      "scottish deerhound": "gigante",
+      "great dane (dogue alemao)": "gigante",
+      "fila brasileiro": "gigante"
+    }
+  },
+  "gato": [
+    "SRD (Sem Raça Definida)",
+    "Abissínio",
+    "Angorá",
+    "Bengal",
+    "Bobtail Japonês",
+    "Bombay",
+    "Burmês",
+    "Cornish Rex",
+    "Devon Rex",
+    "Exótico",
+    "Himalaio",
+    "Maine Coon",
+    "Norueguês da Floresta",
+    "Persa",
+    "Ragdoll",
+    "Sagrado da Birmânia",
+    "Savannah",
+    "Scottish Fold",
+    "Siamês",
+    "Siberiano",
+    "Sphynx"
+  ],
+  "passaro": [
+    "Agapornis",
+    "Calopsita",
+    "Canário",
+    "Caturrita",
+    "Diamante",
+    "Manon",
+    "Mandarim",
+    "Papagaio",
+    "Periquito",
+    "Ring Neck"
+  ],
+  "peixe": [
+    "Betta",
+    "Carpa",
+    "Discus",
+    "Goldfish",
+    "Kinguio",
+    "Tetra Neon"
+  ],
+  "roedor": [
+    "Hamster Sírio",
+    "Hamster Anão",
+    "Porquinho",
+    "Chinchila",
+    "Gerbil"
+  ],
+  "lagarto": [
+    "Gecko",
+    "Iguana",
+    "Pogona (Dragão"
+  ],
+  "tartaruga": [
+    "Tartaruga",
+    "Jabutí",
+    "Trachemys scripta"
+  ],
+  "exotico": [
+    "Furão (Mustela putorius furo)",
+    "Ouriço",
+    "Petauro",
+    "Mini porco (Mini pig)",
+    "Raposa",
+    "Raposa doméstica (linhagens domesticadas)",
+    "Guaxinim",
+    "Capivara",
+    "Sagui (Mico",
+    "Macaco",
+    "Kinkajou",
+    "Suricato (Meerkat)",
+    "Serval",
+    "Caracal",
+    "Arara (espécies variadas)",
+    "Cacatua",
+    "Coruja (Tyto alba e outras)",
+    "Iguana Verde",
+    "Teiú",
+    "Serpente do milho (Corn Snake)",
+    "Píton Real (Ball Python)",
+    "Tarantula (Caranguejeira)",
+    "Escorpião",
+    "Axolote",
+    "Geco Tokay",
+    "Coati (Quati)",
+    "Fennec (Raposa do Deserto)"
+  ],
+  "__lookup": {
+    "affenpinscher": [
+      "cachorro"
+    ],
+    "biewer terrier": [
+      "cachorro"
+    ],
+    "bolonhes": [
+      "cachorro"
+    ],
+    "brussels griffon": [
+      "cachorro"
+    ],
+    "griffon belga": [
+      "cachorro"
+    ],
+    "petit brabancon": [
+      "cachorro"
+    ],
+    "chihuahua": [
+      "cachorro"
+    ],
+    "chin japones": [
+      "cachorro"
+    ],
+    "coton de tulear": [
+      "cachorro"
+    ],
+    "japanese chin": [
+      "cachorro"
+    ],
+    "lowchen (cao leao)": [
+      "cachorro"
+    ],
+    "maltes": [
+      "cachorro"
+    ],
+    "papillon": [
+      "cachorro"
+    ],
+    "pequines": [
+      "cachorro"
+    ],
+    "pinscher": [
+      "cachorro"
+    ],
+    "pomeranian (spitz alemao anao)": [
+      "cachorro"
+    ],
+    "poodle toy": [
+      "cachorro"
+    ],
+    "prazsky krysarik": [
+      "cachorro"
+    ],
+    "russian toy": [
+      "cachorro"
+    ],
+    "toy fox terrier": [
+      "cachorro"
+    ],
+    "toy manchester terrier": [
+      "cachorro"
+    ],
+    "xoloitzcuintli toy": [
+      "cachorro"
+    ],
+    "basenji": [
+      "cachorro"
+    ],
+    "basset fauve de bretagne": [
+      "cachorro"
+    ],
+    "beagle": [
+      "cachorro"
+    ],
+    "bichon frise": [
+      "cachorro"
+    ],
+    "border terrier": [
+      "cachorro"
+    ],
+    "boston terrier": [
+      "cachorro"
+    ],
+    "cairn terrier": [
+      "cachorro"
+    ],
+    "cavalier king charles spaniel": [
+      "cachorro"
+    ],
+    "dachshund miniatura (pelo curto)": [
+      "cachorro"
+    ],
+    "dachshund miniatura (pelo duro)": [
+      "cachorro"
+    ],
+    "dachshund miniatura (pelo longo)": [
+      "cachorro"
+    ],
+    "fox terrier (pelo duro)": [
+      "cachorro"
+    ],
+    "fox terrier (pelo liso)": [
+      "cachorro"
+    ],
+    "havanes": [
+      "cachorro"
+    ],
+    "italian greyhound (pequeno italiano)": [
+      "cachorro"
+    ],
+    "jack russell terrier": [
+      "cachorro"
+    ],
+    "lhasa apso": [
+      "cachorro"
+    ],
+    "manchester terrier": [
+      "cachorro"
+    ],
+    "miniature bull terrier": [
+      "cachorro"
+    ],
+    "miniature schnauzer": [
+      "cachorro"
+    ],
+    "norfolk terrier": [
+      "cachorro"
+    ],
+    "norwich terrier": [
+      "cachorro"
+    ],
+    "parson russell terrier": [
+      "cachorro"
+    ],
+    "poodle miniatura": [
+      "cachorro"
+    ],
+    "pug": [
+      "cachorro"
+    ],
+    "schipperke": [
+      "cachorro"
+    ],
+    "schnauzer miniatura": [
+      "cachorro"
+    ],
+    "scottish terrier": [
+      "cachorro"
+    ],
+    "sealyham terrier": [
+      "cachorro"
+    ],
+    "shetland sheepdog": [
+      "cachorro"
+    ],
+    "shiba inu": [
+      "cachorro"
+    ],
+    "shih tzu": [
+      "cachorro"
+    ],
+    "silky terrier": [
+      "cachorro"
+    ],
+    "skye terrier": [
+      "cachorro"
+    ],
+    "spitz alemao pequeno": [
+      "cachorro"
+    ],
+    "spitz japones": [
+      "cachorro"
+    ],
+    "terrier brasileiro (fox paulistinha)": [
+      "cachorro"
+    ],
+    "welsh corgi cardigan": [
+      "cachorro"
+    ],
+    "welsh corgi pembroke": [
+      "cachorro"
+    ],
+    "west highland white terrier": [
+      "cachorro"
+    ],
+    "srd (sem raca definida)": [
+      "cachorro",
+      "gato"
+    ],
+    "airedale terrier": [
+      "cachorro"
+    ],
+    "american cocker spaniel": [
+      "cachorro"
+    ],
+    "australian cattle dog (boiadeiro australiano)": [
+      "cachorro"
+    ],
+    "australian shepherd (pastor australiano)": [
+      "cachorro"
+    ],
+    "basset hound": [
+      "cachorro"
+    ],
+    "bearded collie": [
+      "cachorro"
+    ],
+    "border collie": [
+      "cachorro"
+    ],
+    "brittany (epagneul breton)": [
+      "cachorro"
+    ],
+    "bull terrier (standard)": [
+      "cachorro"
+    ],
+    "bulldog ingles": [
+      "cachorro"
+    ],
+    "cao de agua portugues": [
+      "cachorro"
+    ],
+    "chow chow": [
+      "cachorro"
+    ],
+    "cocker spaniel ingles": [
+      "cachorro"
+    ],
+    "dalmata": [
+      "cachorro"
+    ],
+    "finnish lapphund": [
+      "cachorro"
+    ],
+    "keeshond (spitz lobo)": [
+      "cachorro"
+    ],
+    "lagotto romagnolo": [
+      "cachorro"
+    ],
+    "nova scotia duck tolling retriever": [
+      "cachorro"
+    ],
+    "norwegian buhund": [
+      "cachorro"
+    ],
+    "poodle medio": [
+      "cachorro"
+    ],
+    "podengo portugues medio": [
+      "cachorro"
+    ],
+    "schnauzer standard": [
+      "cachorro"
+    ],
+    "shar": [
+      "cachorro"
+    ],
+    "springer spaniel ingles": [
+      "cachorro"
+    ],
+    "springer spaniel gales": [
+      "cachorro"
+    ],
+    "staffordshire bull terrier": [
+      "cachorro"
+    ],
+    "vizsla (pointer hungaro)": [
+      "cachorro"
+    ],
+    "whippet": [
+      "cachorro"
+    ],
+    "akita americano": [
+      "cachorro"
+    ],
+    "alaskan malamute": [
+      "cachorro"
+    ],
+    "bernese mountain dog": [
+      "cachorro"
+    ],
+    "belgian malinois (pastor belga malinois)": [
+      "cachorro"
+    ],
+    "belgian tervuren (pastor belga tervuren)": [
+      "cachorro"
+    ],
+    "belgian groenendael (pastor belga groenendael)": [
+      "cachorro"
+    ],
+    "boxer": [
+      "cachorro"
+    ],
+    "cane corso": [
+      "cachorro"
+    ],
+    "collie (rough)": [
+      "cachorro"
+    ],
+    "collie (smooth)": [
+      "cachorro"
+    ],
+    "doberman": [
+      "cachorro"
+    ],
+    "dogo argentino": [
+      "cachorro"
+    ],
+    "german shepherd (pastor alemao)": [
+      "cachorro"
+    ],
+    "golden retriever": [
+      "cachorro"
+    ],
+    "husky siberiano": [
+      "cachorro"
+    ],
+    "labrador retriever": [
+      "cachorro"
+    ],
+    "old english sheepdog (bobtail)": [
+      "cachorro"
+    ],
+    "rottweiler": [
+      "cachorro"
+    ],
+    "samoyed": [
+      "cachorro"
+    ],
+    "weimaraner": [
+      "cachorro"
+    ],
+    "rhodesian ridgeback": [
+      "cachorro"
+    ],
+    "schnauzer gigante": [
+      "cachorro"
+    ],
+    "akbash": [
+      "cachorro"
+    ],
+    "cao de montanha dos pireneus": [
+      "cachorro"
+    ],
+    "cao maremmano": [
+      "cachorro"
+    ],
+    "komondor": [
+      "cachorro"
+    ],
+    "kuvasz": [
+      "cachorro"
+    ],
+    "leonberger": [
+      "cachorro"
+    ],
+    "mastim ingles": [
+      "cachorro"
+    ],
+    "mastim napolitano": [
+      "cachorro"
+    ],
+    "sao bernardo": [
+      "cachorro"
+    ],
+    "terra nova (newfoundland)": [
+      "cachorro"
+    ],
+    "tosa": [
+      "cachorro"
+    ],
+    "irish wolfhound": [
+      "cachorro"
+    ],
+    "scottish deerhound": [
+      "cachorro"
+    ],
+    "great dane (dogue alemao)": [
+      "cachorro"
+    ],
+    "fila brasileiro": [
+      "cachorro"
+    ],
+    "abissinio": [
+      "gato"
+    ],
+    "angora": [
+      "gato"
+    ],
+    "bengal": [
+      "gato"
+    ],
+    "bobtail japones": [
+      "gato"
+    ],
+    "bombay": [
+      "gato"
+    ],
+    "burmes": [
+      "gato"
+    ],
+    "cornish rex": [
+      "gato"
+    ],
+    "devon rex": [
+      "gato"
+    ],
+    "exotico": [
+      "gato"
+    ],
+    "himalaio": [
+      "gato"
+    ],
+    "maine coon": [
+      "gato"
+    ],
+    "noruegues da floresta": [
+      "gato"
+    ],
+    "persa": [
+      "gato"
+    ],
+    "ragdoll": [
+      "gato"
+    ],
+    "sagrado da birmania": [
+      "gato"
+    ],
+    "savannah": [
+      "gato"
+    ],
+    "scottish fold": [
+      "gato"
+    ],
+    "siames": [
+      "gato"
+    ],
+    "siberiano": [
+      "gato"
+    ],
+    "sphynx": [
+      "gato"
+    ],
+    "agapornis": [
+      "passaro"
+    ],
+    "calopsita": [
+      "passaro"
+    ],
+    "canario": [
+      "passaro"
+    ],
+    "caturrita": [
+      "passaro"
+    ],
+    "diamante": [
+      "passaro"
+    ],
+    "manon": [
+      "passaro"
+    ],
+    "mandarim": [
+      "passaro"
+    ],
+    "papagaio": [
+      "passaro"
+    ],
+    "periquito": [
+      "passaro"
+    ],
+    "ring neck": [
+      "passaro"
+    ],
+    "betta": [
+      "peixe"
+    ],
+    "carpa": [
+      "peixe"
+    ],
+    "discus": [
+      "peixe"
+    ],
+    "goldfish": [
+      "peixe"
+    ],
+    "kinguio": [
+      "peixe"
+    ],
+    "tetra neon": [
+      "peixe"
+    ],
+    "hamster sirio": [
+      "roedor"
+    ],
+    "hamster anao": [
+      "roedor"
+    ],
+    "porquinho": [
+      "roedor"
+    ],
+    "chinchila": [
+      "roedor"
+    ],
+    "gerbil": [
+      "roedor"
+    ],
+    "gecko": [
+      "lagarto"
+    ],
+    "iguana": [
+      "lagarto"
+    ],
+    "pogona (dragao": [
+      "lagarto"
+    ],
+    "tartaruga": [
+      "tartaruga"
+    ],
+    "jabuti": [
+      "tartaruga"
+    ],
+    "trachemys scripta": [
+      "tartaruga"
+    ],
+    "furao (mustela putorius furo)": [
+      "exotico"
+    ],
+    "ourico": [
+      "exotico"
+    ],
+    "petauro": [
+      "exotico"
+    ],
+    "mini porco (mini pig)": [
+      "exotico"
+    ],
+    "raposa": [
+      "exotico"
+    ],
+    "raposa domestica (linhagens domesticadas)": [
+      "exotico"
+    ],
+    "guaxinim": [
+      "exotico"
+    ],
+    "capivara": [
+      "exotico"
+    ],
+    "sagui (mico": [
+      "exotico"
+    ],
+    "macaco": [
+      "exotico"
+    ],
+    "kinkajou": [
+      "exotico"
+    ],
+    "suricato (meerkat)": [
+      "exotico"
+    ],
+    "serval": [
+      "exotico"
+    ],
+    "caracal": [
+      "exotico"
+    ],
+    "arara (especies variadas)": [
+      "exotico"
+    ],
+    "cacatua": [
+      "exotico"
+    ],
+    "coruja (tyto alba e outras)": [
+      "exotico"
+    ],
+    "iguana verde": [
+      "exotico"
+    ],
+    "teiu": [
+      "exotico"
+    ],
+    "serpente do milho (corn snake)": [
+      "exotico"
+    ],
+    "piton real (ball python)": [
+      "exotico"
+    ],
+    "tarantula (caranguejeira)": [
+      "exotico"
+    ],
+    "escorpiao": [
+      "exotico"
+    ],
+    "axolote": [
+      "exotico"
+    ],
+    "geco tokay": [
+      "exotico"
+    ],
+    "coati (quati)": [
+      "exotico"
+    ],
+    "fennec (raposa do deserto)": [
+      "exotico"
+    ]
+  }
+}

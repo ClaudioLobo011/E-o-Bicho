@@ -36,7 +36,11 @@
     saveBtn:    document.getElementById('ap-save-btn'),
   };
 
-  const API_BASE = (win.API_CONFIG && win.API_CONFIG.BASE_URL) || '';
+  const API_BASE = (
+    (typeof API_CONFIG !== 'undefined' && API_CONFIG?.BASE_URL) ||
+    (win.API_CONFIG && win.API_CONFIG.BASE_URL) ||
+    ''
+  );
 
   // --- Species/breeds loader from data/Racas-leitura.js ---
   let SPECIES_MAP = null; // { cachorro:{portes:{mini:[],...}, all:[], map:{}}, gato:[...], passaro:[...], ... }
@@ -45,79 +49,168 @@
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .trim().toLowerCase();
 
-  async function loadSpeciesMap() {
-    if (SPECIES_MAP) return SPECIES_MAP;
-    const base = (win.basePath || '../../');
-    const url = base + 'data/Racas-leitura.js';
-    try {
-      const txt = await fetch(url).then(r => r.text());
-      const species = {};
-      const typeLookup = new Map();
-      const addLookup = (name, tipo) => {
-        const key = norm(name);
-        if (!key) return;
-        const set = typeLookup.get(key) || new Set();
-        set.add(tipo);
-        typeLookup.set(key, set);
-      };
-      let dogMap = { mini:[], pequeno:[], medio:[], grande:[], gigante:[] };
-      const reDogGlobal = /porte[_\s-]?(mini|pequeno|medio|grande|gigante)\s*{([\s\S]*?)}\s*/gi;
-      let m;
-      while ((m = reDogGlobal.exec(txt))) {
-        const key = m[1].toLowerCase();
-        const body = m[2];
-        const list = body.split(/\n+/).map(x => x.trim())
-          .filter(x => x && !x.startsWith('//') && x !== '...')
-          .map(x => x.replace(/\*.*?\*/g, ''))
-          .map(x => x.replace(/\s*\(duplicata.*$/i, ''))
-          .map(x => x.replace(/\s*[ï¿½?"-].*$/,'').replace(/\s*-\s*registro.*$/i,''));
-        const unique = Array.from(new Set(list));
-        dogMap[key] = unique;
-        unique.forEach(nome => addLookup(nome, 'cachorro'));
-      }
-      const dogAll = Array.from(new Set([
-        ...dogMap.mini, ...dogMap.pequeno, ...dogMap.medio, ...dogMap.grande, ...dogMap.gigante
-      ]));
-      const dogLookup = {};
-      dogAll.forEach(n => { dogLookup[norm(n)] =
+  const cleanList = (body) => body.split(/\n+/)
+    .map(x => x.trim())
+    .filter(x => x && !x.startsWith('//') && x !== '...')
+    .map(x => x.replace(/\*.*?\*/g, ''))
+    .map(x => x.replace(/\s*\(duplicata.*$/i, ''))
+    .map(x => x.replace(/\s*[ï¿½?"-].*$/,'').replace(/\s*-\s*registro.*$/i,''));
+
+  function buildFromJson(payload) {
+    if (!payload || typeof payload !== 'object') {
+      throw new Error('payload inválido');
+    }
+    const species = {};
+    const lookupSets = new Map();
+    const ensureSet = (key) => {
+      if (!lookupSets.has(key)) lookupSets.set(key, new Set());
+      return lookupSets.get(key);
+    };
+    const addLookup = (name, tipo) => {
+      const key = norm(name);
+      if (!key) return;
+      ensureSet(key).add(tipo);
+    };
+
+    const dogPayload = payload.cachorro || {};
+    const portas = dogPayload.portes || {};
+    const dogMap = {
+      mini: Array.from(new Set(portas.mini || [])),
+      pequeno: Array.from(new Set(portas.pequeno || [])),
+      medio: Array.from(new Set(portas.medio || [])),
+      grande: Array.from(new Set(portas.grande || [])),
+      gigante: Array.from(new Set(portas.gigante || [])),
+    };
+    const dogAll = Array.from(new Set(dogPayload.all || [
+      ...dogMap.mini, ...dogMap.pequeno, ...dogMap.medio, ...dogMap.grande, ...dogMap.gigante
+    ]));
+    const dogLookup = {};
+    const dogMapPayload = dogPayload.map || {};
+    dogAll.forEach(nome => {
+      const normalized = norm(nome);
+      const porte = dogMapPayload[normalized] || dogMapPayload[nome] ||
+        (dogMap.mini.includes(nome) ? 'mini' :
+          dogMap.pequeno.includes(nome) ? 'pequeno' :
+          dogMap.medio.includes(nome) ? 'medio' :
+          dogMap.grande.includes(nome) ? 'grande' : 'gigante');
+      dogLookup[normalized] = porte;
+      addLookup(nome, 'cachorro');
+    });
+    species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
+
+    const simples = ['gato','passaro','peixe','roedor','lagarto','tartaruga','exotico'];
+    simples.forEach(tipo => {
+      const arr = Array.isArray(payload[tipo]) ? payload[tipo] : [];
+      const unique = Array.from(new Set(arr.filter(Boolean)));
+      species[tipo] = unique;
+      unique.forEach(nome => addLookup(nome, tipo));
+    });
+
+    if (payload.__lookup && typeof payload.__lookup === 'object') {
+      Object.entries(payload.__lookup).forEach(([key, tipos]) => {
+        if (!Array.isArray(tipos)) return;
+        const normalized = norm(key);
+        const set = ensureSet(normalized);
+        tipos.forEach(tipo => set.add(tipo));
+      });
+    }
+
+    const lookup = new Map();
+    lookupSets.forEach((set, key) => lookup.set(key, Array.from(set)));
+    return { species, lookup };
+  }
+
+  function buildFromLegacy(txt) {
+    if (!txt) throw new Error('conteúdo vazio');
+    const species = {};
+    const lookupSets = new Map();
+    const ensureSet = (key) => {
+      if (!lookupSets.has(key)) lookupSets.set(key, new Set());
+      return lookupSets.get(key);
+    };
+    const addLookup = (name, tipo) => {
+      const key = norm(name);
+      if (!key) return;
+      ensureSet(key).add(tipo);
+    };
+
+    let dogMap = { mini:[], pequeno:[], medio:[], grande:[], gigante:[] };
+    const reDogGlobal = /porte[_\s-]?(mini|pequeno|medio|grande|gigante)\s*{([\s\S]*?)}\s*/gi;
+    let m;
+    while ((m = reDogGlobal.exec(txt))) {
+      const key = m[1].toLowerCase();
+      const list = cleanList(m[2]);
+      const unique = Array.from(new Set(list));
+      dogMap[key] = unique;
+      unique.forEach(nome => addLookup(nome, 'cachorro'));
+    }
+    const dogAll = Array.from(new Set([
+      ...dogMap.mini, ...dogMap.pequeno, ...dogMap.medio, ...dogMap.grande, ...dogMap.gigante
+    ]));
+    const dogLookup = {};
+    dogAll.forEach(n => {
+      dogLookup[norm(n)] =
         dogMap.mini.includes(n) ? 'mini' :
         dogMap.pequeno.includes(n) ? 'pequeno' :
         dogMap.medio.includes(n) ? 'medio' :
         dogMap.grande.includes(n) ? 'grande' : 'gigante';
-      });
-      species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
+    });
+    species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
 
-      const simpleSpecies = ['gatos','gato','passaros','passaro','peixes','peixe','roedores','roedor','lagartos','lagarto','tartarugas','tartaruga','exoticos','exotico'];
-      for (const sp of simpleSpecies) {
-        const m2 = new RegExp(sp + "\\s*{([\\s\\S]*?)}","i").exec(txt);
-        if (m2) {
-          const list = m2[1]
-            .split(/\n+/)
-            .map(x => x.trim())
-            .filter(x => x && !x.startsWith('//') && x !== '...')
-            .map(x => x.replace(/\*.*?\*/g, ''))
-            .map(x => x.replace(/\s*\(duplicata.*$/i, ''))
-            .map(x => x.replace(/\s*[ï¿½?"-].*$/, '').replace(/\s*-\s*registro.*$/i, ''));
-          const singular =
-            /roedores$/i.test(sp)   ? 'roedor'     :
-            /gatos$/i.test(sp)      ? 'gato'       :
-            /passaros$/i.test(sp)   ? 'passaro'    :
-            /peixes$/i.test(sp)     ? 'peixe'      :
-            /lagartos$/i.test(sp)   ? 'lagarto'    :
-            /tartarugas$/i.test(sp) ? 'tartaruga'  :
-            /exoticos$/i.test(sp)   ? 'exotico'    :
-            sp.replace(/s$/, '');
-          const unique = Array.from(new Set(list));
-          unique.forEach(nome => addLookup(nome, singular));
-          species[singular] = unique;
-        }
-      }
-      BREED_LOOKUP = new Map();
-      typeLookup.forEach((set, key) => {
-        BREED_LOOKUP.set(key, Array.from(set));
-      });
+    const simpleSpecies = ['gatos','gato','passaros','passaro','peixes','peixe','roedores','roedor','lagartos','lagarto','tartarugas','tartaruga','exoticos','exotico'];
+    for (const sp of simpleSpecies) {
+      const match = new RegExp(sp + "\\s*{([\\s\\S]*?)}","i").exec(txt);
+      if (!match) continue;
+      const list = cleanList(match[1]);
+      const singular =
+        /roedores$/i.test(sp)   ? 'roedor'     :
+        /gatos$/i.test(sp)      ? 'gato'       :
+        /passaros$/i.test(sp)   ? 'passaro'    :
+        /peixes$/i.test(sp)     ? 'peixe'      :
+        /lagartos$/i.test(sp)   ? 'lagarto'    :
+        /tartarugas$/i.test(sp) ? 'tartaruga'  :
+        /exoticos$/i.test(sp)   ? 'exotico'    :
+        sp.replace(/s$/, '');
+      const unique = Array.from(new Set(list));
+      species[singular] = unique;
+      unique.forEach(nome => addLookup(nome, singular));
+    }
+
+    const lookup = new Map();
+    lookupSets.forEach((set, key) => lookup.set(key, Array.from(set)));
+    return { species, lookup };
+  }
+
+  async function loadSpeciesMap() {
+    if (SPECIES_MAP) return SPECIES_MAP;
+    const base = (win.basePath || '../../');
+    const jsonUrl = base + 'data/racas.json';
+    const legacyUrl = base + 'data/Racas-leitura.js';
+
+    const applyResult = ({ species, lookup }) => {
       SPECIES_MAP = species;
-      return species;
+      BREED_LOOKUP = lookup;
+      return SPECIES_MAP;
+    };
+
+    try {
+      const res = await fetch(jsonUrl, { headers: { 'Accept': 'application/json' } });
+      if (res.ok) {
+        const payload = await res.json();
+        return applyResult(buildFromJson(payload));
+      }
+      if (res.status && res.status !== 404) {
+        console.warn('cadastro-servicos/precos: falha ao obter racas.json', res.status);
+      }
+    } catch (err) {
+      console.warn('cadastro-servicos/precos: erro ao ler racas.json', err);
+    }
+
+    try {
+      const res = await fetch(legacyUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const txt = await res.text();
+      return applyResult(buildFromLegacy(txt));
     } catch (e) {
       console.warn('Falha ao ler Racas-leitura.js', e);
       SPECIES_MAP = null;
