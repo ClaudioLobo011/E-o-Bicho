@@ -599,7 +599,7 @@
 
   function savePrices(serviceId, storeId, tipo, items) {
     return fetch(API_BASE + '/admin/servicos/precos/bulk', {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + getToken()
