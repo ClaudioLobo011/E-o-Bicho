@@ -30,6 +30,7 @@ const API_BASE = API_CONFIG.BASE_URL;
 
 // --- Species/breeds loader from data/Racas-leitura.js ---
 let SPECIES_MAP = null; // { cachorro:{portes:{mini:[],...}, all:[], map:{}}, gato:[...], passaro:[...], ... }
+let BREED_LOOKUP = null; // Map<normalizedName, Array<tipo>>
 const norm = (s) => String(s || '')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .trim().toLowerCase();
@@ -41,6 +42,14 @@ async function loadSpeciesMap() {
   try {
     const txt = await fetch(url).then(r => r.text());
     const species = {};
+    const typeLookup = new Map();
+    const addLookup = (name, tipo) => {
+      const key = norm(name);
+      if (!key) return;
+      const set = typeLookup.get(key) || new Set();
+      set.add(tipo);
+      typeLookup.set(key, set);
+    };
     let dogMap = { mini:[], pequeno:[], medio:[], grande:[], gigante:[] };
     const reDogGlobal = /porte[_\s-]?(mini|pequeno|medio|grande|gigante)\s*{([\s\S]*?)}\s*/gi;
     let m;
@@ -52,7 +61,9 @@ async function loadSpeciesMap() {
         .map(x => x.replace(/\*.*?\*/g, ''))
         .map(x => x.replace(/\s*\(duplicata.*$/i, ''))
         .map(x => x.replace(/\s*[ï¿½?"-].*$/,'').replace(/\s*-\s*registro.*$/i,''));
-      dogMap[key] = Array.from(new Set(list));
+      const unique = Array.from(new Set(list));
+      dogMap[key] = unique;
+      unique.forEach(nome => addLookup(nome, 'cachorro'));
     }
     const dogAll = Array.from(new Set([
       ...dogMap.mini, ...dogMap.pequeno, ...dogMap.medio, ...dogMap.grande, ...dogMap.gigante
@@ -86,14 +97,21 @@ async function loadSpeciesMap() {
           /tartarugas$/i.test(sp) ? 'tartaruga'  :
           /exoticos$/i.test(sp)   ? 'exotico'    :
           sp.replace(/s$/, '');
-        species[singular] = Array.from(new Set(list));
+        const unique = Array.from(new Set(list));
+        unique.forEach(nome => addLookup(nome, singular));
+        species[singular] = unique;
       }
     }
+    BREED_LOOKUP = new Map();
+    typeLookup.forEach((set, key) => {
+      BREED_LOOKUP.set(key, Array.from(set));
+    });
     SPECIES_MAP = species;
     return species;
   } catch (e) {
     console.warn('Falha ao ler Racas-leitura.js', e);
     SPECIES_MAP = null;
+    BREED_LOOKUP = null;
     return null;
   }
 }
@@ -170,6 +188,30 @@ function renderServiceSug(list) {
     li.__item = item;
     E.servSug.appendChild(li);
   });
+}
+
+function tiposForBreed(nome) {
+  if (!nome) return [];
+  const key = norm(nome);
+  if (!key) return [];
+  if (BREED_LOOKUP && BREED_LOOKUP.has(key)) {
+    const arr = BREED_LOOKUP.get(key) || [];
+    return Array.isArray(arr) ? [...arr] : [];
+  }
+  return [];
+}
+
+function groupItemsByTipo(items) {
+  const grouped = new Map();
+  (items || []).forEach(item => {
+    const tipos = tiposForBreed(item?.raca) || [];
+    if (!tipos.length) return;
+    tipos.forEach(tipo => {
+      if (!grouped.has(tipo)) grouped.set(tipo, []);
+      grouped.get(tipo).push({ ...item });
+    });
+  });
+  return grouped;
 }
 
 function breedsForSelection(tipo, porte, service) {
@@ -311,8 +353,20 @@ function bindEvents() {
   E.tipo?.addEventListener('change', () => {
     const t = E.tipo?.value;
     if (t === 'todos') {
-      if (E.porte) { E.porte.value = 'Todos'; E.porte.disabled = true; }
-    } else {
+    if (!serviceId || !storeId || !tipo) { alert('Selecione serviço, tipo e empresa.'); return; }
+      if (tipo === 'todos') {
+        const grouped = groupItemsByTipo(items);
+        if (!grouped.size) {
+          alert('Não foi possível identificar os tipos das raças selecionadas.');
+          return;
+        }
+        for (const [tipoAtual, lista] of grouped.entries()) {
+          if (!lista.length) continue;
+          await savePrices(serviceId, storeId, tipoAtual, lista);
+        }
+      } else {
+        await savePrices(serviceId, storeId, tipo, items);
+      }
       if (E.porte) { E.porte.disabled = false; }
     }
     refreshGrid();

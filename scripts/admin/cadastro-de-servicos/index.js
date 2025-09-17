@@ -25,7 +25,7 @@ try {
   }
 } catch (_) { /* ignore */ }
 
-// Guardar: impede salvar quando "Todos" estiver selecionado e mostra toast
+// Guarda básica: impede salvar quando faltarem os filtros obrigatórios
 try {
   const saveBtn = document.getElementById('ap-save-btn');
   if (saveBtn) {
@@ -36,11 +36,6 @@ try {
         const servId = document.getElementById('ap-serv-id')?.value || '';
         if (!(servId && store && tipo)) {
           if (window.showToast) window.showToast('Selecione serviço, tipo e empresa.', 'warning');
-          ev.preventDefault(); ev.stopImmediatePropagation();
-          return;
-        }
-        if (tipo === 'todos') {
-          if (window.showToast) window.showToast('Selecione um Tipo específico para salvar preços.', 'warning');
           ev.preventDefault(); ev.stopImmediatePropagation();
           return;
         }
