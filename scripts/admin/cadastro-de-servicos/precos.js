@@ -3,7 +3,12 @@
 
   function getToken() {
     try {
-      return JSON.parse(win.localStorage.getItem('loggedInUser') || 'null')?.token || '';
+      const raw = win.localStorage.getItem('loggedInUser') || 'null';
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && parsed.token) {
+        return parsed.token;
+      }
+      return '';
     } catch (err) {
       console.warn('cadastro-servicos/precos: token não disponível', err);
       return '';
@@ -37,7 +42,7 @@
   };
 
   const API_BASE = (
-    (typeof API_CONFIG !== 'undefined' && API_CONFIG?.BASE_URL) ||
+    (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) ||
     (win.API_CONFIG && win.API_CONFIG.BASE_URL) ||
     ''
   );
@@ -241,7 +246,7 @@
 
   function setPorteOptionsFromService(service) {
     const el = E.porte; if (!el) return;
-    const portes = Array.isArray(service?.porte) ? service.porte : [];
+    const portes = (service && Array.isArray(service.porte)) ? service.porte : [];
     const all = ['Todos','Mini','Pequeno','Médio','Grande','Gigante'];
     el.innerHTML = '';
     const enabled = (portes.includes('Todos') || !portes.length)
@@ -305,12 +310,13 @@
     }
     if (t === 'cachorro') {
       const dog = data.cachorro || { portes: {} };
-      if (!porte || porte === 'Todos' || (service?.porte||[]).includes('Todos')) {
+      const servicePortes = (service && Array.isArray(service.porte)) ? service.porte : [];
+      if (!porte || porte === 'Todos' || servicePortes.includes('Todos')) {
         const { mini=[], pequeno=[], medio=[], grande=[], gigante=[] } = dog.portes || {};
         return [...new Set([ ...mini, ...pequeno, ...medio, ...grande, ...gigante ])];
       }
       const key = norm(porte);
-      return dog.portes?.[key] || [];
+      return (dog.portes ? dog.portes[key] : undefined) || [];
     return data[t] || [];
 
   function tiposForBreed(nome) {
@@ -326,7 +332,7 @@
   function groupItemsByTipo(items) {
     const grouped = new Map();
     (items || []).forEach(item => {
-      const tipos = tiposForBreed(item?.raca) || [];
+      const tipos = tiposForBreed((item && item.raca)) || [];
       if (!tipos.length) return;
       tipos.forEach(tipo => {
         if (!grouped.has(tipo)) grouped.set(tipo, []);
@@ -374,21 +380,21 @@
       E.gridBody.appendChild(tr);
     }
   function getGridItems() {
-    const rows = Array.from(E.gridBody?.querySelectorAll('tr') || []);
+    const rows = Array.from((E.gridBody ? E.gridBody.querySelectorAll('tr') : []) || []);
     return rows.map(r => {
       const inputs = r.querySelectorAll('input');
-      const custo = parseFloat(inputs[0]?.value || '0');
-      const valor = parseFloat(inputs[1]?.value || '0');
+      const custo = parseFloat((inputs[0] ? inputs[0].value : '') || '0');
+      const valor = parseFloat((inputs[1] ? inputs[1].value : '') || '0');
       return { raca: r.dataset.raca || '', custo: Number.isFinite(custo) ? custo : 0, valor: Number.isFinite(valor) ? valor : 0 };
   }
   async function refreshGrid() {
-    if (!serviceId || !storeId || !tipo) {
-      E.gridBody.innerHTML = '';
-      E.gridEmpty.classList.remove('hidden');
+    const serviceId = (E.servId ? E.servId.value : undefined);
+    const storeId = (E.store ? E.store.value : undefined);
+    const tipo = (E.tipo ? E.tipo.value : undefined);
       return;
     }
-    const service = E.servInput.__selectedService || null;
-    const porte = E.porte?.value || 'Todos';
+    const service = (E.servInput && E.servInput.__selectedService) ? E.servInput.__selectedService : null;
+    const porte = (E.porte ? E.porte.value : undefined) || 'Todos';
     const breeds = breedsForSelection(tipo, porte, service);
     const overrides = await loadPrices(serviceId, storeId, tipo);
     renderGrid(breeds, overrides);
@@ -396,24 +402,24 @@
 
   function bindEvents() {
     // Tabs
-    E.btnTabCadastro?.addEventListener('click', () => {
-      E.tabCadastro?.classList.remove('hidden');
-      E.tabPrecos?.classList.add('hidden');
-      E.btnTabCadastro?.classList.add('bg-primary','text-white');
-      E.btnTabPrecos?.classList.remove('bg-primary','text-white');
-      E.btnTabPrecos?.classList.add('border','border-gray-300','text-gray-700');
+    E.btnTabCadastro && E.btnTabCadastro.addEventListener('click', () => {
+      E.tabCadastro && E.tabCadastro.classList.remove('hidden');
+      E.tabPrecos && E.tabPrecos.classList.add('hidden');
+      E.btnTabCadastro && E.btnTabCadastro.classList.add('bg-primary','text-white');
+      E.btnTabPrecos && E.btnTabPrecos.classList.remove('bg-primary','text-white');
+      E.btnTabPrecos && E.btnTabPrecos.classList.add('border','border-gray-300','text-gray-700');
     });
-    E.btnTabPrecos?.addEventListener('click', () => {
-      E.tabPrecos?.classList.remove('hidden');
-      E.tabCadastro?.classList.add('hidden');
-      E.btnTabPrecos?.classList.add('bg-primary','text-white');
-      E.btnTabCadastro?.classList.remove('bg-primary','text-white');
-      E.btnTabCadastro?.classList.add('border','border-gray-300','text-gray-700');
+    E.btnTabPrecos && E.btnTabPrecos.addEventListener('click', () => {
+      E.tabPrecos && E.tabPrecos.classList.remove('hidden');
+      E.tabCadastro && E.tabCadastro.classList.add('hidden');
+      E.btnTabPrecos && E.btnTabPrecos.classList.add('bg-primary','text-white');
+      E.btnTabCadastro && E.btnTabCadastro.classList.remove('bg-primary','text-white');
+      E.btnTabCadastro && E.btnTabCadastro.classList.add('border','border-gray-300','text-gray-700');
     });
 
     // Serviço search + choose
     let searchTimer = null;
-    E.servInput?.addEventListener('input', () => {
+    E.servInput && E.servInput.addEventListener('input', () => {
       const q = E.servInput.value.trim();
       E.servId.value = '';
       E.servInput.__selectedService = null;
@@ -424,8 +430,9 @@
         renderServiceSug(list);
       }, 200);
     });
-    E.servSug?.addEventListener('click', (ev) => {
-      const li = ev.target?.closest('li');
+    E.servSug && E.servSug.addEventListener('click', (ev) => {
+      const target = ev.target;
+      const li = (target && typeof target.closest === 'function') ? target.closest('li') : null;
       if (!li || !li.__item) return;
       const it = li.__item;
       E.servInput.value = it.nome;
@@ -437,33 +444,34 @@
     });
 
     // Filters
-    E.tipo?.addEventListener('change', () => {
-      const t = E.tipo?.value;
+    E.tipo && E.tipo.addEventListener('change', () => {
+      const t = (E.tipo ? E.tipo.value : undefined);
       if (t === 'todos') {
         if (E.porte) { E.porte.value = 'Todos'; E.porte.disabled = true; }
         if (E.porte) { E.porte.disabled = false; }
       refreshGrid();
     });
-    E.porte?.addEventListener('change', refreshGrid);
-    E.store?.addEventListener('change', refreshGrid);
+    E.porte && E.porte.addEventListener('change', refreshGrid);
+    E.store && E.store.addEventListener('change', refreshGrid);
 
     // Replicate
     const applyToAll = (idx, value) => {
       const v = String(value || '').trim();
       if (v === '') return;
+      if (!E.gridBody) return;
       E.gridBody.querySelectorAll('tr').forEach(tr => {
         const inp = tr.querySelectorAll('input')[idx];
         if (inp) inp.value = v;
       });
     };
-    E.replCustoBtn?.addEventListener('click', () => applyToAll(0, E.replCusto?.value));
-    E.replValorBtn?.addEventListener('click', () => applyToAll(1, E.replValor?.value));
+    E.replCustoBtn && E.replCustoBtn.addEventListener('click', () => applyToAll(0, (E.replCusto ? E.replCusto.value : '')));
+    E.replValorBtn && E.replValorBtn.addEventListener('click', () => applyToAll(1, (E.replValor ? E.replValor.value : '')));
 
     // Save
-    E.saveBtn?.addEventListener('click', async () => {
-      const serviceId = E.servId?.value;
-      const storeId = E.store?.value;
-      const tipo = E.tipo?.value;
+    E.saveBtn && E.saveBtn.addEventListener('click', async () => {
+      const serviceId = (E.servId ? E.servId.value : undefined);
+      const storeId = (E.store ? E.store.value : undefined);
+      const tipo = (E.tipo ? E.tipo.value : undefined);
       if (!serviceId || !storeId || !tipo) { alert('Selecione serviço, tipo e empresa.'); return; }
       try {
         const items = getGridItems();
@@ -483,7 +491,7 @@
         alert('Preços salvos com sucesso.');
         await refreshGrid();
       } catch (e) {
-        console.error(e); alert(e?.message || 'Erro ao salvar preços');
+        console.error(e); alert((e && e.message) ? e.message : 'Erro ao salvar preços');
       }
     });
   }
@@ -493,8 +501,8 @@
     await loadSpeciesMap();
     populateTiposSelect();
     // Default: 'Todos' selecionado e porte bloqueado
-    try { if (E.tipo) E.tipo.value = 'todos'; } catch {}
-    try { if (E.porte) { E.porte.disabled = true; E.porte.innerHTML = '<option>Todos</option>'; } } catch {}
+    try { if (E.tipo) E.tipo.value = 'todos'; } catch (err) {}
+    try { if (E.porte) { E.porte.disabled = true; E.porte.innerHTML = '<option>Todos</option>'; } } catch (err) {}
     await loadStores();
     bindEvents();
   }
