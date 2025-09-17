@@ -148,6 +148,7 @@
         agenda: 'vetFichaAgendaContext',
     };
     const VACINA_STORAGE_PREFIX = 'vetFichaVacinas:';
+    const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 
     const CARD_TUTOR_ACTIVE_CLASSES = ['bg-sky-100', 'text-sky-700'];
     const CARD_PET_ACTIVE_CLASSES = ['bg-emerald-100', 'text-emerald-700'];
@@ -198,6 +199,15 @@
         }
         if (typeof value === 'number') return String(value);
         return String(value).trim();
+    }
+
+    function sanitizeObjectId(value) {
+        const raw = normalizeId(value);
+        if (!raw) return '';
+        const cleaned = raw
+            .replace(/^ObjectId\(["']?/, '')
+            .replace(/["']?\)$/, '');
+        return OBJECT_ID_REGEX.test(cleaned) ? cleaned : '';
     }
 
     function capitalize(value) {
@@ -318,8 +328,20 @@
         const { persist = true } = options || {};
         if (!state.agendaContext || typeof state.agendaContext !== 'object') return '';
 
-        const current = normalizeId(state.agendaContext.storeId);
-        if (current) return current;
+        const current = sanitizeObjectId(state.agendaContext.storeId);
+        if (current) {
+            state.agendaContext.storeId = current;
+            if (!Array.isArray(state.agendaContext.storeIdCandidates)) {
+                state.agendaContext.storeIdCandidates = [];
+            }
+            if (!state.agendaContext.storeIdCandidates.includes(current)) {
+                state.agendaContext.storeIdCandidates.push(current);
+            }
+            if (persist) {
+                persistAgendaContext(state.agendaContext);
+            }
+            return current;
+        }
 
         const candidates = [
             state.agendaContext.store,
@@ -336,10 +358,39 @@
             state.agendaContext.selectedStoreId,
         ];
 
+        if (Array.isArray(state.agendaContext.storeIdCandidates)) {
+            candidates.push(...state.agendaContext.storeIdCandidates);
+        }
+
         for (const candidate of candidates) {
-            const normalized = normalizeId(candidate);
+            if (Array.isArray(candidate)) {
+                for (const nested of candidate) {
+                    const normalizedNested = sanitizeObjectId(nested);
+                    if (normalizedNested) {
+                        state.agendaContext.storeId = normalizedNested;
+                        if (!Array.isArray(state.agendaContext.storeIdCandidates)) {
+                            state.agendaContext.storeIdCandidates = [];
+                        }
+                        if (!state.agendaContext.storeIdCandidates.includes(normalizedNested)) {
+                            state.agendaContext.storeIdCandidates.push(normalizedNested);
+                        }
+                        if (persist) {
+                            persistAgendaContext(state.agendaContext);
+                        }
+                        return normalizedNested;
+                    }
+                }
+                continue;
+            }
+            const normalized = sanitizeObjectId(candidate);
             if (normalized) {
                 state.agendaContext.storeId = normalized;
+                if (!Array.isArray(state.agendaContext.storeIdCandidates)) {
+                    state.agendaContext.storeIdCandidates = [];
+                }
+                if (!state.agendaContext.storeIdCandidates.includes(normalized)) {
+                    state.agendaContext.storeIdCandidates.push(normalized);
+                }
                 if (persist) {
                     persistAgendaContext(state.agendaContext);
                 }
@@ -451,6 +502,90 @@
         } catch {
             return `R$ ${num.toFixed(2).replace('.', ',')}`;
         }
+    }
+
+    function normalizeBreedName(value) {
+        if (!value) return '';
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                const nested = normalizeBreedName(item);
+                if (nested) return nested;
+            }
+            return '';
+        }
+        if (typeof value === 'object') {
+            if (value.nome) return String(value.nome).trim();
+            if (value.name) return String(value.name).trim();
+            if (value.descricao) return String(value.descricao).trim();
+            if (value.label) return String(value.label).trim();
+            if (value.title) return String(value.title).trim();
+            return '';
+        }
+        return String(value || '').trim();
+    }
+
+    function mapPetTipoForPrice(value) {
+        const norm = normalizeForCompare(value);
+        if (!norm) return '';
+        if (/cachorr|cao|canin|canid|dog/.test(norm)) return 'cachorro';
+        if (/gat|felin|cat/.test(norm)) return 'gato';
+        if (/passar|ave|bird|galinh|periquit|papagai|canar|calops|aves/.test(norm)) return 'passaro';
+        if (/peix|fish|aquat/.test(norm)) return 'peixe';
+        if (/roedor|hamst|coelh|porquinho|chinchil|rat|camundong|gerbil|rodent/.test(norm)) return 'roedor';
+        if (/lagart|iguana|geco|gecko|tegu/.test(norm)) return 'lagarto';
+        if (/tartarug|jabuti|quelon|caga/.test(norm)) return 'tartaruga';
+        if (/exot|selvag|silvest|outro/.test(norm)) return 'exotico';
+        return norm;
+    }
+
+    function getPetPriceCriteria() {
+        const pet = getSelectedPet();
+        if (!pet) return { tipo: '', raca: '' };
+
+        const tipoCandidates = [
+            pet.tipo,
+            pet.tipoPet,
+            pet.especie,
+            pet.especiePet,
+            pet.categoria,
+            pet.category,
+            pet.porte,
+            pet.tipoAnimal,
+            pet.tipoEspecie,
+        ];
+        let tipo = '';
+        for (const candidate of tipoCandidates) {
+            const mapped = mapPetTipoForPrice(candidate);
+            if (mapped) {
+                tipo = mapped;
+                break;
+            }
+        }
+
+        const racaCandidates = [
+            pet.raca,
+            pet.breed,
+            pet.racaNome,
+            pet.racaDescricao,
+            pet.racaPrincipal,
+            pet.racaOriginal,
+            pet.racaPet,
+            pet.racaLabel,
+            pet?.raca?.nome,
+            pet?.raca?.name,
+            pet?.raca?.descricao,
+            pet?.raca?.label,
+        ];
+        let raca = '';
+        for (const candidate of racaCandidates) {
+            const value = normalizeBreedName(candidate);
+            if (value) {
+                raca = value;
+                break;
+            }
+        }
+
+        return { tipo, raca };
     }
 
     function isVetCategory(value) {
@@ -1774,12 +1909,14 @@
                 normalized.forEach((svc) => {
                     const li = document.createElement('li');
                     li.className = 'px-3 py-2 hover:bg-gray-50 cursor-pointer';
+                    li.dataset.serviceId = svc._id;
                     const nameEl = document.createElement('div');
                     nameEl.className = 'font-medium text-gray-900';
                     nameEl.textContent = svc.nome;
                     const priceEl = document.createElement('div');
                     priceEl.className = 'text-xs text-gray-500';
                     priceEl.textContent = formatMoney(Number(svc.valor || 0));
+                    svc.priceEl = priceEl;
                     li.appendChild(nameEl);
                     li.appendChild(priceEl);
                     li.addEventListener('click', async () => {
@@ -1788,6 +1925,32 @@
                     vacinaModal.suggestionsEl.appendChild(li);
                 });
                 vacinaModal.suggestionsEl.classList.remove('hidden');
+
+                const storeId = getAgendaStoreId({ persist: false });
+                if (storeId) {
+                    const petId = normalizeId(state.selectedPetId);
+                    const { tipo, raca } = getPetPriceCriteria();
+                    normalized.forEach((svc) => {
+                        const params = new URLSearchParams({ serviceId: svc._id, storeId });
+                        if (petId) params.set('petId', petId);
+                        if (tipo) params.set('tipo', tipo);
+                        if (raca) params.set('raca', raca);
+                        api(`/func/servicos/preco?${params.toString()}`, { signal: controller.signal })
+                            .then((res) => (res && res.ok ? res.json().catch(() => null) : null))
+                            .then((data) => {
+                                if (!data || typeof data.valor !== 'number' || controller.signal.aborted) return;
+                                const price = Number(data.valor || 0);
+                                svc.valor = price;
+                                if (svc.priceEl) {
+                                    svc.priceEl.textContent = formatMoney(price);
+                                }
+                            })
+                            .catch((err) => {
+                                if (controller.signal.aborted) return;
+                                if (err && err.name === 'AbortError') return;
+                            });
+                    });
+                }
             }
         } catch (error) {
             if (controller.signal.aborted) return;
@@ -1805,6 +1968,9 @@
         const petId = normalizeId(state.selectedPetId);
         const params = new URLSearchParams({ serviceId, storeId });
         if (petId) params.set('petId', petId);
+        const { tipo, raca } = getPetPriceCriteria();
+        if (tipo) params.set('tipo', tipo);
+        if (raca) params.set('raca', raca);
         try {
             const resp = await api(`/func/servicos/preco?${params.toString()}`);
             if (!resp.ok) return null;
