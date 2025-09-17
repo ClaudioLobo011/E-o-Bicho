@@ -261,8 +261,19 @@
     }
     if (E.servPorteInfo) E.servPorteInfo.textContent = service ? `Portes permitidos: ${info}` : '';
     if (!E.store) return;
-      const opt = document.createElement('option');
-      opt.value = s._id;
+    let list = [];
+    try {
+      const res = await fetch(`${API_BASE}/stores`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
+      if (Array.isArray(payload)) {
+        list = payload;
+      }
+    } catch (err) {
+      console.warn('cadastro-servicos/precos: falha ao carregar lojas', err);
+      list = [];
+    }
+      if (!s || typeof s !== 'object') return;
       opt.textContent = s.nome;
       E.store.appendChild(opt);
   function clearSugList() {
