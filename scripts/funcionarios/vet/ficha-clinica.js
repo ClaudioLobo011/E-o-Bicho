@@ -504,6 +504,90 @@
         }
     }
 
+    function normalizeBreedName(value) {
+        if (!value) return '';
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                const nested = normalizeBreedName(item);
+                if (nested) return nested;
+            }
+            return '';
+        }
+        if (typeof value === 'object') {
+            if (value.nome) return String(value.nome).trim();
+            if (value.name) return String(value.name).trim();
+            if (value.descricao) return String(value.descricao).trim();
+            if (value.label) return String(value.label).trim();
+            if (value.title) return String(value.title).trim();
+            return '';
+        }
+        return String(value || '').trim();
+    }
+
+    function mapPetTipoForPrice(value) {
+        const norm = normalizeForCompare(value);
+        if (!norm) return '';
+        if (/cachorr|cao|canin|canid|dog/.test(norm)) return 'cachorro';
+        if (/gat|felin|cat/.test(norm)) return 'gato';
+        if (/passar|ave|bird|galinh|periquit|papagai|canar|calops|aves/.test(norm)) return 'passaro';
+        if (/peix|fish|aquat/.test(norm)) return 'peixe';
+        if (/roedor|hamst|coelh|porquinho|chinchil|rat|camundong|gerbil|rodent/.test(norm)) return 'roedor';
+        if (/lagart|iguana|geco|gecko|tegu/.test(norm)) return 'lagarto';
+        if (/tartarug|jabuti|quelon|caga/.test(norm)) return 'tartaruga';
+        if (/exot|selvag|silvest|outro/.test(norm)) return 'exotico';
+        return norm;
+    }
+
+    function getPetPriceCriteria() {
+        const pet = getSelectedPet();
+        if (!pet) return { tipo: '', raca: '' };
+
+        const tipoCandidates = [
+            pet.tipo,
+            pet.tipoPet,
+            pet.especie,
+            pet.especiePet,
+            pet.categoria,
+            pet.category,
+            pet.porte,
+            pet.tipoAnimal,
+            pet.tipoEspecie,
+        ];
+        let tipo = '';
+        for (const candidate of tipoCandidates) {
+            const mapped = mapPetTipoForPrice(candidate);
+            if (mapped) {
+                tipo = mapped;
+                break;
+            }
+        }
+
+        const racaCandidates = [
+            pet.raca,
+            pet.breed,
+            pet.racaNome,
+            pet.racaDescricao,
+            pet.racaPrincipal,
+            pet.racaOriginal,
+            pet.racaPet,
+            pet.racaLabel,
+            pet?.raca?.nome,
+            pet?.raca?.name,
+            pet?.raca?.descricao,
+            pet?.raca?.label,
+        ];
+        let raca = '';
+        for (const candidate of racaCandidates) {
+            const value = normalizeBreedName(candidate);
+            if (value) {
+                raca = value;
+                break;
+            }
+        }
+
+        return { tipo, raca };
+    }
+
     function isVetCategory(value) {
         const norm = normalizeForCompare(value);
         if (!norm) return false;
@@ -1825,12 +1909,14 @@
                 normalized.forEach((svc) => {
                     const li = document.createElement('li');
                     li.className = 'px-3 py-2 hover:bg-gray-50 cursor-pointer';
+                    li.dataset.serviceId = svc._id;
                     const nameEl = document.createElement('div');
                     nameEl.className = 'font-medium text-gray-900';
                     nameEl.textContent = svc.nome;
                     const priceEl = document.createElement('div');
                     priceEl.className = 'text-xs text-gray-500';
                     priceEl.textContent = formatMoney(Number(svc.valor || 0));
+                    svc.priceEl = priceEl;
                     li.appendChild(nameEl);
                     li.appendChild(priceEl);
                     li.addEventListener('click', async () => {
@@ -1839,6 +1925,32 @@
                     vacinaModal.suggestionsEl.appendChild(li);
                 });
                 vacinaModal.suggestionsEl.classList.remove('hidden');
+
+                const storeId = getAgendaStoreId({ persist: false });
+                if (storeId) {
+                    const petId = normalizeId(state.selectedPetId);
+                    const { tipo, raca } = getPetPriceCriteria();
+                    normalized.forEach((svc) => {
+                        const params = new URLSearchParams({ serviceId: svc._id, storeId });
+                        if (petId) params.set('petId', petId);
+                        if (tipo) params.set('tipo', tipo);
+                        if (raca) params.set('raca', raca);
+                        api(`/func/servicos/preco?${params.toString()}`, { signal: controller.signal })
+                            .then((res) => (res && res.ok ? res.json().catch(() => null) : null))
+                            .then((data) => {
+                                if (!data || typeof data.valor !== 'number' || controller.signal.aborted) return;
+                                const price = Number(data.valor || 0);
+                                svc.valor = price;
+                                if (svc.priceEl) {
+                                    svc.priceEl.textContent = formatMoney(price);
+                                }
+                            })
+                            .catch((err) => {
+                                if (controller.signal.aborted) return;
+                                if (err && err.name === 'AbortError') return;
+                            });
+                    });
+                }
             }
         } catch (error) {
             if (controller.signal.aborted) return;
@@ -1856,6 +1968,9 @@
         const petId = normalizeId(state.selectedPetId);
         const params = new URLSearchParams({ serviceId, storeId });
         if (petId) params.set('petId', petId);
+        const { tipo, raca } = getPetPriceCriteria();
+        if (tipo) params.set('tipo', tipo);
+        if (raca) params.set('raca', raca);
         try {
             const resp = await api(`/func/servicos/preco?${params.toString()}`);
             if (!resp.ok) return null;
