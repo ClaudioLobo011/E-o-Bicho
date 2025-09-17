@@ -1,5 +1,9 @@
 (function (win) {
-  if (!win) return;
+  'use strict';
+
+  if (!win || !win.document) return;
+
+  var doc = win.document;
 
   function getToken() {
     try {
@@ -8,36 +12,35 @@
       if (parsed && typeof parsed === 'object' && parsed.token) {
         return parsed.token;
       }
-      return '';
     } catch (err) {
       console.warn('cadastro-servicos/precos: token não disponível', err);
-      return '';
     }
+    return '';
   }
 
   var E = {
-    btnTabCadastro: document.getElementById('tab-btn-cadastro'),
-    btnTabPrecos: document.getElementById('tab-btn-precos'),
-    tabCadastro: document.getElementById('tab-cadastro'),
-    tabPrecos: document.getElementById('tab-precos'),
+    btnTabCadastro: doc.getElementById('tab-btn-cadastro'),
+    btnTabPrecos: doc.getElementById('tab-btn-precos'),
+    tabCadastro: doc.getElementById('tab-cadastro'),
+    tabPrecos: doc.getElementById('tab-precos'),
 
-    servInput: document.getElementById('ap-serv-input'),
-    servSug: document.getElementById('ap-serv-sug'),
-    servId: document.getElementById('ap-serv-id'),
-    servPorteInfo: document.getElementById('ap-serv-porte-info'),
+    servInput: doc.getElementById('ap-serv-input'),
+    servSug: doc.getElementById('ap-serv-sug'),
+    servId: doc.getElementById('ap-serv-id'),
+    servPorteInfo: doc.getElementById('ap-serv-porte-info'),
 
-    tipo: document.getElementById('ap-tipo'),
-    porte: document.getElementById('ap-porte'),
-    store: document.getElementById('ap-store'),
+    tipo: doc.getElementById('ap-tipo'),
+    porte: doc.getElementById('ap-porte'),
+    store: doc.getElementById('ap-store'),
 
-    replCusto: document.getElementById('ap-repl-custo'),
-    replCustoBtn: document.getElementById('ap-repl-custo-btn'),
-    replValor: document.getElementById('ap-repl-valor'),
-    replValorBtn: document.getElementById('ap-repl-valor-btn'),
+    replCusto: doc.getElementById('ap-repl-custo'),
+    replCustoBtn: doc.getElementById('ap-repl-custo-btn'),
+    replValor: doc.getElementById('ap-repl-valor'),
+    replValorBtn: doc.getElementById('ap-repl-valor-btn'),
 
-    gridBody: document.getElementById('ap-grid-tbody'),
-    gridEmpty: document.getElementById('ap-grid-empty'),
-    saveBtn: document.getElementById('ap-save-btn')
+    gridBody: doc.getElementById('ap-grid-tbody'),
+    gridEmpty: doc.getElementById('ap-grid-empty'),
+    saveBtn: doc.getElementById('ap-save-btn')
   };
 
   var API_BASE = (
@@ -46,26 +49,30 @@
     ''
   );
 
-  var SPECIES_MAP = null;
-  var BREED_LOOKUP = null; // { nomeNormalizado: [tipos] }
-  var hasOwn = Object.prototype.hasOwnProperty;
+  var state = {
+    species: null,
+    lookup: null,
+    searchTimer: null,
+    eventsBound: false
+  };
 
-  function norm(value) {
-    return String(value || '')
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .trim().toLowerCase();
+  function hasOwn(obj, key) {
+    return Object.prototype.hasOwnProperty.call(obj, key);
   }
 
-  function addUnique(list, value) {
+  function ensureArray(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
+  function pushUnique(list, value) {
     if (!list) return;
     if (list.indexOf(value) === -1) {
       list.push(value);
     }
   }
 
-  function uniqueList(list) {
+  function unique(list) {
     var result = [];
-    if (!Array.isArray(list)) return result;
     for (var i = 0; i < list.length; i += 1) {
       var item = list[i];
       if (item !== undefined && item !== null && result.indexOf(item) === -1) {
@@ -75,26 +82,46 @@
     return result;
   }
 
-  function shallowCopy(obj) {
+  function clone(obj) {
     var copy = {};
-    if (!obj || typeof obj !== 'object') return copy;
     for (var key in obj) {
-      if (hasOwn.call(obj, key)) {
+      if (hasOwn(obj, key)) {
         copy[key] = obj[key];
       }
     }
     return copy;
   }
 
-  function cleanList(body) {
+  function stripDiacritics(value) {
+    var text = String(value || '');
+    if (!text) return '';
+    var normalizer = ''.normalize;
+    if (typeof normalizer === 'function') {
+      text = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    } else {
+      text = text
+        .replace(/[ÁÀÂÃÄÅ]/gi, 'A')
+        .replace(/[ÉÈÊË]/gi, 'E')
+        .replace(/[ÍÌÎÏ]/gi, 'I')
+        .replace(/[ÓÒÔÕÖ]/gi, 'O')
+        .replace(/[ÚÙÛÜ]/gi, 'U')
+        .replace(/[Ç]/gi, 'C')
+        .replace(/[Ñ]/gi, 'N');
+    }
+    return text.trim().toLowerCase();
+  }
+
+  function cleanLegacyList(body) {
     return String(body || '')
       .split(/\n+/)
-      .map(function (x) { return x.trim(); })
-      .filter(function (x) { return x && x.indexOf('//') !== 0 && x !== '...'; })
-      .map(function (x) { return x.replace(/\*.*?\*/g, ''); })
-      .map(function (x) { return x.replace(/\s*\(duplicata.*$/i, ''); })
-      .map(function (x) {
-        return x.replace(/\s*[ï¿½?"-].*$/, '').replace(/\s*-\s*registro.*$/i, '');
+      .map(function (part) { return part.trim(); })
+      .filter(function (part) { return part && part.indexOf('//') !== 0 && part !== '...'; })
+      .map(function (part) { return part.replace(/\*.*?\*/g, ''); })
+      .map(function (part) { return part.replace(/\s*\(duplicata.*$/i, ''); })
+      .map(function (part) {
+        return part
+          .replace(/\s*[ï¿½?"-].*$/, '')
+          .replace(/\s*-\s*registro.*$/i, '');
       });
   }
 
@@ -103,33 +130,39 @@
       throw new Error('payload inválido');
     }
 
-    var species = {};
-    var lookup = {};
+    var result = { species: {}, lookup: {} };
 
     function addLookup(name, tipo) {
-      var key = norm(name);
+      var key = stripDiacritics(name);
       if (!key) return;
-      if (!lookup[key]) lookup[key] = [];
-      addUnique(lookup[key], tipo);
+      if (!result.lookup[key]) result.lookup[key] = [];
+      pushUnique(result.lookup[key], tipo);
     }
 
     var dogPayload = payload.cachorro || {};
-    var portas = dogPayload.portes || {};
+    var portes = dogPayload.portes || {};
     var dogMap = {
-      mini: uniqueList(portas.mini || []),
-      pequeno: uniqueList(portas.pequeno || []),
-      medio: uniqueList(portas.medio || []),
-      grande: uniqueList(portas.grande || []),
-      gigante: uniqueList(portas.gigante || [])
+      mini: unique(ensureArray(portes.mini)),
+      pequeno: unique(ensureArray(portes.pequeno)),
+      medio: unique(ensureArray(portes.medio)),
+      grande: unique(ensureArray(portes.grande)),
+      gigante: unique(ensureArray(portes.gigante))
     };
-    var baseDogAll = Array.isArray(dogPayload.all) ? dogPayload.all : [];
-    var dogAll = uniqueList(baseDogAll
-      .concat(dogMap.mini, dogMap.pequeno, dogMap.medio, dogMap.grande, dogMap.gigante));
+
+    var dogAll = unique([].concat(
+      ensureArray(dogPayload.all),
+      dogMap.mini,
+      dogMap.pequeno,
+      dogMap.medio,
+      dogMap.grande,
+      dogMap.gigante
+    ));
+
     var dogLookup = {};
     var dogMapPayload = dogPayload.map || {};
     for (var i = 0; i < dogAll.length; i += 1) {
       var nome = dogAll[i];
-      var normalized = norm(nome);
+      var normalized = stripDiacritics(nome);
       var porte = dogMapPayload[normalized] || dogMapPayload[nome];
       if (!porte) {
         if (dogMap.mini.indexOf(nome) !== -1) porte = 'mini';
@@ -141,46 +174,45 @@
       dogLookup[normalized] = porte;
       addLookup(nome, 'cachorro');
     }
-    species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
+    result.species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
 
     var simples = ['gato', 'passaro', 'peixe', 'roedor', 'lagarto', 'tartaruga', 'exotico'];
-    for (var j = 0; j < simples.length; j += 1) {
-      var tipo = simples[j];
-      var arr = Array.isArray(payload[tipo]) ? payload[tipo] : [];
-      var unique = uniqueList(arr.filter(Boolean));
-      species[tipo] = unique;
-      for (var k = 0; k < unique.length; k += 1) {
-        addLookup(unique[k], tipo);
+    for (var s = 0; s < simples.length; s += 1) {
+      var tipo = simples[s];
+      var arr = ensureArray(payload[tipo]).filter(Boolean);
+      var uniqueArr = unique(arr);
+      result.species[tipo] = uniqueArr;
+      for (var j = 0; j < uniqueArr.length; j += 1) {
+        addLookup(uniqueArr[j], tipo);
       }
     }
 
-    if (payload.__lookup && typeof payload.__lookup === 'object') {
-      for (var key in payload.__lookup) {
-        if (!hasOwn.call(payload.__lookup, key)) continue;
-        var tipos = payload.__lookup[key];
-        if (!Array.isArray(tipos)) continue;
-        var normalized = norm(key);
-        if (!normalized) continue;
-        if (!lookup[normalized]) lookup[normalized] = [];
+    var customLookup = payload.__lookup;
+    if (customLookup && typeof customLookup === 'object') {
+      for (var key in customLookup) {
+        if (!hasOwn(customLookup, key)) continue;
+        var tipos = ensureArray(customLookup[key]);
         for (var t = 0; t < tipos.length; t += 1) {
-          addUnique(lookup[normalized], tipos[t]);
+          addLookup(key, tipos[t]);
         }
       }
     }
 
-    return { species: species, lookup: lookup };
+    return result;
   }
 
   function buildFromLegacy(txt) {
-    if (!txt) throw new Error('conteúdo vazio');
-    var species = {};
-    var lookup = {};
+    if (!txt) {
+      throw new Error('conteúdo vazio');
+    }
+
+    var result = { species: {}, lookup: {} };
 
     function addLookup(name, tipo) {
-      var key = norm(name);
+      var key = stripDiacritics(name);
       if (!key) return;
-      if (!lookup[key]) lookup[key] = [];
-      addUnique(lookup[key], tipo);
+      if (!result.lookup[key]) result.lookup[key] = [];
+      pushUnique(result.lookup[key], tipo);
     }
 
     var dogMap = { mini: [], pequeno: [], medio: [], grande: [], gigante: [] };
@@ -188,15 +220,15 @@
     var match;
     while ((match = reDogGlobal.exec(txt))) {
       var porteKey = match[1].toLowerCase();
-      var list = cleanList(match[2]);
-      var unique = uniqueList(list);
-      dogMap[porteKey] = unique;
-      for (var i = 0; i < unique.length; i += 1) {
-        addLookup(unique[i], 'cachorro');
+      var list = cleanLegacyList(match[2]);
+      var uniqueList = unique(list);
+      dogMap[porteKey] = uniqueList;
+      for (var i = 0; i < uniqueList.length; i += 1) {
+        addLookup(uniqueList[i], 'cachorro');
       }
     }
 
-    var dogAll = uniqueList([].concat(
+    var dogAll = unique([].concat(
       dogMap.mini,
       dogMap.pequeno,
       dogMap.medio,
@@ -206,7 +238,7 @@
     var dogLookup = {};
     for (var di = 0; di < dogAll.length; di += 1) {
       var name = dogAll[di];
-      var normalized = norm(name);
+      var normalized = stripDiacritics(name);
       var porte = 'gigante';
       if (dogMap.mini.indexOf(name) !== -1) porte = 'mini';
       else if (dogMap.pequeno.indexOf(name) !== -1) porte = 'pequeno';
@@ -214,149 +246,155 @@
       else if (dogMap.grande.indexOf(name) !== -1) porte = 'grande';
       dogLookup[normalized] = porte;
     }
-    species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
+    result.species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
 
-    var simpleSpecies = ['gatos', 'gato', 'passaros', 'passaro', 'peixes', 'peixe', 'roedores', 'roedor', 'lagartos', 'lagarto', 'tartarugas', 'tartaruga', 'exoticos', 'exotico'];
-    for (var si = 0; si < simpleSpecies.length; si += 1) {
-      var sp = simpleSpecies[si];
-      var regex = new RegExp(sp + '\\s*{([\\s\\S]*?)}', 'i');
-      var res = regex.exec(txt);
-      if (!res) continue;
-      var list = cleanList(res[1]);
-      var singular;
-      if (/roedores$/i.test(sp)) singular = 'roedor';
-      else if (/gatos$/i.test(sp)) singular = 'gato';
-      else if (/passaros$/i.test(sp)) singular = 'passaro';
-      else if (/peixes$/i.test(sp)) singular = 'peixe';
-      else if (/lagartos$/i.test(sp)) singular = 'lagarto';
-      else if (/tartarugas$/i.test(sp)) singular = 'tartaruga';
-      else if (/exoticos$/i.test(sp)) singular = 'exotico';
-      else singular = sp.replace(/s$/, '');
-      var unique = uniqueList(list);
-      species[singular] = unique;
-      for (var ui = 0; ui < unique.length; ui += 1) {
-        addLookup(unique[ui], singular);
+    var simpleGroups = [
+      ['gatos', 'gato'],
+      ['gato', 'gato'],
+      ['passaros', 'passaro'],
+      ['passaro', 'passaro'],
+      ['peixes', 'peixe'],
+      ['peixe', 'peixe'],
+      ['roedores', 'roedor'],
+      ['roedor', 'roedor'],
+      ['lagartos', 'lagarto'],
+      ['lagarto', 'lagarto'],
+      ['tartarugas', 'tartaruga'],
+      ['tartaruga', 'tartaruga'],
+      ['exoticos', 'exotico'],
+      ['exotico', 'exotico']
+    ];
+
+    for (var sg = 0; sg < simpleGroups.length; sg += 1) {
+      var group = simpleGroups[sg];
+      var token = group[0];
+      var tipo = group[1];
+      var regex = new RegExp(token + '\\s*{([\\s\\S]*?)}', 'i');
+      var resultMatch = regex.exec(txt);
+      if (!resultMatch) continue;
+      var items = unique(cleanLegacyList(resultMatch[1]));
+      result.species[tipo] = items;
+      for (var it = 0; it < items.length; it += 1) {
+        addLookup(items[it], tipo);
       }
     }
 
-    return { species: species, lookup: lookup };
+    return result;
+  }
+
+  function applySpecies(result) {
+    state.species = result.species || {};
+    state.lookup = result.lookup || {};
+    return state.species;
+  }
+
+  function fetchJson(url) {
+    return fetch(url, { headers: { 'Accept': 'application/json' } })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      });
+  }
+
+  function loadLegacy(url) {
+    return fetch(url)
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.text();
+      })
+      .then(function (txt) {
+        return applySpecies(buildFromLegacy(txt));
+      });
   }
 
   function loadSpeciesMap() {
-    if (SPECIES_MAP) return Promise.resolve(SPECIES_MAP);
+    if (state.species) {
+      return Promise.resolve(state.species);
+    }
 
-    var base = (win.basePath || '../../');
+    var base = win.basePath || '../../';
     var jsonUrl = base + 'data/racas.json';
     var legacyUrl = base + 'data/Racas-leitura.js';
 
-    function applyResult(result) {
-      if (result && result.species) {
-        SPECIES_MAP = result.species;
-        BREED_LOOKUP = result.lookup || {};
-      }
-      return SPECIES_MAP;
-    }
-
-    function loadLegacy() {
-      return fetch(legacyUrl)
-        .then(function (res) {
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          return res.text();
-        })
-        .then(function (txt) {
-          return applyResult(buildFromLegacy(txt));
-        })
-        .catch(function (err) {
-          console.warn('Falha ao ler Racas-leitura.js', err);
-          SPECIES_MAP = null;
-          BREED_LOOKUP = null;
-          return null;
-        });
-    }
-
-    return fetch(jsonUrl, { headers: { 'Accept': 'application/json' } })
-      .then(function (res) {
-        if (!res.ok) {
-          if (res.status && res.status !== 404) {
-            console.warn('cadastro-servicos/precos: falha ao obter racas.json', res.status);
-          }
-          return loadLegacy();
-        }
-        return res.json()
-          .then(function (payload) {
-            return applyResult(buildFromJson(payload));
-          })
-          .catch(function (err) {
-            console.warn('cadastro-servicos/precos: erro ao interpretar racas.json', err);
-            return loadLegacy();
-          });
+    return fetchJson(jsonUrl)
+      .then(function (payload) {
+        return applySpecies(buildFromJson(payload));
       })
       .catch(function (err) {
-        console.warn('cadastro-servicos/precos: erro ao ler racas.json', err);
-        return loadLegacy();
+        console.warn('cadastro-servicos/precos: falha ao ler racas.json', err);
+        return loadLegacy(legacyUrl)
+          .catch(function (legacyErr) {
+            console.warn('cadastro-servicos/precos: falha ao ler Racas-leitura.js', legacyErr);
+            state.species = null;
+            state.lookup = null;
+            return {};
+          });
       });
   }
 
   function populateTiposSelect() {
     if (!E.tipo) return;
-    var opts = [
-      { v: 'todos', l: 'Todos' },
-      { v: 'cachorro', l: 'Cachorro' },
-      { v: 'gato', l: 'Gato' },
-      { v: 'passaro', l: 'Pássaro' },
-      { v: 'peixe', l: 'Peixe' },
-      { v: 'roedor', l: 'Roedor' },
-      { v: 'lagarto', l: 'Lagarto' },
-      { v: 'tartaruga', l: 'Tartaruga' },
-      { v: 'exotico', l: 'Exótico' }
+    var options = [
+      { value: 'todos', label: 'Todos' },
+      { value: 'cachorro', label: 'Cachorro' },
+      { value: 'gato', label: 'Gato' },
+      { value: 'passaro', label: 'Pássaro' },
+      { value: 'peixe', label: 'Peixe' },
+      { value: 'roedor', label: 'Roedor' },
+      { value: 'lagarto', label: 'Lagarto' },
+      { value: 'tartaruga', label: 'Tartaruga' },
+      { value: 'exotico', label: 'Exótico' }
     ];
     E.tipo.innerHTML = '';
-    for (var i = 0; i < opts.length; i += 1) {
-      var data = opts[i];
-      var opt = document.createElement('option');
-      opt.value = data.v;
-      opt.textContent = data.l;
+    for (var i = 0; i < options.length; i += 1) {
+      var opt = doc.createElement('option');
+      opt.value = options[i].value;
+      opt.textContent = options[i].label;
       E.tipo.appendChild(opt);
     }
   }
 
   function setPorteOptionsFromService(service) {
-    var el = E.porte;
-    if (!el) return;
-    var portes = (service && Array.isArray(service.porte)) ? service.porte : [];
+    if (!E.porte) return;
+    var porteList = Array.isArray(service && service.porte) ? service.porte : [];
     var all = ['Todos', 'Mini', 'Pequeno', 'Médio', 'Grande', 'Gigante'];
-    el.innerHTML = '';
     var enabled;
-    if (portes.indexOf('Todos') !== -1 || !portes.length) {
+    if (!porteList.length || porteList.indexOf('Todos') !== -1) {
       enabled = all.slice();
     } else {
       enabled = [];
-      for (var i = 0; i < portes.length; i += 1) {
-        var label = String(portes[i] || '')
+      for (var i = 0; i < porteList.length; i += 1) {
+        var label = String(porteList[i] || '')
           .replace('MǸdio', 'Médio')
           .replace('M?dio', 'Médio')
           .replace('M  dio', 'Médio');
         enabled.push(label);
       }
     }
+
+    E.porte.innerHTML = '';
     for (var j = 0; j < all.length; j += 1) {
-      var p = all[j];
-      var opt = document.createElement('option');
-      opt.disabled = enabled.indexOf(p) === -1;
-    }
-    if (enabled.indexOf('Todos') !== -1) el.value = 'Todos';
-    var info = enabled.join(', ');
-    if (E.servPorteInfo) {
-      E.servPorteInfo.textContent = service ? 'Portes permitidos: ' + info : '';
+      var name = all[j];
+      var option = doc.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      option.disabled = enabled.indexOf(name) === -1;
+      E.porte.appendChild(option);
     }
 
-    function applyList(items) {
+    if (enabled.indexOf('Todos') !== -1) {
+      E.porte.value = 'Todos';
+    } else {
+      E.porte.value = enabled[0] || 'Mini';
+    }
+
+      E.servPorteInfo.textContent = service ? 'Portes permitidos: ' + enabled.join(', ') : '';
       E.store.innerHTML = '';
-      var list = Array.isArray(items) ? items : [];
-      for (var i = 0; i < list.length; i += 1) {
-        var store = list[i];
+      if (!items || !items.length) return;
+      for (var i = 0; i < items.length; i += 1) {
+        var store = items[i];
         if (!store || typeof store !== 'object') continue;
-        var opt = document.createElement('option');
+        var opt = doc.createElement('option');
         opt.value = store._id;
         opt.textContent = store.nome;
         E.store.appendChild(opt);
@@ -375,61 +413,70 @@
         console.warn('cadastro-servicos/precos: falha ao carregar lojas', err);
         applyList([]);
       });
-  function searchServices(q) {
-    return fetch(API_BASE + '/func/servicos/buscar?q=' + encodeURIComponent(q) + '&limit=20', {
-      headers: { 'Authorization': 'Bearer ' + getToken() }
-      .then(function (res) { return res.ok ? res.json() : []; })
-      .catch(function () { return []; });
-  }
-    for (var i = 0; i < list.length; i += 1) {
-      var item = list[i];
-      var li = document.createElement('li');
+  function clearSuggestions() {
+  function searchServices(term) {
+    return fetch(
+      API_BASE + '/func/servicos/buscar?q=' + encodeURIComponent(term) + '&limit=20',
+      { headers: { 'Authorization': 'Bearer ' + getToken() } }
+    )
+      .then(function (res) {
+        if (!res.ok) return [];
+        return res.json();
+      })
+  function renderSuggestions(list) {
+    clearSuggestions();
+      if (!item) continue;
+      var li = doc.createElement('li');
       var label = item.nome + (item.grupo ? ' (' + item.grupo.nome + ')' : '');
       li.textContent = label;
     }
-    var data = SPECIES_MAP || {};
-    var t = tipo || 'cachorro';
-      var all = [];
-      var dog = data.cachorro || { all: [] };
-      var dogAll = Array.isArray(dog.all) ? dog.all : [];
-      for (var di = 0; di < dogAll.length; di += 1) addUnique(all, dogAll[di]);
-      for (var key in data) {
-        if (!hasOwn.call(data, key) || key === 'cachorro') continue;
-        var arr = data[key];
-        if (!Array.isArray(arr)) continue;
-        for (var ai = 0; ai < arr.length; ai += 1) addUnique(all, arr[ai]);
+    var species = state.species || {};
+    var selectedTipo = tipo || 'cachorro';
+
+    if (selectedTipo === 'todos') {
+      var dog = species.cachorro || {};
+      var dogAll = ensureArray(dog.all);
+      for (var i = 0; i < dogAll.length; i += 1) {
+        pushUnique(all, dogAll[i]);
+      }
+      for (var key in species) {
+        if (!hasOwn(species, key) || key === 'cachorro') continue;
+        var list = ensureArray(species[key]);
+        for (var j = 0; j < list.length; j += 1) {
+          pushUnique(all, list[j]);
+        }
       return all;
-      var dogData = data.cachorro || { portes: {} };
-      var servicePortes = (service && Array.isArray(service.porte)) ? service.porte : [];
-      var permiteTodos = servicePortes.indexOf('Todos') !== -1;
+
+    if (selectedTipo === 'cachorro') {
+      var dogData = species.cachorro || {};
+      var servicePortes = Array.isArray(service && service.porte) ? service.porte : [];
+      var porteKey;
       if (!porte || porte === 'Todos' || permiteTodos) {
         var portes = dogData.portes || {};
-        var mini = Array.isArray(portes.mini) ? portes.mini : [];
-        var pequeno = Array.isArray(portes.pequeno) ? portes.pequeno : [];
-        var medio = Array.isArray(portes.medio) ? portes.medio : [];
-        var grande = Array.isArray(portes.grande) ? portes.grande : [];
-        var gigante = Array.isArray(portes.gigante) ? portes.gigante : [];
-        return uniqueList([].concat(mini, pequeno, medio, grande, gigante));
-      var porteKey = norm(porte);
+        return unique([].concat(
+          ensureArray(portes.mini),
+          ensureArray(portes.pequeno),
+          ensureArray(portes.medio),
+          ensureArray(portes.grande),
+          ensureArray(portes.gigante)
+        ));
+      porteKey = stripDiacritics(porte);
       if (dogData.portes && dogData.portes[porteKey]) {
-        return dogData.portes[porteKey].slice();
+        return ensureArray(dogData.portes[porteKey]).slice();
       }
       return [];
-    var arrList = data[t];
-    return Array.isArray(arrList) ? arrList.slice() : [];
-    var key = norm(nome);
-    if (BREED_LOOKUP && BREED_LOOKUP[key]) {
-      return BREED_LOOKUP[key].slice();
-    var grouped = {};
-    var list = Array.isArray(items) ? items : [];
-    for (var i = 0; i < list.length; i += 1) {
-      var item = list[i];
-      var tipos = tiposForBreed(item && item.raca) || [];
-      if (!tipos.length) continue;
-      for (var j = 0; j < tipos.length; j += 1) {
-        var tipo = tipos[j];
-        if (!grouped[tipo]) grouped[tipo] = [];
-        grouped[tipo].push(shallowCopy(item || {}));
+
+    var arr = ensureArray(species[selectedTipo]);
+    return arr.slice();
+  function tiposForBreed(name) {
+    if (!name) return [];
+    var key = stripDiacritics(name);
+    var list = state.lookup && state.lookup[key];
+    return list ? list.slice() : [];
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i];
+      var tipos = tiposForBreed(item.raca);
+        grouped[tipo].push(clone(item));
       }
     }
     var url = API_BASE + '/admin/servicos/precos?serviceId=' + serviceId + '&storeId=' + storeId;
@@ -444,48 +491,53 @@
         'Authorization': 'Bearer ' + getToken()
       },
       body: JSON.stringify({ serviceId: serviceId, storeId: storeId, tipo: tipo, items: items })
-      .then(function (res) {
-          return res.json().catch(function () { return {}; }).then(function (err) {
-    var map = {};
-    var list = Array.isArray(overrides) ? overrides : [];
-    for (var i = 0; i < list.length; i += 1) {
-      var ov = list[i];
-      if (!ov || typeof ov !== 'object') continue;
-      map[norm(ov.raca)] = ov;
-    }
-    if (!breeds || !breeds.length) {
-    for (var j = 0; j < breeds.length; j += 1) {
-      var name = breeds[j];
-      var override = map[norm(name)] || { custo: '', valor: '' };
-      var custo = override.custo === '' ? '' : Number(override.custo);
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.json().catch(function () { return {}; }).then(function (err) {
+          throw new Error(err.message || 'Falha ao salvar');
+        });
+      }
+      return res.json();
+    });
+    var ovList = Array.isArray(overrides) ? overrides : [];
+    for (var i = 0; i < ovList.length; i += 1) {
+      var ov = ovList[i];
+      map[stripDiacritics(ov.raca)] = ov;
+
+
+      var override = map[stripDiacritics(name)] || { custo: '', valor: '' };
       var valor = override.valor === '' ? '' : Number(override.valor);
-      var tr = document.createElement('tr');
+      var tr = doc.createElement('tr');
+      tr.dataset.raca = name;
       tr.innerHTML = '' +
         '<td class="px-3 py-2 text-gray-800">' + name + '</td>' +
         '<td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="' + custo + '" /></td>' +
         '<td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="' + valor + '" /></td>';
-    var rows = E.gridBody ? E.gridBody.querySelectorAll('tr') : [];
-    var items = [];
+    if (!E.gridBody) return [];
+    var rows = E.gridBody.querySelectorAll('tr');
     for (var i = 0; i < rows.length; i += 1) {
-      var r = rows[i];
-      var inputs = r.querySelectorAll('input');
-      var custo = parseFloat((inputs[0] ? inputs[0].value : '') || '0');
-      var valor = parseFloat((inputs[1] ? inputs[1].value : '') || '0');
+      var row = rows[i];
+      var inputs = row.querySelectorAll('input');
+      var custo = parseFloat((inputs[0] && inputs[0].value) || '0');
+      var valor = parseFloat((inputs[1] && inputs[1].value) || '0');
       items.push({
-        custo: isFinite(custo) ? custo : 0,
+        raca: row.dataset.raca || '',
         valor: isFinite(valor) ? valor : 0
       });
     }
     return items;
-    var serviceId = E.servId ? E.servId.value : undefined;
-    var storeId = E.store ? E.store.value : undefined;
-    var tipo = E.tipo ? E.tipo.value : undefined;
-    var service = (E.servInput && E.servInput.__selectedService) ? E.servInput.__selectedService : null;
-    var porte = (E.porte ? E.porte.value : undefined) || 'Todos';
-    var breeds = breedsForSelection(tipo, porte, service);
+    var serviceId = E.servId ? E.servId.value : '';
+    var storeId = E.store ? E.store.value : '';
+    var tipo = E.tipo ? E.tipo.value : '';
+    var service = E.servInput && E.servInput.__selectedService;
+    var porte = (E.porte ? E.porte.value : '') || 'Todos';
+    var breeds = breedsForSelection(tipo, porte, service || null);
 
       .then(function (overrides) {
       .catch(function (err) {
+    if (state.eventsBound) return;
+    state.eventsBound = true;
+
       E.btnTabCadastro.addEventListener('click', function () {
         if (E.tabCadastro) E.tabCadastro.classList.remove('hidden');
         if (E.tabPrecos) E.tabPrecos.classList.add('hidden');
@@ -494,6 +546,7 @@
           E.btnTabPrecos.classList.remove('bg-primary', 'text-white');
           E.btnTabPrecos.classList.add('border', 'border-gray-300', 'text-gray-700');
         }
+
       E.btnTabPrecos.addEventListener('click', function () {
         if (E.tabPrecos) E.tabPrecos.classList.remove('hidden');
         if (E.tabCadastro) E.tabCadastro.classList.add('hidden');
@@ -502,74 +555,87 @@
           E.btnTabCadastro.classList.remove('bg-primary', 'text-white');
           E.btnTabCadastro.classList.add('border', 'border-gray-300', 'text-gray-700');
         }
-    var searchTimer = null;
       E.servInput.addEventListener('input', function () {
-        var q = E.servInput.value.trim();
-        searchTimer = setTimeout(function () {
-            .then(function (data) { renderServiceSug(data); })
-            .catch(function (err) {
-      E.servSug.addEventListener('click', function (ev) {
-        var target = ev.target;
-        var li = target && typeof target.closest === 'function' ? target.closest('li') : null;
-        var it = li.__item;
-      E.tipo.addEventListener('change', function () {
-        var t = E.tipo ? E.tipo.value : 'todos';
-        } else if (E.porte) {
-          E.porte.value = 'Todos';
-          E.porte.disabled = true;
-      E.porte.addEventListener('change', refreshGrid);
-    }
-    if (E.store) {
-      E.store.addEventListener('change', refreshGrid);
-    }
-    function applyToAll(idx, value) {
-      var v = String(value || '').trim();
-      var rows = E.gridBody.querySelectorAll('tr');
-      for (var i = 0; i < rows.length; i += 1) {
-        var inputs = rows[i].querySelectorAll('input');
-        if (inputs[idx]) inputs[idx].value = v;
+        var term = E.servInput.value.trim();
+        if (state.searchTimer) {
+          clearTimeout(state.searchTimer);
+        }
+        if (!term) {
+          clearSuggestions();
+        state.searchTimer = setTimeout(function () {
+          searchServices(term)
+            .then(function (list) {
+              renderSuggestions(Array.isArray(list) ? list : []);
+            })
+              renderSuggestions([]);
+
+        var target = ev.target || ev.srcElement;
+        var li = target && target.closest ? target.closest('li') : null;
+        var item = li.__item;
+        if (E.servInput) E.servInput.value = item.nome;
+        if (E.servId) E.servId.value = item._id;
+        if (E.servInput) E.servInput.__selectedService = item;
+        setPorteOptionsFromService(item);
+        clearSuggestions();
+        var value = E.tipo.value || 'todos';
+        if (value === 'cachorro') {
+
+      E.porte.addEventListener('change', function () {
+        refreshGrid();
+      });
+
+      E.store.addEventListener('change', function () {
+        refreshGrid();
+      });
+    function applyToAll(index, value) {
+      var trimmed = String(value || '').trim();
+      if (trimmed === '') return;
+        if (inputs[index]) inputs[index].value = trimmed;
       }
     }
 
       E.replCustoBtn.addEventListener('click', function () {
         applyToAll(0, E.replCusto ? E.replCusto.value : '');
       });
+
       E.replValorBtn.addEventListener('click', function () {
         applyToAll(1, E.replValor ? E.replValor.value : '');
       });
       E.saveBtn.addEventListener('click', function () {
-        var serviceId = E.servId ? E.servId.value : undefined;
-        var storeId = E.store ? E.store.value : undefined;
-        var tipo = E.tipo ? E.tipo.value : undefined;
-        function finalize() {
+        var serviceId = E.servId ? E.servId.value : '';
+        var storeId = E.store ? E.store.value : '';
+        var tipo = E.tipo ? E.tipo.value : '';
+        if (!(serviceId && storeId && tipo)) {
         }
 
-        function handleError(e) {
-          alert(e && e.message ? e.message : 'Erro ao salvar preços');
-        }
         var items = getGridItems();
-          var grouped = groupItemsByTipo(items);
+        function handleError(error) {
+          console.error(error);
+          alert(error && error.message ? error.message : 'Erro ao salvar preços');
           var keys = Object.keys(grouped);
           if (!keys.length) {
-          var sequence = Promise.resolve();
-          keys.forEach(function (tipoAtual) {
-            var lista = grouped[tipoAtual];
-            sequence = sequence.then(function () {
-              return savePrices(serviceId, storeId, tipoAtual, lista);
-            });
-          sequence.then(finalize).catch(handleError);
-      .then(function () {
-        try {
-          if (E.tipo) E.tipo.value = 'todos';
-        } catch (err) {}
-        try {
-          if (E.porte) {
-            E.porte.disabled = true;
-            E.porte.innerHTML = '<option>Todos</option>';
+          var chain = Promise.resolve();
+          for (var i = 0; i < keys.length; i += 1) {
+            (function (tipoAtual) {
+              var lista = grouped[tipoAtual];
+              if (!lista || !lista.length) return;
+              chain = chain.then(function () {
+                return savePrices(serviceId, storeId, tipoAtual, lista);
+              });
+            })(keys[i]);
           }
-        } catch (err) {}
+          chain.then(finalize).catch(handleError);
+        if (E.tipo) {
+          try { E.tipo.value = 'todos'; } catch (err) {}
+        }
+        if (E.porte) {
+          try {
+            E.porte.innerHTML = '<option>Todos</option>';
+            E.porte.value = 'Todos';
+          } catch (err) {}
+        }
       .then(function () {
-    }
+})(typeof window !== 'undefined' ? window : null);
     if (E.servPorteInfo) E.servPorteInfo.textContent = '';
     });
     if (!res.ok) {
