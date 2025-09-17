@@ -10,6 +10,7 @@ import { openAddModal } from './modal.js';
 const VET_FICHA_CLIENTE_KEY = 'vetFichaSelectedCliente';
 const VET_FICHA_PET_KEY = 'vetFichaSelectedPetId';
 const VET_FICHA_AGENDA_CONTEXT_KEY = 'vetFichaAgendaContext';
+const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 
 function pickFirst(...values) {
   for (const value of values) {
@@ -61,6 +62,15 @@ function normalizeId(value) {
     return trimmed;
   }
   return '';
+}
+
+function normalizeObjectId(value) {
+  const normalized = normalizeId(value);
+  if (!normalized) return '';
+  const cleaned = normalized
+    .replace(/^ObjectId\(["']?/, '')
+    .replace(/["']?\)$/, '');
+  return OBJECT_ID_REGEX.test(cleaned) ? cleaned : '';
 }
 
 function extractTutorPayload(appointment) {
@@ -293,24 +303,44 @@ function persistFichaClinicaContext(appointment) {
       appointment?.profissional?.nomeContato,
       appointment?.profissional?.razaoSocial
     );
-    const storeCandidates = [
+    const storeCandidatesRaw = [
       appointment.storeId,
       appointment.store?._id,
+      appointment.store?.id,
+      appointment.store?.storeId,
       appointment.store,
       appointment.store_id,
       appointment.storeID,
       appointment.empresaId,
+      appointment.empresa_id,
+      appointment.empresaID,
+      appointment.empresa?._id,
+      appointment.empresa?.id,
       appointment.empresa,
       appointment.lojaId,
+      appointment.loja_id,
+      appointment.lojaID,
+      appointment.loja?._id,
+      appointment.loja?.id,
       appointment.loja,
+      appointment.filialId,
+      appointment.filial_id,
+      appointment.filialID,
+      appointment.filial?._id,
+      appointment.filial?.id,
+      appointment.filial,
       state.selectedStoreId,
     ];
+    const storeIdCandidates = [];
     let storeId = '';
-    for (const candidate of storeCandidates) {
-      const normalized = normalizeId(candidate);
-      if (normalized) {
+    for (const candidate of storeCandidatesRaw) {
+      const normalized = normalizeObjectId(candidate);
+      if (!normalized) continue;
+      if (!storeIdCandidates.includes(normalized)) {
+        storeIdCandidates.push(normalized);
+      }
+      if (!storeId) {
         storeId = normalized;
-        break;
       }
     }
 
@@ -328,6 +358,9 @@ function persistFichaClinicaContext(appointment) {
       servicos: extractAppointmentServices(appointment),
       totalServicos: Array.isArray(appointment.servicos) ? appointment.servicos.length : (appointment.servico ? 1 : 0),
     };
+    if (storeIdCandidates.length) {
+      agendaContext.storeIdCandidates = storeIdCandidates;
+    }
     localStorage.setItem(VET_FICHA_AGENDA_CONTEXT_KEY, JSON.stringify(agendaContext));
     return true;
   } catch (err) {

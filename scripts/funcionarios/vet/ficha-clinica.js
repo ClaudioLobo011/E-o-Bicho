@@ -148,6 +148,7 @@
         agenda: 'vetFichaAgendaContext',
     };
     const VACINA_STORAGE_PREFIX = 'vetFichaVacinas:';
+    const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 
     const CARD_TUTOR_ACTIVE_CLASSES = ['bg-sky-100', 'text-sky-700'];
     const CARD_PET_ACTIVE_CLASSES = ['bg-emerald-100', 'text-emerald-700'];
@@ -198,6 +199,15 @@
         }
         if (typeof value === 'number') return String(value);
         return String(value).trim();
+    }
+
+    function sanitizeObjectId(value) {
+        const raw = normalizeId(value);
+        if (!raw) return '';
+        const cleaned = raw
+            .replace(/^ObjectId\(["']?/, '')
+            .replace(/["']?\)$/, '');
+        return OBJECT_ID_REGEX.test(cleaned) ? cleaned : '';
     }
 
     function capitalize(value) {
@@ -318,8 +328,20 @@
         const { persist = true } = options || {};
         if (!state.agendaContext || typeof state.agendaContext !== 'object') return '';
 
-        const current = normalizeId(state.agendaContext.storeId);
-        if (current) return current;
+        const current = sanitizeObjectId(state.agendaContext.storeId);
+        if (current) {
+            state.agendaContext.storeId = current;
+            if (!Array.isArray(state.agendaContext.storeIdCandidates)) {
+                state.agendaContext.storeIdCandidates = [];
+            }
+            if (!state.agendaContext.storeIdCandidates.includes(current)) {
+                state.agendaContext.storeIdCandidates.push(current);
+            }
+            if (persist) {
+                persistAgendaContext(state.agendaContext);
+            }
+            return current;
+        }
 
         const candidates = [
             state.agendaContext.store,
@@ -336,10 +358,39 @@
             state.agendaContext.selectedStoreId,
         ];
 
+        if (Array.isArray(state.agendaContext.storeIdCandidates)) {
+            candidates.push(...state.agendaContext.storeIdCandidates);
+        }
+
         for (const candidate of candidates) {
-            const normalized = normalizeId(candidate);
+            if (Array.isArray(candidate)) {
+                for (const nested of candidate) {
+                    const normalizedNested = sanitizeObjectId(nested);
+                    if (normalizedNested) {
+                        state.agendaContext.storeId = normalizedNested;
+                        if (!Array.isArray(state.agendaContext.storeIdCandidates)) {
+                            state.agendaContext.storeIdCandidates = [];
+                        }
+                        if (!state.agendaContext.storeIdCandidates.includes(normalizedNested)) {
+                            state.agendaContext.storeIdCandidates.push(normalizedNested);
+                        }
+                        if (persist) {
+                            persistAgendaContext(state.agendaContext);
+                        }
+                        return normalizedNested;
+                    }
+                }
+                continue;
+            }
+            const normalized = sanitizeObjectId(candidate);
             if (normalized) {
                 state.agendaContext.storeId = normalized;
+                if (!Array.isArray(state.agendaContext.storeIdCandidates)) {
+                    state.agendaContext.storeIdCandidates = [];
+                }
+                if (!state.agendaContext.storeIdCandidates.includes(normalized)) {
+                    state.agendaContext.storeIdCandidates.push(normalized);
+                }
                 if (persist) {
                     persistAgendaContext(state.agendaContext);
                 }
