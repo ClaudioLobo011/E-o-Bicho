@@ -269,11 +269,13 @@
     E.gridEmpty.classList.add('hidden');
     for (const name of breeds) {
       const ov = map.get(norm(name)) || { custo: '', valor: '' };
+      const custo = ov.custo === '' ? '' : Number(ov.custo);
+      const valor = ov.valor === '' ? '' : Number(ov.valor);
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="px-3 py-2 text-gray-800">${name}</td>
-        <td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="${ov.custo === '' ? '' : Number(ov.custo)}" /></td>
-        <td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="${ov.valor === '' ? '' : Number(ov.valor)}" /></td>
+        <td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="${custo}" /></td>
+        <td class="px-3 py-2"><input type="number" step="0.01" class="w-32 rounded border-gray-300" value="${valor}" /></td>
       `;
       tr.dataset.raca = name;
       E.gridBody.appendChild(tr);
