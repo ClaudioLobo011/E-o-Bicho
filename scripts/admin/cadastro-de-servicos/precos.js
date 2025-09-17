@@ -186,8 +186,8 @@
     return { species, lookup };
   }
 
-  async function loadSpeciesMap() {
-    if (SPECIES_MAP) return SPECIES_MAP;
+  function loadSpeciesMap() {
+    if (SPECIES_MAP) return Promise.resolve(SPECIES_MAP);
     const base = (win.basePath || '../../');
     const jsonUrl = base + 'data/racas.json';
     const legacyUrl = base + 'data/Racas-leitura.js';
@@ -198,30 +198,38 @@
       return SPECIES_MAP;
     };
 
-    try {
-      const res = await fetch(jsonUrl, { headers: { 'Accept': 'application/json' } });
-      if (res.ok) {
-        const payload = await res.json();
-        return applyResult(buildFromJson(payload));
-      }
-      if (res.status && res.status !== 404) {
-        console.warn('cadastro-servicos/precos: falha ao obter racas.json', res.status);
-      }
-    } catch (err) {
-      console.warn('cadastro-servicos/precos: erro ao ler racas.json', err);
-    }
+    const loadLegacy = () => fetch(legacyUrl)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      })
+      .then(txt => applyResult(buildFromLegacy(txt)))
+      .catch((e) => {
+        console.warn('Falha ao ler Racas-leitura.js', e);
+        SPECIES_MAP = null;
+        BREED_LOOKUP = null;
+        return null;
+      });
 
-    try {
-      const res = await fetch(legacyUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const txt = await res.text();
-      return applyResult(buildFromLegacy(txt));
-    } catch (e) {
-      console.warn('Falha ao ler Racas-leitura.js', e);
-      SPECIES_MAP = null;
-      BREED_LOOKUP = null;
-      return null;
-    }
+    return fetch(jsonUrl, { headers: { 'Accept': 'application/json' } })
+      .then(res => {
+        if (!res.ok) {
+          if (res.status && res.status !== 404) {
+            console.warn('cadastro-servicos/precos: falha ao obter racas.json', res.status);
+          }
+          return loadLegacy();
+        }
+        return res.json()
+          .then(payload => applyResult(buildFromJson(payload)))
+          .catch(err => {
+            console.warn('cadastro-servicos/precos: erro ao interpretar racas.json', err);
+            return loadLegacy();
+          });
+      })
+      .catch(err => {
+        console.warn('cadastro-servicos/precos: erro ao ler racas.json', err);
+        return loadLegacy();
+      });
   }
 
   function populateTiposSelect() {
@@ -260,33 +268,38 @@
       opt.disabled = !enabled.includes(p);
     }
     if (E.servPorteInfo) E.servPorteInfo.textContent = service ? `Portes permitidos: ${info}` : '';
-    if (!E.store) return;
-    let list = [];
-    try {
-      const res = await fetch(`${API_BASE}/stores`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const payload = await res.json();
-      if (Array.isArray(payload)) {
-        list = payload;
-      }
-    } catch (err) {
-      console.warn('cadastro-servicos/precos: falha ao carregar lojas', err);
-      list = [];
-    }
-      if (!s || typeof s !== 'object') return;
-      opt.textContent = s.nome;
-      E.store.appendChild(opt);
-  function clearSugList() {
-    if (!E.servSug) return;
-    E.servSug.innerHTML = '';
-    E.servSug.classList.add('hidden');
-  }
-  }
-      const all = new Set([...(dog.all || [])]);
-        const { mini = [], pequeno = [], medio = [], grande = [], gigante = [] } = dog.portes || {};
-        return [...new Set([...mini, ...pequeno, ...medio, ...grande, ...gigante])];
-    }
-  }
+  function loadStores() {
+    if (!E.store) return Promise.resolve();
+
+    const applyList = (items) => {
+      E.store.innerHTML = '';
+      (items || []).forEach(s => {
+        if (!s || typeof s !== 'object') return;
+        const opt = document.createElement('option');
+        opt.value = s._id;
+        opt.textContent = s.nome;
+        E.store.appendChild(opt);
+      });
+    };
+
+    return fetch(`${API_BASE}/stores`)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(payload => {
+        const list = Array.isArray(payload) ? payload : [];
+        applyList(list);
+      })
+      .catch(err => {
+        console.warn('cadastro-servicos/precos: falha ao carregar lojas', err);
+        applyList([]);
+      });
+  function searchServices(q) {
+    return fetch(`${API_BASE}/func/servicos/buscar?q=${encodeURIComponent(q)}&limit=20`, {
+    })
+      .then(res => (res.ok ? res.json() : []))
+      .catch(() => []);
   }
     });
   }
@@ -345,27 +358,40 @@
           clearSugList();
           if (E.servPorteInfo) E.servPorteInfo.textContent = '';
           refreshGrid();
-          return;
+  function loadPrices(serviceId, storeId, tipo) {
+    if (!serviceId || !storeId) return Promise.resolve([]);
+    return fetch(url, { headers: { 'Authorization': `Bearer ${getToken()}` } })
+      .then(res => (res.ok ? res.json() : []))
+      .catch(() => []);
+  function savePrices(serviceId, storeId, tipo, items) {
+    return fetch(`${API_BASE}/admin/servicos/precos/bulk`, {
+    })
+      .then(res => {
+        if (!res.ok) {
+          return res.json().catch(() => ({})).then(err => {
+            throw new Error(err.message || 'Falha ao salvar');
+          });
         }
-        searchTimer = setTimeout(async () => {
-          const list = await searchServices(q);
-          renderServiceSug(list);
-        }, 200);
+        return res.json();
       });
-    }
-    if (E.servSug) {
-      E.servSug.addEventListener('click', (ev) => {
-        const target = ev.target;
-        const li = (target && typeof target.closest === 'function') ? target.closest('li') : null;
-        if (!li || !li.__item) return;
-        const it = li.__item;
-        if (E.servInput) E.servInput.value = it.nome;
-        if (E.servId) E.servId.value = it._id;
-        if (E.servInput) E.servInput.__selectedService = it;
-        setPorteOptionsFromService(it);
-        clearSugList();
-        refreshGrid();
+  function refreshGrid() {
+    if (!E.gridBody) return Promise.resolve();
+      return Promise.resolve();
+    return loadPrices(serviceId, storeId, tipo)
+      .then(overrides => {
+        renderGrid(breeds, overrides);
+      })
+      .catch(err => {
+        console.warn('cadastro-servicos/precos: falha ao carregar preços', err);
+        renderGrid(breeds, []);
       });
+        searchTimer = setTimeout(() => {
+          searchServices(q)
+            .then(renderServiceSug)
+            .catch(err => {
+              console.warn('cadastro-servicos/precos: falha na busca de serviços', err);
+              renderServiceSug([]);
+            });
     }
     if (E.tipo) {
       E.tipo.addEventListener('change', () => {
@@ -533,16 +559,14 @@
         if (inp) inp.value = v;
       });
     };
-    E.replCustoBtn && E.replCustoBtn.addEventListener('click', () => applyToAll(0, (E.replCusto ? E.replCusto.value : '')));
-    E.replValorBtn && E.replValorBtn.addEventListener('click', () => applyToAll(1, (E.replValor ? E.replValor.value : '')));
+      E.saveBtn.addEventListener('click', () => {
 
-    // Save
-    E.saveBtn && E.saveBtn.addEventListener('click', async () => {
-      const serviceId = (E.servId ? E.servId.value : undefined);
-      const storeId = (E.store ? E.store.value : undefined);
-      const tipo = (E.tipo ? E.tipo.value : undefined);
-      if (!serviceId || !storeId || !tipo) { alert('Selecione serviço, tipo e empresa.'); return; }
-      try {
+        const finalize = () => {
+          return refreshGrid();
+        };
+        const handleError = (e) => {
+        };
+
         const items = getGridItems();
         if (tipo === 'todos') {
           const grouped = groupItemsByTipo(items);
@@ -550,17 +574,33 @@
             alert('Não foi possível identificar os tipos das raças selecionadas.');
             return;
           }
-          for (const [tipoAtual, lista] of grouped.entries()) {
-            if (!lista.length) continue;
-            await savePrices(serviceId, storeId, tipoAtual, lista);
-          }
+          const entries = Array.from(grouped.entries());
+          let sequence = Promise.resolve();
+          entries.forEach(([tipoAtual, lista]) => {
+            if (!Array.isArray(lista) || !lista.length) return;
+            sequence = sequence.then(() => savePrices(serviceId, storeId, tipoAtual, lista));
+          });
+          sequence
+            .then(finalize)
+            .catch(handleError);
         } else {
-          await savePrices(serviceId, storeId, tipo, items);
-        }
-        alert('Preços salvos com sucesso.');
-        await refreshGrid();
-      } catch (e) {
-        console.error(e); alert((e && e.message) ? e.message : 'Erro ao salvar preços');
+          savePrices(serviceId, storeId, tipo, items)
+            .then(finalize)
+            .catch(handleError);
+  function initPrecosTab() {
+    if (!E.tabPrecos) return Promise.resolve();
+    return loadSpeciesMap()
+      .then(() => {
+        populateTiposSelect();
+        // Default: 'Todos' selecionado e porte bloqueado
+        try { if (E.tipo) E.tipo.value = 'todos'; } catch (err) {}
+        try { if (E.porte) { E.porte.disabled = true; E.porte.innerHTML = '<option>Todos</option>'; } } catch (err) {}
+        if (E.servPorteInfo) E.servPorteInfo.textContent = '';
+        return loadStores();
+      })
+      .then(() => {
+        bindEvents();
+      });
       }
     });
   }
