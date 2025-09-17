@@ -314,6 +314,42 @@
         } catch { }
     }
 
+    function getAgendaStoreId(options = {}) {
+        const { persist = true } = options || {};
+        if (!state.agendaContext || typeof state.agendaContext !== 'object') return '';
+
+        const current = normalizeId(state.agendaContext.storeId);
+        if (current) return current;
+
+        const candidates = [
+            state.agendaContext.store,
+            state.agendaContext.store_id,
+            state.agendaContext.storeID,
+            state.agendaContext.empresaId,
+            state.agendaContext.empresa,
+            state.agendaContext.lojaId,
+            state.agendaContext.loja,
+            state.agendaContext.companyId,
+            state.agendaContext.company,
+            state.agendaContext.filialId,
+            state.agendaContext.filial,
+            state.agendaContext.selectedStoreId,
+        ];
+
+        for (const candidate of candidates) {
+            const normalized = normalizeId(candidate);
+            if (normalized) {
+                state.agendaContext.storeId = normalized;
+                if (persist) {
+                    persistAgendaContext(state.agendaContext);
+                }
+                return normalized;
+            }
+        }
+
+        return '';
+    }
+
     function getPersistedState() {
         let cliente = null;
         try {
@@ -1676,7 +1712,7 @@
             }
         }, 50);
 
-        const storeId = normalizeId(state.agendaContext?.storeId);
+        const storeId = getAgendaStoreId();
         if (!storeId) {
             notify('Não foi possível identificar a empresa do agendamento. Os valores podem considerar apenas o preço padrão do serviço.', 'warning');
         }
@@ -1764,7 +1800,7 @@
     }
 
     async function fetchServicePrice(serviceId) {
-        const storeId = normalizeId(state.agendaContext?.storeId);
+        const storeId = getAgendaStoreId();
         if (!serviceId || !storeId) return null;
         const petId = normalizeId(state.selectedPetId);
         const params = new URLSearchParams({ serviceId, storeId });
@@ -2465,6 +2501,9 @@
             }
         } else if (state.agendaContext && !cliente) {
             state.agendaContext = null;
+        }
+        if (state.agendaContext) {
+            getAgendaStoreId();
         }
         persistAgendaContext(state.agendaContext);
         updateConsultaAgendaCard();

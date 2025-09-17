@@ -293,10 +293,31 @@ function persistFichaClinicaContext(appointment) {
       appointment?.profissional?.nomeContato,
       appointment?.profissional?.razaoSocial
     );
+    const storeCandidates = [
+      appointment.storeId,
+      appointment.store?._id,
+      appointment.store,
+      appointment.store_id,
+      appointment.storeID,
+      appointment.empresaId,
+      appointment.empresa,
+      appointment.lojaId,
+      appointment.loja,
+      state.selectedStoreId,
+    ];
+    let storeId = '';
+    for (const candidate of storeCandidates) {
+      const normalized = normalizeId(candidate);
+      if (normalized) {
+        storeId = normalized;
+        break;
+      }
+    }
+
     const agendaContext = {
       tutorId: tutor._id,
       petId,
-      storeId: normalizeId(appointment.storeId || appointment.store?._id || appointment.store),
+      storeId: storeId || null,
       appointmentId,
       scheduledAt: appointment.h || appointment.scheduledAt || appointment.data || appointment.dataHora || '',
       profissionalId: normalizeId(appointment.profissionalId || appointment?.profissional?._id),
