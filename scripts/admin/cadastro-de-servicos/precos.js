@@ -190,10 +190,11 @@
     var customLookup = payload.__lookup;
     if (customLookup && typeof customLookup === 'object') {
       for (var key in customLookup) {
-        if (!hasOwn(customLookup, key)) continue;
-        var tipos = ensureArray(customLookup[key]);
-        for (var t = 0; t < tipos.length; t += 1) {
-          addLookup(key, tipos[t]);
+        if (hasOwn(customLookup, key)) {
+          var tipos = ensureArray(customLookup[key]);
+          for (var t = 0; t < tipos.length; t += 1) {
+            addLookup(key, tipos[t]);
+          }
         }
       }
     }
@@ -271,11 +272,12 @@
       var tipo = group[1];
       var regex = new RegExp(token + '\\s*{([\\s\\S]*?)}', 'i');
       var resultMatch = regex.exec(txt);
-      if (!resultMatch) continue;
-      var items = unique(cleanLegacyList(resultMatch[1]));
-      result.species[tipo] = items;
-      for (var it = 0; it < items.length; it += 1) {
-        addLookup(items[it], tipo);
+      if (resultMatch) {
+        var items = unique(cleanLegacyList(resultMatch[1]));
+        result.species[tipo] = items;
+        for (var it = 0; it < items.length; it += 1) {
+          addLookup(items[it], tipo);
+        }
       }
     }
 
@@ -393,11 +395,12 @@
       if (!items || !items.length) return;
       for (var i = 0; i < items.length; i += 1) {
         var store = items[i];
-        if (!store || typeof store !== 'object') continue;
-        var opt = doc.createElement('option');
-        opt.value = store._id;
-        opt.textContent = store.nome;
-        E.store.appendChild(opt);
+        if (store && typeof store === 'object') {
+          var opt = doc.createElement('option');
+          opt.value = store._id;
+          opt.textContent = store.nome;
+          E.store.appendChild(opt);
+        }
       }
     }
 
@@ -425,14 +428,15 @@
       })
   function renderSuggestions(list) {
     clearSuggestions();
-      if (!item) continue;
-      var li = doc.createElement('li');
-      var label = item.nome + (item.grupo ? ' (' + item.grupo.nome + ')' : '');
-      li.textContent = label;
-    }
-    var species = state.species || {};
-    var selectedTipo = tipo || 'cachorro';
-
+      if (item) {
+        var li = doc.createElement('li');
+        li.className = 'px-3 py-2 hover:bg-gray-50 cursor-pointer';
+        var label = item.nome + (item.grupo ? ' (' + item.grupo.nome + ')' : '');
+        li.textContent = label;
+        li.dataset.id = item._id;
+        li.__item = item;
+        E.servSug.appendChild(li);
+      }
     if (selectedTipo === 'todos') {
       var dog = species.cachorro || {};
       var dogAll = ensureArray(dog.all);
@@ -440,10 +444,11 @@
         pushUnique(all, dogAll[i]);
       }
       for (var key in species) {
-        if (!hasOwn(species, key) || key === 'cachorro') continue;
-        var list = ensureArray(species[key]);
-        for (var j = 0; j < list.length; j += 1) {
-          pushUnique(all, list[j]);
+        if (hasOwn(species, key) && key !== 'cachorro') {
+          var list = ensureArray(species[key]);
+          for (var j = 0; j < list.length; j += 1) {
+            pushUnique(all, list[j]);
+          }
         }
       return all;
 
@@ -536,19 +541,59 @@
       .then(function (overrides) {
       .catch(function (err) {
     if (state.eventsBound) return;
-    state.eventsBound = true;
+    for (var j = 0; j < ovList.length; j += 1) {
+      var item = ovList[j];
+      if (item && typeof item === 'object' && item.raca) {
+        var key = stripDiacritics(item.raca);
+        if (key) map[key] = item;
+      }
+    }
 
-      E.btnTabCadastro.addEventListener('click', function () {
-        if (E.tabCadastro) E.tabCadastro.classList.remove('hidden');
-        if (E.tabPrecos) E.tabPrecos.classList.add('hidden');
-        if (E.btnTabCadastro) E.btnTabCadastro.classList.add('bg-primary', 'text-white');
-        if (E.btnTabPrecos) {
-          E.btnTabPrecos.classList.remove('bg-primary', 'text-white');
-          E.btnTabPrecos.classList.add('border', 'border-gray-300', 'text-gray-700');
-        }
+    for (var k = 0; k < breeds.length; k += 1) {
+      var name = breeds[k];
+      var custo = override.custo;
+      var valor = override.valor;
 
-      E.btnTabPrecos.addEventListener('click', function () {
-        if (E.tabPrecos) E.tabPrecos.classList.remove('hidden');
+      if (custo !== '' && custo !== null && custo !== undefined) {
+        custo = Number(custo);
+        if (!isFinite(custo)) custo = '';
+      } else {
+        custo = '';
+      }
+
+      if (valor !== '' && valor !== null && valor !== undefined) {
+        valor = Number(valor);
+        if (!isFinite(valor)) valor = '';
+      } else {
+        valor = '';
+      }
+
+
+      var tdNome = doc.createElement('td');
+      tdNome.className = 'px-3 py-2 text-gray-800';
+      tdNome.textContent = name;
+      tr.appendChild(tdNome);
+
+      var tdCusto = doc.createElement('td');
+      tdCusto.className = 'px-3 py-2';
+      var inputCusto = doc.createElement('input');
+      inputCusto.type = 'number';
+      inputCusto.step = '0.01';
+      inputCusto.className = 'w-32 rounded border-gray-300';
+      inputCusto.value = custo;
+      tdCusto.appendChild(inputCusto);
+      tr.appendChild(tdCusto);
+
+      var tdValor = doc.createElement('td');
+      tdValor.className = 'px-3 py-2';
+      var inputValor = doc.createElement('input');
+      inputValor.type = 'number';
+      inputValor.step = '0.01';
+      inputValor.className = 'w-32 rounded border-gray-300';
+      inputValor.value = valor;
+      tdValor.appendChild(inputValor);
+      tr.appendChild(tdValor);
+
         if (E.tabCadastro) E.tabCadastro.classList.add('hidden');
         if (E.btnTabPrecos) E.btnTabPrecos.classList.add('bg-primary', 'text-white');
         if (E.btnTabCadastro) {
@@ -712,7 +757,9 @@
         renderServiceSug(list);
       }, 200);
     });
-    E.servSug && E.servSug.addEventListener('click', (ev) => {
+        if (inputs[index]) {
+          inputs[index].value = trimmed;
+        }
       const target = ev.target;
       const li = (target && typeof target.closest === 'function') ? target.closest('li') : null;
       if (!li || !li.__item) return;
