@@ -23,6 +23,10 @@ const petWeightSchema = new Schema({
     ref: 'User',
     default: null,
   },
+  isInitial: {
+    type: Boolean,
+    default: false,
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('PetWeight', petWeightSchema);

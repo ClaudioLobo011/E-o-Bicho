@@ -307,11 +307,11 @@ router.get('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
       .lean();
 
     const formatted = docs.map(formatPetWeightEntry).filter(Boolean);
+    const hasInitial = formatted.some((entry) => entry && entry.isInitial);
 
-    const initialWeight = parseWeight(petDoc.peso);
-    if (initialWeight !== null) {
-      const hasInitial = formatted.some((entry) => entry && entry.isInitial);
-      if (!hasInitial) {
+    if (!hasInitial && formatted.length === 0) {
+      const initialWeight = parseWeight(petDoc.peso);
+      if (initialWeight !== null) {
         const initialEntry = formatPetWeightEntry({
           _id: `initial-${petId}`,
           cliente: petDoc.owner,
@@ -354,7 +354,7 @@ router.post('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'Informe um peso válido.' });
     }
 
-    const petDoc = await Pet.findById(petId).select('owner peso');
+    const petDoc = await Pet.findById(petId).select('owner peso createdAt updatedAt');
     if (!petDoc) {
       return res.status(404).json({ message: 'Pet não encontrado.' });
     }
@@ -372,6 +372,51 @@ router.post('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
     const registeredBy = normalizeObjectId(req.user?.id || req.user?._id);
     if (registeredBy) {
       payload.registradoPor = registeredBy;
+    }
+
+    const previousWeightValue = parseWeight(petDoc.peso);
+
+    const existingInitial = await PetWeight.findOne({ pet: petId, isInitial: true });
+    if (!existingInitial) {
+      const earliestWeight = await PetWeight.findOne({ pet: petId }).sort({ createdAt: 1 });
+      if (earliestWeight) {
+        if (!earliestWeight.isInitial) {
+          earliestWeight.isInitial = true;
+          await earliestWeight.save();
+        }
+      } else if (previousWeightValue !== null) {
+        let initialTimestamp = petDoc.createdAt instanceof Date ? petDoc.createdAt : null;
+        if (!initialTimestamp && petDoc.createdAt) {
+          const parsed = new Date(petDoc.createdAt);
+          if (!Number.isNaN(parsed.getTime())) {
+            initialTimestamp = parsed;
+          }
+        }
+        if (!initialTimestamp && petDoc.updatedAt) {
+          if (petDoc.updatedAt instanceof Date) {
+            initialTimestamp = petDoc.updatedAt;
+          } else {
+            const parsed = new Date(petDoc.updatedAt);
+            if (!Number.isNaN(parsed.getTime())) {
+              initialTimestamp = parsed;
+            }
+          }
+        }
+        if (!initialTimestamp) {
+          initialTimestamp = new Date();
+        }
+
+        const initialPayload = {
+          cliente: clienteId,
+          pet: petId,
+          peso: previousWeightValue,
+          isInitial: true,
+          createdAt: initialTimestamp,
+          updatedAt: initialTimestamp,
+        };
+
+        await PetWeight.create(initialPayload);
+      }
     }
 
     const created = await PetWeight.create(payload);
