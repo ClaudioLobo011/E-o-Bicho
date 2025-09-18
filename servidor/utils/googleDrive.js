@@ -3,7 +3,7 @@ const { URL } = require('url');
 const jwt = require('jsonwebtoken');
 
 const TOKEN_URI = 'https://oauth2.googleapis.com/token';
-const UPLOAD_URI = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink,webContentLink';
+const UPLOAD_URI = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,mimeType,size,webViewLink,webContentLink';
 const FILES_URI = 'https://www.googleapis.com/drive/v3/files';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
@@ -190,7 +190,7 @@ async function ensureFileIsPublic(fileId, token) {
 
   try {
     await requestGoogle({
-      url: `${FILES_URI}/${fileId}/permissions`,
+      url: `${FILES_URI}/${fileId}/permissions?supportsAllDrives=true`,
       method: 'POST',
       headers,
       body: Buffer.from(body, 'utf8'),
@@ -206,7 +206,7 @@ async function getFileMetadata(fileId, token) {
     Authorization: `Bearer ${token}`,
   };
   const response = await requestGoogle({
-    url: `${FILES_URI}/${fileId}?fields=id,name,mimeType,size,webViewLink,webContentLink`,
+    url: `${FILES_URI}/${fileId}?supportsAllDrives=true&fields=id,name,mimeType,size,webViewLink,webContentLink`,
     method: 'GET',
     headers,
   });
@@ -288,7 +288,7 @@ async function deleteFile(fileId) {
   try {
     const token = await fetchAccessToken();
     await requestGoogle({
-      url: `${FILES_URI}/${fileId}`,
+      url: `${FILES_URI}/${fileId}?supportsAllDrives=true`,
       method: 'DELETE',
       headers: {
         Authorization: `Bearer ${token}`,
