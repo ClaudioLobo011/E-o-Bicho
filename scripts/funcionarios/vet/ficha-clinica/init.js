@@ -5,6 +5,7 @@ import { openVacinaModal } from './vacinas.js';
 import { openAnexoModal } from './anexos.js';
 import { openExameModal } from './exames.js';
 import { openPesoModal } from './pesos.js';
+import { openObservacaoModal } from './observacoes.js';
 import {
   searchClientes,
   hideSugestoes,
@@ -97,6 +98,13 @@ export function initFichaClinica() {
     els.addPesoBtn.addEventListener('click', (event) => {
       event.preventDefault();
       openPesoModal();
+    });
+  }
+
+  if (els.addObservacaoBtn) {
+    els.addObservacaoBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      openObservacaoModal();
     });
   }
 

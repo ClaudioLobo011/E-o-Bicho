@@ -522,6 +522,101 @@ function createAnexoCard(anexo) {
   return card;
 }
 
+function createObservacaoCard(entry) {
+  if (!entry) return null;
+
+  const card = document.createElement('article');
+  card.className = 'rounded-xl border border-amber-200 bg-white p-4 shadow-sm';
+
+  const observacaoId = normalizeId(entry.id || entry._id);
+  if (observacaoId) {
+    card.dataset.observacaoId = observacaoId;
+  }
+
+  const header = document.createElement('div');
+  header.className = 'flex items-start gap-3';
+  card.appendChild(header);
+
+  const icon = document.createElement('div');
+  icon.className = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600';
+  icon.innerHTML = '<i class="fas fa-comment-dots"></i>';
+  header.appendChild(icon);
+
+  const headerText = document.createElement('div');
+  headerText.className = 'flex-1';
+  header.appendChild(headerText);
+
+  const titleEl = document.createElement('h3');
+  titleEl.className = 'text-sm font-semibold text-amber-700 break-words';
+  const title = String(entry.titulo || '').trim();
+  titleEl.textContent = title || 'Observação';
+  headerText.appendChild(titleEl);
+
+  const createdAt = entry.createdAt ? formatDateTimeDisplay(entry.createdAt) : '';
+  if (createdAt) {
+    const meta = document.createElement('p');
+    meta.className = 'mt-0.5 text-xs text-gray-500';
+    meta.textContent = `Registrado em ${createdAt}`;
+    headerText.appendChild(meta);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'ml-auto flex items-start';
+  header.appendChild(actions);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 transition hover:bg-amber-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-amber-200';
+  removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
+  removeBtn.title = 'Remover observação';
+
+  const toggleRemoveDisabled = (disabled) => {
+    removeBtn.disabled = !!disabled;
+    removeBtn.classList.toggle('opacity-60', !!disabled);
+    removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
+  };
+
+  removeBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const handler = state?.deleteObservacao;
+    if (typeof handler !== 'function') {
+      notify('Não foi possível remover a observação agora. Recarregue a página e tente novamente.', 'error');
+      return;
+    }
+
+    toggleRemoveDisabled(true);
+    let result;
+    try {
+      result = handler(entry);
+    } catch (error) {
+      console.error('removeObservacao handler', error);
+      toggleRemoveDisabled(false);
+      notify('Não foi possível remover a observação.', 'error');
+      return;
+    }
+
+    Promise.resolve(result)
+      .catch((error) => {
+        console.error('removeObservacao', error);
+        notify('Não foi possível remover a observação.', 'error');
+      })
+      .finally(() => {
+        toggleRemoveDisabled(false);
+      });
+  });
+
+  actions.appendChild(removeBtn);
+
+  const content = document.createElement('p');
+  content.className = 'mt-3 whitespace-pre-wrap text-sm text-gray-700 break-words';
+  content.textContent = String(entry.observacao || entry.texto || '').trim();
+  card.appendChild(content);
+
+  return card;
+}
+
 function createVacinaDetail(label, value) {
   const wrapper = document.createElement('div');
   wrapper.className = 'space-y-1';
@@ -1313,6 +1408,8 @@ export function updateConsultaAgendaCard() {
   const pesos = Array.isArray(state.pesos) ? state.pesos : [];
   const hasPesos = pesos.some((entry) => entry && !entry.isInitial);
   const isLoadingPesos = !!state.pesosLoading;
+  const observacoes = Array.isArray(state.observacoes) ? state.observacoes : [];
+  const hasObservacoes = observacoes.length > 0;
   const context = state.agendaContext;
   const selectedPetId = normalizeId(state.selectedPetId);
   const selectedTutorId = normalizeId(state.selectedCliente?._id);
@@ -1437,7 +1534,8 @@ export function updateConsultaAgendaCard() {
     }
   }
 
-  const hasAnyContent = hasManualConsultas || hasAgendaContent || hasVacinas || hasAnexos || hasPesos || hasExames;
+  const hasAnyContent =
+    hasManualConsultas || hasAgendaContent || hasVacinas || hasAnexos || hasPesos || hasExames || hasObservacoes;
   const shouldShowPlaceholder = !hasAnyContent;
 
   if ((isLoadingConsultas || isLoadingAnexos || isLoadingPesos || isLoadingExames) && !hasAnyContent) {
@@ -1530,6 +1628,19 @@ export function updateConsultaAgendaCard() {
     loadingPesos.className = 'rounded-xl border border-dashed border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-600';
     loadingPesos.textContent = 'Carregando registros de peso...';
     scroll.appendChild(loadingPesos);
+  }
+
+  if (hasObservacoes) {
+    const orderedObservacoes = [...observacoes];
+    orderedObservacoes.sort((a, b) => {
+      const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+    orderedObservacoes.forEach((observacao) => {
+      const card = createObservacaoCard(observacao);
+      if (card) scroll.appendChild(card);
+    });
   }
 
   if (hasManualConsultas) {

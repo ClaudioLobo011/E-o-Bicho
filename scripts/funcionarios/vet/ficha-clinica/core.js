@@ -100,6 +100,7 @@ export const els = {
   addAnexoBtn: document.getElementById('vet-add-anexo-btn'),
   addExameBtn: document.getElementById('vet-add-exame-btn'),
   addPesoBtn: document.getElementById('vet-add-peso-btn'),
+  addObservacaoBtn: document.getElementById('vet-add-observacao-btn'),
 };
 
 export const state = {
@@ -121,6 +122,7 @@ export const state = {
   pesos: [],
   pesosLoading: false,
   pesosLoadKey: null,
+  observacoes: [],
 };
 
 export const consultaModal = {
@@ -233,6 +235,7 @@ export const STORAGE_KEYS = {
 export const VACINA_STORAGE_PREFIX = 'vetFichaVacinas:';
 export const ANEXO_STORAGE_PREFIX = 'vetFichaAnexos:';
 export const EXAME_STORAGE_PREFIX = 'vetFichaExames:';
+export const OBSERVACAO_STORAGE_PREFIX = 'vetFichaObservacoes:';
 export const EXAME_ATTACHMENT_OBSERVACAO_PREFIX = '__vet_exame__:';
 export const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 

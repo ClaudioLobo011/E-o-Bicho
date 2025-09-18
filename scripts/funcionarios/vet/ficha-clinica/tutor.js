@@ -15,6 +15,7 @@ import { loadConsultasFromServer, updateConsultaAgendaCard } from './consultas.j
 import { loadVacinasForSelection } from './vacinas.js';
 import { loadAnexosForSelection, loadAnexosFromServer } from './anexos.js';
 import { loadExamesForSelection } from './exames.js';
+import { loadObservacoesForSelection } from './observacoes.js';
 import { loadPesosFromServer } from './pesos.js';
 import { updateCardDisplay, updatePageVisibility, setCardMode } from './ui.js';
 
@@ -252,9 +253,11 @@ export async function onSelectPet(petId, opts = {}) {
   state.pesos = [];
   state.pesosLoadKey = null;
   state.pesosLoading = false;
+  state.observacoes = [];
   loadVacinasForSelection();
   loadAnexosForSelection();
   loadExamesForSelection();
+  loadObservacoesForSelection();
   updateCardDisplay();
   updatePageVisibility();
   if (!state.selectedPetId) {
@@ -286,6 +289,7 @@ export function clearCliente() {
   state.pesos = [];
   state.pesosLoadKey = null;
   state.pesosLoading = false;
+  state.observacoes = [];
   persistAgendaContext(null);
   if (els.cliInput) els.cliInput.value = '';
   hideSugestoes();
@@ -315,6 +319,7 @@ export function clearPet() {
   state.exames = [];
   state.examesLoadKey = null;
   state.examesLoading = false;
+  state.observacoes = [];
   updateCardDisplay();
   updatePageVisibility();
 }
