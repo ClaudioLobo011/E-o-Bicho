@@ -11,6 +11,7 @@ const SERVICE_CATEGORIES = [
   'day_care',
   'outros',
   'veterinario',
+  'exame',
   'banho_tosa',
 ];
 

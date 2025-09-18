@@ -8,18 +8,127 @@ import {
   normalizeId,
   normalizeForCompare,
   formatMoney,
+  formatFileSize,
   exameModal,
   EXAME_STORAGE_PREFIX,
   getAgendaStoreId,
   getPetPriceCriteria,
   persistAgendaContext,
+  getFileExtension,
+  ANEXO_ALLOWED_EXTENSIONS,
+  ANEXO_ALLOWED_MIME_TYPES,
+  getAuthToken,
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
+import { loadAnexosFromServer } from './anexos.js';
 
 const MIN_SEARCH_TERM_LENGTH = 2;
 
 function generateExameId() {
   return `exm-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+}
+
+function generateExameFileId() {
+  return `exm-file-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+}
+
+function isAllowedExameFile(file) {
+  if (!file) return false;
+  const extension = getFileExtension(file.name);
+  if (extension && ANEXO_ALLOWED_EXTENSIONS.includes(extension)) return true;
+  const mime = String(file.type || '').toLowerCase();
+  if (mime && ANEXO_ALLOWED_MIME_TYPES.some((type) => mime === type)) return true;
+  return false;
+}
+
+function normalizeExameFileRecord(raw, fallback = {}) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const fallbackSource = fallback && typeof fallback === 'object' ? fallback : {};
+
+  const id = normalizeId(source.id || source._id || fallbackSource.id || fallbackSource._id) || generateExameFileId();
+  const nome = pickFirst(source.nome, source.name, fallbackSource.nome, fallbackSource.name) || '';
+  const originalName = pickFirst(
+    source.originalName,
+    source.arquivoNomeOriginal,
+    source.fileName,
+    fallbackSource.originalName,
+    fallbackSource.fileName,
+  );
+  const mimeType = pickFirst(source.mimeType, source.contentType, fallbackSource.mimeType) || '';
+
+  const sizeCandidate = Number(
+    source.size ?? source.tamanho ?? source.bytes ?? source.fileSize ?? fallbackSource.size ?? fallbackSource.tamanho,
+  );
+  const size = Number.isFinite(sizeCandidate) && sizeCandidate >= 0 ? sizeCandidate : 0;
+
+  let extension = pickFirst(source.extension, source.extensao, fallbackSource.extension, fallbackSource.extensao) || '';
+  if (!extension && (originalName || nome)) {
+    extension = getFileExtension(originalName || nome);
+  }
+  if (extension) {
+    extension = String(extension).toLowerCase();
+    if (!extension.startsWith('.')) extension = `.${extension}`;
+  }
+
+  const url = pickFirst(source.url, source.link, source.downloadUrl, source.webViewLink, fallbackSource.url) || '';
+
+  let createdAt = source.createdAt || source.uploadedAt || fallbackSource.createdAt || fallbackSource.uploadedAt || null;
+  if (createdAt) {
+    const parsed = new Date(createdAt);
+    createdAt = Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+
+  return {
+    id,
+    _id: id,
+    nome: nome || originalName || 'Arquivo',
+    originalName: originalName || nome || '',
+    mimeType,
+    size,
+    extension: extension || '',
+    url,
+    createdAt,
+  };
+}
+
+function mergeExameFiles(existing = [], incoming = []) {
+  const result = [];
+  const map = new Map();
+  const append = (item) => {
+    const normalized = normalizeExameFileRecord(item);
+    if (!normalized) return;
+    const key = normalizeId(normalized.id || normalized._id) || `${normalized.nome}|${normalized.originalName}|${normalized.url}`;
+    const previous = map.get(key);
+    if (previous) {
+      const merged = { ...previous, ...normalized };
+      if (!merged.url && normalized.url) merged.url = normalized.url;
+      if (!merged.mimeType && normalized.mimeType) merged.mimeType = normalized.mimeType;
+      if (!merged.extension && normalized.extension) merged.extension = normalized.extension;
+      if (!merged.size && normalized.size) merged.size = normalized.size;
+      if (!merged.createdAt && normalized.createdAt) merged.createdAt = normalized.createdAt;
+      map.set(key, merged);
+    } else {
+      map.set(key, normalized);
+    }
+  };
+
+  (Array.isArray(existing) ? existing : []).forEach(append);
+  (Array.isArray(incoming) ? incoming : []).forEach(append);
+
+  map.forEach((value) => result.push(value));
+  result.sort((a, b) => {
+    const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bTime - aTime;
+  });
+  return result;
+}
+
+function getExameFileIconClass(file) {
+  const ext = String(file?.extension || getFileExtension(file?.originalName || file?.name || file?.nome)).toLowerCase();
+  if (ext === '.pdf') return 'fas fa-file-pdf';
+  if (ext === '.png' || ext === '.jpg' || ext === '.jpeg') return 'fas fa-file-image';
+  return 'fas fa-file';
 }
 
 function getExameStorageKey(clienteId, petId) {
@@ -38,6 +147,13 @@ function normalizeExameRecord(raw) {
   const valorCandidate = Number(raw.valor || raw.valorUnitario || raw.valorTotal || 0);
   const valor = Number.isFinite(valorCandidate) ? valorCandidate : 0;
   const observacao = typeof raw.observacao === 'string' ? raw.observacao.trim() : '';
+  let arquivos = mergeExameFiles([], Array.isArray(raw.arquivos) ? raw.arquivos : []);
+  if (Array.isArray(raw.files)) {
+    arquivos = mergeExameFiles(arquivos, raw.files);
+  }
+  if (Array.isArray(raw.anexos)) {
+    arquivos = mergeExameFiles(arquivos, raw.anexos);
+  }
   let createdAt = null;
   if (raw.createdAt) {
     const date = new Date(raw.createdAt);
@@ -56,6 +172,8 @@ function normalizeExameRecord(raw) {
     valor,
     observacao,
     createdAt,
+    arquivos,
+    anexoId: normalizeId(raw.anexoId || raw.anexo || raw.attachmentId || raw.attachment) || null,
   };
 }
 
@@ -73,6 +191,276 @@ function persistExamesForSelection() {
   } catch {
     // ignore persistence errors
   }
+}
+
+function setExamePendingFile(file) {
+  exameModal.pendingFile = file || null;
+  if (!exameModal.dropzoneText || !exameModal.dropzoneHint) {
+    if (!file && exameModal.fileInput) {
+      exameModal.fileInput.value = '';
+    }
+    refreshExameModalControls();
+    return;
+  }
+
+  if (file) {
+    exameModal.dropzoneText.textContent = file.name;
+    const details = [];
+    const extension = getFileExtension(file.name).replace('.', '').toUpperCase();
+    if (extension) details.push(extension);
+    const size = formatFileSize(file.size);
+    if (size) details.push(size);
+    exameModal.dropzoneHint.textContent = details.length ? details.join(' · ') : '';
+    if (exameModal.fileNameInput) {
+      const current = (exameModal.fileNameInput.value || '').trim();
+      if (!current) {
+        const base = file.name.replace(/\.[^.]+$/, '');
+        exameModal.fileNameInput.value = base || file.name;
+      }
+    }
+  } else {
+    exameModal.dropzoneText.textContent = 'Arraste o arquivo aqui ou clique para selecionar';
+    exameModal.dropzoneHint.textContent = 'Formatos aceitos: PNG, JPG, JPEG ou PDF.';
+    if (exameModal.fileInput) {
+      exameModal.fileInput.value = '';
+    }
+  }
+
+  refreshExameModalControls();
+}
+
+function refreshExameModalControls() {
+  const hasPendingFile = !!exameModal.pendingFile;
+  const nameValue = (exameModal.fileNameInput?.value || '').trim();
+  const canAdd = hasPendingFile && !!nameValue && !exameModal.isSubmitting;
+  if (exameModal.addFileBtn) {
+    exameModal.addFileBtn.disabled = !canAdd;
+    exameModal.addFileBtn.classList.toggle('opacity-50', exameModal.addFileBtn.disabled);
+    exameModal.addFileBtn.classList.toggle('cursor-not-allowed', exameModal.addFileBtn.disabled);
+  }
+  if (exameModal.fileNameInput) {
+    exameModal.fileNameInput.disabled = !!exameModal.isSubmitting;
+  }
+  if (exameModal.fileInput) {
+    exameModal.fileInput.disabled = !!exameModal.isSubmitting;
+  }
+  if (exameModal.dropzone) {
+    exameModal.dropzone.classList.toggle('pointer-events-none', !!exameModal.isSubmitting);
+    exameModal.dropzone.classList.toggle('opacity-60', !!exameModal.isSubmitting);
+  }
+  updateExameAttachmentsGrid();
+}
+
+function updateExameAttachmentsGrid() {
+  const list = exameModal.filesList;
+  const empty = exameModal.filesEmptyState;
+  if (!list || !empty) return;
+
+  list.innerHTML = '';
+  const files = Array.isArray(exameModal.selectedFiles) ? exameModal.selectedFiles : [];
+  if (!files.length) {
+    list.classList.add('hidden');
+    empty.classList.remove('hidden');
+    return;
+  }
+
+  empty.classList.add('hidden');
+  list.classList.remove('hidden');
+
+  files.forEach((entry) => {
+    const item = document.createElement('div');
+    item.className = 'flex flex-col gap-2 rounded-lg border border-rose-100 bg-rose-50/70 px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between';
+    list.appendChild(item);
+
+    const info = document.createElement('div');
+    info.className = 'flex items-start gap-3 text-sm text-rose-700';
+    item.appendChild(info);
+
+    const iconWrapper = document.createElement('div');
+    iconWrapper.className = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600';
+    const icon = document.createElement('i');
+    icon.className = getExameFileIconClass(entry);
+    iconWrapper.appendChild(icon);
+    info.appendChild(iconWrapper);
+
+    const textWrap = document.createElement('div');
+    textWrap.className = 'min-w-0';
+    info.appendChild(textWrap);
+
+    const nameEl = document.createElement('p');
+    nameEl.className = 'font-semibold leading-tight text-rose-700 break-words';
+    nameEl.textContent = entry.name || entry.originalName || 'Arquivo';
+    textWrap.appendChild(nameEl);
+
+    const meta = document.createElement('p');
+    meta.className = 'text-xs text-rose-600';
+    const metaPieces = [];
+    const ext = String(entry.extension || getFileExtension(entry.originalName || entry.name)).replace('.', '').toUpperCase();
+    if (entry.originalName && entry.originalName !== entry.name) metaPieces.push(entry.originalName);
+    if (ext) metaPieces.push(ext);
+    const sizeText = formatFileSize(entry.size);
+    if (sizeText) metaPieces.push(sizeText);
+    meta.textContent = metaPieces.length ? metaPieces.join(' · ') : '—';
+    textWrap.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'flex items-center gap-2';
+    item.appendChild(actions);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'inline-flex items-center gap-2 rounded-md border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
+    removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
+    removeBtn.disabled = !!exameModal.isSubmitting;
+    removeBtn.classList.toggle('opacity-60', removeBtn.disabled);
+    removeBtn.classList.toggle('cursor-not-allowed', removeBtn.disabled);
+    removeBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (exameModal.isSubmitting) return;
+      exameModal.selectedFiles = (Array.isArray(exameModal.selectedFiles) ? exameModal.selectedFiles : []).filter(
+        (file) => file !== entry,
+      );
+      updateExameAttachmentsGrid();
+      refreshExameModalControls();
+    });
+    actions.appendChild(removeBtn);
+  });
+}
+
+function handleExameFileSelection(file) {
+  if (!file) {
+    setExamePendingFile(null);
+    return;
+  }
+  if (!isAllowedExameFile(file)) {
+    notify('Formato de arquivo não permitido. Use PNG, JPG, JPEG ou PDF.', 'warning');
+    setExamePendingFile(null);
+    return;
+  }
+  setExamePendingFile(file);
+}
+
+function handleExameAddFile() {
+  const file = exameModal.pendingFile;
+  const name = (exameModal.fileNameInput?.value || '').trim();
+  if (!file || !name) {
+    notify('Informe um nome e selecione um arquivo para adicionar.', 'warning');
+    return;
+  }
+
+  const entry = {
+    id: generateExameFileId(),
+    name,
+    originalName: file.name,
+    size: Number(file.size || 0),
+    mimeType: file.type || '',
+    extension: getFileExtension(file.name),
+    file,
+  };
+
+  if (!Array.isArray(exameModal.selectedFiles)) {
+    exameModal.selectedFiles = [];
+  }
+  exameModal.selectedFiles.push(entry);
+
+  setExamePendingFile(null);
+  if (exameModal.fileNameInput) {
+    exameModal.fileNameInput.value = '';
+  }
+  updateExameAttachmentsGrid();
+  refreshExameModalControls();
+}
+
+async function uploadExameAttachments(entries) {
+  const files = Array.isArray(entries) ? entries.filter((entry) => entry && entry.file) : [];
+  if (!files.length) {
+    return { arquivos: [], anexoId: null };
+  }
+
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  if (!(clienteId && petId)) {
+    throw new Error('Selecione um tutor e um pet para enviar arquivos.');
+  }
+
+  const formData = new FormData();
+  formData.append('clienteId', clienteId);
+  formData.append('petId', petId);
+  const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+  if (appointmentId) {
+    formData.append('appointmentId', appointmentId);
+  }
+
+  const fallbackEntries = files.map((entry) => {
+    const createdAt = new Date().toISOString();
+    return normalizeExameFileRecord({
+      id: entry.id,
+      nome: entry.name,
+      originalName: entry.originalName,
+      mimeType: entry.mimeType,
+      size: entry.size,
+      extension: entry.extension,
+      createdAt,
+    });
+  });
+
+  files.forEach((entry) => {
+    const file = entry.file;
+    if (!file) return;
+    const displayName = (entry.name || file.name || '').trim() || file.name;
+    formData.append('arquivos', file, file.name);
+    formData.append('nomes[]', displayName);
+  });
+
+  const token = getAuthToken();
+  const response = await fetch(`${API_CONFIG.BASE_URL}/func/vet/anexos`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => (response.ok ? {} : {}));
+  if (!response.ok) {
+    const message = typeof data?.message === 'string' ? data.message : 'Erro ao enviar arquivos do exame.';
+    throw new Error(message);
+  }
+
+  const parseRecord = (raw) => {
+    if (!raw || typeof raw !== 'object') return null;
+    const arquivosRaw = Array.isArray(raw.arquivos)
+      ? raw.arquivos
+      : (Array.isArray(raw.files) ? raw.files : []);
+    const arquivos = mergeExameFiles([], arquivosRaw);
+    return {
+      arquivos,
+      anexoId: normalizeId(raw._id || raw.id || raw.anexoId || raw.anexo) || null,
+    };
+  };
+
+  let parsed = parseRecord(data);
+  if (!parsed || !parsed.arquivos.length) {
+    if (Array.isArray(data?.anexos)) {
+      parsed = data.anexos.map(parseRecord).find((item) => item && item.arquivos.length) || null;
+    } else if (Array.isArray(data)) {
+      parsed = data.map(parseRecord).find((item) => item && item.arquivos.length) || null;
+    }
+  }
+
+  if (!parsed || !parsed.arquivos.length) {
+    parsed = { arquivos: fallbackEntries, anexoId: parsed?.anexoId || null };
+  } else {
+    parsed = { arquivos: mergeExameFiles(parsed.arquivos, fallbackEntries), anexoId: parsed.anexoId };
+  }
+
+  try {
+    await loadAnexosFromServer({ force: true });
+  } catch (error) {
+    console.error('uploadExameAttachments loadAnexosFromServer', error);
+  }
+
+  return parsed;
 }
 
 export function loadExamesForSelection() {
@@ -145,6 +533,7 @@ function setExameModalSubmitting(isSubmitting) {
     exameModal.closeBtn.classList.toggle('opacity-50', !!isSubmitting);
     exameModal.closeBtn.classList.toggle('cursor-not-allowed', !!isSubmitting);
   }
+  refreshExameModalControls();
 }
 
 function ensureExameModal() {
@@ -235,6 +624,82 @@ function ensureExameModal() {
   obsTextarea.className = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-200';
   obsWrapper.appendChild(obsTextarea);
 
+  const attachmentsSection = document.createElement('div');
+  attachmentsSection.className = 'grid gap-3 rounded-lg border border-rose-100 bg-rose-50/40 p-4';
+  fieldsWrapper.appendChild(attachmentsSection);
+
+  const attachmentsHeader = document.createElement('div');
+  attachmentsHeader.className = 'flex flex-col gap-1';
+  attachmentsSection.appendChild(attachmentsHeader);
+
+  const attachmentsTitle = document.createElement('h3');
+  attachmentsTitle.className = 'text-sm font-semibold text-rose-700';
+  attachmentsTitle.textContent = 'Arquivos do exame (opcional)';
+  attachmentsHeader.appendChild(attachmentsTitle);
+
+  const attachmentsHint = document.createElement('p');
+  attachmentsHint.className = 'text-xs text-rose-600';
+  attachmentsHint.textContent = 'Adicione imagens ou PDFs relacionados ao exame, se necessário.';
+  attachmentsHeader.appendChild(attachmentsHint);
+
+  const attachmentsRow = document.createElement('div');
+  attachmentsRow.className = 'grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]';
+  attachmentsSection.appendChild(attachmentsRow);
+
+  const nameWrapper = document.createElement('div');
+  nameWrapper.className = 'flex flex-col gap-2';
+  attachmentsRow.appendChild(nameWrapper);
+
+  const nameLabel = document.createElement('label');
+  nameLabel.className = 'text-sm font-medium text-gray-700';
+  nameLabel.textContent = 'Nome do arquivo';
+  nameWrapper.appendChild(nameLabel);
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Informe um nome para o arquivo';
+  nameInput.className = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-200';
+  nameWrapper.appendChild(nameInput);
+
+  const fileWrapper = document.createElement('div');
+  fileWrapper.className = 'flex flex-col gap-2';
+  attachmentsRow.appendChild(fileWrapper);
+
+  const fileLabel = document.createElement('label');
+  fileLabel.className = 'text-sm font-medium text-gray-700';
+  fileLabel.textContent = 'Arquivo';
+  fileWrapper.appendChild(fileLabel);
+
+  const dropzone = document.createElement('label');
+  dropzone.className = 'flex h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-rose-300 bg-rose-50 text-sm text-rose-600 transition';
+  dropzone.innerHTML = '<span id="vet-exame-dropzone-text">Arraste o arquivo aqui ou clique para selecionar</span><span id="vet-exame-dropzone-hint" class="text-xs text-rose-500">Formatos aceitos: PNG, JPG, JPEG ou PDF.</span>';
+  fileWrapper.appendChild(dropzone);
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = ANEXO_ALLOWED_EXTENSIONS.join(',');
+  fileInput.className = 'hidden';
+  dropzone.appendChild(fileInput);
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'self-start rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-400';
+  addBtn.textContent = 'Adicionar';
+  attachmentsRow.appendChild(addBtn);
+
+  const listWrapper = document.createElement('div');
+  listWrapper.className = 'grid gap-3';
+  attachmentsSection.appendChild(listWrapper);
+
+  const filesList = document.createElement('div');
+  filesList.className = 'space-y-3 hidden';
+  listWrapper.appendChild(filesList);
+
+  const emptyState = document.createElement('div');
+  emptyState.className = 'rounded-lg border border-rose-100 bg-white px-3 py-6 text-center text-sm text-rose-600';
+  emptyState.textContent = 'Nenhum arquivo adicionado no momento.';
+  listWrapper.appendChild(emptyState);
+
   const footer = document.createElement('div');
   footer.className = 'flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3';
   form.appendChild(footer);
@@ -292,6 +757,46 @@ function ensureExameModal() {
     }
   });
 
+  nameInput.addEventListener('input', () => {
+    refreshExameModalControls();
+  });
+
+  dropzone.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    dropzone.classList.add('border-rose-500', 'bg-rose-100');
+  });
+
+  dropzone.addEventListener('dragleave', (event) => {
+    event.preventDefault();
+    dropzone.classList.remove('border-rose-500', 'bg-rose-100');
+  });
+
+  dropzone.addEventListener('drop', (event) => {
+    event.preventDefault();
+    dropzone.classList.remove('border-rose-500', 'bg-rose-100');
+    const file = event.dataTransfer?.files?.[0] || null;
+    if (file) {
+      handleExameFileSelection(file);
+    }
+  });
+
+  dropzone.addEventListener('click', (event) => {
+    event.preventDefault();
+    if (exameModal.fileInput) {
+      exameModal.fileInput.click();
+    }
+  });
+
+  fileInput.addEventListener('change', (event) => {
+    const file = event.target.files?.[0] || null;
+    handleExameFileSelection(file);
+  });
+
+  addBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    handleExameAddFile();
+  });
+
   document.body.appendChild(overlay);
 
   exameModal.overlay = overlay;
@@ -308,6 +813,18 @@ function ensureExameModal() {
     servico: serviceInput,
     observacao: obsTextarea,
   };
+  exameModal.addFileBtn = addBtn;
+  exameModal.fileNameInput = nameInput;
+  exameModal.fileInput = fileInput;
+  exameModal.dropzone = dropzone;
+  exameModal.dropzoneText = document.getElementById('vet-exame-dropzone-text');
+  exameModal.dropzoneHint = document.getElementById('vet-exame-dropzone-hint');
+  exameModal.filesList = filesList;
+  exameModal.filesEmptyState = emptyState;
+  exameModal.selectedFiles = [];
+  exameModal.pendingFile = null;
+  updateExameAttachmentsGrid();
+  refreshExameModalControls();
 
   return exameModal;
 }
@@ -321,6 +838,11 @@ export function closeExameModal() {
   updateExamePriceDisplay();
   hideExameSuggestions();
   setExameModalSubmitting(false);
+  exameModal.selectedFiles = [];
+  if (exameModal.fileNameInput) {
+    exameModal.fileNameInput.value = '';
+  }
+  setExamePendingFile(null);
   if (exameModal.searchAbortController) {
     try { exameModal.searchAbortController.abort(); } catch { }
     exameModal.searchAbortController = null;
@@ -542,7 +1064,12 @@ async function handleExameSubmit() {
     valor,
     observacao,
     createdAt: new Date().toISOString(),
+    arquivos: [],
+    anexoId: null,
   };
+
+  const attachmentsEntries = Array.isArray(modal.selectedFiles) ? [...modal.selectedFiles] : [];
+  let anexosResult = { arquivos: [], anexoId: null };
 
   setExameModalSubmitting(true);
 
@@ -568,6 +1095,22 @@ async function handleExameSubmit() {
       state.agendaContext.totalServicos = state.agendaContext.servicos.length;
     }
     persistAgendaContext(state.agendaContext);
+
+    if (attachmentsEntries.length) {
+      try {
+        anexosResult = await uploadExameAttachments(attachmentsEntries);
+      } catch (attachmentError) {
+        console.error('uploadExameAttachments', attachmentError);
+        notify('Exame registrado, mas não foi possível enviar os arquivos. Tente novamente pelo botão de anexos.', 'warning');
+      }
+    }
+
+    if (Array.isArray(anexosResult.arquivos) && anexosResult.arquivos.length) {
+      record.arquivos = anexosResult.arquivos;
+    }
+    if (anexosResult.anexoId) {
+      record.anexoId = anexosResult.anexoId;
+    }
 
     state.exames = [record, ...(Array.isArray(state.exames) ? state.exames : [])];
     persistExamesForSelection();
@@ -598,6 +1141,9 @@ export function openExameModal() {
   modal.selectedService = null;
   if (modal.fields?.servico) modal.fields.servico.value = '';
   if (modal.fields?.observacao) modal.fields.observacao.value = '';
+  modal.selectedFiles = [];
+  if (modal.fileNameInput) modal.fileNameInput.value = '';
+  setExamePendingFile(null);
   hideExameSuggestions();
   updateExamePriceDisplay();
 

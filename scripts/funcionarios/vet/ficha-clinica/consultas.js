@@ -690,6 +690,81 @@ function createExameCard(exame) {
   observationSection.appendChild(text);
   card.appendChild(observationSection);
 
+  const arquivos = Array.isArray(exame.arquivos) ? exame.arquivos.filter(Boolean) : [];
+  if (arquivos.length) {
+    const attachmentsSection = document.createElement('div');
+    attachmentsSection.className = 'mt-4 space-y-2';
+
+    const attachmentsLabel = document.createElement('span');
+    attachmentsLabel.className = 'text-xs font-semibold uppercase tracking-wide text-rose-600';
+    attachmentsLabel.textContent = 'Arquivos do exame';
+    attachmentsSection.appendChild(attachmentsLabel);
+
+    const list = document.createElement('div');
+    list.className = 'space-y-2';
+    attachmentsSection.appendChild(list);
+
+    arquivos.forEach((file) => {
+      const item = document.createElement('div');
+      item.className = 'flex flex-col gap-2 rounded-lg border border-rose-100 bg-rose-50/70 px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between';
+      list.appendChild(item);
+
+      const info = document.createElement('div');
+      info.className = 'flex items-start gap-3 text-sm text-rose-700';
+      item.appendChild(info);
+
+      const iconWrapper = document.createElement('div');
+      iconWrapper.className = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600';
+      const iconEl = document.createElement('i');
+      iconEl.className = getAnexoFileIconClass(file);
+      iconWrapper.appendChild(iconEl);
+      info.appendChild(iconWrapper);
+
+      const textWrap = document.createElement('div');
+      textWrap.className = 'min-w-0';
+      info.appendChild(textWrap);
+
+      const nameEl = document.createElement('p');
+      nameEl.className = 'font-semibold leading-tight text-rose-700 break-words';
+      nameEl.textContent = file.nome || file.originalName || 'Arquivo';
+      textWrap.appendChild(nameEl);
+
+      const meta = document.createElement('p');
+      meta.className = 'text-xs text-rose-600';
+      const metaPieces = [];
+      if (file.originalName && file.originalName !== file.nome) metaPieces.push(file.originalName);
+      const extension = String(file.extension || '').replace('.', '').toUpperCase();
+      if (extension) metaPieces.push(extension);
+      if (file.size) metaPieces.push(formatFileSize(file.size));
+      meta.textContent = metaPieces.length ? metaPieces.join(' · ') : '—';
+      textWrap.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'flex items-center gap-2';
+      item.appendChild(actions);
+
+      if (file.url) {
+        const link = document.createElement('a');
+        link.href = file.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'inline-flex items-center gap-2 rounded-md border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-600 hover:text-white';
+        link.innerHTML = '<i class="fas fa-arrow-up-right-from-square text-[10px]"></i><span>Abrir</span>';
+        if (file.originalName) {
+          link.download = file.originalName;
+        }
+        actions.appendChild(link);
+      } else {
+        const pending = document.createElement('span');
+        pending.className = 'text-xs text-rose-500';
+        pending.textContent = 'Link disponível após sincronização.';
+        actions.appendChild(pending);
+      }
+    });
+
+    card.appendChild(attachmentsSection);
+  }
+
   return card;
 }
 
