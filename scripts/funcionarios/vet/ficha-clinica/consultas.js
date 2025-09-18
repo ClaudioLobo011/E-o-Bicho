@@ -6,6 +6,7 @@ import {
   notify,
   pickFirst,
   normalizeId,
+  sanitizeObjectId,
   normalizeForCompare,
   toIsoOrNull,
   formatDateDisplay,
@@ -629,6 +630,56 @@ function createPesoCard(peso, baseline, previous) {
   const headerText = document.createElement('div');
   headerText.className = 'flex-1';
   header.appendChild(headerText);
+
+  const removableId = sanitizeObjectId(peso.id || peso._id);
+  if (removableId) {
+    const headerActions = document.createElement('div');
+    headerActions.className = 'ml-auto flex items-start';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'flex h-8 w-8 items-center justify-center rounded-full text-rose-500 transition hover:bg-rose-100 hover:text-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-200';
+    removeBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+    removeBtn.title = 'Remover registro de peso';
+    removeBtn.setAttribute('aria-label', 'Remover registro de peso');
+
+    const toggleRemoveDisabled = (disabled) => {
+      removeBtn.disabled = !!disabled;
+      removeBtn.classList.toggle('opacity-50', !!disabled);
+      removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
+    };
+
+    removeBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const handler = state?.deletePeso;
+      if (typeof handler !== 'function') {
+        notify('Não foi possível remover o registro de peso agora. Recarregue a página e tente novamente.', 'error');
+        return;
+      }
+
+      toggleRemoveDisabled(true);
+
+      let result;
+      try {
+        result = handler(peso);
+      } catch (error) {
+        console.error('removePeso handler', error);
+        toggleRemoveDisabled(false);
+        return;
+      }
+
+      Promise.resolve(result)
+        .catch(() => {})
+        .finally(() => {
+          toggleRemoveDisabled(false);
+        });
+    });
+
+    headerActions.appendChild(removeBtn);
+    header.appendChild(headerActions);
+  }
 
   const title = document.createElement('h3');
   title.className = 'text-sm font-semibold text-orange-700';

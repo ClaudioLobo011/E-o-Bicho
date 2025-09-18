@@ -12,6 +12,7 @@ import {
   parseWeightValue,
   formatWeightDelta,
   pesoModal,
+  sanitizeObjectId,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
 import { updateCardDisplay } from './ui.js';
@@ -353,6 +354,8 @@ function renderPesoList() {
   });
 }
 
+pesoModal.renderList = renderPesoList;
+
 function updatePetWeightInState(newPeso) {
   const petId = normalizeId(state.selectedPetId);
   if (!petId) return;
@@ -421,6 +424,111 @@ export async function loadPesosFromServer(options = {}) {
     updateConsultaAgendaCard();
   }
 }
+
+export async function deletePeso(peso, options = {}) {
+  const { skipConfirm = false } = options || {};
+  const record = peso && typeof peso === 'object' ? peso : {};
+  const normalizedId = normalizeId(record.id || record._id);
+  const targetId = sanitizeObjectId(normalizedId);
+
+  if (!targetId) {
+    notify('Este registro de peso não pode ser removido.', 'warning');
+    return false;
+  }
+
+  if (!skipConfirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+    const weightText = formatPetWeight(record.peso) || 'este registro de peso';
+    const question = record.isInitial
+      ? `Remover o registro de peso inicial (${weightText})?`
+      : `Remover o registro de peso ${weightText}?`;
+    const confirmed = window.confirm(question);
+    if (!confirmed) {
+      return false;
+    }
+  }
+
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  if (!(clienteId && petId)) {
+    notify('Selecione um tutor e um pet para remover registros de peso.', 'warning');
+    return false;
+  }
+
+  const params = new URLSearchParams({ clienteId, petId });
+  const endpoint = `/func/vet/pesos/${encodeURIComponent(targetId)}?${params.toString()}`;
+
+  try {
+    const response = await api(endpoint, { method: 'DELETE' });
+    let payload = null;
+    if (response.status !== 204) {
+      payload = await response.json().catch(() => null);
+    }
+    if (!response.ok) {
+      const message = typeof payload?.message === 'string' ? payload.message : 'Erro ao remover registro de peso.';
+      throw new Error(message);
+    }
+
+    const remaining = (Array.isArray(state.pesos) ? state.pesos : []).filter((item) => {
+      const itemId = normalizeId(item?.id || item?._id);
+      if (!itemId) return true;
+      const itemSanitized = sanitizeObjectId(itemId);
+      if (itemSanitized) {
+        return itemSanitized !== targetId;
+      }
+      return itemId !== normalizedId;
+    });
+
+    const hasInitial = remaining.some((entry) => entry && entry.isInitial);
+    if (!hasInitial && remaining.length) {
+      const orderedByDate = [...remaining].sort((a, b) => {
+        const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return aTime - bTime;
+      });
+      const first = orderedByDate[0];
+      if (first) {
+        remaining.forEach((entry) => {
+          if (entry) entry.isInitial = false;
+        });
+        first.isInitial = true;
+      }
+    }
+
+    state.pesos = remaining;
+
+    const orderedAfterRemoval = getOrderedPesos();
+    const latestAfterRemoval = orderedAfterRemoval[0] || null;
+    const latestWeightValue = latestAfterRemoval ? latestAfterRemoval.peso : null;
+    updatePetWeightInState(latestWeightValue);
+
+    if (typeof pesoModal.renderList === 'function') {
+      try {
+        pesoModal.renderList();
+      } catch (_) {
+        /* ignore */
+      }
+    }
+
+    updateCardDisplay();
+    notify('Registro de peso removido com sucesso.', 'success');
+
+    await loadPesosFromServer({ force: true });
+
+    const orderedAfterReload = getOrderedPesos();
+    const latestAfterReload = orderedAfterReload[0] || null;
+    const syncedWeight = latestAfterReload ? latestAfterReload.peso : null;
+    updatePetWeightInState(syncedWeight);
+    updateCardDisplay();
+
+    return true;
+  } catch (error) {
+    console.error('deletePeso', error);
+    notify(error.message || 'Erro ao remover registro de peso.', 'error');
+    throw error;
+  }
+}
+
+state.deletePeso = deletePeso;
 
 export function closePesoModal() {
   if (!pesoModal.overlay) return;
