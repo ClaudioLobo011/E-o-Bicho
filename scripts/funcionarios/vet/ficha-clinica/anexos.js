@@ -34,6 +34,77 @@ function isAllowedAnexoFile(file) {
   return false;
 }
 
+function sanitizeAttachmentName(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeAttachmentExtension(extension) {
+  if (!extension) return '';
+  const str = String(extension).trim().toLowerCase();
+  if (!str) return '';
+  return str.startsWith('.') ? str : `.${str}`;
+}
+
+function resolveAnexoAttachmentNames(entry = {}) {
+  const file = entry && typeof entry === 'object' ? entry.file : null;
+  const fileName =
+    typeof entry.originalName === 'string' && entry.originalName
+      ? entry.originalName
+      : (file && typeof file.name === 'string' ? file.name : '');
+  const normalizedFileName = String(fileName || '');
+  const extension = normalizeAttachmentExtension(entry.extension || getFileExtension(normalizedFileName));
+
+  const nameCandidates = [entry.providedName, entry.displayName, entry.name, entry.nome];
+  let displayName = '';
+  for (const candidate of nameCandidates) {
+    const sanitized = sanitizeAttachmentName(candidate);
+    if (sanitized) {
+      displayName = sanitized;
+      break;
+    }
+  }
+  if (!displayName) {
+    displayName = sanitizeAttachmentName(normalizedFileName) || 'Arquivo';
+  }
+
+  const uploadCandidates = [entry.uploadName, entry.fileName, displayName, sanitizeAttachmentName(normalizedFileName)];
+  let uploadBase = '';
+  for (const candidate of uploadCandidates) {
+    const sanitized = sanitizeAttachmentName(candidate);
+    if (sanitized) {
+      uploadBase = sanitized;
+      break;
+    }
+  }
+  if (extension && uploadBase && uploadBase.toLowerCase().endsWith(extension)) {
+    const withoutExt = uploadBase.slice(0, -extension.length);
+    uploadBase = sanitizeAttachmentName(withoutExt);
+  }
+  if (!uploadBase) {
+    const originalBase = sanitizeAttachmentName(normalizedFileName.replace(/\.[^.]+$/, ''));
+    uploadBase = originalBase || 'arquivo';
+  }
+
+  let uploadName = uploadBase;
+  if (extension) {
+    if (!uploadName.toLowerCase().endsWith(extension)) {
+      uploadName = `${uploadName}${extension}`;
+    }
+  }
+  uploadName = sanitizeAttachmentName(uploadName);
+  if (!uploadName) {
+    uploadName = extension ? `arquivo${extension}` : 'arquivo';
+  } else if (extension && !uploadName.toLowerCase().endsWith(extension)) {
+    uploadName = `${uploadName}${extension}`;
+  }
+
+  return { displayName, uploadName, extension };
+}
+
 function normalizeAnexoFileRecord(raw, fallback = {}) {
   const source = raw && typeof raw === 'object' ? raw : {};
   const fallbackSource = fallback && typeof fallback === 'object' ? fallback : {};
@@ -775,13 +846,24 @@ function handleAnexoAdd() {
     notify('Informe um nome e selecione um arquivo para adicionar.', 'warning');
     return;
   }
+  const names = resolveAnexoAttachmentNames({
+    file,
+    name,
+    providedName: name,
+    originalName: file.name,
+    extension: getFileExtension(file.name),
+  });
+  const normalizedExtension = normalizeAttachmentExtension(names.extension || getFileExtension(file.name));
   const entry = {
     id: generateAnexoFileId(),
-    name,
+    name: names.displayName,
+    displayName: names.displayName,
+    uploadName: names.uploadName,
+    providedName: name,
     originalName: file.name,
     size: Number(file.size || 0),
     mimeType: file.type || '',
-    extension: getFileExtension(file.name),
+    extension: normalizedExtension,
     file,
   };
   if (!Array.isArray(anexoModal.selectedFiles)) {
@@ -824,16 +906,45 @@ async function handleAnexoSubmit() {
   files.forEach((entry) => {
     const file = entry.file;
     if (!file) return;
-    const displayName = (entry.name || file.name || '').trim();
-    formData.append('arquivos', file, file.name);
-    formData.append('nomes[]', displayName || file.name);
-    fallbackFiles.push({
-      nome: displayName || file.name,
-      originalName: entry.originalName || file.name,
-      size: Number(entry.size || file.size || 0),
-      mimeType: entry.mimeType || file.type || '',
-      extension: entry.extension || getFileExtension(file.name),
+    const originalName = entry.originalName || file.name || '';
+    const names = resolveAnexoAttachmentNames({
+      ...entry,
+      file,
+      originalName,
+      extension: entry.extension || getFileExtension(originalName || file.name || ''),
     });
+    entry.name = names.displayName;
+    entry.displayName = names.displayName;
+    entry.uploadName = names.uploadName;
+    entry.extension = normalizeAttachmentExtension(
+      names.extension || entry.extension || getFileExtension(originalName || file.name || ''),
+    );
+    if (!entry.originalName) {
+      entry.originalName = originalName;
+    }
+
+    const uploadName = entry.uploadName || file.name;
+    const displayName = (entry.name || entry.displayName || uploadName || file.name || '').trim() || uploadName;
+
+    formData.append('arquivos', file, uploadName);
+    formData.append('nomes[]', displayName);
+
+    const createdAt = new Date().toISOString();
+    const fallbackEntry = normalizeAnexoFileRecord({
+      id: entry.id,
+      nome: displayName,
+      name: displayName,
+      displayName,
+      originalName: entry.originalName,
+      mimeType: entry.mimeType || file.type || '',
+      size: Number(entry.size || file.size || 0),
+      extension: entry.extension,
+      fileName: uploadName,
+      createdAt,
+    });
+    if (fallbackEntry) {
+      fallbackFiles.push(fallbackEntry);
+    }
   });
 
   setAnexoModalSubmitting(true);
