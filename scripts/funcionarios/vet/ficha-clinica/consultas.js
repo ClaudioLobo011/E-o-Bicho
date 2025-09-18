@@ -351,6 +351,10 @@ function createAnexoCard(anexo) {
 
   const card = document.createElement('article');
   card.className = 'rounded-xl border border-indigo-200 bg-white p-4 shadow-sm';
+  const anexoId = normalizeId(anexo.id || anexo._id);
+  if (anexoId) {
+    card.dataset.anexoId = anexoId;
+  }
 
   const header = document.createElement('div');
   header.className = 'flex items-start gap-3';
@@ -364,6 +368,51 @@ function createAnexoCard(anexo) {
   const headerText = document.createElement('div');
   headerText.className = 'flex-1';
   header.appendChild(headerText);
+
+  const headerActions = document.createElement('div');
+  headerActions.className = 'ml-auto flex items-start';
+  header.appendChild(headerActions);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
+  removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
+  removeBtn.title = 'Remover anexo';
+
+  const toggleRemoveDisabled = (disabled) => {
+    removeBtn.disabled = !!disabled;
+    removeBtn.classList.toggle('opacity-60', !!disabled);
+    removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
+  };
+
+  removeBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const handler = state?.deleteAnexo;
+    if (typeof handler !== 'function') {
+      notify('Não foi possível remover o anexo agora. Recarregue a página e tente novamente.', 'error');
+      return;
+    }
+
+    toggleRemoveDisabled(true);
+    let result;
+    try {
+      result = handler(anexo);
+    } catch (error) {
+      console.error('removeAnexo handler', error);
+      toggleRemoveDisabled(false);
+      return;
+    }
+
+    Promise.resolve(result)
+      .catch(() => {})
+      .finally(() => {
+        toggleRemoveDisabled(false);
+      });
+  });
+
+  headerActions.appendChild(removeBtn);
 
   const title = document.createElement('h3');
   title.className = 'text-sm font-semibold text-indigo-700';

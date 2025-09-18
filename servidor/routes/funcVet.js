@@ -453,6 +453,51 @@ router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, asyn
   }
 });
 
+router.delete('/vet/anexos/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const id = normalizeObjectId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+
+    const existing = await VetAttachment.findById(id).lean();
+    if (!existing) {
+      return res.status(404).json({ message: 'Anexo não encontrado.' });
+    }
+
+    const clienteId = normalizeObjectId(req.query.clienteId || req.body?.clienteId);
+    if (clienteId && toStringSafe(existing.cliente) !== clienteId) {
+      return res.status(400).json({ message: 'Anexo pertence a outro tutor.' });
+    }
+
+    const petId = normalizeObjectId(req.query.petId || req.body?.petId);
+    if (petId && toStringSafe(existing.pet) !== petId) {
+      return res.status(400).json({ message: 'Anexo pertence a outro pet.' });
+    }
+
+    const appointmentId = normalizeObjectId(req.query.appointmentId || req.body?.appointmentId);
+    const existingAppointmentId = toStringSafe(existing.appointment);
+    if (appointmentId && existingAppointmentId && existingAppointmentId !== appointmentId) {
+      return res.status(400).json({ message: 'Anexo pertence a outro agendamento.' });
+    }
+
+    const driveIds = Array.isArray(existing.arquivos)
+      ? existing.arquivos.map((file) => toStringSafe(file?.driveFileId)).filter(Boolean)
+      : [];
+
+    await VetAttachment.deleteOne({ _id: id });
+
+    if (driveIds.length && isDriveConfigured()) {
+      await Promise.allSettled(driveIds.map((driveId) => deleteFile(driveId)));
+    }
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error('DELETE /func/vet/anexos/:id', error);
+    return res.status(500).json({ message: 'Erro ao remover anexo.' });
+  }
+});
+
 router.post('/vet/consultas', authMiddleware, requireStaff, async (req, res) => {
   try {
     const {

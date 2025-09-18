@@ -293,6 +293,65 @@ export async function loadAnexosFromServer(options = {}) {
   }
 }
 
+export async function deleteAnexo(anexo, options = {}) {
+  const { skipConfirm = false } = options || {};
+  const record = anexo && typeof anexo === 'object' ? anexo : {};
+  const targetId = normalizeId(record.id || record._id);
+  if (!targetId) return false;
+
+  const arquivos = Array.isArray(record.arquivos) ? record.arquivos.filter(Boolean) : [];
+  const firstFile = arquivos.length ? arquivos[0] : null;
+
+  if (!skipConfirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+    const mainName = pickFirst(firstFile?.nome, firstFile?.originalName);
+    const question = mainName
+      ? `Remover o anexo "${mainName}"? O arquivo será excluído do Google Drive.`
+      : 'Remover este anexo? O arquivo será excluído do Google Drive.';
+    const confirmed = window.confirm(question);
+    if (!confirmed) {
+      return false;
+    }
+  }
+
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  if (!(clienteId && petId)) {
+    notify('Selecione um tutor e um pet para remover anexos.', 'warning');
+    return false;
+  }
+
+  const params = new URLSearchParams({ clienteId, petId });
+  const endpoint = `/func/vet/anexos/${encodeURIComponent(targetId)}?${params.toString()}`;
+
+  try {
+    const response = await api(endpoint, { method: 'DELETE' });
+    let payload = null;
+    if (response.status !== 204) {
+      payload = await response.json().catch(() => null);
+    }
+    if (!response.ok) {
+      const message = typeof payload?.message === 'string' ? payload.message : 'Erro ao remover anexo.';
+      throw new Error(message);
+    }
+
+    const remaining = (Array.isArray(state.anexos) ? state.anexos : []).filter(
+      (item) => normalizeId(item?.id || item?._id) !== targetId,
+    );
+    state.anexos = remaining;
+    persistAnexosForSelection();
+    updateConsultaAgendaCard();
+    notify('Anexo removido com sucesso.', 'success');
+    await loadAnexosFromServer({ force: true });
+    return true;
+  } catch (error) {
+    console.error('deleteAnexo', error);
+    notify(error.message || 'Erro ao remover anexo.', 'error');
+    throw error;
+  }
+}
+
+state.deleteAnexo = deleteAnexo;
+
 function updateAnexoDropzoneText() {
   if (!anexoModal.dropzoneText || !anexoModal.dropzoneHint) return;
   if (anexoModal.pendingFile) {
