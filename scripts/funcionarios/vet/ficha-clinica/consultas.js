@@ -1097,7 +1097,7 @@ export function updateConsultaAgendaCard() {
   const hasAnexos = anexos.length > 0;
   const isLoadingAnexos = !!state.anexosLoading;
   const pesos = Array.isArray(state.pesos) ? state.pesos : [];
-  const hasPesos = pesos.length > 0;
+  const hasPesos = pesos.some((entry) => entry && !entry.isInitial);
   const isLoadingPesos = !!state.pesosLoading;
   const context = state.agendaContext;
   const selectedPetId = normalizeId(state.selectedPetId);
@@ -1286,9 +1286,10 @@ export function updateConsultaAgendaCard() {
     });
 
     const baselinePeso = orderedPesos.find((entry) => entry && entry.isInitial) || orderedPesos[orderedPesos.length - 1] || null;
+    const orderedVetPesos = orderedPesos.filter((entry) => entry && !entry.isInitial);
 
-    orderedPesos.forEach((peso, index) => {
-      const previous = orderedPesos[index + 1] || null;
+    orderedVetPesos.forEach((peso, index) => {
+      const previous = orderedVetPesos[index + 1] || null;
       const card = createPesoCard(peso, baselinePeso, previous);
       if (card) scroll.appendChild(card);
     });
