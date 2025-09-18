@@ -98,6 +98,7 @@ export const els = {
   addConsultaBtn: document.getElementById('vet-add-consulta-btn'),
   addVacinaBtn: document.getElementById('vet-add-vacina-btn'),
   addAnexoBtn: document.getElementById('vet-add-anexo-btn'),
+  addExameBtn: document.getElementById('vet-add-exame-btn'),
   addPesoBtn: document.getElementById('vet-add-peso-btn'),
 };
 
@@ -114,6 +115,9 @@ export const state = {
   anexos: [],
   anexosLoading: false,
   anexosLoadKey: null,
+  exames: [],
+  examesLoading: false,
+  examesLoadKey: null,
   pesos: [],
   pesosLoading: false,
   pesosLoadKey: null,
@@ -147,6 +151,24 @@ export const vacinaModal = {
   fields: {},
   suggestionsEl: null,
   priceDisplay: null,
+  selectedService: null,
+  isSubmitting: false,
+  keydownHandler: null,
+  searchAbortController: null,
+};
+
+export const exameModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  submitBtn: null,
+  cancelBtn: null,
+  closeBtn: null,
+  titleEl: null,
+  contextInfo: null,
+  suggestionsEl: null,
+  priceDisplay: null,
+  fields: {},
   selectedService: null,
   isSubmitting: false,
   keydownHandler: null,
@@ -200,6 +222,7 @@ export const STORAGE_KEYS = {
 
 export const VACINA_STORAGE_PREFIX = 'vetFichaVacinas:';
 export const ANEXO_STORAGE_PREFIX = 'vetFichaAnexos:';
+export const EXAME_STORAGE_PREFIX = 'vetFichaExames:';
 export const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 
 export const CARD_TUTOR_ACTIVE_CLASSES = ['bg-sky-100', 'text-sky-700'];
@@ -730,7 +753,11 @@ export function getPetPriceCriteria() {
 export function isVetCategory(value) {
   const norm = normalizeForCompare(value);
   if (!norm) return false;
-  return norm.replace(/[^a-z]/g, '').includes('veterinario');
+  const normalized = norm.replace(/[^a-z]/g, '');
+  if (!normalized) return false;
+  if (normalized.includes('veterinario')) return true;
+  if (normalized.includes('exame')) return true;
+  return false;
 }
 
 export function isVetService(service) {
