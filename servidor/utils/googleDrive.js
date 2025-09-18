@@ -1,11 +1,8 @@
 const https = require('https');
 const { URL } = require('url');
-const jwt = require('jsonwebtoken');
-
 const TOKEN_URI = 'https://oauth2.googleapis.com/token';
 const UPLOAD_URI = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,mimeType,size,webViewLink,webContentLink';
 const FILES_URI = 'https://www.googleapis.com/drive/v3/files';
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 let cachedCredentials = null;
 let cachedAccessToken = null;
@@ -29,22 +26,17 @@ function getCredentials() {
     return cachedCredentials;
   }
 
-  const clientEmail = cleanEnvValue(process.env.GOOGLE_DRIVE_CLIENT_EMAIL || '');
-  let privateKey = cleanEnvValue(process.env.GOOGLE_DRIVE_PRIVATE_KEY || '');
-  if (privateKey.includes('\\n')) {
-    privateKey = privateKey.replace(/\\n/g, '\n');
-  }
-  if (privateKey.includes('\\r')) {
-    privateKey = privateKey.replace(/\\r/g, '\r');
-  }
+  const clientId = cleanEnvValue(process.env.GOOGLE_DRIVE_CLIENT_ID || '');
+  const clientSecret = cleanEnvValue(process.env.GOOGLE_DRIVE_CLIENT_SECRET || '');
+  const refreshToken = cleanEnvValue(process.env.GOOGLE_DRIVE_REFRESH_TOKEN || '');
 
-  if (!(clientEmail && privateKey)) {
+  if (!(clientId && clientSecret && refreshToken)) {
     return null;
   }
 
   const folderId = cleanEnvValue(process.env.GOOGLE_DRIVE_FOLDER_ID || '') || null;
 
-  cachedCredentials = { clientEmail, privateKey, folderId };
+  cachedCredentials = { clientId, clientSecret, refreshToken, folderId };
   return cachedCredentials;
 }
 
@@ -120,19 +112,11 @@ async function fetchAccessToken() {
   }
 
   pendingTokenPromise = (async () => {
-    const now = Math.floor(Date.now() / 1000);
-    const payload = {
-      iss: credentials.clientEmail,
-      scope: DRIVE_SCOPE,
-      aud: TOKEN_URI,
-      iat: now,
-      exp: now + 3600,
-    };
-
-    const assertion = jwt.sign(payload, credentials.privateKey, { algorithm: 'RS256' });
     const params = new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
+      refresh_token: credentials.refreshToken,
+      grant_type: 'refresh_token',
     });
     const bodyString = params.toString();
     const headers = {
@@ -140,12 +124,29 @@ async function fetchAccessToken() {
       'Content-Length': Buffer.byteLength(bodyString),
     };
 
-    const response = await requestGoogle({
-      url: TOKEN_URI,
-      method: 'POST',
-      headers,
-      body: Buffer.from(bodyString, 'utf8'),
-    });
+    let response;
+    try {
+      response = await requestGoogle({
+        url: TOKEN_URI,
+        method: 'POST',
+        headers,
+        body: Buffer.from(bodyString, 'utf8'),
+      });
+    } catch (err) {
+      let errorToThrow = err;
+      if (err?.body) {
+        try {
+          const parsed = JSON.parse(err.body.toString('utf8'));
+          const message = parsed?.error_description || parsed?.error || null;
+          if (message) {
+            errorToThrow = new Error(`Google OAuth: ${message}`);
+          }
+        } catch (_) {
+          // ignore parsing failures
+        }
+      }
+      throw errorToThrow;
+    }
 
     let data;
     try {
@@ -154,15 +155,22 @@ async function fetchAccessToken() {
       throw new Error('Resposta inválida ao obter token do Google Drive.');
     }
 
+    if (data?.error) {
+      const message = data.error_description || data.error || 'Erro ao obter token do Google Drive.';
+      const error = new Error(`Google OAuth: ${message}`);
+      error.data = data;
+      throw error;
+    }
+
     const accessToken = data?.access_token;
     if (!accessToken) {
       throw new Error('Token de acesso não recebido do Google Drive.');
     }
 
     const expiresIn = Number(data.expires_in) || 3600;
+    const safetyWindowSeconds = Math.max(expiresIn - 120, 60);
     cachedAccessToken = accessToken;
-    cachedAccessTokenExpiry = Date.now() + (expiresIn - 120) * 1000;
-    pendingTokenPromise = null;
+    cachedAccessTokenExpiry = Date.now() + safetyWindowSeconds * 1000;
 
     return accessToken;
   })();
@@ -230,17 +238,27 @@ async function uploadBufferToDrive(buffer, options = {}) {
   const token = await fetchAccessToken();
   const boundary = `gc_boundary_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const mimeType = options.mimeType || 'application/octet-stream';
-  const parents = Array.isArray(options.parents) ? options.parents.filter(Boolean) : [];
-  const folderId = options.folderId || credentials.folderId;
+  const parentsRaw = Array.isArray(options.parents) ? options.parents : [];
+  const parents = parentsRaw
+    .filter((value) => value !== null && value !== undefined)
+    .map((value) => cleanEnvValue(typeof value === 'string' ? value : String(value)))
+    .filter(Boolean);
+  const folderSource = typeof options.folderId !== 'undefined' ? options.folderId : credentials.folderId;
+  const folderId = cleanEnvValue(
+    folderSource === null || folderSource === undefined
+      ? ''
+      : (typeof folderSource === 'string' ? folderSource : String(folderSource)),
+  );
   if (folderId) {
     parents.push(folderId);
   }
+  const uniqueParents = Array.from(new Set(parents)).filter(Boolean);
 
   const metadata = {
     name: options.name || `arquivo-${Date.now()}`,
   };
-  if (parents.length) {
-    metadata.parents = parents;
+  if (uniqueParents.length) {
+    metadata.parents = uniqueParents;
   }
 
   const metaString = JSON.stringify(metadata);
