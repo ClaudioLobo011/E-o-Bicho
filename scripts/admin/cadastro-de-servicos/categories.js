@@ -10,6 +10,7 @@ export const SERVICE_CATEGORIES = [
   { id: 'day_care', label: 'Day Care', icon: 'fas fa-paw' },
   { id: 'outros', label: 'Outros', icon: 'fas fa-ellipsis-h' },
   { id: 'veterinario', label: 'Veterinário', icon: 'fas fa-stethoscope' },
+  { id: 'exame', label: 'Exame', icon: 'fas fa-vial' },
   { id: 'banho_tosa', label: 'Banho & Tosa', icon: 'fas fa-brush' },
 ];
 

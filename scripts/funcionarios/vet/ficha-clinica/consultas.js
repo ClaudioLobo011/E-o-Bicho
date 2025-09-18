@@ -612,6 +612,212 @@ function createVacinaCard(vacina) {
   return card;
 }
 
+function createExameCard(exame) {
+  if (!exame) return null;
+
+  const card = document.createElement('article');
+  card.className = 'rounded-xl border border-rose-200 bg-white p-4 shadow-sm';
+
+  const exameId = normalizeId(exame.id || exame._id);
+  if (exameId) {
+    card.dataset.exameId = exameId;
+  }
+
+  const header = document.createElement('div');
+  header.className = 'flex items-start gap-3';
+  card.appendChild(header);
+
+  const icon = document.createElement('div');
+  icon.className = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-100 text-rose-600';
+  icon.innerHTML = '<i class="fas fa-vial"></i>';
+  header.appendChild(icon);
+
+  const headerText = document.createElement('div');
+  headerText.className = 'flex-1';
+  header.appendChild(headerText);
+
+  const headerActions = document.createElement('div');
+  headerActions.className = 'ml-auto flex items-start';
+  header.appendChild(headerActions);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
+  removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
+  removeBtn.title = 'Remover exame';
+  removeBtn.setAttribute('aria-label', 'Remover exame');
+
+  const toggleRemoveDisabled = (disabled) => {
+    removeBtn.disabled = !!disabled;
+    removeBtn.classList.toggle('opacity-60', !!disabled);
+    removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
+  };
+
+  toggleRemoveDisabled(state.examesLoading);
+
+  removeBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const handler = state?.deleteExame;
+    if (typeof handler !== 'function') {
+      notify('Não foi possível remover o exame agora. Recarregue a página e tente novamente.', 'error');
+      return;
+    }
+
+    toggleRemoveDisabled(true);
+
+    let result;
+    try {
+      result = handler(exame);
+    } catch (error) {
+      console.error('removeExame handler', error);
+      toggleRemoveDisabled(false);
+      return;
+    }
+
+    Promise.resolve(result)
+      .catch(() => {})
+      .finally(() => {
+        toggleRemoveDisabled(state.examesLoading);
+      });
+  });
+
+  headerActions.appendChild(removeBtn);
+
+
+  const title = document.createElement('h3');
+  title.className = 'text-sm font-semibold text-rose-700';
+  title.textContent = 'Registro de exame';
+  headerText.appendChild(title);
+
+  const serviceName = pickFirst(exame?.servicoNome);
+  if (serviceName) {
+    const badge = document.createElement('span');
+    badge.className = 'mt-1 inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700';
+    const badgeIcon = document.createElement('i');
+    badgeIcon.className = 'fas fa-paw text-[10px]';
+    badge.appendChild(badgeIcon);
+    const badgeText = document.createElement('span');
+    badgeText.className = 'leading-none';
+    badgeText.textContent = serviceName;
+    badge.appendChild(badgeText);
+    headerText.appendChild(badge);
+  }
+
+  const metaParts = [];
+  if (exame.createdAt) {
+    const created = formatDateTimeDisplay(exame.createdAt);
+    if (created) metaParts.push(`Registrado em ${created}`);
+  }
+  if (metaParts.length) {
+    const meta = document.createElement('p');
+    meta.className = 'mt-0.5 text-xs text-gray-500';
+    meta.textContent = metaParts.join(' · ');
+    headerText.appendChild(meta);
+  }
+
+  const summary = document.createElement('p');
+  summary.className = 'mt-2 text-sm text-gray-700';
+  summary.textContent = 'Valor do exame: ';
+  const valueEl = document.createElement('span');
+  valueEl.className = 'font-semibold text-gray-900';
+  const valor = Number(exame.valor);
+  valueEl.textContent = Number.isFinite(valor) && valor >= 0 ? formatMoney(valor) : '—';
+  summary.appendChild(valueEl);
+  headerText.appendChild(summary);
+
+  const observationSection = document.createElement('div');
+  observationSection.className = 'mt-4 space-y-2';
+  const label = document.createElement('span');
+  label.className = 'text-xs font-semibold uppercase tracking-wide text-rose-600';
+  label.textContent = 'Observações';
+  observationSection.appendChild(label);
+  const text = document.createElement('div');
+  text.className = 'rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-700 whitespace-pre-wrap break-words';
+  const observation = (exame?.observacao || '').trim();
+  text.textContent = observation || 'Nenhuma observação adicionada.';
+  observationSection.appendChild(text);
+  card.appendChild(observationSection);
+
+  const arquivos = Array.isArray(exame.arquivos) ? exame.arquivos.filter(Boolean) : [];
+  if (arquivos.length) {
+    const attachmentsSection = document.createElement('div');
+    attachmentsSection.className = 'mt-4 space-y-2';
+
+    const attachmentsLabel = document.createElement('span');
+    attachmentsLabel.className = 'text-xs font-semibold uppercase tracking-wide text-rose-600';
+    attachmentsLabel.textContent = 'Arquivos do exame';
+    attachmentsSection.appendChild(attachmentsLabel);
+
+    const list = document.createElement('div');
+    list.className = 'space-y-2';
+    attachmentsSection.appendChild(list);
+
+    arquivos.forEach((file) => {
+      const item = document.createElement('div');
+      item.className = 'flex flex-col gap-2 rounded-lg border border-rose-100 bg-rose-50/70 px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between';
+      list.appendChild(item);
+
+      const info = document.createElement('div');
+      info.className = 'flex items-start gap-3 text-sm text-rose-700';
+      item.appendChild(info);
+
+      const iconWrapper = document.createElement('div');
+      iconWrapper.className = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600';
+      const iconEl = document.createElement('i');
+      iconEl.className = getAnexoFileIconClass(file);
+      iconWrapper.appendChild(iconEl);
+      info.appendChild(iconWrapper);
+
+      const textWrap = document.createElement('div');
+      textWrap.className = 'min-w-0';
+      info.appendChild(textWrap);
+
+      const nameEl = document.createElement('p');
+      nameEl.className = 'font-semibold leading-tight text-rose-700 break-words';
+      nameEl.textContent = file.nome || file.originalName || 'Arquivo';
+      textWrap.appendChild(nameEl);
+
+      const meta = document.createElement('p');
+      meta.className = 'text-xs text-rose-600';
+      const metaPieces = [];
+      if (file.originalName && file.originalName !== file.nome) metaPieces.push(file.originalName);
+      const extension = String(file.extension || '').replace('.', '').toUpperCase();
+      if (extension) metaPieces.push(extension);
+      if (file.size) metaPieces.push(formatFileSize(file.size));
+      meta.textContent = metaPieces.length ? metaPieces.join(' · ') : '—';
+      textWrap.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'flex items-center gap-2';
+      item.appendChild(actions);
+
+      if (file.url) {
+        const link = document.createElement('a');
+        link.href = file.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'inline-flex items-center gap-2 rounded-md border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-600 hover:text-white';
+        link.innerHTML = '<i class="fas fa-arrow-up-right-from-square text-[10px]"></i><span>Abrir</span>';
+        if (file.originalName) {
+          link.download = file.originalName;
+        }
+        actions.appendChild(link);
+      } else {
+        const pending = document.createElement('span');
+        pending.className = 'text-xs text-rose-500';
+        pending.textContent = 'Link disponível após sincronização.';
+        actions.appendChild(pending);
+      }
+    });
+
+    card.appendChild(attachmentsSection);
+  }
+
+  return card;
+}
+
 function createPesoCard(peso, baseline, previous) {
   if (!peso) return null;
 
@@ -1093,6 +1299,9 @@ export function updateConsultaAgendaCard() {
   const isLoadingConsultas = !!state.consultasLoading;
   const vacinas = Array.isArray(state.vacinas) ? state.vacinas : [];
   const hasVacinas = vacinas.length > 0;
+  const exames = Array.isArray(state.exames) ? state.exames : [];
+  const hasExames = exames.length > 0;
+  const isLoadingExames = !!state.examesLoading;
   const anexos = Array.isArray(state.anexos) ? state.anexos : [];
   const hasAnexos = anexos.length > 0;
   const isLoadingAnexos = !!state.anexosLoading;
@@ -1223,10 +1432,10 @@ export function updateConsultaAgendaCard() {
     }
   }
 
-  const hasAnyContent = hasManualConsultas || hasAgendaContent || hasVacinas || hasAnexos || hasPesos;
+  const hasAnyContent = hasManualConsultas || hasAgendaContent || hasVacinas || hasAnexos || hasPesos || hasExames;
   const shouldShowPlaceholder = !hasAnyContent;
 
-  if ((isLoadingConsultas || isLoadingAnexos || isLoadingPesos) && !hasAnyContent) {
+  if ((isLoadingConsultas || isLoadingAnexos || isLoadingPesos || isLoadingExames) && !hasAnyContent) {
     area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
     area.innerHTML = '';
     const paragraph = document.createElement('p');
@@ -1262,6 +1471,24 @@ export function updateConsultaAgendaCard() {
       const card = createAnexoCard(anexo);
       if (card) scroll.appendChild(card);
     });
+  }
+
+  if (hasExames) {
+    const orderedExames = [...exames];
+    orderedExames.sort((a, b) => {
+      const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+    orderedExames.forEach((exame) => {
+      const card = createExameCard(exame);
+      if (card) scroll.appendChild(card);
+    });
+  } else if (isLoadingExames) {
+    const loadingExames = document.createElement('div');
+    loadingExames.className = 'rounded-xl border border-dashed border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600';
+    loadingExames.textContent = 'Carregando exames...';
+    scroll.appendChild(loadingExames);
   }
 
   if (hasVacinas) {

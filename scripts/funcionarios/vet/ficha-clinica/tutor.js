@@ -14,6 +14,7 @@ import {
 import { loadConsultasFromServer, updateConsultaAgendaCard } from './consultas.js';
 import { loadVacinasForSelection } from './vacinas.js';
 import { loadAnexosForSelection, loadAnexosFromServer } from './anexos.js';
+import { loadExamesForSelection } from './exames.js';
 import { loadPesosFromServer } from './pesos.js';
 import { updateCardDisplay, updatePageVisibility, setCardMode } from './ui.js';
 
@@ -137,6 +138,9 @@ export async function onSelectCliente(cli, opts = {}) {
   state.anexos = [];
   state.anexosLoadKey = null;
   state.anexosLoading = false;
+  state.exames = [];
+  state.examesLoadKey = null;
+  state.examesLoading = false;
   state.pesos = [];
   state.pesosLoadKey = null;
   state.pesosLoading = false;
@@ -242,11 +246,15 @@ export async function onSelectPet(petId, opts = {}) {
   state.anexos = [];
   state.anexosLoadKey = null;
   state.anexosLoading = false;
+  state.exames = [];
+  state.examesLoadKey = null;
+  state.examesLoading = false;
   state.pesos = [];
   state.pesosLoadKey = null;
   state.pesosLoading = false;
   loadVacinasForSelection();
   loadAnexosForSelection();
+  loadExamesForSelection();
   updateCardDisplay();
   updatePageVisibility();
   if (!state.selectedPetId) {
@@ -272,6 +280,9 @@ export function clearCliente() {
   state.anexos = [];
   state.anexosLoadKey = null;
   state.anexosLoading = false;
+  state.exames = [];
+  state.examesLoadKey = null;
+  state.examesLoading = false;
   state.pesos = [];
   state.pesosLoadKey = null;
   state.pesosLoading = false;
@@ -301,6 +312,9 @@ export function clearPet() {
   state.anexos = [];
   state.anexosLoadKey = null;
   state.anexosLoading = false;
+  state.exames = [];
+  state.examesLoadKey = null;
+  state.examesLoading = false;
   updateCardDisplay();
   updatePageVisibility();
 }
