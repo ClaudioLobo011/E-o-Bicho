@@ -9,6 +9,23 @@ let cachedAccessToken = null;
 let cachedAccessTokenExpiry = 0;
 let pendingTokenPromise = null;
 
+function looksLikeOAuthClientId(value) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return /\.apps\.googleusercontent\.com$/i.test(trimmed);
+}
+
+function looksLikeServiceAccountEmail(value) {
+  if (typeof value !== 'string') return false;
+  return /@.*gserviceaccount\.com$/i.test(value.trim());
+}
+
+function looksLikePrivateKey(value) {
+  if (typeof value !== 'string') return false;
+  return /-----BEGIN [^-]*PRIVATE KEY-----/i.test(value);
+}
+
 function cleanEnvValue(value) {
   if (typeof value !== 'string') return '';
   let cleaned = value.trim();
@@ -38,6 +55,35 @@ function getCredentials() {
 
   cachedCredentials = { clientId, clientSecret, refreshToken, folderId };
   return cachedCredentials;
+}
+
+function validateOAuthCredentials(credentials) {
+  if (!credentials) return;
+
+  const issues = [];
+  if (!looksLikeOAuthClientId(credentials.clientId || '')) {
+    if (looksLikeServiceAccountEmail(credentials.clientId || '')) {
+      issues.push(
+        'GOOGLE_DRIVE_CLIENT_ID não deve usar o client_email da service account. Crie um cliente OAuth 2.0 (Aplicativo da Web) e copie o "ID do cliente" que termina com .apps.googleusercontent.com.',
+      );
+    } else {
+      issues.push(
+        'GOOGLE_DRIVE_CLIENT_ID deve ser o "ID do cliente" das credenciais OAuth 2.0 (geralmente termina com .apps.googleusercontent.com).',
+      );
+    }
+  }
+
+  if (looksLikePrivateKey(credentials.clientSecret || '')) {
+    issues.push(
+      'GOOGLE_DRIVE_CLIENT_SECRET não pode receber a chave privada da service account. Utilize o client secret mostrado junto do client ID nas credenciais OAuth 2.0.',
+    );
+  }
+
+  if (issues.length) {
+    const error = new Error(issues.join(' '));
+    error.code = 'GOOGLE_DRIVE_INVALID_CREDENTIALS';
+    throw error;
+  }
 }
 
 function resetCredentialsCache() {
@@ -102,6 +148,8 @@ async function fetchAccessToken() {
   if (!credentials) {
     throw new Error('Credenciais do Google Drive não configuradas.');
   }
+
+  validateOAuthCredentials(credentials);
 
   if (cachedAccessToken && cachedAccessTokenExpiry > Date.now() + 60000) {
     return cachedAccessToken;
