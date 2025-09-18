@@ -14,6 +14,7 @@ import {
 import { loadConsultasFromServer, updateConsultaAgendaCard } from './consultas.js';
 import { loadVacinasForSelection } from './vacinas.js';
 import { loadAnexosForSelection, loadAnexosFromServer } from './anexos.js';
+import { loadPesosFromServer } from './pesos.js';
 import { updateCardDisplay, updatePageVisibility, setCardMode } from './ui.js';
 
 function hideSugestoes() {
@@ -136,6 +137,12 @@ export async function onSelectCliente(cli, opts = {}) {
   state.anexos = [];
   state.anexosLoadKey = null;
   state.anexosLoading = false;
+  state.pesos = [];
+  state.pesosLoadKey = null;
+  state.pesosLoading = false;
+  state.pesos = [];
+  state.pesosLoadKey = null;
+  state.pesosLoading = false;
 
   if (state.agendaContext) {
     const contextTutorId = normalizeId(state.agendaContext.tutorId);
@@ -235,6 +242,9 @@ export async function onSelectPet(petId, opts = {}) {
   state.anexos = [];
   state.anexosLoadKey = null;
   state.anexosLoading = false;
+  state.pesos = [];
+  state.pesosLoadKey = null;
+  state.pesosLoading = false;
   loadVacinasForSelection();
   loadAnexosForSelection();
   updateCardDisplay();
@@ -246,6 +256,7 @@ export async function onSelectPet(petId, opts = {}) {
   await Promise.all([
     loadConsultasFromServer({ force: true }),
     loadAnexosFromServer({ force: true }),
+    loadPesosFromServer({ force: true }),
   ]);
 }
 
@@ -261,6 +272,9 @@ export function clearCliente() {
   state.anexos = [];
   state.anexosLoadKey = null;
   state.anexosLoading = false;
+  state.pesos = [];
+  state.pesosLoadKey = null;
+  state.pesosLoading = false;
   persistAgendaContext(null);
   if (els.cliInput) els.cliInput.value = '';
   hideSugestoes();
