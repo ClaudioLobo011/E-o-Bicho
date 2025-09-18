@@ -10,6 +10,7 @@ const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
 const VetConsultation = require('../models/VetConsultation');
 const VetAttachment = require('../models/VetAttachment');
+const PetWeight = require('../models/PetWeight');
 const {
   isDriveConfigured,
   getDriveFolderId,
@@ -234,6 +235,267 @@ function formatAttachment(doc) {
     arquivos,
   };
 }
+
+function parseWeight(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value < 0 ? null : value;
+  }
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const sanitized = raw.replace(/[^0-9.,]+/g, '');
+  if (!sanitized) return null;
+  const hasComma = sanitized.includes(',');
+  let normalized = sanitized;
+  if (hasComma) {
+    normalized = sanitized.replace(/\./g, '').replace(',', '.');
+  } else {
+    const firstDot = sanitized.indexOf('.');
+    if (firstDot >= 0) {
+      const before = sanitized.slice(0, firstDot + 1);
+      const after = sanitized.slice(firstDot + 1).replace(/\./g, '');
+      normalized = `${before}${after}`;
+    }
+  }
+  const num = Number(normalized);
+  if (!Number.isFinite(num) || num < 0) return null;
+  return num;
+}
+
+function formatPetWeightEntry(doc) {
+  if (!doc) return null;
+  const weightValue = parseWeight(doc.peso);
+  if (weightValue === null) return null;
+  const createdAt = toIsoDate(doc.createdAt);
+  const updatedAt = toIsoDate(doc.updatedAt) || createdAt;
+  return {
+    id: toStringSafe(doc._id),
+    _id: toStringSafe(doc._id),
+    clienteId: toStringSafe(doc.cliente),
+    petId: toStringSafe(doc.pet),
+    peso: weightValue,
+    registradoPor: doc.registradoPor ? toStringSafe(doc.registradoPor) : null,
+    createdAt,
+    updatedAt,
+    isInitial: !!doc.isInitial,
+  };
+}
+
+router.get('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const clienteId = normalizeObjectId(req.query.clienteId);
+    const petId = normalizeObjectId(req.query.petId);
+
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    const petDoc = await Pet.findById(petId)
+      .select('owner peso createdAt updatedAt')
+      .lean();
+
+    if (!petDoc) {
+      return res.status(404).json({ message: 'Pet não encontrado.' });
+    }
+
+    if (clienteId && toStringSafe(petDoc.owner) !== clienteId) {
+      return res.status(400).json({ message: 'Pet não pertence ao tutor informado.' });
+    }
+
+    const docs = await PetWeight.find({ pet: petId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formatted = docs.map(formatPetWeightEntry).filter(Boolean);
+    const hasInitial = formatted.some((entry) => entry && entry.isInitial);
+
+    if (!hasInitial && formatted.length === 0) {
+      const initialWeight = parseWeight(petDoc.peso);
+      if (initialWeight !== null) {
+        const initialEntry = formatPetWeightEntry({
+          _id: `initial-${petId}`,
+          cliente: petDoc.owner,
+          pet: petId,
+          peso: initialWeight,
+          createdAt: petDoc.createdAt || petDoc.updatedAt || new Date(),
+          updatedAt: petDoc.createdAt || petDoc.updatedAt || new Date(),
+          isInitial: true,
+        });
+        if (initialEntry) {
+          formatted.push(initialEntry);
+        }
+      }
+    }
+
+    formatted.sort((a, b) => {
+      const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    return res.json(formatted);
+  } catch (error) {
+    console.error('GET /func/vet/pesos', error);
+    return res.status(500).json({ message: 'Erro ao carregar pesos.' });
+  }
+});
+
+router.post('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const clienteId = normalizeObjectId(req.body.clienteId);
+    const petId = normalizeObjectId(req.body.petId);
+    const pesoValue = parseWeight(req.body.peso);
+
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    if (pesoValue === null || pesoValue <= 0) {
+      return res.status(400).json({ message: 'Informe um peso válido.' });
+    }
+
+    const petDoc = await Pet.findById(petId).select('owner peso createdAt updatedAt');
+    if (!petDoc) {
+      return res.status(404).json({ message: 'Pet não encontrado.' });
+    }
+
+    if (clienteId && toStringSafe(petDoc.owner) !== clienteId) {
+      return res.status(400).json({ message: 'Pet não pertence ao tutor informado.' });
+    }
+
+    const payload = {
+      cliente: clienteId,
+      pet: petId,
+      peso: pesoValue,
+    };
+
+    const registeredBy = normalizeObjectId(req.user?.id || req.user?._id);
+    if (registeredBy) {
+      payload.registradoPor = registeredBy;
+    }
+
+    const previousWeightValue = parseWeight(petDoc.peso);
+
+    const existingInitial = await PetWeight.findOne({ pet: petId, isInitial: true });
+    if (!existingInitial) {
+      const earliestWeight = await PetWeight.findOne({ pet: petId }).sort({ createdAt: 1 });
+      if (earliestWeight) {
+        if (!earliestWeight.isInitial) {
+          earliestWeight.isInitial = true;
+          await earliestWeight.save();
+        }
+      } else if (previousWeightValue !== null) {
+        let initialTimestamp = petDoc.createdAt instanceof Date ? petDoc.createdAt : null;
+        if (!initialTimestamp && petDoc.createdAt) {
+          const parsed = new Date(petDoc.createdAt);
+          if (!Number.isNaN(parsed.getTime())) {
+            initialTimestamp = parsed;
+          }
+        }
+        if (!initialTimestamp && petDoc.updatedAt) {
+          if (petDoc.updatedAt instanceof Date) {
+            initialTimestamp = petDoc.updatedAt;
+          } else {
+            const parsed = new Date(petDoc.updatedAt);
+            if (!Number.isNaN(parsed.getTime())) {
+              initialTimestamp = parsed;
+            }
+          }
+        }
+        if (!initialTimestamp) {
+          initialTimestamp = new Date();
+        }
+
+        const initialPayload = {
+          cliente: clienteId,
+          pet: petId,
+          peso: previousWeightValue,
+          isInitial: true,
+          createdAt: initialTimestamp,
+          updatedAt: initialTimestamp,
+        };
+
+        await PetWeight.create(initialPayload);
+      }
+    }
+
+    const created = await PetWeight.create(payload);
+
+    petDoc.peso = String(pesoValue);
+    await petDoc.save();
+
+    const formatted = formatPetWeightEntry(created.toObject());
+    return res.status(201).json(formatted);
+  } catch (error) {
+    console.error('POST /func/vet/pesos', error);
+    return res.status(500).json({ message: 'Erro ao registrar peso.' });
+  }
+});
+
+router.delete('/vet/pesos/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const weightId = normalizeObjectId(req.params.id);
+    const clienteId = normalizeObjectId(req.query.clienteId || req.body?.clienteId);
+    const petId = normalizeObjectId(req.query.petId || req.body?.petId);
+
+    if (!weightId) {
+      return res.status(400).json({ message: 'Registro de peso inválido.' });
+    }
+
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    const weightDoc = await PetWeight.findById(weightId);
+    if (!weightDoc) {
+      return res.status(404).json({ message: 'Registro de peso não encontrado.' });
+    }
+
+    if (toStringSafe(weightDoc.cliente) !== clienteId || toStringSafe(weightDoc.pet) !== petId) {
+      return res.status(400).json({ message: 'Registro de peso não pertence ao pet informado.' });
+    }
+
+    const petDoc = await Pet.findById(petId).select('owner peso');
+    if (!petDoc) {
+      return res.status(404).json({ message: 'Pet não encontrado.' });
+    }
+
+    if (clienteId && toStringSafe(petDoc.owner) !== clienteId) {
+      return res.status(400).json({ message: 'Pet não pertence ao tutor informado.' });
+    }
+
+    await weightDoc.deleteOne();
+
+    const initialRemaining = await PetWeight.findOne({ pet: petId, isInitial: true }).sort({ createdAt: 1 });
+    if (!initialRemaining) {
+      const earliest = await PetWeight.findOne({ pet: petId }).sort({ createdAt: 1 });
+      if (earliest) {
+        if (!earliest.isInitial) {
+          earliest.isInitial = true;
+          await earliest.save();
+        }
+      }
+    }
+
+    const latest = await PetWeight.findOne({ pet: petId }).sort({ createdAt: -1 });
+    const latestWeightValue = latest ? parseWeight(latest.peso) : null;
+
+    if (latestWeightValue !== null) {
+      petDoc.peso = String(latestWeightValue);
+    } else {
+      petDoc.peso = '';
+    }
+    await petDoc.save();
+
+    return res.json({
+      deletedId: weightId,
+      latestWeight: latestWeightValue,
+    });
+  } catch (error) {
+    console.error('DELETE /func/vet/pesos/:id', error);
+    return res.status(500).json({ message: 'Erro ao remover registro de peso.' });
+  }
+});
 
 router.get('/vet/anexos', authMiddleware, requireStaff, async (req, res) => {
   try {

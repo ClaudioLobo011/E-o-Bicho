@@ -98,6 +98,7 @@ export const els = {
   addConsultaBtn: document.getElementById('vet-add-consulta-btn'),
   addVacinaBtn: document.getElementById('vet-add-vacina-btn'),
   addAnexoBtn: document.getElementById('vet-add-anexo-btn'),
+  addPesoBtn: document.getElementById('vet-add-peso-btn'),
 };
 
 export const state = {
@@ -113,6 +114,9 @@ export const state = {
   anexos: [],
   anexosLoading: false,
   anexosLoadKey: null,
+  pesos: [],
+  pesosLoading: false,
+  pesosLoadKey: null,
 };
 
 export const consultaModal = {
@@ -167,6 +171,23 @@ export const anexoModal = {
   contextInfo: null,
   selectedFiles: [],
   pendingFile: null,
+  isSubmitting: false,
+  keydownHandler: null,
+};
+
+export const pesoModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  submitBtn: null,
+  submitBtnOriginalHtml: '',
+  cancelBtn: null,
+  closeBtn: null,
+  input: null,
+  list: null,
+  emptyState: null,
+  loadingState: null,
+  summary: null,
   isSubmitting: false,
   keydownHandler: null,
 };
@@ -529,6 +550,62 @@ export function formatPetWeight(value) {
   const str = String(value).trim();
   if (!str) return '';
   return /kg$/i.test(str) ? str : `${str} Kg`;
+}
+
+export function parseWeightValue(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const sanitized = raw.replace(/[^0-9.,]+/g, '');
+  if (!sanitized) return null;
+  const hasComma = sanitized.includes(',');
+  let normalized = sanitized;
+  if (hasComma) {
+    normalized = sanitized.replace(/\./g, '').replace(',', '.');
+  } else {
+    const firstDot = sanitized.indexOf('.');
+    if (firstDot >= 0) {
+      const before = sanitized.slice(0, firstDot + 1);
+      const after = sanitized.slice(firstDot + 1).replace(/\./g, '');
+      normalized = `${before}${after}`;
+    }
+  }
+  const num = Number(normalized);
+  if (!Number.isFinite(num)) return null;
+  return num;
+}
+
+export function computeWeightDifference(currentValue, baselineValue) {
+  const current = parseWeightValue(currentValue);
+  const baseline = parseWeightValue(baselineValue);
+  if (current === null || baseline === null) return null;
+  const diff = current - baseline;
+  if (!Number.isFinite(diff)) return null;
+  return Number(diff.toFixed(4));
+}
+
+export function formatWeightDelta(diff, { showZero = false } = {}) {
+  const value = Number(diff);
+  if (!Number.isFinite(value)) return '';
+  if (Math.abs(value) < 0.005) {
+    return showZero ? '0 Kg' : 'Sem variação';
+  }
+  const absolute = Math.abs(value);
+  const formatted = absolute.toLocaleString('pt-BR', {
+    minimumFractionDigits: Number.isInteger(absolute) ? 0 : 1,
+    maximumFractionDigits: 2,
+  });
+  const sign = value > 0 ? '+' : '-';
+  return `${sign}${formatted} Kg`;
+}
+
+export function formatWeightDifference(currentValue, baselineValue, options = {}) {
+  const diff = computeWeightDifference(currentValue, baselineValue);
+  if (diff === null) return '';
+  return formatWeightDelta(diff, options);
 }
 
 export function formatMoney(value) {

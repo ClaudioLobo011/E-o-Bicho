@@ -6,11 +6,15 @@ import {
   notify,
   pickFirst,
   normalizeId,
+  sanitizeObjectId,
   normalizeForCompare,
   toIsoOrNull,
   formatDateDisplay,
   formatDateTimeDisplay,
   formatMoney,
+  formatPetWeight,
+  formatWeightDifference,
+  computeWeightDifference,
   getVetServices,
   getStatusLabel,
   CONSULTA_PLACEHOLDER_CLASSNAMES,
@@ -608,6 +612,141 @@ function createVacinaCard(vacina) {
   return card;
 }
 
+function createPesoCard(peso, baseline, previous) {
+  if (!peso) return null;
+
+  const card = document.createElement('article');
+  card.className = 'rounded-xl border border-orange-200 bg-white p-4 shadow-sm';
+
+  const header = document.createElement('div');
+  header.className = 'flex items-start gap-3';
+  card.appendChild(header);
+
+  const icon = document.createElement('div');
+  icon.className = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600';
+  icon.innerHTML = '<i class="fas fa-weight-scale"></i>';
+  header.appendChild(icon);
+
+  const headerText = document.createElement('div');
+  headerText.className = 'flex-1';
+  header.appendChild(headerText);
+
+  const removableId = sanitizeObjectId(peso.id || peso._id);
+  if (removableId) {
+    const headerActions = document.createElement('div');
+    headerActions.className = 'ml-auto flex items-start';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'flex h-8 w-8 items-center justify-center rounded-full text-rose-500 transition hover:bg-rose-100 hover:text-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-200';
+    removeBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+    removeBtn.title = 'Remover registro de peso';
+    removeBtn.setAttribute('aria-label', 'Remover registro de peso');
+
+    const toggleRemoveDisabled = (disabled) => {
+      removeBtn.disabled = !!disabled;
+      removeBtn.classList.toggle('opacity-50', !!disabled);
+      removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
+    };
+
+    removeBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const handler = state?.deletePeso;
+      if (typeof handler !== 'function') {
+        notify('Não foi possível remover o registro de peso agora. Recarregue a página e tente novamente.', 'error');
+        return;
+      }
+
+      toggleRemoveDisabled(true);
+
+      let result;
+      try {
+        result = handler(peso);
+      } catch (error) {
+        console.error('removePeso handler', error);
+        toggleRemoveDisabled(false);
+        return;
+      }
+
+      Promise.resolve(result)
+        .catch(() => {})
+        .finally(() => {
+          toggleRemoveDisabled(false);
+        });
+    });
+
+    headerActions.appendChild(removeBtn);
+    header.appendChild(headerActions);
+  }
+
+  const title = document.createElement('h3');
+  title.className = 'text-sm font-semibold text-orange-700';
+  title.textContent = peso.isInitial ? 'Peso inicial registrado' : 'Atualização de peso';
+  headerText.appendChild(title);
+
+  if (peso.createdAt) {
+    const meta = document.createElement('p');
+    meta.className = 'mt-0.5 text-xs text-gray-500';
+    meta.textContent = `Registrado em ${formatDateTimeDisplay(peso.createdAt)}`;
+    headerText.appendChild(meta);
+  }
+
+  const summary = document.createElement('p');
+  summary.className = 'mt-3 text-sm text-gray-700';
+  const weightText = formatPetWeight(peso.peso) || '—';
+  summary.innerHTML = `Peso registrado: <span class="font-semibold text-gray-900">${weightText}</span>`;
+  headerText.appendChild(summary);
+
+  const details = document.createElement('div');
+  details.className = 'mt-4 space-y-2 text-sm';
+  card.appendChild(details);
+
+  if (baseline && !peso.isInitial) {
+    const diffValue = computeWeightDifference(peso.peso, baseline.peso) || 0;
+    const diffText = formatWeightDifference(peso.peso, baseline.peso);
+    const diffEl = document.createElement('p');
+    diffEl.className = 'font-medium';
+    if (!diffText || diffText === 'Sem variação') {
+      diffEl.classList.add('text-gray-600');
+      diffEl.textContent = 'Sem variação desde o primeiro registro.';
+    } else {
+      diffEl.classList.add(diffValue > 0 ? 'text-emerald-600' : 'text-rose-600');
+      diffEl.textContent = `Variação desde o primeiro registro: ${diffText}`;
+    }
+    details.appendChild(diffEl);
+
+    const baselineEl = document.createElement('p');
+    baselineEl.className = 'text-xs text-gray-500';
+    baselineEl.textContent = `Peso inicial: ${formatPetWeight(baseline.peso) || '—'}`;
+    details.appendChild(baselineEl);
+  } else if (peso.isInitial) {
+    const note = document.createElement('p');
+    note.className = 'text-sm text-gray-600';
+    note.textContent = 'Primeiro registro de peso do pet.';
+    details.appendChild(note);
+  }
+
+  if (previous && !peso.isInitial) {
+    const diffPrevValue = computeWeightDifference(peso.peso, previous.peso);
+    if (diffPrevValue !== null) {
+      const diffPrevText = formatWeightDifference(peso.peso, previous.peso, { showZero: true });
+      const diffPrevEl = document.createElement('p');
+      diffPrevEl.className = 'text-xs text-gray-500';
+      if (!diffPrevText || diffPrevText === '0 Kg') {
+        diffPrevEl.textContent = 'Sem variação em relação ao registro anterior.';
+      } else {
+        const when = previous.createdAt ? ` (${formatDateTimeDisplay(previous.createdAt)})` : '';
+        diffPrevEl.textContent = `Comparado ao registro anterior${when}: ${diffPrevText}`;
+      }
+      details.appendChild(diffPrevEl);
+    }
+  }
+
+  return card;
+}
+
 function createModalTextareaField(label, fieldName) {
   const wrapper = document.createElement('label');
   wrapper.className = 'grid gap-1';
@@ -957,6 +1096,9 @@ export function updateConsultaAgendaCard() {
   const anexos = Array.isArray(state.anexos) ? state.anexos : [];
   const hasAnexos = anexos.length > 0;
   const isLoadingAnexos = !!state.anexosLoading;
+  const pesos = Array.isArray(state.pesos) ? state.pesos : [];
+  const hasPesos = pesos.some((entry) => entry && !entry.isInitial);
+  const isLoadingPesos = !!state.pesosLoading;
   const context = state.agendaContext;
   const selectedPetId = normalizeId(state.selectedPetId);
   const selectedTutorId = normalizeId(state.selectedCliente?._id);
@@ -1081,10 +1223,10 @@ export function updateConsultaAgendaCard() {
     }
   }
 
-  const hasAnyContent = hasManualConsultas || hasAgendaContent || hasVacinas || hasAnexos;
+  const hasAnyContent = hasManualConsultas || hasAgendaContent || hasVacinas || hasAnexos || hasPesos;
   const shouldShowPlaceholder = !hasAnyContent;
 
-  if ((isLoadingConsultas || isLoadingAnexos) && !hasAnyContent) {
+  if ((isLoadingConsultas || isLoadingAnexos || isLoadingPesos) && !hasAnyContent) {
     area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
     area.innerHTML = '';
     const paragraph = document.createElement('p');
@@ -1133,6 +1275,29 @@ export function updateConsultaAgendaCard() {
       const card = createVacinaCard(vacina);
       if (card) scroll.appendChild(card);
     });
+  }
+
+  if (hasPesos) {
+    const orderedPesos = [...pesos];
+    orderedPesos.sort((a, b) => {
+      const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    const baselinePeso = orderedPesos.find((entry) => entry && entry.isInitial) || orderedPesos[orderedPesos.length - 1] || null;
+    const orderedVetPesos = orderedPesos.filter((entry) => entry && !entry.isInitial);
+
+    orderedVetPesos.forEach((peso, index) => {
+      const previous = orderedVetPesos[index + 1] || null;
+      const card = createPesoCard(peso, baselinePeso, previous);
+      if (card) scroll.appendChild(card);
+    });
+  } else if (isLoadingPesos) {
+    const loadingPesos = document.createElement('div');
+    loadingPesos.className = 'rounded-xl border border-dashed border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-600';
+    loadingPesos.textContent = 'Carregando registros de peso...';
+    scroll.appendChild(loadingPesos);
   }
 
   if (hasManualConsultas) {
