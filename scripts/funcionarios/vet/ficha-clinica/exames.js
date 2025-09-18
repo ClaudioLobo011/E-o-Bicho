@@ -33,6 +33,12 @@ function generateExameFileId() {
   return `exm-file-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 }
 
+const EXAME_FILE_ID_PATTERN = /^exm-file-\d+-\d+$/;
+
+function isGeneratedExameFileId(id) {
+  return EXAME_FILE_ID_PATTERN.test(String(id || ''));
+}
+
 function isAllowedExameFile(file) {
   if (!file) return false;
   const extension = getFileExtension(file.name);
@@ -92,31 +98,135 @@ function normalizeExameFileRecord(raw, fallback = {}) {
   };
 }
 
+function getExameFileMatchKey(file) {
+  if (!file) return '';
+  const nome = normalizeForCompare(file.nome || file.name || '');
+  const original = normalizeForCompare(file.originalName || '');
+  const size = Number(file.size || 0);
+  const sizeKey = Number.isFinite(size) && size > 0 ? String(size) : '';
+  if (!nome && !original && !sizeKey) return '';
+  return `${nome}|${original}|${sizeKey}`;
+}
+
+function mergeNormalizedExameFileEntries(base, extra) {
+  if (!base && !extra) return null;
+  if (!base) return extra;
+  if (!extra) return base;
+
+  const merged = { ...base };
+  const baseId = normalizeId(base.id || base._id);
+  const extraId = normalizeId(extra.id || extra._id);
+
+  if (extraId && (!baseId || isGeneratedExameFileId(baseId) || baseId === extraId)) {
+    merged.id = extraId;
+    merged._id = extraId;
+  } else if (baseId) {
+    merged.id = baseId;
+    merged._id = baseId;
+  }
+
+  if (!merged.nome && extra.nome) merged.nome = extra.nome;
+  if (!merged.originalName && extra.originalName) merged.originalName = extra.originalName;
+  if (!merged.mimeType && extra.mimeType) merged.mimeType = extra.mimeType;
+  if (!merged.extension && extra.extension) merged.extension = extra.extension;
+  if ((!merged.size || merged.size <= 0) && extra.size) merged.size = extra.size;
+  if (!merged.url && extra.url) merged.url = extra.url;
+  if (!merged.createdAt && extra.createdAt) merged.createdAt = extra.createdAt;
+
+  return merged;
+}
+
 function mergeExameFiles(existing = [], incoming = []) {
   const result = [];
-  const map = new Map();
+  const byId = new Map();
+  const byKey = new Map();
+
+  const registerKeyIndex = (key, idx) => {
+    if (!key) return;
+    const list = byKey.get(key);
+    if (list) {
+      if (!list.includes(idx)) list.push(idx);
+    } else {
+      byKey.set(key, [idx]);
+    }
+  };
+
+  const unregisterKeyIndex = (key, idx) => {
+    if (!key) return;
+    const list = byKey.get(key);
+    if (!list) return;
+    const filtered = list.filter((value) => value !== idx);
+    if (filtered.length) {
+      byKey.set(key, filtered);
+    } else {
+      byKey.delete(key);
+    }
+  };
+
   const append = (item) => {
     const normalized = normalizeExameFileRecord(item);
     if (!normalized) return;
-    const key = normalizeId(normalized.id || normalized._id) || `${normalized.nome}|${normalized.originalName}|${normalized.url}`;
-    const previous = map.get(key);
-    if (previous) {
-      const merged = { ...previous, ...normalized };
-      if (!merged.url && normalized.url) merged.url = normalized.url;
-      if (!merged.mimeType && normalized.mimeType) merged.mimeType = normalized.mimeType;
-      if (!merged.extension && normalized.extension) merged.extension = normalized.extension;
-      if (!merged.size && normalized.size) merged.size = normalized.size;
-      if (!merged.createdAt && normalized.createdAt) merged.createdAt = normalized.createdAt;
-      map.set(key, merged);
-    } else {
-      map.set(key, normalized);
+
+    const id = normalizeId(normalized.id || normalized._id);
+    if (id && byId.has(id)) {
+      const idx = byId.get(id);
+      const merged = mergeNormalizedExameFileEntries(result[idx], normalized);
+      result[idx] = merged;
+      const mergedId = normalizeId(merged.id || merged._id);
+      if (mergedId && mergedId !== id) {
+        byId.delete(id);
+        byId.set(mergedId, idx);
+      } else if (mergedId && !byId.has(mergedId)) {
+        byId.set(mergedId, idx);
+      }
+      const mergedKey = getExameFileMatchKey(merged);
+      if (mergedKey) registerKeyIndex(mergedKey, idx);
+      return;
     }
+
+    const key = getExameFileMatchKey(normalized);
+    if (key && byKey.has(key)) {
+      const indexes = byKey.get(key) || [];
+      for (let i = 0; i < indexes.length; i += 1) {
+        const idx = indexes[i];
+        const existingEntry = result[idx];
+        if (!existingEntry) continue;
+        const existingId = normalizeId(existingEntry.id || existingEntry._id);
+        const incomingId = id;
+        const existingPending = !existingEntry.url || isGeneratedExameFileId(existingId);
+        const incomingPending = !normalized.url || isGeneratedExameFileId(incomingId);
+        if (existingPending || incomingPending) {
+          const merged = mergeNormalizedExameFileEntries(existingEntry, normalized);
+          result[idx] = merged;
+          const mergedId = normalizeId(merged.id || merged._id);
+          if (mergedId && mergedId !== existingId) {
+            if (existingId) byId.delete(existingId);
+            byId.set(mergedId, idx);
+          } else if (mergedId && !byId.has(mergedId)) {
+            byId.set(mergedId, idx);
+          }
+          const mergedKey = getExameFileMatchKey(merged);
+          if (mergedKey && mergedKey !== key) {
+            unregisterKeyIndex(key, idx);
+            registerKeyIndex(mergedKey, idx);
+          }
+          return;
+        }
+      }
+    }
+
+    const entry = { ...normalized };
+    result.push(entry);
+    const idx = result.length - 1;
+    if (id) {
+      byId.set(id, idx);
+    }
+    registerKeyIndex(key, idx);
   };
 
   (Array.isArray(existing) ? existing : []).forEach(append);
   (Array.isArray(incoming) ? incoming : []).forEach(append);
 
-  map.forEach((value) => result.push(value));
   result.sort((a, b) => {
     const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
     const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
