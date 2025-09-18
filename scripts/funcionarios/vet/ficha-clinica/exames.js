@@ -11,6 +11,7 @@ import {
   formatFileSize,
   exameModal,
   EXAME_STORAGE_PREFIX,
+  EXAME_ATTACHMENT_OBSERVACAO_PREFIX,
   getAgendaStoreId,
   getPetPriceCriteria,
   persistAgendaContext,
@@ -20,7 +21,7 @@ import {
   getAuthToken,
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
-import { loadAnexosFromServer } from './anexos.js';
+import { loadAnexosFromServer, deleteAnexo } from './anexos.js';
 
 const MIN_SEARCH_TERM_LENGTH = 2;
 
@@ -174,6 +175,7 @@ function normalizeExameRecord(raw) {
     createdAt,
     arquivos,
     anexoId: normalizeId(raw.anexoId || raw.anexo || raw.attachmentId || raw.attachment) || null,
+    anexoObservacao: typeof raw.anexoObservacao === 'string' ? raw.anexoObservacao : '',
   };
 }
 
@@ -371,10 +373,10 @@ function handleExameAddFile() {
   refreshExameModalControls();
 }
 
-async function uploadExameAttachments(entries) {
+async function uploadExameAttachments(entries, options = {}) {
   const files = Array.isArray(entries) ? entries.filter((entry) => entry && entry.file) : [];
   if (!files.length) {
-    return { arquivos: [], anexoId: null };
+    return { arquivos: [], anexoId: null, observacao: '' };
   }
 
   const clienteId = normalizeId(state.selectedCliente?._id);
@@ -383,6 +385,9 @@ async function uploadExameAttachments(entries) {
     throw new Error('Selecione um tutor e um pet para enviar arquivos.');
   }
 
+  const exameId = normalizeId(options?.exameId);
+  const observacaoValue = `${EXAME_ATTACHMENT_OBSERVACAO_PREFIX}${exameId || 'pending'}`;
+
   const formData = new FormData();
   formData.append('clienteId', clienteId);
   formData.append('petId', petId);
@@ -390,6 +395,7 @@ async function uploadExameAttachments(entries) {
   if (appointmentId) {
     formData.append('appointmentId', appointmentId);
   }
+  formData.append('observacao', observacaoValue);
 
   const fallbackEntries = files.map((entry) => {
     const createdAt = new Date().toISOString();
@@ -436,6 +442,7 @@ async function uploadExameAttachments(entries) {
     return {
       arquivos,
       anexoId: normalizeId(raw._id || raw.id || raw.anexoId || raw.anexo) || null,
+      observacao: typeof raw.observacao === 'string' ? raw.observacao : '',
     };
   };
 
@@ -449,9 +456,13 @@ async function uploadExameAttachments(entries) {
   }
 
   if (!parsed || !parsed.arquivos.length) {
-    parsed = { arquivos: fallbackEntries, anexoId: parsed?.anexoId || null };
+    parsed = { arquivos: fallbackEntries, anexoId: parsed?.anexoId || null, observacao: observacaoValue };
   } else {
-    parsed = { arquivos: mergeExameFiles(parsed.arquivos, fallbackEntries), anexoId: parsed.anexoId };
+    parsed = {
+      arquivos: mergeExameFiles(parsed.arquivos, fallbackEntries),
+      anexoId: parsed.anexoId,
+      observacao: parsed.observacao || observacaoValue,
+    };
   }
 
   try {
@@ -1066,10 +1077,11 @@ async function handleExameSubmit() {
     createdAt: new Date().toISOString(),
     arquivos: [],
     anexoId: null,
+    anexoObservacao: '',
   };
 
   const attachmentsEntries = Array.isArray(modal.selectedFiles) ? [...modal.selectedFiles] : [];
-  let anexosResult = { arquivos: [], anexoId: null };
+  let anexosResult = { arquivos: [], anexoId: null, observacao: '' };
 
   setExameModalSubmitting(true);
 
@@ -1098,7 +1110,7 @@ async function handleExameSubmit() {
 
     if (attachmentsEntries.length) {
       try {
-        anexosResult = await uploadExameAttachments(attachmentsEntries);
+        anexosResult = await uploadExameAttachments(attachmentsEntries, { exameId: record.id });
       } catch (attachmentError) {
         console.error('uploadExameAttachments', attachmentError);
         notify('Exame registrado, mas não foi possível enviar os arquivos. Tente novamente pelo botão de anexos.', 'warning');
@@ -1110,6 +1122,9 @@ async function handleExameSubmit() {
     }
     if (anexosResult.anexoId) {
       record.anexoId = anexosResult.anexoId;
+    }
+    if (typeof anexosResult.observacao === 'string') {
+      record.anexoObservacao = anexosResult.observacao;
     }
 
     state.exames = [record, ...(Array.isArray(state.exames) ? state.exames : [])];
@@ -1124,6 +1139,149 @@ async function handleExameSubmit() {
     setExameModalSubmitting(false);
   }
 }
+
+export async function deleteExame(exame, options = {}) {
+  const { skipConfirm = false } = options || {};
+  const record = exame && typeof exame === 'object' ? exame : {};
+  const exameId = normalizeId(record.id || record._id);
+  const servicoId = normalizeId(record.servicoId || record.servico);
+  if (!servicoId) {
+    notify('Não foi possível identificar o exame selecionado.', 'error');
+    return false;
+  }
+
+  if (!ensureTutorAndPetSelected()) {
+    return false;
+  }
+
+  const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+  if (!appointmentId) {
+    notify('Abra a ficha pela agenda para remover exames vinculados a um agendamento.', 'warning');
+    return false;
+  }
+
+  const serviceName = pickFirst(record.servicoNome);
+  const hasFiles = Array.isArray(record.arquivos) && record.arquivos.length > 0;
+
+  if (!skipConfirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+    const questionParts = [];
+    if (serviceName) {
+      questionParts.push(`Remover o exame "${serviceName}"?`);
+    } else {
+      questionParts.push('Remover este exame?');
+    }
+    if (hasFiles) {
+      questionParts.push('Os arquivos enviados serão excluídos.');
+    }
+    const confirmed = window.confirm(questionParts.join('\n'));
+    if (!confirmed) {
+      return false;
+    }
+  }
+
+  const existingServices = Array.isArray(state.agendaContext?.servicos) ? state.agendaContext.servicos : [];
+  const normalizedServices = existingServices
+    .map((svc) => {
+      const sid = normalizeId(svc?._id || svc?.id || svc?.servicoId || svc?.servico);
+      if (!sid) return null;
+      const valorItem = Number(svc?.valor || 0);
+      return {
+        servicoId: sid,
+        valor: Number.isFinite(valorItem) ? valorItem : 0,
+      };
+    })
+    .filter(Boolean);
+
+  let removed = false;
+  const remainingServices = [];
+  normalizedServices.forEach((svc) => {
+    if (!removed && svc.servicoId === servicoId) {
+      removed = true;
+    } else {
+      remainingServices.push(svc);
+    }
+  });
+
+  if (!removed) {
+    notify('Não foi possível localizar o serviço do exame no agendamento.', 'error');
+    return false;
+  }
+
+  state.examesLoading = true;
+  updateConsultaAgendaCard();
+
+  try {
+    const response = await api(`/func/agendamentos/${appointmentId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ servicos: remainingServices }),
+    });
+    const data = await response.json().catch(() => (response.ok ? {} : {}));
+    if (!response.ok) {
+      const message = typeof data?.message === 'string' ? data.message : 'Erro ao atualizar os serviços do agendamento.';
+      throw new Error(message);
+    }
+
+    if (!state.agendaContext) state.agendaContext = {};
+    if (Array.isArray(data?.servicos)) {
+      state.agendaContext.servicos = data.servicos;
+    } else {
+      let removedFromContext = false;
+      state.agendaContext.servicos = existingServices.filter((svc) => {
+        if (removedFromContext) return true;
+        const sid = normalizeId(svc?._id || svc?.id || svc?.servicoId || svc?.servico);
+        if (sid && sid === servicoId) {
+          removedFromContext = true;
+          return false;
+        }
+        return true;
+      });
+    }
+    if (typeof data?.valor === 'number') {
+      state.agendaContext.valor = Number(data.valor);
+    }
+    if (Array.isArray(state.agendaContext?.servicos)) {
+      state.agendaContext.totalServicos = state.agendaContext.servicos.length;
+    }
+    persistAgendaContext(state.agendaContext);
+
+    const nextExames = (Array.isArray(state.exames) ? state.exames : []).filter((item) => {
+      const itemId = normalizeId(item?.id || item?._id);
+      if (exameId && itemId) {
+        return itemId !== exameId;
+      }
+      return item !== record;
+    });
+    state.exames = nextExames;
+    persistExamesForSelection();
+    state.examesLoading = false;
+    updateConsultaAgendaCard();
+
+    const anexoId = normalizeId(record.anexoId);
+    if (anexoId) {
+      try {
+        await deleteAnexo({ id: anexoId, _id: anexoId, observacao: record.anexoObservacao || '' }, {
+          skipConfirm: true,
+          suppressNotify: true,
+        });
+      } catch (attachmentError) {
+        console.error('deleteExame deleteAnexo', attachmentError);
+        notify('Exame removido, mas não foi possível excluir os arquivos agora. Verifique em anexos.', 'warning');
+      }
+    }
+
+    notify('Exame removido com sucesso.', 'success');
+    return true;
+  } catch (error) {
+    console.error('deleteExame', error);
+    notify(error.message || 'Erro ao remover exame.', 'error');
+    return false;
+  } finally {
+    state.examesLoading = false;
+    updateConsultaAgendaCard();
+  }
+}
+
+state.deleteExame = deleteExame;
 
 export function openExameModal() {
   if (!ensureTutorAndPetSelected()) {

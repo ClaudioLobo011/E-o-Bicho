@@ -636,6 +636,56 @@ function createExameCard(exame) {
   headerText.className = 'flex-1';
   header.appendChild(headerText);
 
+  const headerActions = document.createElement('div');
+  headerActions.className = 'ml-auto flex items-start';
+  header.appendChild(headerActions);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
+  removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
+  removeBtn.title = 'Remover exame';
+  removeBtn.setAttribute('aria-label', 'Remover exame');
+
+  const toggleRemoveDisabled = (disabled) => {
+    removeBtn.disabled = !!disabled;
+    removeBtn.classList.toggle('opacity-60', !!disabled);
+    removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
+  };
+
+  toggleRemoveDisabled(state.examesLoading);
+
+  removeBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const handler = state?.deleteExame;
+    if (typeof handler !== 'function') {
+      notify('Não foi possível remover o exame agora. Recarregue a página e tente novamente.', 'error');
+      return;
+    }
+
+    toggleRemoveDisabled(true);
+
+    let result;
+    try {
+      result = handler(exame);
+    } catch (error) {
+      console.error('removeExame handler', error);
+      toggleRemoveDisabled(false);
+      return;
+    }
+
+    Promise.resolve(result)
+      .catch(() => {})
+      .finally(() => {
+        toggleRemoveDisabled(state.examesLoading);
+      });
+  });
+
+  headerActions.appendChild(removeBtn);
+
+
   const title = document.createElement('h3');
   title.className = 'text-sm font-semibold text-rose-700';
   title.textContent = 'Registro de exame';

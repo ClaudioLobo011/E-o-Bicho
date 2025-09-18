@@ -12,6 +12,7 @@ import {
   ANEXO_ALLOWED_EXTENSIONS,
   ANEXO_ALLOWED_MIME_TYPES,
   ANEXO_STORAGE_PREFIX,
+  EXAME_ATTACHMENT_OBSERVACAO_PREFIX,
   getAuthToken,
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
@@ -139,6 +140,12 @@ function normalizeAnexoRecord(raw, fallbackFiles = []) {
   };
 }
 
+export function isExameAttachmentRecord(anexo) {
+  if (!anexo) return false;
+  const observacao = typeof anexo.observacao === 'string' ? anexo.observacao : '';
+  return observacao.startsWith(EXAME_ATTACHMENT_OBSERVACAO_PREFIX);
+}
+
 function getAnexoStorageKey(clienteId, petId) {
   const base = getConsultasKey(clienteId, petId);
   return base ? `${ANEXO_STORAGE_PREFIX}${base}` : null;
@@ -181,7 +188,8 @@ export function loadAnexosForSelection() {
       const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
       return bTime - aTime;
     });
-    state.anexos = normalized;
+    const filtered = normalized.filter((item) => !isExameAttachmentRecord(item));
+    state.anexos = filtered;
   } catch {
     state.anexos = [];
   }
@@ -190,6 +198,7 @@ export function loadAnexosForSelection() {
 function upsertAnexoInState(record, fallbackFiles = []) {
   const normalized = normalizeAnexoRecord(record, fallbackFiles);
   if (!normalized) return null;
+  if (isExameAttachmentRecord(normalized)) return null;
   const id = normalizeId(normalized.id || normalized._id);
   if (!id) return null;
 
@@ -234,11 +243,12 @@ function upsertAnexoInState(record, fallbackFiles = []) {
     return bTime - aTime;
   });
 
-  state.anexos = deduped;
+  const filtered = deduped.filter((item) => !isExameAttachmentRecord(item));
+  state.anexos = filtered;
   const key = getConsultasKey(state.selectedCliente?._id, state.selectedPetId);
   if (key) state.anexosLoadKey = key;
 
-  return deduped.find((item) => normalizeId(item?.id || item?._id) === id) || payload;
+  return filtered.find((item) => normalizeId(item?.id || item?._id) === id) || payload;
 }
 
 export async function loadAnexosFromServer(options = {}) {
@@ -280,7 +290,9 @@ export async function loadAnexosFromServer(options = {}) {
       return bTime - aTime;
     });
 
-    state.anexos = normalized;
+    const filtered = normalized.filter((item) => !isExameAttachmentRecord(item));
+
+    state.anexos = filtered;
     state.anexosLoadKey = key;
   } catch (error) {
     console.error('loadAnexosFromServer', error);
@@ -294,7 +306,7 @@ export async function loadAnexosFromServer(options = {}) {
 }
 
 export async function deleteAnexo(anexo, options = {}) {
-  const { skipConfirm = false } = options || {};
+  const { skipConfirm = false, suppressNotify = false } = options || {};
   const record = anexo && typeof anexo === 'object' ? anexo : {};
   const targetId = normalizeId(record.id || record._id);
   if (!targetId) return false;
@@ -340,7 +352,9 @@ export async function deleteAnexo(anexo, options = {}) {
     state.anexos = remaining;
     persistAnexosForSelection();
     updateConsultaAgendaCard();
-    notify('Anexo removido com sucesso.', 'success');
+    if (!suppressNotify) {
+      notify('Anexo removido com sucesso.', 'success');
+    }
     await loadAnexosFromServer({ force: true });
     return true;
   } catch (error) {

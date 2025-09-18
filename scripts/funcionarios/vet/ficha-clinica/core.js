@@ -233,6 +233,7 @@ export const STORAGE_KEYS = {
 export const VACINA_STORAGE_PREFIX = 'vetFichaVacinas:';
 export const ANEXO_STORAGE_PREFIX = 'vetFichaAnexos:';
 export const EXAME_STORAGE_PREFIX = 'vetFichaExames:';
+export const EXAME_ATTACHMENT_OBSERVACAO_PREFIX = '__vet_exame__:';
 export const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 
 export const CARD_TUTOR_ACTIVE_CLASSES = ['bg-sky-100', 'text-sky-700'];
