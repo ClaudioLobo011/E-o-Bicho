@@ -48,6 +48,77 @@ function isAllowedExameFile(file) {
   return false;
 }
 
+function sanitizeAttachmentName(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeAttachmentExtension(extension) {
+  if (!extension) return '';
+  const str = String(extension).trim().toLowerCase();
+  if (!str) return '';
+  return str.startsWith('.') ? str : `.${str}`;
+}
+
+function resolveExameAttachmentNames(entry = {}) {
+  const file = entry && typeof entry === 'object' ? entry.file : null;
+  const fileName =
+    typeof entry.originalName === 'string' && entry.originalName
+      ? entry.originalName
+      : (file && typeof file.name === 'string' ? file.name : '');
+  const normalizedFileName = String(fileName || '');
+  const extension = normalizeAttachmentExtension(entry.extension || getFileExtension(normalizedFileName));
+
+  const nameCandidates = [entry.providedName, entry.displayName, entry.name, entry.nome];
+  let displayName = '';
+  for (const candidate of nameCandidates) {
+    const sanitized = sanitizeAttachmentName(candidate);
+    if (sanitized) {
+      displayName = sanitized;
+      break;
+    }
+  }
+  if (!displayName) {
+    displayName = sanitizeAttachmentName(normalizedFileName) || 'Arquivo';
+  }
+
+  const uploadCandidates = [entry.uploadName, entry.fileName, displayName, sanitizeAttachmentName(normalizedFileName)];
+  let uploadBase = '';
+  for (const candidate of uploadCandidates) {
+    const sanitized = sanitizeAttachmentName(candidate);
+    if (sanitized) {
+      uploadBase = sanitized;
+      break;
+    }
+  }
+  if (extension && uploadBase && uploadBase.toLowerCase().endsWith(extension)) {
+    const withoutExt = uploadBase.slice(0, -extension.length);
+    uploadBase = sanitizeAttachmentName(withoutExt);
+  }
+  if (!uploadBase) {
+    const originalBase = sanitizeAttachmentName(normalizedFileName.replace(/\.[^.]+$/, ''));
+    uploadBase = originalBase || 'arquivo';
+  }
+
+  let uploadName = uploadBase;
+  if (extension) {
+    if (!uploadName.toLowerCase().endsWith(extension)) {
+      uploadName = `${uploadName}${extension}`;
+    }
+  }
+  uploadName = sanitizeAttachmentName(uploadName);
+  if (!uploadName) {
+    uploadName = extension ? `arquivo${extension}` : 'arquivo';
+  } else if (extension && !uploadName.toLowerCase().endsWith(extension)) {
+    uploadName = `${uploadName}${extension}`;
+  }
+
+  return { displayName, uploadName, extension };
+}
+
 function normalizeExameFileRecord(raw, fallback = {}) {
   const source = raw && typeof raw === 'object' ? raw : {};
   const fallbackSource = fallback && typeof fallback === 'object' ? fallback : {};
@@ -454,19 +525,32 @@ function handleExameFileSelection(file) {
 
 function handleExameAddFile() {
   const file = exameModal.pendingFile;
-  const name = (exameModal.fileNameInput?.value || '').trim();
-  if (!file || !name) {
+  const rawName = (exameModal.fileNameInput?.value || '').trim();
+  if (!file || !rawName) {
     notify('Informe um nome e selecione um arquivo para adicionar.', 'warning');
     return;
   }
 
+  const names = resolveExameAttachmentNames({
+    file,
+    name: rawName,
+    providedName: rawName,
+    originalName: file.name,
+    extension: getFileExtension(file.name),
+  });
+
+  const normalizedExtension = normalizeAttachmentExtension(names.extension || getFileExtension(file.name));
+
   const entry = {
     id: generateExameFileId(),
-    name,
+    name: names.displayName,
+    displayName: names.displayName,
+    uploadName: names.uploadName,
+    providedName: rawName,
     originalName: file.name,
     size: Number(file.size || 0),
     mimeType: file.type || '',
-    extension: getFileExtension(file.name),
+    extension: normalizedExtension,
     file,
   };
 
@@ -508,6 +592,19 @@ async function uploadExameAttachments(entries, options = {}) {
   formData.append('observacao', observacaoValue);
 
   const fallbackEntries = files.map((entry) => {
+    const file = entry.file;
+    const originalName = entry.originalName || (file && file.name) || '';
+    const names = resolveExameAttachmentNames({
+      ...entry,
+      file,
+      originalName,
+      extension: entry.extension || getFileExtension(originalName || (file && file.name) || ''),
+    });
+    entry.name = names.displayName;
+    entry.displayName = names.displayName;
+    entry.uploadName = names.uploadName;
+    entry.extension = normalizeAttachmentExtension(names.extension || entry.extension || getFileExtension(originalName));
+    if (!entry.originalName) entry.originalName = originalName;
     const createdAt = new Date().toISOString();
     return normalizeExameFileRecord({
       id: entry.id,
@@ -516,6 +613,7 @@ async function uploadExameAttachments(entries, options = {}) {
       mimeType: entry.mimeType,
       size: entry.size,
       extension: entry.extension,
+      fileName: entry.uploadName,
       createdAt,
     });
   });
@@ -523,8 +621,9 @@ async function uploadExameAttachments(entries, options = {}) {
   files.forEach((entry) => {
     const file = entry.file;
     if (!file) return;
-    const displayName = (entry.name || file.name || '').trim() || file.name;
-    formData.append('arquivos', file, file.name);
+    const uploadName = entry.uploadName || file.name;
+    const displayName = (entry.name || entry.displayName || file.name || '').trim() || file.name;
+    formData.append('arquivos', file, uploadName);
     formData.append('nomes[]', displayName);
   });
 

@@ -740,7 +740,16 @@ function createExameCard(exame) {
   observationSection.appendChild(text);
   card.appendChild(observationSection);
 
-  const arquivos = Array.isArray(exame.arquivos) ? exame.arquivos.filter(Boolean) : [];
+  const arquivosRaw = Array.isArray(exame.arquivos) ? exame.arquivos : [];
+  const arquivos = arquivosRaw
+    .map((file) => {
+      if (!file || typeof file !== 'object') return null;
+      const url = typeof file.url === 'string' ? file.url.trim() : '';
+      if (!url) return null;
+      return { ...file, url };
+    })
+    .filter(Boolean);
+
   if (arquivos.length) {
     const attachmentsSection = document.createElement('div');
     attachmentsSection.className = 'mt-4 space-y-2';
@@ -755,6 +764,9 @@ function createExameCard(exame) {
     attachmentsSection.appendChild(list);
 
     arquivos.forEach((file) => {
+      const fileUrl = typeof file.url === 'string' ? file.url : '';
+      if (!fileUrl) return;
+
       const item = document.createElement('div');
       item.className = 'flex flex-col gap-2 rounded-lg border border-rose-100 bg-rose-50/70 px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between';
       list.appendChild(item);
@@ -793,23 +805,16 @@ function createExameCard(exame) {
       actions.className = 'flex items-center gap-2';
       item.appendChild(actions);
 
-      if (file.url) {
-        const link = document.createElement('a');
-        link.href = file.url;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.className = 'inline-flex items-center gap-2 rounded-md border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-600 hover:text-white';
-        link.innerHTML = '<i class="fas fa-arrow-up-right-from-square text-[10px]"></i><span>Abrir</span>';
-        if (file.originalName) {
-          link.download = file.originalName;
-        }
-        actions.appendChild(link);
-      } else {
-        const pending = document.createElement('span');
-        pending.className = 'text-xs text-rose-500';
-        pending.textContent = 'Link disponível após sincronização.';
-        actions.appendChild(pending);
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.className = 'inline-flex items-center gap-2 rounded-md border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-600 hover:text-white';
+      link.innerHTML = '<i class="fas fa-arrow-up-right-from-square text-[10px]"></i><span>Abrir</span>';
+      if (file.originalName) {
+        link.download = file.originalName;
       }
+      actions.appendChild(link);
     });
 
     card.appendChild(attachmentsSection);
