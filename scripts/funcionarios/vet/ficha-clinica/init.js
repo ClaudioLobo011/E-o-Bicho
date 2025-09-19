@@ -3,6 +3,7 @@ import { els, debounce } from './core.js';
 import { openConsultaModal } from './consultas.js';
 import { openVacinaModal } from './vacinas.js';
 import { openAnexoModal } from './anexos.js';
+import { openDocumentoModal } from './documentos.js';
 import { openExameModal } from './exames.js';
 import { openPesoModal } from './pesos.js';
 import { openObservacaoModal } from './observacoes.js';
@@ -84,6 +85,13 @@ export function initFichaClinica() {
     els.addAnexoBtn.addEventListener('click', (event) => {
       event.preventDefault();
       openAnexoModal();
+    });
+  }
+
+  if (els.addDocumentoBtn) {
+    els.addDocumentoBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      openDocumentoModal();
     });
   }
 
