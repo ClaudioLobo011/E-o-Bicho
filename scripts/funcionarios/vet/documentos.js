@@ -540,18 +540,32 @@ function renderKeywords() {
 
 function sanitizeDocumentHtml(html, { allowStyles = false } = {}) {
   if (typeof html !== 'string') return '';
-  let safe = html
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, '')
-    .replace(/<object[\s\S]*?>[\s\S]*?<\/object>/gi, '')
-    .replace(/on[a-z]+="[^"]*"/gi, '')
-    .replace(/on[a-z]+='[^']*'/gi, '')
-    .replace(/\s+href\s*=\s*(['"])javascript:[^'">]*\1/gi, ' href="#"')
-    .replace(/data:text\/html/gi, '');
+  let safe = html;
+
+  const blockedTagPatterns = [
+    /<script[\s\S]*?>[\s\S]*?<\/script>/gi,
+    /<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi,
+    /<object[\s\S]*?>[\s\S]*?<\/object>/gi,
+    /<embed[\s\S]*?>[\s\S]*?<\/embed>/gi,
+    /<link[^>]*?>/gi,
+    /<meta[^>]*?>/gi,
+    /<base[^>]*?>/gi,
+  ];
+
+  blockedTagPatterns.forEach((pattern) => {
+    safe = safe.replace(pattern, '');
+  });
 
   if (!allowStyles) {
     safe = safe.replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '');
   }
+
+  safe = safe
+    .replace(/\son[a-z]+\s*=\s*(['"])[\s\S]*?\1/gi, '')
+    .replace(/\s+(?:xlink:)?href\s*=\s*(['"])\s*(?:javascript|vbscript):[^'">]*\1/gi, ' href="#"')
+    .replace(/\s+src\s*=\s*(['"])\s*(?:javascript|vbscript):[^'">]*\1/gi, ' src="#"')
+    .replace(/url\((['"]?)\s*(?:javascript|vbscript):[^)]*?\1\)/gi, 'url()')
+    .replace(/data:text\/html/gi, '');
 
   return safe;
 }
