@@ -14,6 +14,7 @@ const VetAttachment = require('../models/VetAttachment');
 const VetDocument = require('../models/VetDocument');
 const VetDocumentRecord = require('../models/VetDocumentRecord');
 const VetRecipe = require('../models/VetRecipe');
+const VetRecipeRecord = require('../models/VetRecipeRecord');
 const PetWeight = require('../models/PetWeight');
 const {
   isDriveConfigured,
@@ -224,6 +225,27 @@ function formatDocumentRecord(doc) {
     clienteId: toStringSafe(doc.cliente),
     petId: toStringSafe(doc.pet),
     documentoId: toStringSafe(doc.documento),
+    appointmentId: toStringSafe(doc.appointment),
+    descricao: doc.descricao || '',
+    conteudo: doc.conteudo || '',
+    conteudoOriginal: doc.conteudoOriginal || '',
+    preview: doc.preview || '',
+    createdAt,
+    updatedAt,
+  };
+}
+
+function formatRecipeRecord(doc) {
+  if (!doc) return null;
+  const createdAt = doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt || null;
+  const updatedAt = doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt || createdAt;
+
+  return {
+    _id: toStringSafe(doc._id),
+    id: toStringSafe(doc._id),
+    clienteId: toStringSafe(doc.cliente),
+    petId: toStringSafe(doc.pet),
+    receitaId: toStringSafe(doc.receita),
     appointmentId: toStringSafe(doc.appointment),
     descricao: doc.descricao || '',
     conteudo: doc.conteudo || '',
@@ -1042,6 +1064,151 @@ router.delete('/vet/documentos-registros/:id', authMiddleware, requireStaff, asy
   } catch (error) {
     console.error('DELETE /func/vet/documentos-registros/:id', error);
     return res.status(500).json({ message: 'Erro ao remover documento do atendimento.' });
+  }
+});
+
+router.get('/vet/receitas-registros', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const clienteId = normalizeObjectId(req.query.clienteId);
+    const petId = normalizeObjectId(req.query.petId);
+    const appointmentId = normalizeObjectId(req.query.appointmentId);
+
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+    if (!petCheck.ok) {
+      return res.status(petCheck.status).json({ message: petCheck.message });
+    }
+
+    const filter = { cliente: clienteId, pet: petId };
+    if (appointmentId) {
+      filter.$or = [
+        { appointment: appointmentId },
+        { appointment: { $exists: false } },
+        { appointment: null },
+      ];
+    }
+
+    const docs = await VetRecipeRecord.find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formatted = docs.map(formatRecipeRecord).filter(Boolean);
+    return res.json(formatted);
+  } catch (error) {
+    console.error('GET /func/vet/receitas-registros', error);
+    return res.status(500).json({ message: 'Erro ao carregar receitas do atendimento.' });
+  }
+});
+
+router.post('/vet/receitas-registros', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const clienteId = normalizeObjectId(req.body.clienteId);
+    const petId = normalizeObjectId(req.body.petId);
+    const receitaId = req.body.receitaId ? normalizeObjectId(req.body.receitaId) : null;
+    const appointmentId = req.body.appointmentId ? normalizeObjectId(req.body.appointmentId) : null;
+
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    if (req.body.receitaId && !receitaId) {
+      return res.status(400).json({ message: 'receitaId inválido.' });
+    }
+
+    if (req.body.appointmentId && !appointmentId) {
+      return res.status(400).json({ message: 'appointmentId inválido.' });
+    }
+
+    const conteudo = typeof req.body.conteudo === 'string' ? req.body.conteudo : '';
+    if (!conteudo) {
+      return res.status(400).json({ message: 'O conteúdo da receita é obrigatório.' });
+    }
+    if (conteudo.length > 200000) {
+      return res.status(400).json({ message: 'A receita deve ter no máximo 200.000 caracteres.' });
+    }
+
+    const conteudoOriginal = typeof req.body.conteudoOriginal === 'string' ? req.body.conteudoOriginal : '';
+    if (conteudoOriginal.length > 200000) {
+      return res.status(400).json({ message: 'A receita original deve ter no máximo 200.000 caracteres.' });
+    }
+
+    const descricao = typeof req.body.descricao === 'string' ? req.body.descricao.trim() : '';
+    if (descricao.length > 180) {
+      return res.status(400).json({ message: 'A descrição da receita deve ter no máximo 180 caracteres.' });
+    }
+
+    const preview = typeof req.body.preview === 'string' ? req.body.preview.trim() : '';
+    if (preview.length > 2000) {
+      return res.status(400).json({ message: 'A prévia da receita deve ter no máximo 2.000 caracteres.' });
+    }
+
+    const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+    if (!petCheck.ok) {
+      return res.status(petCheck.status).json({ message: petCheck.message });
+    }
+
+    if (appointmentId) {
+      const appointmentCheck = await ensureAppointmentLink(appointmentId, clienteId, petId, null);
+      if (!appointmentCheck.ok) {
+        return res.status(appointmentCheck.status).json({ message: appointmentCheck.message });
+      }
+    }
+
+    let recipeReference = null;
+    if (receitaId) {
+      const existingRecipe = await VetRecipe.findById(receitaId).select('_id descricao').lean();
+      if (!existingRecipe) {
+        return res.status(404).json({ message: 'Receita salva não encontrada.' });
+      }
+      recipeReference = existingRecipe;
+    }
+
+    const payload = {
+      cliente: clienteId,
+      pet: petId,
+      receita: recipeReference ? recipeReference._id : undefined,
+      appointment: appointmentId || undefined,
+      descricao: descricao || recipeReference?.descricao || 'Receita',
+      conteudo,
+      conteudoOriginal: conteudoOriginal || '',
+      preview: preview || '',
+    };
+
+    const userId = normalizeObjectId(req.user?.id || req.user?._id);
+    if (userId) {
+      payload.createdBy = userId;
+      payload.updatedBy = userId;
+    }
+
+    const created = await VetRecipeRecord.create(payload);
+    const record = await VetRecipeRecord.findById(created._id).lean();
+    return res.status(201).json(formatRecipeRecord(record));
+  } catch (error) {
+    console.error('POST /func/vet/receitas-registros', error);
+    return res.status(500).json({ message: 'Erro ao salvar receita do atendimento.' });
+  }
+});
+
+router.delete('/vet/receitas-registros/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const id = normalizeObjectId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+
+    const existing = await VetRecipeRecord.findById(id).lean();
+    if (!existing) {
+      return res.status(404).json({ message: 'Receita do atendimento não encontrada.' });
+    }
+
+    await VetRecipeRecord.deleteOne({ _id: id });
+    return res.status(204).send();
+  } catch (error) {
+    console.error('DELETE /func/vet/receitas-registros/:id', error);
+    return res.status(500).json({ message: 'Erro ao remover receita do atendimento.' });
   }
 });
 
