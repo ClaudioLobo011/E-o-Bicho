@@ -483,18 +483,21 @@ function ensureDocumentoModal() {
 
   const overlay = document.createElement('div');
   overlay.id = 'vet-documento-modal';
-  overlay.className = 'hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4';
+  overlay.className = 'hidden fixed inset-0 z-50 flex items-center justify-center p-4';
+  overlay.style.backgroundColor = 'rgba(15, 23, 42, 0.5)';
   overlay.setAttribute('aria-hidden', 'true');
 
   const dialog = document.createElement('div');
   dialog.className = 'w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl focus:outline-none';
+  dialog.style.maxHeight = 'calc(100vh - 2rem)';
   dialog.setAttribute('role', 'dialog');
   dialog.setAttribute('aria-modal', 'true');
   dialog.tabIndex = -1;
   overlay.appendChild(dialog);
 
   const layout = document.createElement('div');
-  layout.className = 'flex max-h-[90vh] flex-col overflow-hidden';
+  layout.className = 'flex flex-col overflow-hidden';
+  layout.style.maxHeight = '90vh';
   dialog.appendChild(layout);
 
   const header = document.createElement('div');
@@ -522,12 +525,12 @@ function ensureDocumentoModal() {
   header.appendChild(closeBtn);
 
   const content = document.createElement('div');
-  content.className = 'flex flex-1 flex-col overflow-hidden px-6 py-5';
+  content.className = 'flex flex-1 flex-col overflow-y-auto px-6 py-5';
   content.style.minHeight = '0';
   layout.appendChild(content);
 
   const bodyWrapper = document.createElement('div');
-  bodyWrapper.className = 'flex flex-col gap-5 lg:flex-row';
+  bodyWrapper.className = 'flex flex-1 flex-col gap-5 lg:flex-row';
   bodyWrapper.style.minHeight = '0';
   content.appendChild(bodyWrapper);
 
