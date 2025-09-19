@@ -39,19 +39,44 @@ export async function searchClientes(term) {
     if (!Array.isArray(list) || !els.cliSug) return;
 
     els.cliSug.innerHTML = list.map((u) => `
-<li class="px-3 py-2 hover:bg-gray-50 cursor-pointer" data-id="${u._id}" data-nome="${u.nome}" data-email="${u.email || ''}" data-celular="${u.celular || ''}">
+<li class="px-3 py-2 hover:bg-gray-50 cursor-pointer" data-id="${u._id}" data-nome="${u.nome}" data-email="${u.email || ''}" data-celular="${u.celular || ''}" data-documento="${u.doc || u.cpf || u.cnpj || u.inscricaoEstadual || ''}" data-cpf="${u.cpf || ''}" data-cnpj="${u.cnpj || ''}" data-inscricao-estadual="${u.inscricaoEstadual || ''}" data-tipo-conta="${u.tipoConta || ''}">
   <div class="font-medium text-gray-900">${u.nome}</div>
   <div class="text-xs text-gray-500">${u.email || ''}</div>
 </li>`).join('');
     els.cliSug.classList.remove('hidden');
 
     Array.from(els.cliSug.querySelectorAll('li')).forEach((li) => {
-      li.addEventListener('click', () => onSelectCliente({
-        _id: li.dataset.id,
-        nome: li.dataset.nome,
-        email: li.dataset.email || '',
-        celular: li.dataset.celular || '',
-      }));
+      li.addEventListener('click', () => {
+        const rawDoc = li.dataset.documento || '';
+        const cpf = li.dataset.cpf || '';
+        const cnpj = li.dataset.cnpj || '';
+        const inscricaoEstadual = li.dataset.inscricaoEstadual || '';
+        const tipoConta = li.dataset.tipoConta || '';
+        const resolvedDoc = pickFirst(rawDoc, cpf, cnpj, inscricaoEstadual);
+        const selection = {
+          _id: li.dataset.id,
+          nome: li.dataset.nome,
+          email: li.dataset.email || '',
+          celular: li.dataset.celular || '',
+        };
+        if (tipoConta) selection.tipoConta = tipoConta;
+        if (cpf) selection.cpf = cpf;
+        if (cnpj) selection.cnpj = cnpj;
+        if (inscricaoEstadual) selection.inscricaoEstadual = inscricaoEstadual;
+        if (resolvedDoc) {
+          const digits = String(resolvedDoc).replace(/\D+/g, '');
+          selection.documento = resolvedDoc;
+          selection.documentoPrincipal = resolvedDoc;
+          selection.doc = resolvedDoc;
+          selection.cpfCnpj = pickFirst(cpf, cnpj, resolvedDoc);
+          if (!selection.cpf && digits.length === 11) {
+            selection.cpf = resolvedDoc;
+          } else if (!selection.cnpj && digits.length === 14) {
+            selection.cnpj = resolvedDoc;
+          }
+        }
+        onSelectCliente(selection);
+      });
     });
   } catch {
     // silent failure
@@ -68,7 +93,20 @@ async function fetchClienteWithPhones(cliente) {
   const existingEmail = pickFirst(cliente?.email);
   const existingCelular = pickFirst(cliente?.celular);
   const existingTelefone = pickFirst(cliente?.telefone);
-  const needsHydration = !existingNome || !existingEmail || !pickFirst(existingCelular, existingTelefone);
+  const existingDocument = pickFirst(
+    cliente?.documento,
+    cliente?.documentoPrincipal,
+    cliente?.cpf,
+    cliente?.cpfCnpj,
+    cliente?.cnpj,
+    cliente?.inscricaoEstadual,
+    cliente?.doc,
+  );
+  const needsHydration =
+    !existingNome ||
+    !existingEmail ||
+    !pickFirst(existingCelular, existingTelefone) ||
+    !existingDocument;
 
   if (!needsHydration) {
     return {
@@ -101,13 +139,42 @@ async function fetchClienteWithPhones(cliente) {
 
     const payload = {
       ...cliente,
+      ...data,
       _id: clienteId,
       nome: pickFirst(existingNome, data.nome),
       email: pickFirst(existingEmail, data.email),
-      celular: primaryPhone,
     };
+    if (primaryPhone) {
+      payload.celular = primaryPhone;
+    }
     if (secondaryPhone) {
       payload.telefone = secondaryPhone;
+    }
+    const hydratedDocument = pickFirst(
+      existingDocument,
+      data?.documento,
+      data?.documentoPrincipal,
+      data?.cpf,
+      data?.cpfCnpj,
+      data?.cnpj,
+      data?.inscricaoEstadual,
+    );
+    if (hydratedDocument) {
+      const digits = String(hydratedDocument).replace(/\D+/g, '');
+      if (!payload.documento) payload.documento = hydratedDocument;
+      if (!payload.documentoPrincipal) payload.documentoPrincipal = hydratedDocument;
+      if (!payload.doc) payload.doc = hydratedDocument;
+      if (!payload.cpfCnpj) {
+        payload.cpfCnpj = pickFirst(data?.cpfCnpj, data?.cpf, data?.cnpj, hydratedDocument);
+      }
+      if (!payload.cpf && digits.length === 11) {
+        payload.cpf = hydratedDocument;
+      } else if (!payload.cnpj && digits.length === 14) {
+        payload.cnpj = hydratedDocument;
+      }
+    }
+    if (data?.inscricaoEstadual && !payload.inscricaoEstadual) {
+      payload.inscricaoEstadual = data.inscricaoEstadual;
     }
     return payload;
   } catch {

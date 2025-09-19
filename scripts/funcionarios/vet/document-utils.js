@@ -43,6 +43,11 @@ export const KEYWORD_GROUPS = [
       { token: '<EnderecoClinica>', description: 'Endereço completo da clínica.' },
       { token: '<TelefoneClinica>', description: 'Telefone principal da clínica.' },
       { token: '<WhatsappClinica>', description: 'WhatsApp oficial da clínica.' },
+      {
+        token: '<LogoClinica>',
+        description:
+          'Logo da clínica. Ajuste o tamanho com atributos como largura="160" ou altura="120".',
+      },
       { token: '<DataAtual>', description: 'Data atual no formato local.' },
       { token: '<HoraAtual>', description: 'Horário atual.' },
       { token: '<DataHoraAtual>', description: 'Data e hora atuais.' },
@@ -158,6 +163,227 @@ function getKeywordRegexes(token) {
   return keywordRegexCache.get(normalizedToken) || [];
 }
 
+function escapeHtmlAttribute(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function getWindowOrigin() {
+  if (typeof window === 'undefined') return '';
+  const { location } = window;
+  if (!location) return '';
+
+  if (location.origin && location.origin !== 'null') {
+    return location.origin;
+  }
+
+  const protocol = location.protocol || '';
+  const host = location.host || '';
+  if (protocol && host) {
+    return `${protocol}//${host}`;
+  }
+
+  return '';
+}
+
+export function resolveDocumentAssetUrl(path) {
+  const raw = typeof path === 'string' ? path.trim() : '';
+  if (!raw) return '';
+
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(raw)) {
+    return raw;
+  }
+
+  const normalized = raw.startsWith('/') ? raw : `/${raw}`;
+  const origin = getWindowOrigin();
+  if (!origin) {
+    return normalized;
+  }
+
+  try {
+    return new URL(normalized, origin).href;
+  } catch (error) {
+    console.error('resolveDocumentAssetUrl', error);
+    return `${origin.replace(/\/$/, '')}${normalized}`;
+  }
+}
+
+const ALLOWED_DIMENSION_UNITS = ['px', '%', 'em', 'rem', 'vw', 'vh', 'vmin', 'vmax', 'cm', 'mm', 'in'];
+
+function normalizeDimension(value, { fallbackUnit = 'px' } = {}) {
+  const str = String(value || '').trim();
+  if (!str) return '';
+  if (str.toLowerCase() === 'auto') return 'auto';
+  const match = str.match(/^(\d+(?:\.\d+)?)([a-z%]*)$/i);
+  if (!match) return '';
+  const unit = (match[2] || fallbackUnit).toLowerCase();
+  if (!ALLOWED_DIMENSION_UNITS.includes(unit)) return '';
+  return `${match[1]}${unit}`;
+}
+
+function parseTagAttributes(rawAttrs) {
+  const attrs = {};
+  const source = typeof rawAttrs === 'string' ? rawAttrs : '';
+  if (!source) return attrs;
+
+  const pattern = /([a-zA-Z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
+  let match;
+  while ((match = pattern.exec(source))) {
+    const name = match[1] ? match[1].toLowerCase() : '';
+    if (!name) continue;
+    const value = match[2] ?? match[3] ?? match[4] ?? '';
+    attrs[name] = value;
+  }
+  return attrs;
+}
+
+function pickAttributeValue(attrs, ...names) {
+  if (!attrs) return '';
+  for (const name of names) {
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(attrs, key)) {
+      const raw = attrs[key];
+      if (raw === null || raw === undefined) continue;
+      const value = String(raw).trim();
+      if (value) return value;
+    }
+  }
+  return '';
+}
+
+function extractTokenTagName(token) {
+  const raw = typeof token === 'string' ? token.trim() : '';
+  if (!raw) return '';
+  const angleMatch = raw.match(/^<\s*([^>\s]+)\s*>$/);
+  if (angleMatch && angleMatch[1]) {
+    return angleMatch[1].trim();
+  }
+  return raw.replace(/[<>]/g, '').trim();
+}
+
+function buildLogoStyles({ width, height, maxWidth, maxHeight, defaultMaxWidth }) {
+  const styles = [];
+  const normalizedWidth = width && width !== 'auto' ? width : '';
+  const normalizedHeight = height && height !== 'auto' ? height : '';
+  const normalizedMaxWidth = maxWidth && maxWidth !== 'auto' ? maxWidth : '';
+  const normalizedMaxHeight = maxHeight && maxHeight !== 'auto' ? maxHeight : '';
+  const normalizedDefault = normalizeDimension(defaultMaxWidth);
+
+  if (normalizedWidth) {
+    styles.push(`width:${normalizedWidth}`);
+  }
+
+  const resolvedMaxWidth = normalizedMaxWidth || (!normalizedWidth ? normalizedDefault : '100%');
+  if (resolvedMaxWidth) {
+    styles.push(`max-width:${resolvedMaxWidth}`);
+  }
+
+  if (normalizedHeight) {
+    styles.push(`height:${normalizedHeight}`);
+  } else {
+    styles.push('height:auto');
+  }
+
+  if (normalizedMaxHeight) {
+    styles.push(`max-height:${normalizedMaxHeight}`);
+  }
+
+  styles.push('display:block');
+  return styles.join('; ');
+}
+
+function applyLogoTokenReplacement(html, token, data) {
+  const tagName = extractTokenTagName(token);
+  if (!tagName) return html;
+
+  const src = typeof data?.url === 'string' ? data.url.trim() : '';
+  const defaultAlt = typeof data?.alt === 'string' ? data.alt.trim() : '';
+  const defaultMaxWidth = data?.defaultMaxWidth;
+  const pattern = new RegExp(`<${escapeRegex(tagName)}(?:\\s+([^>]*?))?\\s*/?>`, 'gi');
+
+  if (!src) {
+    return html.replace(pattern, '');
+  }
+
+  return html.replace(pattern, (_, attrText = '') => {
+    const attrs = parseTagAttributes(attrText);
+    const widthAttr = pickAttributeValue(attrs, 'width', 'largura', 'data-width');
+    const heightAttr = pickAttributeValue(attrs, 'height', 'altura', 'data-height');
+    const maxWidthAttr = pickAttributeValue(
+      attrs,
+      'max-width',
+      'largura-maxima',
+      'maxwidth',
+      'data-max-width',
+    );
+    const maxHeightAttr = pickAttributeValue(
+      attrs,
+      'max-height',
+      'altura-maxima',
+      'maxheight',
+      'data-max-height',
+    );
+    const altAttr = pickAttributeValue(attrs, 'alt', 'descricao');
+    const titleAttr = pickAttributeValue(attrs, 'title', 'titulo');
+    const classAttr = pickAttributeValue(attrs, 'class');
+    const idAttr = pickAttributeValue(attrs, 'id');
+
+    const width = normalizeDimension(widthAttr);
+    const height = normalizeDimension(heightAttr);
+    const maxWidth = normalizeDimension(maxWidthAttr);
+    const maxHeight = normalizeDimension(maxHeightAttr);
+    const style = buildLogoStyles({ width, height, maxWidth, maxHeight, defaultMaxWidth });
+
+    const attributes = [
+      `src="${escapeHtmlAttribute(src)}"`,
+      `alt="${escapeHtmlAttribute(altAttr || defaultAlt || '')}"`,
+    ];
+
+    if (style) {
+      attributes.push(`style="${escapeHtmlAttribute(style)}"`);
+    }
+
+    if (titleAttr) {
+      attributes.push(`title="${escapeHtmlAttribute(titleAttr)}"`);
+    }
+
+    if (classAttr && /^[\w\-\s]+$/.test(classAttr)) {
+      attributes.push(`class="${escapeHtmlAttribute(classAttr)}"`);
+    }
+
+    if (idAttr && /^[A-Za-z][-A-Za-z0-9_:.]*$/.test(idAttr)) {
+      attributes.push(`id="${escapeHtmlAttribute(idAttr)}"`);
+    }
+
+    return `<img ${attributes.join(' ')} />`;
+  });
+}
+
+function getReplacementKind(value) {
+  if (!value || typeof value !== 'object') return '';
+  return value.__kind || value.kind || '';
+}
+
+function isSpecialReplacement(value) {
+  return !!getReplacementKind(value);
+}
+
+function applySpecialReplacement(html, token, value) {
+  const kind = getReplacementKind(value);
+  switch (kind) {
+    case 'logo':
+      return applyLogoTokenReplacement(html, token, value);
+    default:
+      return html;
+  }
+}
+
 export function keywordAppearsInContent(content, token) {
   if (typeof content !== 'string') return false;
   const regexes = getKeywordRegexes(token);
@@ -178,6 +404,16 @@ export function applyKeywordReplacements(html, replacements = {}) {
 
   let output = html;
   Object.entries(replacements).forEach(([token, rawValue]) => {
+    if (!isSpecialReplacement(rawValue)) return;
+    try {
+      output = applySpecialReplacement(output, token, rawValue);
+    } catch (error) {
+      console.error('applyKeywordReplacements', token, error);
+    }
+  });
+
+  Object.entries(replacements).forEach(([token, rawValue]) => {
+    if (isSpecialReplacement(rawValue)) return;
     const regexes = getKeywordRegexes(token);
     if (!regexes.length) return;
     const value = escapeHtml(rawValue);
@@ -274,11 +510,15 @@ export function openDocumentPrintWindow(html, { title = 'Documento', styles = ''
   const safeContent = sanitized && sanitized.trim()
     ? sanitized
     : '<p style="font-size:14px;color:#475569;">Documento sem conteúdo para impressão.</p>';
+  const origin = getWindowOrigin();
+  const baseHref = origin ? `${origin.replace(/\/$/, '')}/` : '';
+  const baseTag = baseHref ? `<base href="${escapeHtmlAttribute(baseHref)}" />` : '';
 
   const documentHtml = `<!DOCTYPE html>
     <html lang="pt-BR">
       <head>
         <meta charset="utf-8" />
+        ${baseTag}
         <title>${title ? String(title).replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'Documento'}</title>
         <style>
           :root { color-scheme: light; }

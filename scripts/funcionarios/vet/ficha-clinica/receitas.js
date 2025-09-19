@@ -22,6 +22,7 @@ import {
   openDocumentPrintWindow,
   applyKeywordReplacements,
   keywordAppearsInContent,
+  resolveDocumentAssetUrl,
 } from '../document-utils.js';
 
 const receitaModal = {
@@ -330,6 +331,24 @@ async function fetchStoreInfoById(storeId) {
   return promise;
 }
 
+function buildClinicLogoReplacement({ agenda, store, clinicName }) {
+  const fallbackUrl = resolveDocumentAssetUrl('/public/image/logo.svg');
+  const alt = pickFirst(
+    clinicName,
+    store?.nome,
+    agenda?.storeNome,
+    agenda?.empresaNome,
+    'Logo da clínica',
+  );
+
+  return {
+    __kind: 'logo',
+    url: fallbackUrl,
+    alt: alt || 'Logo da clínica',
+    defaultMaxWidth: '240px',
+  };
+}
+
 async function buildKeywordReplacements() {
   const replacements = {};
   KEYWORD_GROUPS.forEach((group) => {
@@ -341,6 +360,10 @@ async function buildKeywordReplacements() {
       }
     });
   });
+
+  if (Object.prototype.hasOwnProperty.call(replacements, '<LogoClinica>')) {
+    replacements['<LogoClinica>'] = buildClinicLogoReplacement({ agenda: null, store: null, clinicName: '' });
+  }
 
   try {
     const tutor = state.selectedCliente || null;
@@ -466,6 +489,11 @@ async function buildKeywordReplacements() {
     replacements['<DataAtual>'] = formatDateDisplay(now);
     replacements['<HoraAtual>'] = formatTimeDisplay(now);
     replacements['<DataHoraAtual>'] = formatDateTimeDisplay(now);
+
+    const clinicName = replacements['<NomeClinica>'] || '';
+    if (Object.prototype.hasOwnProperty.call(replacements, '<LogoClinica>')) {
+      replacements['<LogoClinica>'] = buildClinicLogoReplacement({ agenda, store, clinicName });
+    }
   } catch (error) {
     console.error('buildKeywordReplacements', error);
   }
