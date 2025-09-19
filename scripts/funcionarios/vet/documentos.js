@@ -73,6 +73,10 @@ let fallbackTextarea = null;
 let isRedirecting = false;
 let keywordsContainer;
 let keywordButtons = [];
+let modeToggle = null;
+let modeButtons = [];
+let codeTextarea = null;
+let editorMode = 'visual';
 
 function getAuthToken() {
   try {
@@ -252,9 +256,159 @@ function getPreviewText(html) {
   return text;
 }
 
+function formatCodeEditorValue(html) {
+  if (!html) return '';
+  const value = String(html)
+    .replace(/\r?\n/g, '\n')
+    .replace(/></g, '>\n<')
+    .replace(/&nbsp;/g, ' ');
+  return value.replace(/\n{3,}/g, '\n\n');
+}
+
+function setCodeEditorContent(html) {
+  if (!codeTextarea) return;
+  const value = typeof html === 'string' ? html : '';
+  codeTextarea.value = value ? formatCodeEditorValue(value) : '';
+}
+
+function getCodeEditorValue() {
+  return codeTextarea ? codeTextarea.value || '' : '';
+}
+
+function syncCodeEditorFromVisual() {
+  if (!codeTextarea) return;
+  setCodeEditorContent(getVisualEditorHtml());
+}
+
+function updateModeToggleButtons() {
+  if (!modeButtons.length) return;
+  modeButtons.forEach((button) => {
+    if (!button) return;
+    const mode = button.dataset.mode === 'code' ? 'code' : 'visual';
+    const isActive = mode === editorMode;
+    button.classList.toggle('vet-doc-mode-btn-active', isActive);
+    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+}
+
+function setModeToggleDisabled(disabled) {
+  if (!modeButtons.length) return;
+  modeButtons.forEach((button) => {
+    if (!button) return;
+    button.disabled = !!disabled;
+  });
+}
+
+function updateEditorModeVisibility() {
+  if (editorContainer) {
+    editorContainer.classList.toggle('hidden', editorMode === 'code');
+  }
+  if (codeTextarea) {
+    codeTextarea.classList.toggle('hidden', editorMode !== 'code');
+  }
+}
+
+function focusCurrentEditor() {
+  if (state.isSaving) return;
+  if (editorMode === 'code') {
+    if (codeTextarea && !codeTextarea.disabled) {
+      const length = codeTextarea.value.length;
+      codeTextarea.focus();
+      try {
+        codeTextarea.setSelectionRange(length, length);
+      } catch (_) {
+        /* ignore selection errors */
+      }
+    }
+    return;
+  }
+  if (quill) {
+    quill.focus();
+    return;
+  }
+  if (fallbackTextarea && !fallbackTextarea.disabled) {
+    fallbackTextarea.focus();
+    try {
+      const length = fallbackTextarea.value.length;
+      fallbackTextarea.setSelectionRange(length, length);
+    } catch (_) {
+      /* ignore selection errors */
+    }
+  }
+}
+
+function setEditorMode(mode, { focus = true, sync = true } = {}) {
+  const target = mode === 'code' ? 'code' : 'visual';
+  if (target === editorMode) {
+    if (target === 'code' && sync) {
+      syncCodeEditorFromVisual();
+    }
+    updateEditorModeVisibility();
+    updateModeToggleButtons();
+    if (focus) focusCurrentEditor();
+    return;
+  }
+
+  if (target === 'code' && sync) {
+    syncCodeEditorFromVisual();
+  }
+
+  if (target === 'visual' && sync) {
+    const codeValue = getCodeEditorValue();
+    applyVisualEditorContent(codeValue);
+    syncCodeEditorFromVisual();
+  }
+
+  editorMode = target;
+  updateEditorModeVisibility();
+  updateModeToggleButtons();
+  setEditorDisabled(state.isSaving);
+  if (focus) focusCurrentEditor();
+}
+
+function initEditorModeToggle() {
+  if (!modeToggle) return;
+  modeButtons = Array.from(modeToggle.querySelectorAll('[data-mode]')).filter(Boolean);
+  modeButtons.forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (state.isSaving) return;
+      const targetMode = button.dataset.mode === 'code' ? 'code' : 'visual';
+      setEditorMode(targetMode);
+    });
+  });
+  updateModeToggleButtons();
+  updateEditorModeVisibility();
+}
+
+function insertIntoCodeEditor(text) {
+  if (!codeTextarea) return;
+  const textarea = codeTextarea;
+  const value = textarea.value || '';
+  const start = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : value.length;
+  const end = typeof textarea.selectionEnd === 'number' ? textarea.selectionEnd : start;
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  const scroll = textarea.scrollTop;
+  textarea.value = `${before}${text}${after}`;
+  const cursor = start + text.length;
+  try {
+    textarea.focus();
+    textarea.setSelectionRange(cursor, cursor);
+  } catch (_) {
+    /* ignore selection errors */
+  }
+  textarea.scrollTop = scroll;
+}
+
 function insertKeyword(token) {
   const text = typeof token === 'string' ? token : String(token || '');
   if (!text || state.isSaving) return;
+
+  if (editorMode === 'code' && codeTextarea) {
+    insertIntoCodeEditor(text);
+    return;
+  }
 
   if (quill) {
     quill.focus();
@@ -387,7 +541,7 @@ function initEditor() {
   showToastMessage('Editor avançado não pôde ser carregado. Utilizando editor simples.', 'warning');
 }
 
-function setEditorContent(html) {
+function applyVisualEditorContent(html) {
   if (quill) {
     if (html) {
       const delta = quill.clipboard.convert(html);
@@ -402,11 +556,17 @@ function setEditorContent(html) {
   }
 }
 
+function setEditorContent(html) {
+  applyVisualEditorContent(html);
+  syncCodeEditorFromVisual();
+  updateEditorModeVisibility();
+}
+
 function clearEditor() {
   setEditorContent('');
 }
 
-function getEditorHtml() {
+function getVisualEditorHtml() {
   if (quill) {
     return quill.root.innerHTML;
   }
@@ -418,7 +578,17 @@ function getEditorHtml() {
   return '';
 }
 
+function getEditorHtml() {
+  if (editorMode === 'code' && codeTextarea) {
+    return getCodeEditorValue();
+  }
+  return getVisualEditorHtml();
+}
+
 function getEditorPlainText() {
+  if (editorMode === 'code' && codeTextarea) {
+    return (codeTextarea.value || '').trim();
+  }
   if (quill) {
     return quill.getText().trim();
   }
@@ -433,8 +603,12 @@ function setEditorDisabled(disabled) {
     quill.enable(!disabled);
   }
   if (fallbackTextarea) {
-    fallbackTextarea.disabled = !!disabled;
+    fallbackTextarea.disabled = !!disabled || editorMode === 'code';
   }
+  if (codeTextarea) {
+    codeTextarea.disabled = !!disabled || editorMode !== 'code';
+  }
+  setModeToggleDisabled(disabled);
 }
 
 function updateSaveButton() {
@@ -776,6 +950,8 @@ function init() {
   errorEl = document.getElementById('vet-doc-error');
   countBadge = document.getElementById('vet-doc-count');
   keywordsContainer = document.getElementById('vet-doc-keywords');
+  modeToggle = document.getElementById('vet-doc-mode-toggle');
+  codeTextarea = document.getElementById('vet-doc-code');
 
   if (!form || !descriptionInput || !editorContainer || !listEl) {
     console.error('Elementos essenciais não encontrados na página de documentos.');
@@ -785,6 +961,10 @@ function init() {
   updateFormMode();
   updateEmptyState();
   initEditor();
+  syncCodeEditorFromVisual();
+  initEditorModeToggle();
+  setEditorMode(editorMode, { focus: false, sync: true });
+  setEditorDisabled(state.isSaving);
   renderKeywords();
 
   form.addEventListener('submit', onSubmit);
