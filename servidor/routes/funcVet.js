@@ -98,6 +98,15 @@ function sanitizeFolderSegment(name, fallback = '') {
   return secondary || '';
 }
 
+function sanitizePetCode(value) {
+  if (value === null || value === undefined) return '';
+  const withoutPrefix = sanitizeFileName(value)
+    .replace(/^pet[-_\s]*/i, '')
+    .trim();
+  if (!withoutPrefix) return '';
+  return sanitizeFolderSegment(withoutPrefix);
+}
+
 function ensureFileNameWithExtension(name, extension) {
   if (!extension) return name || '';
   const ext = extension.startsWith('.') ? extension : `.${extension}`;
@@ -660,24 +669,48 @@ router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, asyn
     }
 
     const appointmentDoc = appointmentCheck.appointment || null;
-    let appointmentFolderName = '';
-    if (appointmentDoc) {
-      const rawCode = typeof appointmentDoc.codigoVenda === 'string' ? appointmentDoc.codigoVenda.trim() : '';
-      if (rawCode) {
-        appointmentFolderName = sanitizeFolderSegment(rawCode, rawCode);
-      } else if (appointmentDoc._id) {
-        appointmentFolderName = sanitizeFolderSegment(`atendimento-${appointmentDoc._id}`);
-      }
-    }
-    if (!appointmentFolderName) {
-      appointmentFolderName = sanitizeFolderSegment('sem-atendimento') || 'sem-atendimento';
-    }
+    const rawAppointmentCode =
+      typeof appointmentDoc?.codigoVenda === 'string' ? appointmentDoc.codigoVenda.trim() : '';
+    const appointmentFallbackSegment = appointmentDoc?._id
+      ? `codigo_${appointmentDoc._id}`
+      : 'codigo_sem-atendimento';
+    const appointmentFolderName =
+      sanitizeFolderSegment(
+        rawAppointmentCode ? `codigo_${rawAppointmentCode}` : '',
+        appointmentFallbackSegment,
+      ) || sanitizeFolderSegment(appointmentFallbackSegment) || appointmentFallbackSegment;
 
     const petFallbackId = pet ? String(pet).slice(-6) || String(pet) : 'pet';
-    const petFolderName = sanitizeFolderSegment(petDoc?.nome || '', `pet-${petFallbackId}`) || `pet-${petFallbackId}`;
+    const candidatePetCodes = [
+      petDoc?.codigoPet,
+      petDoc?.codigo,
+      petDoc?.codigo_pet,
+      petDoc?.codigoDoPet,
+      petDoc?.codigoInterno,
+      petDoc?.identificador,
+      appointmentDoc?.petCodigo,
+      appointmentDoc?.codigoPet,
+      appointmentDoc?.pet?.codigo,
+      petDoc?.microchip,
+    ];
+    let sanitizedPetCode = '';
+    for (const candidate of candidatePetCodes) {
+      const sanitized = sanitizePetCode(candidate);
+      if (sanitized) {
+        sanitizedPetCode = sanitized;
+        break;
+      }
+    }
+    const petFallbackSegment = `pet_${petFallbackId}`;
+    const petFolderName =
+      sanitizeFolderSegment(
+        sanitizedPetCode ? `pet_${sanitizedPetCode}` : '',
+        petFallbackSegment,
+      ) || sanitizeFolderSegment(petFallbackSegment) || petFallbackSegment;
 
-    const typeFolderName = sanitizeFolderSegment(isExameAttachment ? 'Exames' : 'Anexos') || (isExameAttachment ? 'Exames' : 'Anexos');
-    const folderPath = [tutorFolderName, appointmentFolderName, petFolderName, typeFolderName];
+    const typeFolderName = sanitizeFolderSegment(isExameAttachment ? 'Exame' : 'Anexo')
+      || (isExameAttachment ? 'Exame' : 'Anexo');
+    const folderPath = [tutorFolderName, petFolderName, appointmentFolderName, typeFolderName];
 
     const rawNames = req.body['nomes[]'];
     const providedNames = Array.isArray(rawNames)
