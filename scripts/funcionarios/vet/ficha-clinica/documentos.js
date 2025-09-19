@@ -22,6 +22,7 @@ import {
   openDocumentPrintWindow,
   applyKeywordReplacements,
   keywordAppearsInContent,
+  resolveDocumentAssetUrl,
 } from '../document-utils.js';
 
 const documentoModal = {
@@ -331,7 +332,7 @@ async function fetchStoreInfoById(storeId) {
 }
 
 function buildClinicLogoReplacement({ agenda, store, clinicName }) {
-  const fallbackUrl = '/public/image/logo.svg';
+  const fallbackUrl = resolveDocumentAssetUrl('/public/image/logo.svg');
   const alt = pickFirst(
     clinicName,
     store?.nome,

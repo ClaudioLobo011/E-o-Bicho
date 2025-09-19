@@ -173,6 +173,46 @@ function escapeHtmlAttribute(value) {
     .replace(/>/g, '&gt;');
 }
 
+function getWindowOrigin() {
+  if (typeof window === 'undefined') return '';
+  const { location } = window;
+  if (!location) return '';
+
+  if (location.origin && location.origin !== 'null') {
+    return location.origin;
+  }
+
+  const protocol = location.protocol || '';
+  const host = location.host || '';
+  if (protocol && host) {
+    return `${protocol}//${host}`;
+  }
+
+  return '';
+}
+
+export function resolveDocumentAssetUrl(path) {
+  const raw = typeof path === 'string' ? path.trim() : '';
+  if (!raw) return '';
+
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(raw)) {
+    return raw;
+  }
+
+  const normalized = raw.startsWith('/') ? raw : `/${raw}`;
+  const origin = getWindowOrigin();
+  if (!origin) {
+    return normalized;
+  }
+
+  try {
+    return new URL(normalized, origin).href;
+  } catch (error) {
+    console.error('resolveDocumentAssetUrl', error);
+    return `${origin.replace(/\/$/, '')}${normalized}`;
+  }
+}
+
 const ALLOWED_DIMENSION_UNITS = ['px', '%', 'em', 'rem', 'vw', 'vh', 'vmin', 'vmax', 'cm', 'mm', 'in'];
 
 function normalizeDimension(value, { fallbackUnit = 'px' } = {}) {
@@ -470,11 +510,15 @@ export function openDocumentPrintWindow(html, { title = 'Documento', styles = ''
   const safeContent = sanitized && sanitized.trim()
     ? sanitized
     : '<p style="font-size:14px;color:#475569;">Documento sem conteúdo para impressão.</p>';
+  const origin = getWindowOrigin();
+  const baseHref = origin ? `${origin.replace(/\/$/, '')}/` : '';
+  const baseTag = baseHref ? `<base href="${escapeHtmlAttribute(baseHref)}" />` : '';
 
   const documentHtml = `<!DOCTYPE html>
     <html lang="pt-BR">
       <head>
         <meta charset="utf-8" />
+        ${baseTag}
         <title>${title ? String(title).replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'Documento'}</title>
         <style>
           :root { color-scheme: light; }
