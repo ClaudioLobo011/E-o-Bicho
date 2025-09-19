@@ -273,7 +273,7 @@ function createManualConsultaCard(consulta) {
   card.setAttribute('title', 'Clique para editar a consulta');
 
   const header = document.createElement('div');
-  header.className = 'flex items-start gap-3';
+  header.className = 'flex items-start gap-3 pr-16';
   card.appendChild(header);
 
   const icon = document.createElement('div');
@@ -284,6 +284,34 @@ function createManualConsultaCard(consulta) {
   const headerText = document.createElement('div');
   headerText.className = 'flex-1';
   header.appendChild(headerText);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-700 transition hover:bg-sky-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-200';
+  removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
+  removeBtn.title = 'Remover consulta';
+
+  const toggleRemoveDisabled = (disabled) => {
+    removeBtn.disabled = !!disabled;
+    removeBtn.classList.toggle('opacity-60', !!disabled);
+    removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
+  };
+
+  removeBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    toggleRemoveDisabled(true);
+    Promise.resolve(deleteConsulta(consulta))
+      .catch((error) => {
+        console.error('removeConsulta', error);
+      })
+      .finally(() => {
+        toggleRemoveDisabled(false);
+      });
+  });
+
+  card.appendChild(removeBtn);
 
   const title = document.createElement('h3');
   title.className = 'text-sm font-semibold text-sky-700';
@@ -340,6 +368,68 @@ function createManualConsultaCard(consulta) {
   });
 
   return card;
+}
+
+async function deleteConsulta(record, options = {}) {
+  const { skipConfirm = false } = options || {};
+  const consulta = record && typeof record === 'object' ? record : {};
+  const consultaId = normalizeId(consulta.id || consulta._id);
+  if (!consultaId) {
+    notify('Não foi possível identificar a consulta selecionada.', 'error');
+    return false;
+  }
+
+  if (!ensureTutorAndPetSelected()) {
+    return false;
+  }
+
+  const serviceName = pickFirst(consulta.servicoNome);
+  if (!skipConfirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+    const question = serviceName
+      ? `Remover o registro de consulta vinculado ao serviço "${serviceName}"?`
+      : 'Remover este registro de consulta?';
+    const confirmed = window.confirm(question);
+    if (!confirmed) {
+      return false;
+    }
+  }
+
+  state.consultasLoading = true;
+  updateConsultaAgendaCard();
+
+  try {
+    const response = await api(`/func/vet/consultas/${consultaId}`, {
+      method: 'DELETE',
+    });
+
+    let data = null;
+    if (response.status !== 204) {
+      data = await response.json().catch(() => (response.ok ? {} : {}));
+    }
+
+    if (!response.ok) {
+      const message = typeof data?.message === 'string' ? data.message : 'Erro ao remover consulta.';
+      throw new Error(message);
+    }
+
+    const nextConsultas = (Array.isArray(state.consultas) ? state.consultas : []).filter((item) => {
+      const itemId = normalizeId(item?.id || item?._id);
+      if (itemId) {
+        return itemId !== consultaId;
+      }
+      return item !== consulta;
+    });
+    state.consultas = nextConsultas;
+    notify('Consulta removida com sucesso.', 'success');
+    return true;
+  } catch (error) {
+    console.error('deleteConsulta', error);
+    notify(error.message || 'Erro ao remover consulta.', 'error');
+    return false;
+  } finally {
+    state.consultasLoading = false;
+    updateConsultaAgendaCard();
+  }
 }
 
 function getAnexoFileIconClass(file) {
@@ -737,10 +827,10 @@ function createVacinaCard(vacina) {
   if (!vacina) return null;
 
   const card = document.createElement('article');
-  card.className = 'rounded-xl border border-emerald-200 bg-white p-4 shadow-sm';
+  card.className = 'relative rounded-xl border border-emerald-200 bg-white p-4 shadow-sm';
 
   const header = document.createElement('div');
-  header.className = 'flex items-start gap-3';
+  header.className = 'flex items-start gap-3 pr-16';
   card.appendChild(header);
 
   const icon = document.createElement('div');
@@ -756,6 +846,51 @@ function createVacinaCard(vacina) {
   title.className = 'text-sm font-semibold text-emerald-700';
   title.textContent = 'Aplicação de vacina';
   headerText.appendChild(title);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 transition hover:bg-emerald-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-200';
+  removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
+  removeBtn.title = 'Remover vacina';
+
+  const toggleRemoveDisabled = (disabled) => {
+    removeBtn.disabled = !!disabled;
+    removeBtn.classList.toggle('opacity-60', !!disabled);
+    removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
+  };
+
+  removeBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const handler = state?.deleteVacina;
+    if (typeof handler !== 'function') {
+      notify('Não foi possível remover a vacina agora. Recarregue a página e tente novamente.', 'error');
+      return;
+    }
+
+    toggleRemoveDisabled(true);
+    let result;
+    try {
+      result = handler(vacina);
+    } catch (error) {
+      console.error('removeVacina handler', error);
+      toggleRemoveDisabled(false);
+      notify('Não foi possível remover a vacina.', 'error');
+      return;
+    }
+
+    Promise.resolve(result)
+      .catch((error) => {
+        console.error('removeVacina', error);
+        notify('Não foi possível remover a vacina.', 'error');
+      })
+      .finally(() => {
+        toggleRemoveDisabled(false);
+      });
+  });
+
+  card.appendChild(removeBtn);
 
   const serviceName = pickFirst(vacina?.servicoNome);
   if (serviceName) {

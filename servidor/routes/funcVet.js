@@ -1366,4 +1366,24 @@ router.put('/vet/consultas/:id', authMiddleware, requireStaff, async (req, res) 
   }
 });
 
+router.delete('/vet/consultas/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const id = normalizeObjectId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+
+    const existing = await VetConsultation.findById(id).lean();
+    if (!existing) {
+      return res.status(404).json({ message: 'Consulta não encontrada.' });
+    }
+
+    await VetConsultation.deleteOne({ _id: id });
+    return res.status(204).send();
+  } catch (error) {
+    console.error('DELETE /func/vet/consultas/:id', error);
+    return res.status(500).json({ message: 'Erro ao remover consulta.' });
+  }
+});
+
 module.exports = router;
