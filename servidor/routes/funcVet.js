@@ -6,6 +6,7 @@ const multer = require('multer');
 const authMiddleware = require('../middlewares/authMiddleware');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const Pet = require('../models/Pet');
+const User = require('../models/User');
 const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
 const VetConsultation = require('../models/VetConsultation');
@@ -25,6 +26,7 @@ const ALLOWED_ANEXO_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.pdf']);
 const ALLOWED_ANEXO_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'application/pdf']);
 const MAX_ANEXO_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const MAX_ANEXO_FILE_COUNT = 10;
+const EXAME_ATTACHMENT_OBSERVACAO_PREFIX = '__vet_exame__:';
 
 const uploadAnexoMiddleware = multer({
   storage: multer.memoryStorage(),
@@ -89,6 +91,22 @@ function sanitizeFileName(name) {
     .trim();
 }
 
+function sanitizeFolderSegment(name, fallback = '') {
+  const primary = sanitizeFileName(name).slice(0, 100);
+  if (primary) return primary;
+  const secondary = sanitizeFileName(fallback).slice(0, 100);
+  return secondary || '';
+}
+
+function sanitizePetCode(value) {
+  if (value === null || value === undefined) return '';
+  const withoutPrefix = sanitizeFileName(value)
+    .replace(/^pet[-_\s]*/i, '')
+    .trim();
+  if (!withoutPrefix) return '';
+  return sanitizeFolderSegment(withoutPrefix);
+}
+
 function ensureFileNameWithExtension(name, extension) {
   if (!extension) return name || '';
   const ext = extension.startsWith('.') ? extension : `.${extension}`;
@@ -117,14 +135,14 @@ function isVetService(serviceDoc = {}) {
 }
 
 async function ensurePetBelongsToCliente(petId, clienteId) {
-  const pet = await Pet.findById(petId).select('owner').lean();
+  const pet = await Pet.findById(petId).select('owner nome').lean();
   if (!pet) {
     return { ok: false, status: 404, message: 'Pet não encontrado.' };
   }
   if (clienteId && toStringSafe(pet.owner) !== clienteId) {
     return { ok: false, status: 400, message: 'Pet não pertence ao tutor informado.' };
   }
-  return { ok: true };
+  return { ok: true, pet };
 }
 
 async function fetchVetService(servicoId) {
@@ -143,7 +161,7 @@ async function ensureAppointmentLink(appointmentId, clienteId, petId, servicoId)
     return { ok: true, appointment: null };
   }
   const appointment = await Appointment.findById(appointmentId)
-    .select('cliente pet servico itens')
+    .select('cliente pet servico itens codigoVenda createdAt')
     .lean();
   if (!appointment) {
     return { ok: false, status: 404, message: 'Agendamento não encontrado.' };
@@ -628,6 +646,72 @@ router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, asyn
       return res.status(appointmentCheck.status).json({ message: appointmentCheck.message });
     }
 
+    const observacaoRaw = typeof req.body.observacao === 'string' ? req.body.observacao.trim() : '';
+    const isExameAttachment = observacaoRaw.startsWith(EXAME_ATTACHMENT_OBSERVACAO_PREFIX);
+
+    const clienteDoc = await User.findById(cliente)
+      .select('cpf nomeCompleto email celular telefone')
+      .lean();
+    if (!clienteDoc) {
+      return res.status(404).json({ message: 'Tutor não encontrado.' });
+    }
+
+    const petDoc = petCheck.pet || null;
+    const tutorCpfDigits = clienteDoc.cpf ? String(clienteDoc.cpf).replace(/\D+/g, '') : '';
+    const tutorFallbackId = cliente ? String(cliente).slice(-6) || String(cliente) : 'tutor';
+    let tutorFolderName = tutorCpfDigits;
+    if (!tutorFolderName) {
+      const fallbackTutorName = clienteDoc.nomeCompleto || clienteDoc.email || clienteDoc.celular || clienteDoc.telefone || '';
+      tutorFolderName = sanitizeFolderSegment(
+        fallbackTutorName,
+        `sem-cpf-${tutorFallbackId}`,
+      ) || `sem-cpf-${tutorFallbackId}`;
+    }
+
+    const appointmentDoc = appointmentCheck.appointment || null;
+    const rawAppointmentCode =
+      typeof appointmentDoc?.codigoVenda === 'string' ? appointmentDoc.codigoVenda.trim() : '';
+    const appointmentFallbackSegment = appointmentDoc?._id
+      ? `codigo_${appointmentDoc._id}`
+      : 'codigo_sem-atendimento';
+    const appointmentFolderName =
+      sanitizeFolderSegment(
+        rawAppointmentCode ? `codigo_${rawAppointmentCode}` : '',
+        appointmentFallbackSegment,
+      ) || sanitizeFolderSegment(appointmentFallbackSegment) || appointmentFallbackSegment;
+
+    const petFallbackId = pet ? String(pet).slice(-6) || String(pet) : 'pet';
+    const candidatePetCodes = [
+      petDoc?.codigoPet,
+      petDoc?.codigo,
+      petDoc?.codigo_pet,
+      petDoc?.codigoDoPet,
+      petDoc?.codigoInterno,
+      petDoc?.identificador,
+      appointmentDoc?.petCodigo,
+      appointmentDoc?.codigoPet,
+      appointmentDoc?.pet?.codigo,
+      petDoc?.microchip,
+    ];
+    let sanitizedPetCode = '';
+    for (const candidate of candidatePetCodes) {
+      const sanitized = sanitizePetCode(candidate);
+      if (sanitized) {
+        sanitizedPetCode = sanitized;
+        break;
+      }
+    }
+    const petFallbackSegment = `pet_${petFallbackId}`;
+    const petFolderName =
+      sanitizeFolderSegment(
+        sanitizedPetCode ? `pet_${sanitizedPetCode}` : '',
+        petFallbackSegment,
+      ) || sanitizeFolderSegment(petFallbackSegment) || petFallbackSegment;
+
+    const typeFolderName = sanitizeFolderSegment(isExameAttachment ? 'Exame' : 'Anexo')
+      || (isExameAttachment ? 'Exame' : 'Anexo');
+    const folderPath = [tutorFolderName, petFolderName, appointmentFolderName, typeFolderName];
+
     const rawNames = req.body['nomes[]'];
     const providedNames = Array.isArray(rawNames)
       ? rawNames
@@ -657,6 +741,7 @@ router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, asyn
         mimeType: file.mimetype || 'application/octet-stream',
         name: driveFileName,
         folderId,
+        folderPath,
       });
 
       if (uploadResult?.id) {
@@ -682,7 +767,7 @@ router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, asyn
       cliente,
       pet,
       appointment: appointment || undefined,
-      observacao: typeof req.body.observacao === 'string' ? req.body.observacao.trim() : '',
+      observacao: observacaoRaw,
       arquivos: uploadedFiles,
       createdBy: nowUserId || undefined,
       updatedBy: nowUserId || undefined,
