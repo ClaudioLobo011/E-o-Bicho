@@ -355,14 +355,14 @@ function createAnexoCard(anexo) {
   if (!arquivos.length) return null;
 
   const card = document.createElement('article');
-  card.className = 'rounded-xl border border-indigo-200 bg-white p-4 shadow-sm';
+  card.className = 'relative rounded-xl border border-indigo-200 bg-white p-4 shadow-sm';
   const anexoId = normalizeId(anexo.id || anexo._id);
   if (anexoId) {
     card.dataset.anexoId = anexoId;
   }
 
   const header = document.createElement('div');
-  header.className = 'flex items-start gap-3';
+  header.className = 'flex items-start gap-3 pr-16';
   card.appendChild(header);
 
   const icon = document.createElement('div');
@@ -374,13 +374,9 @@ function createAnexoCard(anexo) {
   headerText.className = 'flex-1';
   header.appendChild(headerText);
 
-  const headerActions = document.createElement('div');
-  headerActions.className = 'ml-auto flex items-start';
-  header.appendChild(headerActions);
-
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
-  removeBtn.className = 'inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
+  removeBtn.className = 'absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
   removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
   removeBtn.title = 'Remover anexo';
 
@@ -417,7 +413,7 @@ function createAnexoCard(anexo) {
       });
   });
 
-  headerActions.appendChild(removeBtn);
+  card.appendChild(removeBtn);
 
   const title = document.createElement('h3');
   title.className = 'text-sm font-semibold text-indigo-700';
@@ -527,10 +523,10 @@ function createDocumentoRegistroCard(entry) {
   if (!entry) return null;
 
   const card = document.createElement('article');
-  card.className = 'rounded-xl border border-emerald-200 bg-white p-4 shadow-sm';
+  card.className = 'relative rounded-xl border border-emerald-200 bg-white p-4 shadow-sm';
 
   const header = document.createElement('div');
-  header.className = 'flex items-start gap-3';
+  header.className = 'flex items-start gap-3 pr-16';
   card.appendChild(header);
 
   const icon = document.createElement('div');
@@ -571,8 +567,8 @@ function createDocumentoRegistroCard(entry) {
 
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
-  removeBtn.className = 'inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-200';
-  removeBtn.innerHTML = '<i class="fas fa-trash-can text-[12px]"></i><span>Remover</span>';
+  removeBtn.className = 'absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 transition hover:bg-emerald-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-200';
+  removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
   removeBtn.title = 'Remover documento';
   removeBtn.setAttribute('aria-label', 'Remover documento');
 
@@ -624,7 +620,7 @@ function createDocumentoRegistroCard(entry) {
   });
   actions.appendChild(printBtn);
 
-  actions.appendChild(removeBtn);
+  card.appendChild(removeBtn);
 
   return card;
 }
@@ -633,7 +629,7 @@ function createObservacaoCard(entry) {
   if (!entry) return null;
 
   const card = document.createElement('article');
-  card.className = 'rounded-xl border border-amber-200 bg-white p-4 shadow-sm';
+  card.className = 'relative rounded-xl border border-amber-200 bg-white p-4 shadow-sm';
 
   const observacaoId = normalizeId(entry.id || entry._id);
   if (observacaoId) {
@@ -641,7 +637,7 @@ function createObservacaoCard(entry) {
   }
 
   const header = document.createElement('div');
-  header.className = 'flex items-start gap-3';
+  header.className = 'flex items-start gap-3 pr-16';
   card.appendChild(header);
 
   const icon = document.createElement('div');
@@ -667,13 +663,9 @@ function createObservacaoCard(entry) {
     headerText.appendChild(meta);
   }
 
-  const actions = document.createElement('div');
-  actions.className = 'ml-auto flex items-start';
-  header.appendChild(actions);
-
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
-  removeBtn.className = 'inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 transition hover:bg-amber-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-amber-200';
+  removeBtn.className = 'absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 transition hover:bg-amber-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-amber-200';
   removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
   removeBtn.title = 'Remover observação';
 
@@ -714,7 +706,7 @@ function createObservacaoCard(entry) {
       });
   });
 
-  actions.appendChild(removeBtn);
+  card.appendChild(removeBtn);
 
   const content = document.createElement('p');
   content.className = 'mt-3 whitespace-pre-wrap text-sm text-gray-700 break-words';
@@ -818,7 +810,7 @@ function createExameCard(exame) {
   if (!exame) return null;
 
   const card = document.createElement('article');
-  card.className = 'rounded-xl border border-rose-200 bg-white p-4 shadow-sm';
+  card.className = 'relative rounded-xl border border-rose-200 bg-white p-4 shadow-sm';
 
   const exameId = normalizeId(exame.id || exame._id);
   if (exameId) {
@@ -826,7 +818,7 @@ function createExameCard(exame) {
   }
 
   const header = document.createElement('div');
-  header.className = 'flex items-start gap-3';
+  header.className = 'flex items-start gap-3 pr-16';
   card.appendChild(header);
 
   const icon = document.createElement('div');
@@ -838,13 +830,9 @@ function createExameCard(exame) {
   headerText.className = 'flex-1';
   header.appendChild(headerText);
 
-  const headerActions = document.createElement('div');
-  headerActions.className = 'ml-auto flex items-start';
-  header.appendChild(headerActions);
-
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
-  removeBtn.className = 'inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
+  removeBtn.className = 'absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
   removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
   removeBtn.title = 'Remover exame';
   removeBtn.setAttribute('aria-label', 'Remover exame');
@@ -885,7 +873,7 @@ function createExameCard(exame) {
       });
   });
 
-  headerActions.appendChild(removeBtn);
+  card.appendChild(removeBtn);
 
 
   const title = document.createElement('h3');
@@ -1029,10 +1017,10 @@ function createPesoCard(peso, baseline, previous) {
   if (!peso) return null;
 
   const card = document.createElement('article');
-  card.className = 'rounded-xl border border-orange-200 bg-white p-4 shadow-sm';
+  card.className = 'relative rounded-xl border border-orange-200 bg-white p-4 shadow-sm';
 
   const header = document.createElement('div');
-  header.className = 'flex items-start gap-3';
+  header.className = 'flex items-start gap-3 pr-16';
   card.appendChild(header);
 
   const icon = document.createElement('div');
@@ -1046,19 +1034,16 @@ function createPesoCard(peso, baseline, previous) {
 
   const removableId = sanitizeObjectId(peso.id || peso._id);
   if (removableId) {
-    const headerActions = document.createElement('div');
-    headerActions.className = 'ml-auto flex items-start';
-
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
-    removeBtn.className = 'flex h-8 w-8 items-center justify-center rounded-full text-rose-500 transition hover:bg-rose-100 hover:text-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-200';
-    removeBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+    removeBtn.className = 'absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-700 transition hover:bg-orange-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-orange-200';
+    removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
     removeBtn.title = 'Remover registro de peso';
     removeBtn.setAttribute('aria-label', 'Remover registro de peso');
 
     const toggleRemoveDisabled = (disabled) => {
       removeBtn.disabled = !!disabled;
-      removeBtn.classList.toggle('opacity-50', !!disabled);
+      removeBtn.classList.toggle('opacity-60', !!disabled);
       removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
     };
 
@@ -1090,8 +1075,7 @@ function createPesoCard(peso, baseline, previous) {
         });
     });
 
-    headerActions.appendChild(removeBtn);
-    header.appendChild(headerActions);
+    card.appendChild(removeBtn);
   }
 
   const title = document.createElement('h3');
