@@ -12,14 +12,16 @@ import {
   formatPetMicrochip,
   getSelectedPet,
   getAgendaStoreId,
+  normalizeId,
 } from './core.js';
-import { ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
+import { ensureTutorAndPetSelected, updateConsultaAgendaCard, getConsultasKey } from './consultas.js';
 import {
   KEYWORD_GROUPS,
   renderPreviewFrameContent,
   getPreviewText,
   openDocumentPrintWindow,
   applyKeywordReplacements,
+  keywordAppearsInContent,
 } from '../document-utils.js';
 
 const documentoModal = {
@@ -101,7 +103,7 @@ function renderKeywordReference() {
 function highlightKeywords(content) {
   const value = typeof content === 'string' ? content : '';
   documentoModal.keywordItems.forEach((item) => {
-    const found = value.includes(item.token);
+    const found = keywordAppearsInContent(value, item.token);
     item.element.classList.toggle('border-emerald-300', found);
     item.element.classList.toggle('bg-emerald-50', found);
     item.element.classList.toggle('text-emerald-700', found);
@@ -488,7 +490,8 @@ function ensureDocumentoModal() {
   overlay.setAttribute('aria-hidden', 'true');
 
   const dialog = document.createElement('div');
-  dialog.className = 'w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl focus:outline-none';
+  dialog.className = 'w-full overflow-hidden rounded-xl bg-white shadow-2xl focus:outline-none';
+  dialog.style.maxWidth = '72rem';
   dialog.style.maxHeight = 'calc(100vh - 2rem)';
   dialog.setAttribute('role', 'dialog');
   dialog.setAttribute('aria-modal', 'true');
@@ -535,7 +538,7 @@ function ensureDocumentoModal() {
   content.appendChild(bodyWrapper);
 
   const leftColumn = document.createElement('div');
-  leftColumn.className = 'flex flex-1 flex-col gap-4';
+  leftColumn.className = 'flex min-w-0 flex-1 flex-col gap-4';
   leftColumn.style.minHeight = '0';
   bodyWrapper.appendChild(leftColumn);
 
@@ -580,7 +583,7 @@ function ensureDocumentoModal() {
   leftColumn.appendChild(emptyState);
 
   const previewCard = document.createElement('div');
-  previewCard.className = 'flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner';
+  previewCard.className = 'flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner';
   previewCard.style.minHeight = '260px';
   leftColumn.appendChild(previewCard);
 
@@ -861,21 +864,196 @@ async function loadDocuments({ force = false } = {}) {
   }
 }
 
-function generateDocumentEntry(doc, resolvedHtml = '') {
-  const timestamp = new Date().toISOString();
+export async function loadDocumentosFromServer(options = {}) {
+  const { force = false } = options || {};
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+
+  if (!(clienteId && petId)) {
+    state.documentos = [];
+    state.documentosLoadKey = null;
+    state.documentosLoading = false;
+    updateConsultaAgendaCard();
+    return;
+  }
+
+  const key = getConsultasKey(clienteId, petId);
+  if (!force && key && state.documentosLoadKey === key) return;
+
+  state.documentosLoading = true;
+  updateConsultaAgendaCard();
+
+  try {
+    const params = new URLSearchParams({ clienteId, petId });
+    const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+    if (appointmentId) params.set('appointmentId', appointmentId);
+
+    const resp = await api(`/func/vet/documentos-registros?${params.toString()}`);
+    const payload = await resp.json().catch(() => (resp.ok ? [] : {}));
+    if (!resp.ok) {
+      const message = typeof payload?.message === 'string' ? payload.message : 'Erro ao carregar documentos do atendimento.';
+      throw new Error(message);
+    }
+
+    setDocumentoRegistrosInState(Array.isArray(payload) ? payload : []);
+  } catch (error) {
+    console.error('loadDocumentosFromServer', error);
+    state.documentos = [];
+    state.documentosLoadKey = null;
+    notify(error.message || 'Erro ao carregar documentos do atendimento.', 'error');
+  } finally {
+    state.documentosLoading = false;
+    updateConsultaAgendaCard();
+  }
+}
+
+function prepareDocumentRecordPayload(doc, resolvedHtml = '') {
+  if (!doc || typeof doc !== 'object') return null;
+  const docId = normalizeId(doc.id || doc._id);
+  if (!docId) return null;
   const finalHtml = typeof resolvedHtml === 'string' ? resolvedHtml : '';
-  const previewSource = finalHtml || doc.conteudo || '';
+  const previewSource = finalHtml || (typeof doc.conteudo === 'string' ? doc.conteudo : '');
   return {
-    id: `doc-reg-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
-    documentoId: doc.id,
-    descricao: doc.descricao || 'Documento',
+    documentoId: docId,
+    descricao: typeof doc.descricao === 'string' && doc.descricao.trim()
+      ? doc.descricao.trim()
+      : 'Documento',
     conteudo: finalHtml,
-    conteudoOriginal: doc.conteudo || '',
-    createdAt: timestamp,
-    updatedAt: timestamp,
+    conteudoOriginal: typeof doc.conteudo === 'string' ? doc.conteudo : '',
     preview: getPreviewText(previewSource),
   };
 }
+
+function normalizeDocumentoRegistroRecord(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = normalizeId(raw.id || raw._id);
+  if (!id) return null;
+
+  const documentoId = normalizeId(raw.documentoId || raw.documento);
+  const descricao = typeof raw.descricao === 'string' ? raw.descricao.trim() : '';
+  const conteudo = typeof raw.conteudo === 'string' ? raw.conteudo : '';
+  const conteudoOriginal = typeof raw.conteudoOriginal === 'string' ? raw.conteudoOriginal : '';
+  const previewSource = typeof raw.preview === 'string' && raw.preview
+    ? raw.preview
+    : getPreviewText(conteudo || conteudoOriginal);
+
+  const clienteId = normalizeId(raw.clienteId || raw.cliente);
+  const petId = normalizeId(raw.petId || raw.pet);
+  const appointmentId = normalizeId(raw.appointmentId || raw.appointment);
+
+  const createdAtDate = parseDateValue(raw.createdAt || raw.criadoEm || raw.dataCriacao);
+  const updatedAtDate = parseDateValue(raw.updatedAt || raw.atualizadoEm || raw.dataAtualizacao) || createdAtDate;
+  const createdAt = createdAtDate ? createdAtDate.toISOString() : null;
+  const updatedAt = updatedAtDate ? updatedAtDate.toISOString() : createdAt;
+
+  return {
+    id,
+    _id: id,
+    documentoId,
+    descricao,
+    conteudo,
+    conteudoOriginal,
+    preview: previewSource,
+    createdAt,
+    updatedAt,
+    clienteId,
+    petId,
+    appointmentId,
+  };
+}
+
+function upsertDocumentoRegistroInState(record) {
+  const normalized = normalizeDocumentoRegistroRecord(record);
+  if (!normalized) return null;
+
+  const list = Array.isArray(state.documentos) ? [...state.documentos] : [];
+  const targetId = normalizeId(normalized.id || normalized._id);
+  const existingIdx = list.findIndex((item) => normalizeId(item?.id || item?._id) === targetId);
+
+  if (existingIdx >= 0) {
+    list[existingIdx] = { ...list[existingIdx], ...normalized };
+  } else {
+    list.unshift(normalized);
+  }
+
+  list.sort((a, b) => {
+    const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  state.documentos = list;
+  const key = getConsultasKey(state.selectedCliente?._id, state.selectedPetId);
+  if (key) state.documentosLoadKey = key;
+
+  return list.find((item) => normalizeId(item?.id || item?._id) === targetId) || normalized;
+}
+
+function setDocumentoRegistrosInState(records) {
+  const list = Array.isArray(records)
+    ? records.map(normalizeDocumentoRegistroRecord).filter(Boolean)
+    : [];
+
+  list.sort((a, b) => {
+    const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  state.documentos = list;
+  const key = getConsultasKey(state.selectedCliente?._id, state.selectedPetId);
+  if (key) state.documentosLoadKey = key;
+
+  return list;
+}
+
+export async function deleteDocumentoRegistro(target, options = {}) {
+  const { suppressNotify = false } = options;
+  const targetId = normalizeId(
+    target && typeof target === 'object' ? target.id || target._id : target,
+  );
+  if (!targetId) return false;
+
+  const current = Array.isArray(state.documentos) ? state.documentos : [];
+  const filtered = current.filter((item) => normalizeId(item?.id || item?._id) !== targetId);
+  const hadEntry = filtered.length !== current.length;
+
+  try {
+    const resp = await api(`/func/vet/documentos-registros/${encodeURIComponent(targetId)}`, {
+      method: 'DELETE',
+    });
+
+    if (!resp.ok) {
+      if (resp.status === 404 && hadEntry) {
+        state.documentos = filtered;
+        if (!suppressNotify) {
+          notify('Documento removido com sucesso.', 'success');
+        }
+        updateConsultaAgendaCard();
+        return true;
+      }
+
+      const payload = await resp.json().catch(() => ({}));
+      const message = typeof payload?.message === 'string'
+        ? payload.message
+        : 'Não foi possível remover o documento.';
+      throw new Error(message);
+    }
+
+    state.documentos = filtered;
+    if (!suppressNotify) {
+      notify('Documento removido com sucesso.', 'success');
+    }
+    updateConsultaAgendaCard();
+    return true;
+  } catch (error) {
+    console.error('deleteDocumentoRegistro', error);
+    notify(error.message || 'Não foi possível remover o documento.', 'error');
+    return false;
+  }
+}
+
+state.deleteDocumento = deleteDocumentoRegistro;
 
 async function handleSave() {
   if (documentoModal.isLoading || documentoModal.isGenerating) return;
@@ -885,20 +1063,67 @@ async function handleSave() {
     return;
   }
 
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  if (!(clienteId && petId)) {
+    notify('Selecione um tutor e um pet para registrar o documento no atendimento.', 'warning');
+    return;
+  }
+
   documentoModal.isGenerating = true;
   updateButtonsState();
 
   try {
     const { html } = await resolveDocumentContent(doc);
-    const entry = generateDocumentEntry(doc, typeof html === 'string' ? html : doc.conteudo || '');
-    const current = Array.isArray(state.documentos) ? state.documentos.slice() : [];
-    current.unshift(entry);
-    state.documentos = current;
+    const finalHtml = typeof html === 'string' ? html : (doc.conteudo || '');
+    const recordPayload = prepareDocumentRecordPayload(doc, finalHtml);
+    if (!recordPayload) {
+      throw new Error('Não foi possível preparar os dados do documento.');
+    }
+
+    const payload = {
+      ...recordPayload,
+      clienteId,
+      petId,
+    };
+
+    const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+    if (appointmentId) {
+      payload.appointmentId = appointmentId;
+    }
+
+    const resp = await api('/func/vet/documentos-registros', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+      const message = typeof data?.message === 'string' ? data.message : 'Não foi possível salvar o documento.';
+      throw new Error(message);
+    }
+
+    const fallbackRecord = {
+      ...recordPayload,
+      id: normalizeId(data?.id || data?._id) || `doc-reg-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+      _id: data?._id,
+      createdAt: data?.createdAt || new Date().toISOString(),
+      updatedAt: data?.updatedAt || data?.createdAt || new Date().toISOString(),
+      clienteId,
+      petId,
+      appointmentId,
+    };
+
+    const saved = upsertDocumentoRegistroInState(data || fallbackRecord);
+    if (!saved && fallbackRecord) {
+      upsertDocumentoRegistroInState(fallbackRecord);
+    }
+
     notify('Documento adicionado na aba de consultas.', 'success');
+    closeDocumentoModal();
     updateConsultaAgendaCard();
   } catch (error) {
     console.error('handleSave', error);
-    notify('Não foi possível preparar o documento para salvar.', 'error');
+    notify(error.message || 'Não foi possível preparar o documento para salvar.', 'error');
   } finally {
     documentoModal.isGenerating = false;
     updateButtonsState();

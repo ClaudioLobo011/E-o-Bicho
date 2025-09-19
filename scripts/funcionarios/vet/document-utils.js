@@ -113,6 +113,63 @@ export function getPreviewText(html, maxLength = 220) {
 
 const keywordRegexCache = new Map();
 
+function escapeRegex(value) {
+  return value.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&');
+}
+
+function buildKeywordRegexes(token) {
+  const variants = [];
+  if (!token) return variants;
+
+  const escapedToken = escapeRegex(token);
+  if (escapedToken) {
+    variants.push(new RegExp(escapedToken, 'g'));
+  }
+
+  const trimmed = token.trim();
+  if (trimmed.startsWith('<') && trimmed.endsWith('>')) {
+    const inner = trimmed.slice(1, -1).trim();
+    if (inner) {
+      const escapedInner = escapeRegex(inner);
+      const entityPatterns = [
+        { pattern: `&lt;\\s*${escapedInner}\\s*&gt;`, flags: 'gi' },
+        { pattern: `&#0*60;\\s*${escapedInner}\\s*&#0*62;`, flags: 'gi' },
+        { pattern: `&#x0*3c;\\s*${escapedInner}\\s*&#x0*3e;`, flags: 'gi' },
+      ];
+      entityPatterns.forEach(({ pattern, flags }) => {
+        try {
+          variants.push(new RegExp(pattern, flags));
+        } catch (_) {
+          /* ignore malformed patterns */
+        }
+      });
+    }
+  }
+
+  return variants;
+}
+
+function getKeywordRegexes(token) {
+  const normalizedToken = typeof token === 'string' ? token.trim() : '';
+  if (!normalizedToken) return [];
+  if (!keywordRegexCache.has(normalizedToken)) {
+    keywordRegexCache.set(normalizedToken, buildKeywordRegexes(normalizedToken));
+  }
+  return keywordRegexCache.get(normalizedToken) || [];
+}
+
+export function keywordAppearsInContent(content, token) {
+  if (typeof content !== 'string') return false;
+  const regexes = getKeywordRegexes(token);
+  if (!regexes.length) return false;
+  return regexes.some((regex) => {
+    regex.lastIndex = 0;
+    const matches = regex.test(content);
+    regex.lastIndex = 0;
+    return matches;
+  });
+}
+
 export function applyKeywordReplacements(html, replacements = {}) {
   if (typeof html !== 'string') return '';
   if (!replacements || typeof replacements !== 'object') {
@@ -121,16 +178,14 @@ export function applyKeywordReplacements(html, replacements = {}) {
 
   let output = html;
   Object.entries(replacements).forEach(([token, rawValue]) => {
-    const normalizedToken = typeof token === 'string' ? token.trim() : '';
-    if (!normalizedToken) return;
+    const regexes = getKeywordRegexes(token);
+    if (!regexes.length) return;
     const value = escapeHtml(rawValue);
-    if (!keywordRegexCache.has(normalizedToken)) {
-      const escapedToken = normalizedToken.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&');
-      keywordRegexCache.set(normalizedToken, new RegExp(escapedToken, 'g'));
-    }
-    const regex = keywordRegexCache.get(normalizedToken);
-    if (!regex) return;
-    output = output.replace(regex, value);
+    regexes.forEach((regex) => {
+      regex.lastIndex = 0;
+      output = output.replace(regex, value);
+      regex.lastIndex = 0;
+    });
   });
 
   return output;
@@ -247,37 +302,157 @@ export function openDocumentPrintWindow(html, { title = 'Documento', styles = ''
       <body>${safeContent}</body>
     </html>`;
 
+  const urlFactory = typeof window !== 'undefined' ? window.URL || window.webkitURL : null;
+  const supportsBlobUrl =
+    typeof Blob !== 'undefined' &&
+    !!urlFactory &&
+    typeof urlFactory.createObjectURL === 'function';
+
   let printWindow = null;
+  let blobUrl = '';
+  let fallbackTimer = null;
+  let readinessTimer = null;
+  let readyAttempts = 0;
+  let printed = false;
+
+  const clearTimers = () => {
+    if (fallbackTimer) {
+      window.clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+    }
+    if (readinessTimer) {
+      window.clearTimeout(readinessTimer);
+      readinessTimer = null;
+    }
+  };
+
+  const releaseBlob = () => {
+    if (blobUrl && urlFactory && typeof urlFactory.revokeObjectURL === 'function') {
+      try {
+        urlFactory.revokeObjectURL(blobUrl);
+      } catch (_) {
+        /* ignore */
+      }
+      blobUrl = '';
+    }
+  };
+
+  const cleanup = () => {
+    clearTimers();
+    releaseBlob();
+  };
+
+  const triggerPrint = () => {
+    if (printed || !printWindow) return;
+    printed = true;
+    try {
+      printWindow.focus();
+      printWindow.print();
+    } catch (error) {
+      console.error('openDocumentPrintWindow', error);
+    } finally {
+      window.setTimeout(releaseBlob, 1500);
+    }
+  };
+
+  const waitForReady = () => {
+    if (!printWindow) return;
+
+    let isReady = true;
+    try {
+      const doc = printWindow.document;
+      isReady = !!doc && doc.readyState === 'complete';
+    } catch (error) {
+      isReady = true;
+    }
+
+    if (!isReady && readyAttempts < 15) {
+      readyAttempts += 1;
+      readinessTimer = window.setTimeout(waitForReady, 120);
+      return;
+    }
+
+    clearTimers();
+    window.setTimeout(triggerPrint, 120);
+  };
+
   try {
-    printWindow = window.open('', '_blank', 'noopener,noreferrer');
+    if (supportsBlobUrl) {
+      const blob = new Blob([documentHtml], { type: 'text/html' });
+      blobUrl = urlFactory.createObjectURL(blob);
+      printWindow = window.open(blobUrl, '_blank', 'noopener');
+    } else {
+      printWindow = window.open('', '_blank', 'noopener');
+    }
+
     if (!printWindow) {
+      cleanup();
       return false;
     }
-    printWindow.document.open();
-    printWindow.document.write(documentHtml);
-    printWindow.document.close();
-    const triggerPrint = () => {
-      try {
-        printWindow.focus();
-        printWindow.print();
-      } catch (error) {
-        console.error('openDocumentPrintWindow', error);
-      }
+
+    const handleLoad = () => {
+      readyAttempts = 0;
+      waitForReady();
     };
-    if (printWindow.addEventListener) {
-      printWindow.addEventListener('load', () => setTimeout(triggerPrint, 100));
+
+    if (!blobUrl) {
+      const printDocument = printWindow.document;
+      if (!printDocument) {
+        if (typeof printWindow.close === 'function') {
+          try {
+            printWindow.close();
+          } catch (_) {
+            /* ignore */
+          }
+        }
+        cleanup();
+        return false;
+      }
+
+      printDocument.open();
+      printDocument.write(documentHtml);
+      printDocument.close();
+
+      if (printWindow.addEventListener) {
+        printWindow.addEventListener('load', handleLoad, { once: true });
+      }
+
+      if (printDocument.readyState === 'complete') {
+        handleLoad();
+      } else if (printDocument.addEventListener) {
+        const readyListener = () => {
+          if (printDocument.readyState === 'complete') {
+            printDocument.removeEventListener('readystatechange', readyListener);
+            handleLoad();
+          }
+        };
+        printDocument.addEventListener('readystatechange', readyListener);
+      }
+    } else if (printWindow.addEventListener) {
+      printWindow.addEventListener('load', handleLoad, { once: true });
     }
-    setTimeout(triggerPrint, 300);
+
+    if (printWindow.addEventListener) {
+      printWindow.addEventListener('afterprint', cleanup);
+      printWindow.addEventListener('beforeunload', cleanup);
+    }
+
+    fallbackTimer = window.setTimeout(() => {
+      readyAttempts = 0;
+      waitForReady();
+    }, blobUrl ? 900 : 600);
+
     return true;
   } catch (error) {
     console.error('openDocumentPrintWindow', error);
-    if (printWindow) {
+    if (printWindow && typeof printWindow.close === 'function') {
       try {
         printWindow.close();
       } catch (_) {
         /* ignore */
       }
     }
+    cleanup();
     return false;
   }
 }
