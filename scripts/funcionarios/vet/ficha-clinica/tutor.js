@@ -17,6 +17,7 @@ import { loadAnexosForSelection, loadAnexosFromServer } from './anexos.js';
 import { loadExamesForSelection } from './exames.js';
 import { loadObservacoesForSelection } from './observacoes.js';
 import { loadPesosFromServer } from './pesos.js';
+import { loadDocumentosFromServer } from './documentos.js';
 import { updateCardDisplay, updatePageVisibility, setCardMode } from './ui.js';
 
 function hideSugestoes() {
@@ -256,6 +257,8 @@ export async function onSelectPet(petId, opts = {}) {
   state.pesosLoading = false;
   state.observacoes = [];
   state.documentos = [];
+  state.documentosLoadKey = null;
+  state.documentosLoading = false;
   loadVacinasForSelection();
   loadAnexosForSelection();
   loadExamesForSelection();
@@ -270,6 +273,7 @@ export async function onSelectPet(petId, opts = {}) {
     loadConsultasFromServer({ force: true }),
     loadAnexosFromServer({ force: true }),
     loadPesosFromServer({ force: true }),
+    loadDocumentosFromServer({ force: true }),
   ]);
 }
 
@@ -293,6 +297,8 @@ export function clearCliente() {
   state.pesosLoading = false;
   state.observacoes = [];
   state.documentos = [];
+  state.documentosLoadKey = null;
+  state.documentosLoading = false;
   persistAgendaContext(null);
   if (els.cliInput) els.cliInput.value = '';
   hideSugestoes();
@@ -324,6 +330,8 @@ export function clearPet() {
   state.examesLoading = false;
   state.observacoes = [];
   state.documentos = [];
+  state.documentosLoadKey = null;
+  state.documentosLoading = false;
   updateCardDisplay();
   updatePageVisibility();
 }

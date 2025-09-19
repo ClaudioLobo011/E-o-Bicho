@@ -125,6 +125,8 @@ export const state = {
   pesosLoadKey: null,
   observacoes: [],
   documentos: [],
+  documentosLoading: false,
+  documentosLoadKey: null,
 };
 
 export const consultaModal = {

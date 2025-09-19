@@ -1367,9 +1367,6 @@
   .border-blue-500 {
     border-color: var(--color-blue-500);
   }
-  .border-emerald-100 {
-    border-color: var(--color-emerald-100);
-  }
   .border-emerald-200 {
     border-color: var(--color-emerald-200);
   }
@@ -2595,6 +2592,13 @@
     &:hover {
       @media (hover: hover) {
         background-color: var(--color-emerald-50);
+      }
+    }
+  }
+  .hover\:bg-emerald-600 {
+    &:hover {
+      @media (hover: hover) {
+        background-color: var(--color-emerald-600);
       }
     }
   }

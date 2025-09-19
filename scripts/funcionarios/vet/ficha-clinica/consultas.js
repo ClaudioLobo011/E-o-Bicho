@@ -571,7 +571,7 @@ function createDocumentoRegistroCard(entry) {
 
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
-  removeBtn.className = 'inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-200';
+  removeBtn.className = 'inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-200';
   removeBtn.innerHTML = '<i class="fas fa-trash-can text-[12px]"></i><span>Remover</span>';
   removeBtn.title = 'Remover documento';
   removeBtn.setAttribute('aria-label', 'Remover documento');
@@ -1519,6 +1519,7 @@ export function updateConsultaAgendaCard() {
   const hasObservacoes = observacoes.length > 0;
   const documentos = Array.isArray(state.documentos) ? state.documentos : [];
   const hasDocumentos = documentos.length > 0;
+  const isLoadingDocumentos = !!state.documentosLoading;
   const context = state.agendaContext;
   const selectedPetId = normalizeId(state.selectedPetId);
   const selectedTutorId = normalizeId(state.selectedCliente?._id);
@@ -1770,6 +1771,11 @@ export function updateConsultaAgendaCard() {
       const card = createDocumentoRegistroCard(documento);
       if (card) scroll.appendChild(card);
     });
+  } else if (isLoadingDocumentos) {
+    const loadingDocumentos = document.createElement('div');
+    loadingDocumentos.className = 'rounded-xl border border-dashed border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-600';
+    loadingDocumentos.textContent = 'Carregando documentos salvos...';
+    scroll.appendChild(loadingDocumentos);
   }
 
   if (hasManualConsultas) {

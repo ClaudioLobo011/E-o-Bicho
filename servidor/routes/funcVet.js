@@ -12,6 +12,7 @@ const Appointment = require('../models/Appointment');
 const VetConsultation = require('../models/VetConsultation');
 const VetAttachment = require('../models/VetAttachment');
 const VetDocument = require('../models/VetDocument');
+const VetDocumentRecord = require('../models/VetDocumentRecord');
 const PetWeight = require('../models/PetWeight');
 const {
   isDriveConfigured,
@@ -206,6 +207,27 @@ function formatConsultation(doc) {
     anamnese: doc.anamnese || '',
     exameFisico: doc.exameFisico || '',
     diagnostico: doc.diagnostico || '',
+    createdAt,
+    updatedAt,
+  };
+}
+
+function formatDocumentRecord(doc) {
+  if (!doc) return null;
+  const createdAt = doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt || null;
+  const updatedAt = doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt || createdAt;
+
+  return {
+    _id: toStringSafe(doc._id),
+    id: toStringSafe(doc._id),
+    clienteId: toStringSafe(doc.cliente),
+    petId: toStringSafe(doc.pet),
+    documentoId: toStringSafe(doc.documento),
+    appointmentId: toStringSafe(doc.appointment),
+    descricao: doc.descricao || '',
+    conteudo: doc.conteudo || '',
+    conteudoOriginal: doc.conteudoOriginal || '',
+    preview: doc.preview || '',
     createdAt,
     updatedAt,
   };
@@ -720,6 +742,151 @@ router.delete('/vet/documentos/:id', authMiddleware, requireStaff, async (req, r
   } catch (error) {
     console.error('DELETE /func/vet/documentos/:id', error);
     return res.status(500).json({ message: 'Erro ao remover documento.' });
+  }
+});
+
+router.get('/vet/documentos-registros', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const clienteId = normalizeObjectId(req.query.clienteId);
+    const petId = normalizeObjectId(req.query.petId);
+    const appointmentId = normalizeObjectId(req.query.appointmentId);
+
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+    if (!petCheck.ok) {
+      return res.status(petCheck.status).json({ message: petCheck.message });
+    }
+
+    const filter = { cliente: clienteId, pet: petId };
+    if (appointmentId) {
+      filter.$or = [
+        { appointment: appointmentId },
+        { appointment: { $exists: false } },
+        { appointment: null },
+      ];
+    }
+
+    const docs = await VetDocumentRecord.find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formatted = docs.map(formatDocumentRecord).filter(Boolean);
+    return res.json(formatted);
+  } catch (error) {
+    console.error('GET /func/vet/documentos-registros', error);
+    return res.status(500).json({ message: 'Erro ao carregar documentos do atendimento.' });
+  }
+});
+
+router.post('/vet/documentos-registros', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const clienteId = normalizeObjectId(req.body.clienteId);
+    const petId = normalizeObjectId(req.body.petId);
+    const documentoId = req.body.documentoId ? normalizeObjectId(req.body.documentoId) : null;
+    const appointmentId = req.body.appointmentId ? normalizeObjectId(req.body.appointmentId) : null;
+
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    if (req.body.documentoId && !documentoId) {
+      return res.status(400).json({ message: 'documentoId inválido.' });
+    }
+
+    if (req.body.appointmentId && !appointmentId) {
+      return res.status(400).json({ message: 'appointmentId inválido.' });
+    }
+
+    const conteudo = typeof req.body.conteudo === 'string' ? req.body.conteudo : '';
+    if (!conteudo) {
+      return res.status(400).json({ message: 'O conteúdo do documento é obrigatório.' });
+    }
+    if (conteudo.length > 200000) {
+      return res.status(400).json({ message: 'O documento deve ter no máximo 200.000 caracteres.' });
+    }
+
+    const conteudoOriginal = typeof req.body.conteudoOriginal === 'string' ? req.body.conteudoOriginal : '';
+    if (conteudoOriginal.length > 200000) {
+      return res.status(400).json({ message: 'O documento original deve ter no máximo 200.000 caracteres.' });
+    }
+
+    const descricao = typeof req.body.descricao === 'string' ? req.body.descricao.trim() : '';
+    if (descricao.length > 180) {
+      return res.status(400).json({ message: 'A descrição do documento deve ter no máximo 180 caracteres.' });
+    }
+
+    const preview = typeof req.body.preview === 'string' ? req.body.preview.trim() : '';
+    if (preview.length > 2000) {
+      return res.status(400).json({ message: 'A prévia do documento deve ter no máximo 2.000 caracteres.' });
+    }
+
+    const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+    if (!petCheck.ok) {
+      return res.status(petCheck.status).json({ message: petCheck.message });
+    }
+
+    if (appointmentId) {
+      const appointmentCheck = await ensureAppointmentLink(appointmentId, clienteId, petId, null);
+      if (!appointmentCheck.ok) {
+        return res.status(appointmentCheck.status).json({ message: appointmentCheck.message });
+      }
+    }
+
+    let documentReference = null;
+    if (documentoId) {
+      const existingDocument = await VetDocument.findById(documentoId).select('_id descricao').lean();
+      if (!existingDocument) {
+        return res.status(404).json({ message: 'Documento salvo não encontrado.' });
+      }
+      documentReference = existingDocument;
+    }
+
+    const payload = {
+      cliente: clienteId,
+      pet: petId,
+      documento: documentReference ? documentReference._id : undefined,
+      appointment: appointmentId || undefined,
+      descricao: descricao || documentReference?.descricao || 'Documento',
+      conteudo,
+      conteudoOriginal: conteudoOriginal || '',
+      preview: preview || '',
+    };
+
+    const userId = normalizeObjectId(req.user?.id || req.user?._id);
+    if (userId) {
+      payload.createdBy = userId;
+      payload.updatedBy = userId;
+    }
+
+    const created = await VetDocumentRecord.create(payload);
+    const record = await VetDocumentRecord.findById(created._id).lean();
+    return res.status(201).json(formatDocumentRecord(record));
+  } catch (error) {
+    console.error('POST /func/vet/documentos-registros', error);
+    return res.status(500).json({ message: 'Erro ao salvar documento do atendimento.' });
+  }
+});
+
+router.delete('/vet/documentos-registros/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const id = normalizeObjectId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+
+    const existing = await VetDocumentRecord.findById(id).lean();
+    if (!existing) {
+      return res.status(404).json({ message: 'Documento do atendimento não encontrado.' });
+    }
+
+    await VetDocumentRecord.deleteOne({ _id: id });
+    return res.status(204).send();
+  } catch (error) {
+    console.error('DELETE /func/vet/documentos-registros/:id', error);
+    return res.status(500).json({ message: 'Erro ao remover documento do atendimento.' });
   }
 });
 
