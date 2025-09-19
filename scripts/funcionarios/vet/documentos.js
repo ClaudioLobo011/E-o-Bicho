@@ -73,6 +73,15 @@ let fallbackTextarea = null;
 let isRedirecting = false;
 let keywordsContainer;
 let keywordButtons = [];
+let modeToggle = null;
+let modeButtons = [];
+let codeTextarea = null;
+let editorMode = 'visual';
+let previewContainer = null;
+let previewFrame = null;
+let visualMode = 'editor';
+let previewHtml = '';
+let previewModeKeywordNoticeShown = false;
 
 function getAuthToken() {
   try {
@@ -252,9 +261,195 @@ function getPreviewText(html) {
   return text;
 }
 
+function formatCodeEditorValue(html) {
+  if (!html) return '';
+  const value = String(html)
+    .replace(/\r?\n/g, '\n')
+    .replace(/></g, '>\n<')
+    .replace(/&nbsp;/g, ' ');
+  return value.replace(/\n{3,}/g, '\n\n');
+}
+
+function setCodeEditorContent(html) {
+  if (!codeTextarea) return;
+  const value = typeof html === 'string' ? html : '';
+  codeTextarea.value = value ? formatCodeEditorValue(value) : '';
+}
+
+function getCodeEditorValue() {
+  return codeTextarea ? codeTextarea.value || '' : '';
+}
+
+function syncCodeEditorFromVisual() {
+  if (!codeTextarea) return;
+  setCodeEditorContent(getVisualEditorHtml());
+}
+
+function updateModeToggleButtons() {
+  if (!modeButtons.length) return;
+  modeButtons.forEach((button) => {
+    if (!button) return;
+    const mode = button.dataset.mode === 'code' ? 'code' : 'visual';
+    const isActive = mode === editorMode;
+    button.classList.toggle('vet-doc-mode-btn-active', isActive);
+    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+}
+
+function setModeToggleDisabled(disabled) {
+  if (!modeButtons.length) return;
+  modeButtons.forEach((button) => {
+    if (!button) return;
+    button.disabled = !!disabled;
+  });
+}
+
+function updateEditorModeVisibility() {
+  const showCode = editorMode === 'code';
+  const showPreview = editorMode === 'visual' && visualMode === 'preview';
+  const showEditor = editorMode === 'visual' && visualMode !== 'preview';
+
+  if (editorContainer) {
+    editorContainer.classList.toggle('hidden', !showEditor);
+  }
+  if (previewContainer) {
+    previewContainer.classList.toggle('hidden', !showPreview);
+  }
+  if (codeTextarea) {
+    codeTextarea.classList.toggle('hidden', !showCode);
+  }
+}
+
+function focusCurrentEditor() {
+  if (state.isSaving) return;
+  if (editorMode === 'code') {
+    if (codeTextarea && !codeTextarea.disabled) {
+      const length = codeTextarea.value.length;
+      codeTextarea.focus();
+      try {
+        codeTextarea.setSelectionRange(length, length);
+      } catch (_) {
+        /* ignore selection errors */
+      }
+    }
+    return;
+  }
+  if (editorMode === 'visual' && visualMode === 'preview') {
+    if (previewContainer) {
+      if (!previewContainer.hasAttribute('tabindex')) {
+        previewContainer.setAttribute('tabindex', '-1');
+      }
+      try {
+        previewContainer.focus({ preventScroll: true });
+      } catch (_) {
+        previewContainer.focus();
+      }
+    }
+    return;
+  }
+  if (quill) {
+    quill.focus();
+    return;
+  }
+  if (fallbackTextarea && !fallbackTextarea.disabled) {
+    fallbackTextarea.focus();
+    try {
+      const length = fallbackTextarea.value.length;
+      fallbackTextarea.setSelectionRange(length, length);
+    } catch (_) {
+      /* ignore selection errors */
+    }
+  }
+}
+
+function setEditorMode(mode, { focus = true, sync = true } = {}) {
+  const target = mode === 'code' ? 'code' : 'visual';
+  if (target === editorMode) {
+    if (target === 'code' && sync) {
+      syncCodeEditorFromVisual();
+    }
+    updateEditorModeVisibility();
+    updateModeToggleButtons();
+    setEditorDisabled(state.isSaving);
+    if (focus) focusCurrentEditor();
+    return;
+  }
+
+  if (target === 'code' && sync) {
+    syncCodeEditorFromVisual();
+  }
+
+  if (target === 'visual' && sync) {
+    const codeValue = getCodeEditorValue();
+    applyVisualEditorContent(codeValue);
+    syncCodeEditorFromVisual();
+  }
+
+  editorMode = target;
+  updateEditorModeVisibility();
+  updateModeToggleButtons();
+  setEditorDisabled(state.isSaving);
+  if (focus) focusCurrentEditor();
+}
+
+function initEditorModeToggle() {
+  if (!modeToggle) return;
+  modeButtons = Array.from(modeToggle.querySelectorAll('[data-mode]')).filter(Boolean);
+  modeButtons.forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (state.isSaving) return;
+      const targetMode = button.dataset.mode === 'code' ? 'code' : 'visual';
+      setEditorMode(targetMode);
+    });
+  });
+  updateModeToggleButtons();
+  updateEditorModeVisibility();
+}
+
+function insertIntoCodeEditor(text) {
+  if (!codeTextarea) return;
+  const textarea = codeTextarea;
+  const value = textarea.value || '';
+  const start = typeof textarea.selectionStart === 'number' ? textarea.selectionStart : value.length;
+  const end = typeof textarea.selectionEnd === 'number' ? textarea.selectionEnd : start;
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  const scroll = textarea.scrollTop;
+  textarea.value = `${before}${text}${after}`;
+  const cursor = start + text.length;
+  try {
+    textarea.focus();
+    textarea.setSelectionRange(cursor, cursor);
+  } catch (_) {
+    /* ignore selection errors */
+  }
+  textarea.scrollTop = scroll;
+}
+
 function insertKeyword(token) {
   const text = typeof token === 'string' ? token : String(token || '');
   if (!text || state.isSaving) return;
+
+  if (visualMode === 'preview' && codeTextarea) {
+    if (editorMode !== 'code') {
+      setEditorMode('code');
+      if (!previewModeKeywordNoticeShown) {
+        showToastMessage(
+          'Este documento possui um layout avançado. Inserimos a palavra-chave diretamente no modo Código.',
+          'info'
+        );
+        previewModeKeywordNoticeShown = true;
+      }
+    }
+    insertIntoCodeEditor(text);
+    return;
+  }
+
+  if (editorMode === 'code' && codeTextarea) {
+    insertIntoCodeEditor(text);
+    return;
+  }
 
   if (quill) {
     quill.focus();
@@ -343,17 +538,125 @@ function renderKeywords() {
   setKeywordsDisabled(state.isSaving);
 }
 
-function sanitizeDocumentHtml(html) {
+function sanitizeDocumentHtml(html, { allowStyles = false } = {}) {
   if (typeof html !== 'string') return '';
-  return html
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
-    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, '')
-    .replace(/<object[\s\S]*?>[\s\S]*?<\/object>/gi, '')
-    .replace(/on[a-z]+="[^"]*"/gi, '')
-    .replace(/on[a-z]+='[^']*'/gi, '')
-    .replace(/\s+href\s*=\s*(['"])javascript:[^'">]*\1/gi, ' href="#"')
+  let safe = html;
+
+  const blockedTagPatterns = [
+    /<script[\s\S]*?>[\s\S]*?<\/script>/gi,
+    /<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi,
+    /<object[\s\S]*?>[\s\S]*?<\/object>/gi,
+    /<embed[\s\S]*?>[\s\S]*?<\/embed>/gi,
+    /<link[^>]*?>/gi,
+    /<meta[^>]*?>/gi,
+    /<base[^>]*?>/gi,
+  ];
+
+  blockedTagPatterns.forEach((pattern) => {
+    safe = safe.replace(pattern, '');
+  });
+
+  if (!allowStyles) {
+    safe = safe.replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '');
+  }
+
+  safe = safe
+    .replace(/\son[a-z]+\s*=\s*(['"])[\s\S]*?\1/gi, '')
+    .replace(/\s+(?:xlink:)?href\s*=\s*(['"])\s*(?:javascript|vbscript):[^'">]*\1/gi, ' href="#"')
+    .replace(/\s+src\s*=\s*(['"])\s*(?:javascript|vbscript):[^'">]*\1/gi, ' src="#"')
+    .replace(/url\((['"]?)\s*(?:javascript|vbscript):[^)]*?\1\)/gi, 'url()')
     .replace(/data:text\/html/gi, '');
+
+  return safe;
+}
+
+function shouldRenderAsPreview(html) {
+  if (!html || typeof html !== 'string') return false;
+  const value = html.trim();
+  if (!value) return false;
+  if (/<style[\s>]/i.test(value)) return true;
+  if (/(class|id|style)=/i.test(value)) return true;
+  if (/<(table|section|article|aside|header|footer|nav|figure|figcaption|canvas|svg|iframe|video|audio|form|input|textarea|button|select|option|label|fieldset)/i.test(value)) {
+    return true;
+  }
+  return false;
+}
+
+function updatePreviewFrameHeight(frame, minHeight = 320) {
+  if (!frame) return;
+  try {
+    const doc = frame.contentDocument || frame.contentWindow?.document;
+    if (!doc) return;
+    const body = doc.body;
+    const html = doc.documentElement;
+    const bodyHeight = body
+      ? Math.max(body.scrollHeight, body.offsetHeight, body.clientHeight)
+      : 0;
+    const htmlHeight = html
+      ? Math.max(html.scrollHeight, html.offsetHeight, html.clientHeight)
+      : 0;
+    const height = Math.max(bodyHeight, htmlHeight, minHeight);
+    frame.style.height = `${height}px`;
+  } catch (_) {
+    /* ignore preview resize errors */
+  }
+}
+
+function renderPreviewFrameContent(frame, html, { minHeight = 320, padding = 24, background = '#f1f5f9' } = {}) {
+  if (!frame) return '';
+  frame.style.minHeight = `${minHeight}px`;
+  frame.style.height = `${minHeight}px`;
+  const sanitized = sanitizeDocumentHtml(html, { allowStyles: true });
+  const hasContent = !!sanitized && sanitized.trim().length > 0;
+  const placeholder = `
+    <div class="preview-empty">
+      Nenhum conteúdo para pré-visualizar.
+    </div>
+  `;
+  const documentHtml = `<!DOCTYPE html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8" />
+        <base target="_blank" />
+        <style>
+          :root { color-scheme: light; }
+          *, *::before, *::after { box-sizing: border-box; }
+          body { margin: 0; background: ${background}; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; color: #0f172a; }
+          .preview-wrapper { padding: ${padding}px; min-height: ${Math.max(minHeight - padding * 2, 0)}px; }
+          img { max-width: 100%; height: auto; display: block; }
+          table { width: 100%; border-collapse: collapse; }
+          .preview-empty {
+            display: grid;
+            place-items: center;
+            min-height: 160px;
+            border-radius: 16px;
+            border: 1px dashed rgba(148, 163, 184, 0.6);
+            background: rgba(148, 163, 184, 0.12);
+            color: #475569;
+            font-size: 14px;
+            line-height: 1.5;
+            text-align: center;
+            padding: 24px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="preview-wrapper">
+          ${hasContent ? sanitized : placeholder}
+        </div>
+      </body>
+    </html>`;
+
+  frame.srcdoc = documentHtml;
+
+  if (!frame.dataset.previewInitialized) {
+    frame.addEventListener('load', () => updatePreviewFrameHeight(frame, minHeight));
+    frame.dataset.previewInitialized = 'true';
+  }
+
+  setTimeout(() => updatePreviewFrameHeight(frame, minHeight), 60);
+
+  return sanitized;
 }
 
 function initEditor() {
@@ -387,26 +690,70 @@ function initEditor() {
   showToastMessage('Editor avançado não pôde ser carregado. Utilizando editor simples.', 'warning');
 }
 
-function setEditorContent(html) {
-  if (quill) {
-    if (html) {
-      const delta = quill.clipboard.convert(html);
-      quill.setContents(delta, 'silent');
-    } else {
+function applyVisualEditorContent(html) {
+  const value = typeof html === 'string' ? html : '';
+  const trimmed = value.trim();
+  const canPreview = shouldRenderAsPreview(value) && !!previewFrame;
+
+  if (!trimmed) {
+    visualMode = 'editor';
+    previewHtml = '';
+    previewModeKeywordNoticeShown = false;
+    if (quill) {
       quill.setText('', 'silent');
+    }
+    if (fallbackTextarea) {
+      fallbackTextarea.value = '';
+    }
+    if (previewFrame) {
+      renderPreviewFrameContent(previewFrame, '', { minHeight: 320 });
     }
     return;
   }
-  if (fallbackTextarea) {
-    fallbackTextarea.value = extractPlainText(html || '');
+
+  if (canPreview) {
+    visualMode = 'preview';
+    previewModeKeywordNoticeShown = false;
+    previewHtml = renderPreviewFrameContent(previewFrame, value, { minHeight: 320 });
+    if (quill) {
+      quill.setText('', 'silent');
+    }
+    if (fallbackTextarea) {
+      fallbackTextarea.value = extractPlainText(previewHtml);
+      fallbackTextarea.disabled = true;
+    }
+    return;
   }
+
+  visualMode = 'editor';
+  previewHtml = '';
+  previewModeKeywordNoticeShown = false;
+  if (quill) {
+    const delta = quill.clipboard.convert(value);
+    quill.setContents(delta, 'silent');
+  } else if (fallbackTextarea) {
+    fallbackTextarea.value = extractPlainText(value);
+  }
+  if (previewFrame) {
+    renderPreviewFrameContent(previewFrame, '', { minHeight: 320 });
+  }
+}
+
+function setEditorContent(html) {
+  applyVisualEditorContent(html);
+  syncCodeEditorFromVisual();
+  updateEditorModeVisibility();
+  setEditorDisabled(state.isSaving);
 }
 
 function clearEditor() {
   setEditorContent('');
 }
 
-function getEditorHtml() {
+function getVisualEditorHtml() {
+  if (visualMode === 'preview') {
+    return previewHtml || '';
+  }
   if (quill) {
     return quill.root.innerHTML;
   }
@@ -418,7 +765,20 @@ function getEditorHtml() {
   return '';
 }
 
+function getEditorHtml() {
+  if (editorMode === 'code' && codeTextarea) {
+    return getCodeEditorValue();
+  }
+  return getVisualEditorHtml();
+}
+
 function getEditorPlainText() {
+  if (editorMode === 'code' && codeTextarea) {
+    return (codeTextarea.value || '').trim();
+  }
+  if (visualMode === 'preview') {
+    return extractPlainText(previewHtml).trim();
+  }
   if (quill) {
     return quill.getText().trim();
   }
@@ -430,11 +790,20 @@ function getEditorPlainText() {
 
 function setEditorDisabled(disabled) {
   if (quill) {
-    quill.enable(!disabled);
+    const shouldEnable = !disabled && editorMode === 'visual' && visualMode !== 'preview';
+    quill.enable(shouldEnable);
   }
   if (fallbackTextarea) {
-    fallbackTextarea.disabled = !!disabled;
+    fallbackTextarea.disabled = !!disabled || editorMode === 'code' || visualMode === 'preview';
   }
+  if (codeTextarea) {
+    codeTextarea.disabled = !!disabled || editorMode !== 'code';
+  }
+  if (previewContainer) {
+    previewContainer.classList.toggle('opacity-60', !!disabled);
+    previewContainer.classList.toggle('pointer-events-none', !!disabled);
+  }
+  setModeToggleDisabled(disabled);
 }
 
 function updateSaveButton() {
@@ -532,7 +901,13 @@ function createDocumentCard(doc) {
            <i class="fas fa-chevron-down vet-doc-summary-icon transition-transform duration-200"></i>
            <span>Visualizar conteúdo</span>
          </summary>
-         <div class="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-700 leading-relaxed vet-doc-body" data-doc-body></div>
+         <div class="mt-3 rounded-lg border border-gray-100 bg-gray-50 vet-doc-body" data-doc-body>
+           <div class="vet-doc-preview-bar">
+             <i class="fas fa-eye"></i>
+             <span>Pré-visualização do documento</span>
+           </div>
+           <iframe class="vet-doc-preview-embed" data-doc-preview title="Pré-visualização do documento" loading="lazy"></iframe>
+         </div>
        </details>`
     : '';
 
@@ -564,9 +939,9 @@ function createDocumentCard(doc) {
     </div>
   `;
 
-  const body = article.querySelector('[data-doc-body]');
-  if (body) {
-    body.innerHTML = sanitizeDocumentHtml(doc.conteudo || '');
+  const previewFrameEl = article.querySelector('[data-doc-preview]');
+  if (previewFrameEl) {
+    renderPreviewFrameContent(previewFrameEl, doc.conteudo || '', { minHeight: 280, padding: 16, background: '#f8fafc' });
   }
 
   const editBtn = article.querySelector('[data-action="edit"]');
@@ -776,6 +1151,13 @@ function init() {
   errorEl = document.getElementById('vet-doc-error');
   countBadge = document.getElementById('vet-doc-count');
   keywordsContainer = document.getElementById('vet-doc-keywords');
+  modeToggle = document.getElementById('vet-doc-mode-toggle');
+  codeTextarea = document.getElementById('vet-doc-code');
+  previewContainer = document.getElementById('vet-doc-preview');
+  previewFrame = document.getElementById('vet-doc-preview-frame');
+  if (previewFrame) {
+    previewFrame.setAttribute('loading', 'lazy');
+  }
 
   if (!form || !descriptionInput || !editorContainer || !listEl) {
     console.error('Elementos essenciais não encontrados na página de documentos.');
@@ -785,6 +1167,10 @@ function init() {
   updateFormMode();
   updateEmptyState();
   initEditor();
+  syncCodeEditorFromVisual();
+  initEditorModeToggle();
+  setEditorMode(editorMode, { focus: false, sync: true });
+  setEditorDisabled(state.isSaving);
   renderKeywords();
 
   form.addEventListener('submit', onSubmit);

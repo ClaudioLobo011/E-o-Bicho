@@ -43,6 +43,144 @@
       border-color: #2563eb;
       box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
     }
+    .vet-doc-mode-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.3rem;
+      border-radius: 9999px;
+      background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+      border: 1px solid #e2e8f0;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    }
+    .vet-doc-mode-btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 9999px;
+      padding: 0.35rem 0.9rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #475569;
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+    }
+    .vet-doc-mode-btn:hover:not([disabled]) {
+      color: #1d4ed8;
+    }
+    .vet-doc-mode-btn:focus-visible {
+      outline: 2px solid rgba(37, 99, 235, 0.45);
+      outline-offset: 2px;
+    }
+    .vet-doc-mode-btn[disabled] {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .vet-doc-mode-btn-active {
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
+      color: #f8fafc;
+      box-shadow: 0 6px 14px rgba(37, 99, 235, 0.25);
+    }
+    .vet-doc-mode-btn-active::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 9999px;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      pointer-events: none;
+    }
+    .vet-doc-code {
+      width: 100%;
+      min-height: 280px;
+      border: 1px solid #1f2937;
+      border-radius: 0.75rem;
+      padding: 1rem 1.1rem;
+      font-size: 0.9rem;
+      line-height: 1.7;
+      color: #e2e8f0;
+      background: #0f172a;
+      font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas,
+        'Liberation Mono', 'Courier New', monospace;
+      resize: vertical;
+      white-space: pre;
+      overflow-x: auto;
+      overflow-wrap: normal;
+      word-break: normal;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.6);
+    }
+    .vet-doc-code:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+    }
+    .vet-doc-preview {
+      position: relative;
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 0.75rem;
+      background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      overflow: hidden;
+    }
+    .vet-doc-preview:focus {
+      outline: 2px solid rgba(37, 99, 235, 0.4);
+      outline-offset: 2px;
+    }
+    .vet-doc-preview-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.65rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: #1f2937;
+      background: rgba(148, 163, 184, 0.18);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .vet-doc-preview-bar i {
+      color: #2563eb;
+    }
+    .vet-doc-preview-frame {
+      width: 100%;
+      border: none;
+      background: transparent;
+      min-height: 320px;
+      display: block;
+    }
+    .vet-doc-card [data-doc-body] {
+      padding: 0;
+      overflow: hidden;
+      border-radius: 0.75rem;
+    }
+    .vet-doc-card .vet-doc-preview-embed {
+      width: 100%;
+      border: none;
+      background: transparent;
+      border-radius: 0 0 0.75rem 0.75rem;
+      border-top: 1px solid rgba(148, 163, 184, 0.3);
+      min-height: 260px;
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+    }
+    .vet-doc-code::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    .vet-doc-code::-webkit-scrollbar-track {
+      background: rgba(148, 163, 184, 0.15);
+      border-radius: 9999px;
+    }
+    .vet-doc-code::-webkit-scrollbar-thumb {
+      background: rgba(59, 130, 246, 0.6);
+      border-radius: 9999px;
+    }
+    .vet-doc-code::-webkit-scrollbar-thumb:hover {
+      background: rgba(37, 99, 235, 0.8);
+    }
     .vet-doc-card details summary {
       list-style: none;
       cursor: pointer;
@@ -142,11 +280,49 @@
           </div>
 
           <div>
-            <label class="text-sm font-medium text-gray-700">Conteúdo</label>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <label class="text-sm font-medium text-gray-700">Conteúdo</label>
+              <div id="vet-doc-mode-toggle" class="vet-doc-mode-toggle">
+                <button
+                  type="button"
+                  class="vet-doc-mode-btn vet-doc-mode-btn-active"
+                  data-mode="visual"
+                  aria-pressed="true"
+                >
+                  Normal
+                </button>
+                <button
+                  type="button"
+                  class="vet-doc-mode-btn"
+                  data-mode="code"
+                  aria-pressed="false"
+                >
+                  Código
+                </button>
+              </div>
+            </div>
             <div
               id="vet-doc-editor"
               class="vet-doc-editor mt-2"
             ></div>
+            <div id="vet-doc-preview" class="vet-doc-preview mt-2 hidden">
+              <div class="vet-doc-preview-bar">
+                <i class="fas fa-eye"></i>
+                <span>Pré-visualização do documento</span>
+              </div>
+              <iframe
+                id="vet-doc-preview-frame"
+                class="vet-doc-preview-frame"
+                title="Pré-visualização do documento"
+              ></iframe>
+            </div>
+            <textarea
+              id="vet-doc-code"
+              class="vet-doc-code mt-2 hidden"
+              spellcheck="false"
+              autocomplete="off"
+              wrap="off"
+            ></textarea>
           </div>
 
           <div>
