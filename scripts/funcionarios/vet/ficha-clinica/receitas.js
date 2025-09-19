@@ -331,7 +331,7 @@ async function fetchStoreInfoById(storeId) {
 }
 
 function buildClinicLogoReplacement({ agenda, store, clinicName }) {
-  const fallbackUrl = '/image/logo.svg';
+  const fallbackUrl = '/public/image/logo.svg';
   const alt = pickFirst(
     clinicName,
     store?.nome,
