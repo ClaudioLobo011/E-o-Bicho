@@ -20,6 +20,7 @@ import {
   getPreviewText,
   openDocumentPrintWindow,
   applyKeywordReplacements,
+  keywordAppearsInContent,
 } from '../document-utils.js';
 
 const documentoModal = {
@@ -101,7 +102,7 @@ function renderKeywordReference() {
 function highlightKeywords(content) {
   const value = typeof content === 'string' ? content : '';
   documentoModal.keywordItems.forEach((item) => {
-    const found = value.includes(item.token);
+    const found = keywordAppearsInContent(value, item.token);
     item.element.classList.toggle('border-emerald-300', found);
     item.element.classList.toggle('bg-emerald-50', found);
     item.element.classList.toggle('text-emerald-700', found);

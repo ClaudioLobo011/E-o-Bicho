@@ -113,6 +113,63 @@ export function getPreviewText(html, maxLength = 220) {
 
 const keywordRegexCache = new Map();
 
+function escapeRegex(value) {
+  return value.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&');
+}
+
+function buildKeywordRegexes(token) {
+  const variants = [];
+  if (!token) return variants;
+
+  const escapedToken = escapeRegex(token);
+  if (escapedToken) {
+    variants.push(new RegExp(escapedToken, 'g'));
+  }
+
+  const trimmed = token.trim();
+  if (trimmed.startsWith('<') && trimmed.endsWith('>')) {
+    const inner = trimmed.slice(1, -1).trim();
+    if (inner) {
+      const escapedInner = escapeRegex(inner);
+      const entityPatterns = [
+        { pattern: `&lt;\\s*${escapedInner}\\s*&gt;`, flags: 'gi' },
+        { pattern: `&#0*60;\\s*${escapedInner}\\s*&#0*62;`, flags: 'gi' },
+        { pattern: `&#x0*3c;\\s*${escapedInner}\\s*&#x0*3e;`, flags: 'gi' },
+      ];
+      entityPatterns.forEach(({ pattern, flags }) => {
+        try {
+          variants.push(new RegExp(pattern, flags));
+        } catch (_) {
+          /* ignore malformed patterns */
+        }
+      });
+    }
+  }
+
+  return variants;
+}
+
+function getKeywordRegexes(token) {
+  const normalizedToken = typeof token === 'string' ? token.trim() : '';
+  if (!normalizedToken) return [];
+  if (!keywordRegexCache.has(normalizedToken)) {
+    keywordRegexCache.set(normalizedToken, buildKeywordRegexes(normalizedToken));
+  }
+  return keywordRegexCache.get(normalizedToken) || [];
+}
+
+export function keywordAppearsInContent(content, token) {
+  if (typeof content !== 'string') return false;
+  const regexes = getKeywordRegexes(token);
+  if (!regexes.length) return false;
+  return regexes.some((regex) => {
+    regex.lastIndex = 0;
+    const matches = regex.test(content);
+    regex.lastIndex = 0;
+    return matches;
+  });
+}
+
 export function applyKeywordReplacements(html, replacements = {}) {
   if (typeof html !== 'string') return '';
   if (!replacements || typeof replacements !== 'object') {
@@ -121,16 +178,14 @@ export function applyKeywordReplacements(html, replacements = {}) {
 
   let output = html;
   Object.entries(replacements).forEach(([token, rawValue]) => {
-    const normalizedToken = typeof token === 'string' ? token.trim() : '';
-    if (!normalizedToken) return;
+    const regexes = getKeywordRegexes(token);
+    if (!regexes.length) return;
     const value = escapeHtml(rawValue);
-    if (!keywordRegexCache.has(normalizedToken)) {
-      const escapedToken = normalizedToken.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&');
-      keywordRegexCache.set(normalizedToken, new RegExp(escapedToken, 'g'));
-    }
-    const regex = keywordRegexCache.get(normalizedToken);
-    if (!regex) return;
-    output = output.replace(regex, value);
+    regexes.forEach((regex) => {
+      regex.lastIndex = 0;
+      output = output.replace(regex, value);
+      regex.lastIndex = 0;
+    });
   });
 
   return output;
