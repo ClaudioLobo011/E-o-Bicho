@@ -11,6 +11,7 @@ const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
 const VetConsultation = require('../models/VetConsultation');
 const VetAttachment = require('../models/VetAttachment');
+const VetDocument = require('../models/VetDocument');
 const PetWeight = require('../models/PetWeight');
 const {
   isDriveConfigured,
@@ -251,6 +252,59 @@ function formatAttachment(doc) {
     createdAt,
     updatedAt,
     arquivos,
+  };
+}
+
+function sanitizeDocumentContent(html) {
+  if (typeof html !== 'string') return '';
+  return html
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
+    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<object[\s\S]*?>[\s\S]*?<\/object>/gi, '')
+    .replace(/ on[a-z]+\s*=\s*(['"])[\s\S]*?\1/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/data:text\/html/gi, '')
+    .trim();
+}
+
+function extractPlainTextContent(html) {
+  if (!html) return '';
+  return String(html)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function formatUserRef(user) {
+  if (!user) return null;
+  if (typeof user === 'string') {
+    const id = toStringSafe(user);
+    return id ? { id, nome: '', email: '' } : null;
+  }
+  const id = toStringSafe(user._id || user.id);
+  if (!id) return null;
+  return {
+    id,
+    nome: typeof user.nome === 'string' ? user.nome : '',
+    email: typeof user.email === 'string' ? user.email : '',
+  };
+}
+
+function formatDocument(doc) {
+  if (!doc) return null;
+  const createdAt = toIsoDate(doc.createdAt);
+  const updatedAt = toIsoDate(doc.updatedAt) || createdAt;
+  return {
+    id: toStringSafe(doc._id),
+    _id: toStringSafe(doc._id),
+    descricao: typeof doc.descricao === 'string' ? doc.descricao : '',
+    conteudo: typeof doc.conteudo === 'string' ? doc.conteudo : '',
+    createdAt,
+    updatedAt,
+    createdBy: formatUserRef(doc.createdBy),
+    updatedBy: formatUserRef(doc.updatedBy),
   };
 }
 
@@ -512,6 +566,144 @@ router.delete('/vet/pesos/:id', authMiddleware, requireStaff, async (req, res) =
   } catch (error) {
     console.error('DELETE /func/vet/pesos/:id', error);
     return res.status(500).json({ message: 'Erro ao remover registro de peso.' });
+  }
+});
+
+router.get('/vet/documentos', authMiddleware, requireStaff, async (_req, res) => {
+  try {
+    const docs = await VetDocument.find({})
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .populate('createdBy', 'nome email')
+      .populate('updatedBy', 'nome email')
+      .lean();
+
+    const formatted = docs.map(formatDocument).filter(Boolean);
+    return res.json(formatted);
+  } catch (error) {
+    console.error('GET /func/vet/documentos', error);
+    return res.status(500).json({ message: 'Erro ao listar documentos.' });
+  }
+});
+
+router.post('/vet/documentos', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const descricaoRaw = typeof req.body?.descricao === 'string' ? req.body.descricao : '';
+    const conteudoRaw = typeof req.body?.conteudo === 'string' ? req.body.conteudo : '';
+    const descricao = descricaoRaw.trim();
+
+    if (!descricao) {
+      return res.status(400).json({ message: 'Descrição é obrigatória.' });
+    }
+    if (descricao.length > 180) {
+      return res.status(400).json({ message: 'A descrição deve ter no máximo 180 caracteres.' });
+    }
+
+    const conteudoSanitized = sanitizeDocumentContent(conteudoRaw);
+    if (conteudoSanitized.length > 200000) {
+      return res.status(400).json({ message: 'O documento deve ter no máximo 200.000 caracteres.' });
+    }
+
+    const plainText = extractPlainTextContent(conteudoSanitized);
+    if (!plainText) {
+      return res.status(400).json({ message: 'O conteúdo do documento é obrigatório.' });
+    }
+
+    const userId = normalizeObjectId(req.user?.id || req.user?._id);
+    if (!userId) {
+      return res.status(401).json({ message: 'Usuário não autenticado.' });
+    }
+
+    const doc = await VetDocument.create({
+      descricao,
+      conteudo: conteudoSanitized,
+      createdBy: userId,
+      updatedBy: userId,
+    });
+
+    const full = await VetDocument.findById(doc._id)
+      .populate('createdBy', 'nome email')
+      .populate('updatedBy', 'nome email')
+      .lean();
+
+    return res.status(201).json(formatDocument(full));
+  } catch (error) {
+    console.error('POST /func/vet/documentos', error);
+    return res.status(500).json({ message: 'Erro ao salvar documento.' });
+  }
+});
+
+router.put('/vet/documentos/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const id = normalizeObjectId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+
+    const existing = await VetDocument.findById(id);
+    if (!existing) {
+      return res.status(404).json({ message: 'Documento não encontrado.' });
+    }
+
+    const descricaoRaw = typeof req.body?.descricao === 'string' ? req.body.descricao : '';
+    const conteudoRaw = typeof req.body?.conteudo === 'string' ? req.body.conteudo : '';
+    const descricao = descricaoRaw.trim();
+
+    if (!descricao) {
+      return res.status(400).json({ message: 'Descrição é obrigatória.' });
+    }
+    if (descricao.length > 180) {
+      return res.status(400).json({ message: 'A descrição deve ter no máximo 180 caracteres.' });
+    }
+
+    const conteudoSanitized = sanitizeDocumentContent(conteudoRaw);
+    if (conteudoSanitized.length > 200000) {
+      return res.status(400).json({ message: 'O documento deve ter no máximo 200.000 caracteres.' });
+    }
+
+    const plainText = extractPlainTextContent(conteudoSanitized);
+    if (!plainText) {
+      return res.status(400).json({ message: 'O conteúdo do documento é obrigatório.' });
+    }
+
+    const userId = normalizeObjectId(req.user?.id || req.user?._id);
+    if (!userId) {
+      return res.status(401).json({ message: 'Usuário não autenticado.' });
+    }
+
+    existing.descricao = descricao;
+    existing.conteudo = conteudoSanitized;
+    existing.updatedBy = userId;
+    await existing.save();
+
+    const full = await VetDocument.findById(id)
+      .populate('createdBy', 'nome email')
+      .populate('updatedBy', 'nome email')
+      .lean();
+
+    return res.json(formatDocument(full));
+  } catch (error) {
+    console.error('PUT /func/vet/documentos/:id', error);
+    return res.status(500).json({ message: 'Erro ao atualizar documento.' });
+  }
+});
+
+router.delete('/vet/documentos/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const id = normalizeObjectId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+
+    const existing = await VetDocument.findById(id).lean();
+    if (!existing) {
+      return res.status(404).json({ message: 'Documento não encontrado.' });
+    }
+
+    await VetDocument.deleteOne({ _id: id });
+    return res.status(204).send();
+  } catch (error) {
+    console.error('DELETE /func/vet/documentos/:id', error);
+    return res.status(500).json({ message: 'Erro ao remover documento.' });
   }
 });
 
