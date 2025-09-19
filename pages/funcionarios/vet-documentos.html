@@ -2,10 +2,104 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Funcionários — Veterinário — Documentos</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <link rel="stylesheet" href="../../src/output.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="../../src/output.css" />
+  <link rel="stylesheet" href="https://cdn.quilljs.com/1.3.7/quill.snow.css" />
+  <style>
+    .vet-doc-editor .ql-toolbar.ql-snow {
+      border-color: #e5e7eb;
+      border-top-left-radius: 0.75rem;
+      border-top-right-radius: 0.75rem;
+    }
+    .vet-doc-editor .ql-container.ql-snow {
+      border-color: #e5e7eb;
+      border-bottom-left-radius: 0.75rem;
+      border-bottom-right-radius: 0.75rem;
+      min-height: 280px;
+    }
+    .vet-doc-editor .ql-container .ql-editor {
+      min-height: 240px;
+      font-size: 0.95rem;
+      color: #1f2937;
+    }
+    .vet-doc-editor .ql-toolbar button:hover,
+    .vet-doc-editor .ql-toolbar button.ql-active {
+      color: #2563eb;
+    }
+    .vet-doc-textarea {
+      width: 100%;
+      min-height: 260px;
+      border: 1px solid #d1d5db;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      font-size: 0.95rem;
+      color: #1f2937;
+      resize: vertical;
+    }
+    .vet-doc-textarea:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+    .vet-doc-card details summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .vet-doc-card details summary::-webkit-details-marker {
+      display: none;
+    }
+    .vet-doc-card details summary:focus {
+      outline: none;
+    }
+    .vet-doc-card details[open] .vet-doc-summary-icon {
+      transform: rotate(180deg);
+    }
+    .vet-doc-body h1,
+    .vet-doc-body h2,
+    .vet-doc-body h3,
+    .vet-doc-body h4 {
+      font-weight: 600;
+      color: #111827;
+      margin-top: 1.25rem;
+    }
+    .vet-doc-body h1 { font-size: 1.25rem; }
+    .vet-doc-body h2 { font-size: 1.15rem; }
+    .vet-doc-body h3 { font-size: 1.05rem; }
+    .vet-doc-body h4 { font-size: 1rem; }
+    .vet-doc-body p {
+      margin-top: 0.75rem;
+      line-height: 1.7;
+    }
+    .vet-doc-body ul,
+    .vet-doc-body ol {
+      margin-top: 0.75rem;
+      padding-left: 1.25rem;
+    }
+    .vet-doc-body ul { list-style: disc; }
+    .vet-doc-body ol { list-style: decimal; }
+    .vet-doc-body blockquote {
+      border-left: 3px solid #cbd5f5;
+      padding-left: 1rem;
+      color: #374151;
+      font-style: italic;
+      margin-top: 0.75rem;
+    }
+    .vet-doc-body a {
+      color: #2563eb;
+      text-decoration: underline;
+    }
+    .vet-doc-body code {
+      background-color: #f3f4f6;
+      padding: 0.1rem 0.3rem;
+      border-radius: 0.25rem;
+      font-size: 0.85em;
+    }
+  </style>
 </head>
 <body class="bg-gray-100">
   <div id="func-header-placeholder"></div>
@@ -14,12 +108,110 @@
     <div class="mb-6" id="func-sidebar-placeholder"></div>
 
     <section class="bg-white rounded-xl shadow-sm ring-1 ring-black/5 p-6">
-      <div class="flex items-center gap-3 mb-4">
-        <i class="fas fa-file-medical text-primary"></i>
-        <h1 class="text-xl font-semibold text-gray-800">Documentos</h1>
+      <div class="flex items-start gap-3">
+        <div class="h-12 w-12 rounded-xl bg-primary/10 text-primary grid place-items-center text-xl">
+          <i class="fas fa-file-lines"></i>
+        </div>
+        <div class="flex-1">
+          <h1 class="text-xl font-semibold text-gray-800">Documentos</h1>
+          <p class="text-sm text-gray-500 mt-1">
+            Crie, edite e organize os documentos emitidos na clínica veterinária.
+          </p>
+        </div>
       </div>
-      <div class="rounded-lg border border-dashed border-gray-300 p-8 text-center">
-        <p class="text-gray-500">Em breve — estamos preparando esta área.</p>
+
+      <div class="mt-8">
+        <h2 id="vet-doc-form-title" class="text-lg font-semibold text-gray-800">Novo documento</h2>
+        <p class="text-sm text-gray-500 mt-1">
+          Informe uma descrição e escreva o conteúdo utilizando o editor avançado para salvar este documento.
+        </p>
+
+        <form id="vet-doc-form" class="mt-4 space-y-5">
+          <div>
+            <label for="vet-doc-descricao" class="text-sm font-medium text-gray-700">Descrição</label>
+            <input
+              id="vet-doc-descricao"
+              name="descricao"
+              type="text"
+              maxlength="180"
+              placeholder="Ex.: Declaração de atendimento, Relatório clínico do paciente, etc."
+              class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/30"
+              autocomplete="off"
+              required
+            />
+          </div>
+
+          <div>
+            <label class="text-sm font-medium text-gray-700">Conteúdo</label>
+            <div
+              id="vet-doc-editor"
+              class="vet-doc-editor mt-2"
+            ></div>
+          </div>
+
+          <div>
+            <div class="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4">
+              <div class="flex items-start gap-3">
+                <div class="hidden h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary sm:grid">
+                  <i class="fas fa-tags"></i>
+                </div>
+                <div class="flex-1">
+                  <h3 class="text-sm font-semibold text-primary">Palavras-chave disponíveis</h3>
+                  <p class="mt-1 text-xs text-primary/80">
+                    Clique em uma palavra-chave para inserir no conteúdo. Elas serão preenchidas automaticamente quando o documento for utilizado em outras telas.
+                  </p>
+                </div>
+              </div>
+              <div id="vet-doc-keywords" class="mt-4 space-y-4"></div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <button
+              id="vet-doc-save"
+              type="submit"
+              class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <i class="fas fa-save"></i>
+              <span>Salvar documento</span>
+            </button>
+            <button
+              id="vet-doc-cancel-edit"
+              type="button"
+              class="hidden inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <i class="fas fa-rotate-left"></i>
+              <span>Cancelar edição</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div class="mt-10 border-t border-gray-100 pt-6">
+        <div class="flex items-center gap-3">
+          <h2 class="text-lg font-semibold text-gray-800">Documentos salvos</h2>
+          <span id="vet-doc-count" class="inline-flex items-center justify-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600">0</span>
+        </div>
+        <p class="mt-1 text-sm text-gray-500">Os documentos mais recentes aparecem primeiro.</p>
+
+        <div
+          id="vet-doc-error"
+          class="mt-4 hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        ></div>
+
+        <div id="vet-doc-loading" class="mt-6 hidden items-center gap-2 text-sm text-gray-500">
+          <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-transparent"></span>
+          <span>Carregando documentos...</span>
+        </div>
+
+        <div
+          id="vet-doc-empty"
+          class="mt-6 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500"
+        >
+          Nenhum documento cadastrado até o momento.
+        </div>
+
+        <div id="vet-doc-list" class="mt-6 space-y-4"></div>
       </div>
     </section>
   </main>
@@ -33,5 +225,7 @@
   <script src="../../scripts/core/ui.js"></script>
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/funcionarios/funcionarios.js"></script>
+  <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+  <script type="module" src="../../scripts/funcionarios/vet/documentos.js"></script>
 </body>
 </html>

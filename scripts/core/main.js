@@ -131,7 +131,7 @@ function initFuncionarioVetHoverMenu() {
   // Itens do menu (todos "Em breve")
   const ITEMS = [
     { label: 'Ficha Clínica', icon: 'fas fa-notes-medical', href: '/pages/funcionarios/vet-ficha-clinica.html', status: 'Em breve' },
-    { label: 'Documentos',    icon: 'fas fa-file-medical', href: '/pages/funcionarios/vet-documentos.html',    status: 'Em breve' },
+    { label: 'Documentos',    icon: 'fas fa-file-medical', href: '/pages/funcionarios/vet-documentos.html',    status: '' },
     { label: 'Receitas',      icon: 'fas fa-prescription-bottle-medical', href: '/pages/funcionarios/vet-receitas.html', status: 'Em breve' },
     { label: 'Assinatura',    icon: 'fas fa-signature',     href: '/pages/funcionarios/vet-assinatura.html',   status: 'Em breve' },
   ];
@@ -155,15 +155,21 @@ function initFuncionarioVetHoverMenu() {
 
   // Render dos itens
   function renderItems() {
-    list.innerHTML = ITEMS.map(it => `
+    list.innerHTML = ITEMS.map((it) => {
+      const status = typeof it.status === 'string' ? it.status.trim() : '';
+      const badge = status
+        ? `<span class="text-[10px] uppercase tracking-wide bg-gray-200 text-gray-700 rounded px-2 py-0.5">${status}</span>`
+        : '';
+      return `
       <a href="${it.href}" class="flex items-center justify-between px-3 py-2 rounded-md hover:bg-gray-50">
         <span class="flex items-center gap-3">
           <i class="${it.icon} w-5 text-center"></i>
           <span>${it.label}</span>
         </span>
-        <span class="text-[10px] uppercase tracking-wide bg-gray-200 text-gray-700 rounded px-2 py-0.5">${it.status}</span>
+        ${badge}
       </a>
-    `).join('');
+    `;
+    }).join('');
   }
   renderItems();
 
