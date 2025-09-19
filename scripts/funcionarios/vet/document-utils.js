@@ -247,62 +247,145 @@ export function openDocumentPrintWindow(html, { title = 'Documento', styles = ''
       <body>${safeContent}</body>
     </html>`;
 
+  const urlFactory = typeof window !== 'undefined' ? window.URL || window.webkitURL : null;
+  const supportsBlobUrl =
+    typeof Blob !== 'undefined' &&
+    !!urlFactory &&
+    typeof urlFactory.createObjectURL === 'function';
+
   let printWindow = null;
-  try {
-    printWindow = window.open('', '_blank', 'noopener=yes');
-    if (!printWindow) {
-      return false;
+  let blobUrl = '';
+  let fallbackTimer = null;
+  let readinessTimer = null;
+  let readyAttempts = 0;
+  let printed = false;
+
+  const clearTimers = () => {
+    if (fallbackTimer) {
+      window.clearTimeout(fallbackTimer);
+      fallbackTimer = null;
     }
-
-    const printDocument = printWindow.document;
-    if (!printDocument) {
-      if (typeof printWindow.close === 'function') {
-        printWindow.close();
-      }
-      return false;
+    if (readinessTimer) {
+      window.clearTimeout(readinessTimer);
+      readinessTimer = null;
     }
+  };
 
-    printDocument.open();
-    printDocument.write(documentHtml);
-    printDocument.close();
-
-    let printed = false;
-    const triggerPrint = () => {
-      if (printed) return;
-      printed = true;
+  const releaseBlob = () => {
+    if (blobUrl && urlFactory && typeof urlFactory.revokeObjectURL === 'function') {
       try {
-        printWindow.focus();
-        printWindow.print();
-      } catch (error) {
-        console.error('openDocumentPrintWindow', error);
+        urlFactory.revokeObjectURL(blobUrl);
+      } catch (_) {
+        /* ignore */
       }
+      blobUrl = '';
+    }
+  };
+
+  const cleanup = () => {
+    clearTimers();
+    releaseBlob();
+  };
+
+  const triggerPrint = () => {
+    if (printed || !printWindow) return;
+    printed = true;
+    try {
+      printWindow.focus();
+      printWindow.print();
+    } catch (error) {
+      console.error('openDocumentPrintWindow', error);
+    } finally {
+      window.setTimeout(releaseBlob, 1500);
+    }
+  };
+
+  const waitForReady = () => {
+    if (!printWindow) return;
+
+    let isReady = true;
+    try {
+      const doc = printWindow.document;
+      isReady = !!doc && doc.readyState === 'complete';
+    } catch (error) {
+      isReady = true;
+    }
+
+    if (!isReady && readyAttempts < 15) {
+      readyAttempts += 1;
+      readinessTimer = window.setTimeout(waitForReady, 120);
+      return;
+    }
+
+    clearTimers();
+    window.setTimeout(triggerPrint, 120);
+  };
+
+  try {
+    if (supportsBlobUrl) {
+      const blob = new Blob([documentHtml], { type: 'text/html' });
+      blobUrl = urlFactory.createObjectURL(blob);
+      printWindow = window.open(blobUrl, '_blank', 'noopener');
+    } else {
+      printWindow = window.open('', '_blank', 'noopener');
+    }
+
+    if (!printWindow) {
+      cleanup();
+      return false;
+    }
+
+    const handleLoad = () => {
+      readyAttempts = 0;
+      waitForReady();
     };
 
-    let fallbackTimer = window.setTimeout(triggerPrint, 600);
-
-    const handleReady = () => {
-      if (fallbackTimer) {
-        window.clearTimeout(fallbackTimer);
-        fallbackTimer = null;
+    if (!blobUrl) {
+      const printDocument = printWindow.document;
+      if (!printDocument) {
+        if (typeof printWindow.close === 'function') {
+          try {
+            printWindow.close();
+          } catch (_) {
+            /* ignore */
+          }
+        }
+        cleanup();
+        return false;
       }
-      window.setTimeout(triggerPrint, 120);
-    };
+
+      printDocument.open();
+      printDocument.write(documentHtml);
+      printDocument.close();
+
+      if (printWindow.addEventListener) {
+        printWindow.addEventListener('load', handleLoad, { once: true });
+      }
+
+      if (printDocument.readyState === 'complete') {
+        handleLoad();
+      } else if (printDocument.addEventListener) {
+        const readyListener = () => {
+          if (printDocument.readyState === 'complete') {
+            printDocument.removeEventListener('readystatechange', readyListener);
+            handleLoad();
+          }
+        };
+        printDocument.addEventListener('readystatechange', readyListener);
+      }
+    } else if (printWindow.addEventListener) {
+      printWindow.addEventListener('load', handleLoad, { once: true });
+    }
 
     if (printWindow.addEventListener) {
-      printWindow.addEventListener('load', handleReady, { once: true });
+      printWindow.addEventListener('afterprint', cleanup);
+      printWindow.addEventListener('beforeunload', cleanup);
     }
 
-    if (printDocument.readyState === 'complete') {
-      handleReady();
-    } else if (printDocument.addEventListener) {
-      const readyListener = () => {
-        if (printDocument.readyState === 'complete') {
-          printDocument.removeEventListener('readystatechange', readyListener);
-          handleReady();
-        }
-      };
-      printDocument.addEventListener('readystatechange', readyListener);
-    }
+    fallbackTimer = window.setTimeout(() => {
+      readyAttempts = 0;
+      waitForReady();
+    }, blobUrl ? 900 : 600);
 
     return true;
   } catch (error) {
@@ -314,6 +397,7 @@ export function openDocumentPrintWindow(html, { title = 'Documento', styles = ''
         /* ignore */
       }
     }
+    cleanup();
     return false;
   }
 }
