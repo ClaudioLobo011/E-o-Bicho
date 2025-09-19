@@ -1,3 +1,55 @@
+const KEYWORD_GROUPS = [
+  {
+    title: 'Tutor',
+    items: [
+      { token: '<NomeTutor>', description: 'Nome completo do tutor responsável pelo pet.' },
+      { token: '<EmailTutor>', description: 'E-mail principal do tutor.' },
+      { token: '<TelefoneTutor>', description: 'Telefone ou celular do tutor, formatado.' },
+      {
+        token: '<DocumentoTutor>',
+        description: 'Documento principal (CPF ou CNPJ) informado pelo tutor.',
+      },
+    ],
+  },
+  {
+    title: 'Pet',
+    items: [
+      { token: '<NomePet>', description: 'Nome do pet atendido.' },
+      { token: '<EspeciePet>', description: 'Espécie do pet (cão, gato, etc.).' },
+      { token: '<RacaPet>', description: 'Raça do pet.' },
+      { token: '<SexoPet>', description: 'Sexo do pet.' },
+      { token: '<NascimentoPet>', description: 'Data de nascimento do pet.' },
+      { token: '<IdadePet>', description: 'Idade atual estimada do pet.' },
+      { token: '<PesoPet>', description: 'Último peso registrado do pet.' },
+      { token: '<MicrochipPet>', description: 'Número de microchip do pet, quando disponível.' },
+    ],
+  },
+  {
+    title: 'Atendimento',
+    items: [
+      { token: '<DataAtendimento>', description: 'Data agendada ou realizada do atendimento.' },
+      { token: '<HoraAtendimento>', description: 'Horário do atendimento.' },
+      { token: '<NomeServico>', description: 'Nome do serviço ou procedimento veterinário.' },
+      { token: '<MotivoConsulta>', description: 'Motivo ou anamnese registrada para a consulta.' },
+      { token: '<DiagnosticoConsulta>', description: 'Diagnóstico registrado na consulta.' },
+      { token: '<ExameFisicoConsulta>', description: 'Resumo do exame físico registrado.' },
+      { token: '<NomeVeterinario>', description: 'Nome do profissional responsável pelo atendimento.' },
+    ],
+  },
+  {
+    title: 'Clínica e sistema',
+    items: [
+      { token: '<NomeClinica>', description: 'Nome da clínica ou unidade onde o atendimento ocorreu.' },
+      { token: '<EnderecoClinica>', description: 'Endereço completo da clínica.' },
+      { token: '<TelefoneClinica>', description: 'Telefone principal da clínica.' },
+      { token: '<WhatsappClinica>', description: 'WhatsApp oficial da clínica.' },
+      { token: '<DataAtual>', description: 'Data atual no formato local.' },
+      { token: '<HoraAtual>', description: 'Horário atual.' },
+      { token: '<DataHoraAtual>', description: 'Data e hora atuais.' },
+    ],
+  },
+];
+
 const state = {
   documents: [],
   editingId: null,
@@ -19,6 +71,8 @@ let countBadge;
 let quill = null;
 let fallbackTextarea = null;
 let isRedirecting = false;
+let keywordsContainer;
+let keywordButtons = [];
 
 function getAuthToken() {
   try {
@@ -198,6 +252,97 @@ function getPreviewText(html) {
   return text;
 }
 
+function insertKeyword(token) {
+  const text = typeof token === 'string' ? token : String(token || '');
+  if (!text || state.isSaving) return;
+
+  if (quill) {
+    quill.focus();
+    let range = quill.getSelection(true);
+    if (!range) {
+      const length = Math.max(quill.getLength(), 0);
+      range = { index: length, length: 0 };
+    }
+    if (range.length > 0) {
+      quill.deleteText(range.index, range.length, 'user');
+    }
+    quill.insertText(range.index, text, 'user');
+    quill.setSelection(range.index + text.length, 0, 'silent');
+    return;
+  }
+
+  if (fallbackTextarea) {
+    const value = fallbackTextarea.value || '';
+    const start = typeof fallbackTextarea.selectionStart === 'number'
+      ? fallbackTextarea.selectionStart
+      : value.length;
+    const end = typeof fallbackTextarea.selectionEnd === 'number'
+      ? fallbackTextarea.selectionEnd
+      : start;
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    fallbackTextarea.value = `${before}${text}${after}`;
+    const cursor = start + text.length;
+    fallbackTextarea.focus();
+    fallbackTextarea.setSelectionRange(cursor, cursor);
+  }
+}
+
+function setKeywordsDisabled(disabled) {
+  if (!keywordButtons.length) return;
+  keywordButtons.forEach((button) => {
+    if (!button) return;
+    button.disabled = !!disabled;
+    button.classList.toggle('opacity-60', !!disabled);
+    button.classList.toggle('cursor-not-allowed', !!disabled);
+  });
+}
+
+function renderKeywords() {
+  if (!keywordsContainer) return;
+  keywordsContainer.innerHTML = '';
+  keywordButtons = [];
+
+  KEYWORD_GROUPS.forEach((group) => {
+    if (!group || !Array.isArray(group.items) || !group.items.length) return;
+
+    const section = document.createElement('div');
+    section.className = 'space-y-2';
+
+    const heading = document.createElement('h3');
+    heading.className = 'text-xs font-semibold uppercase tracking-wide text-primary';
+    heading.textContent = group.title;
+    section.appendChild(heading);
+
+    const list = document.createElement('div');
+    list.className = 'grid gap-2 sm:grid-cols-2';
+
+    group.items.forEach((item) => {
+      const token = typeof item?.token === 'string' ? item.token.trim() : '';
+      if (!token) return;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.token = token;
+      button.className = 'flex w-full flex-col rounded-lg border border-primary/30 bg-white px-3 py-2 text-left text-sm text-primary shadow-sm transition hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/40';
+      const description = typeof item.description === 'string' ? item.description : '';
+      button.innerHTML = `
+        <span class="font-mono text-xs font-semibold tracking-tight text-primary/90">${escapeHtml(token)}</span>
+        ${description ? `<span class="mt-1 text-xs text-slate-500">${escapeHtml(description)}</span>` : ''}
+      `;
+      button.addEventListener('click', () => insertKeyword(token));
+      keywordButtons.push(button);
+      list.appendChild(button);
+    });
+
+    if (list.children.length > 0) {
+      section.appendChild(list);
+      keywordsContainer.appendChild(section);
+    }
+  });
+
+  setKeywordsDisabled(state.isSaving);
+}
+
 function sanitizeDocumentHtml(html) {
   if (typeof html !== 'string') return '';
   return html
@@ -331,6 +476,7 @@ function setFormBusy(busy) {
     descriptionInput.disabled = state.isSaving;
   }
   setEditorDisabled(state.isSaving);
+  setKeywordsDisabled(state.isSaving);
 }
 
 function resetForm() {
@@ -629,6 +775,7 @@ function init() {
   loadingEl = document.getElementById('vet-doc-loading');
   errorEl = document.getElementById('vet-doc-error');
   countBadge = document.getElementById('vet-doc-count');
+  keywordsContainer = document.getElementById('vet-doc-keywords');
 
   if (!form || !descriptionInput || !editorContainer || !listEl) {
     console.error('Elementos essenciais não encontrados na página de documentos.');
@@ -638,6 +785,7 @@ function init() {
   updateFormMode();
   updateEmptyState();
   initEditor();
+  renderKeywords();
 
   form.addEventListener('submit', onSubmit);
   if (cancelBtn) {
