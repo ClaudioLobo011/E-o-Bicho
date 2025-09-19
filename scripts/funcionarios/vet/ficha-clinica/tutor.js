@@ -68,7 +68,19 @@ async function fetchClienteWithPhones(cliente) {
   const existingEmail = pickFirst(cliente?.email);
   const existingCelular = pickFirst(cliente?.celular);
   const existingTelefone = pickFirst(cliente?.telefone);
-  const needsHydration = !existingNome || !existingEmail || !pickFirst(existingCelular, existingTelefone);
+  const existingDocument = pickFirst(
+    cliente?.documento,
+    cliente?.documentoPrincipal,
+    cliente?.cpf,
+    cliente?.cpfCnpj,
+    cliente?.cnpj,
+    cliente?.inscricaoEstadual,
+  );
+  const needsHydration =
+    !existingNome ||
+    !existingEmail ||
+    !pickFirst(existingCelular, existingTelefone) ||
+    !existingDocument;
 
   if (!needsHydration) {
     return {
@@ -101,11 +113,14 @@ async function fetchClienteWithPhones(cliente) {
 
     const payload = {
       ...cliente,
+      ...data,
       _id: clienteId,
       nome: pickFirst(existingNome, data.nome),
       email: pickFirst(existingEmail, data.email),
-      celular: primaryPhone,
     };
+    if (primaryPhone) {
+      payload.celular = primaryPhone;
+    }
     if (secondaryPhone) {
       payload.telefone = secondaryPhone;
     }
