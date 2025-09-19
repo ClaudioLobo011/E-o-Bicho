@@ -487,18 +487,18 @@ function ensureDocumentoModal() {
   overlay.setAttribute('aria-hidden', 'true');
 
   const dialog = document.createElement('div');
-  dialog.className = 'w-full max-w-3xl rounded-xl bg-white shadow-2xl focus:outline-none';
+  dialog.className = 'w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl focus:outline-none';
   dialog.setAttribute('role', 'dialog');
   dialog.setAttribute('aria-modal', 'true');
   dialog.tabIndex = -1;
   overlay.appendChild(dialog);
 
   const layout = document.createElement('div');
-  layout.className = 'flex max-h-[90vh] flex-col';
+  layout.className = 'flex max-h-[90vh] flex-col overflow-hidden';
   dialog.appendChild(layout);
 
   const header = document.createElement('div');
-  header.className = 'flex items-start justify-between gap-3 border-b border-gray-100 px-6 py-4';
+  header.className = 'flex shrink-0 items-start justify-between gap-3 border-b border-gray-100 px-6 py-4';
   layout.appendChild(header);
 
   const titleWrap = document.createElement('div');
@@ -522,12 +522,32 @@ function ensureDocumentoModal() {
   header.appendChild(closeBtn);
 
   const content = document.createElement('div');
-  content.className = 'flex-1 space-y-5 overflow-y-auto px-6 py-5';
+  content.className = 'flex flex-1 flex-col overflow-hidden px-6 py-5';
+  content.style.minHeight = '0';
   layout.appendChild(content);
+
+  const bodyWrapper = document.createElement('div');
+  bodyWrapper.className = 'flex flex-col gap-5 lg:flex-row';
+  bodyWrapper.style.minHeight = '0';
+  content.appendChild(bodyWrapper);
+
+  const leftColumn = document.createElement('div');
+  leftColumn.className = 'flex flex-1 flex-col gap-4';
+  leftColumn.style.minHeight = '0';
+  bodyWrapper.appendChild(leftColumn);
+
+  const rightColumn = document.createElement('div');
+  rightColumn.className = 'flex flex-1 flex-col';
+  rightColumn.style.minHeight = '0';
+  bodyWrapper.appendChild(rightColumn);
+
+  const selectCard = document.createElement('div');
+  selectCard.className = 'rounded-xl border border-slate-200 bg-white p-4 shadow-sm';
+  leftColumn.appendChild(selectCard);
 
   const selectField = document.createElement('div');
   selectField.className = 'space-y-2';
-  content.appendChild(selectField);
+  selectCard.appendChild(selectField);
 
   const selectLabel = document.createElement('label');
   selectLabel.className = 'text-sm font-medium text-gray-700';
@@ -547,18 +567,19 @@ function ensureDocumentoModal() {
   selectField.appendChild(selectHelp);
 
   const loadingState = document.createElement('div');
-  loadingState.className = 'hidden rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600';
+  loadingState.className = 'hidden rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600 shadow-inner';
   loadingState.textContent = 'Carregando documentos salvos...';
-  content.appendChild(loadingState);
+  leftColumn.appendChild(loadingState);
 
   const emptyState = document.createElement('div');
-  emptyState.className = 'hidden rounded-lg border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-600';
+  emptyState.className = 'hidden rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm';
   emptyState.textContent = 'Nenhum documento salvo foi encontrado.';
-  content.appendChild(emptyState);
+  leftColumn.appendChild(emptyState);
 
   const previewCard = document.createElement('div');
-  previewCard.className = 'overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner';
-  content.appendChild(previewCard);
+  previewCard.className = 'flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner';
+  previewCard.style.minHeight = '260px';
+  leftColumn.appendChild(previewCard);
 
   const previewBar = document.createElement('div');
   previewBar.className = 'flex items-center gap-2 border-b border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600';
@@ -566,16 +587,18 @@ function ensureDocumentoModal() {
   previewCard.appendChild(previewBar);
 
   const previewTitle = document.createElement('p');
-  previewTitle.className = 'px-4 py-2 text-sm font-medium text-slate-700';
+  previewTitle.className = 'px-4 py-2 text-sm font-semibold text-slate-700';
   previewTitle.textContent = 'Nenhum documento selecionado.';
   previewCard.appendChild(previewTitle);
 
   const previewWrapper = document.createElement('div');
-  previewWrapper.className = 'relative';
+  previewWrapper.className = 'relative flex-1 bg-white';
+  previewWrapper.style.minHeight = '0';
   previewCard.appendChild(previewWrapper);
 
   const previewFrame = document.createElement('iframe');
-  previewFrame.className = 'block h-[320px] w-full bg-white';
+  previewFrame.className = 'block h-full w-full bg-white';
+  previewFrame.style.minHeight = '260px';
   previewFrame.id = 'vet-documento-preview-frame';
   previewFrame.setAttribute('loading', 'lazy');
   previewWrapper.appendChild(previewFrame);
@@ -587,8 +610,9 @@ function ensureDocumentoModal() {
   previewWrapper.appendChild(previewEmpty);
 
   const keywordsSection = document.createElement('div');
-  keywordsSection.className = 'rounded-xl border border-dashed border-slate-300 bg-white p-4';
-  content.appendChild(keywordsSection);
+  keywordsSection.className = 'flex flex-1 flex-col rounded-xl border border-dashed border-slate-300 bg-white p-4 shadow-sm';
+  keywordsSection.style.minHeight = '0';
+  rightColumn.appendChild(keywordsSection);
 
   const keywordsTitle = document.createElement('h3');
   keywordsTitle.className = 'text-sm font-semibold text-slate-700';
@@ -600,12 +624,17 @@ function ensureDocumentoModal() {
   keywordsHelp.textContent = 'As palavras abaixo são substituídas automaticamente pelos dados atuais do atendimento.';
   keywordsSection.appendChild(keywordsHelp);
 
+  const keywordsScroll = document.createElement('div');
+  keywordsScroll.className = 'mt-3 flex-1 overflow-y-auto pr-2';
+  keywordsScroll.style.minHeight = '0';
+  keywordsSection.appendChild(keywordsScroll);
+
   const keywordsContainer = document.createElement('div');
-  keywordsContainer.className = 'mt-3 grid gap-2 sm:grid-cols-2';
-  keywordsSection.appendChild(keywordsContainer);
+  keywordsContainer.className = 'grid gap-2 md:grid-cols-2';
+  keywordsScroll.appendChild(keywordsContainer);
 
   const footer = document.createElement('div');
-  footer.className = 'flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-slate-50 px-6 py-4';
+  footer.className = 'flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-slate-50 px-6 py-4';
   layout.appendChild(footer);
 
   const footerInfo = document.createElement('p');
@@ -734,7 +763,7 @@ async function updatePreview() {
       previewEmpty.classList.remove('hidden');
     }
     if (previewFrame) {
-      renderPreviewFrameContent(previewFrame, '', { minHeight: 320, background: '#f8fafc' });
+      renderPreviewFrameContent(previewFrame, '', { minHeight: 260, background: '#f8fafc' });
     }
     highlightKeywords('');
     documentoModal.isGenerating = false;
@@ -751,7 +780,7 @@ async function updatePreview() {
     previewEmpty.classList.remove('hidden');
   }
   if (previewFrame) {
-    renderPreviewFrameContent(previewFrame, '', { minHeight: 320, background: '#f8fafc' });
+    renderPreviewFrameContent(previewFrame, '', { minHeight: 260, background: '#f8fafc' });
   }
 
   const requestId = ++previewUpdateToken;
@@ -762,7 +791,7 @@ async function updatePreview() {
     const { html } = await resolveDocumentContent(doc);
     if (requestId !== previewUpdateToken) return;
     if (previewFrame) {
-      renderPreviewFrameContent(previewFrame, html, { minHeight: 320, background: '#f8fafc' });
+      renderPreviewFrameContent(previewFrame, html, { minHeight: 260, background: '#f8fafc' });
     }
     if (previewEmpty) {
       previewEmpty.textContent = defaultMessage;
@@ -776,7 +805,7 @@ async function updatePreview() {
       previewEmpty.classList.remove('hidden');
     }
     if (previewFrame) {
-      renderPreviewFrameContent(previewFrame, '', { minHeight: 320, background: '#f8fafc' });
+      renderPreviewFrameContent(previewFrame, '', { minHeight: 260, background: '#f8fafc' });
     }
   } finally {
     if (requestId === previewUpdateToken) {
