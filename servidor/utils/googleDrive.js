@@ -3,6 +3,9 @@ const { URL } = require('url');
 const TOKEN_URI = 'https://oauth2.googleapis.com/token';
 const UPLOAD_URI = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,mimeType,size,webViewLink,webContentLink';
 const FILES_URI = 'https://www.googleapis.com/drive/v3/files';
+const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+const folderCache = new Map();
 
 let cachedCredentials = null;
 let cachedAccessToken = null;
@@ -36,6 +39,24 @@ function cleanEnvValue(value) {
     cleaned = cleaned.slice(1, -1);
   }
   return cleaned.trim();
+}
+
+function sanitizeDriveFolderName(name) {
+  if (name === null || name === undefined) return '';
+  return String(name)
+    .replace(/[\\/:*?"'<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 255);
+}
+
+function getFolderCacheKey(parentId, name) {
+  const parentKey = parentId ? String(parentId) : 'root';
+  return `${parentKey}::${name}`;
+}
+
+function escapeQueryValue(value) {
+  return String(value).replace(/'/g, "\\'");
 }
 
 function getCredentials() {
@@ -91,6 +112,7 @@ function resetCredentialsCache() {
   cachedAccessToken = null;
   cachedAccessTokenExpiry = 0;
   pendingTokenPromise = null;
+  folderCache.clear();
 }
 
 function isDriveConfigured() {
@@ -141,6 +163,121 @@ function requestGoogle({ url, method = 'GET', headers = {}, body = null }) {
       reject(error);
     }
   });
+}
+
+async function findFolderByName(name, parentId, token) {
+  const sanitized = sanitizeDriveFolderName(name);
+  if (!sanitized) return null;
+
+  const parentQuery = parentId ? `'${escapeQueryValue(parentId)}' in parents` : "'root' in parents";
+  const query = `name = '${escapeQueryValue(sanitized)}' and mimeType = '${DRIVE_FOLDER_MIME}' and trashed = false and ${parentQuery}`;
+  const params = new URLSearchParams({
+    q: query,
+    spaces: 'drive',
+    fields: 'files(id,name),nextPageToken',
+    pageSize: '10',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
+  });
+
+  const headers = { Authorization: `Bearer ${token}` };
+  const response = await requestGoogle({
+    url: `${FILES_URI}?${params.toString()}`,
+    method: 'GET',
+    headers,
+  });
+
+  try {
+    const data = JSON.parse(response.body.toString('utf8'));
+    if (Array.isArray(data?.files) && data.files.length > 0) {
+      return data.files[0]?.id || null;
+    }
+  } catch (error) {
+    console.error('googleDrive.findFolderByName parse error', error);
+  }
+  return null;
+}
+
+async function createFolder(name, parentId, token) {
+  const sanitized = sanitizeDriveFolderName(name);
+  if (!sanitized) return null;
+
+  const bodyPayload = {
+    name: sanitized,
+    mimeType: DRIVE_FOLDER_MIME,
+  };
+  if (parentId) {
+    bodyPayload.parents = [parentId];
+  }
+
+  const bodyString = JSON.stringify(bodyPayload);
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(bodyString),
+  };
+
+  const response = await requestGoogle({
+    url: `${FILES_URI}?supportsAllDrives=true&fields=id,name,parents`,
+    method: 'POST',
+    headers,
+    body: Buffer.from(bodyString, 'utf8'),
+  });
+
+  try {
+    const data = JSON.parse(response.body.toString('utf8'));
+    return data?.id || null;
+  } catch (error) {
+    console.error('googleDrive.createFolder parse error', error);
+    return null;
+  }
+}
+
+async function ensureDriveFolder(name, parentId, token) {
+  const sanitized = sanitizeDriveFolderName(name);
+  if (!sanitized) return null;
+
+  const cacheKey = getFolderCacheKey(parentId, sanitized);
+  if (folderCache.has(cacheKey)) {
+    return folderCache.get(cacheKey);
+  }
+
+  let folderId = await findFolderByName(sanitized, parentId, token);
+  if (!folderId) {
+    folderId = await createFolder(sanitized, parentId, token);
+  }
+
+  if (folderId) {
+    folderCache.set(cacheKey, folderId);
+  }
+
+  return folderId;
+}
+
+async function ensureFolderPath({ segments = [], baseFolderId = null, token }) {
+  if (!token) {
+    throw new Error('Token do Google Drive é obrigatório para garantir pastas.');
+  }
+
+  const list = Array.isArray(segments) ? segments : [];
+  const sanitizedSegments = list
+    .map((segment) => sanitizeDriveFolderName(segment))
+    .filter(Boolean);
+
+  if (!sanitizedSegments.length) {
+    return baseFolderId || null;
+  }
+
+  let currentParent = baseFolderId || null;
+  for (const segment of sanitizedSegments) {
+    const ensuredId = await ensureDriveFolder(segment, currentParent, token);
+    if (!ensuredId) {
+      throw new Error(`Falha ao garantir a pasta "${segment}" no Google Drive.`);
+    }
+    currentParent = ensuredId;
+  }
+
+  return currentParent;
 }
 
 async function fetchAccessToken() {
@@ -287,20 +424,34 @@ async function uploadBufferToDrive(buffer, options = {}) {
   const boundary = `gc_boundary_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const mimeType = options.mimeType || 'application/octet-stream';
   const parentsRaw = Array.isArray(options.parents) ? options.parents : [];
-  const parents = parentsRaw
+  const parentCandidates = parentsRaw
     .filter((value) => value !== null && value !== undefined)
     .map((value) => cleanEnvValue(typeof value === 'string' ? value : String(value)))
     .filter(Boolean);
   const folderSource = typeof options.folderId !== 'undefined' ? options.folderId : credentials.folderId;
-  const folderId = cleanEnvValue(
+  const baseFolderId = cleanEnvValue(
     folderSource === null || folderSource === undefined
       ? ''
       : (typeof folderSource === 'string' ? folderSource : String(folderSource)),
   );
-  if (folderId) {
-    parents.push(folderId);
+
+  const pathSegments = Array.isArray(options.folderPath) ? options.folderPath : [];
+  let finalFolderId = null;
+  if (pathSegments.length) {
+    finalFolderId = await ensureFolderPath({
+      segments: pathSegments,
+      baseFolderId: baseFolderId || null,
+      token,
+    });
+  } else if (baseFolderId) {
+    finalFolderId = baseFolderId;
   }
-  const uniqueParents = Array.from(new Set(parents)).filter(Boolean);
+
+  if (finalFolderId) {
+    parentCandidates.push(finalFolderId);
+  }
+
+  const uniqueParents = Array.from(new Set(parentCandidates)).filter(Boolean);
 
   const metadata = {
     name: options.name || `arquivo-${Date.now()}`,
