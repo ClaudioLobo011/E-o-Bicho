@@ -488,7 +488,8 @@ function ensureDocumentoModal() {
   overlay.setAttribute('aria-hidden', 'true');
 
   const dialog = document.createElement('div');
-  dialog.className = 'w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl focus:outline-none';
+  dialog.className = 'w-full overflow-hidden rounded-xl bg-white shadow-2xl focus:outline-none';
+  dialog.style.maxWidth = '72rem';
   dialog.style.maxHeight = 'calc(100vh - 2rem)';
   dialog.setAttribute('role', 'dialog');
   dialog.setAttribute('aria-modal', 'true');
@@ -535,7 +536,7 @@ function ensureDocumentoModal() {
   content.appendChild(bodyWrapper);
 
   const leftColumn = document.createElement('div');
-  leftColumn.className = 'flex flex-1 flex-col gap-4';
+  leftColumn.className = 'flex min-w-0 flex-1 flex-col gap-4';
   leftColumn.style.minHeight = '0';
   bodyWrapper.appendChild(leftColumn);
 
@@ -580,7 +581,7 @@ function ensureDocumentoModal() {
   leftColumn.appendChild(emptyState);
 
   const previewCard = document.createElement('div');
-  previewCard.className = 'flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner';
+  previewCard.className = 'flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner';
   previewCard.style.minHeight = '260px';
   leftColumn.appendChild(previewCard);
 

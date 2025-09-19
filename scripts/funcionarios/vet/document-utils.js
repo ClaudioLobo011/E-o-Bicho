@@ -249,14 +249,27 @@ export function openDocumentPrintWindow(html, { title = 'Documento', styles = ''
 
   let printWindow = null;
   try {
-    printWindow = window.open('', '_blank', 'noopener,noreferrer');
+    printWindow = window.open('', '_blank', 'noopener=yes');
     if (!printWindow) {
       return false;
     }
-    printWindow.document.open();
-    printWindow.document.write(documentHtml);
-    printWindow.document.close();
+
+    const printDocument = printWindow.document;
+    if (!printDocument) {
+      if (typeof printWindow.close === 'function') {
+        printWindow.close();
+      }
+      return false;
+    }
+
+    printDocument.open();
+    printDocument.write(documentHtml);
+    printDocument.close();
+
+    let printed = false;
     const triggerPrint = () => {
+      if (printed) return;
+      printed = true;
       try {
         printWindow.focus();
         printWindow.print();
@@ -264,14 +277,37 @@ export function openDocumentPrintWindow(html, { title = 'Documento', styles = ''
         console.error('openDocumentPrintWindow', error);
       }
     };
+
+    let fallbackTimer = window.setTimeout(triggerPrint, 600);
+
+    const handleReady = () => {
+      if (fallbackTimer) {
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+      window.setTimeout(triggerPrint, 120);
+    };
+
     if (printWindow.addEventListener) {
-      printWindow.addEventListener('load', () => setTimeout(triggerPrint, 100));
+      printWindow.addEventListener('load', handleReady, { once: true });
     }
-    setTimeout(triggerPrint, 300);
+
+    if (printDocument.readyState === 'complete') {
+      handleReady();
+    } else if (printDocument.addEventListener) {
+      const readyListener = () => {
+        if (printDocument.readyState === 'complete') {
+          printDocument.removeEventListener('readystatechange', readyListener);
+          handleReady();
+        }
+      };
+      printDocument.addEventListener('readystatechange', readyListener);
+    }
+
     return true;
   } catch (error) {
     console.error('openDocumentPrintWindow', error);
-    if (printWindow) {
+    if (printWindow && typeof printWindow.close === 'function') {
       try {
         printWindow.close();
       } catch (_) {
