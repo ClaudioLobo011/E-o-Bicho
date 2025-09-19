@@ -203,7 +203,7 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
     }
 
     const users = await User.find({ $or: or })
-      .select('_id nomeCompleto nomeContato razaoSocial email cpf cnpj celular tipoConta')
+      .select('_id nomeCompleto nomeContato razaoSocial email cpf cnpj inscricaoEstadual celular tipoConta')
       .limit(limit)
       .lean();
 
@@ -212,7 +212,10 @@ router.get('/clientes/buscar', authMiddleware, requireStaff, async (req, res) =>
       nome: userDisplayName(u),
       email: u.email,
       celular: u.celular || '',
-      doc: u.cpf || u.cnpj || '',
+      doc: u.cpf || u.cnpj || u.inscricaoEstadual || '',
+      cpf: u.cpf || '',
+      cnpj: u.cnpj || '',
+      inscricaoEstadual: u.inscricaoEstadual || '',
       tipoConta: u.tipoConta
     })));
   } catch (e) {
@@ -669,7 +672,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'ID inválido.' });
     }
     const u = await User.findById(id)
-      .select('_id nomeCompleto nomeContato razaoSocial email celular telefone')
+      .select('_id nomeCompleto nomeContato razaoSocial email celular telefone cpf cnpj inscricaoEstadual')
       .lean();
     if (!u) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
@@ -677,12 +680,24 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
     const nome = u.nomeCompleto || u.nomeContato || u.razaoSocial || u.email || '';
     const celular = u.celular || u.telefone || '';
     const telefone = u.telefone || '';
+    const cpf = typeof u.cpf === 'string' ? u.cpf : '';
+    const cnpj = typeof u.cnpj === 'string' ? u.cnpj : '';
+    const inscricaoEstadual = typeof u.inscricaoEstadual === 'string' ? u.inscricaoEstadual : '';
+    const documentoPrincipal = cpf || cnpj || inscricaoEstadual || '';
+    const cpfCnpj = cpf || cnpj || '';
     res.json({
       _id: u._id,
       nome,
       email: u.email || '',
       celular,
       telefone,
+      cpf,
+      cnpj,
+      cpfCnpj,
+      inscricaoEstadual,
+      documento: documentoPrincipal,
+      documentoPrincipal,
+      doc: documentoPrincipal,
     });
   } catch (e) {
     console.error('GET /func/clientes/:id', e);

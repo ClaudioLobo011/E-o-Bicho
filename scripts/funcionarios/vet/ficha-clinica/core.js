@@ -390,6 +390,18 @@ export function persistCliente(cliente) {
         cliente?.telefone && cliente?.telefone !== primaryPhone ? cliente.telefone : '',
         cliente?.celular && cliente?.celular !== primaryPhone ? cliente.celular : '',
       );
+      const cpfValue = pickFirst(cliente?.cpf);
+      const cnpjValue = pickFirst(cliente?.cnpj);
+      const inscricaoEstadualValue = pickFirst(cliente?.inscricaoEstadual);
+      const documentValue = pickFirst(
+        cliente?.documento,
+        cliente?.documentoPrincipal,
+        cliente?.cpfCnpj,
+        cliente?.doc,
+        cpfValue,
+        cnpjValue,
+        inscricaoEstadualValue,
+      );
       const payload = {
         _id: id,
         nome,
@@ -398,6 +410,38 @@ export function persistCliente(cliente) {
       };
       if (secondaryPhone) {
         payload.telefone = secondaryPhone;
+      }
+      if (cliente?.tipoConta) {
+        payload.tipoConta = cliente.tipoConta;
+      }
+      if (cpfValue) {
+        payload.cpf = cpfValue;
+      }
+      if (cnpjValue) {
+        payload.cnpj = cnpjValue;
+      }
+      if (inscricaoEstadualValue) {
+        payload.inscricaoEstadual = inscricaoEstadualValue;
+      }
+      if (documentValue) {
+        const digits = String(documentValue).replace(/\D+/g, '');
+        payload.documento = documentValue;
+        payload.documentoPrincipal = documentValue;
+        payload.doc = documentValue;
+        payload.cpfCnpj = pickFirst(cpfValue, cnpjValue, documentValue);
+        if (!payload.cpf && digits.length === 11) {
+          payload.cpf = documentValue;
+        } else if (!payload.cnpj && digits.length === 14) {
+          payload.cnpj = documentValue;
+        }
+      } else if (payload.cpf || payload.cnpj) {
+        const principalDoc = pickFirst(payload.cpf, payload.cnpj);
+        if (principalDoc) {
+          payload.cpfCnpj = principalDoc;
+          if (!payload.documento) payload.documento = principalDoc;
+          if (!payload.documentoPrincipal) payload.documentoPrincipal = principalDoc;
+          if (!payload.doc) payload.doc = principalDoc;
+        }
       }
       localStorage.setItem(STORAGE_KEYS.cliente, JSON.stringify(payload));
     } else {
@@ -548,13 +592,40 @@ export async function fetchClienteById(id) {
     if (!resp.ok) return null;
     const data = await resp.json().catch(() => null);
     if (!data || !data._id) return null;
-    return {
+    const cpfValue = pickFirst(data.cpf);
+    const cnpjValue = pickFirst(data.cnpj);
+    const inscricaoEstadualValue = pickFirst(data.inscricaoEstadual);
+    const documentValue = pickFirst(
+      data.documento,
+      data.documentoPrincipal,
+      data.cpfCnpj,
+      cpfValue,
+      cnpjValue,
+      inscricaoEstadualValue,
+    );
+    const payload = {
       _id: normalizeId(data._id),
       nome: pickFirst(data.nome),
       email: pickFirst(data.email),
       celular: pickFirst(data.celular, data.telefone),
       telefone: pickFirst(data.telefone, data.celular),
     };
+    if (cpfValue) payload.cpf = cpfValue;
+    if (cnpjValue) payload.cnpj = cnpjValue;
+    if (inscricaoEstadualValue) payload.inscricaoEstadual = inscricaoEstadualValue;
+    if (documentValue) {
+      const digits = String(documentValue).replace(/\D+/g, '');
+      payload.documento = documentValue;
+      payload.documentoPrincipal = documentValue;
+      payload.doc = documentValue;
+      payload.cpfCnpj = pickFirst(cpfValue, cnpjValue, documentValue);
+      if (!payload.cpf && digits.length === 11) {
+        payload.cpf = documentValue;
+      } else if (!payload.cnpj && digits.length === 14) {
+        payload.cnpj = documentValue;
+      }
+    }
+    return payload;
   } catch {
     return null;
   }
