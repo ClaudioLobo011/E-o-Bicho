@@ -720,3 +720,145 @@ async function handleVacinaSubmit() {
     setVacinaModalSubmitting(false);
   }
 }
+
+export async function deleteVacina(vacina, options = {}) {
+  const { skipConfirm = false } = options || {};
+  const record = vacina && typeof vacina === 'object' ? vacina : {};
+  const recordId = normalizeId(record.id || record._id);
+  const servicoId = normalizeId(record.servicoId || record.servico);
+  if (!servicoId) {
+    notify('Não foi possível identificar a vacina selecionada.', 'error');
+    return false;
+  }
+
+  if (!ensureTutorAndPetSelected()) {
+    return false;
+  }
+
+  const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+  if (!appointmentId) {
+    notify('Abra a ficha pela agenda para remover vacinas vinculadas a um agendamento.', 'warning');
+    return false;
+  }
+
+  const serviceName = pickFirst(record.servicoNome);
+  if (!skipConfirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+    const question = serviceName
+      ? `Remover a aplicação da vacina "${serviceName}"?`
+      : 'Remover esta aplicação de vacina?';
+    const confirmed = window.confirm(question);
+    if (!confirmed) {
+      return false;
+    }
+  }
+
+  const existingServices = Array.isArray(state.agendaContext?.servicos) ? state.agendaContext.servicos : [];
+  const normalizedServices = existingServices
+    .map((svc) => {
+      const sid = normalizeId(svc?._id || svc?.id || svc?.servicoId || svc?.servico);
+      if (!sid) return null;
+      const valorItem = Number(svc?.valor || 0);
+      return {
+        servicoId: sid,
+        valor: Number.isFinite(valorItem) ? valorItem : 0,
+      };
+    })
+    .filter(Boolean);
+
+  const rawTotal = Number(record.valorTotal);
+  const fallbackTotal = Number(record.valorUnitario || 0) * (Number(record.quantidade || 0) || 0);
+  let targetValor = null;
+  if (Number.isFinite(rawTotal) && rawTotal > 0) {
+    targetValor = Number(rawTotal);
+  } else if (Number.isFinite(fallbackTotal) && fallbackTotal > 0) {
+    targetValor = Number(fallbackTotal);
+  }
+
+  let removed = false;
+  const remainingServices = [];
+  normalizedServices.forEach((svc) => {
+    if (removed) {
+      remainingServices.push(svc);
+      return;
+    }
+
+    if (svc.servicoId !== servicoId) {
+      remainingServices.push(svc);
+      return;
+    }
+
+    const valorItem = Number(svc.valor || 0);
+    if (targetValor != null && Math.abs(valorItem - targetValor) > 0.01) {
+      remainingServices.push(svc);
+      return;
+    }
+
+    removed = true;
+  });
+
+  if (!removed) {
+    notify('Não foi possível localizar a vacina no agendamento.', 'error');
+    return false;
+  }
+
+  try {
+    const response = await api(`/func/agendamentos/${appointmentId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ servicos: remainingServices }),
+    });
+
+    let data = null;
+    if (response.status !== 204) {
+      data = await response.json().catch(() => (response.ok ? {} : {}));
+    }
+
+    if (!response.ok) {
+      const message = typeof data?.message === 'string' ? data.message : 'Erro ao atualizar os serviços do agendamento.';
+      throw new Error(message);
+    }
+
+    if (!state.agendaContext) state.agendaContext = {};
+    if (Array.isArray(data?.servicos)) {
+      state.agendaContext.servicos = data.servicos;
+    } else {
+      let removedFromContext = false;
+      state.agendaContext.servicos = existingServices.filter((svc) => {
+        if (removedFromContext) return true;
+        const sid = normalizeId(svc?._id || svc?.id || svc?.servicoId || svc?.servico);
+        if (!sid || sid !== servicoId) return true;
+        const valorItem = Number(svc?.valor || 0);
+        if (targetValor != null && Math.abs(valorItem - targetValor) > 0.01) {
+          return true;
+        }
+        removedFromContext = true;
+        return false;
+      });
+    }
+    if (typeof data?.valor === 'number') {
+      state.agendaContext.valor = Number(data.valor);
+    }
+    if (Array.isArray(state.agendaContext?.servicos)) {
+      state.agendaContext.totalServicos = state.agendaContext.servicos.length;
+    }
+    persistAgendaContext(state.agendaContext);
+
+    const nextVacinas = (Array.isArray(state.vacinas) ? state.vacinas : []).filter((item) => {
+      const itemId = normalizeId(item?.id || item?._id);
+      if (recordId && itemId) {
+        return itemId !== recordId;
+      }
+      return item !== record;
+    });
+    state.vacinas = nextVacinas;
+    persistVacinasForSelection();
+    updateConsultaAgendaCard();
+    notify('Vacina removida com sucesso.', 'success');
+    return true;
+  } catch (error) {
+    console.error('deleteVacina', error);
+    notify(error.message || 'Erro ao remover vacina.', 'error');
+    return false;
+  }
+}
+
+state.deleteVacina = deleteVacina;
