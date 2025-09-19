@@ -13,7 +13,6 @@ import {
   getSelectedPet,
   getAgendaStoreId,
   normalizeId,
-  buildAbsoluteUrl,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard, getConsultasKey } from './consultas.js';
 import {
@@ -331,38 +330,8 @@ async function fetchStoreInfoById(storeId) {
   return promise;
 }
 
-function resolveLogoPath(...candidates) {
-  for (const candidate of candidates) {
-    if (candidate === null || candidate === undefined) continue;
-    if (typeof candidate === 'string') {
-      const trimmed = candidate.trim();
-      if (trimmed && trimmed !== '[object Object]') {
-        return trimmed;
-      }
-      continue;
-    }
-    if (typeof candidate === 'object') {
-      const resolved = resolveLogoPath(candidate.url, candidate.href, candidate.src, candidate.path);
-      if (resolved) return resolved;
-    }
-  }
-  return '';
-}
-
 function buildClinicLogoReplacement({ agenda, store, clinicName }) {
-  const fallbackUrl = buildAbsoluteUrl('/image/logo.svg', { fallback: '' });
-  const rawLogoPath = resolveLogoPath(
-    store?.logoUrl,
-    store?.logo,
-    store?.imagem,
-    agenda?.storeLogo,
-    agenda?.logoUrl,
-    agenda?.logo,
-    agenda?.empresaLogo,
-    agenda?.logoEmpresa,
-    agenda?.storeImagem,
-  );
-  const logoUrl = buildAbsoluteUrl(rawLogoPath, { fallback: '' }) || fallbackUrl;
+  const fallbackUrl = '/image/logo.svg';
   const alt = pickFirst(
     clinicName,
     store?.nome,
@@ -373,7 +342,7 @@ function buildClinicLogoReplacement({ agenda, store, clinicName }) {
 
   return {
     __kind: 'logo',
-    url: logoUrl,
+    url: fallbackUrl,
     alt: alt || 'Logo da clínica',
     defaultMaxWidth: '240px',
   };
