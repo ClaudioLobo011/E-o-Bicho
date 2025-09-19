@@ -12,6 +12,7 @@ import {
   formatPetMicrochip,
   getSelectedPet,
   getAgendaStoreId,
+  normalizeId,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
 import {
@@ -878,6 +879,33 @@ function generateDocumentEntry(doc, resolvedHtml = '') {
     preview: getPreviewText(previewSource),
   };
 }
+
+export function deleteDocumentoRegistro(target, options = {}) {
+  const { suppressNotify = false } = options;
+  const targetId = normalizeId(
+    target && typeof target === 'object' ? target.id || target._id : target,
+  );
+  if (!targetId) return Promise.resolve(false);
+
+  const current = Array.isArray(state.documentos) ? state.documentos : [];
+  const filtered = current.filter(
+    (item) => normalizeId(item?.id || item?._id) !== targetId,
+  );
+
+  if (filtered.length === current.length) {
+    return Promise.resolve(false);
+  }
+
+  state.documentos = filtered;
+  if (!suppressNotify) {
+    notify('Documento removido com sucesso.', 'success');
+  }
+  updateConsultaAgendaCard();
+
+  return Promise.resolve(true);
+}
+
+state.deleteDocumento = deleteDocumentoRegistro;
 
 async function handleSave() {
   if (documentoModal.isLoading || documentoModal.isGenerating) return;

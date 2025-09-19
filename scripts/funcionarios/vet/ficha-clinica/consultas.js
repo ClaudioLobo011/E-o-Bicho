@@ -24,7 +24,7 @@ import {
   getSelectedPet,
   formatFileSize,
 } from './core.js';
-import { getPreviewText, openDocumentPrintWindow } from '../document-utils.js';
+import { openDocumentPrintWindow } from '../document-utils.js';
 
 function normalizeConsultaRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -544,7 +544,7 @@ function createDocumentoRegistroCard(entry) {
 
   const title = document.createElement('h3');
   title.className = 'text-sm font-semibold text-emerald-700';
-  title.textContent = entry.descricao || 'Documento salvo';
+  title.textContent = 'Documento salvo';
   headerText.appendChild(title);
 
   if (entry.createdAt) {
@@ -554,17 +554,60 @@ function createDocumentoRegistroCard(entry) {
     headerText.appendChild(meta);
   }
 
-  const preview = entry.preview || getPreviewText(entry.conteudo || '');
-  if (preview) {
-    const previewEl = document.createElement('p');
-    previewEl.className = 'mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700';
-    previewEl.textContent = preview;
-    card.appendChild(previewEl);
+  const descricao = (entry.descricao || '').trim();
+  if (descricao) {
+    const tagWrapper = document.createElement('div');
+    tagWrapper.className = 'mt-3';
+    const descriptionTag = document.createElement('span');
+    descriptionTag.className = 'inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700';
+    descriptionTag.textContent = descricao;
+    tagWrapper.appendChild(descriptionTag);
+    card.appendChild(tagWrapper);
   }
 
   const actions = document.createElement('div');
   actions.className = 'mt-4 flex flex-wrap items-center justify-end gap-2';
   card.appendChild(actions);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-200';
+  removeBtn.innerHTML = '<i class="fas fa-trash-can text-[12px]"></i><span>Remover</span>';
+  removeBtn.title = 'Remover documento';
+  removeBtn.setAttribute('aria-label', 'Remover documento');
+
+  const toggleRemoveDisabled = (disabled) => {
+    removeBtn.disabled = !!disabled;
+    removeBtn.classList.toggle('opacity-60', !!disabled);
+    removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
+  };
+
+  removeBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const handler = state?.deleteDocumento;
+    if (typeof handler !== 'function') {
+      notify('Não foi possível remover o documento agora. Recarregue a página e tente novamente.', 'error');
+      return;
+    }
+
+    toggleRemoveDisabled(true);
+
+    let result;
+    try {
+      result = handler(entry);
+    } catch (error) {
+      console.error('removeDocumento handler', error);
+      toggleRemoveDisabled(false);
+      return;
+    }
+
+    Promise.resolve(result)
+      .catch(() => {})
+      .finally(() => {
+        toggleRemoveDisabled(false);
+      });
+  });
 
   const printBtn = document.createElement('button');
   printBtn.type = 'button';
@@ -580,6 +623,8 @@ function createDocumentoRegistroCard(entry) {
     }
   });
   actions.appendChild(printBtn);
+
+  actions.appendChild(removeBtn);
 
   return card;
 }
