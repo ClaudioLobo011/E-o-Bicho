@@ -148,6 +148,7 @@ export async function onSelectCliente(cli, opts = {}) {
   state.pesos = [];
   state.pesosLoadKey = null;
   state.pesosLoading = false;
+  state.documentos = [];
 
   if (state.agendaContext) {
     const contextTutorId = normalizeId(state.agendaContext.tutorId);
@@ -254,6 +255,7 @@ export async function onSelectPet(petId, opts = {}) {
   state.pesosLoadKey = null;
   state.pesosLoading = false;
   state.observacoes = [];
+  state.documentos = [];
   loadVacinasForSelection();
   loadAnexosForSelection();
   loadExamesForSelection();
@@ -290,6 +292,7 @@ export function clearCliente() {
   state.pesosLoadKey = null;
   state.pesosLoading = false;
   state.observacoes = [];
+  state.documentos = [];
   persistAgendaContext(null);
   if (els.cliInput) els.cliInput.value = '';
   hideSugestoes();
@@ -320,6 +323,7 @@ export function clearPet() {
   state.examesLoadKey = null;
   state.examesLoading = false;
   state.observacoes = [];
+  state.documentos = [];
   updateCardDisplay();
   updatePageVisibility();
 }

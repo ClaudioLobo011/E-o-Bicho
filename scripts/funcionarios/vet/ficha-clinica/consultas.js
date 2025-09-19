@@ -24,6 +24,7 @@ import {
   getSelectedPet,
   formatFileSize,
 } from './core.js';
+import { getPreviewText, openDocumentPrintWindow } from '../document-utils.js';
 
 function normalizeConsultaRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -518,6 +519,67 @@ function createAnexoCard(anexo) {
       item.appendChild(actions);
     }
   });
+
+  return card;
+}
+
+function createDocumentoRegistroCard(entry) {
+  if (!entry) return null;
+
+  const card = document.createElement('article');
+  card.className = 'rounded-xl border border-emerald-200 bg-white p-4 shadow-sm';
+
+  const header = document.createElement('div');
+  header.className = 'flex items-start gap-3';
+  card.appendChild(header);
+
+  const icon = document.createElement('div');
+  icon.className = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600';
+  icon.innerHTML = '<i class="fas fa-file-signature"></i>';
+  header.appendChild(icon);
+
+  const headerText = document.createElement('div');
+  headerText.className = 'flex-1';
+  header.appendChild(headerText);
+
+  const title = document.createElement('h3');
+  title.className = 'text-sm font-semibold text-emerald-700';
+  title.textContent = entry.descricao || 'Documento salvo';
+  headerText.appendChild(title);
+
+  if (entry.createdAt) {
+    const meta = document.createElement('p');
+    meta.className = 'mt-0.5 text-xs text-gray-500';
+    meta.textContent = `Salvo em ${formatDateTimeDisplay(entry.createdAt)}`;
+    headerText.appendChild(meta);
+  }
+
+  const preview = entry.preview || getPreviewText(entry.conteudo || '');
+  if (preview) {
+    const previewEl = document.createElement('p');
+    previewEl.className = 'mt-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700';
+    previewEl.textContent = preview;
+    card.appendChild(previewEl);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'mt-4 flex flex-wrap items-center justify-end gap-2';
+  card.appendChild(actions);
+
+  const printBtn = document.createElement('button');
+  printBtn.type = 'button';
+  printBtn.className = 'inline-flex items-center gap-2 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-200';
+  printBtn.innerHTML = '<i class="fas fa-print"></i><span>Imprimir</span>';
+  printBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    const success = openDocumentPrintWindow(entry.conteudo || '', {
+      title: entry.descricao || 'Documento',
+    });
+    if (!success) {
+      notify('Não foi possível abrir a impressão. Verifique se o navegador bloqueou pop-ups.', 'error');
+    }
+  });
+  actions.appendChild(printBtn);
 
   return card;
 }
@@ -1410,6 +1472,8 @@ export function updateConsultaAgendaCard() {
   const isLoadingPesos = !!state.pesosLoading;
   const observacoes = Array.isArray(state.observacoes) ? state.observacoes : [];
   const hasObservacoes = observacoes.length > 0;
+  const documentos = Array.isArray(state.documentos) ? state.documentos : [];
+  const hasDocumentos = documentos.length > 0;
   const context = state.agendaContext;
   const selectedPetId = normalizeId(state.selectedPetId);
   const selectedTutorId = normalizeId(state.selectedCliente?._id);
@@ -1535,7 +1599,14 @@ export function updateConsultaAgendaCard() {
   }
 
   const hasAnyContent =
-    hasManualConsultas || hasAgendaContent || hasVacinas || hasAnexos || hasPesos || hasExames || hasObservacoes;
+    hasManualConsultas ||
+    hasAgendaContent ||
+    hasVacinas ||
+    hasAnexos ||
+    hasPesos ||
+    hasExames ||
+    hasObservacoes ||
+    hasDocumentos;
   const shouldShowPlaceholder = !hasAnyContent;
 
   if ((isLoadingConsultas || isLoadingAnexos || isLoadingPesos || isLoadingExames) && !hasAnyContent) {
@@ -1639,6 +1710,19 @@ export function updateConsultaAgendaCard() {
     });
     orderedObservacoes.forEach((observacao) => {
       const card = createObservacaoCard(observacao);
+      if (card) scroll.appendChild(card);
+    });
+  }
+
+  if (hasDocumentos) {
+    const orderedDocumentos = [...documentos];
+    orderedDocumentos.sort((a, b) => {
+      const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+    orderedDocumentos.forEach((documento) => {
+      const card = createDocumentoRegistroCard(documento);
       if (card) scroll.appendChild(card);
     });
   }

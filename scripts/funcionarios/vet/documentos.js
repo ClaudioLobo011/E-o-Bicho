@@ -1,54 +1,10 @@
-const KEYWORD_GROUPS = [
-  {
-    title: 'Tutor',
-    items: [
-      { token: '<NomeTutor>', description: 'Nome completo do tutor responsável pelo pet.' },
-      { token: '<EmailTutor>', description: 'E-mail principal do tutor.' },
-      { token: '<TelefoneTutor>', description: 'Telefone ou celular do tutor, formatado.' },
-      {
-        token: '<DocumentoTutor>',
-        description: 'Documento principal (CPF ou CNPJ) informado pelo tutor.',
-      },
-    ],
-  },
-  {
-    title: 'Pet',
-    items: [
-      { token: '<NomePet>', description: 'Nome do pet atendido.' },
-      { token: '<EspeciePet>', description: 'Espécie do pet (cão, gato, etc.).' },
-      { token: '<RacaPet>', description: 'Raça do pet.' },
-      { token: '<SexoPet>', description: 'Sexo do pet.' },
-      { token: '<NascimentoPet>', description: 'Data de nascimento do pet.' },
-      { token: '<IdadePet>', description: 'Idade atual estimada do pet.' },
-      { token: '<PesoPet>', description: 'Último peso registrado do pet.' },
-      { token: '<MicrochipPet>', description: 'Número de microchip do pet, quando disponível.' },
-    ],
-  },
-  {
-    title: 'Atendimento',
-    items: [
-      { token: '<DataAtendimento>', description: 'Data agendada ou realizada do atendimento.' },
-      { token: '<HoraAtendimento>', description: 'Horário do atendimento.' },
-      { token: '<NomeServico>', description: 'Nome do serviço ou procedimento veterinário.' },
-      { token: '<MotivoConsulta>', description: 'Motivo ou anamnese registrada para a consulta.' },
-      { token: '<DiagnosticoConsulta>', description: 'Diagnóstico registrado na consulta.' },
-      { token: '<ExameFisicoConsulta>', description: 'Resumo do exame físico registrado.' },
-      { token: '<NomeVeterinario>', description: 'Nome do profissional responsável pelo atendimento.' },
-    ],
-  },
-  {
-    title: 'Clínica e sistema',
-    items: [
-      { token: '<NomeClinica>', description: 'Nome da clínica ou unidade onde o atendimento ocorreu.' },
-      { token: '<EnderecoClinica>', description: 'Endereço completo da clínica.' },
-      { token: '<TelefoneClinica>', description: 'Telefone principal da clínica.' },
-      { token: '<WhatsappClinica>', description: 'WhatsApp oficial da clínica.' },
-      { token: '<DataAtual>', description: 'Data atual no formato local.' },
-      { token: '<HoraAtual>', description: 'Horário atual.' },
-      { token: '<DataHoraAtual>', description: 'Data e hora atuais.' },
-    ],
-  },
-];
+import {
+  KEYWORD_GROUPS,
+  sanitizeDocumentHtml,
+  extractPlainText,
+  getPreviewText,
+  renderPreviewFrameContent,
+} from './document-utils.js';
 
 const state = {
   documents: [],
@@ -243,22 +199,6 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
-
-function extractPlainText(html) {
-  if (!html) return '';
-  const temp = document.createElement('div');
-  temp.innerHTML = html;
-  return (temp.textContent || temp.innerText || '').trim();
-}
-
-function getPreviewText(html) {
-  const text = extractPlainText(html).replace(/\s+/g, ' ').trim();
-  if (!text) return '';
-  if (text.length > 220) {
-    return `${text.slice(0, 220).trim()}…`;
-  }
-  return text;
 }
 
 function formatCodeEditorValue(html) {
@@ -538,38 +478,6 @@ function renderKeywords() {
   setKeywordsDisabled(state.isSaving);
 }
 
-function sanitizeDocumentHtml(html, { allowStyles = false } = {}) {
-  if (typeof html !== 'string') return '';
-  let safe = html;
-
-  const blockedTagPatterns = [
-    /<script[\s\S]*?>[\s\S]*?<\/script>/gi,
-    /<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi,
-    /<object[\s\S]*?>[\s\S]*?<\/object>/gi,
-    /<embed[\s\S]*?>[\s\S]*?<\/embed>/gi,
-    /<link[^>]*?>/gi,
-    /<meta[^>]*?>/gi,
-    /<base[^>]*?>/gi,
-  ];
-
-  blockedTagPatterns.forEach((pattern) => {
-    safe = safe.replace(pattern, '');
-  });
-
-  if (!allowStyles) {
-    safe = safe.replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '');
-  }
-
-  safe = safe
-    .replace(/\son[a-z]+\s*=\s*(['"])[\s\S]*?\1/gi, '')
-    .replace(/\s+(?:xlink:)?href\s*=\s*(['"])\s*(?:javascript|vbscript):[^'">]*\1/gi, ' href="#"')
-    .replace(/\s+src\s*=\s*(['"])\s*(?:javascript|vbscript):[^'">]*\1/gi, ' src="#"')
-    .replace(/url\((['"]?)\s*(?:javascript|vbscript):[^)]*?\1\)/gi, 'url()')
-    .replace(/data:text\/html/gi, '');
-
-  return safe;
-}
-
 function shouldRenderAsPreview(html) {
   if (!html || typeof html !== 'string') return false;
   const value = html.trim();
@@ -580,83 +488,6 @@ function shouldRenderAsPreview(html) {
     return true;
   }
   return false;
-}
-
-function updatePreviewFrameHeight(frame, minHeight = 320) {
-  if (!frame) return;
-  try {
-    const doc = frame.contentDocument || frame.contentWindow?.document;
-    if (!doc) return;
-    const body = doc.body;
-    const html = doc.documentElement;
-    const bodyHeight = body
-      ? Math.max(body.scrollHeight, body.offsetHeight, body.clientHeight)
-      : 0;
-    const htmlHeight = html
-      ? Math.max(html.scrollHeight, html.offsetHeight, html.clientHeight)
-      : 0;
-    const height = Math.max(bodyHeight, htmlHeight, minHeight);
-    frame.style.height = `${height}px`;
-  } catch (_) {
-    /* ignore preview resize errors */
-  }
-}
-
-function renderPreviewFrameContent(frame, html, { minHeight = 320, padding = 24, background = '#f1f5f9' } = {}) {
-  if (!frame) return '';
-  frame.style.minHeight = `${minHeight}px`;
-  frame.style.height = `${minHeight}px`;
-  const sanitized = sanitizeDocumentHtml(html, { allowStyles: true });
-  const hasContent = !!sanitized && sanitized.trim().length > 0;
-  const placeholder = `
-    <div class="preview-empty">
-      Nenhum conteúdo para pré-visualizar.
-    </div>
-  `;
-  const documentHtml = `<!DOCTYPE html>
-    <html lang="pt-BR">
-      <head>
-        <meta charset="utf-8" />
-        <base target="_blank" />
-        <style>
-          :root { color-scheme: light; }
-          *, *::before, *::after { box-sizing: border-box; }
-          body { margin: 0; background: ${background}; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; color: #0f172a; }
-          .preview-wrapper { padding: ${padding}px; min-height: ${Math.max(minHeight - padding * 2, 0)}px; }
-          img { max-width: 100%; height: auto; display: block; }
-          table { width: 100%; border-collapse: collapse; }
-          .preview-empty {
-            display: grid;
-            place-items: center;
-            min-height: 160px;
-            border-radius: 16px;
-            border: 1px dashed rgba(148, 163, 184, 0.6);
-            background: rgba(148, 163, 184, 0.12);
-            color: #475569;
-            font-size: 14px;
-            line-height: 1.5;
-            text-align: center;
-            padding: 24px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="preview-wrapper">
-          ${hasContent ? sanitized : placeholder}
-        </div>
-      </body>
-    </html>`;
-
-  frame.srcdoc = documentHtml;
-
-  if (!frame.dataset.previewInitialized) {
-    frame.addEventListener('load', () => updatePreviewFrameHeight(frame, minHeight));
-    frame.dataset.previewInitialized = 'true';
-  }
-
-  setTimeout(() => updatePreviewFrameHeight(frame, minHeight), 60);
-
-  return sanitized;
 }
 
 function initEditor() {

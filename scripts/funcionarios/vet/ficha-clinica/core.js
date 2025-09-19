@@ -98,6 +98,7 @@ export const els = {
   addConsultaBtn: document.getElementById('vet-add-consulta-btn'),
   addVacinaBtn: document.getElementById('vet-add-vacina-btn'),
   addAnexoBtn: document.getElementById('vet-add-anexo-btn'),
+  addDocumentoBtn: document.getElementById('vet-add-documento-btn'),
   addExameBtn: document.getElementById('vet-add-exame-btn'),
   addPesoBtn: document.getElementById('vet-add-peso-btn'),
   addObservacaoBtn: document.getElementById('vet-add-observacao-btn'),
@@ -123,6 +124,7 @@ export const state = {
   pesosLoading: false,
   pesosLoadKey: null,
   observacoes: [],
+  documentos: [],
 };
 
 export const consultaModal = {
