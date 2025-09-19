@@ -282,6 +282,36 @@ export function pickFirst(...values) {
   return '';
 }
 
+export function buildAbsoluteUrl(path, { fallback = '' } = {}) {
+  let raw = '';
+  if (typeof path === 'string') {
+    raw = path;
+  } else if (path && typeof path === 'object') {
+    if (typeof path.url === 'string') {
+      raw = path.url;
+    } else if (typeof path.href === 'string') {
+      raw = path.href;
+    }
+  }
+
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return String(fallback || '');
+  if (/^(?:[a-z]+:)?\/\//i.test(trimmed) || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+
+  const base = (typeof API_CONFIG === 'object' && API_CONFIG && API_CONFIG.SERVER_URL) || '';
+  const normalizedBase = String(base || '').replace(/\/+$/, '');
+  if (!normalizedBase) {
+    const normalizedPath = trimmed.startsWith('/') ? trimmed : `/${trimmed.replace(/^\/+/, '')}`;
+    return normalizedPath || String(fallback || '');
+  }
+
+  const normalizedPath = trimmed.startsWith('/') ? trimmed : `/${trimmed.replace(/^\/+/, '')}`;
+  const absolute = `${normalizedBase}${normalizedPath}`;
+  return absolute || String(fallback || '');
+}
+
 export function normalizeForCompare(value) {
   const str = String(value || '');
   if (typeof String.prototype.normalize === 'function') {

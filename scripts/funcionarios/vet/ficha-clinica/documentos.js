@@ -13,6 +13,7 @@ import {
   getSelectedPet,
   getAgendaStoreId,
   normalizeId,
+  buildAbsoluteUrl,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard, getConsultasKey } from './consultas.js';
 import {
@@ -330,6 +331,54 @@ async function fetchStoreInfoById(storeId) {
   return promise;
 }
 
+function resolveLogoPath(...candidates) {
+  for (const candidate of candidates) {
+    if (candidate === null || candidate === undefined) continue;
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (trimmed && trimmed !== '[object Object]') {
+        return trimmed;
+      }
+      continue;
+    }
+    if (typeof candidate === 'object') {
+      const resolved = resolveLogoPath(candidate.url, candidate.href, candidate.src, candidate.path);
+      if (resolved) return resolved;
+    }
+  }
+  return '';
+}
+
+function buildClinicLogoReplacement({ agenda, store, clinicName }) {
+  const fallbackUrl = buildAbsoluteUrl('/image/logo.svg', { fallback: '' });
+  const rawLogoPath = resolveLogoPath(
+    store?.logoUrl,
+    store?.logo,
+    store?.imagem,
+    agenda?.storeLogo,
+    agenda?.logoUrl,
+    agenda?.logo,
+    agenda?.empresaLogo,
+    agenda?.logoEmpresa,
+    agenda?.storeImagem,
+  );
+  const logoUrl = buildAbsoluteUrl(rawLogoPath, { fallback: '' }) || fallbackUrl;
+  const alt = pickFirst(
+    clinicName,
+    store?.nome,
+    agenda?.storeNome,
+    agenda?.empresaNome,
+    'Logo da clínica',
+  );
+
+  return {
+    __kind: 'logo',
+    url: logoUrl,
+    alt: alt || 'Logo da clínica',
+    defaultMaxWidth: '240px',
+  };
+}
+
 async function buildKeywordReplacements() {
   const replacements = {};
   KEYWORD_GROUPS.forEach((group) => {
@@ -341,6 +390,10 @@ async function buildKeywordReplacements() {
       }
     });
   });
+
+  if (Object.prototype.hasOwnProperty.call(replacements, '<LogoClinica>')) {
+    replacements['<LogoClinica>'] = buildClinicLogoReplacement({ agenda: null, store: null, clinicName: '' });
+  }
 
   try {
     const tutor = state.selectedCliente || null;
@@ -466,6 +519,11 @@ async function buildKeywordReplacements() {
     replacements['<DataAtual>'] = formatDateDisplay(now);
     replacements['<HoraAtual>'] = formatTimeDisplay(now);
     replacements['<DataHoraAtual>'] = formatDateTimeDisplay(now);
+
+    const clinicName = replacements['<NomeClinica>'] || '';
+    if (Object.prototype.hasOwnProperty.call(replacements, '<LogoClinica>')) {
+      replacements['<LogoClinica>'] = buildClinicLogoReplacement({ agenda, store, clinicName });
+    }
   } catch (error) {
     console.error('buildKeywordReplacements', error);
   }
