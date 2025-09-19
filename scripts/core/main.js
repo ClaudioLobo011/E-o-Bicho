@@ -128,11 +128,11 @@ function initFuncionarioVetHoverMenu() {
   const trigger = wrap.querySelector('#func-vet-hover');
   if (!trigger) return;
 
-  // Itens do menu (todos "Em breve")
+  // Itens do menu
   const ITEMS = [
     { label: 'Ficha Clínica', icon: 'fas fa-notes-medical', href: '/pages/funcionarios/vet-ficha-clinica.html', status: 'Em breve' },
     { label: 'Documentos',    icon: 'fas fa-file-medical', href: '/pages/funcionarios/vet-documentos.html',    status: '' },
-    { label: 'Receitas',      icon: 'fas fa-prescription-bottle-medical', href: '/pages/funcionarios/vet-receitas.html', status: 'Em breve' },
+    { label: 'Receitas',      icon: 'fas fa-prescription-bottle-medical', href: '/pages/funcionarios/vet-receitas.html', status: '' },
     { label: 'Assinatura',    icon: 'fas fa-signature',     href: '/pages/funcionarios/vet-assinatura.html',   status: 'Em breve' },
   ];
 

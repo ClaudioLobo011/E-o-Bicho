@@ -4,6 +4,7 @@ import { openConsultaModal } from './consultas.js';
 import { openVacinaModal } from './vacinas.js';
 import { openAnexoModal } from './anexos.js';
 import { openDocumentoModal } from './documentos.js';
+import { openReceitaModal } from './receitas.js';
 import { openExameModal } from './exames.js';
 import { openPesoModal } from './pesos.js';
 import { openObservacaoModal } from './observacoes.js';
@@ -92,6 +93,13 @@ export function initFichaClinica() {
     els.addDocumentoBtn.addEventListener('click', (event) => {
       event.preventDefault();
       openDocumentoModal();
+    });
+  }
+
+  if (els.addReceitaBtn) {
+    els.addReceitaBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      openReceitaModal();
     });
   }
 

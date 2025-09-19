@@ -18,6 +18,7 @@ import { loadExamesForSelection } from './exames.js';
 import { loadObservacoesForSelection } from './observacoes.js';
 import { loadPesosFromServer } from './pesos.js';
 import { loadDocumentosFromServer } from './documentos.js';
+import { loadReceitasFromServer } from './receitas.js';
 import { updateCardDisplay, updatePageVisibility, setCardMode } from './ui.js';
 
 function hideSugestoes() {
@@ -150,6 +151,11 @@ export async function onSelectCliente(cli, opts = {}) {
   state.pesosLoadKey = null;
   state.pesosLoading = false;
   state.documentos = [];
+  state.documentosLoadKey = null;
+  state.documentosLoading = false;
+  state.receitas = [];
+  state.receitasLoadKey = null;
+  state.receitasLoading = false;
 
   if (state.agendaContext) {
     const contextTutorId = normalizeId(state.agendaContext.tutorId);
@@ -259,6 +265,9 @@ export async function onSelectPet(petId, opts = {}) {
   state.documentos = [];
   state.documentosLoadKey = null;
   state.documentosLoading = false;
+  state.receitas = [];
+  state.receitasLoadKey = null;
+  state.receitasLoading = false;
   loadVacinasForSelection();
   loadAnexosForSelection();
   loadExamesForSelection();
@@ -274,6 +283,7 @@ export async function onSelectPet(petId, opts = {}) {
     loadAnexosFromServer({ force: true }),
     loadPesosFromServer({ force: true }),
     loadDocumentosFromServer({ force: true }),
+    loadReceitasFromServer({ force: true }),
   ]);
 }
 
@@ -299,6 +309,9 @@ export function clearCliente() {
   state.documentos = [];
   state.documentosLoadKey = null;
   state.documentosLoading = false;
+  state.receitas = [];
+  state.receitasLoadKey = null;
+  state.receitasLoading = false;
   persistAgendaContext(null);
   if (els.cliInput) els.cliInput.value = '';
   hideSugestoes();
@@ -332,6 +345,9 @@ export function clearPet() {
   state.documentos = [];
   state.documentosLoadKey = null;
   state.documentosLoading = false;
+  state.receitas = [];
+  state.receitasLoadKey = null;
+  state.receitasLoading = false;
   updateCardDisplay();
   updatePageVisibility();
 }
