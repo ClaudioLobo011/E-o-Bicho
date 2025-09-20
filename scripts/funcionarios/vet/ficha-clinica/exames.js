@@ -440,8 +440,13 @@ function updateExameAttachmentsGrid() {
   if (!list || !empty) return;
 
   list.innerHTML = '';
-  const files = Array.isArray(exameModal.selectedFiles) ? exameModal.selectedFiles : [];
-  if (!files.length) {
+
+  const existingFiles = Array.isArray(exameModal.existingFiles) ? exameModal.existingFiles : [];
+  const newFiles = Array.isArray(exameModal.selectedFiles) ? exameModal.selectedFiles : [];
+  const hasExisting = existingFiles.length > 0;
+  const hasNew = newFiles.length > 0;
+
+  if (!hasExisting && !hasNew) {
     list.classList.add('hidden');
     empty.classList.remove('hidden');
     return;
@@ -450,64 +455,188 @@ function updateExameAttachmentsGrid() {
   empty.classList.add('hidden');
   list.classList.remove('hidden');
 
-  files.forEach((entry) => {
-    const item = document.createElement('div');
-    item.className = 'flex flex-col gap-2 rounded-lg border border-rose-100 bg-rose-50/70 px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between';
-    list.appendChild(item);
+  if (hasExisting) {
+    const existingHeader = document.createElement('p');
+    existingHeader.className = 'text-xs font-semibold uppercase tracking-wide text-rose-500';
+    existingHeader.textContent = 'Arquivos atuais';
+    list.appendChild(existingHeader);
 
-    const info = document.createElement('div');
-    info.className = 'flex items-start gap-3 text-sm text-rose-700';
-    item.appendChild(info);
+    existingFiles.forEach((entry) => {
+      const row = document.createElement('div');
+      row.className = 'flex flex-col gap-2 rounded-lg border border-rose-100 bg-white px-3 py-3 shadow-sm transition sm:flex-row sm:items-center sm:justify-between';
+      if (entry.markedForRemoval) {
+        row.classList.add('border-rose-200', 'bg-rose-50/80');
+      }
+      list.appendChild(row);
 
-    const iconWrapper = document.createElement('div');
-    iconWrapper.className = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600';
-    const icon = document.createElement('i');
-    icon.className = getExameFileIconClass(entry);
-    iconWrapper.appendChild(icon);
-    info.appendChild(iconWrapper);
+      const info = document.createElement('div');
+      info.className = 'flex items-start gap-3 text-sm text-rose-700';
+      row.appendChild(info);
 
-    const textWrap = document.createElement('div');
-    textWrap.className = 'min-w-0';
-    info.appendChild(textWrap);
+      const iconWrapper = document.createElement('div');
+      iconWrapper.className = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600';
+      const icon = document.createElement('i');
+      icon.className = getExameFileIconClass(entry);
+      iconWrapper.appendChild(icon);
+      info.appendChild(iconWrapper);
 
-    const nameEl = document.createElement('p');
-    nameEl.className = 'font-semibold leading-tight text-rose-700 break-words';
-    nameEl.textContent = entry.name || entry.originalName || 'Arquivo';
-    textWrap.appendChild(nameEl);
+      const textWrap = document.createElement('div');
+      textWrap.className = 'min-w-0';
+      info.appendChild(textWrap);
 
-    const meta = document.createElement('p');
-    meta.className = 'text-xs text-rose-600';
-    const metaPieces = [];
-    const ext = String(entry.extension || getFileExtension(entry.originalName || entry.name)).replace('.', '').toUpperCase();
-    if (entry.originalName && entry.originalName !== entry.name) metaPieces.push(entry.originalName);
-    if (ext) metaPieces.push(ext);
-    const sizeText = formatFileSize(entry.size);
-    if (sizeText) metaPieces.push(sizeText);
-    meta.textContent = metaPieces.length ? metaPieces.join(' · ') : '—';
-    textWrap.appendChild(meta);
+      const displayName = entry.name || entry.displayName || entry.nome || entry.originalName || 'Arquivo';
+      const nameEl = document.createElement('p');
+      nameEl.className = 'font-semibold leading-tight text-rose-700 break-words';
+      nameEl.textContent = displayName;
+      if (entry.markedForRemoval) {
+        nameEl.classList.add('line-through');
+      }
+      textWrap.appendChild(nameEl);
 
-    const actions = document.createElement('div');
-    actions.className = 'flex items-center gap-2';
-    item.appendChild(actions);
+      const meta = document.createElement('p');
+      meta.className = 'text-xs text-rose-600';
+      const metaPieces = [];
+      if (entry.originalName && entry.originalName !== displayName) metaPieces.push(entry.originalName);
+      const ext = String(entry.extension || '').replace('.', '').toUpperCase();
+      if (ext) metaPieces.push(ext);
+      if (entry.size) metaPieces.push(formatFileSize(entry.size));
+      meta.textContent = metaPieces.length ? metaPieces.join(' · ') : '—';
+      textWrap.appendChild(meta);
 
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'inline-flex items-center gap-2 rounded-md border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
-    removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
-    removeBtn.disabled = !!exameModal.isSubmitting;
-    removeBtn.classList.toggle('opacity-60', removeBtn.disabled);
-    removeBtn.classList.toggle('cursor-not-allowed', removeBtn.disabled);
-    removeBtn.addEventListener('click', (event) => {
-      event.preventDefault();
-      if (exameModal.isSubmitting) return;
-      exameModal.selectedFiles = (Array.isArray(exameModal.selectedFiles) ? exameModal.selectedFiles : []).filter(
-        (file) => file !== entry,
-      );
-      updateExameAttachmentsGrid();
-      refreshExameModalControls();
+      if (entry.markedForRemoval) {
+        const removalBadge = document.createElement('span');
+        removalBadge.className = 'mt-1 inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-600';
+        removalBadge.innerHTML = '<i class="fas fa-circle-minus text-[10px]"></i><span>Marcado para remoção</span>';
+        textWrap.appendChild(removalBadge);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'flex flex-wrap items-center gap-2';
+      row.appendChild(actions);
+
+      if (entry.url) {
+        const link = document.createElement('a');
+        link.href = entry.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'inline-flex items-center gap-2 rounded-md border border-rose-200 bg-white px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
+        link.innerHTML = '<i class="fas fa-arrow-up-right-from-square text-[10px]"></i><span>Abrir</span>';
+        if (entry.originalName) {
+          link.download = entry.originalName;
+        }
+        actions.appendChild(link);
+      } else {
+        const pending = document.createElement('span');
+        pending.className = 'text-xs text-rose-500';
+        pending.textContent = 'Link disponível após sincronização.';
+        actions.appendChild(pending);
+      }
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      const marked = !!entry.markedForRemoval;
+      toggleBtn.className = marked
+        ? 'inline-flex items-center gap-2 rounded-md border border-transparent px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-200'
+        : 'inline-flex items-center gap-2 rounded-md border border-transparent px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-200';
+      toggleBtn.innerHTML = marked
+        ? '<i class="fas fa-rotate-left text-[10px]"></i><span>Restaurar</span>'
+        : '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
+      toggleBtn.disabled = !!exameModal.isSubmitting;
+      toggleBtn.classList.toggle('opacity-60', toggleBtn.disabled);
+      toggleBtn.classList.toggle('cursor-not-allowed', toggleBtn.disabled);
+      toggleBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (exameModal.isSubmitting) return;
+        entry.markedForRemoval = !entry.markedForRemoval;
+        const entryId = normalizeId(entry.id || entry._id);
+        if (!Array.isArray(exameModal.removedFileIds)) {
+          exameModal.removedFileIds = [];
+        }
+        if (entry.markedForRemoval) {
+          if (entryId && !exameModal.removedFileIds.includes(entryId)) {
+            exameModal.removedFileIds.push(entryId);
+          }
+        } else if (entryId) {
+          exameModal.removedFileIds = exameModal.removedFileIds.filter((value) => value !== entryId);
+        }
+        updateExameAttachmentsGrid();
+        refreshExameModalControls();
+      });
+      actions.appendChild(toggleBtn);
     });
-    actions.appendChild(removeBtn);
-  });
+  }
+
+  if (hasExisting && hasNew) {
+    const divider = document.createElement('div');
+    divider.className = 'h-px bg-rose-100';
+    list.appendChild(divider);
+  }
+
+  if (hasNew) {
+    const newHeader = document.createElement('p');
+    newHeader.className = 'text-xs font-semibold uppercase tracking-wide text-rose-500';
+    newHeader.textContent = hasExisting ? 'Novos arquivos' : 'Arquivos selecionados';
+    list.appendChild(newHeader);
+
+    newFiles.forEach((entry) => {
+      const item = document.createElement('div');
+      item.className = 'flex flex-col gap-2 rounded-lg border border-rose-100 bg-rose-50/70 px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between';
+      list.appendChild(item);
+
+      const info = document.createElement('div');
+      info.className = 'flex items-start gap-3 text-sm text-rose-700';
+      item.appendChild(info);
+
+      const iconWrapper = document.createElement('div');
+      iconWrapper.className = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600';
+      const icon = document.createElement('i');
+      icon.className = getExameFileIconClass(entry);
+      iconWrapper.appendChild(icon);
+      info.appendChild(iconWrapper);
+
+      const textWrap = document.createElement('div');
+      textWrap.className = 'min-w-0';
+      info.appendChild(textWrap);
+
+      const nameEl = document.createElement('p');
+      nameEl.className = 'font-semibold leading-tight text-rose-700 break-words';
+      nameEl.textContent = entry.name || entry.originalName || 'Arquivo';
+      textWrap.appendChild(nameEl);
+
+      const meta = document.createElement('p');
+      meta.className = 'text-xs text-rose-600';
+      const metaPieces = [];
+      const ext = String(entry.extension || getFileExtension(entry.originalName || entry.name)).replace('.', '').toUpperCase();
+      if (entry.originalName && entry.originalName !== entry.name) metaPieces.push(entry.originalName);
+      if (ext) metaPieces.push(ext);
+      const sizeText = formatFileSize(entry.size);
+      if (sizeText) metaPieces.push(sizeText);
+      meta.textContent = metaPieces.length ? metaPieces.join(' · ') : '—';
+      textWrap.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'flex items-center gap-2';
+      item.appendChild(actions);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'inline-flex items-center gap-2 rounded-md border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
+      removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
+      removeBtn.disabled = !!exameModal.isSubmitting;
+      removeBtn.classList.toggle('opacity-60', removeBtn.disabled);
+      removeBtn.classList.toggle('cursor-not-allowed', removeBtn.disabled);
+      removeBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (exameModal.isSubmitting) return;
+        exameModal.selectedFiles = (Array.isArray(exameModal.selectedFiles) ? exameModal.selectedFiles : []).filter(
+          (file) => file !== entry,
+        );
+        updateExameAttachmentsGrid();
+        refreshExameModalControls();
+      });
+      actions.appendChild(removeBtn);
+    });
+  }
 }
 
 function handleExameFileSelection(file) {
@@ -681,6 +810,191 @@ async function uploadExameAttachments(entries, options = {}) {
   }
 
   return parsed;
+}
+
+async function updateExistingExameAttachments({
+  exameId,
+  anexoId,
+  existingFiles = [],
+  removedIds = [],
+  newEntries = [],
+  observacao = '',
+}) {
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  if (!(clienteId && petId)) {
+    throw new Error('Selecione um tutor e um pet para enviar arquivos.');
+  }
+
+  const sanitizedAnexoId = normalizeId(anexoId);
+  if (!sanitizedAnexoId) {
+    throw new Error('Não foi possível identificar os arquivos do exame para atualização.');
+  }
+
+  const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+  const formData = new FormData();
+  formData.append('clienteId', clienteId);
+  formData.append('petId', petId);
+  if (appointmentId) {
+    formData.append('appointmentId', appointmentId);
+  }
+
+  const observacaoValue = observacao || `${EXAME_ATTACHMENT_OBSERVACAO_PREFIX}${exameId || 'pending'}`;
+  formData.append('observacao', observacaoValue);
+
+  (Array.isArray(removedIds) ? removedIds : []).forEach((id) => {
+    const normalized = normalizeId(id);
+    if (normalized) {
+      formData.append('removeFileIds[]', normalized);
+    }
+  });
+
+  const fallbackEntries = [];
+  const keptExisting = (Array.isArray(existingFiles) ? existingFiles : []).filter((file) => file && !file.markedForRemoval);
+  keptExisting.forEach((entry) => {
+    const normalized = normalizeExameFileRecord(entry);
+    if (normalized) {
+      fallbackEntries.push(normalized);
+    }
+  });
+
+  (Array.isArray(newEntries) ? newEntries : []).forEach((entry) => {
+    const file = entry.file;
+    if (!file) return;
+    const originalName = entry.originalName || file.name || '';
+    const names = resolveExameAttachmentNames({
+      ...entry,
+      file,
+      originalName,
+      extension: entry.extension || getFileExtension(originalName || file.name || ''),
+    });
+    entry.name = names.displayName;
+    entry.displayName = names.displayName;
+    entry.uploadName = names.uploadName;
+    entry.extension = normalizeAttachmentExtension(names.extension || entry.extension || getFileExtension(originalName));
+    if (!entry.originalName) entry.originalName = originalName;
+
+    const uploadName = entry.uploadName || file.name;
+    const displayName = (entry.name || entry.displayName || uploadName || file.name || '').trim() || uploadName;
+
+    formData.append('arquivos', file, uploadName);
+    formData.append('nomes[]', displayName);
+
+    const createdAt = new Date().toISOString();
+    const fallback = normalizeExameFileRecord({
+      id: entry.id,
+      nome: displayName,
+      originalName: entry.originalName,
+      mimeType: entry.mimeType || file.type || '',
+      size: Number(entry.size || file.size || 0),
+      extension: entry.extension,
+      fileName: uploadName,
+      createdAt,
+    });
+    if (fallback) {
+      fallbackEntries.push(fallback);
+    }
+  });
+
+  const token = getAuthToken();
+  const response = await fetch(`${API_CONFIG.BASE_URL}/func/vet/anexos/${encodeURIComponent(sanitizedAnexoId)}`, {
+    method: 'PUT',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => (response.ok ? {} : {}));
+  if (!response.ok) {
+    const message = typeof data?.message === 'string' ? data.message : 'Erro ao atualizar arquivos do exame.';
+    throw new Error(message);
+  }
+
+  const parseRecord = (raw) => {
+    if (!raw || typeof raw !== 'object') return null;
+    const arquivosRaw = Array.isArray(raw.arquivos)
+      ? raw.arquivos
+      : Array.isArray(raw.files)
+      ? raw.files
+      : [];
+    const arquivos = mergeExameFiles(fallbackEntries, arquivosRaw);
+    return {
+      arquivos,
+      anexoId: normalizeId(raw._id || raw.id || raw.anexoId || raw.anexo) || sanitizedAnexoId,
+      observacao: typeof raw.observacao === 'string' ? raw.observacao : observacaoValue,
+    };
+  };
+
+  let parsed = parseRecord(data);
+  if (!parsed || !parsed.arquivos.length) {
+    if (Array.isArray(data?.anexos)) {
+      parsed = data.anexos.map(parseRecord).find((item) => item && item.arquivos.length) || null;
+    } else if (Array.isArray(data)) {
+      parsed = data.map(parseRecord).find((item) => item && item.arquivos.length) || null;
+    }
+  }
+  if (!parsed) {
+    parsed = {
+      arquivos: mergeExameFiles([], fallbackEntries),
+      anexoId: sanitizedAnexoId,
+      observacao: observacaoValue,
+    };
+  }
+
+  try {
+    await loadAnexosFromServer({ force: true });
+  } catch (error) {
+    console.error('updateExistingExameAttachments loadAnexosFromServer', error);
+  }
+
+  return parsed;
+}
+
+async function persistExameAttachmentsChanges({
+  exameId,
+  anexoId,
+  existingFiles = [],
+  removedIds = [],
+  newEntries = [],
+  observacao = '',
+}) {
+  const hasNew = Array.isArray(newEntries) && newEntries.length > 0;
+  const hasRemovals = Array.isArray(removedIds) && removedIds.length > 0;
+
+  if (!hasNew && !hasRemovals) {
+    const normalizedExisting = (Array.isArray(existingFiles) ? existingFiles : [])
+      .filter((file) => file && !file.markedForRemoval)
+      .map((file) => normalizeExameFileRecord(file))
+      .filter(Boolean);
+    return {
+      arquivos: mergeExameFiles([], normalizedExisting),
+      anexoId: normalizeId(anexoId) || null,
+      observacao: observacao || '',
+    };
+  }
+
+  const sanitizedAnexoId = normalizeId(anexoId);
+  if (sanitizedAnexoId) {
+    return updateExistingExameAttachments({
+      exameId,
+      anexoId: sanitizedAnexoId,
+      existingFiles,
+      removedIds,
+      newEntries,
+      observacao,
+    });
+  }
+
+  if (hasNew) {
+    return uploadExameAttachments(newEntries, { exameId });
+  }
+
+  return {
+    arquivos: [],
+    anexoId: null,
+    observacao: observacao || '',
+  };
 }
 
 export function loadExamesForSelection() {
@@ -1043,6 +1357,11 @@ function ensureExameModal() {
   exameModal.filesEmptyState = emptyState;
   exameModal.selectedFiles = [];
   exameModal.pendingFile = null;
+  exameModal.existingFiles = [];
+  exameModal.removedFileIds = [];
+  exameModal.mode = 'create';
+  exameModal.editingId = null;
+  exameModal.editingRecord = null;
   updateExameAttachmentsGrid();
   refreshExameModalControls();
 
@@ -1059,6 +1378,11 @@ export function closeExameModal() {
   hideExameSuggestions();
   setExameModalSubmitting(false);
   exameModal.selectedFiles = [];
+  exameModal.existingFiles = [];
+  exameModal.removedFileIds = [];
+  exameModal.mode = 'create';
+  exameModal.editingId = null;
+  exameModal.editingRecord = null;
   if (exameModal.fileNameInput) {
     exameModal.fileNameInput.value = '';
   }
@@ -1254,7 +1578,7 @@ async function handleExameSubmit() {
 
   const service = modal.selectedService;
   if (!service || !service._id) {
-    notify('Selecione um exame para registrar.', 'warning');
+    notify(modal.mode === 'edit' ? 'Não foi possível identificar o exame selecionado.' : 'Selecione um exame para registrar.', 'warning');
     return;
   }
 
@@ -1262,39 +1586,121 @@ async function handleExameSubmit() {
   let valor = Number(service.valor || 0);
   if (!Number.isFinite(valor) || valor < 0) valor = 0;
 
-  const existingServices = Array.isArray(state.agendaContext?.servicos) ? state.agendaContext.servicos : [];
-  const payloadServicos = existingServices
-    .map((svc) => {
-      const sid = normalizeId(svc._id || svc.id || svc.servicoId || svc.servico);
-      if (!sid) return null;
-      const valorItem = Number(svc.valor || 0);
-      return {
-        servicoId: sid,
-        valor: Number.isFinite(valorItem) ? valorItem : 0,
-      };
-    })
-    .filter(Boolean);
-
-  payloadServicos.push({ servicoId: service._id, valor });
-
-  const record = {
-    id: generateExameId(),
-    servicoId: service._id,
-    servicoNome: service.nome || '',
-    valor,
-    observacao,
-    createdAt: new Date().toISOString(),
-    arquivos: [],
-    anexoId: null,
-    anexoObservacao: '',
-  };
-
   const attachmentsEntries = Array.isArray(modal.selectedFiles) ? [...modal.selectedFiles] : [];
-  let anexosResult = { arquivos: [], anexoId: null, observacao: '' };
+  const existingModalFiles = Array.isArray(modal.existingFiles) ? modal.existingFiles : [];
+  const removedIds = existingModalFiles
+    .filter((file) => file && file.markedForRemoval)
+    .map((file) => normalizeId(file.id || file._id))
+    .filter(Boolean);
+  const keptExisting = existingModalFiles.filter((file) => file && !file.markedForRemoval);
+
+  const isEditing = modal.mode === 'edit';
+  const editingId = isEditing ? normalizeId(modal.editingId) : null;
+
+  if (isEditing && !editingId) {
+    notify('Não foi possível editar este exame agora. Recarregue a página e tente novamente.', 'error');
+    return;
+  }
+
+  if (isEditing) {
+    const originalObservacao = typeof modal.editingRecord?.observacao === 'string'
+      ? modal.editingRecord.observacao.trim()
+      : '';
+    const hasObservacaoChange = observacao !== originalObservacao;
+    const hasAttachmentChanges = attachmentsEntries.length > 0 || removedIds.length > 0;
+    if (!hasObservacaoChange && !hasAttachmentChanges) {
+      notify('Nenhuma alteração para salvar.', 'info');
+      return;
+    }
+  }
 
   setExameModalSubmitting(true);
 
   try {
+    if (isEditing && editingId) {
+      const list = Array.isArray(state.exames) ? state.exames : [];
+      const index = list.findIndex((item) => normalizeId(item?.id || item?._id) === editingId);
+      if (index < 0) {
+        throw new Error('Não foi possível localizar o exame selecionado. Recarregue a página e tente novamente.');
+      }
+
+      const current = { ...list[index] };
+      let anexosResult = {
+        arquivos: mergeExameFiles(
+          [],
+          keptExisting.map((file) => normalizeExameFileRecord(file)).filter(Boolean),
+        ),
+        anexoId: normalizeId(current.anexoId) || null,
+        observacao: current.anexoObservacao || '',
+      };
+
+      if (attachmentsEntries.length || removedIds.length) {
+        try {
+          anexosResult = await persistExameAttachmentsChanges({
+            exameId: editingId,
+            anexoId: current.anexoId,
+            existingFiles: existingModalFiles,
+            removedIds,
+            newEntries: attachmentsEntries,
+            observacao: current.anexoObservacao || '',
+          });
+        } catch (attachmentError) {
+          console.error('persistExameAttachmentsChanges', attachmentError);
+          throw attachmentError;
+        }
+      }
+
+      const updatedRecord = {
+        ...current,
+        observacao,
+        valor,
+        arquivos: Array.isArray(anexosResult.arquivos) ? anexosResult.arquivos : [],
+        anexoId: anexosResult.anexoId || null,
+        anexoObservacao:
+          typeof anexosResult.observacao === 'string' && anexosResult.observacao
+            ? anexosResult.observacao
+            : current.anexoObservacao || '',
+        updatedAt: new Date().toISOString(),
+      };
+
+      state.exames = [...list];
+      state.exames[index] = updatedRecord;
+      persistExamesForSelection();
+      updateConsultaAgendaCard();
+      closeExameModal();
+      notify('Exame atualizado com sucesso.', 'success');
+      return;
+    }
+
+    const existingServices = Array.isArray(state.agendaContext?.servicos) ? state.agendaContext.servicos : [];
+    const payloadServicos = existingServices
+      .map((svc) => {
+        const sid = normalizeId(svc._id || svc.id || svc.servicoId || svc.servico);
+        if (!sid) return null;
+        const valorItem = Number(svc.valor || 0);
+        return {
+          servicoId: sid,
+          valor: Number.isFinite(valorItem) ? valorItem : 0,
+        };
+      })
+      .filter(Boolean);
+
+    payloadServicos.push({ servicoId: service._id, valor });
+
+    const record = {
+      id: generateExameId(),
+      servicoId: service._id,
+      servicoNome: service.nome || '',
+      valor,
+      observacao,
+      createdAt: new Date().toISOString(),
+      arquivos: [],
+      anexoId: null,
+      anexoObservacao: '',
+    };
+
+    let anexosResult = { arquivos: [], anexoId: null, observacao: '' };
+
     const response = await api(`/func/agendamentos/${appointmentId}`, {
       method: 'PUT',
       body: JSON.stringify({ servicos: payloadServicos }),
@@ -1343,7 +1749,8 @@ async function handleExameSubmit() {
     notify('Exame registrado com sucesso.', 'success');
   } catch (error) {
     console.error('handleExameSubmit', error);
-    notify(error.message || 'Erro ao registrar exame.', 'error');
+    const defaultMessage = isEditing ? 'Erro ao atualizar exame.' : 'Erro ao registrar exame.';
+    notify(error.message || defaultMessage, 'error');
   } finally {
     setExameModalSubmitting(false);
   }
@@ -1492,7 +1899,7 @@ export async function deleteExame(exame, options = {}) {
 
 state.deleteExame = deleteExame;
 
-export function openExameModal() {
+export function openExameModal(options = {}) {
   if (!ensureTutorAndPetSelected()) {
     return;
   }
@@ -1503,15 +1910,92 @@ export function openExameModal() {
     return;
   }
 
+  const { exame = null } = options || {};
   const modal = ensureExameModal();
   setExameModalSubmitting(false);
+
+  if (modal.form) {
+    modal.form.reset();
+  }
+
   modal.selectedService = null;
-  if (modal.fields?.servico) modal.fields.servico.value = '';
-  if (modal.fields?.observacao) modal.fields.observacao.value = '';
   modal.selectedFiles = [];
-  if (modal.fileNameInput) modal.fileNameInput.value = '';
+  modal.existingFiles = [];
+  modal.removedFileIds = [];
+  modal.pendingFile = null;
+  modal.mode = 'create';
+  modal.editingId = null;
+  modal.editingRecord = null;
+
+  if (modal.fields?.servico) {
+    modal.fields.servico.value = '';
+    modal.fields.servico.disabled = false;
+    modal.fields.servico.classList.remove('bg-rose-50', 'cursor-not-allowed');
+    modal.fields.servico.removeAttribute('aria-disabled');
+  }
+  if (modal.fields?.observacao) {
+    modal.fields.observacao.value = '';
+  }
+  if (modal.fileNameInput) {
+    modal.fileNameInput.value = '';
+  }
+  if (modal.titleEl) {
+    modal.titleEl.textContent = 'Novo exame';
+  }
+
   setExamePendingFile(null);
   hideExameSuggestions();
+
+  let focusField = 'servico';
+
+  if (exame && typeof exame === 'object') {
+    modal.mode = 'edit';
+    const editingId = normalizeId(exame.id || exame._id);
+    if (editingId) {
+      modal.editingId = editingId;
+    }
+    modal.editingRecord = { ...exame };
+
+    const serviceId = normalizeId(exame.servicoId || exame.servico);
+    const serviceNome = pickFirst(exame.servicoNome, exame.servicoNomeOriginal, exame.nome);
+    const serviceValor = Number(exame.valor || 0);
+    if (serviceId) {
+      modal.selectedService = {
+        _id: serviceId,
+        nome: serviceNome || '',
+        valor: Number.isFinite(serviceValor) ? serviceValor : 0,
+      };
+    }
+
+    if (modal.fields?.servico) {
+      modal.fields.servico.value = serviceNome || '';
+      modal.fields.servico.disabled = true;
+      modal.fields.servico.setAttribute('aria-disabled', 'true');
+      modal.fields.servico.classList.add('bg-rose-50', 'cursor-not-allowed');
+    }
+    if (modal.fields?.observacao) {
+      modal.fields.observacao.value = exame.observacao || '';
+    }
+
+    const arquivosExistentes = Array.isArray(exame.arquivos) ? exame.arquivos : [];
+    modal.existingFiles = arquivosExistentes
+      .map((file) => {
+        const normalized = normalizeExameFileRecord(file, file);
+        if (!normalized) return null;
+        return { ...normalized, markedForRemoval: false };
+      })
+      .filter(Boolean);
+    modal.removedFileIds = [];
+
+    if (modal.titleEl) {
+      modal.titleEl.textContent = 'Editar exame';
+    }
+
+    focusField = 'observacao';
+  }
+
+  updateExameAttachmentsGrid();
+  refreshExameModalControls();
   updateExamePriceDisplay();
 
   if (modal.contextInfo) {
@@ -1547,7 +2031,9 @@ export function openExameModal() {
   document.addEventListener('keydown', modal.keydownHandler);
 
   setTimeout(() => {
-    if (modal.fields?.servico) {
+    if (focusField === 'observacao' && modal.fields?.observacao) {
+      try { modal.fields.observacao.focus(); } catch { }
+    } else if (modal.fields?.servico && !modal.fields.servico.disabled) {
       try { modal.fields.servico.focus(); } catch { }
     }
   }, 50);

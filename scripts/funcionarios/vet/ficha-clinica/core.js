@@ -193,6 +193,11 @@ export const exameModal = {
   isSubmitting: false,
   keydownHandler: null,
   searchAbortController: null,
+  mode: 'create',
+  editingId: null,
+  editingRecord: null,
+  existingFiles: [],
+  removedFileIds: [],
 };
 
 export const anexoModal = {
@@ -232,6 +237,7 @@ export const pesoModal = {
   form: null,
   submitBtn: null,
   submitBtnOriginalHtml: '',
+  submitBtnEditHtml: '',
   cancelBtn: null,
   closeBtn: null,
   input: null,
@@ -241,6 +247,9 @@ export const pesoModal = {
   summary: null,
   isSubmitting: false,
   keydownHandler: null,
+  mode: 'create',
+  editingId: null,
+  editingRecord: null,
 };
 
 export const STORAGE_KEYS = {
