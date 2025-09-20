@@ -29,7 +29,16 @@ import { openObservacaoModal } from './observacoes.js';
 import { openAnexoModal } from './anexos.js';
 import { openExameModal } from './exames.js';
 import { openPesoModal } from './pesos.js';
-import { openDocumentoModal, uploadDocumentoAssinado, removeDocumentoAssinado } from './documentos.js';
+import {
+  openDocumentoModal,
+  uploadDocumentoAssinado,
+  removeDocumentoAssinado,
+} from './documentos.js';
+import {
+  openReceitaModal,
+  uploadReceitaAssinada,
+  removeReceitaAssinada,
+} from './receitas.js';
 import { openVacinaModal } from './vacinas.js';
 
 function normalizeConsultaRecord(raw) {
@@ -1043,6 +1052,273 @@ function createDocumentoRegistroCard(entry) {
   return card;
 }
 
+function createSignedReceitaFileCard(entry, signedFile) {
+  if (!signedFile) return null;
+
+  const card = document.createElement('div');
+  card.className = 'rounded-xl border border-sky-200 bg-sky-50 px-4 py-4 shadow-sm';
+
+  const info = document.createElement('div');
+  info.className = 'flex flex-wrap items-start gap-3';
+  card.appendChild(info);
+
+  const iconWrapper = document.createElement('div');
+  iconWrapper.className = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-white text-sky-600 shadow-sm';
+  iconWrapper.innerHTML = '<i class="fas fa-prescription-bottle-medical"></i>';
+  info.appendChild(iconWrapper);
+
+  const textWrap = document.createElement('div');
+  textWrap.className = 'min-w-0 flex-1 space-y-2';
+  info.appendChild(textWrap);
+
+  const displayName = signedFile.nome || signedFile.originalName || 'Receita assinada';
+
+  const nameEl = document.createElement('p');
+  nameEl.className = 'text-sm font-semibold leading-snug text-sky-800 break-words';
+  nameEl.textContent = displayName;
+  textWrap.appendChild(nameEl);
+
+  if (signedFile.originalName && signedFile.originalName !== displayName) {
+    const originalNameEl = document.createElement('p');
+    originalNameEl.className = 'text-xs text-sky-600 break-words';
+    originalNameEl.textContent = signedFile.originalName;
+    textWrap.appendChild(originalNameEl);
+  }
+
+  const badgeList = document.createElement('div');
+  badgeList.className = 'flex flex-wrap items-center gap-2 text-[11px] font-medium text-sky-700';
+
+  const appendBadge = (iconClass, label) => {
+    if (!label) return;
+    const badge = document.createElement('span');
+    badge.className = 'inline-flex items-center gap-1 rounded-full border border-sky-200 bg-white px-2.5 py-0.5 shadow-sm';
+
+    const icon = document.createElement('i');
+    icon.className = `fas ${iconClass} text-[10px]`;
+    badge.appendChild(icon);
+
+    const text = document.createElement('span');
+    text.className = 'leading-none';
+    text.textContent = label;
+    badge.appendChild(text);
+
+    badgeList.appendChild(badge);
+  };
+
+  const extension = String(signedFile.extension || '').trim();
+  const normalizedExtension = extension ? extension.replace('.', '').toUpperCase() : '';
+  if (normalizedExtension) {
+    appendBadge('fa-file', normalizedExtension);
+  } else if (signedFile.mimeType) {
+    const [, subtype] = String(signedFile.mimeType).split('/');
+    const typeLabel = (subtype || signedFile.mimeType || '').toUpperCase();
+    appendBadge('fa-file', typeLabel);
+  }
+
+  const sizeLabel = formatFileSize(signedFile.size);
+  if (sizeLabel) {
+    appendBadge('fa-weight-scale', sizeLabel);
+  }
+
+  if (badgeList.children.length) {
+    textWrap.appendChild(badgeList);
+  }
+
+  const uploadedDisplay = signedFile.uploadedAt ? formatDateTimeDisplay(signedFile.uploadedAt) : '';
+  if (uploadedDisplay) {
+    const uploadedEl = document.createElement('p');
+    uploadedEl.className = 'flex items-center gap-1 text-xs text-sky-600';
+
+    const clockIcon = document.createElement('i');
+    clockIcon.className = 'fas fa-clock text-[10px]';
+    uploadedEl.appendChild(clockIcon);
+
+    const uploadedText = document.createElement('span');
+    uploadedText.textContent = `Enviada em ${uploadedDisplay}`;
+    uploadedEl.appendChild(uploadedText);
+
+    textWrap.appendChild(uploadedEl);
+  } else if (!badgeList.children.length) {
+    const emptyMeta = document.createElement('p');
+    emptyMeta.className = 'text-xs text-sky-600';
+    emptyMeta.textContent = 'Detalhes do arquivo não disponíveis.';
+    textWrap.appendChild(emptyMeta);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'mt-3 flex flex-wrap items-center justify-end gap-2';
+  card.appendChild(actions);
+
+  if (signedFile.url) {
+    const link = document.createElement('a');
+    link.href = signedFile.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.className = 'inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-600 shadow-sm transition hover:bg-sky-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-200';
+    link.innerHTML = '<i class="fas fa-arrow-up-right-from-square text-[10px]"></i><span>Abrir</span>';
+    link.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+    actions.appendChild(link);
+  }
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-600 shadow-sm transition hover:bg-sky-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-200';
+  removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
+
+  const toggleDisabled = (disabled) => {
+    removeBtn.disabled = !!disabled;
+    removeBtn.classList.toggle('opacity-60', !!disabled);
+    removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
+  };
+
+  removeBtn.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (removeBtn.disabled) return;
+    toggleDisabled(true);
+    const success = await removeReceitaAssinada(entry);
+    if (!success && removeBtn.isConnected) {
+      toggleDisabled(false);
+    }
+  });
+
+  actions.appendChild(removeBtn);
+
+  card.addEventListener('click', (event) => {
+    const interactive = event.target.closest('a, button');
+    if (!interactive) {
+      event.stopPropagation();
+    }
+  });
+
+  return card;
+}
+
+function createSignedReceitaDropzone(entry) {
+  const dropzone = document.createElement('label');
+  dropzone.className = 'flex h-32 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-sky-300 bg-sky-50 px-4 text-center text-sm text-sky-600 transition';
+  dropzone.innerHTML = '<span class="flex h-12 w-12 items-center justify-center rounded-full border border-sky-200 bg-white text-lg text-sky-500 shadow-sm"><i class="fas fa-file-circle-plus"></i></span><span class="max-w-[240px] text-sm font-medium leading-snug text-sky-700" data-role="signed-dropzone-text"><span class="block">Arraste ou Clique para adicionar</span><span class="block">a Receita assinada</span></span><span class="max-w-[240px] text-xs leading-tight text-sky-600" data-role="signed-dropzone-hint">Formatos aceitos: PDF, PNG, JPG ou JPEG até 20MB.</span>';
+  dropzone.setAttribute('tabindex', '0');
+
+  const dropzoneText = dropzone.querySelector('[data-role="signed-dropzone-text"]');
+  const dropzoneHint = dropzone.querySelector('[data-role="signed-dropzone-hint"]');
+  const defaultText = dropzoneText?.textContent || 'Arraste ou Clique para adicionar a Receita assinada';
+  const defaultTextHtml = dropzoneText?.innerHTML || '';
+  const defaultHint = dropzoneHint?.textContent || 'Formatos aceitos: PDF, PNG, JPG ou JPEG até 20MB.';
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.pdf,.png,.jpg,.jpeg';
+  fileInput.className = 'sr-only';
+  dropzone.appendChild(fileInput);
+
+  const setUploadingState = (isUploading) => {
+    dropzone.classList.toggle('pointer-events-none', isUploading);
+    dropzone.classList.toggle('opacity-60', isUploading);
+    if (dropzoneText) {
+      if (isUploading) {
+        dropzoneText.textContent = 'Enviando receita assinada...';
+      } else if (defaultTextHtml) {
+        dropzoneText.innerHTML = defaultTextHtml;
+      } else {
+        dropzoneText.textContent = defaultText;
+      }
+    }
+    if (dropzoneHint) {
+      dropzoneHint.textContent = isUploading
+        ? 'Aguarde enquanto o upload é realizado.'
+        : defaultHint;
+    }
+  };
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setUploadingState(true);
+    try {
+      await uploadReceitaAssinada(entry, file);
+    } finally {
+      if (dropzone.isConnected) {
+        setUploadingState(false);
+      }
+    }
+  };
+
+  dropzone.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (dropzone.classList.contains('pointer-events-none')) return;
+    fileInput.click();
+  });
+
+  dropzone.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (dropzone.classList.contains('pointer-events-none')) return;
+      fileInput.click();
+    }
+  });
+
+  dropzone.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dropzone.classList.add('border-sky-500', 'bg-sky-100');
+  });
+
+  dropzone.addEventListener('dragleave', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dropzone.classList.remove('border-sky-500', 'bg-sky-100');
+  });
+
+  dropzone.addEventListener('drop', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dropzone.classList.remove('border-sky-500', 'bg-sky-100');
+    if (dropzone.classList.contains('pointer-events-none')) return;
+    const files = event.dataTransfer?.files;
+    if (files && files.length) {
+      handleFile(files[0]);
+    }
+  });
+
+  fileInput.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+
+  fileInput.addEventListener('change', (event) => {
+    const [file] = Array.from(event.target.files || []);
+    if (file) {
+      handleFile(file);
+    }
+    event.target.value = '';
+  });
+
+  return dropzone;
+}
+
+function createReceitaSignedSection(entry) {
+  const section = document.createElement('div');
+  section.className = 'mt-4 space-y-3';
+
+  if (entry?.signedFile) {
+    const fileCard = createSignedReceitaFileCard(entry, entry.signedFile);
+    if (fileCard) {
+      section.appendChild(fileCard);
+    }
+  }
+
+  if (!entry?.signedFile) {
+    const dropzone = createSignedReceitaDropzone(entry);
+    if (dropzone) {
+      section.appendChild(dropzone);
+    }
+  }
+
+  return section;
+}
+
 function createReceitaRegistroCard(entry) {
   if (!entry) return null;
 
@@ -1083,6 +1359,11 @@ function createReceitaRegistroCard(entry) {
     descriptionTag.textContent = descricao;
     tagWrapper.appendChild(descriptionTag);
     card.appendChild(tagWrapper);
+  }
+
+  const signedSection = createReceitaSignedSection(entry);
+  if (signedSection) {
+    card.appendChild(signedSection);
   }
 
   const actions = document.createElement('div');
@@ -1145,6 +1426,31 @@ function createReceitaRegistroCard(entry) {
   actions.appendChild(printBtn);
 
   card.appendChild(removeBtn);
+
+  const openModal = () => {
+    openReceitaModal({ receitaRegistro: entry });
+  };
+
+  card.classList.add('cursor-pointer', 'transition', 'hover:border-sky-300', 'hover:shadow-md');
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('aria-label', 'Editar receita salva');
+
+  card.addEventListener('click', (event) => {
+    if (event.defaultPrevented) return;
+    const interactive = event.target.closest('button, a, input, label');
+    if (interactive) return;
+    event.preventDefault();
+    openModal();
+  });
+
+  card.addEventListener('keydown', (event) => {
+    if (event.target !== card) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openModal();
+    }
+  });
 
   return card;
 }
