@@ -55,18 +55,34 @@ function getOrderedPesos() {
   return entries;
 }
 
+function getLatestEditablePeso() {
+  const ordered = getOrderedPesos();
+  for (let i = 0; i < ordered.length; i += 1) {
+    const entry = ordered[i];
+    if (entry && !entry.isInitial) {
+      return entry;
+    }
+  }
+  return null;
+}
+
 function setPesoModalSubmitting(isSubmitting) {
   pesoModal.isSubmitting = !!isSubmitting;
   if (pesoModal.submitBtn) {
     if (!pesoModal.submitBtnOriginalHtml) {
       pesoModal.submitBtnOriginalHtml = pesoModal.submitBtn.innerHTML;
     }
+    if (!pesoModal.submitBtnEditHtml) {
+      pesoModal.submitBtnEditHtml = '<i class="fas fa-floppy-disk"></i><span>Atualizar</span>';
+    }
     pesoModal.submitBtn.disabled = !!isSubmitting;
     pesoModal.submitBtn.classList.toggle('opacity-60', !!isSubmitting);
     pesoModal.submitBtn.classList.toggle('cursor-not-allowed', !!isSubmitting);
-    pesoModal.submitBtn.innerHTML = isSubmitting
-      ? '<i class="fas fa-spinner fa-spin"></i><span>Salvando...</span>'
-      : pesoModal.submitBtnOriginalHtml;
+    const savingHtml = pesoModal.mode === 'edit'
+      ? '<i class="fas fa-spinner fa-spin"></i><span>Atualizando...</span>'
+      : '<i class="fas fa-spinner fa-spin"></i><span>Salvando...</span>';
+    const idleHtml = pesoModal.mode === 'edit' ? pesoModal.submitBtnEditHtml : pesoModal.submitBtnOriginalHtml;
+    pesoModal.submitBtn.innerHTML = isSubmitting ? savingHtml : idleHtml;
   }
   if (pesoModal.cancelBtn) {
     pesoModal.cancelBtn.disabled = !!isSubmitting;
@@ -75,6 +91,37 @@ function setPesoModalSubmitting(isSubmitting) {
   }
   if (pesoModal.input) {
     pesoModal.input.disabled = !!isSubmitting;
+  }
+}
+
+function setPesoModalMode(mode, record = null) {
+  const normalizedMode = mode === 'edit' ? 'edit' : 'create';
+  pesoModal.mode = normalizedMode;
+  pesoModal.editingId = null;
+  pesoModal.editingRecord = null;
+
+  if (normalizedMode === 'edit' && record) {
+    const recordId = sanitizeObjectId(record.id || record._id) || normalizeId(record.id || record._id);
+    if (recordId) {
+      pesoModal.editingId = recordId;
+    }
+    pesoModal.editingRecord = { ...record };
+    if (pesoModal.submitBtn) {
+      const editHtml = pesoModal.submitBtnEditHtml || '<i class="fas fa-floppy-disk"></i><span>Atualizar</span>';
+      pesoModal.submitBtnEditHtml = editHtml;
+      pesoModal.submitBtn.innerHTML = editHtml;
+    }
+    if (pesoModal.input) {
+      const value = record.peso != null ? String(record.peso) : '';
+      pesoModal.input.value = value;
+    }
+  } else {
+    if (pesoModal.submitBtn && pesoModal.submitBtnOriginalHtml) {
+      pesoModal.submitBtn.innerHTML = pesoModal.submitBtnOriginalHtml;
+    }
+    if (pesoModal.input) {
+      pesoModal.input.value = '';
+    }
   }
 }
 
@@ -213,6 +260,7 @@ function ensurePesoModal() {
   pesoModal.cancelBtn = cancelBtn;
   pesoModal.submitBtn = submitBtn;
   pesoModal.submitBtnOriginalHtml = submitBtn.innerHTML;
+  pesoModal.submitBtnEditHtml = '<i class="fas fa-floppy-disk"></i><span>Atualizar</span>';
   pesoModal.input = input;
   pesoModal.list = list;
   pesoModal.summary = summary;
@@ -537,6 +585,7 @@ export function closePesoModal() {
   if (pesoModal.form) {
     try { pesoModal.form.reset(); } catch (_) { /* ignore */ }
   }
+  setPesoModalMode('create');
   setPesoModalSubmitting(false);
   if (pesoModal.keydownHandler) {
     document.removeEventListener('keydown', pesoModal.keydownHandler);
@@ -544,18 +593,31 @@ export function closePesoModal() {
   }
 }
 
-export function openPesoModal() {
+export function openPesoModal(options = {}) {
   if (!ensureTutorAndPetSelected()) {
     return;
   }
 
   const modal = ensurePesoModal();
   setPesoModalSubmitting(false);
+  const { peso = null } = options || {};
   if (modal.form) {
     try { modal.form.reset(); } catch (_) { /* ignore */ }
   }
-  if (pesoModal.input) {
-    pesoModal.input.value = '';
+
+  setPesoModalMode('create');
+  if (peso && typeof peso === 'object' && !peso.isInitial) {
+    const latest = getLatestEditablePeso();
+    const latestId = latest
+      ? sanitizeObjectId(latest.id || latest._id) || normalizeId(latest.id || latest._id)
+      : '';
+    const targetId = sanitizeObjectId(peso.id || peso._id) || normalizeId(peso.id || peso._id);
+
+    if (latest && ((latestId && targetId && latestId === targetId) || latest === peso)) {
+      setPesoModalMode('edit', peso);
+    } else {
+      notify('Apenas o registro de peso mais recente pode ser editado.', 'info');
+    }
   }
 
   renderPesoList();
@@ -608,6 +670,17 @@ async function handlePesoSubmit(event) {
     return;
   }
 
+  if (pesoModal.mode === 'edit') {
+    const record = pesoModal.editingRecord || {};
+    const currentPeso = typeof record.peso === 'number' ? record.peso : null;
+    if (currentPeso !== null && Math.abs(currentPeso - pesoValor) < 0.0001) {
+      notify('Nenhuma alteração para salvar.', 'info');
+      return;
+    }
+    await submitPesoUpdate(pesoValor);
+    return;
+  }
+
   const payload = {
     clienteId,
     petId,
@@ -645,5 +718,71 @@ async function handlePesoSubmit(event) {
   } finally {
     setPesoModalSubmitting(false);
     renderPesoList();
+  }
+}
+
+async function submitPesoUpdate(pesoValor) {
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  if (!(clienteId && petId)) {
+    notify('Selecione um tutor e um pet para editar registros de peso.', 'warning');
+    return;
+  }
+
+  const record = pesoModal.editingRecord || {};
+  const targetId = sanitizeObjectId(pesoModal.editingId || record.id || record._id);
+  if (!targetId) {
+    notify('Não foi possível editar este registro de peso.', 'error');
+    return;
+  }
+
+  const payload = {
+    clienteId,
+    petId,
+    peso: pesoValor,
+  };
+  if (record.isInitial) {
+    payload.isInitial = true;
+  }
+
+  setPesoModalSubmitting(true);
+
+  try {
+    const response = await api(`/func/vet/pesos/${encodeURIComponent(targetId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => (response.ok ? {} : {}));
+    if (!response.ok) {
+      const message = typeof data?.message === 'string' ? data.message : 'Erro ao atualizar registro de peso.';
+      throw new Error(message);
+    }
+
+    const updated = normalizePesoRecord(data);
+    if (updated) {
+      const list = Array.isArray(state.pesos) ? [...state.pesos] : [];
+      const idx = list.findIndex((item) => normalizeId(item?.id || item?._id) === updated.id);
+      if (idx >= 0) {
+        list[idx] = updated;
+      } else {
+        list.unshift(updated);
+      }
+      state.pesos = list;
+    }
+
+    await loadPesosFromServer({ force: true });
+    const ordered = getOrderedPesos();
+    const latest = ordered[0] || null;
+    updatePetWeightInState(latest ? latest.peso : null);
+    updateCardDisplay();
+    renderPesoList();
+    notify('Peso atualizado com sucesso.', 'success');
+    setPesoModalMode('create');
+    closePesoModal();
+  } catch (error) {
+    console.error('submitPesoUpdate', error);
+    notify(error.message || 'Erro ao atualizar registro de peso.', 'error');
+  } finally {
+    setPesoModalSubmitting(false);
   }
 }

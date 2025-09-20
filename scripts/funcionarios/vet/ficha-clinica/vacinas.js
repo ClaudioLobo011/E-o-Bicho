@@ -144,16 +144,153 @@ function hideVacinaSuggestions() {
 function setVacinaModalSubmitting(isSubmitting) {
   vacinaModal.isSubmitting = !!isSubmitting;
   if (vacinaModal.submitBtn) {
+    if (!vacinaModal.submitBtnOriginalText) {
+      vacinaModal.submitBtnOriginalText = vacinaModal.submitBtn.textContent || 'Adicionar';
+    }
+    if (!vacinaModal.submitBtnEditText) {
+      vacinaModal.submitBtnEditText = 'Atualizar';
+    }
     vacinaModal.submitBtn.disabled = !!isSubmitting;
     vacinaModal.submitBtn.classList.toggle('opacity-60', !!isSubmitting);
     vacinaModal.submitBtn.classList.toggle('cursor-not-allowed', !!isSubmitting);
-    vacinaModal.submitBtn.textContent = isSubmitting ? 'Salvando...' : 'Adicionar';
+    const savingText = vacinaModal.mode === 'edit' ? 'Atualizando...' : 'Salvando...';
+    const idleText = vacinaModal.mode === 'edit'
+      ? vacinaModal.submitBtnEditText || 'Atualizar'
+      : vacinaModal.submitBtnOriginalText || 'Adicionar';
+    vacinaModal.submitBtn.textContent = isSubmitting ? savingText : idleText;
   }
   if (vacinaModal.cancelBtn) {
     vacinaModal.cancelBtn.disabled = !!isSubmitting;
     vacinaModal.cancelBtn.classList.toggle('opacity-50', !!isSubmitting);
     vacinaModal.cancelBtn.classList.toggle('cursor-not-allowed', !!isSubmitting);
   }
+}
+
+function setVacinaModalMode(mode, record = null) {
+  if (!vacinaModal.overlay) {
+    ensureVacinaModal();
+  }
+
+  hideVacinaSuggestions();
+
+  const isEdit = mode === 'edit' && record && typeof record === 'object';
+  const normalizedMode = isEdit ? 'edit' : 'create';
+  vacinaModal.mode = normalizedMode;
+  vacinaModal.editingId = null;
+  vacinaModal.editingRecord = null;
+
+  if (!vacinaModal.submitBtnOriginalText && vacinaModal.submitBtn) {
+    vacinaModal.submitBtnOriginalText = vacinaModal.submitBtn.textContent || 'Adicionar';
+  }
+  if (!vacinaModal.submitBtnEditText) {
+    vacinaModal.submitBtnEditText = 'Atualizar';
+  }
+
+  const serviceField = vacinaModal.fields?.servico || null;
+  const quantidadeField = vacinaModal.fields?.quantidade || null;
+  const validadeField = vacinaModal.fields?.validade || null;
+  const loteField = vacinaModal.fields?.lote || null;
+  const aplicacaoField = vacinaModal.fields?.aplicacao || null;
+  const renovacaoField = vacinaModal.fields?.renovacao || null;
+
+  if (normalizedMode === 'edit') {
+    const editingId = normalizeId(record.id || record._id);
+    if (editingId) {
+      vacinaModal.editingId = editingId;
+    }
+    vacinaModal.editingRecord = { ...record };
+
+    const serviceId = normalizeId(record.servicoId || record.servico);
+    const serviceNome = pickFirst(record.servicoNome, record.nome, record.serviceName) || '';
+    let unitValue = Number(record.valorUnitario || 0);
+    if (!Number.isFinite(unitValue) || unitValue < 0) {
+      const quantidadeRecord = Number(record.quantidade || 0) || 1;
+      const totalRecord = Number(record.valorTotal || 0);
+      const computed = quantidadeRecord > 0 ? totalRecord / quantidadeRecord : 0;
+      if (Number.isFinite(computed) && computed > 0) {
+        unitValue = computed;
+      } else {
+        unitValue = 0;
+      }
+    }
+
+    vacinaModal.selectedService = serviceId
+      ? {
+          _id: serviceId,
+          nome: serviceNome,
+          valor: Number.isFinite(unitValue) && unitValue > 0 ? unitValue : 0,
+        }
+      : null;
+
+    if (vacinaModal.titleEl) {
+      vacinaModal.titleEl.textContent = 'Editar aplicação de vacina';
+    }
+
+    if (serviceField) {
+      serviceField.value = serviceNome || '';
+      if (vacinaModal.selectedService) {
+        serviceField.disabled = true;
+        serviceField.setAttribute('aria-disabled', 'true');
+        serviceField.classList.add('bg-emerald-50', 'cursor-not-allowed');
+      } else {
+        serviceField.disabled = false;
+        serviceField.removeAttribute('aria-disabled');
+        serviceField.classList.remove('bg-emerald-50', 'cursor-not-allowed');
+      }
+    }
+
+    const quantidadeValor = Number(record.quantidade || 0);
+    const quantidadeNormalizada = Number.isFinite(quantidadeValor) && quantidadeValor > 0
+      ? Math.max(1, Math.round(quantidadeValor))
+      : 1;
+    if (quantidadeField) {
+      quantidadeField.value = String(quantidadeNormalizada);
+    }
+    if (validadeField) {
+      validadeField.value = normalizeDateInputValue(record.validade || record.dataValidade) || '';
+    }
+    if (loteField) {
+      loteField.value = String(record.lote || record.loteNumero || '').trim();
+    }
+    if (aplicacaoField) {
+      aplicacaoField.value = normalizeDateInputValue(record.aplicacao || record.dataAplicacao) || '';
+    }
+    if (renovacaoField) {
+      renovacaoField.value = normalizeDateInputValue(record.renovacao || record.dataRenovacao) || '';
+    }
+  } else {
+    vacinaModal.selectedService = null;
+    vacinaModal.editingId = null;
+    vacinaModal.editingRecord = null;
+
+    if (vacinaModal.titleEl) {
+      vacinaModal.titleEl.textContent = 'Nova vacina';
+    }
+    if (serviceField) {
+      serviceField.disabled = false;
+      serviceField.removeAttribute('aria-disabled');
+      serviceField.classList.remove('bg-emerald-50', 'cursor-not-allowed');
+      serviceField.value = '';
+    }
+    if (quantidadeField) {
+      quantidadeField.value = '1';
+    }
+    if (validadeField) {
+      validadeField.value = '';
+    }
+    if (loteField) {
+      loteField.value = '';
+    }
+    if (aplicacaoField) {
+      aplicacaoField.value = '';
+    }
+    if (renovacaoField) {
+      renovacaoField.value = '';
+    }
+  }
+
+  updateVacinaPriceSummary();
+  setVacinaModalSubmitting(false);
 }
 
 function updateVacinaPriceSummary() {
@@ -352,6 +489,8 @@ function ensureVacinaModal() {
   vacinaModal.cancelBtn = cancelBtn;
   vacinaModal.titleEl = title;
   vacinaModal.closeBtn = closeBtn;
+  vacinaModal.submitBtnOriginalText = submitBtn.textContent || 'Adicionar';
+  vacinaModal.submitBtnEditText = 'Atualizar';
   vacinaModal.fields = {
     servico: serviceInput,
     quantidade: quantityInput,
@@ -393,13 +532,11 @@ export function closeVacinaModal() {
   if (!vacinaModal.overlay) return;
   vacinaModal.overlay.classList.add('hidden');
   vacinaModal.overlay.setAttribute('aria-hidden', 'true');
-  if (vacinaModal.form) vacinaModal.form.reset();
-  vacinaModal.selectedService = null;
-  hideVacinaSuggestions();
-  setVacinaModalSubmitting(false);
-  if (vacinaModal.priceDisplay) {
-    vacinaModal.priceDisplay.textContent = 'Selecione uma vacina para ver o valor.';
+  if (vacinaModal.form) {
+    try { vacinaModal.form.reset(); } catch { /* ignore */ }
   }
+  setVacinaModalMode('create');
+  hideVacinaSuggestions();
   if (vacinaModal.keydownHandler) {
     document.removeEventListener('keydown', vacinaModal.keydownHandler);
     vacinaModal.keydownHandler = null;
@@ -410,7 +547,7 @@ export function closeVacinaModal() {
   }
 }
 
-export function openVacinaModal() {
+export function openVacinaModal(options = {}) {
   if (!ensureTutorAndPetSelected()) {
     return;
   }
@@ -421,19 +558,27 @@ export function openVacinaModal() {
   }
 
   const modal = ensureVacinaModal();
-  setVacinaModalSubmitting(false);
-  if (modal.form) modal.form.reset();
-  if (modal.fields.quantidade) modal.fields.quantidade.value = '1';
-  vacinaModal.selectedService = null;
+  const { vacina = null } = options || {};
+
+  if (modal.form) {
+    try { modal.form.reset(); } catch { /* ignore */ }
+  }
+
   hideVacinaSuggestions();
-  if (vacinaModal.priceDisplay) {
-    vacinaModal.priceDisplay.textContent = 'Selecione uma vacina para ver o valor.';
+
+  setVacinaModalMode('create');
+  if (vacina && typeof vacina === 'object') {
+    setVacinaModalMode('edit', vacina);
   }
 
   vacinaModal.overlay.classList.remove('hidden');
   vacinaModal.overlay.removeAttribute('aria-hidden');
   if (vacinaModal.dialog) {
-    vacinaModal.dialog.focus();
+    try {
+      vacinaModal.dialog.focus({ preventScroll: true });
+    } catch (_) {
+      vacinaModal.dialog.focus();
+    }
   }
 
   if (vacinaModal.keydownHandler) {
@@ -448,13 +593,23 @@ export function openVacinaModal() {
   document.addEventListener('keydown', vacinaModal.keydownHandler);
 
   setTimeout(() => {
-    if (vacinaModal.fields.servico) {
-      try { vacinaModal.fields.servico.focus(); } catch { }
+    let focusTarget = null;
+    if (vacinaModal.mode === 'edit') {
+      focusTarget = vacinaModal.fields?.quantidade
+        || vacinaModal.fields?.aplicacao
+        || vacinaModal.fields?.renovacao
+        || vacinaModal.fields?.validade
+        || vacinaModal.fields?.lote;
+    } else {
+      focusTarget = vacinaModal.fields?.servico || null;
+    }
+    if (focusTarget) {
+      try { focusTarget.focus(); } catch { /* ignore */ }
     }
   }, 50);
 
   const storeId = getAgendaStoreId();
-  if (!storeId) {
+  if (!storeId && vacinaModal.mode !== 'edit') {
     notify('Não foi possível identificar a empresa do agendamento. Os valores podem considerar apenas o preço padrão do serviço.', 'warning');
   }
 }
@@ -627,8 +782,17 @@ async function handleVacinaSubmit() {
     return;
   }
 
+  const isEditing = modal.mode === 'edit';
+  const originalRecord = isEditing && modal.editingRecord && typeof modal.editingRecord === 'object'
+    ? { ...modal.editingRecord }
+    : null;
+  const editingId = isEditing
+    ? normalizeId(modal.editingId || originalRecord?.id || originalRecord?._id)
+    : '';
+
   const service = vacinaModal.selectedService;
-  if (!service || !service._id) {
+  const normalizedServiceId = normalizeId(service?._id);
+  if (!service || !normalizedServiceId) {
     notify('Selecione uma vacina para registrar.', 'warning');
     return;
   }
@@ -654,9 +818,12 @@ async function handleVacinaSubmit() {
   }
   const valorTotal = valorUnitario * quantidade;
 
-  const record = {
-    id: generateVacinaId(),
-    servicoId: service._id,
+  const recordId = originalRecord?.id || originalRecord?._id || editingId || generateVacinaId();
+  const createdAt = originalRecord?.createdAt || new Date().toISOString();
+  const nextRecord = {
+    ...(originalRecord || {}),
+    id: recordId,
+    servicoId: normalizedServiceId,
     servicoNome: service.nome || '',
     quantidade,
     valorUnitario,
@@ -665,8 +832,14 @@ async function handleVacinaSubmit() {
     aplicacao,
     renovacao,
     lote,
-    createdAt: new Date().toISOString(),
+    createdAt,
   };
+  if (originalRecord?._id) {
+    nextRecord._id = originalRecord._id;
+  }
+  if (isEditing) {
+    nextRecord.updatedAt = new Date().toISOString();
+  }
 
   const existingServices = Array.isArray(state.agendaContext?.servicos) ? state.agendaContext.servicos : [];
   const payloadServicos = existingServices
@@ -681,7 +854,28 @@ async function handleVacinaSubmit() {
     })
     .filter(Boolean);
 
-  payloadServicos.push({ servicoId: service._id, valor: valorTotal });
+  if (isEditing) {
+    const targetServiceId = normalizeId(originalRecord?.servicoId || originalRecord?.servico || normalizedServiceId);
+    const rawTotal = Number(originalRecord?.valorTotal);
+    const fallbackTotal = Number(originalRecord?.valorUnitario || 0) * (Number(originalRecord?.quantidade || 0) || 0);
+    const previousValor = Number.isFinite(rawTotal) && rawTotal > 0
+      ? Number(rawTotal)
+      : (Number.isFinite(fallbackTotal) && fallbackTotal > 0 ? Number(fallbackTotal) : null);
+
+    let updatedInPayload = false;
+    for (const item of payloadServicos) {
+      if (item.servicoId !== targetServiceId) continue;
+      if (previousValor != null && Math.abs(item.valor - previousValor) > 0.01) continue;
+      item.valor = valorTotal;
+      updatedInPayload = true;
+      break;
+    }
+    if (!updatedInPayload) {
+      payloadServicos.push({ servicoId: normalizedServiceId, valor: valorTotal });
+    }
+  } else {
+    payloadServicos.push({ servicoId: normalizedServiceId, valor: valorTotal });
+  }
 
   setVacinaModalSubmitting(true);
 
@@ -699,6 +893,27 @@ async function handleVacinaSubmit() {
     if (!state.agendaContext) state.agendaContext = {};
     if (Array.isArray(data?.servicos)) {
       state.agendaContext.servicos = data.servicos;
+    } else if (isEditing) {
+      const targetServiceId = normalizeId(originalRecord?.servicoId || originalRecord?.servico || normalizedServiceId);
+      const rawTotal = Number(originalRecord?.valorTotal);
+      const fallbackTotal = Number(originalRecord?.valorUnitario || 0) * (Number(originalRecord?.quantidade || 0) || 0);
+      const previousValor = Number.isFinite(rawTotal) && rawTotal > 0
+        ? Number(rawTotal)
+        : (Number.isFinite(fallbackTotal) && fallbackTotal > 0 ? Number(fallbackTotal) : null);
+      let replacedInContext = false;
+      const nextServices = existingServices.map((svc) => {
+        if (replacedInContext) return svc;
+        const sid = normalizeId(svc?._id || svc?.id || svc?.servicoId || svc?.servico);
+        if (!sid || sid !== targetServiceId) return svc;
+        const valorItem = Number(svc?.valor || 0);
+        if (previousValor != null && Math.abs(valorItem - previousValor) > 0.01) return svc;
+        replacedInContext = true;
+        return { ...svc, valor: valorTotal };
+      });
+      if (!replacedInContext) {
+        nextServices.push({ servicoId: normalizedServiceId, valor: valorTotal });
+      }
+      state.agendaContext.servicos = nextServices;
     }
     if (typeof data?.valor === 'number') {
       state.agendaContext.valor = Number(data.valor);
@@ -708,14 +923,37 @@ async function handleVacinaSubmit() {
     }
     persistAgendaContext(state.agendaContext);
 
-    state.vacinas = [record, ...(Array.isArray(state.vacinas) ? state.vacinas : [])];
+    const previousList = Array.isArray(state.vacinas) ? [...state.vacinas] : [];
+    if (isEditing) {
+      const normalizedRecordId = normalizeId(nextRecord.id || nextRecord._id);
+      let replaced = false;
+      for (let i = 0; i < previousList.length; i += 1) {
+        const entry = previousList[i];
+        const entryId = normalizeId(entry?.id || entry?._id);
+        if ((normalizedRecordId && entryId && entryId === normalizedRecordId) || (!normalizedRecordId && entry === modal.editingRecord)) {
+          previousList[i] = nextRecord;
+          replaced = true;
+          break;
+        }
+      }
+      if (!replaced) {
+        previousList.unshift(nextRecord);
+      }
+      state.vacinas = previousList;
+    } else {
+      state.vacinas = [nextRecord, ...previousList];
+    }
+
     persistVacinasForSelection();
     updateConsultaAgendaCard();
     closeVacinaModal();
-    notify('Vacina registrada com sucesso.', 'success');
+    notify(isEditing ? 'Vacina atualizada com sucesso.' : 'Vacina registrada com sucesso.', 'success');
   } catch (error) {
     console.error('handleVacinaSubmit', error);
-    notify(error.message || 'Erro ao registrar vacina.', 'error');
+    notify(
+      error.message || (modal.mode === 'edit' ? 'Erro ao atualizar vacina.' : 'Erro ao registrar vacina.'),
+      'error',
+    );
   } finally {
     setVacinaModalSubmitting(false);
   }

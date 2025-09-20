@@ -26,6 +26,11 @@ import {
 } from './core.js';
 import { openDocumentPrintWindow } from '../document-utils.js';
 import { openObservacaoModal } from './observacoes.js';
+import { openAnexoModal } from './anexos.js';
+import { openExameModal } from './exames.js';
+import { openPesoModal } from './pesos.js';
+import { openDocumentoModal } from './documentos.js';
+import { openVacinaModal } from './vacinas.js';
 
 function normalizeConsultaRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -607,6 +612,31 @@ function createAnexoCard(anexo) {
     }
   });
 
+  const openModal = () => {
+    openAnexoModal({ anexo });
+  };
+
+  card.classList.add('cursor-pointer', 'transition', 'hover:border-indigo-300', 'hover:shadow-md');
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('aria-label', 'Editar anexos');
+
+  card.addEventListener('click', (event) => {
+    if (event.defaultPrevented) return;
+    const interactive = event.target.closest('a, button');
+    if (interactive) return;
+    event.preventDefault();
+    openModal();
+  });
+
+  card.addEventListener('keydown', (event) => {
+    if (event.target !== card) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openModal();
+    }
+  });
+
   return card;
 }
 
@@ -712,6 +742,31 @@ function createDocumentoRegistroCard(entry) {
   actions.appendChild(printBtn);
 
   card.appendChild(removeBtn);
+
+  const openModal = () => {
+    openDocumentoModal({ documentoRegistro: entry });
+  };
+
+  card.classList.add('cursor-pointer', 'transition', 'hover:border-emerald-300', 'hover:shadow-md');
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('aria-label', 'Editar documento salvo');
+
+  card.addEventListener('click', (event) => {
+    if (event.defaultPrevented) return;
+    const interactive = event.target.closest('button, a');
+    if (interactive) return;
+    event.preventDefault();
+    openModal();
+  });
+
+  card.addEventListener('keydown', (event) => {
+    if (event.target !== card) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openModal();
+    }
+  });
 
   return card;
 }
@@ -1062,6 +1117,39 @@ function createVacinaCard(vacina) {
   const renovacao = vacina.renovacao ? formatDateDisplay(vacina.renovacao) : '';
   grid.appendChild(createVacinaDetail('Data de renovação', renovacao || '—'));
 
+  const openModal = () => {
+    openVacinaModal({ vacina });
+  };
+
+  card.classList.add(
+    'cursor-pointer',
+    'transition',
+    'hover:border-emerald-300',
+    'hover:shadow-md',
+    'focus-visible:outline-none',
+    'focus-visible:ring-2',
+    'focus-visible:ring-emerald-300',
+  );
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('aria-label', 'Editar aplicação de vacina');
+
+  card.addEventListener('click', (event) => {
+    if (event.defaultPrevented) return;
+    const interactive = event.target.closest('a, button');
+    if (interactive) return;
+    event.preventDefault();
+    openModal();
+  });
+
+  card.addEventListener('keydown', (event) => {
+    if (event.target !== card) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openModal();
+    }
+  });
+
   return card;
 }
 
@@ -1269,10 +1357,36 @@ function createExameCard(exame) {
     card.appendChild(attachmentsSection);
   }
 
+  const openModal = () => {
+    openExameModal({ exame });
+  };
+
+  card.classList.add('cursor-pointer', 'transition', 'hover:border-rose-300', 'hover:shadow-md');
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('aria-label', 'Editar registro de exame');
+
+  card.addEventListener('click', (event) => {
+    if (event.defaultPrevented) return;
+    const interactive = event.target.closest('a, button');
+    if (interactive) return;
+    event.preventDefault();
+    openModal();
+  });
+
+  card.addEventListener('keydown', (event) => {
+    if (event.target !== card) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openModal();
+    }
+  });
+
   return card;
 }
 
-function createPesoCard(peso, baseline, previous) {
+function createPesoCard(peso, baseline, previous, options = {}) {
+  const { isLatest = false } = options || {};
   if (!peso) return null;
 
   const card = document.createElement('article');
@@ -1398,6 +1512,33 @@ function createPesoCard(peso, baseline, previous) {
       }
       details.appendChild(diffPrevEl);
     }
+  }
+
+  if (!peso.isInitial && isLatest) {
+    const openModal = () => {
+      openPesoModal({ peso });
+    };
+
+    card.classList.add('cursor-pointer', 'transition', 'hover:border-orange-300', 'hover:shadow-md');
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', 'Editar atualização de peso');
+
+    card.addEventListener('click', (event) => {
+      if (event.defaultPrevented) return;
+      const interactive = event.target.closest('button');
+      if (interactive) return;
+      event.preventDefault();
+      openModal();
+    });
+
+    card.addEventListener('keydown', (event) => {
+      if (event.target !== card) return;
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openModal();
+      }
+    });
   }
 
   return card;
@@ -2018,7 +2159,7 @@ export function updateConsultaAgendaCard() {
 
     orderedVetPesos.forEach((peso, index) => {
       const previous = orderedVetPesos[index + 1] || null;
-      const card = createPesoCard(peso, baselinePeso, previous);
+      const card = createPesoCard(peso, baselinePeso, previous, { isLatest: index === 0 });
       if (card) pushRestCard(card);
     });
   } else if (isLoadingPesos) {

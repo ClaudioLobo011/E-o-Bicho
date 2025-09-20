@@ -44,6 +44,11 @@ const documentoModal = {
   isGenerating: false,
   selectedId: '',
   keydownHandler: null,
+  mode: 'create',
+  editingId: null,
+  editingRecord: null,
+  saveBtnOriginalHtml: '',
+  saveBtnEditHtml: '',
 };
 
 const PREVIEW_LOADING_MESSAGE = 'Carregando pré-visualização com os dados do atendimento...';
@@ -127,18 +132,134 @@ function setModalLoading(isLoading) {
 }
 
 function updateButtonsState() {
-  const hasSelection = !!getSelectedDocument();
+  const hasSelection =
+    !!getSelectedDocument() || (documentoModal.mode === 'edit' && documentoModal.editingRecord);
   const disabled = documentoModal.isLoading || documentoModal.isGenerating || !hasSelection;
   if (documentoModal.saveBtn) {
     documentoModal.saveBtn.disabled = disabled;
     documentoModal.saveBtn.classList.toggle('opacity-60', disabled);
     documentoModal.saveBtn.classList.toggle('cursor-not-allowed', disabled);
+
+    const savingHtml = documentoModal.mode === 'edit'
+      ? '<i class="fas fa-spinner fa-spin"></i><span>Atualizando...</span>'
+      : '<i class="fas fa-spinner fa-spin"></i><span>Salvando...</span>';
+    const idleHtml = documentoModal.mode === 'edit'
+      ? documentoModal.saveBtnEditHtml || '<i class="fas fa-floppy-disk"></i><span>Atualizar documento</span>'
+      : documentoModal.saveBtnOriginalHtml || '<i class="fas fa-save"></i><span>Salvar no atendimento</span>';
+
+    if (documentoModal.isGenerating) {
+      documentoModal.saveBtn.innerHTML = savingHtml;
+    } else if (idleHtml) {
+      documentoModal.saveBtn.innerHTML = idleHtml;
+    }
   }
   if (documentoModal.printBtn) {
     documentoModal.printBtn.disabled = disabled;
     documentoModal.printBtn.classList.toggle('opacity-60', disabled);
     documentoModal.printBtn.classList.toggle('cursor-not-allowed', disabled);
   }
+}
+
+function getPreviewDefaultMessage() {
+  return (
+    documentoModal.previewDefaultMessage
+    || documentoModal.previewEmpty?.dataset?.defaultMessage
+    || 'Selecione um documento para visualizar com as palavras-chave atualizadas.'
+  );
+}
+
+function resetDocumentoPreview() {
+  const defaultMessage = getPreviewDefaultMessage();
+  if (documentoModal.previewTitle) {
+    documentoModal.previewTitle.textContent = 'Nenhum documento selecionado.';
+  }
+  if (documentoModal.previewFrame) {
+    renderPreviewFrameContent(documentoModal.previewFrame, '', { minHeight: 260, background: '#f8fafc' });
+  }
+  if (documentoModal.previewEmpty) {
+    documentoModal.previewEmpty.textContent = defaultMessage;
+    documentoModal.previewEmpty.classList.remove('hidden');
+  }
+  highlightKeywords('');
+}
+
+function renderExistingDocumentPreview(record) {
+  if (!record) {
+    resetDocumentoPreview();
+    return;
+  }
+
+  const defaultMessage = getPreviewDefaultMessage();
+  const html = typeof record.conteudo === 'string' ? record.conteudo : '';
+  const title = typeof record.descricao === 'string' && record.descricao.trim()
+    ? record.descricao.trim()
+    : 'Documento salvo';
+
+  if (documentoModal.previewTitle) {
+    documentoModal.previewTitle.textContent = title;
+  }
+  if (documentoModal.previewFrame) {
+    renderPreviewFrameContent(documentoModal.previewFrame, html, { minHeight: 260, background: '#f8fafc' });
+  }
+  if (documentoModal.previewEmpty) {
+    documentoModal.previewEmpty.textContent = defaultMessage;
+    if (html) {
+      documentoModal.previewEmpty.classList.add('hidden');
+    } else {
+      documentoModal.previewEmpty.classList.remove('hidden');
+    }
+  }
+
+  const highlightSource = typeof record.conteudoOriginal === 'string' && record.conteudoOriginal
+    ? record.conteudoOriginal
+    : html;
+  highlightKeywords(highlightSource);
+}
+
+function setDocumentoModalMode(mode, record = null) {
+  const normalized = mode === 'edit' ? 'edit' : 'create';
+  documentoModal.mode = normalized;
+  documentoModal.isGenerating = false;
+  documentoModal.editingId = null;
+  documentoModal.editingRecord = null;
+
+  if (documentoModal.saveBtn) {
+    if (normalized === 'edit') {
+      const editHtml = documentoModal.saveBtnEditHtml || '<i class="fas fa-floppy-disk"></i><span>Atualizar documento</span>';
+      documentoModal.saveBtnEditHtml = editHtml;
+      documentoModal.saveBtn.innerHTML = editHtml;
+    } else if (documentoModal.saveBtnOriginalHtml) {
+      documentoModal.saveBtn.innerHTML = documentoModal.saveBtnOriginalHtml;
+    }
+  }
+
+  if (normalized === 'edit' && record && typeof record === 'object') {
+    const editingId = normalizeId(record.id || record._id);
+    if (editingId) {
+      documentoModal.editingId = editingId;
+    }
+    documentoModal.editingRecord = { ...record };
+    documentoModal.selectedId = normalizeId(record.documentoId || record.documento) || '';
+    if (documentoModal.select) {
+      const value = documentoModal.selectedId || '';
+      documentoModal.select.value = value;
+      if (!value) {
+        const placeholder = documentoModal.select.querySelector('option[value=""]');
+        if (placeholder) placeholder.selected = true;
+      }
+    }
+    renderExistingDocumentPreview(record);
+  } else {
+    documentoModal.selectedId = '';
+    if (documentoModal.select) {
+      documentoModal.select.value = '';
+      const placeholder = documentoModal.select.querySelector('option[value=""]');
+      if (placeholder) placeholder.selected = true;
+    }
+    resetDocumentoPreview();
+  }
+
+  updateButtonsState();
 }
 
 function normalizeDocumentRecord(raw) {
@@ -722,6 +843,8 @@ function ensureDocumentoModal() {
   documentoModal.loadingState = loadingState;
   documentoModal.emptyState = emptyState;
   documentoModal.saveBtn = saveBtn;
+  documentoModal.saveBtnOriginalHtml = saveBtn.innerHTML;
+  documentoModal.saveBtnEditHtml = '<i class="fas fa-floppy-disk"></i><span>Atualizar documento</span>';
   documentoModal.printBtn = printBtn;
   documentoModal.keywordContainer = keywordsContainer;
   documentoModal.keywordItems = [];
@@ -729,6 +852,9 @@ function ensureDocumentoModal() {
   documentoModal.selectedId = '';
   documentoModal.isLoading = false;
   documentoModal.isGenerating = false;
+  documentoModal.mode = 'create';
+  documentoModal.editingId = null;
+  documentoModal.editingRecord = null;
 
   renderKeywordReference();
   document.body.appendChild(overlay);
@@ -750,7 +876,7 @@ function populateDocumentOptions() {
   const placeholder = document.createElement('option');
   placeholder.value = '';
   placeholder.textContent = docs.length ? 'Selecione um documento salvo' : 'Nenhum documento encontrado';
-  placeholder.disabled = !!docs.length;
+  placeholder.disabled = docs.length === 0;
   placeholder.selected = true;
   documentoModal.select.appendChild(placeholder);
 
@@ -767,12 +893,27 @@ function populateDocumentOptions() {
 
   if (docs.length) {
     const hasPreviousSelection = docs.some((doc) => doc.id === documentoModal.selectedId);
-    const targetId = hasPreviousSelection ? documentoModal.selectedId : docs[0].id;
-    documentoModal.selectedId = targetId;
-    documentoModal.select.value = targetId;
+    let targetId = hasPreviousSelection ? documentoModal.selectedId : '';
+    if (!targetId && documentoModal.mode !== 'edit' && docs[0]) {
+      targetId = docs[0].id;
+    }
+
+    const keepExistingSelection =
+      documentoModal.mode === 'edit' && documentoModal.selectedId && !hasPreviousSelection;
+
+    if (!keepExistingSelection) {
+      documentoModal.selectedId = targetId || '';
+    }
+
+    documentoModal.select.value = targetId || '';
+    placeholder.selected = !targetId;
+
     updatePreview().catch(() => {});
   } else {
-    documentoModal.selectedId = '';
+    placeholder.selected = true;
+    if (documentoModal.mode !== 'edit') {
+      documentoModal.selectedId = '';
+    }
     updatePreview().catch(() => {});
   }
 
@@ -781,25 +922,18 @@ function populateDocumentOptions() {
 
 async function updatePreview() {
   const doc = getSelectedDocument();
+  const editingRecord = documentoModal.mode === 'edit' ? documentoModal.editingRecord : null;
   const previewFrame = documentoModal.previewFrame;
   const previewTitle = documentoModal.previewTitle;
   const previewEmpty = documentoModal.previewEmpty;
-  const defaultMessage = documentoModal.previewDefaultMessage
-    || previewEmpty?.dataset?.defaultMessage
-    || 'Selecione um documento para visualizar com as palavras-chave atualizadas.';
+  const defaultMessage = getPreviewDefaultMessage();
 
   if (!doc) {
-    if (previewTitle) {
-      previewTitle.textContent = 'Nenhum documento selecionado.';
+    if (documentoModal.mode === 'edit' && editingRecord) {
+      renderExistingDocumentPreview(editingRecord);
+    } else {
+      resetDocumentoPreview();
     }
-    if (previewEmpty) {
-      previewEmpty.textContent = defaultMessage;
-      previewEmpty.classList.remove('hidden');
-    }
-    if (previewFrame) {
-      renderPreviewFrameContent(previewFrame, '', { minHeight: 260, background: '#f8fafc' });
-    }
-    highlightKeywords('');
     documentoModal.isGenerating = false;
     updateButtonsState();
     return;
@@ -1085,8 +1219,10 @@ state.deleteDocumento = deleteDocumentoRegistro;
 
 async function handleSave() {
   if (documentoModal.isLoading || documentoModal.isGenerating) return;
+
+  const isEditing = documentoModal.mode === 'edit' && documentoModal.editingId;
   const doc = getSelectedDocument();
-  if (!doc) {
+  if (!doc && !isEditing) {
     notify('Selecione um documento salvo para registrar.', 'warning');
     return;
   }
@@ -1102,9 +1238,25 @@ async function handleSave() {
   updateButtonsState();
 
   try {
-    const { html } = await resolveDocumentContent(doc);
-    const finalHtml = typeof html === 'string' ? html : (doc.conteudo || '');
-    const recordPayload = prepareDocumentRecordPayload(doc, finalHtml);
+    let recordPayload = null;
+    if (doc) {
+      const { html } = await resolveDocumentContent(doc);
+      const finalHtml = typeof html === 'string' ? html : (doc.conteudo || '');
+      recordPayload = prepareDocumentRecordPayload(doc, finalHtml);
+    } else if (isEditing && documentoModal.editingRecord) {
+      const existing = documentoModal.editingRecord;
+      const finalHtml = typeof existing.conteudo === 'string' ? existing.conteudo : '';
+      const descricao = existing.descricao || 'Documento';
+      const preview = existing.preview || getPreviewText(finalHtml);
+      recordPayload = {
+        documentoId: normalizeId(existing.documentoId || existing.documento) || null,
+        descricao,
+        conteudo: finalHtml,
+        conteudoOriginal: typeof existing.conteudoOriginal === 'string' ? existing.conteudoOriginal : '',
+        preview,
+      };
+    }
+
     if (!recordPayload) {
       throw new Error('Não foi possível preparar os dados do documento.');
     }
@@ -1118,40 +1270,84 @@ async function handleSave() {
     const appointmentId = normalizeId(state.agendaContext?.appointmentId);
     if (appointmentId) {
       payload.appointmentId = appointmentId;
+    } else if (isEditing) {
+      const existingAppointment = normalizeId(
+        documentoModal.editingRecord?.appointmentId || documentoModal.editingRecord?.appointment,
+      );
+      if (existingAppointment) {
+        payload.appointmentId = existingAppointment;
+      }
     }
 
-    const resp = await api('/func/vet/documentos-registros', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    const data = await resp.json().catch(() => null);
-    if (!resp.ok) {
-      const message = typeof data?.message === 'string' ? data.message : 'Não foi possível salvar o documento.';
-      throw new Error(message);
+    if (isEditing && documentoModal.editingRecord?.descricao && !payload.descricao) {
+      payload.descricao = documentoModal.editingRecord.descricao;
     }
 
-    const fallbackRecord = {
-      ...recordPayload,
-      id: normalizeId(data?.id || data?._id) || `doc-reg-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
-      _id: data?._id,
-      createdAt: data?.createdAt || new Date().toISOString(),
-      updatedAt: data?.updatedAt || data?.createdAt || new Date().toISOString(),
-      clienteId,
-      petId,
-      appointmentId,
-    };
+    let response;
+    let data;
+    if (isEditing && documentoModal.editingId) {
+      response = await api(`/func/vet/documentos-registros/${encodeURIComponent(documentoModal.editingId)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      data = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' ? data.message : 'Não foi possível atualizar o documento.';
+        throw new Error(message);
+      }
 
-    const saved = upsertDocumentoRegistroInState(data || fallbackRecord);
-    if (!saved && fallbackRecord) {
-      upsertDocumentoRegistroInState(fallbackRecord);
+      const fallbackRecord = {
+        ...documentoModal.editingRecord,
+        ...payload,
+        id: documentoModal.editingId,
+        _id: documentoModal.editingId,
+        updatedAt: data?.updatedAt || new Date().toISOString(),
+      };
+
+      const saved = upsertDocumentoRegistroInState(data || fallbackRecord);
+      if (!saved && fallbackRecord) {
+        upsertDocumentoRegistroInState(fallbackRecord);
+      }
+
+      notify('Documento atualizado na aba de consultas.', 'success');
+    } else {
+      response = await api('/func/vet/documentos-registros', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      data = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' ? data.message : 'Não foi possível salvar o documento.';
+        throw new Error(message);
+      }
+
+      const fallbackRecord = {
+        ...recordPayload,
+        id: normalizeId(data?.id || data?._id) || `doc-reg-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+        _id: data?._id,
+        createdAt: data?.createdAt || new Date().toISOString(),
+        updatedAt: data?.updatedAt || data?.createdAt || new Date().toISOString(),
+        clienteId,
+        petId,
+        appointmentId,
+      };
+
+      const saved = upsertDocumentoRegistroInState(data || fallbackRecord);
+      if (!saved && fallbackRecord) {
+        upsertDocumentoRegistroInState(fallbackRecord);
+      }
+
+      notify('Documento adicionado na aba de consultas.', 'success');
     }
 
-    notify('Documento adicionado na aba de consultas.', 'success');
     closeDocumentoModal();
     updateConsultaAgendaCard();
   } catch (error) {
     console.error('handleSave', error);
-    notify(error.message || 'Não foi possível preparar o documento para salvar.', 'error');
+    const defaultMessage = documentoModal.mode === 'edit'
+      ? 'Não foi possível atualizar o documento.'
+      : 'Não foi possível preparar o documento para salvar.';
+    notify(error.message || defaultMessage, 'error');
   } finally {
     documentoModal.isGenerating = false;
     updateButtonsState();
@@ -1189,18 +1385,28 @@ export function closeDocumentoModal() {
   if (!documentoModal.overlay) return;
   documentoModal.overlay.classList.add('hidden');
   documentoModal.overlay.setAttribute('aria-hidden', 'true');
-  documentoModal.isGenerating = false;
-  updateButtonsState();
+  setModalLoading(false);
+  setDocumentoModalMode('create');
+  populateDocumentOptions();
   if (documentoModal.keydownHandler) {
     document.removeEventListener('keydown', documentoModal.keydownHandler);
     documentoModal.keydownHandler = null;
   }
 }
 
-export function openDocumentoModal() {
+export function openDocumentoModal(options = {}) {
   if (!ensureTutorAndPetSelected()) return;
 
   const modal = ensureDocumentoModal();
+  const { documentoRegistro = null } = options || {};
+
+  setDocumentoModalMode('create');
+  if (documentoRegistro && typeof documentoRegistro === 'object') {
+    setDocumentoModalMode('edit', documentoRegistro);
+  }
+
+  populateDocumentOptions();
+
   modal.overlay.classList.remove('hidden');
   modal.overlay.setAttribute('aria-hidden', 'false');
   try {
@@ -1219,6 +1425,9 @@ export function openDocumentoModal() {
     document.addEventListener('keydown', modal.keydownHandler);
   }
 
-  loadDocuments({ force: true });
+  const loadPromise = loadDocuments({ force: true });
+  if (loadPromise && typeof loadPromise.then === 'function') {
+    loadPromise.catch(() => {});
+  }
   updateButtonsState();
 }
