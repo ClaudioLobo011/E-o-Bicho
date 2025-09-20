@@ -656,16 +656,16 @@ function createSignedDocumentoFileCard(entry, signedFile) {
   info.appendChild(iconWrapper);
 
   const textWrap = document.createElement('div');
-  textWrap.className = 'min-w-0';
+  textWrap.className = 'min-w-0 space-y-1';
   info.appendChild(textWrap);
 
   const nameEl = document.createElement('p');
-  nameEl.className = 'font-semibold leading-tight break-words text-emerald-700';
+  nameEl.className = 'font-semibold leading-snug break-words text-emerald-700';
   nameEl.textContent = signedFile.nome || signedFile.originalName || 'Documento assinado';
   textWrap.appendChild(nameEl);
 
   const meta = document.createElement('p');
-  meta.className = 'text-xs text-emerald-600';
+  meta.className = 'text-xs text-emerald-600 leading-snug';
   const metaPieces = [];
   if (signedFile.originalName && signedFile.originalName !== signedFile.nome) {
     metaPieces.push(signedFile.originalName);
@@ -733,13 +733,14 @@ function createSignedDocumentoFileCard(entry, signedFile) {
 
 function createSignedDocumentoDropzone(entry) {
   const dropzone = document.createElement('label');
-  dropzone.className = 'flex h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-emerald-300 bg-emerald-50 text-sm text-emerald-600 transition';
-  dropzone.innerHTML = '<span class="font-medium" data-role="signed-dropzone-text">Arraste ou Clique para adicionar o Documento assinado</span><span class="text-xs text-emerald-500" data-role="signed-dropzone-hint">Formatos aceitos: PDF, PNG, JPG ou JPEG até 20MB.</span>';
+  dropzone.className = 'flex h-32 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-emerald-300 bg-emerald-50 px-4 text-center text-sm text-emerald-600 transition';
+  dropzone.innerHTML = '<span class="flex h-12 w-12 items-center justify-center rounded-full border border-emerald-200 bg-white text-lg text-emerald-500 shadow-sm"><i class="fas fa-file-circle-plus"></i></span><span class="max-w-[240px] text-sm font-medium leading-snug text-emerald-700" data-role="signed-dropzone-text"><span class="block">Arraste ou Clique para adicionar</span><span class="block">o Documento assinado</span></span><span class="max-w-[240px] text-xs leading-tight text-emerald-600" data-role="signed-dropzone-hint">Formatos aceitos: PDF, PNG, JPG ou JPEG até 20MB.</span>';
   dropzone.setAttribute('tabindex', '0');
 
   const dropzoneText = dropzone.querySelector('[data-role="signed-dropzone-text"]');
   const dropzoneHint = dropzone.querySelector('[data-role="signed-dropzone-hint"]');
   const defaultText = dropzoneText?.textContent || 'Arraste ou Clique para adicionar o Documento assinado';
+  const defaultTextHtml = dropzoneText?.innerHTML || '';
   const defaultHint = dropzoneHint?.textContent || 'Formatos aceitos: PDF, PNG, JPG ou JPEG até 20MB.';
 
   const fileInput = document.createElement('input');
@@ -752,9 +753,13 @@ function createSignedDocumentoDropzone(entry) {
     dropzone.classList.toggle('pointer-events-none', isUploading);
     dropzone.classList.toggle('opacity-60', isUploading);
     if (dropzoneText) {
-      dropzoneText.textContent = isUploading
-        ? 'Enviando documento assinado...'
-        : defaultText;
+      if (isUploading) {
+        dropzoneText.textContent = 'Enviando documento assinado...';
+      } else if (defaultTextHtml) {
+        dropzoneText.innerHTML = defaultTextHtml;
+      } else {
+        dropzoneText.textContent = defaultText;
+      }
     }
     if (dropzoneHint) {
       dropzoneHint.textContent = isUploading
@@ -839,9 +844,11 @@ function createDocumentoSignedSection(entry) {
     }
   }
 
-  const dropzone = createSignedDocumentoDropzone(entry);
-  if (dropzone) {
-    section.appendChild(dropzone);
+  if (!entry?.signedFile) {
+    const dropzone = createSignedDocumentoDropzone(entry);
+    if (dropzone) {
+      section.appendChild(dropzone);
+    }
   }
 
   return section;
