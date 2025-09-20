@@ -20,6 +20,7 @@ import {
   CONSULTA_PLACEHOLDER_CLASSNAMES,
   CONSULTA_CARD_CLASSNAMES,
   CONSULTA_PLACEHOLDER_TEXT,
+  CONSULTA_FINALIZADA_PLACEHOLDER_TEXT,
   consultaModal,
   getSelectedPet,
   formatFileSize,
@@ -2511,13 +2512,15 @@ export function updateConsultaAgendaCard() {
   const selectedTutorId = normalizeId(state.selectedCliente?._id);
   const contextPetId = normalizeId(context?.petId);
   const contextTutorId = normalizeId(context?.tutorId);
+  const agendaStatus = normalizeForCompare(context?.status);
+  const agendaFinalizado = agendaStatus === 'finalizado';
 
   let agendaElement = null;
   let hasAgendaContent = false;
 
   const contextMatches = !!(context && selectedPetId && selectedTutorId && contextPetId && contextTutorId && contextPetId === selectedPetId && contextTutorId === selectedTutorId);
 
-  if (contextMatches) {
+  if (contextMatches && !agendaFinalizado) {
     const allServices = Array.isArray(context.servicos) ? context.servicos : [];
     const vetServices = getVetServices(allServices);
     const filteredOut = Math.max(allServices.length - vetServices.length, 0);
@@ -2640,6 +2643,9 @@ export function updateConsultaAgendaCard() {
     hasObservacoes ||
     hasDocumentos;
   const shouldShowPlaceholder = !hasAnyContent;
+  const placeholderText = agendaFinalizado
+    ? CONSULTA_FINALIZADA_PLACEHOLDER_TEXT
+    : CONSULTA_PLACEHOLDER_TEXT;
 
   if ((isLoadingConsultas || isLoadingAnexos || isLoadingPesos || isLoadingExames) && !hasAnyContent) {
     area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
@@ -2654,7 +2660,7 @@ export function updateConsultaAgendaCard() {
     area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
     area.innerHTML = '';
     const paragraph = document.createElement('p');
-    paragraph.textContent = CONSULTA_PLACEHOLDER_TEXT;
+    paragraph.textContent = placeholderText;
     area.appendChild(paragraph);
     return;
   }

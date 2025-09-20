@@ -299,6 +299,7 @@ export const CARD_BUTTON_DISABLED_CLASSES = ['opacity-50', 'cursor-not-allowed']
 export const CONSULTA_PLACEHOLDER_CLASSNAMES = 'h-[420px] rounded-lg bg-white border border-dashed border-gray-300 flex flex-col items-center justify-center text-sm text-gray-500 text-center px-6';
 export const CONSULTA_CARD_CLASSNAMES = 'h-[420px] rounded-lg bg-white border border-gray-200 shadow-sm overflow-hidden';
 export const CONSULTA_PLACEHOLDER_TEXT = 'Selecione um agendamento na agenda para carregar os serviços veterinários.';
+export const CONSULTA_FINALIZADA_PLACEHOLDER_TEXT = 'Nenhum agendamento para iniciar uma consulta.';
 
 export const STATUS_LABELS = {
   agendado: 'Agendado',
