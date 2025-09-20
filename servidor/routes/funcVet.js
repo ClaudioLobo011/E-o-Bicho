@@ -51,6 +51,10 @@ const uploadDocumentoAssinadoMiddleware = multer({
   },
 });
 
+const RECEITA_REGISTROS_BASE_PATHS = ['/vet/receitas-registros', '/receitas-registros'];
+const RECEITA_REGISTROS_ID_PATHS = RECEITA_REGISTROS_BASE_PATHS.map((base) => `${base}/:id`);
+const RECEITA_REGISTROS_SIGNATURE_PATHS = RECEITA_REGISTROS_ID_PATHS.map((base) => `${base}/assinatura`);
+
 function handleAnexoUpload(req, res, next) {
   uploadAnexoMiddleware.array('arquivos', MAX_ANEXO_FILE_COUNT)(req, res, (err) => {
     if (err instanceof multer.MulterError) {
@@ -132,6 +136,37 @@ function toIsoDate(value) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
+}
+
+function hasSignedFileData(file) {
+  if (!file || typeof file !== 'object') return false;
+
+  const stringFields = [
+    'url',
+    'driveFileId',
+    'driveViewLink',
+    'driveContentLink',
+    'originalName',
+    'mimeType',
+    'extension',
+  ];
+
+  if (
+    stringFields.some((field) => {
+      const value = file[field];
+      return typeof value === 'string' && value.trim().length > 0;
+    })
+  ) {
+    return true;
+  }
+
+  if (Number(file.size || 0) > 0) return true;
+
+  if (file.uploadedAt && toIsoDate(file.uploadedAt)) {
+    return true;
+  }
+
+  return false;
 }
 
 function sanitizeFileName(name) {
@@ -322,7 +357,7 @@ function formatDocumentRecord(doc) {
   const updatedAt = doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt || createdAt;
   let signedFile = null;
 
-  if (doc.signedFile && typeof doc.signedFile === 'object') {
+  if (doc.signedFile && typeof doc.signedFile === 'object' && hasSignedFileData(doc.signedFile)) {
     const file = doc.signedFile;
     const fileCreatedAt = toIsoDate(file.uploadedAt) || updatedAt || createdAt;
     const url = file.url || file.driveViewLink || file.driveContentLink || '';
@@ -363,7 +398,7 @@ function formatRecipeRecord(doc) {
   const updatedAt = doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt || createdAt;
   let signedFile = null;
 
-  if (doc.signedFile && typeof doc.signedFile === 'object') {
+  if (doc.signedFile && typeof doc.signedFile === 'object' && hasSignedFileData(doc.signedFile)) {
     const file = doc.signedFile;
     const fileCreatedAt = toIsoDate(file.uploadedAt) || updatedAt || createdAt;
     const url = file.url || file.driveViewLink || file.driveContentLink || '';
@@ -1653,7 +1688,7 @@ router.delete('/vet/documentos-registros/:id', authMiddleware, requireStaff, asy
 });
 
 router.post(
-  '/vet/receitas-registros/:id/assinatura',
+  RECEITA_REGISTROS_SIGNATURE_PATHS,
   authMiddleware,
   requireStaff,
   handleReceitaAssinadaUpload,
@@ -1870,7 +1905,7 @@ router.post(
   },
 );
 
-router.delete('/vet/receitas-registros/:id/assinatura', authMiddleware, requireStaff, async (req, res) => {
+router.delete(RECEITA_REGISTROS_SIGNATURE_PATHS, authMiddleware, requireStaff, async (req, res) => {
   try {
     const recordId = normalizeObjectId(req.params.id);
     if (!recordId) {
@@ -1912,7 +1947,7 @@ router.delete('/vet/receitas-registros/:id/assinatura', authMiddleware, requireS
   }
 });
 
-router.get('/vet/receitas-registros', authMiddleware, requireStaff, async (req, res) => {
+router.get(RECEITA_REGISTROS_BASE_PATHS, authMiddleware, requireStaff, async (req, res) => {
   try {
     const clienteId = normalizeObjectId(req.query.clienteId);
     const petId = normalizeObjectId(req.query.petId);
@@ -1948,7 +1983,7 @@ router.get('/vet/receitas-registros', authMiddleware, requireStaff, async (req, 
   }
 });
 
-router.post('/vet/receitas-registros', authMiddleware, requireStaff, async (req, res) => {
+router.post(RECEITA_REGISTROS_BASE_PATHS, authMiddleware, requireStaff, async (req, res) => {
   try {
     const clienteId = normalizeObjectId(req.body.clienteId);
     const petId = normalizeObjectId(req.body.petId);
@@ -2037,7 +2072,7 @@ router.post('/vet/receitas-registros', authMiddleware, requireStaff, async (req,
   }
 });
 
-router.put('/vet/receitas-registros/:id', authMiddleware, requireStaff, async (req, res) => {
+router.put(RECEITA_REGISTROS_ID_PATHS, authMiddleware, requireStaff, async (req, res) => {
   try {
     const recordId = normalizeObjectId(req.params.id);
     if (!recordId) {
@@ -2149,7 +2184,7 @@ router.put('/vet/receitas-registros/:id', authMiddleware, requireStaff, async (r
     return res.status(500).json({ message: 'Erro ao atualizar receita do atendimento.' });
   }
 });
-router.delete('/vet/receitas-registros/:id', authMiddleware, requireStaff, async (req, res) => {
+router.delete(RECEITA_REGISTROS_ID_PATHS, authMiddleware, requireStaff, async (req, res) => {
   try {
     const id = normalizeObjectId(req.params.id);
     if (!id) {
