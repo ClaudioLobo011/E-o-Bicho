@@ -20,9 +20,11 @@ import {
   CONSULTA_PLACEHOLDER_CLASSNAMES,
   CONSULTA_CARD_CLASSNAMES,
   CONSULTA_PLACEHOLDER_TEXT,
+  CONSULTA_FINALIZADA_PLACEHOLDER_TEXT,
   consultaModal,
   getSelectedPet,
   formatFileSize,
+  isFinalizadoSelection,
 } from './core.js';
 import { openDocumentPrintWindow } from '../document-utils.js';
 import { openObservacaoModal } from './observacoes.js';
@@ -223,6 +225,15 @@ export async function loadConsultasFromServer(options = {}) {
   }
 
   const key = getConsultasKey(clienteId, petId);
+
+  if (isFinalizadoSelection(clienteId, petId)) {
+    state.consultas = [];
+    state.consultasLoadKey = key;
+    state.consultasLoading = false;
+    updateConsultaAgendaCard();
+    return;
+  }
+
   if (!force && key && state.consultasLoadKey === key) return;
 
   state.consultasLoading = true;
@@ -2446,21 +2457,50 @@ async function handleConsultaSubmit() {
   }
 }
 
-function setConsultaTabActive() {
+export function updateMainTabLayout() {
+  const activeTab = state.activeMainTab === 'historico' ? 'historico' : 'consulta';
+  const consultaActiveClasses = ['bg-sky-600', 'text-white'];
+  const consultaInactiveClasses = ['bg-gray-100', 'text-gray-700', 'hover:bg-gray-50'];
+
   if (els.consultaTab) {
-    els.consultaTab.classList.remove('bg-gray-100', 'text-gray-700', 'hover:bg-gray-50');
-    els.consultaTab.classList.add('bg-sky-600', 'text-white');
+    els.consultaTab.classList.remove(...consultaActiveClasses, ...consultaInactiveClasses);
+    els.consultaTab.classList.add(...(activeTab === 'consulta' ? consultaActiveClasses : consultaInactiveClasses));
   }
+
   if (els.historicoTab) {
-    els.historicoTab.classList.remove('bg-sky-600', 'text-white');
-    els.historicoTab.classList.add('bg-gray-100', 'text-gray-700', 'hover:bg-gray-50');
+    els.historicoTab.classList.remove(...consultaActiveClasses, ...consultaInactiveClasses);
+    els.historicoTab.classList.add(...(activeTab === 'historico' ? consultaActiveClasses : consultaInactiveClasses));
+  }
+
+  if (els.consultaArea) {
+    if (activeTab === 'consulta') {
+      els.consultaArea.classList.remove('hidden');
+    } else {
+      els.consultaArea.classList.add('hidden');
+    }
+  }
+
+  if (els.historicoArea) {
+    if (activeTab === 'historico') {
+      els.historicoArea.classList.remove('hidden');
+    } else {
+      els.historicoArea.classList.add('hidden');
+    }
   }
 }
 
 export function updateConsultaAgendaCard() {
   const area = els.consultaArea;
   if (!area) return;
-  setConsultaTabActive();
+  const isConsultaTabActive = state.activeMainTab === 'consulta';
+
+  const setAreaClassNames = (classNames) => {
+    area.className = classNames;
+    if (!isConsultaTabActive) {
+      area.classList.add('hidden');
+    }
+  };
+  updateMainTabLayout();
 
   const consultas = Array.isArray(state.consultas) ? state.consultas : [];
   const manualConsultas = consultas.filter((consulta) => !!normalizeId(consulta?.id || consulta?._id));
@@ -2490,13 +2530,15 @@ export function updateConsultaAgendaCard() {
   const selectedTutorId = normalizeId(state.selectedCliente?._id);
   const contextPetId = normalizeId(context?.petId);
   const contextTutorId = normalizeId(context?.tutorId);
+  const agendaStatus = normalizeForCompare(context?.status);
+  const agendaFinalizado = agendaStatus === 'finalizado';
 
   let agendaElement = null;
   let hasAgendaContent = false;
 
   const contextMatches = !!(context && selectedPetId && selectedTutorId && contextPetId && contextTutorId && contextPetId === selectedPetId && contextTutorId === selectedTutorId);
 
-  if (contextMatches) {
+  if (contextMatches && !agendaFinalizado) {
     const allServices = Array.isArray(context.servicos) ? context.servicos : [];
     const vetServices = getVetServices(allServices);
     const filteredOut = Math.max(allServices.length - vetServices.length, 0);
@@ -2619,9 +2661,12 @@ export function updateConsultaAgendaCard() {
     hasObservacoes ||
     hasDocumentos;
   const shouldShowPlaceholder = !hasAnyContent;
+  const placeholderText = agendaFinalizado
+    ? CONSULTA_FINALIZADA_PLACEHOLDER_TEXT
+    : CONSULTA_PLACEHOLDER_TEXT;
 
   if ((isLoadingConsultas || isLoadingAnexos || isLoadingPesos || isLoadingExames) && !hasAnyContent) {
-    area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
+    setAreaClassNames(CONSULTA_PLACEHOLDER_CLASSNAMES);
     area.innerHTML = '';
     const paragraph = document.createElement('p');
     paragraph.textContent = 'Carregando registros...';
@@ -2630,15 +2675,15 @@ export function updateConsultaAgendaCard() {
   }
 
   if (shouldShowPlaceholder) {
-    area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
+    setAreaClassNames(CONSULTA_PLACEHOLDER_CLASSNAMES);
     area.innerHTML = '';
     const paragraph = document.createElement('p');
-    paragraph.textContent = CONSULTA_PLACEHOLDER_TEXT;
+    paragraph.textContent = placeholderText;
     area.appendChild(paragraph);
     return;
   }
 
-  area.className = CONSULTA_CARD_CLASSNAMES;
+  setAreaClassNames(CONSULTA_CARD_CLASSNAMES);
   area.innerHTML = '';
 
   const scroll = document.createElement('div');

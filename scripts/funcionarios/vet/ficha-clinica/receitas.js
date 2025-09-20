@@ -16,6 +16,7 @@ import {
   getAuthToken,
   ANEXO_ALLOWED_EXTENSIONS,
   getFileExtension,
+  isFinalizadoSelection,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard, getConsultasKey } from './consultas.js';
 import {
@@ -1055,6 +1056,13 @@ export async function loadReceitasFromServer(options = {}) {
   }
 
   const key = getConsultasKey(clienteId, petId);
+  if (isFinalizadoSelection(clienteId, petId)) {
+    state.receitas = [];
+    state.receitasLoadKey = key;
+    state.receitasLoading = false;
+    updateConsultaAgendaCard();
+    return;
+  }
   if (!force && key && state.receitasLoadKey === key) return;
 
   state.receitasLoading = true;

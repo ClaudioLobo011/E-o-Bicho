@@ -14,6 +14,7 @@ import {
   getAgendaStoreId,
   getPetPriceCriteria,
   persistAgendaContext,
+  isFinalizadoSelection,
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
 
@@ -106,9 +107,20 @@ function persistVacinasForSelection() {
 }
 
 export function loadVacinasForSelection() {
-  const key = getVacinaStorageKey(state.selectedCliente?._id, state.selectedPetId);
+  const clienteId = state.selectedCliente?._id;
+  const petId = state.selectedPetId;
+  const key = getVacinaStorageKey(clienteId, petId);
   if (!key) {
     state.vacinas = [];
+    return;
+  }
+  if (isFinalizadoSelection(clienteId, petId)) {
+    state.vacinas = [];
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore storage errors
+    }
     return;
   }
   try {

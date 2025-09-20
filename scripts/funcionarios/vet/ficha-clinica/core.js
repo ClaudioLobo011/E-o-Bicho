@@ -57,6 +57,21 @@ export function formatPhone(value) {
   return digits || '';
 }
 
+export function getCurrentUserRole() {
+  try {
+    const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+    const role = typeof cached?.role === 'string' ? cached.role : '';
+    return role || '';
+  } catch {
+    return '';
+  }
+}
+
+export function isAdminRole(role = getCurrentUserRole()) {
+  const normalized = String(role || '').toLowerCase();
+  return normalized === 'admin' || normalized === 'admin_master';
+}
+
 export const els = {
   cliInput: document.getElementById('vet-cli-input'),
   cliSug: document.getElementById('vet-cli-sug'),
@@ -93,6 +108,7 @@ export const els = {
   togglePet: document.getElementById('vet-card-show-pet'),
   pageContent: document.getElementById('vet-ficha-content'),
   consultaArea: document.getElementById('vet-consulta-area'),
+  historicoArea: document.getElementById('vet-historico-area'),
   historicoTab: document.getElementById('vet-tab-historico'),
   consultaTab: document.getElementById('vet-tab-consulta'),
   addConsultaBtn: document.getElementById('vet-add-consulta-btn'),
@@ -103,6 +119,8 @@ export const els = {
   addExameBtn: document.getElementById('vet-add-exame-btn'),
   addPesoBtn: document.getElementById('vet-add-peso-btn'),
   addObservacaoBtn: document.getElementById('vet-add-observacao-btn'),
+  finalizarAtendimentoBtn: document.getElementById('vet-finalizar-atendimento'),
+  limparConsultaBtn: document.getElementById('vet-clear-consulta'),
 };
 
 export const state = {
@@ -131,6 +149,9 @@ export const state = {
   receitas: [],
   receitasLoading: false,
   receitasLoadKey: null,
+  historicos: [],
+  historicosLoadKey: null,
+  activeMainTab: 'consulta',
 };
 
 export const consultaModal = {
@@ -268,6 +289,7 @@ export const ANEXO_STORAGE_PREFIX = 'vetFichaAnexos:';
 export const EXAME_STORAGE_PREFIX = 'vetFichaExames:';
 export const OBSERVACAO_STORAGE_PREFIX = 'vetFichaObservacoes:';
 export const EXAME_ATTACHMENT_OBSERVACAO_PREFIX = '__vet_exame__:';
+export const HISTORICO_STORAGE_PREFIX = 'vetFichaHistorico:';
 export const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 
 export const CARD_TUTOR_ACTIVE_CLASSES = ['bg-sky-100', 'text-sky-700'];
@@ -277,6 +299,7 @@ export const CARD_BUTTON_DISABLED_CLASSES = ['opacity-50', 'cursor-not-allowed']
 export const CONSULTA_PLACEHOLDER_CLASSNAMES = 'h-[420px] rounded-lg bg-white border border-dashed border-gray-300 flex flex-col items-center justify-center text-sm text-gray-500 text-center px-6';
 export const CONSULTA_CARD_CLASSNAMES = 'h-[420px] rounded-lg bg-white border border-gray-200 shadow-sm overflow-hidden';
 export const CONSULTA_PLACEHOLDER_TEXT = 'Selecione um agendamento na agenda para carregar os serviços veterinários.';
+export const CONSULTA_FINALIZADA_PLACEHOLDER_TEXT = 'Nenhum agendamento para iniciar uma consulta.';
 
 export const STATUS_LABELS = {
   agendado: 'Agendado',
@@ -363,6 +386,24 @@ export function sanitizeObjectId(value) {
     .replace(/^ObjectId\(["']?/, '')
     .replace(/["']?\)$/, '');
   return OBJECT_ID_REGEX.test(cleaned) ? cleaned : '';
+}
+
+export function isAgendaContextFinalizado(context = state.agendaContext) {
+  const status = normalizeForCompare(context?.status);
+  return status === 'finalizado';
+}
+
+export function isFinalizadoSelection(clienteId, petId, context = state.agendaContext) {
+  if (!context || typeof context !== 'object') return false;
+  if (!isAgendaContextFinalizado(context)) return false;
+  const appointmentId = normalizeId(context.appointmentId);
+  if (!appointmentId) return false;
+  const tutorId = normalizeId(context.tutorId);
+  const petContextId = normalizeId(context.petId);
+  const targetTutorId = normalizeId(clienteId);
+  const targetPetId = normalizeId(petId);
+  if (!(tutorId && petContextId && targetTutorId && targetPetId)) return false;
+  return tutorId === targetTutorId && petContextId === targetPetId;
 }
 
 export function capitalize(value) {

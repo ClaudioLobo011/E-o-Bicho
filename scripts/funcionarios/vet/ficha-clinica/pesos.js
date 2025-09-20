@@ -13,6 +13,7 @@ import {
   formatWeightDelta,
   pesoModal,
   sanitizeObjectId,
+  isFinalizadoSelection,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
 import { updateCardDisplay } from './ui.js';
@@ -433,6 +434,16 @@ export async function loadPesosFromServer(options = {}) {
   }
 
   const key = getPesosKey(clienteId, petId);
+  if (isFinalizadoSelection(clienteId, petId)) {
+    state.pesos = [];
+    state.pesosLoadKey = key;
+    state.pesosLoading = false;
+    if (pesoModal.overlay && !pesoModal.overlay.classList.contains('hidden')) {
+      renderPesoList();
+    }
+    updateConsultaAgendaCard();
+    return;
+  }
   if (!force && key && state.pesosLoadKey === key && Array.isArray(state.pesos) && state.pesos.length) {
     return;
   }
