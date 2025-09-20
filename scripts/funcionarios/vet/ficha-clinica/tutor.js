@@ -10,6 +10,7 @@ import {
   persistPetId,
   persistAgendaContext,
   getPersistedState,
+  isFinalizadoSelection,
 } from './core.js';
 import { loadConsultasFromServer, updateConsultaAgendaCard } from './consultas.js';
 import { loadVacinasForSelection } from './vacinas.js';
@@ -317,7 +318,8 @@ export async function onSelectPet(petId, opts = {}) {
   if (!skipPersistPet) {
     persistPetId(state.selectedPetId);
   }
-  setActiveMainTab('consulta');
+  const defaultToHistorico = isFinalizadoSelection(state.selectedCliente?._id, state.selectedPetId);
+  setActiveMainTab(defaultToHistorico ? 'historico' : 'consulta');
   state.consultas = [];
   state.consultasLoadKey = null;
   state.consultasLoading = false;

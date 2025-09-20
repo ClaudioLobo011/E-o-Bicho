@@ -388,6 +388,24 @@ export function sanitizeObjectId(value) {
   return OBJECT_ID_REGEX.test(cleaned) ? cleaned : '';
 }
 
+export function isAgendaContextFinalizado(context = state.agendaContext) {
+  const status = normalizeForCompare(context?.status);
+  return status === 'finalizado';
+}
+
+export function isFinalizadoSelection(clienteId, petId, context = state.agendaContext) {
+  if (!context || typeof context !== 'object') return false;
+  if (!isAgendaContextFinalizado(context)) return false;
+  const appointmentId = normalizeId(context.appointmentId);
+  if (!appointmentId) return false;
+  const tutorId = normalizeId(context.tutorId);
+  const petContextId = normalizeId(context.petId);
+  const targetTutorId = normalizeId(clienteId);
+  const targetPetId = normalizeId(petId);
+  if (!(tutorId && petContextId && targetTutorId && targetPetId)) return false;
+  return tutorId === targetTutorId && petContextId === targetPetId;
+}
+
 export function capitalize(value) {
   const str = String(value || '').trim();
   if (!str) return '';

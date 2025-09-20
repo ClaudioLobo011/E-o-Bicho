@@ -24,6 +24,7 @@ import {
   consultaModal,
   getSelectedPet,
   formatFileSize,
+  isFinalizadoSelection,
 } from './core.js';
 import { openDocumentPrintWindow } from '../document-utils.js';
 import { openObservacaoModal } from './observacoes.js';
@@ -224,6 +225,15 @@ export async function loadConsultasFromServer(options = {}) {
   }
 
   const key = getConsultasKey(clienteId, petId);
+
+  if (isFinalizadoSelection(clienteId, petId)) {
+    state.consultas = [];
+    state.consultasLoadKey = key;
+    state.consultasLoading = false;
+    updateConsultaAgendaCard();
+    return;
+  }
+
   if (!force && key && state.consultasLoadKey === key) return;
 
   state.consultasLoading = true;

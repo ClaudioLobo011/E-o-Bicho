@@ -17,6 +17,7 @@ import {
   ANEXO_ALLOWED_EXTENSIONS,
   getFileExtension,
   formatFileSize,
+  isFinalizadoSelection,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard, getConsultasKey } from './consultas.js';
 import {
@@ -1051,6 +1052,13 @@ export async function loadDocumentosFromServer(options = {}) {
   }
 
   const key = getConsultasKey(clienteId, petId);
+  if (isFinalizadoSelection(clienteId, petId)) {
+    state.documentos = [];
+    state.documentosLoadKey = key;
+    state.documentosLoading = false;
+    updateConsultaAgendaCard();
+    return;
+  }
   if (!force && key && state.documentosLoadKey === key) return;
 
   state.documentosLoading = true;

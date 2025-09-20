@@ -6,6 +6,7 @@ import {
   normalizeId,
   toIsoOrNull,
   OBSERVACAO_STORAGE_PREFIX,
+  isFinalizadoSelection,
 } from './core.js';
 import { getConsultasKey, updateConsultaAgendaCard } from './consultas.js';
 
@@ -76,9 +77,20 @@ function persistObservacoesForSelection() {
 }
 
 export function loadObservacoesForSelection() {
-  const key = getObservacaoStorageKey(state.selectedCliente?._id, state.selectedPetId);
+  const clienteId = state.selectedCliente?._id;
+  const petId = state.selectedPetId;
+  const key = getObservacaoStorageKey(clienteId, petId);
   if (!key) {
     state.observacoes = [];
+    return;
+  }
+  if (isFinalizadoSelection(clienteId, petId)) {
+    state.observacoes = [];
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore storage errors
+    }
     return;
   }
   try {

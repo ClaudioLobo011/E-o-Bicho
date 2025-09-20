@@ -19,6 +19,7 @@ import {
   ANEXO_ALLOWED_EXTENSIONS,
   ANEXO_ALLOWED_MIME_TYPES,
   getAuthToken,
+  isFinalizadoSelection,
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
 import { loadAnexosFromServer, deleteAnexo } from './anexos.js';
@@ -998,10 +999,22 @@ async function persistExameAttachmentsChanges({
 }
 
 export function loadExamesForSelection() {
-  const key = getExameStorageKey(state.selectedCliente?._id, state.selectedPetId);
+  const clienteId = state.selectedCliente?._id;
+  const petId = state.selectedPetId;
+  const key = getExameStorageKey(clienteId, petId);
   if (!key) {
     state.exames = [];
     state.examesLoadKey = null;
+    return;
+  }
+  if (isFinalizadoSelection(clienteId, petId)) {
+    state.exames = [];
+    state.examesLoadKey = key;
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore storage errors
+    }
     return;
   }
   try {

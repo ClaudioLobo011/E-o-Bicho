@@ -14,6 +14,7 @@ import {
   ANEXO_STORAGE_PREFIX,
   EXAME_ATTACHMENT_OBSERVACAO_PREFIX,
   getAuthToken,
+  isFinalizadoSelection,
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
 
@@ -237,9 +238,20 @@ function persistAnexosForSelection() {
 }
 
 export function loadAnexosForSelection() {
-  const key = getAnexoStorageKey(state.selectedCliente?._id, state.selectedPetId);
+  const clienteId = state.selectedCliente?._id;
+  const petId = state.selectedPetId;
+  const key = getAnexoStorageKey(clienteId, petId);
   if (!key) {
     state.anexos = [];
+    return;
+  }
+  if (isFinalizadoSelection(clienteId, petId)) {
+    state.anexos = [];
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore storage errors
+    }
     return;
   }
   try {
@@ -336,6 +348,13 @@ export async function loadAnexosFromServer(options = {}) {
   }
 
   const key = getConsultasKey(clienteId, petId);
+  if (isFinalizadoSelection(clienteId, petId)) {
+    state.anexos = [];
+    state.anexosLoadKey = key;
+    state.anexosLoading = false;
+    updateConsultaAgendaCard();
+    return;
+  }
   if (!force && key && state.anexosLoadKey === key) return;
 
   state.anexosLoading = true;
