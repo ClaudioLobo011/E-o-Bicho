@@ -1377,6 +1377,9 @@
   .border-emerald-300 {
     border-color: var(--color-emerald-300);
   }
+  .border-emerald-500 {
+    border-color: var(--color-emerald-500);
+  }
   .border-gray-100 {
     border-color: var(--color-gray-100);
   }

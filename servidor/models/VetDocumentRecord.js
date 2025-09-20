@@ -44,6 +44,56 @@ const VetDocumentRecordSchema = new Schema({
     default: '',
     maxlength: 2000,
   },
+  signedFile: {
+    nome: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    originalName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    mimeType: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    size: {
+      type: Number,
+      default: 0,
+    },
+    extension: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    url: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    driveFileId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    driveViewLink: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    driveContentLink: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    uploadedAt: {
+      type: Date,
+      default: null,
+    },
+  },
   createdBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',
