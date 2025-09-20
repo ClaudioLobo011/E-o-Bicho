@@ -13,6 +13,10 @@ import {
   getSelectedPet,
   getAgendaStoreId,
   normalizeId,
+  getAuthToken,
+  ANEXO_ALLOWED_EXTENSIONS,
+  getFileExtension,
+  formatFileSize,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard, getConsultasKey } from './consultas.js';
 import {
@@ -56,6 +60,13 @@ const PREVIEW_ERROR_MESSAGE = 'Erro ao gerar pré-visualização do documento.';
 const storeCache = new Map();
 const storePromiseCache = new Map();
 let previewUpdateToken = 0;
+
+const MAX_SIGNED_DOCUMENT_FILE_SIZE = 20 * 1024 * 1024;
+const SIGNED_DOCUMENT_ALLOWED_EXTENSIONS = new Set(
+  (Array.isArray(ANEXO_ALLOWED_EXTENSIONS) ? ANEXO_ALLOWED_EXTENSIONS : [])
+    .map((ext) => String(ext || '').toLowerCase()),
+);
+const SIGNED_DOCUMENT_ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'application/pdf']);
 
 function renderKeywordReference() {
   if (!documentoModal.keywordContainer) return;
@@ -1103,6 +1114,39 @@ function normalizeDocumentoRegistroRecord(raw) {
   const petId = normalizeId(raw.petId || raw.pet);
   const appointmentId = normalizeId(raw.appointmentId || raw.appointment);
 
+  const rawSignedFile = raw.signedFile && typeof raw.signedFile === 'object'
+    ? raw.signedFile
+    : null;
+  let signedFile = null;
+  if (rawSignedFile) {
+    const fileUrl = pickFirst(
+      rawSignedFile.url,
+      rawSignedFile.driveViewLink,
+      rawSignedFile.driveContentLink,
+    );
+    const uploadedAtDate = parseDateValue(
+      rawSignedFile.uploadedAt
+      || rawSignedFile.createdAt
+      || rawSignedFile.criadoEm
+      || rawSignedFile.dataCriacao,
+    );
+
+    signedFile = {
+      nome: typeof rawSignedFile.nome === 'string' && rawSignedFile.nome.trim()
+        ? rawSignedFile.nome.trim()
+        : (rawSignedFile.originalName || 'Documento assinado'),
+      originalName: rawSignedFile.originalName || '',
+      mimeType: rawSignedFile.mimeType || '',
+      size: Number(rawSignedFile.size || 0),
+      extension: typeof rawSignedFile.extension === 'string' ? rawSignedFile.extension : '',
+      url: typeof fileUrl === 'string' ? fileUrl : '',
+      driveFileId: rawSignedFile.driveFileId || '',
+      driveViewLink: rawSignedFile.driveViewLink || '',
+      driveContentLink: rawSignedFile.driveContentLink || '',
+      uploadedAt: uploadedAtDate ? uploadedAtDate.toISOString() : null,
+    };
+  }
+
   const createdAtDate = parseDateValue(raw.createdAt || raw.criadoEm || raw.dataCriacao);
   const updatedAtDate = parseDateValue(raw.updatedAt || raw.atualizadoEm || raw.dataAtualizacao) || createdAtDate;
   const createdAt = createdAtDate ? createdAtDate.toISOString() : null;
@@ -1121,6 +1165,7 @@ function normalizeDocumentoRegistroRecord(raw) {
     clienteId,
     petId,
     appointmentId,
+    signedFile,
   };
 }
 
@@ -1167,6 +1212,168 @@ function setDocumentoRegistrosInState(records) {
   if (key) state.documentosLoadKey = key;
 
   return list;
+}
+
+export async function uploadDocumentoAssinado(target, file, options = {}) {
+  const { suppressNotify = false, nome } = options || {};
+  const recordId = normalizeId(
+    target && typeof target === 'object' ? target.id || target._id : target,
+  );
+
+  const isFileObject = (
+    typeof File !== 'undefined' && file instanceof File
+  ) || (file && typeof file === 'object' && typeof file.name === 'string');
+
+  if (!recordId || !isFileObject) {
+    if (!suppressNotify) {
+      notify('Selecione um documento válido para enviar o arquivo assinado.', 'error');
+    }
+    return false;
+  }
+
+  const extension = getFileExtension(file.name).toLowerCase();
+  const mimeType = String(file.type || file.mimeType || '').toLowerCase();
+  if (
+    !(
+      (extension && SIGNED_DOCUMENT_ALLOWED_EXTENSIONS.has(extension))
+      || SIGNED_DOCUMENT_ALLOWED_MIME_TYPES.has(mimeType)
+    )
+  ) {
+    if (!suppressNotify) {
+      notify('Formato de arquivo não suportado. Permitido: PNG, JPG, JPEG ou PDF.', 'warning');
+    }
+    return false;
+  }
+
+  if (Number(file.size || 0) > MAX_SIGNED_DOCUMENT_FILE_SIZE) {
+    if (!suppressNotify) {
+      notify('O documento assinado deve ter no máximo 20MB.', 'warning');
+    }
+    return false;
+  }
+
+  const formData = new FormData();
+  formData.append('arquivo', file, file.name);
+  if (typeof nome === 'string' && nome.trim()) {
+    formData.append('nome', nome.trim());
+  }
+
+  const token = getAuthToken();
+
+  let response;
+  try {
+    response = await fetch(`${API_CONFIG.BASE_URL}/func/vet/documentos-registros/${encodeURIComponent(recordId)}/assinatura`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+  } catch (error) {
+    console.error('uploadDocumentoAssinado', error);
+    if (!suppressNotify) {
+      notify('Não foi possível enviar o documento assinado.', 'error');
+    }
+    return false;
+  }
+
+  const payload = await response.json().catch(() => (response.ok ? {} : {}));
+  if (!response.ok) {
+    const message = typeof payload?.message === 'string'
+      ? payload.message
+      : 'Não foi possível salvar o documento assinado.';
+    if (!suppressNotify) {
+      notify(message, 'error');
+    }
+    return false;
+  }
+
+  const normalized = normalizeDocumentoRegistroRecord(payload);
+  if (normalized) {
+    upsertDocumentoRegistroInState(normalized);
+  } else {
+    try {
+      await loadDocumentosFromServer({ force: true });
+    } catch (error) {
+      console.error('uploadDocumentoAssinado loadDocumentosFromServer', error);
+    }
+  }
+
+  updateConsultaAgendaCard();
+  if (!suppressNotify) {
+    notify('Documento assinado salvo com sucesso.', 'success');
+  }
+  return true;
+}
+
+export async function removeDocumentoAssinado(target, options = {}) {
+  const { suppressNotify = false } = options || {};
+  const recordId = normalizeId(
+    target && typeof target === 'object' ? target.id || target._id : target,
+  );
+
+  if (!recordId) {
+    if (!suppressNotify) {
+      notify('Documento inválido para remover o arquivo assinado.', 'error');
+    }
+    return false;
+  }
+
+  const token = getAuthToken();
+
+  let response;
+  try {
+    response = await fetch(`${API_CONFIG.BASE_URL}/func/vet/documentos-registros/${encodeURIComponent(recordId)}/assinatura`, {
+      method: 'DELETE',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  } catch (error) {
+    console.error('removeDocumentoAssinado', error);
+    if (!suppressNotify) {
+      notify('Não foi possível remover o documento assinado.', 'error');
+    }
+    return false;
+  }
+
+  let payload = null;
+  if (response.status !== 204) {
+    payload = await response.json().catch(() => (response.ok ? {} : {}));
+  }
+
+  if (!response.ok) {
+    const message = typeof payload?.message === 'string'
+      ? payload.message
+      : 'Não foi possível remover o documento assinado.';
+    if (!suppressNotify) {
+      notify(message, 'error');
+    }
+    return false;
+  }
+
+  let normalized = null;
+  if (payload) {
+    normalized = normalizeDocumentoRegistroRecord(payload);
+  }
+
+  if (normalized) {
+    upsertDocumentoRegistroInState(normalized);
+  } else {
+    const current = Array.isArray(state.documentos) ? [...state.documentos] : [];
+    state.documentos = current.map((item) => {
+      if (normalizeId(item?.id || item?._id) === recordId) {
+        return { ...item, signedFile: null };
+      }
+      return item;
+    });
+  }
+
+  updateConsultaAgendaCard();
+  if (!suppressNotify) {
+    notify('Documento assinado removido com sucesso.', 'success');
+  }
+  return true;
 }
 
 export async function deleteDocumentoRegistro(target, options = {}) {

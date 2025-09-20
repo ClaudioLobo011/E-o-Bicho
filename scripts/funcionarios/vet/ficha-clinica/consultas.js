@@ -29,7 +29,7 @@ import { openObservacaoModal } from './observacoes.js';
 import { openAnexoModal } from './anexos.js';
 import { openExameModal } from './exames.js';
 import { openPesoModal } from './pesos.js';
-import { openDocumentoModal } from './documentos.js';
+import { openDocumentoModal, uploadDocumentoAssinado, removeDocumentoAssinado } from './documentos.js';
 import { openVacinaModal } from './vacinas.js';
 
 function normalizeConsultaRecord(raw) {
@@ -640,6 +640,220 @@ function createAnexoCard(anexo) {
   return card;
 }
 
+function createSignedDocumentoFileCard(entry, signedFile) {
+  if (!signedFile) return null;
+
+  const card = document.createElement('div');
+  card.className = 'flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 shadow-sm';
+
+  const info = document.createElement('div');
+  info.className = 'flex flex-1 min-w-0 items-center gap-3 text-sm text-emerald-700';
+  card.appendChild(info);
+
+  const iconWrapper = document.createElement('div');
+  iconWrapper.className = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-white text-emerald-600';
+  iconWrapper.innerHTML = '<i class="fas fa-file-signature"></i>';
+  info.appendChild(iconWrapper);
+
+  const textWrap = document.createElement('div');
+  textWrap.className = 'min-w-0 space-y-1';
+  info.appendChild(textWrap);
+
+  const nameEl = document.createElement('p');
+  nameEl.className = 'font-semibold leading-snug break-words text-emerald-700';
+  nameEl.textContent = signedFile.nome || signedFile.originalName || 'Documento assinado';
+  textWrap.appendChild(nameEl);
+
+  const meta = document.createElement('p');
+  meta.className = 'text-xs text-emerald-600 leading-snug';
+  const metaPieces = [];
+  if (signedFile.originalName && signedFile.originalName !== signedFile.nome) {
+    metaPieces.push(signedFile.originalName);
+  }
+  const extension = String(signedFile.extension || '').replace('.', '').toUpperCase();
+  if (extension) metaPieces.push(extension);
+  if (signedFile.size) metaPieces.push(formatFileSize(signedFile.size));
+  if (signedFile.uploadedAt) {
+    const uploadedDisplay = formatDateTimeDisplay(signedFile.uploadedAt);
+    if (uploadedDisplay) metaPieces.push(`Enviado em ${uploadedDisplay}`);
+  }
+  meta.textContent = metaPieces.length ? metaPieces.join(' · ') : '—';
+  textWrap.appendChild(meta);
+
+  const actions = document.createElement('div');
+  actions.className = 'flex items-center gap-2 flex-shrink-0';
+  card.appendChild(actions);
+
+  if (signedFile.url) {
+    const link = document.createElement('a');
+    link.href = signedFile.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.className = 'inline-flex items-center gap-2 rounded-md border border-emerald-300 bg-white px-3 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-600 hover:text-white';
+    link.innerHTML = '<i class="fas fa-arrow-up-right-from-square text-[10px]"></i><span>Abrir</span>';
+    link.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+    actions.appendChild(link);
+  }
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-200';
+  removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
+
+  const toggleDisabled = (disabled) => {
+    removeBtn.disabled = !!disabled;
+    removeBtn.classList.toggle('opacity-60', !!disabled);
+    removeBtn.classList.toggle('cursor-not-allowed', !!disabled);
+  };
+
+  removeBtn.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (removeBtn.disabled) return;
+    toggleDisabled(true);
+    const success = await removeDocumentoAssinado(entry);
+    if (!success && removeBtn.isConnected) {
+      toggleDisabled(false);
+    }
+  });
+
+  actions.appendChild(removeBtn);
+
+  card.addEventListener('click', (event) => {
+    const interactive = event.target.closest('a, button');
+    if (!interactive) {
+      event.stopPropagation();
+    }
+  });
+
+  return card;
+}
+
+function createSignedDocumentoDropzone(entry) {
+  const dropzone = document.createElement('label');
+  dropzone.className = 'flex h-32 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-emerald-300 bg-emerald-50 px-4 text-center text-sm text-emerald-600 transition';
+  dropzone.innerHTML = '<span class="flex h-12 w-12 items-center justify-center rounded-full border border-emerald-200 bg-white text-lg text-emerald-500 shadow-sm"><i class="fas fa-file-circle-plus"></i></span><span class="max-w-[240px] text-sm font-medium leading-snug text-emerald-700" data-role="signed-dropzone-text"><span class="block">Arraste ou Clique para adicionar</span><span class="block">o Documento assinado</span></span><span class="max-w-[240px] text-xs leading-tight text-emerald-600" data-role="signed-dropzone-hint">Formatos aceitos: PDF, PNG, JPG ou JPEG até 20MB.</span>';
+  dropzone.setAttribute('tabindex', '0');
+
+  const dropzoneText = dropzone.querySelector('[data-role="signed-dropzone-text"]');
+  const dropzoneHint = dropzone.querySelector('[data-role="signed-dropzone-hint"]');
+  const defaultText = dropzoneText?.textContent || 'Arraste ou Clique para adicionar o Documento assinado';
+  const defaultTextHtml = dropzoneText?.innerHTML || '';
+  const defaultHint = dropzoneHint?.textContent || 'Formatos aceitos: PDF, PNG, JPG ou JPEG até 20MB.';
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.pdf,.png,.jpg,.jpeg';
+  fileInput.className = 'sr-only';
+  dropzone.appendChild(fileInput);
+
+  const setUploadingState = (isUploading) => {
+    dropzone.classList.toggle('pointer-events-none', isUploading);
+    dropzone.classList.toggle('opacity-60', isUploading);
+    if (dropzoneText) {
+      if (isUploading) {
+        dropzoneText.textContent = 'Enviando documento assinado...';
+      } else if (defaultTextHtml) {
+        dropzoneText.innerHTML = defaultTextHtml;
+      } else {
+        dropzoneText.textContent = defaultText;
+      }
+    }
+    if (dropzoneHint) {
+      dropzoneHint.textContent = isUploading
+        ? 'Aguarde enquanto o upload é realizado.'
+        : defaultHint;
+    }
+  };
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setUploadingState(true);
+    try {
+      await uploadDocumentoAssinado(entry, file);
+    } finally {
+      if (dropzone.isConnected) {
+        setUploadingState(false);
+      }
+    }
+  };
+
+  dropzone.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (dropzone.classList.contains('pointer-events-none')) return;
+    fileInput.click();
+  });
+
+  dropzone.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (dropzone.classList.contains('pointer-events-none')) return;
+      fileInput.click();
+    }
+  });
+
+  dropzone.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dropzone.classList.add('border-emerald-500', 'bg-emerald-100');
+  });
+
+  dropzone.addEventListener('dragleave', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dropzone.classList.remove('border-emerald-500', 'bg-emerald-100');
+  });
+
+  dropzone.addEventListener('drop', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dropzone.classList.remove('border-emerald-500', 'bg-emerald-100');
+    if (dropzone.classList.contains('pointer-events-none')) return;
+    const files = event.dataTransfer?.files;
+    if (files && files.length) {
+      handleFile(files[0]);
+    }
+  });
+
+  fileInput.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+
+  fileInput.addEventListener('change', (event) => {
+    const [file] = Array.from(event.target.files || []);
+    if (file) {
+      handleFile(file);
+    }
+    event.target.value = '';
+  });
+
+  return dropzone;
+}
+
+function createDocumentoSignedSection(entry) {
+  const section = document.createElement('div');
+  section.className = 'mt-4 space-y-3';
+
+  if (entry?.signedFile) {
+    const fileCard = createSignedDocumentoFileCard(entry, entry.signedFile);
+    if (fileCard) {
+      section.appendChild(fileCard);
+    }
+  }
+
+  if (!entry?.signedFile) {
+    const dropzone = createSignedDocumentoDropzone(entry);
+    if (dropzone) {
+      section.appendChild(dropzone);
+    }
+  }
+
+  return section;
+}
+
 function createDocumentoRegistroCard(entry) {
   if (!entry) return null;
 
@@ -680,6 +894,11 @@ function createDocumentoRegistroCard(entry) {
     descriptionTag.textContent = descricao;
     tagWrapper.appendChild(descriptionTag);
     card.appendChild(tagWrapper);
+  }
+
+  const signedSection = createDocumentoSignedSection(entry);
+  if (signedSection) {
+    card.appendChild(signedSection);
   }
 
   const actions = document.createElement('div');
