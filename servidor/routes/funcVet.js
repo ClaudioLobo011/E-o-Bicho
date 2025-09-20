@@ -138,6 +138,37 @@ function toIsoDate(value) {
   return date.toISOString();
 }
 
+function hasSignedFileData(file) {
+  if (!file || typeof file !== 'object') return false;
+
+  const stringFields = [
+    'url',
+    'driveFileId',
+    'driveViewLink',
+    'driveContentLink',
+    'originalName',
+    'mimeType',
+    'extension',
+  ];
+
+  if (
+    stringFields.some((field) => {
+      const value = file[field];
+      return typeof value === 'string' && value.trim().length > 0;
+    })
+  ) {
+    return true;
+  }
+
+  if (Number(file.size || 0) > 0) return true;
+
+  if (file.uploadedAt && toIsoDate(file.uploadedAt)) {
+    return true;
+  }
+
+  return false;
+}
+
 function sanitizeFileName(name) {
   if (!name) return '';
   return String(name)
@@ -326,7 +357,7 @@ function formatDocumentRecord(doc) {
   const updatedAt = doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt || createdAt;
   let signedFile = null;
 
-  if (doc.signedFile && typeof doc.signedFile === 'object') {
+  if (doc.signedFile && typeof doc.signedFile === 'object' && hasSignedFileData(doc.signedFile)) {
     const file = doc.signedFile;
     const fileCreatedAt = toIsoDate(file.uploadedAt) || updatedAt || createdAt;
     const url = file.url || file.driveViewLink || file.driveContentLink || '';
@@ -367,7 +398,7 @@ function formatRecipeRecord(doc) {
   const updatedAt = doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt || createdAt;
   let signedFile = null;
 
-  if (doc.signedFile && typeof doc.signedFile === 'object') {
+  if (doc.signedFile && typeof doc.signedFile === 'object' && hasSignedFileData(doc.signedFile)) {
     const file = doc.signedFile;
     const fileCreatedAt = toIsoDate(file.uploadedAt) || updatedAt || createdAt;
     const url = file.url || file.driveViewLink || file.driveContentLink || '';
