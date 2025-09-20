@@ -11,7 +11,11 @@ import { openDocumentoModal, loadDocumentosFromServer } from './documentos.js';
 import { openReceitaModal, loadReceitasFromServer } from './receitas.js';
 import { openExameModal, loadExamesForSelection, handleExameRealTimeEvent } from './exames.js';
 import { openPesoModal, loadPesosFromServer } from './pesos.js';
-import { openObservacaoModal, loadObservacoesForSelection } from './observacoes.js';
+import {
+  openObservacaoModal,
+  loadObservacoesForSelection,
+  handleObservacaoRealTimeEvent,
+} from './observacoes.js';
 import {
   searchClientes,
   hideSugestoes,
@@ -79,6 +83,8 @@ function handleFichaRealTimeMessage(message) {
       handled = handleVacinaRealTimeEvent(event) || handled;
     } else if (scope === 'exame') {
       handled = handleExameRealTimeEvent(event) || handled;
+    } else if (scope === 'observacao') {
+      handled = handleObservacaoRealTimeEvent(event) || handled;
     }
   }
 
