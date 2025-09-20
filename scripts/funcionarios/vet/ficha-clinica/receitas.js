@@ -13,6 +13,9 @@ import {
   getSelectedPet,
   getAgendaStoreId,
   normalizeId,
+  getAuthToken,
+  ANEXO_ALLOWED_EXTENSIONS,
+  getFileExtension,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard, getConsultasKey } from './consultas.js';
 import {
@@ -44,6 +47,11 @@ const receitaModal = {
   isGenerating: false,
   selectedId: '',
   keydownHandler: null,
+  mode: 'create',
+  editingId: null,
+  editingRecord: null,
+  saveBtnOriginalHtml: '',
+  saveBtnEditHtml: '',
 };
 
 const PREVIEW_LOADING_MESSAGE = 'Carregando pré-visualização com os dados do atendimento...';
@@ -51,6 +59,13 @@ const PREVIEW_ERROR_MESSAGE = 'Erro ao gerar pré-visualização da receita.';
 const storeCache = new Map();
 const storePromiseCache = new Map();
 let previewUpdateToken = 0;
+
+const MAX_SIGNED_DOCUMENT_FILE_SIZE = 20 * 1024 * 1024;
+const SIGNED_DOCUMENT_ALLOWED_EXTENSIONS = new Set(
+  (Array.isArray(ANEXO_ALLOWED_EXTENSIONS) ? ANEXO_ALLOWED_EXTENSIONS : [])
+    .map((ext) => String(ext || '').toLowerCase()),
+);
+const SIGNED_DOCUMENT_ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'application/pdf']);
 
 function renderKeywordReference() {
   if (!receitaModal.keywordContainer) return;
@@ -127,18 +142,133 @@ function setModalLoading(isLoading) {
 }
 
 function updateButtonsState() {
-  const hasSelection = !!getSelectedReceita();
+  const hasSelection =
+    !!getSelectedReceita() || (receitaModal.mode === 'edit' && receitaModal.editingRecord);
   const disabled = receitaModal.isLoading || receitaModal.isGenerating || !hasSelection;
   if (receitaModal.saveBtn) {
     receitaModal.saveBtn.disabled = disabled;
     receitaModal.saveBtn.classList.toggle('opacity-60', disabled);
     receitaModal.saveBtn.classList.toggle('cursor-not-allowed', disabled);
+    const savingHtml = receitaModal.mode === 'edit'
+      ? '<i class="fas fa-spinner fa-spin"></i><span>Atualizando...</span>'
+      : '<i class="fas fa-spinner fa-spin"></i><span>Salvando...</span>';
+    const idleHtml = receitaModal.mode === 'edit'
+      ? receitaModal.saveBtnEditHtml || '<i class="fas fa-floppy-disk"></i><span>Atualizar receita</span>'
+      : receitaModal.saveBtnOriginalHtml || '<i class="fas fa-save"></i><span>Salvar receita no atendimento</span>';
+
+    if (receitaModal.isGenerating) {
+      receitaModal.saveBtn.innerHTML = savingHtml;
+    } else if (idleHtml) {
+      receitaModal.saveBtn.innerHTML = idleHtml;
+    }
   }
   if (receitaModal.printBtn) {
     receitaModal.printBtn.disabled = disabled;
     receitaModal.printBtn.classList.toggle('opacity-60', disabled);
     receitaModal.printBtn.classList.toggle('cursor-not-allowed', disabled);
   }
+}
+
+function getPreviewDefaultMessage() {
+  return (
+    receitaModal.previewDefaultMessage
+    || receitaModal.previewEmpty?.dataset?.defaultMessage
+    || 'Selecione uma receita para visualizar com as palavras-chave atualizadas.'
+  );
+}
+
+function resetReceitaPreview() {
+  const defaultMessage = getPreviewDefaultMessage();
+  if (receitaModal.previewTitle) {
+    receitaModal.previewTitle.textContent = 'Nenhuma receita selecionada.';
+  }
+  if (receitaModal.previewFrame) {
+    renderPreviewFrameContent(receitaModal.previewFrame, '', { minHeight: 420, background: '#f8fafc', autoResize: false });
+  }
+  if (receitaModal.previewEmpty) {
+    receitaModal.previewEmpty.textContent = defaultMessage;
+    receitaModal.previewEmpty.classList.remove('hidden');
+  }
+  highlightKeywords('');
+}
+
+function renderExistingReceitaPreview(record) {
+  if (!record) {
+    resetReceitaPreview();
+    return;
+  }
+
+  const defaultMessage = getPreviewDefaultMessage();
+  const html = typeof record.conteudo === 'string' ? record.conteudo : '';
+  const title = typeof record.descricao === 'string' && record.descricao.trim()
+    ? record.descricao.trim()
+    : 'Receita salva';
+
+  if (receitaModal.previewTitle) {
+    receitaModal.previewTitle.textContent = title;
+  }
+  if (receitaModal.previewFrame) {
+    renderPreviewFrameContent(receitaModal.previewFrame, html, { minHeight: 420, background: '#f8fafc', autoResize: false });
+  }
+  if (receitaModal.previewEmpty) {
+    receitaModal.previewEmpty.textContent = defaultMessage;
+    if (html) {
+      receitaModal.previewEmpty.classList.add('hidden');
+    } else {
+      receitaModal.previewEmpty.classList.remove('hidden');
+    }
+  }
+
+  const highlightSource = typeof record.conteudoOriginal === 'string' && record.conteudoOriginal
+    ? record.conteudoOriginal
+    : html;
+  highlightKeywords(highlightSource);
+}
+
+function setReceitaModalMode(mode, record = null) {
+  const normalized = mode === 'edit' ? 'edit' : 'create';
+  receitaModal.mode = normalized;
+  receitaModal.isGenerating = false;
+  receitaModal.editingId = null;
+  receitaModal.editingRecord = null;
+
+  if (receitaModal.saveBtn) {
+    if (normalized === 'edit') {
+      const editHtml = receitaModal.saveBtnEditHtml || '<i class="fas fa-floppy-disk"></i><span>Atualizar receita</span>';
+      receitaModal.saveBtnEditHtml = editHtml;
+      receitaModal.saveBtn.innerHTML = editHtml;
+    } else if (receitaModal.saveBtnOriginalHtml) {
+      receitaModal.saveBtn.innerHTML = receitaModal.saveBtnOriginalHtml;
+    }
+  }
+
+  if (normalized === 'edit' && record && typeof record === 'object') {
+    const editingId = normalizeId(record.id || record._id);
+    if (editingId) {
+      receitaModal.editingId = editingId;
+    }
+    receitaModal.editingRecord = { ...record };
+    receitaModal.selectedId = normalizeId(record.receitaId || record.receita) || '';
+    if (receitaModal.select) {
+      const value = receitaModal.selectedId || '';
+      receitaModal.select.value = value;
+      if (!value) {
+        const placeholder = receitaModal.select.querySelector('option[value=""]');
+        if (placeholder) placeholder.selected = true;
+      }
+    }
+    renderExistingReceitaPreview(record);
+  } else {
+    receitaModal.selectedId = '';
+    if (receitaModal.select) {
+      receitaModal.select.value = '';
+      const placeholder = receitaModal.select.querySelector('option[value=""]');
+      if (placeholder) placeholder.selected = true;
+    }
+    resetReceitaPreview();
+  }
+
+  updateButtonsState();
 }
 
 function normalizeRecipeTemplate(raw) {
@@ -693,6 +823,8 @@ function ensureReceitaModal() {
   receitaModal.loadingState = loadingState;
   receitaModal.emptyState = emptyState;
   receitaModal.saveBtn = saveBtn;
+  receitaModal.saveBtnOriginalHtml = saveBtn.innerHTML;
+  receitaModal.saveBtnEditHtml = '<i class="fas fa-floppy-disk"></i><span>Atualizar receita</span>';
   receitaModal.printBtn = printBtn;
   receitaModal.keywordContainer = null;
   receitaModal.keywordItems = [];
@@ -700,6 +832,9 @@ function ensureReceitaModal() {
   receitaModal.selectedId = '';
   receitaModal.isLoading = false;
   receitaModal.isGenerating = false;
+  receitaModal.mode = 'create';
+  receitaModal.editingId = null;
+  receitaModal.editingRecord = null;
 
   renderKeywordReference();
   document.body.appendChild(overlay);
@@ -721,7 +856,7 @@ function populateReceitaOptions() {
   const placeholder = document.createElement('option');
   placeholder.value = '';
   placeholder.textContent = docs.length ? 'Selecione uma receita salva' : 'Nenhuma receita encontrada';
-  placeholder.disabled = !!docs.length;
+  placeholder.disabled = docs.length === 0;
   placeholder.selected = true;
   receitaModal.select.appendChild(placeholder);
 
@@ -738,12 +873,26 @@ function populateReceitaOptions() {
 
   if (docs.length) {
     const hasPreviousSelection = docs.some((doc) => doc.id === receitaModal.selectedId);
-    const targetId = hasPreviousSelection ? receitaModal.selectedId : docs[0].id;
-    receitaModal.selectedId = targetId;
-    receitaModal.select.value = targetId;
+    let targetId = hasPreviousSelection ? receitaModal.selectedId : '';
+    if (!targetId && receitaModal.mode !== 'edit' && docs[0]) {
+      targetId = docs[0].id;
+    }
+
+    const keepExistingSelection =
+      receitaModal.mode === 'edit' && receitaModal.selectedId && !hasPreviousSelection;
+
+    if (!keepExistingSelection) {
+      receitaModal.selectedId = targetId || '';
+    }
+
+    receitaModal.select.value = targetId || '';
+    placeholder.selected = !targetId;
     updatePreview().catch(() => {});
   } else {
-    receitaModal.selectedId = '';
+    placeholder.selected = true;
+    if (receitaModal.mode !== 'edit') {
+      receitaModal.selectedId = '';
+    }
     updatePreview().catch(() => {});
   }
 
@@ -752,25 +901,18 @@ function populateReceitaOptions() {
 
 async function updatePreview() {
   const doc = getSelectedReceita();
+  const editingRecord = receitaModal.mode === 'edit' ? receitaModal.editingRecord : null;
   const previewFrame = receitaModal.previewFrame;
   const previewTitle = receitaModal.previewTitle;
   const previewEmpty = receitaModal.previewEmpty;
-  const defaultMessage = receitaModal.previewDefaultMessage
-    || previewEmpty?.dataset?.defaultMessage
-    || 'Selecione uma receita para visualizar com as palavras-chave atualizadas.';
+  const defaultMessage = getPreviewDefaultMessage();
 
   if (!doc) {
-    if (previewTitle) {
-      previewTitle.textContent = 'Nenhuma receita selecionada.';
+    if (receitaModal.mode === 'edit' && editingRecord) {
+      renderExistingReceitaPreview(editingRecord);
+    } else {
+      resetReceitaPreview();
     }
-    if (previewEmpty) {
-      previewEmpty.textContent = defaultMessage;
-      previewEmpty.classList.remove('hidden');
-    }
-    if (previewFrame) {
-      renderPreviewFrameContent(previewFrame, '', { minHeight: 420, background: '#f8fafc', autoResize: false });
-    }
-    highlightKeywords('');
     receitaModal.isGenerating = false;
     updateButtonsState();
     return;
@@ -940,6 +1082,39 @@ function normalizeReceitaRegistroRecord(raw) {
   const petId = normalizeId(raw.petId || raw.pet);
   const appointmentId = normalizeId(raw.appointmentId || raw.appointment);
 
+  const rawSignedFile = raw.signedFile && typeof raw.signedFile === 'object'
+    ? raw.signedFile
+    : null;
+  let signedFile = null;
+  if (rawSignedFile) {
+    const fileUrl = pickFirst(
+      rawSignedFile.url,
+      rawSignedFile.driveViewLink,
+      rawSignedFile.driveContentLink,
+    );
+    const uploadedAtDate = parseDateValue(
+      rawSignedFile.uploadedAt
+      || rawSignedFile.createdAt
+      || rawSignedFile.criadoEm
+      || rawSignedFile.dataCriacao,
+    );
+
+    signedFile = {
+      nome: typeof rawSignedFile.nome === 'string' && rawSignedFile.nome.trim()
+        ? rawSignedFile.nome.trim()
+        : (rawSignedFile.originalName || 'Receita assinada'),
+      originalName: rawSignedFile.originalName || '',
+      mimeType: rawSignedFile.mimeType || '',
+      size: Number(rawSignedFile.size || 0),
+      extension: typeof rawSignedFile.extension === 'string' ? rawSignedFile.extension : '',
+      url: typeof fileUrl === 'string' ? fileUrl : '',
+      driveFileId: rawSignedFile.driveFileId || '',
+      driveViewLink: rawSignedFile.driveViewLink || '',
+      driveContentLink: rawSignedFile.driveContentLink || '',
+      uploadedAt: uploadedAtDate ? uploadedAtDate.toISOString() : null,
+    };
+  }
+
   const createdAtDate = parseDateValue(raw.createdAt || raw.criadoEm || raw.dataCriacao);
   const updatedAtDate = parseDateValue(raw.updatedAt || raw.atualizadoEm || raw.dataAtualizacao) || createdAtDate;
   const createdAt = createdAtDate ? createdAtDate.toISOString() : null;
@@ -958,6 +1133,7 @@ function normalizeReceitaRegistroRecord(raw) {
     clienteId,
     petId,
     appointmentId,
+    signedFile,
   };
 }
 
@@ -1054,10 +1230,173 @@ export async function deleteReceitaRegistro(target, options = {}) {
 
 state.deleteReceita = deleteReceitaRegistro;
 
+export async function uploadReceitaAssinada(target, file, options = {}) {
+  const { suppressNotify = false, nome } = options || {};
+  const recordId = normalizeId(
+    target && typeof target === 'object' ? target.id || target._id : target,
+  );
+
+  const isFileObject = (
+    typeof File !== 'undefined' && file instanceof File
+  ) || (file && typeof file === 'object' && typeof file.name === 'string');
+
+  if (!recordId || !isFileObject) {
+    if (!suppressNotify) {
+      notify('Selecione uma receita válida para enviar o arquivo assinado.', 'error');
+    }
+    return false;
+  }
+
+  const extension = getFileExtension(file.name).toLowerCase();
+  const mimeType = String(file.type || file.mimeType || '').toLowerCase();
+  if (
+    !(
+      (extension && SIGNED_DOCUMENT_ALLOWED_EXTENSIONS.has(extension))
+      || SIGNED_DOCUMENT_ALLOWED_MIME_TYPES.has(mimeType)
+    )
+  ) {
+    if (!suppressNotify) {
+      notify('Formato de arquivo não suportado. Permitido: PNG, JPG, JPEG ou PDF.', 'warning');
+    }
+    return false;
+  }
+
+  if (Number(file.size || 0) > MAX_SIGNED_DOCUMENT_FILE_SIZE) {
+    if (!suppressNotify) {
+      notify('A receita assinada deve ter no máximo 20MB.', 'warning');
+    }
+    return false;
+  }
+
+  const formData = new FormData();
+  formData.append('arquivo', file, file.name);
+  if (typeof nome === 'string' && nome.trim()) {
+    formData.append('nome', nome.trim());
+  }
+
+  const token = getAuthToken();
+
+  let response;
+  try {
+    response = await fetch(`${API_CONFIG.BASE_URL}/func/vet/receitas-registros/${encodeURIComponent(recordId)}/assinatura`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+  } catch (error) {
+    console.error('uploadReceitaAssinada', error);
+    if (!suppressNotify) {
+      notify('Não foi possível enviar a receita assinada.', 'error');
+    }
+    return false;
+  }
+
+  const payload = await response.json().catch(() => (response.ok ? {} : {}));
+  if (!response.ok) {
+    const message = typeof payload?.message === 'string'
+      ? payload.message
+      : 'Não foi possível salvar a receita assinada.';
+    if (!suppressNotify) {
+      notify(message, 'error');
+    }
+    return false;
+  }
+
+  const normalized = normalizeReceitaRegistroRecord(payload);
+  if (normalized) {
+    upsertReceitaRegistroInState(normalized);
+  } else {
+    try {
+      await loadReceitasFromServer({ force: true });
+    } catch (error) {
+      console.error('uploadReceitaAssinada loadReceitasFromServer', error);
+    }
+  }
+
+  updateConsultaAgendaCard();
+  if (!suppressNotify) {
+    notify('Receita assinada salva com sucesso.', 'success');
+  }
+  return true;
+}
+
+export async function removeReceitaAssinada(target, options = {}) {
+  const { suppressNotify = false } = options || {};
+  const recordId = normalizeId(
+    target && typeof target === 'object' ? target.id || target._id : target,
+  );
+
+  if (!recordId) {
+    if (!suppressNotify) {
+      notify('Receita inválida para remover o arquivo assinado.', 'error');
+    }
+    return false;
+  }
+
+  const token = getAuthToken();
+
+  let response;
+  try {
+    response = await fetch(`${API_CONFIG.BASE_URL}/func/vet/receitas-registros/${encodeURIComponent(recordId)}/assinatura`, {
+      method: 'DELETE',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  } catch (error) {
+    console.error('removeReceitaAssinada', error);
+    if (!suppressNotify) {
+      notify('Não foi possível remover a receita assinada.', 'error');
+    }
+    return false;
+  }
+
+  let payload = null;
+  if (response.status !== 204) {
+    payload = await response.json().catch(() => (response.ok ? {} : {}));
+  }
+
+  if (!response.ok) {
+    const message = typeof payload?.message === 'string'
+      ? payload.message
+      : 'Não foi possível remover a receita assinada.';
+    if (!suppressNotify) {
+      notify(message, 'error');
+    }
+    return false;
+  }
+
+  let normalized = null;
+  if (payload) {
+    normalized = normalizeReceitaRegistroRecord(payload);
+  }
+
+  if (normalized) {
+    upsertReceitaRegistroInState(normalized);
+  } else {
+    const current = Array.isArray(state.receitas) ? [...state.receitas] : [];
+    state.receitas = current.map((item) => {
+      if (normalizeId(item?.id || item?._id) === recordId) {
+        return { ...item, signedFile: null };
+      }
+      return item;
+    });
+  }
+
+  updateConsultaAgendaCard();
+  if (!suppressNotify) {
+    notify('Receita assinada removida com sucesso.', 'success');
+  }
+  return true;
+}
+
 async function handleSave() {
   if (receitaModal.isLoading || receitaModal.isGenerating) return;
+  const isEditing = receitaModal.mode === 'edit' && receitaModal.editingId;
   const doc = getSelectedReceita();
-  if (!doc) {
+  if (!doc && !isEditing) {
     notify('Selecione uma receita salva para registrar.', 'warning');
     return;
   }
@@ -1073,9 +1412,35 @@ async function handleSave() {
   updateButtonsState();
 
   try {
-    const { html } = await resolveReceitaContent(doc);
-    const finalHtml = typeof html === 'string' ? html : (doc.conteudo || '');
-    const recordPayload = prepareReceitaRecordPayload(doc, finalHtml);
+    let recordPayload = null;
+    if (doc) {
+      const { html } = await resolveReceitaContent(doc);
+      const resolvedHtml = typeof html === 'string' && html.trim() ? html : '';
+      const fallbackHtml = typeof doc.conteudo === 'string' ? doc.conteudo : '';
+      const finalHtml = resolvedHtml || fallbackHtml;
+      if (!finalHtml.trim()) {
+        throw new Error('A receita selecionada não possui conteúdo para salvar.');
+      }
+      recordPayload = prepareReceitaRecordPayload(doc, finalHtml);
+    } else if (isEditing && receitaModal.editingRecord) {
+      const existing = receitaModal.editingRecord;
+      const rawHtml = typeof existing.conteudo === 'string' ? existing.conteudo : '';
+      const fallbackHtml = typeof existing.conteudoOriginal === 'string' ? existing.conteudoOriginal : '';
+      const finalHtml = rawHtml && rawHtml.trim() ? rawHtml : fallbackHtml;
+      if (!finalHtml.trim()) {
+        throw new Error('A receita selecionada não possui conteúdo para atualizar.');
+      }
+      const descricao = existing.descricao || 'Receita';
+      const preview = existing.preview || getPreviewText(finalHtml);
+      recordPayload = {
+        receitaId: normalizeId(existing.receitaId || existing.receita) || null,
+        descricao,
+        conteudo: finalHtml,
+        conteudoOriginal: typeof existing.conteudoOriginal === 'string' ? existing.conteudoOriginal : '',
+        preview,
+      };
+    }
+
     if (!recordPayload) {
       throw new Error('Não foi possível preparar os dados da receita.');
     }
@@ -1089,40 +1454,84 @@ async function handleSave() {
     const appointmentId = normalizeId(state.agendaContext?.appointmentId);
     if (appointmentId) {
       payload.appointmentId = appointmentId;
+    } else if (isEditing) {
+      const existingAppointment = normalizeId(
+        receitaModal.editingRecord?.appointmentId || receitaModal.editingRecord?.appointment,
+      );
+      if (existingAppointment) {
+        payload.appointmentId = existingAppointment;
+      }
     }
 
-    const resp = await api('/func/vet/receitas-registros', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    const data = await resp.json().catch(() => null);
-    if (!resp.ok) {
-      const message = typeof data?.message === 'string' ? data.message : 'Não foi possível salvar a receita.';
-      throw new Error(message);
+    if (isEditing && receitaModal.editingRecord?.descricao && !payload.descricao) {
+      payload.descricao = receitaModal.editingRecord.descricao;
     }
 
-    const fallbackRecord = {
-      ...recordPayload,
-      id: normalizeId(data?.id || data?._id) || `rec-reg-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
-      _id: data?._id,
-      createdAt: data?.createdAt || new Date().toISOString(),
-      updatedAt: data?.updatedAt || data?.createdAt || new Date().toISOString(),
-      clienteId,
-      petId,
-      appointmentId,
-    };
+    let response;
+    let data;
+    if (isEditing && receitaModal.editingId) {
+      response = await api(`/func/vet/receitas-registros/${encodeURIComponent(receitaModal.editingId)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      data = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' ? data.message : 'Não foi possível atualizar a receita.';
+        throw new Error(message);
+      }
 
-    const saved = upsertReceitaRegistroInState(data || fallbackRecord);
-    if (!saved && fallbackRecord) {
-      upsertReceitaRegistroInState(fallbackRecord);
+      const fallbackRecord = {
+        ...receitaModal.editingRecord,
+        ...payload,
+        id: receitaModal.editingId,
+        _id: receitaModal.editingId,
+        updatedAt: data?.updatedAt || new Date().toISOString(),
+      };
+
+      const saved = upsertReceitaRegistroInState(data || fallbackRecord);
+      if (!saved && fallbackRecord) {
+        upsertReceitaRegistroInState(fallbackRecord);
+      }
+
+      notify('Receita atualizada na aba de consultas.', 'success');
+    } else {
+      response = await api('/func/vet/receitas-registros', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      data = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' ? data.message : 'Não foi possível salvar a receita.';
+        throw new Error(message);
+      }
+
+      const fallbackRecord = {
+        ...recordPayload,
+        id: normalizeId(data?.id || data?._id) || `rec-reg-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+        _id: data?._id,
+        createdAt: data?.createdAt || new Date().toISOString(),
+        updatedAt: data?.updatedAt || data?.createdAt || new Date().toISOString(),
+        clienteId,
+        petId,
+        appointmentId,
+      };
+
+      const saved = upsertReceitaRegistroInState(data || fallbackRecord);
+      if (!saved && fallbackRecord) {
+        upsertReceitaRegistroInState(fallbackRecord);
+      }
+
+      notify('Receita adicionada na aba de consultas.', 'success');
     }
 
-    notify('Receita adicionada na aba de consultas.', 'success');
     closeReceitaModal();
     updateConsultaAgendaCard();
   } catch (error) {
     console.error('handleSave', error);
-    notify(error.message || 'Não foi possível preparar a receita para salvar.', 'error');
+    const defaultMessage = receitaModal.mode === 'edit'
+      ? 'Não foi possível atualizar a receita.'
+      : 'Não foi possível preparar a receita para salvar.';
+    notify(error.message || defaultMessage, 'error');
   } finally {
     receitaModal.isGenerating = false;
     updateButtonsState();
@@ -1161,6 +1570,9 @@ export function closeReceitaModal() {
   receitaModal.overlay.classList.add('hidden');
   receitaModal.overlay.setAttribute('aria-hidden', 'true');
   receitaModal.isGenerating = false;
+  setModalLoading(false);
+  setReceitaModalMode('create');
+  populateReceitaOptions();
   updateButtonsState();
   if (receitaModal.keydownHandler) {
     document.removeEventListener('keydown', receitaModal.keydownHandler);
@@ -1168,10 +1580,19 @@ export function closeReceitaModal() {
   }
 }
 
-export function openReceitaModal() {
+export function openReceitaModal(options = {}) {
   if (!ensureTutorAndPetSelected()) return;
 
   const modal = ensureReceitaModal();
+  const { receitaRegistro = null } = options || {};
+
+  setReceitaModalMode('create');
+  if (receitaRegistro && typeof receitaRegistro === 'object') {
+    setReceitaModalMode('edit', receitaRegistro);
+  }
+
+  populateReceitaOptions();
+
   modal.overlay.classList.remove('hidden');
   modal.overlay.setAttribute('aria-hidden', 'false');
   try {
@@ -1190,6 +1611,9 @@ export function openReceitaModal() {
     document.addEventListener('keydown', modal.keydownHandler);
   }
 
-  loadReceitas({ force: true });
+  const loadPromise = loadReceitas({ force: true });
+  if (loadPromise && typeof loadPromise.then === 'function') {
+    loadPromise.catch(() => {});
+  }
   updateButtonsState();
 }

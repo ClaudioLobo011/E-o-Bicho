@@ -87,6 +87,24 @@ function handleDocumentoAssinadoUpload(req, res, next) {
   });
 }
 
+function handleReceitaAssinadaUpload(req, res, next) {
+  uploadDocumentoAssinadoMiddleware.single('arquivo')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: 'A receita assinada deve ter no mÃ¡ximo 20MB.' });
+      }
+      if (err.code === 'LIMIT_FILE_COUNT') {
+        return res.status(400).json({ message: 'Envie apenas uma receita assinada por vez.' });
+      }
+      return res.status(400).json({ message: 'Falha ao processar a receita enviada.' });
+    }
+    if (err) {
+      return res.status(400).json({ message: 'Falha ao processar a receita enviada.' });
+    }
+    return next();
+  });
+}
+
 function normalizeObjectId(value) {
   if (!value) return null;
   const str = String(value).trim();
@@ -343,6 +361,25 @@ function formatRecipeRecord(doc) {
   if (!doc) return null;
   const createdAt = doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt || null;
   const updatedAt = doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt || createdAt;
+  let signedFile = null;
+
+  if (doc.signedFile && typeof doc.signedFile === 'object') {
+    const file = doc.signedFile;
+    const fileCreatedAt = toIsoDate(file.uploadedAt) || updatedAt || createdAt;
+    const url = file.url || file.driveViewLink || file.driveContentLink || '';
+    signedFile = {
+      nome: file.nome || file.originalName || 'Receita assinada',
+      originalName: file.originalName || '',
+      mimeType: file.mimeType || '',
+      size: Number(file.size || 0),
+      extension: file.extension || '',
+      url,
+      driveFileId: file.driveFileId || '',
+      driveViewLink: file.driveViewLink || '',
+      driveContentLink: file.driveContentLink || '',
+      uploadedAt: fileCreatedAt,
+    };
+  }
 
   return {
     _id: toStringSafe(doc._id),
@@ -357,6 +394,7 @@ function formatRecipeRecord(doc) {
     preview: doc.preview || '',
     createdAt,
     updatedAt,
+    signedFile,
   };
 }
 
@@ -1614,6 +1652,266 @@ router.delete('/vet/documentos-registros/:id', authMiddleware, requireStaff, asy
   }
 });
 
+router.post(
+  '/vet/receitas-registros/:id/assinatura',
+  authMiddleware,
+  requireStaff,
+  handleReceitaAssinadaUpload,
+  async (req, res) => {
+    const uploadedDriveIds = [];
+    try {
+      if (!isDriveConfigured()) {
+        return res.status(500).json({ message: 'IntegraÃ§Ã£o com o Google Drive nÃ£o estÃ¡ configurada.' });
+      }
+
+      const recordId = normalizeObjectId(req.params.id);
+      if (!recordId) {
+        return res.status(400).json({ message: 'ID invÃ¡lido.' });
+      }
+
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: 'Envie a receita assinada.' });
+      }
+
+      const extension = inferExtensionFromFile(file).toLowerCase();
+      const mimeType = String(file.mimetype || '').toLowerCase();
+      if (
+        !(
+          (extension && ALLOWED_SIGNED_DOCUMENT_EXTENSIONS.has(extension))
+          || ALLOWED_SIGNED_DOCUMENT_MIME_TYPES.has(mimeType)
+        )
+      ) {
+        return res.status(400).json({
+          message: 'Formato de arquivo nÃ£o suportado. Permitido: PNG, JPG, JPEG ou PDF.',
+        });
+      }
+
+      const existing = await VetRecipeRecord.findById(recordId);
+      if (!existing) {
+        return res.status(404).json({ message: 'Receita do atendimento nÃ£o encontrada.' });
+      }
+
+      const clienteId = toStringSafe(existing.cliente);
+      const petId = toStringSafe(existing.pet);
+
+      if (!(clienteId && petId)) {
+        return res.status(400).json({ message: 'Receita do atendimento estÃ¡ sem tutor ou pet vinculado.' });
+      }
+
+      const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+      if (!petCheck.ok) {
+        return res.status(petCheck.status).json({ message: petCheck.message });
+      }
+
+      let appointmentId = existing.appointment ? toStringSafe(existing.appointment) : null;
+      if (Object.prototype.hasOwnProperty.call(req.body, 'appointmentId')) {
+        appointmentId = req.body.appointmentId ? normalizeObjectId(req.body.appointmentId) : null;
+        if (req.body.appointmentId && !appointmentId) {
+          return res.status(400).json({ message: 'appointmentId invÃ¡lido.' });
+        }
+      }
+
+      const appointmentCheck = await ensureAppointmentLink(appointmentId, clienteId, petId, null);
+      if (!appointmentCheck.ok) {
+        return res.status(appointmentCheck.status).json({ message: appointmentCheck.message });
+      }
+
+      const clienteDoc = await User.findById(clienteId)
+        .select('cpf nomeCompleto email celular telefone')
+        .lean();
+      if (!clienteDoc) {
+        return res.status(404).json({ message: 'Tutor nÃ£o encontrado.' });
+      }
+
+      const petDoc = petCheck.pet || null;
+      const appointmentDoc = appointmentCheck.appointment || null;
+
+      const tutorCpfDigits = clienteDoc.cpf ? String(clienteDoc.cpf).replace(/\D+/g, '') : '';
+      const tutorFallbackId = clienteId ? String(clienteId).slice(-6) || String(clienteId) : 'tutor';
+      let tutorFolderName = tutorCpfDigits;
+      if (!tutorFolderName) {
+        const fallbackTutorName = clienteDoc.nomeCompleto || clienteDoc.email || clienteDoc.celular || clienteDoc.telefone || '';
+        tutorFolderName = sanitizeFolderSegment(
+          fallbackTutorName,
+          `sem-cpf-${tutorFallbackId}`,
+        ) || `sem-cpf-${tutorFallbackId}`;
+      }
+
+      const rawAppointmentCode =
+        typeof appointmentDoc?.codigoVenda === 'string' ? appointmentDoc.codigoVenda.trim() : '';
+      const appointmentFallbackSegment = appointmentDoc?._id
+        ? `codigo_${appointmentDoc._id}`
+        : 'codigo_sem-atendimento';
+      const appointmentFolderName =
+        sanitizeFolderSegment(
+          rawAppointmentCode ? `codigo_${rawAppointmentCode}` : '',
+          appointmentFallbackSegment,
+        ) || sanitizeFolderSegment(appointmentFallbackSegment) || appointmentFallbackSegment;
+
+      const petFallbackId = petId ? String(petId).slice(-6) || String(petId) : 'pet';
+      const candidatePetCodes = [
+        petDoc?.codigoPet,
+        petDoc?.codigo,
+        petDoc?.codigo_pet,
+        petDoc?.codigoDoPet,
+        petDoc?.codigoInterno,
+        petDoc?.identificador,
+        appointmentDoc?.petCodigo,
+        appointmentDoc?.codigoPet,
+        appointmentDoc?.pet?.codigo,
+        petDoc?.microchip,
+      ];
+      let sanitizedPetCode = '';
+      for (const candidate of candidatePetCodes) {
+        const sanitized = sanitizePetCode(candidate);
+        if (sanitized) {
+          sanitizedPetCode = sanitized;
+          break;
+        }
+      }
+
+      const petFallbackSegment = `pet_${petFallbackId}`;
+      const petFolderName =
+        sanitizeFolderSegment(
+          sanitizedPetCode ? `pet_${sanitizedPetCode}` : '',
+          petFallbackSegment,
+        ) || sanitizeFolderSegment(petFallbackSegment) || petFallbackSegment;
+
+      const typeFolderName = sanitizeFolderSegment('Receitas') || 'Receitas';
+      const folderPath = [tutorFolderName, petFolderName, appointmentFolderName, typeFolderName];
+
+      const providedName = typeof req.body.nome === 'string' ? req.body.nome : '';
+      const sanitizedProvided = sanitizeFileName(providedName);
+      const fallbackName = sanitizeFileName(file.originalname) || 'Receita assinada';
+      const displayName = sanitizedProvided || fallbackName || 'Receita assinada';
+
+      let driveBaseName = sanitizeFileName(displayName) || `receita-assinada-${Date.now()}`;
+      let driveFileName = ensureFileNameWithExtension(driveBaseName, extension || inferExtensionFromFile(file));
+      driveFileName = sanitizeFileName(driveFileName);
+      if (!driveFileName) {
+        driveFileName = `receita-assinada-${Date.now()}${extension || ''}`;
+      } else if (extension && !driveFileName.toLowerCase().endsWith(extension)) {
+        driveFileName = `${driveFileName}${extension}`;
+      }
+
+      const folderId = getDriveFolderId();
+      const uploadResult = await uploadBufferToDrive(file.buffer, {
+        mimeType: file.mimetype || 'application/octet-stream',
+        name: driveFileName,
+        folderId,
+        folderPath,
+      });
+
+      if (uploadResult?.id) {
+        uploadedDriveIds.push(uploadResult.id);
+      }
+
+      const previousSignedFile = existing.signedFile && typeof existing.signedFile === 'object'
+        ? (typeof existing.signedFile.toObject === 'function'
+          ? existing.signedFile.toObject()
+          : { ...existing.signedFile })
+        : null;
+      const previousDriveId = previousSignedFile?.driveFileId || '';
+
+      const uploadedAt = new Date();
+      existing.signedFile = {
+        nome: displayName,
+        originalName: file.originalname || '',
+        mimeType: uploadResult?.mimeType || file.mimetype || '',
+        size: Number(uploadResult?.size) || Number(file.size || 0),
+        extension: extension || '',
+        url: uploadResult?.webViewLink || uploadResult?.webContentLink || '',
+        driveFileId: uploadResult?.id || '',
+        driveViewLink: uploadResult?.webViewLink || '',
+        driveContentLink: uploadResult?.webContentLink || '',
+        uploadedAt,
+      };
+      existing.markModified('signedFile');
+
+      const userId = normalizeObjectId(req.user?.id || req.user?._id);
+      if (userId) {
+        existing.updatedBy = userId;
+      }
+      existing.updatedAt = uploadedAt;
+
+      await existing.save();
+      uploadedDriveIds.length = 0;
+
+      if (previousDriveId && previousDriveId !== existing.signedFile?.driveFileId) {
+        deleteFile(previousDriveId).catch(() => {});
+      }
+
+      const formatted = formatRecipeRecord(existing.toObject());
+      return res.json(formatted);
+    } catch (error) {
+      if (uploadedDriveIds.length) {
+        await Promise.allSettled(uploadedDriveIds.map((id) => deleteFile(id)));
+      }
+      console.error('POST /func/vet/receitas-registros/:id/assinatura', error);
+      let message = 'Erro ao salvar receita assinada.';
+      if (error?.body) {
+        try {
+          const parsed = JSON.parse(error.body.toString('utf8'));
+          if (parsed?.error?.message) {
+            message = `Google Drive: ${parsed.error.message}`;
+          } else if (parsed?.error_description) {
+            message = `Google Drive: ${parsed.error_description}`;
+          }
+        } catch (_) {
+          // ignore parsing issues
+        }
+      }
+      if (message === 'Erro ao salvar receita assinada.' && error?.message) {
+        message = error.message;
+      }
+      return res.status(500).json({ message });
+    }
+  },
+);
+
+router.delete('/vet/receitas-registros/:id/assinatura', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const recordId = normalizeObjectId(req.params.id);
+    if (!recordId) {
+      return res.status(400).json({ message: 'ID invÃ¡lido.' });
+    }
+
+    const existing = await VetRecipeRecord.findById(recordId);
+    if (!existing) {
+      return res.status(404).json({ message: 'Receita do atendimento nÃ£o encontrada.' });
+    }
+
+    const previousSignedFile = existing.signedFile && typeof existing.signedFile === 'object'
+      ? (typeof existing.signedFile.toObject === 'function'
+        ? existing.signedFile.toObject()
+        : { ...existing.signedFile })
+      : null;
+    const previousDriveId = previousSignedFile?.driveFileId || '';
+
+    existing.signedFile = undefined;
+    existing.markModified('signedFile');
+
+    const userId = normalizeObjectId(req.user?.id || req.user?._id);
+    if (userId) {
+      existing.updatedBy = userId;
+    }
+    existing.updatedAt = new Date();
+
+    await existing.save();
+
+    if (previousDriveId) {
+      deleteFile(previousDriveId).catch(() => {});
+    }
+
+    const formatted = formatRecipeRecord(existing.toObject());
+    return res.json(formatted);
+  } catch (error) {
+    console.error('DELETE /func/vet/receitas-registros/:id/assinatura', error);
+    return res.status(500).json({ message: 'Erro ao remover receita assinada.' });
+  }
+});
+
 router.get('/vet/receitas-registros', authMiddleware, requireStaff, async (req, res) => {
   try {
     const clienteId = normalizeObjectId(req.query.clienteId);
@@ -1864,6 +2162,10 @@ router.delete('/vet/receitas-registros/:id', authMiddleware, requireStaff, async
     }
 
     await VetRecipeRecord.deleteOne({ _id: id });
+    const driveId = existing?.signedFile?.driveFileId;
+    if (driveId) {
+      deleteFile(driveId).catch(() => {});
+    }
     return res.status(204).send();
   } catch (error) {
     console.error('DELETE /func/vet/receitas-registros/:id', error);
