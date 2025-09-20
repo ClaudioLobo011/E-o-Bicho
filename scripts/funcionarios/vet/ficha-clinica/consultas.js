@@ -2492,6 +2492,14 @@ export function updateMainTabLayout() {
 export function updateConsultaAgendaCard() {
   const area = els.consultaArea;
   if (!area) return;
+  const isConsultaTabActive = state.activeMainTab === 'consulta';
+
+  const setAreaClassNames = (classNames) => {
+    area.className = classNames;
+    if (!isConsultaTabActive) {
+      area.classList.add('hidden');
+    }
+  };
   updateMainTabLayout();
 
   const consultas = Array.isArray(state.consultas) ? state.consultas : [];
@@ -2658,7 +2666,7 @@ export function updateConsultaAgendaCard() {
     : CONSULTA_PLACEHOLDER_TEXT;
 
   if ((isLoadingConsultas || isLoadingAnexos || isLoadingPesos || isLoadingExames) && !hasAnyContent) {
-    area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
+    setAreaClassNames(CONSULTA_PLACEHOLDER_CLASSNAMES);
     area.innerHTML = '';
     const paragraph = document.createElement('p');
     paragraph.textContent = 'Carregando registros...';
@@ -2667,7 +2675,7 @@ export function updateConsultaAgendaCard() {
   }
 
   if (shouldShowPlaceholder) {
-    area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
+    setAreaClassNames(CONSULTA_PLACEHOLDER_CLASSNAMES);
     area.innerHTML = '';
     const paragraph = document.createElement('p');
     paragraph.textContent = placeholderText;
@@ -2675,7 +2683,7 @@ export function updateConsultaAgendaCard() {
     return;
   }
 
-  area.className = CONSULTA_CARD_CLASSNAMES;
+  setAreaClassNames(CONSULTA_CARD_CLASSNAMES);
   area.innerHTML = '';
 
   const scroll = document.createElement('div');
