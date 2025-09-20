@@ -418,6 +418,10 @@ export function isFinalizadoSelection(clienteId, petId, context = state.agendaCo
 
 export function isConsultaLockedForCurrentUser(context = state.agendaContext) {
   if (!context || typeof context !== 'object') return false;
+  const role = String(getCurrentUserRole() || '').trim().toLowerCase();
+  if (role === 'admin_master') {
+    return false;
+  }
   const assignedId = normalizeId(
     context.profissionalId ||
       (context.profissional && (context.profissional._id || context.profissional.id)) ||
