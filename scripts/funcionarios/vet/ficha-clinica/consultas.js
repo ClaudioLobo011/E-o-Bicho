@@ -644,44 +644,97 @@ function createSignedDocumentoFileCard(entry, signedFile) {
   if (!signedFile) return null;
 
   const card = document.createElement('div');
-  card.className = 'flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 shadow-sm';
+  card.className = 'rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 shadow-sm';
 
   const info = document.createElement('div');
-  info.className = 'flex flex-1 min-w-0 items-center gap-3 text-sm text-emerald-700';
+  info.className = 'flex flex-wrap items-start gap-3';
   card.appendChild(info);
 
   const iconWrapper = document.createElement('div');
-  iconWrapper.className = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-white text-emerald-600';
+  iconWrapper.className = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-600 shadow-sm';
   iconWrapper.innerHTML = '<i class="fas fa-file-signature"></i>';
   info.appendChild(iconWrapper);
 
   const textWrap = document.createElement('div');
-  textWrap.className = 'min-w-0 space-y-1';
+  textWrap.className = 'min-w-0 flex-1 space-y-2';
   info.appendChild(textWrap);
 
+  const displayName = signedFile.nome || signedFile.originalName || 'Documento assinado';
+
   const nameEl = document.createElement('p');
-  nameEl.className = 'font-semibold leading-snug break-words text-emerald-700';
-  nameEl.textContent = signedFile.nome || signedFile.originalName || 'Documento assinado';
+  nameEl.className = 'text-sm font-semibold leading-snug text-emerald-800 break-words';
+  nameEl.textContent = displayName;
   textWrap.appendChild(nameEl);
 
-  const meta = document.createElement('p');
-  meta.className = 'text-xs text-emerald-600 leading-snug';
-  const metaPieces = [];
-  if (signedFile.originalName && signedFile.originalName !== signedFile.nome) {
-    metaPieces.push(signedFile.originalName);
+  if (signedFile.originalName && signedFile.originalName !== displayName) {
+    const originalNameEl = document.createElement('p');
+    originalNameEl.className = 'text-xs text-emerald-600 break-words';
+    originalNameEl.textContent = signedFile.originalName;
+    textWrap.appendChild(originalNameEl);
   }
-  const extension = String(signedFile.extension || '').replace('.', '').toUpperCase();
-  if (extension) metaPieces.push(extension);
-  if (signedFile.size) metaPieces.push(formatFileSize(signedFile.size));
-  if (signedFile.uploadedAt) {
-    const uploadedDisplay = formatDateTimeDisplay(signedFile.uploadedAt);
-    if (uploadedDisplay) metaPieces.push(`Enviado em ${uploadedDisplay}`);
+
+  const badgeList = document.createElement('div');
+  badgeList.className = 'flex flex-wrap items-center gap-2 text-[11px] font-medium text-emerald-700';
+
+  const appendBadge = (iconClass, label) => {
+    if (!label) return;
+    const badge = document.createElement('span');
+    badge.className = 'inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-0.5 shadow-sm';
+
+    const icon = document.createElement('i');
+    icon.className = `fas ${iconClass} text-[10px]`;
+    badge.appendChild(icon);
+
+    const text = document.createElement('span');
+    text.className = 'leading-none';
+    text.textContent = label;
+    badge.appendChild(text);
+
+    badgeList.appendChild(badge);
+  };
+
+  const extension = String(signedFile.extension || '').trim();
+  const normalizedExtension = extension ? extension.replace('.', '').toUpperCase() : '';
+  if (normalizedExtension) {
+    appendBadge('fa-file', normalizedExtension);
+  } else if (signedFile.mimeType) {
+    const [, subtype] = String(signedFile.mimeType).split('/');
+    const typeLabel = (subtype || signedFile.mimeType || '').toUpperCase();
+    appendBadge('fa-file', typeLabel);
   }
-  meta.textContent = metaPieces.length ? metaPieces.join(' · ') : '—';
-  textWrap.appendChild(meta);
+
+  const sizeLabel = formatFileSize(signedFile.size);
+  if (sizeLabel) {
+    appendBadge('fa-weight-scale', sizeLabel);
+  }
+
+  if (badgeList.children.length) {
+    textWrap.appendChild(badgeList);
+  }
+
+  const uploadedDisplay = signedFile.uploadedAt ? formatDateTimeDisplay(signedFile.uploadedAt) : '';
+  if (uploadedDisplay) {
+    const uploadedEl = document.createElement('p');
+    uploadedEl.className = 'flex items-center gap-1 text-xs text-emerald-600';
+
+    const clockIcon = document.createElement('i');
+    clockIcon.className = 'fas fa-clock text-[10px]';
+    uploadedEl.appendChild(clockIcon);
+
+    const uploadedText = document.createElement('span');
+    uploadedText.textContent = `Enviado em ${uploadedDisplay}`;
+    uploadedEl.appendChild(uploadedText);
+
+    textWrap.appendChild(uploadedEl);
+  } else if (!badgeList.children.length) {
+    const emptyMeta = document.createElement('p');
+    emptyMeta.className = 'text-xs text-emerald-600';
+    emptyMeta.textContent = 'Detalhes do arquivo não disponíveis.';
+    textWrap.appendChild(emptyMeta);
+  }
 
   const actions = document.createElement('div');
-  actions.className = 'flex items-center gap-2 flex-shrink-0';
+  actions.className = 'mt-3 flex flex-wrap items-center justify-end gap-2';
   card.appendChild(actions);
 
   if (signedFile.url) {
@@ -689,7 +742,7 @@ function createSignedDocumentoFileCard(entry, signedFile) {
     link.href = signedFile.url;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
-    link.className = 'inline-flex items-center gap-2 rounded-md border border-emerald-300 bg-white px-3 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-600 hover:text-white';
+    link.className = 'inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-600 shadow-sm transition hover:bg-emerald-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-200';
     link.innerHTML = '<i class="fas fa-arrow-up-right-from-square text-[10px]"></i><span>Abrir</span>';
     link.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -699,7 +752,7 @@ function createSignedDocumentoFileCard(entry, signedFile) {
 
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
-  removeBtn.className = 'inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-200';
+  removeBtn.className = 'inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-600 shadow-sm transition hover:bg-emerald-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-200';
   removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
 
   const toggleDisabled = (disabled) => {
