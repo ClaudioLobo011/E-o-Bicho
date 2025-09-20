@@ -30,6 +30,7 @@ import {
   activateHistoricoTab,
   activateConsultaTab,
   reopenCurrentAgendamento,
+  handleAtendimentoRealTimeEvent,
 } from './atendimento.js';
 import { loadHistoricoForSelection } from './historico.js';
 import {
@@ -79,7 +80,9 @@ function handleFichaRealTimeMessage(message) {
 
   if (event && typeof event === 'object') {
     const scope = event.scope;
-    if (scope === 'vacina') {
+    if (scope === 'atendimento') {
+      handled = handleAtendimentoRealTimeEvent(event) || handled;
+    } else if (scope === 'vacina') {
       handled = handleVacinaRealTimeEvent(event) || handled;
     } else if (scope === 'exame') {
       handled = handleExameRealTimeEvent(event) || handled;

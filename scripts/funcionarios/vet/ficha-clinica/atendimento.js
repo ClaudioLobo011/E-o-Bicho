@@ -33,6 +33,44 @@ function deepClone(value) {
   }
 }
 
+function buildAtendimentoEventPayload(extra = {}) {
+  const payload = { ...extra };
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  const agenda = state.agendaContext && typeof state.agendaContext === 'object' ? state.agendaContext : null;
+  const appointmentId = normalizeId(agenda?.appointmentId);
+
+  if (clienteId) payload.clienteId = clienteId;
+  if (petId) payload.petId = petId;
+  if (appointmentId) payload.appointmentId = appointmentId;
+
+  if (agenda) {
+    if (agenda.status) {
+      payload.agendaStatus = String(agenda.status);
+    }
+    if (Array.isArray(agenda.servicos)) {
+      payload.agendaServicos = deepClone(agenda.servicos) || [...agenda.servicos];
+    }
+    if (agenda.valor !== undefined) {
+      const valor = Number(agenda.valor);
+      if (!Number.isNaN(valor)) {
+        payload.agendaValor = valor;
+      }
+    }
+    const profissional =
+      agenda.profissionalNome !== undefined
+        ? agenda.profissionalNome
+        : agenda.profissional !== undefined
+          ? agenda.profissional
+          : undefined;
+    if (profissional !== undefined) {
+      payload.agendaProfissional = profissional;
+    }
+  }
+
+  return payload;
+}
+
 function buildHistoricoEntryFromState() {
   const clienteId = normalizeId(state.selectedCliente?._id);
   const petId = normalizeId(state.selectedPetId);
@@ -215,11 +253,18 @@ export async function finalizarAtendimento() {
     renderHistoricoArea();
     updateConsultaAgendaCard();
 
-    emitFichaClinicaUpdate({
+    const historicoId = normalizeId(
+      (savedEntry && (savedEntry.id || savedEntry._id)) || (entry && (entry.id || entry._id)),
+    );
+    const historicoSnapshot = deepClone(savedEntry || entry) || savedEntry || entry || null;
+    const eventPayload = buildAtendimentoEventPayload({
       scope: 'atendimento',
       action: 'finalizar',
-      appointmentId,
-    }).catch(() => {});
+      historicoId: historicoId || null,
+      finalizadoEm: (savedEntry || entry)?.finalizadoEm || new Date().toISOString(),
+      ...(historicoSnapshot ? { historico: historicoSnapshot } : {}),
+    });
+    emitFichaClinicaUpdate(eventPayload).catch(() => {});
 
     notify('Atendimento finalizado com sucesso.', 'success');
   } catch (error) {
@@ -313,11 +358,14 @@ async function reopenHistoricoEntry(entry, closeModal) {
       closeModal();
     }
 
-    emitFichaClinicaUpdate({
+    const reopenSnapshot = deepClone(entry) || entry || null;
+    const eventPayload = buildAtendimentoEventPayload({
       scope: 'atendimento',
       action: 'reabrir',
-      appointmentId,
-    }).catch(() => {});
+      historicoId: entryId || entry.id || null,
+      ...(reopenSnapshot ? { reopened: reopenSnapshot } : {}),
+    });
+    emitFichaClinicaUpdate(eventPayload).catch(() => {});
 
     notify('Atendimento reaberto para edição.', 'success');
   } catch (error) {
@@ -365,6 +413,150 @@ setHistoricoReopenHandler((entry, closeModal) => {
   const fullEntry = typeof entry === 'string' ? getHistoricoEntryById(entry) : entry;
   return reopenHistoricoEntry(fullEntry || getHistoricoEntryById(entry?.id), closeModal);
 });
+
+export function handleAtendimentoRealTimeEvent(event = {}) {
+  if (!event || typeof event !== 'object') return false;
+  if (event.scope && event.scope !== 'atendimento') return false;
+
+  const action = String(event.action || '').toLowerCase();
+  if (!action) return false;
+
+  const targetClienteId = normalizeId(event.clienteId || event.tutorId || event.cliente);
+  const targetPetId = normalizeId(event.petId || event.pet);
+  const targetAppointmentId = normalizeId(event.appointmentId || event.agendamentoId || event.appointment);
+
+  const currentClienteId = normalizeId(state.selectedCliente?._id);
+  const currentPetId = normalizeId(state.selectedPetId);
+  const currentAppointmentId = normalizeId(state.agendaContext?.appointmentId);
+
+  if (targetClienteId && currentClienteId && targetClienteId !== currentClienteId) return false;
+  if (targetPetId && currentPetId && targetPetId !== currentPetId) return false;
+  if (targetAppointmentId && currentAppointmentId && targetAppointmentId !== currentAppointmentId) return false;
+
+  if (action === 'finalizar') {
+    if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+      state.agendaContext = {};
+    }
+    if (targetAppointmentId) {
+      state.agendaContext.appointmentId = targetAppointmentId;
+    }
+    const status = String(event.agendaStatus || 'finalizado');
+    state.agendaContext.status = status;
+
+    if (Array.isArray(event.agendaServicos)) {
+      const servicos = deepClone(event.agendaServicos) || [...event.agendaServicos];
+      state.agendaContext.servicos = servicos;
+      state.agendaContext.totalServicos = servicos.length;
+    }
+
+    if (event.agendaValor !== undefined) {
+      const valor = Number(event.agendaValor);
+      if (!Number.isNaN(valor)) {
+        state.agendaContext.valor = valor;
+      }
+    }
+
+    if (event.agendaProfissional !== undefined) {
+      state.agendaContext.profissionalNome = event.agendaProfissional || '';
+    }
+
+    if (event.finalizadoEm) {
+      state.agendaContext.finalizadoEm = event.finalizadoEm;
+    }
+
+    persistAgendaContext(state.agendaContext);
+
+    const clienteId = targetClienteId || currentClienteId;
+    const petId = targetPetId || currentPetId;
+    if (clienteId && petId) {
+      clearLocalStoredDataForSelection(clienteId, petId);
+    }
+    resetConsultaState();
+
+    const historicoEntry = event.historico || event.historicoEntry || event.historicoSnapshot;
+    if (historicoEntry) {
+      addHistoricoEntry(historicoEntry);
+    }
+
+    state.activeMainTab = 'historico';
+    updateMainTabLayout();
+    renderHistoricoArea();
+    updateConsultaAgendaCard();
+    notify('O atendimento foi finalizado por outro usuário.', 'info');
+    return true;
+  }
+
+  if (action === 'reabrir') {
+    if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+      state.agendaContext = {};
+    }
+    if (targetAppointmentId) {
+      state.agendaContext.appointmentId = targetAppointmentId;
+    }
+    const status = String(event.agendaStatus || 'em_atendimento');
+    state.agendaContext.status = status;
+
+    if (Array.isArray(event.agendaServicos)) {
+      const servicos = deepClone(event.agendaServicos) || [...event.agendaServicos];
+      state.agendaContext.servicos = servicos;
+      state.agendaContext.totalServicos = servicos.length;
+    }
+
+    if (event.agendaValor !== undefined) {
+      const valor = Number(event.agendaValor);
+      if (!Number.isNaN(valor)) {
+        state.agendaContext.valor = valor;
+      }
+    }
+
+    if (event.agendaProfissional !== undefined) {
+      state.agendaContext.profissionalNome = event.agendaProfissional || '';
+    }
+
+    persistAgendaContext(state.agendaContext);
+
+    const historicoId = normalizeId(event.historicoId || event.historico?.id || event.historico?._id);
+    if (historicoId) {
+      removeHistoricoEntry(historicoId);
+    }
+
+    const clienteId = targetClienteId || currentClienteId;
+    const petId = targetPetId || currentPetId;
+
+    const reopenedSnapshot =
+      deepClone(event.reopened || event.historico || event.historicoEntry) ||
+      event.reopened ||
+      event.historico ||
+      event.historicoEntry ||
+      null;
+
+    if (reopenedSnapshot && typeof reopenedSnapshot === 'object') {
+      state.consultas = Array.isArray(reopenedSnapshot.consultas) ? reopenedSnapshot.consultas : [];
+      state.vacinas = Array.isArray(reopenedSnapshot.vacinas) ? reopenedSnapshot.vacinas : [];
+      state.anexos = Array.isArray(reopenedSnapshot.anexos) ? reopenedSnapshot.anexos : [];
+      state.exames = Array.isArray(reopenedSnapshot.exames) ? reopenedSnapshot.exames : [];
+      state.pesos = Array.isArray(reopenedSnapshot.pesos) ? reopenedSnapshot.pesos : [];
+      state.observacoes = Array.isArray(reopenedSnapshot.observacoes) ? reopenedSnapshot.observacoes : [];
+      state.documentos = Array.isArray(reopenedSnapshot.documentos) ? reopenedSnapshot.documentos : [];
+      state.receitas = Array.isArray(reopenedSnapshot.receitas) ? reopenedSnapshot.receitas : [];
+
+      if (clienteId && petId) {
+        persistLocalDataForSelection(clienteId, petId);
+      }
+    } else {
+      resetConsultaState();
+    }
+
+    state.activeMainTab = 'consulta';
+    updateMainTabLayout();
+    renderHistoricoArea();
+    updateConsultaAgendaCard();
+    notify('O atendimento foi reaberto por outro usuário.', 'info');
+    return true;
+  }
+
+  return false;
+}
 
 export function initAtendimentoActions() {
   if (els.finalizarAtendimentoBtn) {
