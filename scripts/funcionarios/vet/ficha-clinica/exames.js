@@ -23,6 +23,7 @@ import {
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
 import { loadAnexosFromServer, deleteAnexo } from './anexos.js';
+import { emitFichaClinicaUpdate } from './real-time.js';
 
 const MIN_SEARCH_TERM_LENGTH = 2;
 
@@ -1680,6 +1681,13 @@ async function handleExameSubmit() {
       state.exames[index] = updatedRecord;
       persistExamesForSelection();
       updateConsultaAgendaCard();
+      const updatedRecordId = normalizeId(updatedRecord?.id || updatedRecord?._id || editingId);
+      emitFichaClinicaUpdate({
+        scope: 'exame',
+        action: 'update',
+        exameId: updatedRecordId || null,
+        servicoId: normalizeId(service?._id) || null,
+      }).catch(() => {});
       closeExameModal();
       notify('Exame atualizado com sucesso.', 'success');
       return;
@@ -1758,6 +1766,13 @@ async function handleExameSubmit() {
     state.exames = [record, ...(Array.isArray(state.exames) ? state.exames : [])];
     persistExamesForSelection();
     updateConsultaAgendaCard();
+    const createdRecordId = normalizeId(record.id || record._id);
+    emitFichaClinicaUpdate({
+      scope: 'exame',
+      action: 'create',
+      exameId: createdRecordId || null,
+      servicoId: normalizeId(service?._id) || null,
+    }).catch(() => {});
     closeExameModal();
     notify('Exame registrado com sucesso.', 'success');
   } catch (error) {
@@ -1898,6 +1913,12 @@ export async function deleteExame(exame, options = {}) {
       }
     }
 
+    emitFichaClinicaUpdate({
+      scope: 'exame',
+      action: 'delete',
+      exameId,
+      servicoId,
+    }).catch(() => {});
     notify('Exame removido com sucesso.', 'success');
     return true;
   } catch (error) {

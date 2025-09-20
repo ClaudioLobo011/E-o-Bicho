@@ -23,6 +23,7 @@ import {
   setActiveMainTab,
   persistHistoricoEntry,
 } from './historico.js';
+import { emitFichaClinicaUpdate } from './real-time.js';
 
 function deepClone(value) {
   try {
@@ -214,6 +215,12 @@ export async function finalizarAtendimento() {
     renderHistoricoArea();
     updateConsultaAgendaCard();
 
+    emitFichaClinicaUpdate({
+      scope: 'atendimento',
+      action: 'finalizar',
+      appointmentId,
+    }).catch(() => {});
+
     notify('Atendimento finalizado com sucesso.', 'success');
   } catch (error) {
     console.error('finalizarAtendimento', error);
@@ -305,6 +312,12 @@ async function reopenHistoricoEntry(entry, closeModal) {
     if (typeof closeModal === 'function') {
       closeModal();
     }
+
+    emitFichaClinicaUpdate({
+      scope: 'atendimento',
+      action: 'reabrir',
+      appointmentId,
+    }).catch(() => {});
 
     notify('Atendimento reaberto para edição.', 'success');
   } catch (error) {

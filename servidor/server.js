@@ -63,9 +63,48 @@ routes.push({ path: '/api/func', file: './routes/funcVet' });
 routes.forEach(r => app.use(r.path, require(r.file)));
 
 // WebSockets
+function sanitizeRoomKey(room) {
+  if (typeof room !== 'string') return null;
+  const trimmed = room.trim();
+  if (!trimmed.startsWith('vet:ficha:')) return null;
+  if (trimmed.length > 200) return null;
+  if (!/^[-a-zA-Z0-9:_]+$/.test(trimmed)) return null;
+  return trimmed;
+}
+
 io.on('connection', (socket) => {
   console.log('Um utilizador conectou-se via WebSocket');
-  socket.on('disconnect', () => console.log('Utilizador desconectou-se'));
+  const joinedRooms = new Set();
+
+  socket.on('vet:ficha:join', (payload = {}) => {
+    const room = sanitizeRoomKey(payload.room);
+    if (!room) return;
+    socket.join(room);
+    joinedRooms.add(room);
+  });
+
+  socket.on('vet:ficha:leave', (payload = {}) => {
+    const room = sanitizeRoomKey(payload.room);
+    if (!room) return;
+    socket.leave(room);
+    joinedRooms.delete(room);
+  });
+
+  socket.on('vet:ficha:update', (payload = {}) => {
+    const room = sanitizeRoomKey(payload.room);
+    if (!room) return;
+    const message = {
+      ...payload,
+      room,
+      timestamp: typeof payload.timestamp === 'number' ? payload.timestamp : Date.now(),
+    };
+    socket.to(room).emit('vet:ficha:update', message);
+  });
+
+  socket.on('disconnect', () => {
+    joinedRooms.clear();
+    console.log('Utilizador desconectou-se');
+  });
 });
 
 // Inicialização do servidor

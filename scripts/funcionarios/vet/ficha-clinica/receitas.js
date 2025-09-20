@@ -19,6 +19,7 @@ import {
   isFinalizadoSelection,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard, getConsultasKey } from './consultas.js';
+import { emitFichaClinicaUpdate } from './real-time.js';
 import {
   KEYWORD_GROUPS,
   renderPreviewFrameContent,
@@ -1249,6 +1250,11 @@ export async function deleteReceitaRegistro(target, options = {}) {
           notify('Receita removida com sucesso.', 'success');
         }
         updateConsultaAgendaCard();
+        emitFichaClinicaUpdate({
+          scope: 'receita',
+          action: 'delete',
+          receitaRegistroId: targetId,
+        }).catch(() => {});
         return true;
       }
 
@@ -1264,6 +1270,11 @@ export async function deleteReceitaRegistro(target, options = {}) {
       notify('Receita removida com sucesso.', 'success');
     }
     updateConsultaAgendaCard();
+    emitFichaClinicaUpdate({
+      scope: 'receita',
+      action: 'delete',
+      receitaRegistroId: targetId,
+    }).catch(() => {});
     return true;
   } catch (error) {
     console.error('deleteReceitaRegistro', error);
@@ -1363,6 +1374,11 @@ export async function uploadReceitaAssinada(target, file, options = {}) {
   if (!suppressNotify) {
     notify('Receita assinada salva com sucesso.', 'success');
   }
+  emitFichaClinicaUpdate({
+    scope: 'receita',
+    action: 'signed-upload',
+    receitaRegistroId: recordId,
+  }).catch(() => {});
   return true;
 }
 
@@ -1433,6 +1449,11 @@ export async function removeReceitaAssinada(target, options = {}) {
   if (!suppressNotify) {
     notify('Receita assinada removida com sucesso.', 'success');
   }
+  emitFichaClinicaUpdate({
+    scope: 'receita',
+    action: 'signed-remove',
+    receitaRegistroId: recordId,
+  }).catch(() => {});
   return true;
 }
 
@@ -1513,6 +1534,8 @@ async function handleSave() {
 
     let response;
     let data;
+    let savedRecordId = null;
+    let actionType = null;
     if (isEditing && receitaModal.editingId) {
       response = await api(`/func/vet/receitas-registros/${encodeURIComponent(receitaModal.editingId)}`, {
         method: 'PUT',
@@ -1537,6 +1560,13 @@ async function handleSave() {
         upsertReceitaRegistroInState(fallbackRecord);
       }
 
+      savedRecordId = normalizeId(
+        (data && (data.id || data._id))
+          || receitaModal.editingId
+          || fallbackRecord?.id
+          || fallbackRecord?._id,
+      );
+      actionType = 'update';
       notify('Receita atualizada na aba de consultas.', 'success');
     } else {
       response = await api('/func/vet/receitas-registros', {
@@ -1565,9 +1595,20 @@ async function handleSave() {
         upsertReceitaRegistroInState(fallbackRecord);
       }
 
+      savedRecordId = normalizeId(
+        (data && (data.id || data._id))
+          || fallbackRecord?.id
+          || fallbackRecord?._id,
+      );
+      actionType = 'create';
       notify('Receita adicionada na aba de consultas.', 'success');
     }
 
+    emitFichaClinicaUpdate({
+      scope: 'receita',
+      action: actionType || (isEditing ? 'update' : 'create'),
+      receitaRegistroId: savedRecordId || null,
+    }).catch(() => {});
     closeReceitaModal();
     updateConsultaAgendaCard();
   } catch (error) {

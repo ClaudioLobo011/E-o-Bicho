@@ -17,6 +17,7 @@ import {
   isFinalizadoSelection,
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
+import { emitFichaClinicaUpdate } from './real-time.js';
 
 function getVacinaStorageKey(clienteId, petId) {
   const base = getConsultasKey(clienteId, petId);
@@ -958,6 +959,13 @@ async function handleVacinaSubmit() {
 
     persistVacinasForSelection();
     updateConsultaAgendaCard();
+    const recordId = normalizeId(nextRecord.id || nextRecord._id);
+    emitFichaClinicaUpdate({
+      scope: 'vacina',
+      action: isEditing ? 'update' : 'create',
+      vacinaId: recordId || null,
+      servicoId: normalizedServiceId || null,
+    }).catch(() => {});
     closeVacinaModal();
     notify(isEditing ? 'Vacina atualizada com sucesso.' : 'Vacina registrada com sucesso.', 'success');
   } catch (error) {
@@ -1103,6 +1111,12 @@ export async function deleteVacina(vacina, options = {}) {
     persistVacinasForSelection();
     updateConsultaAgendaCard();
     notify('Vacina removida com sucesso.', 'success');
+    emitFichaClinicaUpdate({
+      scope: 'vacina',
+      action: 'delete',
+      vacinaId: recordId || null,
+      servicoId,
+    }).catch(() => {});
     return true;
   } catch (error) {
     console.error('deleteVacina', error);

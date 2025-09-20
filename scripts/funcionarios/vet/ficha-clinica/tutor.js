@@ -22,6 +22,7 @@ import { loadDocumentosFromServer } from './documentos.js';
 import { loadReceitasFromServer } from './receitas.js';
 import { updateCardDisplay, updatePageVisibility, setCardMode } from './ui.js';
 import { loadHistoricoForSelection, setActiveMainTab } from './historico.js';
+import { updateFichaRealTimeSelection } from './real-time.js';
 
 function hideSugestoes() {
   if (els.cliSug) {
@@ -241,6 +242,8 @@ export async function onSelectCliente(cli, opts = {}) {
     persistPetId(null);
   }
 
+  updateFichaRealTimeSelection().catch(() => {});
+
   updatePageVisibility();
   updateConsultaAgendaCard();
 
@@ -318,6 +321,7 @@ export async function onSelectPet(petId, opts = {}) {
   if (!skipPersistPet) {
     persistPetId(state.selectedPetId);
   }
+  updateFichaRealTimeSelection().catch(() => {});
   const defaultToHistorico = isFinalizadoSelection(state.selectedCliente?._id, state.selectedPetId);
   setActiveMainTab(defaultToHistorico ? 'historico' : 'consulta');
   state.consultas = [];
@@ -401,6 +405,7 @@ export function clearCliente() {
   persistCliente(null);
   updatePageVisibility();
   updateConsultaAgendaCard();
+  updateFichaRealTimeSelection().catch(() => {});
 }
 
 export function clearPet() {
@@ -432,6 +437,7 @@ export function clearPet() {
   loadHistoricoForSelection();
   updateCardDisplay();
   updatePageVisibility();
+  updateFichaRealTimeSelection().catch(() => {});
 }
 
 export function restorePersistedSelection() {
@@ -461,4 +467,5 @@ export function restorePersistedSelection() {
   } else if (petId) {
     persistPetId(null);
   }
+  updateFichaRealTimeSelection().catch(() => {});
 }
