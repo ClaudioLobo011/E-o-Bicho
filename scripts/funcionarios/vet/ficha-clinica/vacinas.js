@@ -49,6 +49,71 @@ function normalizeDateInputValue(value) {
   }
 }
 
+function safeClone(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    if (Array.isArray(value)) {
+      return value.map((item) => (item && typeof item === 'object' ? { ...item } : item));
+    }
+    if (value && typeof value === 'object') {
+      return { ...value };
+    }
+    return value;
+  }
+}
+
+function buildVacinaEventPayload(extra = {}) {
+  const event = { ...extra };
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+  if (clienteId) event.clienteId = clienteId;
+  if (petId) event.petId = petId;
+  if (appointmentId) event.appointmentId = appointmentId;
+  if (state.agendaContext && typeof state.agendaContext === 'object') {
+    if (Array.isArray(state.agendaContext.servicos)) {
+      event.agendaServicos = safeClone(state.agendaContext.servicos);
+    }
+    if (typeof state.agendaContext.valor === 'number') {
+      event.agendaValor = state.agendaContext.valor;
+    }
+  }
+  return event;
+}
+
+function applyAgendaSnapshotFromEvent(event = {}) {
+  const appointmentId = normalizeId(event.appointmentId || event.agendamentoId || event.appointment);
+  const currentAppointment = normalizeId(state.agendaContext?.appointmentId);
+  if (currentAppointment && appointmentId && currentAppointment !== appointmentId) {
+    return;
+  }
+
+  if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+    state.agendaContext = appointmentId ? { appointmentId } : {};
+  } else if (appointmentId && !state.agendaContext.appointmentId) {
+    state.agendaContext.appointmentId = appointmentId;
+  }
+
+  if (Array.isArray(event.agendaServicos)) {
+    state.agendaContext.servicos = safeClone(event.agendaServicos) || [];
+    state.agendaContext.totalServicos = state.agendaContext.servicos.length;
+  }
+
+  if (event.agendaValor !== undefined) {
+    const valor = Number(event.agendaValor);
+    if (!Number.isNaN(valor)) {
+      state.agendaContext.valor = valor;
+    }
+  }
+
+  if (state.agendaContext) {
+    persistAgendaContext(state.agendaContext);
+  }
+}
+
 function normalizeVacinaRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const servicoId = normalizeId(raw.servicoId || raw.servico || raw.serviceId);
@@ -960,12 +1025,15 @@ async function handleVacinaSubmit() {
     persistVacinasForSelection();
     updateConsultaAgendaCard();
     const recordId = normalizeId(nextRecord.id || nextRecord._id);
-    emitFichaClinicaUpdate({
-      scope: 'vacina',
-      action: isEditing ? 'update' : 'create',
-      vacinaId: recordId || null,
-      servicoId: normalizedServiceId || null,
-    }).catch(() => {});
+    emitFichaClinicaUpdate(
+      buildVacinaEventPayload({
+        scope: 'vacina',
+        action: isEditing ? 'update' : 'create',
+        vacinaId: recordId || null,
+        servicoId: normalizedServiceId || null,
+        vacina: safeClone(nextRecord),
+      }),
+    ).catch(() => {});
     closeVacinaModal();
     notify(isEditing ? 'Vacina atualizada com sucesso.' : 'Vacina registrada com sucesso.', 'success');
   } catch (error) {
@@ -1111,12 +1179,14 @@ export async function deleteVacina(vacina, options = {}) {
     persistVacinasForSelection();
     updateConsultaAgendaCard();
     notify('Vacina removida com sucesso.', 'success');
-    emitFichaClinicaUpdate({
-      scope: 'vacina',
-      action: 'delete',
-      vacinaId: recordId || null,
-      servicoId,
-    }).catch(() => {});
+    emitFichaClinicaUpdate(
+      buildVacinaEventPayload({
+        scope: 'vacina',
+        action: 'delete',
+        vacinaId: recordId || null,
+        servicoId,
+      }),
+    ).catch(() => {});
     return true;
   } catch (error) {
     console.error('deleteVacina', error);
@@ -1126,3 +1196,90 @@ export async function deleteVacina(vacina, options = {}) {
 }
 
 state.deleteVacina = deleteVacina;
+
+export function handleVacinaRealTimeEvent(event = {}) {
+  if (!event || typeof event !== 'object') return false;
+  if (event.scope && event.scope !== 'vacina') return false;
+
+  const action = String(event.action || '').toLowerCase();
+  const targetClienteId = normalizeId(event.clienteId || event.tutorId || event.cliente);
+  const targetPetId = normalizeId(event.petId || event.pet);
+  const targetAppointmentId = normalizeId(
+    event.appointmentId || event.agendamentoId || event.appointment,
+  );
+
+  const currentClienteId = normalizeId(state.selectedCliente?._id);
+  const currentPetId = normalizeId(state.selectedPetId);
+  const currentAppointmentId = normalizeId(state.agendaContext?.appointmentId);
+
+  if (targetClienteId && currentClienteId && targetClienteId !== currentClienteId) return false;
+  if (targetPetId && currentPetId && targetPetId !== currentPetId) return false;
+  if (targetAppointmentId && currentAppointmentId && targetAppointmentId !== currentAppointmentId) return false;
+
+  let changed = false;
+
+  if (action === 'delete') {
+    const vacinaId = normalizeId(event.vacinaId || event.id || event.recordId);
+    if (!vacinaId) return false;
+    const previous = Array.isArray(state.vacinas) ? state.vacinas : [];
+    const next = previous.filter((item) => normalizeId(item?.id || item?._id) !== vacinaId);
+    if (next.length !== previous.length) {
+      state.vacinas = next;
+      const storageKey = getConsultasKey(state.selectedCliente?._id, state.selectedPetId);
+      if (storageKey) {
+        state.vacinasLoadKey = storageKey;
+      }
+      persistVacinasForSelection();
+      changed = true;
+    }
+    applyAgendaSnapshotFromEvent(event);
+    if (changed) {
+      updateConsultaAgendaCard();
+    }
+    return changed;
+  }
+
+  const payload = event.vacina || event.record || event.data;
+  if (!payload || typeof payload !== 'object') {
+    applyAgendaSnapshotFromEvent(event);
+    return false;
+  }
+
+  const record = normalizeVacinaRecord({
+    ...payload,
+    id: payload.id || payload._id || event.vacinaId || event.id,
+  });
+  if (!record) {
+    applyAgendaSnapshotFromEvent(event);
+    return false;
+  }
+
+  if (targetAppointmentId && !record.appointmentId) {
+    record.appointmentId = targetAppointmentId;
+  }
+
+  const list = Array.isArray(state.vacinas) ? [...state.vacinas] : [];
+  const recordId = normalizeId(record.id || record._id);
+  let updated = false;
+  for (let i = 0; i < list.length; i += 1) {
+    const entryId = normalizeId(list[i]?.id || list[i]?._id);
+    if (entryId && recordId && entryId === recordId) {
+      list[i] = { ...list[i], ...record, id: recordId, _id: recordId };
+      updated = true;
+      break;
+    }
+  }
+  if (!updated) {
+    list.unshift({ ...record, id: recordId, _id: recordId });
+  }
+
+  state.vacinas = list;
+  const storageKey = getConsultasKey(state.selectedCliente?._id, state.selectedPetId);
+  if (storageKey) {
+    state.vacinasLoadKey = storageKey;
+  }
+  persistVacinasForSelection();
+  applyAgendaSnapshotFromEvent(event);
+  updateConsultaAgendaCard();
+  return true;
+}

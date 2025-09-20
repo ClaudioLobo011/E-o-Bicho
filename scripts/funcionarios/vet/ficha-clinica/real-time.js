@@ -83,6 +83,27 @@ function getSelectionSnapshot() {
   };
 }
 
+function cloneEventPayload(event) {
+  if (!event || typeof event !== 'object') return {};
+  try {
+    return JSON.parse(JSON.stringify(event));
+  } catch {
+    if (Array.isArray(event)) {
+      return event.map((item) => (item && typeof item === 'object' ? cloneEventPayload(item) : item));
+    }
+    const result = {};
+    Object.keys(event).forEach((key) => {
+      const value = event[key];
+      if (value && typeof value === 'object') {
+        result[key] = cloneEventPayload(value);
+      } else {
+        result[key] = value;
+      }
+    });
+    return result;
+  }
+}
+
 function setupSocketListeners() {
   if (!socket) return;
 
@@ -244,7 +265,7 @@ export async function emitFichaClinicaUpdate(event = {}) {
       petId: selection.petId,
       appointmentId: selection.appointmentId || null,
     },
-    event: event && typeof event === 'object' ? { ...event } : {},
+    event: cloneEventPayload(event),
     userId: getCurrentUserId() || null,
     timestamp: Date.now(),
   });

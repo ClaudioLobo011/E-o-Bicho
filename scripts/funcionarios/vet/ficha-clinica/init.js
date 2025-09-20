@@ -1,7 +1,7 @@
 // Entry initialization for the Vet ficha clínica
 import { els, debounce } from './core.js';
 import { openConsultaModal, loadConsultasFromServer } from './consultas.js';
-import { openVacinaModal, loadVacinasForSelection } from './vacinas.js';
+import { openVacinaModal, loadVacinasForSelection, handleVacinaRealTimeEvent } from './vacinas.js';
 import {
   openAnexoModal,
   loadAnexosForSelection,
@@ -9,7 +9,7 @@ import {
 } from './anexos.js';
 import { openDocumentoModal, loadDocumentosFromServer } from './documentos.js';
 import { openReceitaModal, loadReceitasFromServer } from './receitas.js';
-import { openExameModal, loadExamesForSelection } from './exames.js';
+import { openExameModal, loadExamesForSelection, handleExameRealTimeEvent } from './exames.js';
 import { openPesoModal, loadPesosFromServer } from './pesos.js';
 import { openObservacaoModal, loadObservacoesForSelection } from './observacoes.js';
 import {
@@ -69,11 +69,30 @@ function scheduleRemoteSync() {
   }, 150);
 }
 
+function handleFichaRealTimeMessage(message) {
+  const event = message && typeof message === 'object' ? message.event : null;
+  let handled = false;
+
+  if (event && typeof event === 'object') {
+    const scope = event.scope;
+    if (scope === 'vacina') {
+      handled = handleVacinaRealTimeEvent(event) || handled;
+    } else if (scope === 'exame') {
+      handled = handleExameRealTimeEvent(event) || handled;
+    }
+  }
+
+  if (handled) {
+    updateCardDisplay();
+    updatePageVisibility();
+  }
+
+  scheduleRemoteSync();
+}
+
 export function initFichaClinica() {
   initFichaRealTime();
-  registerFichaUpdateHandler(() => {
-    scheduleRemoteSync();
-  });
+  registerFichaUpdateHandler(handleFichaRealTimeMessage);
 
   if (els.cliInput) {
     const debouncedSearch = debounce((value) => searchClientes(value), 300);

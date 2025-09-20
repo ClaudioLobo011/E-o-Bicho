@@ -44,6 +44,7 @@ import {
   removeReceitaAssinada,
 } from './receitas.js';
 import { openVacinaModal } from './vacinas.js';
+import { emitFichaClinicaUpdate } from './real-time.js';
 
 function normalizeConsultaRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;

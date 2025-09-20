@@ -58,6 +58,71 @@ function sanitizeAttachmentName(value) {
     .trim();
 }
 
+function safeClone(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    if (Array.isArray(value)) {
+      return value.map((item) => (item && typeof item === 'object' ? { ...item } : item));
+    }
+    if (value && typeof value === 'object') {
+      return { ...value };
+    }
+    return value;
+  }
+}
+
+function buildExameEventPayload(extra = {}) {
+  const event = { ...extra };
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+  if (clienteId) event.clienteId = clienteId;
+  if (petId) event.petId = petId;
+  if (appointmentId) event.appointmentId = appointmentId;
+  if (state.agendaContext && typeof state.agendaContext === 'object') {
+    if (Array.isArray(state.agendaContext.servicos)) {
+      event.agendaServicos = safeClone(state.agendaContext.servicos);
+    }
+    if (typeof state.agendaContext.valor === 'number') {
+      event.agendaValor = state.agendaContext.valor;
+    }
+  }
+  return event;
+}
+
+function applyExameAgendaSnapshot(event = {}) {
+  const appointmentId = normalizeId(event.appointmentId || event.agendamentoId || event.appointment);
+  const currentAppointment = normalizeId(state.agendaContext?.appointmentId);
+  if (currentAppointment && appointmentId && currentAppointment !== appointmentId) {
+    return;
+  }
+
+  if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+    state.agendaContext = appointmentId ? { appointmentId } : {};
+  } else if (appointmentId && !state.agendaContext.appointmentId) {
+    state.agendaContext.appointmentId = appointmentId;
+  }
+
+  if (Array.isArray(event.agendaServicos)) {
+    state.agendaContext.servicos = safeClone(event.agendaServicos) || [];
+    state.agendaContext.totalServicos = state.agendaContext.servicos.length;
+  }
+
+  if (event.agendaValor !== undefined) {
+    const valor = Number(event.agendaValor);
+    if (!Number.isNaN(valor)) {
+      state.agendaContext.valor = valor;
+    }
+  }
+
+  if (state.agendaContext) {
+    persistAgendaContext(state.agendaContext);
+  }
+}
+
 function normalizeAttachmentExtension(extension) {
   if (!extension) return '';
   const str = String(extension).trim().toLowerCase();
@@ -1682,12 +1747,15 @@ async function handleExameSubmit() {
       persistExamesForSelection();
       updateConsultaAgendaCard();
       const updatedRecordId = normalizeId(updatedRecord?.id || updatedRecord?._id || editingId);
-      emitFichaClinicaUpdate({
-        scope: 'exame',
-        action: 'update',
-        exameId: updatedRecordId || null,
-        servicoId: normalizeId(service?._id) || null,
-      }).catch(() => {});
+      emitFichaClinicaUpdate(
+        buildExameEventPayload({
+          scope: 'exame',
+          action: 'update',
+          exameId: updatedRecordId || null,
+          servicoId: normalizeId(service?._id) || null,
+          exame: safeClone(updatedRecord),
+        }),
+      ).catch(() => {});
       closeExameModal();
       notify('Exame atualizado com sucesso.', 'success');
       return;
@@ -1767,12 +1835,15 @@ async function handleExameSubmit() {
     persistExamesForSelection();
     updateConsultaAgendaCard();
     const createdRecordId = normalizeId(record.id || record._id);
-    emitFichaClinicaUpdate({
-      scope: 'exame',
-      action: 'create',
-      exameId: createdRecordId || null,
-      servicoId: normalizeId(service?._id) || null,
-    }).catch(() => {});
+    emitFichaClinicaUpdate(
+      buildExameEventPayload({
+        scope: 'exame',
+        action: 'create',
+        exameId: createdRecordId || null,
+        servicoId: normalizeId(service?._id) || null,
+        exame: safeClone(record),
+      }),
+    ).catch(() => {});
     closeExameModal();
     notify('Exame registrado com sucesso.', 'success');
   } catch (error) {
@@ -1913,12 +1984,14 @@ export async function deleteExame(exame, options = {}) {
       }
     }
 
-    emitFichaClinicaUpdate({
-      scope: 'exame',
-      action: 'delete',
-      exameId,
-      servicoId,
-    }).catch(() => {});
+    emitFichaClinicaUpdate(
+      buildExameEventPayload({
+        scope: 'exame',
+        action: 'delete',
+        exameId,
+        servicoId,
+      }),
+    ).catch(() => {});
     notify('Exame removido com sucesso.', 'success');
     return true;
   } catch (error) {
@@ -1932,6 +2005,91 @@ export async function deleteExame(exame, options = {}) {
 }
 
 state.deleteExame = deleteExame;
+
+export function handleExameRealTimeEvent(event = {}) {
+  if (!event || typeof event !== 'object') return false;
+  if (event.scope && event.scope !== 'exame') return false;
+
+  const action = String(event.action || '').toLowerCase();
+  const targetClienteId = normalizeId(event.clienteId || event.tutorId || event.cliente);
+  const targetPetId = normalizeId(event.petId || event.pet);
+  const targetAppointmentId = normalizeId(event.appointmentId || event.agendamentoId || event.appointment);
+
+  const currentClienteId = normalizeId(state.selectedCliente?._id);
+  const currentPetId = normalizeId(state.selectedPetId);
+  const currentAppointmentId = normalizeId(state.agendaContext?.appointmentId);
+
+  if (targetClienteId && currentClienteId && targetClienteId !== currentClienteId) return false;
+  if (targetPetId && currentPetId && targetPetId !== currentPetId) return false;
+  if (targetAppointmentId && currentAppointmentId && targetAppointmentId !== currentAppointmentId) return false;
+
+  let changed = false;
+
+  if (action === 'delete') {
+    const exameId = normalizeId(event.exameId || event.id || event.recordId);
+    if (!exameId) return false;
+    const previous = Array.isArray(state.exames) ? state.exames : [];
+    const next = previous.filter((item) => normalizeId(item?.id || item?._id) !== exameId);
+    if (next.length !== previous.length) {
+      state.exames = next;
+      const key = getConsultasKey(state.selectedCliente?._id, state.selectedPetId);
+      if (key) {
+        state.examesLoadKey = key;
+      }
+      persistExamesForSelection();
+      changed = true;
+    }
+    applyExameAgendaSnapshot(event);
+    if (changed) {
+      updateConsultaAgendaCard();
+    }
+    return changed;
+  }
+
+  const payload = event.exame || event.record || event.data;
+  if (!payload || typeof payload !== 'object') {
+    applyExameAgendaSnapshot(event);
+    return false;
+  }
+
+  const record = normalizeExameRecord({
+    ...payload,
+    id: payload.id || payload._id || event.exameId || event.id,
+  });
+  if (!record) {
+    applyExameAgendaSnapshot(event);
+    return false;
+  }
+
+  if (targetAppointmentId && !record.appointmentId) {
+    record.appointmentId = targetAppointmentId;
+  }
+
+  const list = Array.isArray(state.exames) ? [...state.exames] : [];
+  const recordId = normalizeId(record.id || record._id);
+  let updated = false;
+  for (let i = 0; i < list.length; i += 1) {
+    const entryId = normalizeId(list[i]?.id || list[i]?._id);
+    if (entryId && recordId && entryId === recordId) {
+      list[i] = { ...list[i], ...record, id: recordId, _id: recordId };
+      updated = true;
+      break;
+    }
+  }
+  if (!updated) {
+    list.unshift({ ...record, id: recordId, _id: recordId });
+  }
+
+  state.exames = list;
+  const key = getConsultasKey(state.selectedCliente?._id, state.selectedPetId);
+  if (key) {
+    state.examesLoadKey = key;
+  }
+  persistExamesForSelection();
+  applyExameAgendaSnapshot(event);
+  updateConsultaAgendaCard();
+  return true;
+}
 
 export function openExameModal(options = {}) {
   if (!ensureTutorAndPetSelected()) {
