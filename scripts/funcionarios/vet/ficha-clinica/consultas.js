@@ -26,6 +26,7 @@ import {
   formatFileSize,
   isFinalizadoSelection,
   isConsultaLockedForCurrentUser,
+  isAdminRole,
 } from './core.js';
 import { openDocumentPrintWindow } from '../document-utils.js';
 import { openObservacaoModal } from './observacoes.js';
@@ -2570,6 +2571,31 @@ export function updateConsultaAgendaCard() {
   let hasAgendaContent = false;
 
   const contextMatches = !!(context && selectedPetId && selectedTutorId && contextPetId && contextTutorId && contextPetId === selectedPetId && contextTutorId === selectedTutorId);
+
+  if (els.reopenAgendamentoBtn) {
+    const reopenBtn = els.reopenAgendamentoBtn;
+    const appointmentId = normalizeId(context?.appointmentId);
+    const historicos = Array.isArray(state.historicos) ? state.historicos : [];
+    const hasMatchingHistorico = historicos.some(
+      (entry) => normalizeId(entry?.appointmentId || entry?.appointment) === appointmentId,
+    );
+    const shouldShowReopen =
+      isAdminRole() &&
+      contextMatches &&
+      agendaFinalizado &&
+      appointmentId &&
+      hasMatchingHistorico;
+
+    if (shouldShowReopen) {
+      reopenBtn.classList.remove('hidden');
+      reopenBtn.removeAttribute('aria-hidden');
+    } else {
+      reopenBtn.classList.add('hidden');
+      reopenBtn.setAttribute('aria-hidden', 'true');
+      delete reopenBtn.dataset.processing;
+      reopenBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+    }
+  }
 
   const consultaLocked = contextMatches && !agendaFinalizado && isConsultaLockedForCurrentUser(context);
   const canMutate = contextMatches && !agendaFinalizado && !consultaLocked;

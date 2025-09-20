@@ -121,6 +121,7 @@ export const els = {
   historicoTab: document.getElementById('vet-tab-historico'),
   consultaTab: document.getElementById('vet-tab-consulta'),
   addConsultaBtn: document.getElementById('vet-add-consulta-btn'),
+  reopenAgendamentoBtn: document.getElementById('vet-reopen-agendamento-btn'),
   addVacinaBtn: document.getElementById('vet-add-vacina-btn'),
   addAnexoBtn: document.getElementById('vet-add-anexo-btn'),
   addDocumentoBtn: document.getElementById('vet-add-documento-btn'),

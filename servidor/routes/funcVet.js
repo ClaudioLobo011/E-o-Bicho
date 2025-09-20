@@ -26,6 +26,7 @@ const {
 
 const router = express.Router();
 const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
+const requireAdmin = authorizeRoles('admin', 'admin_master');
 
 const ALLOWED_ANEXO_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.pdf']);
 const ALLOWED_ANEXO_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'application/pdf']);
@@ -2359,6 +2360,25 @@ router.post('/vet/historicos', authMiddleware, requireStaff, async (req, res) =>
   } catch (error) {
     console.error('POST /func/vet/historicos', error);
     return res.status(500).json({ message: 'Erro ao salvar histórico do atendimento.' });
+  }
+});
+
+router.delete('/vet/historicos/:id', authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const historyId = normalizeObjectId(req.params.id);
+    if (!historyId) {
+      return res.status(400).json({ message: 'ID do histórico inválido.' });
+    }
+
+    const deleted = await VetClinicHistory.findByIdAndDelete(historyId);
+    if (!deleted) {
+      return res.status(404).json({ message: 'Histórico não encontrado.' });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /func/vet/historicos/:id', error);
+    return res.status(500).json({ message: 'Erro ao remover histórico do atendimento.' });
   }
 });
 

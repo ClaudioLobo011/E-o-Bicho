@@ -15,7 +15,7 @@ import {
   api,
   notify,
 } from './core.js';
-import { updateMainTabLayout } from './consultas.js';
+import { updateMainTabLayout, updateConsultaAgendaCard } from './consultas.js';
 
 const historicoHandlers = {
   onReopen: null,
@@ -151,6 +151,7 @@ export async function loadHistoricoForSelection() {
   } finally {
     state.historicosLoading = false;
     renderHistoricoArea();
+    updateConsultaAgendaCard();
   }
 }
 
@@ -166,6 +167,7 @@ export function addHistoricoEntry(entry) {
     state.historicosLoadKey = key;
   }
   renderHistoricoArea();
+  updateConsultaAgendaCard();
 }
 
 export async function persistHistoricoEntry(entry) {
@@ -212,6 +214,7 @@ export function removeHistoricoEntry(entryId) {
   state.historicos = next;
   state.historicosLoading = false;
   renderHistoricoArea();
+  updateConsultaAgendaCard();
 }
 
 export function getHistoricoEntryById(entryId) {

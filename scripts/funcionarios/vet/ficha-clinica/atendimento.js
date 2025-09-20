@@ -11,6 +11,7 @@ import {
   EXAME_STORAGE_PREFIX,
   OBSERVACAO_STORAGE_PREFIX,
   isConsultaLockedForCurrentUser,
+  isAdminRole,
 } from './core.js';
 import { getConsultasKey, updateConsultaAgendaCard, updateMainTabLayout } from './consultas.js';
 import {
@@ -53,6 +54,15 @@ function buildHistoricoEntryFromState() {
     documentos: deepClone(state.documentos) || [],
     receitas: deepClone(state.receitas) || [],
   };
+}
+
+function findHistoricoEntryByAppointmentId(appointmentId) {
+  const targetId = normalizeId(appointmentId);
+  if (!targetId) return null;
+  const historicos = Array.isArray(state.historicos) ? state.historicos : [];
+  return (
+    historicos.find((item) => normalizeId(item?.appointmentId || item?.appointment) === targetId) || null
+  );
 }
 
 function clearLocalStoredDataForSelection(clienteId, petId) {
@@ -222,6 +232,7 @@ async function reopenHistoricoEntry(entry, closeModal) {
   const clienteId = normalizeId(entry.clienteId);
   const petId = normalizeId(entry.petId);
   const appointmentId = normalizeId(entry.appointmentId);
+  const entryId = normalizeId(entry.id || entry._id || entry.key);
   if (!(clienteId && petId && appointmentId)) {
     notify('Não foi possível identificar o atendimento selecionado.', 'error');
     return;
@@ -232,6 +243,8 @@ async function reopenHistoricoEntry(entry, closeModal) {
     confirmed = window.confirm('Reabrir o atendimento para edição? Ele retornará para a aba Consulta.');
   }
   if (!confirmed) return;
+
+  let statusUpdated = false;
 
   try {
     const response = await api(`/func/agendamentos/${appointmentId}`, {
@@ -244,7 +257,22 @@ async function reopenHistoricoEntry(entry, closeModal) {
       throw new Error(message);
     }
 
-    removeHistoricoEntry(entry.id);
+    statusUpdated = true;
+
+    if (entryId) {
+      const deleteResponse = await api(`/func/vet/historicos/${entryId}`, {
+        method: 'DELETE',
+      });
+      const deleteData = await deleteResponse.json().catch(() => (deleteResponse.ok ? {} : {}));
+      if (!deleteResponse.ok && deleteResponse.status !== 404) {
+        const message = typeof deleteData?.message === 'string'
+          ? deleteData.message
+          : 'Erro ao remover histórico do atendimento.';
+        throw new Error(message);
+      }
+    }
+
+    removeHistoricoEntry(entryId || entry.id);
 
     state.consultas = Array.isArray(entry.consultas) ? entry.consultas : [];
     state.vacinas = Array.isArray(entry.vacinas) ? entry.vacinas : [];
@@ -280,9 +308,44 @@ async function reopenHistoricoEntry(entry, closeModal) {
 
     notify('Atendimento reaberto para edição.', 'success');
   } catch (error) {
+    if (statusUpdated) {
+      try {
+        await api(`/func/agendamentos/${appointmentId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ status: 'finalizado' }),
+        });
+      } catch (rollbackError) {
+        console.error('rollbackReopenHistoricoEntry', rollbackError);
+      }
+    }
     console.error('reopenHistoricoEntry', error);
     notify(error.message || 'Erro ao reabrir atendimento.', 'error');
   }
+}
+
+export async function reopenCurrentAgendamento() {
+  if (!isAdminRole()) {
+    notify('Apenas administradores podem reabrir atendimentos finalizados.', 'warning');
+    return;
+  }
+
+  const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+  if (!appointmentId) {
+    notify('Nenhum agendamento finalizado selecionado para reabrir.', 'warning');
+    return;
+  }
+
+  const entry = findHistoricoEntryByAppointmentId(appointmentId);
+  if (!entry) {
+    if (state.historicosLoading) {
+      notify('Aguarde o carregamento do histórico para reabrir o atendimento.', 'info');
+    } else {
+      notify('Não foi possível localizar o histórico deste atendimento.', 'warning');
+    }
+    return;
+  }
+
+  await reopenHistoricoEntry(entry);
 }
 
 setHistoricoReopenHandler((entry, closeModal) => {
