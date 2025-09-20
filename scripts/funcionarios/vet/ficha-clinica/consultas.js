@@ -25,6 +25,7 @@ import {
   getSelectedPet,
   formatFileSize,
   isFinalizadoSelection,
+  isConsultaLockedForCurrentUser,
 } from './core.js';
 import { openDocumentPrintWindow } from '../document-utils.js';
 import { openObservacaoModal } from './observacoes.js';
@@ -154,9 +155,15 @@ function setConsultaModalSubmitting(isSubmitting) {
 export function ensureTutorAndPetSelected() {
   const tutorId = normalizeId(state.selectedCliente?._id);
   const petId = normalizeId(state.selectedPetId);
-  if (tutorId && petId) return true;
-  notify('Selecione um tutor e um pet para registrar a consulta.', 'warning');
-  return false;
+  if (!(tutorId && petId)) {
+    notify('Selecione um tutor e um pet para registrar a consulta.', 'warning');
+    return false;
+  }
+  if (isConsultaLockedForCurrentUser()) {
+    notify('Apenas o veterinário responsável pode realizar esta ação.', 'warning');
+    return false;
+  }
+  return true;
 }
 
 function ensureAgendaServiceAvailable() {
@@ -2277,7 +2284,7 @@ export function closeConsultaModal() {
 }
 
 export function openConsultaModal(consultaId = null) {
-  if (!consultaId && !ensureTutorAndPetSelected()) {
+  if (!ensureTutorAndPetSelected()) {
     return;
   }
 
@@ -2489,6 +2496,32 @@ export function updateMainTabLayout() {
   }
 }
 
+function setConsultaActionsAvailability(enabled) {
+  const buttons = [
+    els.addConsultaBtn,
+    els.addVacinaBtn,
+    els.addAnexoBtn,
+    els.addDocumentoBtn,
+    els.addReceitaBtn,
+    els.addExameBtn,
+    els.addPesoBtn,
+    els.addObservacaoBtn,
+    els.finalizarAtendimentoBtn,
+    els.limparConsultaBtn,
+  ];
+
+  buttons.forEach((btn) => {
+    if (!btn) return;
+    if (enabled) {
+      btn.removeAttribute('disabled');
+      btn.classList.remove('opacity-50', 'cursor-not-allowed');
+    } else {
+      btn.setAttribute('disabled', 'disabled');
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+    }
+  });
+}
+
 export function updateConsultaAgendaCard() {
   const area = els.consultaArea;
   if (!area) return;
@@ -2537,6 +2570,19 @@ export function updateConsultaAgendaCard() {
   let hasAgendaContent = false;
 
   const contextMatches = !!(context && selectedPetId && selectedTutorId && contextPetId && contextTutorId && contextPetId === selectedPetId && contextTutorId === selectedTutorId);
+
+  const consultaLocked = contextMatches && !agendaFinalizado && isConsultaLockedForCurrentUser(context);
+  const canMutate = contextMatches && !agendaFinalizado && !consultaLocked;
+  setConsultaActionsAvailability(canMutate);
+
+  if (consultaLocked) {
+    setAreaClassNames(CONSULTA_PLACEHOLDER_CLASSNAMES);
+    area.innerHTML = '';
+    const paragraph = document.createElement('p');
+    paragraph.textContent = CONSULTA_FINALIZADA_PLACEHOLDER_TEXT;
+    area.appendChild(paragraph);
+    return;
+  }
 
   if (contextMatches && !agendaFinalizado) {
     const allServices = Array.isArray(context.servicos) ? context.servicos : [];

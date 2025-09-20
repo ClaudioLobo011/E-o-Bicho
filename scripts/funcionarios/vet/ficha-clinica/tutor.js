@@ -386,6 +386,7 @@ export function clearCliente() {
   state.receitasLoading = false;
   state.historicos = [];
   state.historicosLoadKey = null;
+  state.historicosLoading = false;
   persistAgendaContext(null);
   if (els.cliInput) els.cliInput.value = '';
   hideSugestoes();
@@ -426,6 +427,7 @@ export function clearPet() {
   state.receitasLoading = false;
   state.historicos = [];
   state.historicosLoadKey = null;
+  state.historicosLoading = false;
   setActiveMainTab('consulta');
   loadHistoricoForSelection();
   updateCardDisplay();

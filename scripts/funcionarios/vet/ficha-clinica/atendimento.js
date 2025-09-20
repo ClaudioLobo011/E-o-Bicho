@@ -10,6 +10,7 @@ import {
   ANEXO_STORAGE_PREFIX,
   EXAME_STORAGE_PREFIX,
   OBSERVACAO_STORAGE_PREFIX,
+  isConsultaLockedForCurrentUser,
 } from './core.js';
 import { getConsultasKey, updateConsultaAgendaCard, updateMainTabLayout } from './consultas.js';
 import {
@@ -19,6 +20,7 @@ import {
   getHistoricoEntryById,
   setHistoricoReopenHandler,
   setActiveMainTab,
+  persistHistoricoEntry,
 } from './historico.js';
 
 function deepClone(value) {
@@ -132,6 +134,11 @@ export async function finalizarAtendimento() {
     return;
   }
 
+  if (isConsultaLockedForCurrentUser()) {
+    notify('Apenas o veterinário responsável pode finalizar este atendimento.', 'warning');
+    return;
+  }
+
   const entry = buildHistoricoEntryFromState();
   if (!entry) {
     notify('Não foi possível coletar os dados do atendimento atual.', 'error');
@@ -178,7 +185,16 @@ export async function finalizarAtendimento() {
     }
     persistAgendaContext(state.agendaContext);
 
-    addHistoricoEntry(entry);
+    let savedEntry = null;
+    try {
+      savedEntry = await persistHistoricoEntry(entry);
+    } catch (persistError) {
+      console.error('persistHistoricoEntry', persistError);
+      notify(persistError.message || 'Não foi possível sincronizar o histórico do atendimento.', 'warning');
+      savedEntry = entry;
+    }
+
+    addHistoricoEntry(savedEntry);
 
     clearLocalStoredDataForSelection(clienteId, petId);
     resetConsultaState();

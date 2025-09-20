@@ -67,6 +67,15 @@ export function getCurrentUserRole() {
   }
 }
 
+export function getCurrentUserId() {
+  try {
+    const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+    return normalizeId(cached?.id || cached?._id || cached?.userId || cached?.usuarioId);
+  } catch {
+    return '';
+  }
+}
+
 export function isAdminRole(role = getCurrentUserRole()) {
   const normalized = String(role || '').toLowerCase();
   return normalized === 'admin' || normalized === 'admin_master';
@@ -151,6 +160,7 @@ export const state = {
   receitasLoadKey: null,
   historicos: [],
   historicosLoadKey: null,
+  historicosLoading: false,
   activeMainTab: 'consulta',
 };
 
@@ -404,6 +414,19 @@ export function isFinalizadoSelection(clienteId, petId, context = state.agendaCo
   const targetPetId = normalizeId(petId);
   if (!(tutorId && petContextId && targetTutorId && targetPetId)) return false;
   return tutorId === targetTutorId && petContextId === targetPetId;
+}
+
+export function isConsultaLockedForCurrentUser(context = state.agendaContext) {
+  if (!context || typeof context !== 'object') return false;
+  const assignedId = normalizeId(
+    context.profissionalId ||
+      (context.profissional && (context.profissional._id || context.profissional.id)) ||
+      context.profissionalIdCandidate,
+  );
+  if (!assignedId) return false;
+  const currentUserId = getCurrentUserId();
+  if (!currentUserId) return false;
+  return assignedId !== currentUserId;
 }
 
 export function capitalize(value) {
