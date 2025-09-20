@@ -30,6 +30,7 @@ import { openAnexoModal } from './anexos.js';
 import { openExameModal } from './exames.js';
 import { openPesoModal } from './pesos.js';
 import { openDocumentoModal } from './documentos.js';
+import { openVacinaModal } from './vacinas.js';
 
 function normalizeConsultaRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -1115,6 +1116,39 @@ function createVacinaCard(vacina) {
   grid.appendChild(createVacinaDetail('Data de aplicação', aplicacao || '—'));
   const renovacao = vacina.renovacao ? formatDateDisplay(vacina.renovacao) : '';
   grid.appendChild(createVacinaDetail('Data de renovação', renovacao || '—'));
+
+  const openModal = () => {
+    openVacinaModal({ vacina });
+  };
+
+  card.classList.add(
+    'cursor-pointer',
+    'transition',
+    'hover:border-emerald-300',
+    'hover:shadow-md',
+    'focus-visible:outline-none',
+    'focus-visible:ring-2',
+    'focus-visible:ring-emerald-300',
+  );
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('aria-label', 'Editar aplicação de vacina');
+
+  card.addEventListener('click', (event) => {
+    if (event.defaultPrevented) return;
+    const interactive = event.target.closest('a, button');
+    if (interactive) return;
+    event.preventDefault();
+    openModal();
+  });
+
+  card.addEventListener('keydown', (event) => {
+    if (event.target !== card) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openModal();
+    }
+  });
 
   return card;
 }

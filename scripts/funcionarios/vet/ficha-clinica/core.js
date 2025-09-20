@@ -165,6 +165,11 @@ export const vacinaModal = {
   isSubmitting: false,
   keydownHandler: null,
   searchAbortController: null,
+  mode: 'create',
+  editingId: null,
+  editingRecord: null,
+  submitBtnOriginalText: '',
+  submitBtnEditText: '',
 };
 
 export const exameModal = {
