@@ -462,13 +462,32 @@ function refreshAnexoModalControls() {
     anexoModal.addBtn.classList.toggle('opacity-50', anexoModal.addBtn.disabled);
     anexoModal.addBtn.classList.toggle('cursor-not-allowed', anexoModal.addBtn.disabled);
   }
-  const hasSelected = Array.isArray(anexoModal.selectedFiles) && anexoModal.selectedFiles.length > 0;
-  const submitDisabled = anexoModal.isSubmitting || !hasSelected;
+  const selectedFiles = Array.isArray(anexoModal.selectedFiles) ? anexoModal.selectedFiles : [];
+  const existingFiles = Array.isArray(anexoModal.existingFiles) ? anexoModal.existingFiles : [];
+  const removedCount = existingFiles.filter((file) => file && file.markedForRemoval).length;
+  const keptCount = existingFiles.filter((file) => file && !file.markedForRemoval).length;
+  const hasNewFiles = selectedFiles.length > 0;
+  const isEditing = anexoModal.mode === 'edit' && !!anexoModal.editingId;
+  let canSubmit = false;
+  if (isEditing) {
+    const hasChanges = hasNewFiles || removedCount > 0;
+    const resultingCount = keptCount + selectedFiles.length;
+    canSubmit = hasChanges && resultingCount > 0;
+  } else {
+    canSubmit = hasNewFiles;
+  }
+  const submitDisabled = anexoModal.isSubmitting || !canSubmit;
   if (anexoModal.submitBtn) {
     anexoModal.submitBtn.disabled = submitDisabled;
     anexoModal.submitBtn.classList.toggle('opacity-60', anexoModal.isSubmitting);
     anexoModal.submitBtn.classList.toggle('cursor-not-allowed', submitDisabled);
-    anexoModal.submitBtn.textContent = anexoModal.isSubmitting ? 'Salvando...' : 'Salvar';
+    let submitText = 'Salvar';
+    if (anexoModal.isSubmitting) {
+      submitText = 'Salvando...';
+    } else if (isEditing) {
+      submitText = 'Salvar alterações';
+    }
+    anexoModal.submitBtn.textContent = submitText;
   }
   if (anexoModal.cancelBtn) {
     anexoModal.cancelBtn.disabled = anexoModal.isSubmitting;
@@ -506,62 +525,185 @@ function updateAnexoFilesGrid() {
   const empty = anexoModal.emptyState;
   if (!list) return;
   list.innerHTML = '';
-  const files = Array.isArray(anexoModal.selectedFiles) ? anexoModal.selectedFiles : [];
-  if (!files.length) {
+
+  const existingFiles = Array.isArray(anexoModal.existingFiles) ? anexoModal.existingFiles : [];
+  const newFiles = Array.isArray(anexoModal.selectedFiles) ? anexoModal.selectedFiles : [];
+  const hasExisting = existingFiles.length > 0;
+  const hasNew = newFiles.length > 0;
+
+  if (!hasExisting && !hasNew) {
     if (empty) empty.classList.remove('hidden');
     refreshAnexoModalControls();
     return;
   }
+
   if (empty) empty.classList.add('hidden');
 
-  files.forEach((entry) => {
-    const row = document.createElement('div');
-    row.className = 'flex flex-col gap-2 rounded-lg border border-indigo-100 bg-white px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between';
-    list.appendChild(row);
+  if (hasExisting) {
+    const existingHeader = document.createElement('p');
+    existingHeader.className = 'text-xs font-semibold uppercase tracking-wide text-indigo-500';
+    existingHeader.textContent = 'Arquivos atuais';
+    list.appendChild(existingHeader);
 
-    const info = document.createElement('div');
-    info.className = 'flex items-start gap-3 text-sm text-indigo-700';
-    row.appendChild(info);
+    existingFiles.forEach((entry) => {
+      const row = document.createElement('div');
+      row.className = 'flex flex-col gap-2 rounded-lg border border-indigo-100 bg-white px-3 py-3 shadow-sm transition sm:flex-row sm:items-center sm:justify-between';
+      if (entry.markedForRemoval) {
+        row.classList.add('border-rose-200', 'bg-rose-50/80');
+      }
+      list.appendChild(row);
 
-    const icon = document.createElement('div');
-    icon.className = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-600';
-    icon.innerHTML = '<i class="fas fa-file"></i>';
-    info.appendChild(icon);
+      const info = document.createElement('div');
+      info.className = 'flex items-start gap-3 text-sm text-indigo-700';
+      row.appendChild(info);
 
-    const textWrap = document.createElement('div');
-    textWrap.className = 'min-w-0';
-    info.appendChild(textWrap);
+      const icon = document.createElement('div');
+      icon.className = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-600';
+      icon.innerHTML = '<i class="fas fa-file"></i>';
+      info.appendChild(icon);
 
-    const nameEl = document.createElement('p');
-    nameEl.className = 'font-semibold leading-tight text-indigo-700 break-words';
-    nameEl.textContent = entry.name;
-    textWrap.appendChild(nameEl);
+      const textWrap = document.createElement('div');
+      textWrap.className = 'min-w-0';
+      info.appendChild(textWrap);
 
-    const meta = document.createElement('p');
-    meta.className = 'text-xs text-indigo-500';
-    const parts = [];
-    if (entry.originalName && entry.originalName !== entry.name) parts.push(entry.originalName);
-    if (entry.extension) parts.push(entry.extension.replace('.', '').toUpperCase());
-    if (entry.size) parts.push(formatFileSize(entry.size));
-    meta.textContent = parts.length ? parts.join(' · ') : '—';
-    textWrap.appendChild(meta);
+      const displayName = entry.name || entry.displayName || entry.nome || entry.originalName || 'Arquivo';
+      const nameEl = document.createElement('p');
+      nameEl.className = 'font-semibold leading-tight text-indigo-700 break-words';
+      nameEl.textContent = displayName;
+      if (entry.markedForRemoval) {
+        nameEl.classList.add('line-through');
+      }
+      textWrap.appendChild(nameEl);
 
-    const actions = document.createElement('div');
-    actions.className = 'flex items-center gap-2';
-    row.appendChild(actions);
+      const meta = document.createElement('p');
+      meta.className = 'text-xs text-indigo-500';
+      const metaParts = [];
+      if (entry.originalName && entry.originalName !== displayName) metaParts.push(entry.originalName);
+      if (entry.extension) metaParts.push(entry.extension.replace('.', '').toUpperCase());
+      if (entry.size) metaParts.push(formatFileSize(entry.size));
+      meta.textContent = metaParts.length ? metaParts.join(' · ') : '—';
+      textWrap.appendChild(meta);
 
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'inline-flex items-center gap-1 rounded-md border border-transparent px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50';
-    removeBtn.innerHTML = '<i class="fas fa-trash-can"></i><span>Remover</span>';
-    removeBtn.addEventListener('click', (event) => {
-      event.preventDefault();
-      anexoModal.selectedFiles = anexoModal.selectedFiles.filter((file) => file.id !== entry.id);
-      updateAnexoFilesGrid();
-      refreshAnexoModalControls();
+      if (entry.markedForRemoval) {
+        const removalBadge = document.createElement('span');
+        removalBadge.className = 'mt-1 inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-600';
+        removalBadge.innerHTML = '<i class="fas fa-circle-minus text-[10px]"></i><span>Marcado para remoção</span>';
+        textWrap.appendChild(removalBadge);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'flex flex-wrap items-center gap-2';
+      row.appendChild(actions);
+
+      if (entry.url) {
+        const link = document.createElement('a');
+        link.href = entry.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'inline-flex items-center gap-2 rounded-md border border-indigo-300 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-600 hover:text-white';
+        link.innerHTML = '<i class="fas fa-arrow-up-right-from-square text-[10px]"></i><span>Abrir</span>';
+        if (entry.originalName) {
+          link.download = entry.originalName;
+        }
+        actions.appendChild(link);
+      } else {
+        const pending = document.createElement('span');
+        pending.className = 'text-xs text-indigo-500';
+        pending.textContent = 'Link disponível após sincronização.';
+        actions.appendChild(pending);
+      }
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      if (entry.markedForRemoval) {
+        toggleBtn.className = 'inline-flex items-center gap-1 rounded-md border border-transparent px-3 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-50';
+        toggleBtn.innerHTML = '<i class="fas fa-rotate-left"></i><span>Restaurar</span>';
+      } else {
+        toggleBtn.className = 'inline-flex items-center gap-1 rounded-md border border-transparent px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50';
+        toggleBtn.innerHTML = '<i class="fas fa-trash-can"></i><span>Remover</span>';
+      }
+      toggleBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        entry.markedForRemoval = !entry.markedForRemoval;
+        const entryId = normalizeId(entry.id || entry._id);
+        if (entry.markedForRemoval) {
+          if (!Array.isArray(anexoModal.removedFileIds)) {
+            anexoModal.removedFileIds = [];
+          }
+          if (entryId && !anexoModal.removedFileIds.includes(entryId)) {
+            anexoModal.removedFileIds.push(entryId);
+          }
+        } else if (entryId && Array.isArray(anexoModal.removedFileIds)) {
+          anexoModal.removedFileIds = anexoModal.removedFileIds.filter((value) => value !== entryId);
+        }
+        updateAnexoFilesGrid();
+        refreshAnexoModalControls();
+      });
+      actions.appendChild(toggleBtn);
     });
-    actions.appendChild(removeBtn);
-  });
+  }
+
+  if (hasNew) {
+    if (hasExisting) {
+      const divider = document.createElement('div');
+      divider.className = 'h-px bg-indigo-100';
+      list.appendChild(divider);
+    }
+
+    const newHeader = document.createElement('p');
+    newHeader.className = 'text-xs font-semibold uppercase tracking-wide text-indigo-500';
+    newHeader.textContent = 'Novos arquivos';
+    list.appendChild(newHeader);
+
+    newFiles.forEach((entry) => {
+      const row = document.createElement('div');
+      row.className = 'flex flex-col gap-2 rounded-lg border border-indigo-100 bg-white px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between';
+      list.appendChild(row);
+
+      const info = document.createElement('div');
+      info.className = 'flex items-start gap-3 text-sm text-indigo-700';
+      row.appendChild(info);
+
+      const icon = document.createElement('div');
+      icon.className = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-600';
+      icon.innerHTML = '<i class="fas fa-file"></i>';
+      info.appendChild(icon);
+
+      const textWrap = document.createElement('div');
+      textWrap.className = 'min-w-0';
+      info.appendChild(textWrap);
+
+      const nameEl = document.createElement('p');
+      nameEl.className = 'font-semibold leading-tight text-indigo-700 break-words';
+      nameEl.textContent = entry.name;
+      textWrap.appendChild(nameEl);
+
+      const meta = document.createElement('p');
+      meta.className = 'text-xs text-indigo-500';
+      const parts = [];
+      if (entry.originalName && entry.originalName !== entry.name) parts.push(entry.originalName);
+      if (entry.extension) parts.push(entry.extension.replace('.', '').toUpperCase());
+      if (entry.size) parts.push(formatFileSize(entry.size));
+      meta.textContent = parts.length ? parts.join(' · ') : '—';
+      textWrap.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'flex items-center gap-2';
+      row.appendChild(actions);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'inline-flex items-center gap-1 rounded-md border border-transparent px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50';
+      removeBtn.innerHTML = '<i class="fas fa-trash-can"></i><span>Remover</span>';
+      removeBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        anexoModal.selectedFiles = anexoModal.selectedFiles.filter((file) => file.id !== entry.id);
+        updateAnexoFilesGrid();
+        refreshAnexoModalControls();
+      });
+      actions.appendChild(removeBtn);
+    });
+  }
 
   refreshAnexoModalControls();
 }
@@ -755,6 +897,12 @@ export function ensureAnexoModal() {
   anexoModal.contextInfo = contextInfo;
   anexoModal.selectedFiles = [];
   anexoModal.pendingFile = null;
+  anexoModal.mode = 'create';
+  anexoModal.editingId = null;
+  anexoModal.editingRecord = null;
+  anexoModal.existingFiles = [];
+  anexoModal.removedFileIds = [];
+  anexoModal.currentObservacao = '';
 
   return anexoModal;
 }
@@ -766,6 +914,12 @@ export function closeAnexoModal() {
   if (anexoModal.form) anexoModal.form.reset();
   anexoModal.selectedFiles = [];
   anexoModal.pendingFile = null;
+  anexoModal.mode = 'create';
+  anexoModal.editingId = null;
+  anexoModal.editingRecord = null;
+  anexoModal.existingFiles = [];
+  anexoModal.removedFileIds = [];
+  anexoModal.currentObservacao = '';
   setAnexoPendingFile(null);
   updateAnexoFilesGrid();
   setAnexoModalSubmitting(false);
@@ -775,15 +929,60 @@ export function closeAnexoModal() {
   }
 }
 
-export function openAnexoModal() {
+export function openAnexoModal(options = {}) {
   if (!ensureTutorAndPetSelected()) {
     return;
   }
 
+  const { anexo = null } = options || {};
   const modal = ensureAnexoModal();
   setAnexoModalSubmitting(false);
+  if (modal.form) {
+    modal.form.reset();
+  }
   modal.selectedFiles = [];
   modal.pendingFile = null;
+  modal.existingFiles = [];
+  modal.removedFileIds = [];
+  modal.mode = 'create';
+  modal.editingId = null;
+  modal.editingRecord = null;
+  modal.currentObservacao = '';
+
+  if (anexo) {
+    modal.mode = 'edit';
+    const normalized = normalizeAnexoRecord(anexo);
+    modal.editingRecord = normalized;
+    const editingId = normalizeId(normalized?.id || normalized?._id);
+    if (editingId) {
+      modal.editingId = editingId;
+    }
+    modal.currentObservacao = normalized?.observacao || '';
+    if (modal.titleEl) {
+      modal.titleEl.textContent = 'Editar anexos';
+    }
+    const arquivos = Array.isArray(normalized?.arquivos) ? normalized.arquivos : [];
+    modal.existingFiles = arquivos
+      .map((file) => {
+        const record = normalizeAnexoFileRecord(file);
+        if (!record) return null;
+        const id = normalizeId(record.id || record._id);
+        const displayName = record.nome || record.name || record.originalName || 'Arquivo';
+        return {
+          ...record,
+          id,
+          _id: id || record._id,
+          name: displayName,
+          displayName,
+          markedForRemoval: false,
+        };
+      })
+      .filter(Boolean);
+  } else if (modal.titleEl) {
+    modal.titleEl.textContent = 'Novo anexo';
+  }
+
+  setAnexoPendingFile(null);
   updateAnexoDropzoneText();
   updateAnexoFilesGrid();
 
@@ -891,8 +1090,35 @@ async function handleAnexoSubmit() {
   }
 
   const files = Array.isArray(anexoModal.selectedFiles) ? anexoModal.selectedFiles : [];
-  if (!files.length) {
+  const existingFiles = Array.isArray(anexoModal.existingFiles) ? anexoModal.existingFiles : [];
+  const removedIds = existingFiles
+    .filter((file) => file && file.markedForRemoval)
+    .map((file) => normalizeId(file.id || file._id))
+    .filter(Boolean);
+  const keptCount = existingFiles.filter((file) => file && !file.markedForRemoval).length;
+
+  const hasNewFiles = files.length > 0;
+  const hasRemovals = removedIds.length > 0;
+  const isEditing = anexoModal.mode === 'edit' && !!anexoModal.editingId;
+  const editingId = isEditing ? normalizeId(anexoModal.editingId) : null;
+
+  if (!isEditing && !hasNewFiles) {
     notify('Adicione ao menos um arquivo antes de salvar.', 'warning');
+    return;
+  }
+
+  if (isEditing && !editingId) {
+    notify('Não foi possível editar este anexo agora. Recarregue a página e tente novamente.', 'error');
+    return;
+  }
+
+  if (isEditing && !hasNewFiles && !hasRemovals) {
+    notify('Nenhuma alteração para salvar.', 'info');
+    return;
+  }
+
+  if (isEditing && keptCount + files.length === 0) {
+    notify('Mantenha ao menos um arquivo ou remova o anexo.', 'warning');
     return;
   }
 
@@ -901,6 +1127,9 @@ async function handleAnexoSubmit() {
   formData.append('petId', petId);
   const appointmentId = normalizeId(state.agendaContext?.appointmentId);
   if (appointmentId) formData.append('appointmentId', appointmentId);
+  removedIds.forEach((id) => {
+    formData.append('removeFileIds[]', id);
+  });
 
   const fallbackFiles = [];
   files.forEach((entry) => {
@@ -951,8 +1180,12 @@ async function handleAnexoSubmit() {
 
   try {
     const token = getAuthToken();
-    const response = await fetch(`${API_CONFIG.BASE_URL}/func/vet/anexos`, {
-      method: 'POST',
+    const url = isEditing
+      ? `${API_CONFIG.BASE_URL}/func/vet/anexos/${encodeURIComponent(editingId)}`
+      : `${API_CONFIG.BASE_URL}/func/vet/anexos`;
+    const method = isEditing ? 'PUT' : 'POST';
+    const response = await fetch(url, {
+      method,
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
@@ -983,11 +1216,12 @@ async function handleAnexoSubmit() {
     persistAnexosForSelection();
     updateConsultaAgendaCard();
     closeAnexoModal();
-    notify('Anexos salvos com sucesso.', 'success');
+    notify(isEditing ? 'Anexos atualizados com sucesso.' : 'Anexos salvos com sucesso.', 'success');
     await loadAnexosFromServer({ force: true });
   } catch (error) {
     console.error('handleAnexoSubmit', error);
-    notify(error.message || 'Erro ao salvar anexos.', 'error');
+    const defaultMessage = isEditing ? 'Erro ao atualizar anexos.' : 'Erro ao salvar anexos.';
+    notify(error.message || defaultMessage, 'error');
   } finally {
     setAnexoModalSubmitting(false);
   }

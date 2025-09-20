@@ -26,6 +26,7 @@ import {
 } from './core.js';
 import { openDocumentPrintWindow } from '../document-utils.js';
 import { openObservacaoModal } from './observacoes.js';
+import { openAnexoModal } from './anexos.js';
 
 function normalizeConsultaRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -604,6 +605,31 @@ function createAnexoCard(anexo) {
     }
     if (hasAction) {
       item.appendChild(actions);
+    }
+  });
+
+  const openModal = () => {
+    openAnexoModal({ anexo });
+  };
+
+  card.classList.add('cursor-pointer', 'transition', 'hover:border-indigo-300', 'hover:shadow-md');
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('aria-label', 'Editar anexos');
+
+  card.addEventListener('click', (event) => {
+    if (event.defaultPrevented) return;
+    const interactive = event.target.closest('a, button');
+    if (interactive) return;
+    event.preventDefault();
+    openModal();
+  });
+
+  card.addEventListener('keydown', (event) => {
+    if (event.target !== card) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openModal();
     }
   });
 
