@@ -318,6 +318,42 @@ function parseDateValue(value) {
   return null;
 }
 
+function hasMeaningfulSignedFile(rawSignedFile) {
+  if (!rawSignedFile || typeof rawSignedFile !== 'object') return false;
+
+  const sizeValue = Number(rawSignedFile.size || 0);
+  if (!Number.isNaN(sizeValue) && sizeValue > 0) {
+    return true;
+  }
+
+  const stringKeys = [
+    'url',
+    'driveViewLink',
+    'driveContentLink',
+    'driveFileId',
+    'nome',
+    'originalName',
+    'mimeType',
+    'extension',
+  ];
+
+  if (stringKeys.some((key) => {
+    const value = rawSignedFile[key];
+    return typeof value === 'string' && value.trim();
+  })) {
+    return true;
+  }
+
+  const uploadedAt = parseDateValue(
+    rawSignedFile.uploadedAt
+    || rawSignedFile.createdAt
+    || rawSignedFile.criadoEm
+    || rawSignedFile.dataCriacao,
+  );
+
+  return !!uploadedAt;
+}
+
 function formatTimeDisplay(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
   try {
@@ -1086,7 +1122,7 @@ function normalizeReceitaRegistroRecord(raw) {
     ? raw.signedFile
     : null;
   let signedFile = null;
-  if (rawSignedFile) {
+  if (rawSignedFile && hasMeaningfulSignedFile(rawSignedFile)) {
     const fileUrl = pickFirst(
       rawSignedFile.url,
       rawSignedFile.driveViewLink,
