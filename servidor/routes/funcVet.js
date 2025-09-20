@@ -1418,7 +1418,13 @@ router.post(
         ) || sanitizeFolderSegment(petFallbackSegment) || petFallbackSegment;
 
       const typeFolderName = sanitizeFolderSegment('Documentos') || 'Documentos';
-      const folderPath = [tutorFolderName, petFolderName, appointmentFolderName, typeFolderName];
+      const folderPath = [
+        sanitizeFolderSegment('Ficha Clinica') || 'Ficha Clinica',
+        tutorFolderName,
+        petFolderName,
+        appointmentFolderName,
+        typeFolderName,
+      ];
 
       const providedName = typeof req.body.nome === 'string' ? req.body.nome : '';
       const sanitizedProvided = sanitizeFileName(providedName);
@@ -1814,7 +1820,13 @@ router.post(
         ) || sanitizeFolderSegment(petFallbackSegment) || petFallbackSegment;
 
       const typeFolderName = sanitizeFolderSegment('Receitas') || 'Receitas';
-      const folderPath = [tutorFolderName, petFolderName, appointmentFolderName, typeFolderName];
+      const folderPath = [
+        sanitizeFolderSegment('Ficha Clinica') || 'Ficha Clinica',
+        tutorFolderName,
+        petFolderName,
+        appointmentFolderName,
+        typeFolderName,
+      ];
 
       const providedName = typeof req.body.nome === 'string' ? req.body.nome : '';
       const sanitizedProvided = sanitizeFileName(providedName);
@@ -2403,7 +2415,13 @@ router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, asyn
 
     const typeFolderName = sanitizeFolderSegment(isExameAttachment ? 'Exame' : 'Anexo')
       || (isExameAttachment ? 'Exame' : 'Anexo');
-    const folderPath = [tutorFolderName, petFolderName, appointmentFolderName, typeFolderName];
+    const folderPath = [
+      sanitizeFolderSegment('Ficha Clinica') || 'Ficha Clinica',
+      tutorFolderName,
+      petFolderName,
+      appointmentFolderName,
+      typeFolderName,
+    ];
 
     const rawNames = req.body['nomes[]'];
     const providedNames = Array.isArray(rawNames)
@@ -2633,7 +2651,13 @@ router.put('/vet/anexos/:id', authMiddleware, requireStaff, handleAnexoUpload, a
     const isExameAttachment = observacaoRaw.startsWith(EXAME_ATTACHMENT_OBSERVACAO_PREFIX);
     const typeFolderName = sanitizeFolderSegment(isExameAttachment ? 'Exame' : 'Anexo')
       || (isExameAttachment ? 'Exame' : 'Anexo');
-    const folderPath = [tutorFolderName, petFolderName, appointmentFolderName, typeFolderName];
+    const folderPath = [
+      sanitizeFolderSegment('Ficha Clinica') || 'Ficha Clinica',
+      tutorFolderName,
+      petFolderName,
+      appointmentFolderName,
+      typeFolderName,
+    ];
 
     const rawNames = req.body['nomes[]'];
     const providedNames = Array.isArray(rawNames)
