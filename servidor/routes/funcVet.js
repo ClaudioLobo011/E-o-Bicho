@@ -16,6 +16,7 @@ const VetDocumentRecord = require('../models/VetDocumentRecord');
 const VetRecipe = require('../models/VetRecipe');
 const VetRecipeRecord = require('../models/VetRecipeRecord');
 const PetWeight = require('../models/PetWeight');
+const VetClinicHistory = require('../models/VetClinicHistory');
 const {
   isDriveConfigured,
   getDriveFolderId,
@@ -25,6 +26,7 @@ const {
 
 const router = express.Router();
 const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
+const requireAdmin = authorizeRoles('admin', 'admin_master');
 
 const ALLOWED_ANEXO_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.pdf']);
 const ALLOWED_ANEXO_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'application/pdf']);
@@ -330,6 +332,53 @@ async function ensureAppointmentLink(appointmentId, clienteId, petId, servicoId)
     }
   }
   return { ok: true, appointment };
+}
+
+function safeJsonClone(value) {
+  if (value === null || value === undefined) return null;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (error) {
+    return null;
+  }
+}
+
+function cloneArray(value) {
+  if (!Array.isArray(value)) return [];
+  const result = [];
+  value.forEach((item) => {
+    const cloned = safeJsonClone(item);
+    if (cloned !== null) {
+      result.push(cloned);
+    }
+  });
+  return result;
+}
+
+function formatHistoryEntry(doc) {
+  if (!doc) return null;
+  const raw = doc.toObject ? doc.toObject() : doc;
+  const finalizadoEm = toIsoDate(raw.finalizadoEm) || toIsoDate(raw.createdAt);
+  return {
+    id: toStringSafe(raw._id),
+    _id: toStringSafe(raw._id),
+    clienteId: toStringSafe(raw.cliente),
+    petId: toStringSafe(raw.pet),
+    appointmentId: toStringSafe(raw.appointment),
+    finalizadoEm,
+    agenda: safeJsonClone(raw.agenda) || {},
+    consultas: Array.isArray(raw.consultas) ? raw.consultas : [],
+    vacinas: Array.isArray(raw.vacinas) ? raw.vacinas : [],
+    anexos: Array.isArray(raw.anexos) ? raw.anexos : [],
+    exames: Array.isArray(raw.exames) ? raw.exames : [],
+    pesos: Array.isArray(raw.pesos) ? raw.pesos : [],
+    observacoes: Array.isArray(raw.observacoes) ? raw.observacoes : [],
+    documentos: Array.isArray(raw.documentos) ? raw.documentos : [],
+    receitas: Array.isArray(raw.receitas) ? raw.receitas : [],
+    finalizadoPor: toStringSafe(raw.finalizadoPor) || null,
+    createdAt: toIsoDate(raw.createdAt),
+    updatedAt: toIsoDate(raw.updatedAt),
+  };
 }
 
 function formatConsultation(doc) {
@@ -2217,6 +2266,119 @@ router.delete(RECEITA_REGISTROS_ID_PATHS, authMiddleware, requireStaff, async (r
   } catch (error) {
     console.error('DELETE /func/vet/receitas-registros/:id', error);
     return res.status(500).json({ message: 'Erro ao remover receita do atendimento.' });
+  }
+});
+
+router.get('/vet/historicos', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const clienteId = normalizeObjectId(req.query.clienteId);
+    const petId = normalizeObjectId(req.query.petId);
+
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+    if (!petCheck.ok) {
+      return res.status(petCheck.status).json({ message: petCheck.message });
+    }
+
+    const list = await VetClinicHistory.find({ cliente: clienteId, pet: petId })
+      .sort({ finalizadoEm: -1, createdAt: -1 })
+      .lean();
+
+    const formatted = list.map(formatHistoryEntry).filter(Boolean);
+    return res.json(formatted);
+  } catch (error) {
+    console.error('GET /func/vet/historicos', error);
+    return res.status(500).json({ message: 'Erro ao carregar histórico do atendimento.' });
+  }
+});
+
+router.post('/vet/historicos', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const clienteId = normalizeObjectId(req.body.clienteId || req.body.cliente);
+    const petId = normalizeObjectId(req.body.petId || req.body.pet);
+    const appointmentId = normalizeObjectId(req.body.appointmentId || req.body.appointment);
+
+    if (!(clienteId && petId && appointmentId)) {
+      return res.status(400).json({ message: 'clienteId, petId e appointmentId são obrigatórios.' });
+    }
+
+    const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+    if (!petCheck.ok) {
+      return res.status(petCheck.status).json({ message: petCheck.message });
+    }
+
+    const finalizadoEmInput = req.body.finalizadoEm ? new Date(req.body.finalizadoEm) : new Date();
+    const finalizadoEm = Number.isNaN(finalizadoEmInput.getTime()) ? new Date() : finalizadoEmInput;
+
+    const payload = {
+      cliente: clienteId,
+      pet: petId,
+      appointment: appointmentId,
+      finalizadoEm,
+      agenda: safeJsonClone(req.body.agenda) || {},
+      consultas: cloneArray(req.body.consultas),
+      vacinas: cloneArray(req.body.vacinas),
+      anexos: cloneArray(req.body.anexos),
+      exames: cloneArray(req.body.exames),
+      pesos: cloneArray(req.body.pesos),
+      observacoes: cloneArray(req.body.observacoes),
+      documentos: cloneArray(req.body.documentos),
+      receitas: cloneArray(req.body.receitas),
+    };
+
+    const finalizadoPor = normalizeObjectId(req.user?.id || req.user?._id);
+    if (finalizadoPor) {
+      payload.finalizadoPor = finalizadoPor;
+    }
+
+    let history = await VetClinicHistory.findOne({ appointment: appointmentId });
+    if (history) {
+      history.cliente = clienteId;
+      history.pet = petId;
+      history.finalizadoEm = payload.finalizadoEm;
+      history.agenda = payload.agenda;
+      history.consultas = payload.consultas;
+      history.vacinas = payload.vacinas;
+      history.anexos = payload.anexos;
+      history.exames = payload.exames;
+      history.pesos = payload.pesos;
+      history.observacoes = payload.observacoes;
+      history.documentos = payload.documentos;
+      history.receitas = payload.receitas;
+      if (finalizadoPor) {
+        history.finalizadoPor = finalizadoPor;
+      }
+      await history.save();
+      return res.json(formatHistoryEntry(history));
+    }
+
+    history = await VetClinicHistory.create(payload);
+    return res.status(201).json(formatHistoryEntry(history));
+  } catch (error) {
+    console.error('POST /func/vet/historicos', error);
+    return res.status(500).json({ message: 'Erro ao salvar histórico do atendimento.' });
+  }
+});
+
+router.delete('/vet/historicos/:id', authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const historyId = normalizeObjectId(req.params.id);
+    if (!historyId) {
+      return res.status(400).json({ message: 'ID do histórico inválido.' });
+    }
+
+    const deleted = await VetClinicHistory.findByIdAndDelete(historyId);
+    if (!deleted) {
+      return res.status(404).json({ message: 'Histórico não encontrado.' });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /func/vet/historicos/:id', error);
+    return res.status(500).json({ message: 'Erro ao remover histórico do atendimento.' });
   }
 });
 

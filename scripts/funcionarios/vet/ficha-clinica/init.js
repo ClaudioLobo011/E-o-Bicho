@@ -21,6 +21,7 @@ import {
   initAtendimentoActions,
   activateHistoricoTab,
   activateConsultaTab,
+  reopenCurrentAgendamento,
 } from './atendimento.js';
 
 export function initFichaClinica() {
@@ -77,6 +78,22 @@ export function initFichaClinica() {
     els.addConsultaBtn.addEventListener('click', (event) => {
       event.preventDefault();
       openConsultaModal();
+    });
+  }
+
+  if (els.reopenAgendamentoBtn) {
+    els.reopenAgendamentoBtn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      if (els.reopenAgendamentoBtn.classList.contains('hidden')) return;
+      if (els.reopenAgendamentoBtn.dataset.processing === 'true') return;
+      els.reopenAgendamentoBtn.dataset.processing = 'true';
+      els.reopenAgendamentoBtn.classList.add('opacity-60', 'cursor-not-allowed');
+      try {
+        await reopenCurrentAgendamento();
+      } finally {
+        delete els.reopenAgendamentoBtn.dataset.processing;
+        els.reopenAgendamentoBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+      }
     });
   }
 

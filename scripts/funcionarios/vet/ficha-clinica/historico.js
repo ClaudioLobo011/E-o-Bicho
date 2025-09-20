@@ -12,8 +12,10 @@ import {
   CONSULTA_PLACEHOLDER_CLASSNAMES,
   CONSULTA_CARD_CLASSNAMES,
   isAdminRole,
+  api,
+  notify,
 } from './core.js';
-import { updateMainTabLayout } from './consultas.js';
+import { updateMainTabLayout, updateConsultaAgendaCard } from './consultas.js';
 
 const historicoHandlers = {
   onReopen: null,
@@ -63,6 +65,19 @@ function normalizeHistoricoEntry(raw) {
   const observacoes = Array.isArray(raw.observacoes) ? safeClone(raw.observacoes) || [] : [];
   const documentos = Array.isArray(raw.documentos) ? safeClone(raw.documentos) || [] : [];
   const receitas = Array.isArray(raw.receitas) ? safeClone(raw.receitas) || [] : [];
+  const finalizadoPor = normalizeId(raw.finalizadoPor || raw.finalizadoPorId || raw.finalizadoPorUserId);
+  const createdAt = (() => {
+    const value = raw.createdAt;
+    if (!value) return finalizadoEm;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? finalizadoEm : date.toISOString();
+  })();
+  const updatedAt = (() => {
+    const value = raw.updatedAt;
+    if (!value) return createdAt;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? createdAt : date.toISOString();
+  })();
 
   return {
     id,
@@ -70,6 +85,9 @@ function normalizeHistoricoEntry(raw) {
     petId,
     appointmentId,
     finalizadoEm,
+    finalizadoPor,
+    createdAt,
+    updatedAt,
     agenda,
     consultas,
     vacinas,
@@ -93,66 +111,110 @@ function sortHistoricoEntries(entries) {
   return sorted;
 }
 
-function persistHistoricoForSelection() {
-  const key = getHistoricoStorageKey(state.selectedCliente?._id, state.selectedPetId);
+export async function loadHistoricoForSelection() {
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  const key = getHistoricoStorageKey(clienteId, petId);
+  const previousKey = state.historicosLoadKey;
   state.historicosLoadKey = key;
-  if (!key) return;
-  try {
-    if (Array.isArray(state.historicos) && state.historicos.length) {
-      localStorage.setItem(key, JSON.stringify(state.historicos));
-    } else {
-      localStorage.removeItem(key);
-    }
-  } catch {
-    // ignore persistence errors
-  }
-}
 
-export function loadHistoricoForSelection() {
-  const key = getHistoricoStorageKey(state.selectedCliente?._id, state.selectedPetId);
-  state.historicosLoadKey = key;
-  if (!key) {
+  if (!(clienteId && petId && key)) {
     state.historicos = [];
+    state.historicosLoading = false;
     renderHistoricoArea();
     return;
   }
 
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) {
-      state.historicos = [];
-      renderHistoricoArea();
-      return;
-    }
-    const parsed = JSON.parse(raw);
-    const normalized = Array.isArray(parsed)
-      ? parsed.map(normalizeHistoricoEntry).filter(Boolean)
-      : [];
-    state.historicos = sortHistoricoEntries(normalized);
-  } catch {
+  if (previousKey && previousKey !== key) {
     state.historicos = [];
   }
+
+  state.historicosLoading = true;
   renderHistoricoArea();
+
+  try {
+    const params = new URLSearchParams({ clienteId, petId });
+    const response = await api(`/func/vet/historicos?${params.toString()}`);
+    const payload = await response.json().catch(() => (response.ok ? [] : {}));
+    if (!response.ok) {
+      const message = typeof payload?.message === 'string' ? payload.message : 'Erro ao carregar histórico.';
+      throw new Error(message);
+    }
+    const normalized = Array.isArray(payload)
+      ? payload.map(normalizeHistoricoEntry).filter(Boolean)
+      : [];
+    state.historicos = sortHistoricoEntries(normalized);
+  } catch (error) {
+    console.error('loadHistoricoForSelection', error);
+    state.historicos = [];
+    notify(error.message || 'Erro ao carregar histórico.', 'error');
+  } finally {
+    state.historicosLoading = false;
+    renderHistoricoArea();
+    updateConsultaAgendaCard();
+  }
 }
 
 export function addHistoricoEntry(entry) {
   const normalized = normalizeHistoricoEntry(entry);
   if (!normalized) return;
   const existing = Array.isArray(state.historicos) ? [...state.historicos] : [];
-  const filtered = existing.filter((item) => normalizeId(item?.id) !== normalized.id);
+  const filtered = existing.filter((item) => normalizeId(item?.id || item?._id) !== normalized.id);
   state.historicos = sortHistoricoEntries([normalized, ...filtered]);
-  persistHistoricoForSelection();
+  state.historicosLoading = false;
+  const key = getHistoricoStorageKey(state.selectedCliente?._id, state.selectedPetId);
+  if (key) {
+    state.historicosLoadKey = key;
+  }
   renderHistoricoArea();
+  updateConsultaAgendaCard();
+}
+
+export async function persistHistoricoEntry(entry) {
+  const normalized = normalizeHistoricoEntry(entry);
+  if (!normalized) {
+    throw new Error('Não foi possível preparar os dados do histórico.');
+  }
+
+  const payload = {
+    clienteId: normalized.clienteId,
+    petId: normalized.petId,
+    appointmentId: normalized.appointmentId,
+    finalizadoEm: normalized.finalizadoEm,
+    agenda: safeClone(normalized.agenda) || {},
+    consultas: safeClone(normalized.consultas) || [],
+    vacinas: safeClone(normalized.vacinas) || [],
+    anexos: safeClone(normalized.anexos) || [],
+    exames: safeClone(normalized.exames) || [],
+    pesos: safeClone(normalized.pesos) || [],
+    observacoes: safeClone(normalized.observacoes) || [],
+    documentos: safeClone(normalized.documentos) || [],
+    receitas: safeClone(normalized.receitas) || [],
+  };
+
+  const response = await api('/func/vet/historicos', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => (response.ok ? {} : {}));
+  if (!response.ok) {
+    const message = typeof data?.message === 'string' ? data.message : 'Erro ao salvar histórico.';
+    throw new Error(message);
+  }
+
+  return normalizeHistoricoEntry(data) || normalized;
 }
 
 export function removeHistoricoEntry(entryId) {
   const targetId = normalizeId(entryId);
   const next = (Array.isArray(state.historicos) ? state.historicos : []).filter(
-    (entry) => normalizeId(entry?.id) !== targetId,
+    (entry) => normalizeId(entry?.id || entry?._id) !== targetId,
   );
   state.historicos = next;
-  persistHistoricoForSelection();
+  state.historicosLoading = false;
   renderHistoricoArea();
+  updateConsultaAgendaCard();
 }
 
 export function getHistoricoEntryById(entryId) {
@@ -303,13 +365,16 @@ export function renderHistoricoArea() {
   if (!area) return;
 
   const historicos = Array.isArray(state.historicos) ? state.historicos : [];
+  const isLoading = !!state.historicosLoading;
   const hasEntries = historicos.length > 0;
 
   if (!hasEntries) {
     area.className = CONSULTA_PLACEHOLDER_CLASSNAMES;
     area.innerHTML = '';
     const paragraph = document.createElement('p');
-    paragraph.textContent = 'Nenhum atendimento finalizado para exibir.';
+    paragraph.textContent = isLoading
+      ? 'Carregando histórico do atendimento...'
+      : 'Nenhum atendimento finalizado para exibir.';
     area.appendChild(paragraph);
     updateMainTabLayout();
     return;
