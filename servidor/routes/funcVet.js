@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const path = require('path');
 const multer = require('multer');
@@ -44,10 +44,10 @@ function handleAnexoUpload(req, res, next) {
   uploadAnexoMiddleware.array('arquivos', MAX_ANEXO_FILE_COUNT)(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ message: 'Cada arquivo deve ter no máximo 20MB.' });
+        return res.status(400).json({ message: 'Cada arquivo deve ter no mÃ¡ximo 20MB.' });
       }
       if (err.code === 'LIMIT_FILE_COUNT') {
-        return res.status(400).json({ message: `Envie no máximo ${MAX_ANEXO_FILE_COUNT} arquivos por vez.` });
+        return res.status(400).json({ message: `Envie no mÃ¡ximo ${MAX_ANEXO_FILE_COUNT} arquivos por vez.` });
       }
       return res.status(400).json({ message: 'Falha ao processar os arquivos enviados.' });
     }
@@ -131,6 +131,61 @@ function inferExtensionFromFile(file) {
   return '';
 }
 
+function parseStringArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (item == null ? '' : String(item)))
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => (item == null ? '' : String(item)))
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+    } catch (_) {
+      // ignore JSON parse error
+    }
+    return trimmed
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function parseRenameMap(value) {
+  if (!value) return {};
+  let source = value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return {};
+    try {
+      source = JSON.parse(trimmed);
+    } catch (_) {
+      return {};
+    }
+  }
+  if (typeof source !== 'object' || Array.isArray(source)) return {};
+  const result = {};
+  for (const [key, label] of Object.entries(source)) {
+    if (!key) continue;
+    const normalizedKey = String(key).trim();
+    if (!normalizedKey) continue;
+    const normalizedLabel = label == null ? '' : String(label).trim();
+    if (!normalizedLabel) continue;
+    result[normalizedKey] = normalizedLabel;
+  }
+  return result;
+}
+
 function isVetService(serviceDoc = {}) {
   const raw = Array.isArray(serviceDoc.categorias)
     ? serviceDoc.categorias
@@ -141,10 +196,10 @@ function isVetService(serviceDoc = {}) {
 async function ensurePetBelongsToCliente(petId, clienteId) {
   const pet = await Pet.findById(petId).select('owner nome').lean();
   if (!pet) {
-    return { ok: false, status: 404, message: 'Pet não encontrado.' };
+    return { ok: false, status: 404, message: 'Pet nÃ£o encontrado.' };
   }
   if (clienteId && toStringSafe(pet.owner) !== clienteId) {
-    return { ok: false, status: 400, message: 'Pet não pertence ao tutor informado.' };
+    return { ok: false, status: 400, message: 'Pet nÃ£o pertence ao tutor informado.' };
   }
   return { ok: true, pet };
 }
@@ -152,10 +207,10 @@ async function ensurePetBelongsToCliente(petId, clienteId) {
 async function fetchVetService(servicoId) {
   const service = await Service.findById(servicoId).select('categorias nome').lean();
   if (!service) {
-    return { ok: false, status: 404, message: 'Serviço não encontrado.' };
+    return { ok: false, status: 404, message: 'ServiÃ§o nÃ£o encontrado.' };
   }
   if (!isVetService(service)) {
-    return { ok: false, status: 400, message: 'Serviço informado não é veterinário.' };
+    return { ok: false, status: 400, message: 'ServiÃ§o informado nÃ£o Ã© veterinÃ¡rio.' };
   }
   return { ok: true, service };
 }
@@ -168,13 +223,13 @@ async function ensureAppointmentLink(appointmentId, clienteId, petId, servicoId)
     .select('cliente pet servico itens codigoVenda createdAt')
     .lean();
   if (!appointment) {
-    return { ok: false, status: 404, message: 'Agendamento não encontrado.' };
+    return { ok: false, status: 404, message: 'Agendamento nÃ£o encontrado.' };
   }
   if (clienteId && toStringSafe(appointment.cliente) !== clienteId) {
-    return { ok: false, status: 400, message: 'Agendamento não pertence ao tutor informado.' };
+    return { ok: false, status: 400, message: 'Agendamento nÃ£o pertence ao tutor informado.' };
   }
   if (petId && toStringSafe(appointment.pet) !== petId) {
-    return { ok: false, status: 400, message: 'Agendamento não pertence ao pet informado.' };
+    return { ok: false, status: 400, message: 'Agendamento nÃ£o pertence ao pet informado.' };
   }
   if (servicoId) {
     const allowed = new Set();
@@ -189,7 +244,7 @@ async function ensureAppointmentLink(appointmentId, clienteId, petId, servicoId)
       });
     }
     if (allowed.size && !allowed.has(servicoId)) {
-      return { ok: false, status: 400, message: 'Serviço informado não pertence ao agendamento selecionado.' };
+      return { ok: false, status: 400, message: 'ServiÃ§o informado nÃ£o pertence ao agendamento selecionado.' };
     }
   }
   return { ok: true, appointment };
@@ -436,7 +491,7 @@ router.get('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
     const petId = normalizeObjectId(req.query.petId);
 
     if (!(clienteId && petId)) {
-      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+      return res.status(400).json({ message: 'clienteId e petId sÃ£o obrigatÃ³rios.' });
     }
 
     const petDoc = await Pet.findById(petId)
@@ -444,11 +499,11 @@ router.get('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
       .lean();
 
     if (!petDoc) {
-      return res.status(404).json({ message: 'Pet não encontrado.' });
+      return res.status(404).json({ message: 'Pet nÃ£o encontrado.' });
     }
 
     if (clienteId && toStringSafe(petDoc.owner) !== clienteId) {
-      return res.status(400).json({ message: 'Pet não pertence ao tutor informado.' });
+      return res.status(400).json({ message: 'Pet nÃ£o pertence ao tutor informado.' });
     }
 
     const docs = await PetWeight.find({ pet: petId })
@@ -581,18 +636,21 @@ router.post('/vet/pesos', authMiddleware, requireStaff, async (req, res) => {
   }
 });
 
-router.delete('/vet/pesos/:id', authMiddleware, requireStaff, async (req, res) => {
+router.put('/vet/pesos/:id', authMiddleware, requireStaff, async (req, res) => {
   try {
     const weightId = normalizeObjectId(req.params.id);
-    const clienteId = normalizeObjectId(req.query.clienteId || req.body?.clienteId);
-    const petId = normalizeObjectId(req.query.petId || req.body?.petId);
+    const clienteId = normalizeObjectId(req.body.clienteId);
+    const petId = normalizeObjectId(req.body.petId);
+    const pesoValue = parseWeight(req.body.peso);
 
     if (!weightId) {
-      return res.status(400).json({ message: 'Registro de peso inválido.' });
+      return res.status(400).json({ message: 'ID inválido.' });
     }
-
     if (!(clienteId && petId)) {
       return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+    if (pesoValue === null || pesoValue <= 0) {
+      return res.status(400).json({ message: 'Informe um peso válido.' });
     }
 
     const weightDoc = await PetWeight.findById(weightId);
@@ -601,16 +659,80 @@ router.delete('/vet/pesos/:id', authMiddleware, requireStaff, async (req, res) =
     }
 
     if (toStringSafe(weightDoc.cliente) !== clienteId || toStringSafe(weightDoc.pet) !== petId) {
-      return res.status(400).json({ message: 'Registro de peso não pertence ao pet informado.' });
+      return res.status(400).json({ message: 'Registro de peso não pertence ao tutor/pet informado.' });
+    }
+
+    const userId = normalizeObjectId(req.user?.id || req.user?._id);
+    const wantsInitialFlag = typeof req.body.isInitial === 'boolean' ? !!req.body.isInitial : weightDoc.isInitial;
+
+    weightDoc.peso = pesoValue;
+    weightDoc.isInitial = wantsInitialFlag;
+    if (userId) {
+      weightDoc.registradoPor = userId;
+    }
+    weightDoc.updatedAt = new Date();
+    await weightDoc.save();
+
+    if (wantsInitialFlag) {
+      await PetWeight.updateMany({ pet: petId, _id: { $ne: weightDoc._id } }, { $set: { isInitial: false } });
+    } else {
+      const hasInitial = await PetWeight.exists({ pet: petId, isInitial: true });
+      if (!hasInitial) {
+        const earliest = await PetWeight.findOne({ pet: petId }).sort({ createdAt: 1 });
+        if (earliest && String(earliest._id) !== String(weightDoc._id)) {
+          await PetWeight.updateOne({ _id: earliest._id }, { $set: { isInitial: true } });
+        } else {
+          weightDoc.isInitial = true;
+          await weightDoc.save();
+        }
+      }
+    }
+
+    const latest = await PetWeight.findOne({ pet: petId }).sort({ createdAt: -1 });
+    const petDoc = await Pet.findById(petId).select('peso');
+    if (petDoc) {
+      const latestWeight = latest ? parseWeight(latest.peso) : null;
+      petDoc.peso = latestWeight !== null ? String(latestWeight) : '';
+      await petDoc.save();
+    }
+
+    const formatted = formatPetWeightEntry(weightDoc.toObject());
+    return res.json(formatted);
+  } catch (error) {
+    console.error('PUT /func/vet/pesos/:id', error);
+    return res.status(500).json({ message: 'Erro ao atualizar registro de peso.' });
+  }
+});
+router.delete('/vet/pesos/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const weightId = normalizeObjectId(req.params.id);
+    const clienteId = normalizeObjectId(req.query.clienteId || req.body?.clienteId);
+    const petId = normalizeObjectId(req.query.petId || req.body?.petId);
+
+    if (!weightId) {
+      return res.status(400).json({ message: 'Registro de peso invÃ¡lido.' });
+    }
+
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId sÃ£o obrigatÃ³rios.' });
+    }
+
+    const weightDoc = await PetWeight.findById(weightId);
+    if (!weightDoc) {
+      return res.status(404).json({ message: 'Registro de peso nÃ£o encontrado.' });
+    }
+
+    if (toStringSafe(weightDoc.cliente) !== clienteId || toStringSafe(weightDoc.pet) !== petId) {
+      return res.status(400).json({ message: 'Registro de peso nÃ£o pertence ao pet informado.' });
     }
 
     const petDoc = await Pet.findById(petId).select('owner peso');
     if (!petDoc) {
-      return res.status(404).json({ message: 'Pet não encontrado.' });
+      return res.status(404).json({ message: 'Pet nÃ£o encontrado.' });
     }
 
     if (clienteId && toStringSafe(petDoc.owner) !== clienteId) {
-      return res.status(400).json({ message: 'Pet não pertence ao tutor informado.' });
+      return res.status(400).json({ message: 'Pet nÃ£o pertence ao tutor informado.' });
     }
 
     await weightDoc.deleteOne();
@@ -669,25 +791,25 @@ router.post('/vet/documentos', authMiddleware, requireStaff, async (req, res) =>
     const descricao = descricaoRaw.trim();
 
     if (!descricao) {
-      return res.status(400).json({ message: 'Descrição é obrigatória.' });
+      return res.status(400).json({ message: 'DescriÃ§Ã£o Ã© obrigatÃ³ria.' });
     }
     if (descricao.length > 180) {
-      return res.status(400).json({ message: 'A descrição deve ter no máximo 180 caracteres.' });
+      return res.status(400).json({ message: 'A descriÃ§Ã£o deve ter no mÃ¡ximo 180 caracteres.' });
     }
 
     const conteudoSanitized = sanitizeDocumentContent(conteudoRaw);
     if (conteudoSanitized.length > 200000) {
-      return res.status(400).json({ message: 'O documento deve ter no máximo 200.000 caracteres.' });
+      return res.status(400).json({ message: 'O documento deve ter no mÃ¡ximo 200.000 caracteres.' });
     }
 
     const plainText = extractPlainTextContent(conteudoSanitized);
     if (!plainText) {
-      return res.status(400).json({ message: 'O conteúdo do documento é obrigatório.' });
+      return res.status(400).json({ message: 'O conteÃºdo do documento Ã© obrigatÃ³rio.' });
     }
 
     const userId = normalizeObjectId(req.user?.id || req.user?._id);
     if (!userId) {
-      return res.status(401).json({ message: 'Usuário não autenticado.' });
+      return res.status(401).json({ message: 'UsuÃ¡rio nÃ£o autenticado.' });
     }
 
     const doc = await VetDocument.create({
@@ -713,12 +835,12 @@ router.put('/vet/documentos/:id', authMiddleware, requireStaff, async (req, res)
   try {
     const id = normalizeObjectId(req.params.id);
     if (!id) {
-      return res.status(400).json({ message: 'ID inválido.' });
+      return res.status(400).json({ message: 'ID invÃ¡lido.' });
     }
 
     const existing = await VetDocument.findById(id);
     if (!existing) {
-      return res.status(404).json({ message: 'Documento não encontrado.' });
+      return res.status(404).json({ message: 'Documento nÃ£o encontrado.' });
     }
 
     const descricaoRaw = typeof req.body?.descricao === 'string' ? req.body.descricao : '';
@@ -726,25 +848,25 @@ router.put('/vet/documentos/:id', authMiddleware, requireStaff, async (req, res)
     const descricao = descricaoRaw.trim();
 
     if (!descricao) {
-      return res.status(400).json({ message: 'Descrição é obrigatória.' });
+      return res.status(400).json({ message: 'DescriÃ§Ã£o Ã© obrigatÃ³ria.' });
     }
     if (descricao.length > 180) {
-      return res.status(400).json({ message: 'A descrição deve ter no máximo 180 caracteres.' });
+      return res.status(400).json({ message: 'A descriÃ§Ã£o deve ter no mÃ¡ximo 180 caracteres.' });
     }
 
     const conteudoSanitized = sanitizeDocumentContent(conteudoRaw);
     if (conteudoSanitized.length > 200000) {
-      return res.status(400).json({ message: 'O documento deve ter no máximo 200.000 caracteres.' });
+      return res.status(400).json({ message: 'O documento deve ter no mÃ¡ximo 200.000 caracteres.' });
     }
 
     const plainText = extractPlainTextContent(conteudoSanitized);
     if (!plainText) {
-      return res.status(400).json({ message: 'O conteúdo do documento é obrigatório.' });
+      return res.status(400).json({ message: 'O conteÃºdo do documento Ã© obrigatÃ³rio.' });
     }
 
     const userId = normalizeObjectId(req.user?.id || req.user?._id);
     if (!userId) {
-      return res.status(401).json({ message: 'Usuário não autenticado.' });
+      return res.status(401).json({ message: 'UsuÃ¡rio nÃ£o autenticado.' });
     }
 
     existing.descricao = descricao;
@@ -768,12 +890,12 @@ router.delete('/vet/documentos/:id', authMiddleware, requireStaff, async (req, r
   try {
     const id = normalizeObjectId(req.params.id);
     if (!id) {
-      return res.status(400).json({ message: 'ID inválido.' });
+      return res.status(400).json({ message: 'ID invÃ¡lido.' });
     }
 
     const existing = await VetDocument.findById(id).lean();
     if (!existing) {
-      return res.status(404).json({ message: 'Documento não encontrado.' });
+      return res.status(404).json({ message: 'Documento nÃ£o encontrado.' });
     }
 
     await VetDocument.deleteOne({ _id: id });
@@ -807,25 +929,25 @@ router.post('/vet/receitas', authMiddleware, requireStaff, async (req, res) => {
     const descricao = descricaoRaw.trim();
 
     if (!descricao) {
-      return res.status(400).json({ message: 'Descrição é obrigatória.' });
+      return res.status(400).json({ message: 'DescriÃ§Ã£o Ã© obrigatÃ³ria.' });
     }
     if (descricao.length > 180) {
-      return res.status(400).json({ message: 'A descrição deve ter no máximo 180 caracteres.' });
+      return res.status(400).json({ message: 'A descriÃ§Ã£o deve ter no mÃ¡ximo 180 caracteres.' });
     }
 
     const conteudoSanitized = sanitizeDocumentContent(conteudoRaw);
     if (conteudoSanitized.length > 200000) {
-      return res.status(400).json({ message: 'A receita deve ter no máximo 200.000 caracteres.' });
+      return res.status(400).json({ message: 'A receita deve ter no mÃ¡ximo 200.000 caracteres.' });
     }
 
     const plainText = extractPlainTextContent(conteudoSanitized);
     if (!plainText) {
-      return res.status(400).json({ message: 'O conteúdo da receita é obrigatório.' });
+      return res.status(400).json({ message: 'O conteÃºdo da receita Ã© obrigatÃ³rio.' });
     }
 
     const userId = normalizeObjectId(req.user?.id || req.user?._id);
     if (!userId) {
-      return res.status(401).json({ message: 'Usuário não autenticado.' });
+      return res.status(401).json({ message: 'UsuÃ¡rio nÃ£o autenticado.' });
     }
 
     const doc = await VetRecipe.create({
@@ -851,12 +973,12 @@ router.put('/vet/receitas/:id', authMiddleware, requireStaff, async (req, res) =
   try {
     const id = normalizeObjectId(req.params.id);
     if (!id) {
-      return res.status(400).json({ message: 'ID inválido.' });
+      return res.status(400).json({ message: 'ID invÃ¡lido.' });
     }
 
     const existing = await VetRecipe.findById(id);
     if (!existing) {
-      return res.status(404).json({ message: 'Receita não encontrada.' });
+      return res.status(404).json({ message: 'Receita nÃ£o encontrada.' });
     }
 
     const descricaoRaw = typeof req.body?.descricao === 'string' ? req.body.descricao : '';
@@ -864,25 +986,25 @@ router.put('/vet/receitas/:id', authMiddleware, requireStaff, async (req, res) =
     const descricao = descricaoRaw.trim();
 
     if (!descricao) {
-      return res.status(400).json({ message: 'Descrição é obrigatória.' });
+      return res.status(400).json({ message: 'DescriÃ§Ã£o Ã© obrigatÃ³ria.' });
     }
     if (descricao.length > 180) {
-      return res.status(400).json({ message: 'A descrição deve ter no máximo 180 caracteres.' });
+      return res.status(400).json({ message: 'A descriÃ§Ã£o deve ter no mÃ¡ximo 180 caracteres.' });
     }
 
     const conteudoSanitized = sanitizeDocumentContent(conteudoRaw);
     if (conteudoSanitized.length > 200000) {
-      return res.status(400).json({ message: 'A receita deve ter no máximo 200.000 caracteres.' });
+      return res.status(400).json({ message: 'A receita deve ter no mÃ¡ximo 200.000 caracteres.' });
     }
 
     const plainText = extractPlainTextContent(conteudoSanitized);
     if (!plainText) {
-      return res.status(400).json({ message: 'O conteúdo da receita é obrigatório.' });
+      return res.status(400).json({ message: 'O conteÃºdo da receita Ã© obrigatÃ³rio.' });
     }
 
     const userId = normalizeObjectId(req.user?.id || req.user?._id);
     if (!userId) {
-      return res.status(401).json({ message: 'Usuário não autenticado.' });
+      return res.status(401).json({ message: 'UsuÃ¡rio nÃ£o autenticado.' });
     }
 
     existing.descricao = descricao;
@@ -906,12 +1028,12 @@ router.delete('/vet/receitas/:id', authMiddleware, requireStaff, async (req, res
   try {
     const id = normalizeObjectId(req.params.id);
     if (!id) {
-      return res.status(400).json({ message: 'ID inválido.' });
+      return res.status(400).json({ message: 'ID invÃ¡lido.' });
     }
 
     const existing = await VetRecipe.findById(id).lean();
     if (!existing) {
-      return res.status(404).json({ message: 'Receita não encontrada.' });
+      return res.status(404).json({ message: 'Receita nÃ£o encontrada.' });
     }
 
     await VetRecipe.deleteOne({ _id: id });
@@ -929,7 +1051,7 @@ router.get('/vet/documentos-registros', authMiddleware, requireStaff, async (req
     const appointmentId = normalizeObjectId(req.query.appointmentId);
 
     if (!(clienteId && petId)) {
-      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+      return res.status(400).json({ message: 'clienteId e petId sÃ£o obrigatÃ³rios.' });
     }
 
     const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
@@ -1047,16 +1169,128 @@ router.post('/vet/documentos-registros', authMiddleware, requireStaff, async (re
   }
 });
 
+router.put('/vet/documentos-registros/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const recordId = normalizeObjectId(req.params.id);
+    if (!recordId) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+
+    const existing = await VetDocumentRecord.findById(recordId);
+    if (!existing) {
+      return res.status(404).json({ message: 'Documento do atendimento não encontrado.' });
+    }
+
+    const clienteId = normalizeObjectId(req.body.clienteId) || toStringSafe(existing.cliente);
+    const petId = normalizeObjectId(req.body.petId) || toStringSafe(existing.pet);
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+    if (!petCheck.ok) {
+      return res.status(petCheck.status).json({ message: petCheck.message });
+    }
+
+    let appointmentId = existing.appointment ? toStringSafe(existing.appointment) : null;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'appointmentId')) {
+      appointmentId = req.body.appointmentId ? normalizeObjectId(req.body.appointmentId) : null;
+      if (req.body.appointmentId && !appointmentId) {
+        return res.status(400).json({ message: 'appointmentId inválido.' });
+      }
+    }
+
+    if (appointmentId) {
+      const appointmentCheck = await ensureAppointmentLink(appointmentId, clienteId, petId, null);
+      if (!appointmentCheck.ok) {
+        return res.status(appointmentCheck.status).json({ message: appointmentCheck.message });
+      }
+    }
+
+    let documentoId = existing.documento ? toStringSafe(existing.documento) : null;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'documentoId')) {
+      documentoId = req.body.documentoId ? normalizeObjectId(req.body.documentoId) : null;
+      if (req.body.documentoId && !documentoId) {
+        return res.status(400).json({ message: 'documentoId inválido.' });
+      }
+    }
+
+    let documentReference = null;
+    if (documentoId) {
+      const docRef = await VetDocument.findById(documentoId).select('_id descricao').lean();
+      if (!docRef) {
+        return res.status(404).json({ message: 'Documento salvo não encontrado.' });
+      }
+      documentReference = docRef;
+    }
+
+    const conteudoRaw = typeof req.body.conteudo === 'string' ? req.body.conteudo : null;
+    const conteudoSanitized = conteudoRaw !== null ? sanitizeDocumentContent(conteudoRaw) : existing.conteudo;
+    if (!conteudoSanitized) {
+      return res.status(400).json({ message: 'O conteúdo do documento é obrigatório.' });
+    }
+    if (conteudoSanitized.length > 200000) {
+      return res.status(400).json({ message: 'O documento deve ter no máximo 200.000 caracteres.' });
+    }
+
+    const conteudoOriginalRaw = typeof req.body.conteudoOriginal === 'string' ? req.body.conteudoOriginal : null;
+    const conteudoOriginal = conteudoOriginalRaw !== null ? conteudoOriginalRaw : existing.conteudoOriginal || '';
+    if (conteudoOriginal.length > 200000) {
+      return res.status(400).json({ message: 'O documento original deve ter no máximo 200.000 caracteres.' });
+    }
+
+    const descricaoRaw = typeof req.body.descricao === 'string' ? req.body.descricao.trim() : null;
+    let descricao = descricaoRaw !== null ? descricaoRaw : existing.descricao || '';
+    if (!descricao && documentReference?.descricao) {
+      descricao = documentReference.descricao;
+    }
+    if (descricao.length > 180) {
+      return res.status(400).json({ message: 'A descrição do documento deve ter no máximo 180 caracteres.' });
+    }
+
+    const previewRaw = typeof req.body.preview === 'string' ? req.body.preview.trim() : null;
+    const preview = previewRaw !== null ? previewRaw : existing.preview || '';
+    if (preview.length > 2000) {
+      return res.status(400).json({ message: 'A prévia do documento deve ter no máximo 2.000 caracteres.' });
+    }
+
+    existing.cliente = clienteId;
+    existing.pet = petId;
+    if (documentoId !== null) {
+      existing.documento = documentReference ? documentReference._id : documentoId ? documentoId : null;
+    }
+    if (appointmentId !== undefined) {
+      existing.appointment = appointmentId || null;
+    }
+    existing.descricao = descricao || 'Documento';
+    existing.conteudo = conteudoSanitized;
+    existing.conteudoOriginal = conteudoOriginal;
+    existing.preview = preview;
+    const userId = normalizeObjectId(req.user?.id || req.user?._id);
+    if (userId) {
+      existing.updatedBy = userId;
+    }
+    existing.updatedAt = new Date();
+
+    await existing.save();
+
+    const formatted = formatDocumentRecord(existing.toObject());
+    return res.json(formatted);
+  } catch (error) {
+    console.error('PUT /func/vet/documentos-registros/:id', error);
+    return res.status(500).json({ message: 'Erro ao atualizar documento do atendimento.' });
+  }
+});
 router.delete('/vet/documentos-registros/:id', authMiddleware, requireStaff, async (req, res) => {
   try {
     const id = normalizeObjectId(req.params.id);
     if (!id) {
-      return res.status(400).json({ message: 'ID inválido.' });
+      return res.status(400).json({ message: 'ID invÃ¡lido.' });
     }
 
     const existing = await VetDocumentRecord.findById(id).lean();
     if (!existing) {
-      return res.status(404).json({ message: 'Documento do atendimento não encontrado.' });
+      return res.status(404).json({ message: 'Documento do atendimento nÃ£o encontrado.' });
     }
 
     await VetDocumentRecord.deleteOne({ _id: id });
@@ -1074,7 +1308,7 @@ router.get('/vet/receitas-registros', authMiddleware, requireStaff, async (req, 
     const appointmentId = normalizeObjectId(req.query.appointmentId);
 
     if (!(clienteId && petId)) {
-      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+      return res.status(400).json({ message: 'clienteId e petId sÃ£o obrigatÃ³rios.' });
     }
 
     const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
@@ -1192,16 +1426,128 @@ router.post('/vet/receitas-registros', authMiddleware, requireStaff, async (req,
   }
 });
 
+router.put('/vet/receitas-registros/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const recordId = normalizeObjectId(req.params.id);
+    if (!recordId) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+
+    const existing = await VetRecipeRecord.findById(recordId);
+    if (!existing) {
+      return res.status(404).json({ message: 'Receita do atendimento não encontrada.' });
+    }
+
+    const clienteId = normalizeObjectId(req.body.clienteId) || toStringSafe(existing.cliente);
+    const petId = normalizeObjectId(req.body.petId) || toStringSafe(existing.pet);
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+    if (!petCheck.ok) {
+      return res.status(petCheck.status).json({ message: petCheck.message });
+    }
+
+    let appointmentId = existing.appointment ? toStringSafe(existing.appointment) : null;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'appointmentId')) {
+      appointmentId = req.body.appointmentId ? normalizeObjectId(req.body.appointmentId) : null;
+      if (req.body.appointmentId && !appointmentId) {
+        return res.status(400).json({ message: 'appointmentId inválido.' });
+      }
+    }
+
+    if (appointmentId) {
+      const appointmentCheck = await ensureAppointmentLink(appointmentId, clienteId, petId, null);
+      if (!appointmentCheck.ok) {
+        return res.status(appointmentCheck.status).json({ message: appointmentCheck.message });
+      }
+    }
+
+    let receitaId = existing.receita ? toStringSafe(existing.receita) : null;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'receitaId')) {
+      receitaId = req.body.receitaId ? normalizeObjectId(req.body.receitaId) : null;
+      if (req.body.receitaId && !receitaId) {
+        return res.status(400).json({ message: 'receitaId inválido.' });
+      }
+    }
+
+    let recipeReference = null;
+    if (receitaId) {
+      const recipeDoc = await VetRecipe.findById(receitaId).select('_id descricao').lean();
+      if (!recipeDoc) {
+        return res.status(404).json({ message: 'Receita salva não encontrada.' });
+      }
+      recipeReference = recipeDoc;
+    }
+
+    const conteudoRaw = typeof req.body.conteudo === 'string' ? req.body.conteudo : null;
+    const conteudoSanitized = conteudoRaw !== null ? sanitizeDocumentContent(conteudoRaw) : existing.conteudo;
+    if (!conteudoSanitized) {
+      return res.status(400).json({ message: 'O conteúdo da receita é obrigatório.' });
+    }
+    if (conteudoSanitized.length > 200000) {
+      return res.status(400).json({ message: 'A receita deve ter no máximo 200.000 caracteres.' });
+    }
+
+    const conteudoOriginalRaw = typeof req.body.conteudoOriginal === 'string' ? req.body.conteudoOriginal : null;
+    const conteudoOriginal = conteudoOriginalRaw !== null ? conteudoOriginalRaw : existing.conteudoOriginal || '';
+    if (conteudoOriginal.length > 200000) {
+      return res.status(400).json({ message: 'A receita original deve ter no máximo 200.000 caracteres.' });
+    }
+
+    const descricaoRaw = typeof req.body.descricao === 'string' ? req.body.descricao.trim() : null;
+    let descricao = descricaoRaw !== null ? descricaoRaw : existing.descricao || '';
+    if (!descricao && recipeReference?.descricao) {
+      descricao = recipeReference.descricao;
+    }
+    if (descricao.length > 180) {
+      return res.status(400).json({ message: 'A descrição da receita deve ter no máximo 180 caracteres.' });
+    }
+
+    const previewRaw = typeof req.body.preview === 'string' ? req.body.preview.trim() : null;
+    const preview = previewRaw !== null ? previewRaw : existing.preview || '';
+    if (preview.length > 2000) {
+      return res.status(400).json({ message: 'A prévia da receita deve ter no máximo 2.000 caracteres.' });
+    }
+
+    existing.cliente = clienteId;
+    existing.pet = petId;
+    if (receitaId !== null) {
+      existing.receita = recipeReference ? recipeReference._id : receitaId ? receitaId : null;
+    }
+    if (appointmentId !== undefined) {
+      existing.appointment = appointmentId || null;
+    }
+    existing.descricao = descricao || 'Receita';
+    existing.conteudo = conteudoSanitized;
+    existing.conteudoOriginal = conteudoOriginal;
+    existing.preview = preview;
+    const userId = normalizeObjectId(req.user?.id || req.user?._id);
+    if (userId) {
+      existing.updatedBy = userId;
+    }
+    existing.updatedAt = new Date();
+
+    await existing.save();
+
+    const formatted = formatRecipeRecord(existing.toObject());
+    return res.json(formatted);
+  } catch (error) {
+    console.error('PUT /func/vet/receitas-registros/:id', error);
+    return res.status(500).json({ message: 'Erro ao atualizar receita do atendimento.' });
+  }
+});
 router.delete('/vet/receitas-registros/:id', authMiddleware, requireStaff, async (req, res) => {
   try {
     const id = normalizeObjectId(req.params.id);
     if (!id) {
-      return res.status(400).json({ message: 'ID inválido.' });
+      return res.status(400).json({ message: 'ID invÃ¡lido.' });
     }
 
     const existing = await VetRecipeRecord.findById(id).lean();
     if (!existing) {
-      return res.status(404).json({ message: 'Receita do atendimento não encontrada.' });
+      return res.status(404).json({ message: 'Receita do atendimento nÃ£o encontrada.' });
     }
 
     await VetRecipeRecord.deleteOne({ _id: id });
@@ -1219,7 +1565,7 @@ router.get('/vet/anexos', authMiddleware, requireStaff, async (req, res) => {
     const appointmentId = normalizeObjectId(req.query.appointmentId);
 
     if (!(clienteId && petId)) {
-      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+      return res.status(400).json({ message: 'clienteId e petId sÃ£o obrigatÃ³rios.' });
     }
 
     const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
@@ -1259,7 +1605,7 @@ router.get('/vet/consultas', authMiddleware, requireStaff, async (req, res) => {
     const appointmentId = normalizeObjectId(req.query.appointmentId);
 
     if (!clienteId || !petId) {
-      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+      return res.status(400).json({ message: 'clienteId e petId sÃ£o obrigatÃ³rios.' });
     }
 
     const filter = { cliente: clienteId, pet: petId };
@@ -1283,13 +1629,13 @@ router.get('/vet/consultas/:id', authMiddleware, requireStaff, async (req, res) 
   try {
     const id = normalizeObjectId(req.params.id);
     if (!id) {
-      return res.status(400).json({ message: 'ID inválido.' });
+      return res.status(400).json({ message: 'ID invÃ¡lido.' });
     }
     const doc = await VetConsultation.findById(id)
       .populate('servico', 'nome categorias')
       .lean();
     if (!doc) {
-      return res.status(404).json({ message: 'Consulta não encontrada.' });
+      return res.status(404).json({ message: 'Consulta nÃ£o encontrada.' });
     }
     return res.json(formatConsultation(doc));
   } catch (error) {
@@ -1497,16 +1843,241 @@ router.post('/vet/anexos', authMiddleware, requireStaff, handleAnexoUpload, asyn
   }
 });
 
+router.put('/vet/anexos/:id', authMiddleware, requireStaff, handleAnexoUpload, async (req, res) => {
+  const uploadedDriveIds = [];
+  const removedDriveIds = [];
+  try {
+    if (!isDriveConfigured()) {
+      return res.status(500).json({ message: 'Integração com o Google Drive não está configurada.' });
+    }
+
+    const anexoId = normalizeObjectId(req.params.id);
+    if (!anexoId) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+
+    const existing = await VetAttachment.findById(anexoId);
+    if (!existing) {
+      return res.status(404).json({ message: 'Anexo não encontrado.' });
+    }
+
+    const clienteId = normalizeObjectId(req.body.clienteId) || toStringSafe(existing.cliente);
+    const petId = normalizeObjectId(req.body.petId) || toStringSafe(existing.pet);
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    const rawAppointment = Object.prototype.hasOwnProperty.call(req.body, 'appointmentId')
+      ? (req.body.appointmentId ? normalizeObjectId(req.body.appointmentId) : null)
+      : (existing.appointment ? toStringSafe(existing.appointment) : null);
+
+    const removals = parseStringArray(req.body.removeFileIds || req.body['removeFileIds[]']);
+    const renameMap = parseRenameMap(req.body.renameFiles || req.body.renameMap);
+    const observacaoRaw = typeof req.body.observacao === 'string'
+      ? req.body.observacao.trim()
+      : existing.observacao || '';
+
+    const files = Array.isArray(req.files) ? req.files : [];
+    const invalidFile = files.find((file) => {
+      const extension = inferExtensionFromFile(file).toLowerCase();
+      const mime = String(file?.mimetype || '').toLowerCase();
+      return !(
+        (extension && ALLOWED_ANEXO_EXTENSIONS.has(extension)) ||
+        ALLOWED_ANEXO_MIME_TYPES.has(mime)
+      );
+    });
+    if (invalidFile) {
+      return res.status(400).json({
+        message: `Formato de arquivo não suportado: ${invalidFile.originalname || 'arquivo'}. Permitido: PNG, JPG, JPEG ou PDF.`,
+      });
+    }
+
+    const petCheck = await ensurePetBelongsToCliente(petId, clienteId);
+    if (!petCheck.ok) {
+      return res.status(petCheck.status).json({ message: petCheck.message });
+    }
+
+    if (rawAppointment !== null) {
+      const appointmentCheck = await ensureAppointmentLink(rawAppointment, clienteId, petId, null);
+      if (!appointmentCheck.ok) {
+        return res.status(appointmentCheck.status).json({ message: appointmentCheck.message });
+      }
+    }
+
+    const existingObj = existing.toObject();
+    const currentFiles = Array.isArray(existingObj.arquivos) ? existingObj.arquivos.map((item) => ({ ...item })) : [];
+    const removeSet = new Set(removals.map((id) => normalizeObjectId(id) || String(id || '').trim()).filter(Boolean));
+
+    const keptFiles = [];
+    currentFiles.forEach((file) => {
+      const fileId = toStringSafe(file._id || file.id);
+      if (fileId && removeSet.has(fileId)) {
+        if (file.driveFileId) {
+          removedDriveIds.push(file.driveFileId);
+        }
+        return;
+      }
+      const renameLabel = fileId ? renameMap[fileId] : null;
+      if (renameLabel) {
+        const cleaned = sanitizeFileName(renameLabel) || renameLabel;
+        file.nome = cleaned;
+      }
+      keptFiles.push(file);
+    });
+
+    const clienteDoc = await User.findById(clienteId)
+      .select('cpf nomeCompleto email celular telefone')
+      .lean();
+    if (!clienteDoc) {
+      return res.status(404).json({ message: 'Tutor não encontrado.' });
+    }
+
+    const appointmentDoc = rawAppointment ? await Appointment.findById(rawAppointment).select('codigoVenda pet').lean() : null;
+    const petDoc = petCheck.pet || null;
+
+    const tutorCpfDigits = clienteDoc.cpf ? String(clienteDoc.cpf).replace(/\D+/g, '') : '';
+    const tutorFallbackId = clienteId ? String(clienteId).slice(-6) || String(clienteId) : 'tutor';
+    let tutorFolderName = tutorCpfDigits;
+    if (!tutorFolderName) {
+      const fallbackTutorName = clienteDoc.nomeCompleto || clienteDoc.email || clienteDoc.celular || clienteDoc.telefone || '';
+      tutorFolderName = sanitizeFolderSegment(fallbackTutorName, `sem-cpf-${tutorFallbackId}`) || `sem-cpf-${tutorFallbackId}`;
+    }
+
+    const rawAppointmentCode =
+      typeof appointmentDoc?.codigoVenda === 'string' ? appointmentDoc.codigoVenda.trim() : '';
+    const appointmentFallbackSegment = appointmentDoc?._id
+      ? `codigo_${appointmentDoc._id}`
+      : 'codigo_sem-atendimento';
+    const appointmentFolderName =
+      sanitizeFolderSegment(rawAppointmentCode ? `codigo_${rawAppointmentCode}` : '', appointmentFallbackSegment)
+      || sanitizeFolderSegment(appointmentFallbackSegment)
+      || appointmentFallbackSegment;
+
+    const petFallbackId = petId ? String(petId).slice(-6) || String(petId) : 'pet';
+    const candidatePetCodes = [
+      petDoc?.codigoPet,
+      petDoc?.codigo,
+      petDoc?.codigo_pet,
+      petDoc?.codigoDoPet,
+      petDoc?.codigoInterno,
+      petDoc?.identificador,
+      appointmentDoc?.petCodigo,
+      appointmentDoc?.codigoPet,
+      appointmentDoc?.pet?.codigo,
+      petDoc?.microchip,
+    ];
+    let sanitizedPetCode = '';
+    for (const candidate of candidatePetCodes) {
+      const sanitized = sanitizePetCode(candidate);
+      if (sanitized) {
+        sanitizedPetCode = sanitized;
+        break;
+      }
+    }
+    const petFallbackSegment = `pet_${petFallbackId}`;
+    const petFolderName =
+      sanitizeFolderSegment(sanitizedPetCode ? `pet_${sanitizedPetCode}` : '', petFallbackSegment)
+      || sanitizeFolderSegment(petFallbackSegment)
+      || petFallbackSegment;
+
+    const isExameAttachment = observacaoRaw.startsWith(EXAME_ATTACHMENT_OBSERVACAO_PREFIX);
+    const typeFolderName = sanitizeFolderSegment(isExameAttachment ? 'Exame' : 'Anexo')
+      || (isExameAttachment ? 'Exame' : 'Anexo');
+    const folderPath = [tutorFolderName, petFolderName, appointmentFolderName, typeFolderName];
+
+    const rawNames = req.body['nomes[]'];
+    const providedNames = Array.isArray(rawNames)
+      ? rawNames
+      : (typeof rawNames === 'string' ? [rawNames] : []);
+
+    const folderId = getDriveFolderId();
+    const uploadedFiles = [];
+
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      const providedName = typeof providedNames[index] === 'string' ? providedNames[index] : '';
+      const sanitizedProvided = sanitizeFileName(providedName);
+      const fallbackName = sanitizeFileName(file.originalname) || `Arquivo ${index + 1}`;
+      const displayName = sanitizedProvided || fallbackName || `Arquivo ${index + 1}`;
+      const extension = inferExtensionFromFile(file).toLowerCase();
+
+      let driveBaseName = sanitizeFileName(displayName) || `arquivo-${Date.now()}-${index + 1}`;
+      let driveFileName = ensureFileNameWithExtension(driveBaseName, extension || inferExtensionFromFile(file));
+      driveFileName = sanitizeFileName(driveFileName);
+      if (!driveFileName) {
+        driveFileName = `arquivo-${Date.now()}-${index + 1}${extension || ''}`;
+      } else if (extension && !driveFileName.toLowerCase().endsWith(extension)) {
+        driveFileName = `${driveFileName}${extension}`;
+      }
+
+      const uploadResult = await uploadBufferToDrive(file.buffer, {
+        mimeType: file.mimetype || 'application/octet-stream',
+        name: driveFileName,
+        folderId,
+        folderPath,
+      });
+
+      if (uploadResult?.id) {
+        uploadedDriveIds.push(uploadResult.id);
+      }
+
+      uploadedFiles.push({
+        nome: displayName,
+        originalName: file.originalname || '',
+        mimeType: uploadResult?.mimeType || file.mimetype || '',
+        size: Number(uploadResult?.size) || Number(file.size || 0),
+        extension: extension || '',
+        url: uploadResult?.webViewLink || uploadResult?.webContentLink || '',
+        driveFileId: uploadResult?.id || '',
+        driveViewLink: uploadResult?.webViewLink || '',
+        driveContentLink: uploadResult?.webContentLink || '',
+        createdAt: new Date(),
+      });
+    }
+
+    const combinedFiles = [...keptFiles, ...uploadedFiles];
+    if (!combinedFiles.length) {
+      return res.status(400).json({ message: 'Informe ao menos um arquivo.' });
+    }
+
+    existing.cliente = clienteId;
+    existing.pet = petId;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'appointmentId')) {
+      existing.appointment = rawAppointment || null;
+    }
+    existing.observacao = observacaoRaw;
+    existing.arquivos = combinedFiles;
+    const userId = normalizeObjectId(req.user?.id || req.user?._id);
+    if (userId) {
+      existing.updatedBy = userId;
+    }
+    existing.updatedAt = new Date();
+    await existing.save();
+
+    if (removedDriveIds.length && isDriveConfigured()) {
+      await Promise.allSettled(removedDriveIds.map((driveId) => deleteFile(driveId)));
+    }
+
+    const formatted = formatAttachment(existing.toObject());
+    return res.json(formatted);
+  } catch (error) {
+    if (uploadedDriveIds.length) {
+      await Promise.allSettled(uploadedDriveIds.map((id) => deleteFile(id)));
+    }
+    console.error('PUT /func/vet/anexos/:id', error);
+    return res.status(500).json({ message: 'Erro ao atualizar anexos.' });
+  }
+});
 router.delete('/vet/anexos/:id', authMiddleware, requireStaff, async (req, res) => {
   try {
     const id = normalizeObjectId(req.params.id);
     if (!id) {
-      return res.status(400).json({ message: 'ID inválido.' });
+      return res.status(400).json({ message: 'ID invÃ¡lido.' });
     }
 
     const existing = await VetAttachment.findById(id).lean();
     if (!existing) {
-      return res.status(404).json({ message: 'Anexo não encontrado.' });
+      return res.status(404).json({ message: 'Anexo nÃ£o encontrado.' });
     }
 
     const clienteId = normalizeObjectId(req.query.clienteId || req.body?.clienteId);
@@ -1560,7 +2131,7 @@ router.post('/vet/consultas', authMiddleware, requireStaff, async (req, res) => 
     const appointment = normalizeObjectId(appointmentId);
 
     if (!cliente || !pet || !servico) {
-      return res.status(400).json({ message: 'clienteId, petId e servicoId são obrigatórios.' });
+      return res.status(400).json({ message: 'clienteId, petId e servicoId sÃ£o obrigatÃ³rios.' });
     }
 
     const petCheck = await ensurePetBelongsToCliente(pet, cliente);
@@ -1607,12 +2178,12 @@ router.put('/vet/consultas/:id', authMiddleware, requireStaff, async (req, res) 
   try {
     const id = normalizeObjectId(req.params.id);
     if (!id) {
-      return res.status(400).json({ message: 'ID inválido.' });
+      return res.status(400).json({ message: 'ID invÃ¡lido.' });
     }
 
     const existing = await VetConsultation.findById(id).lean();
     if (!existing) {
-      return res.status(404).json({ message: 'Consulta não encontrada.' });
+      return res.status(404).json({ message: 'Consulta nÃ£o encontrada.' });
     }
 
     const cliente = toStringSafe(existing.cliente);
@@ -1644,7 +2215,7 @@ router.put('/vet/consultas/:id', authMiddleware, requireStaff, async (req, res) 
 
     const nextServicoId = normalizeObjectId(servicoId) || toStringSafe(existing.servico);
     if (!nextServicoId) {
-      return res.status(400).json({ message: 'Serviço inválido.' });
+      return res.status(400).json({ message: 'ServiÃ§o invÃ¡lido.' });
     }
     const serviceCheck = await fetchVetService(nextServicoId);
     if (!serviceCheck.ok) {
@@ -1678,7 +2249,7 @@ router.put('/vet/consultas/:id', authMiddleware, requireStaff, async (req, res) 
       .lean();
 
     if (!full) {
-      return res.status(404).json({ message: 'Consulta não encontrada.' });
+      return res.status(404).json({ message: 'Consulta nÃ£o encontrada.' });
     }
 
     return res.json(formatConsultation(full));
@@ -1692,12 +2263,12 @@ router.delete('/vet/consultas/:id', authMiddleware, requireStaff, async (req, re
   try {
     const id = normalizeObjectId(req.params.id);
     if (!id) {
-      return res.status(400).json({ message: 'ID inválido.' });
+      return res.status(400).json({ message: 'ID invÃ¡lido.' });
     }
 
     const existing = await VetConsultation.findById(id).lean();
     if (!existing) {
-      return res.status(404).json({ message: 'Consulta não encontrada.' });
+      return res.status(404).json({ message: 'Consulta nÃ£o encontrada.' });
     }
 
     await VetConsultation.deleteOne({ _id: id });
@@ -1709,3 +2280,7 @@ router.delete('/vet/consultas/:id', authMiddleware, requireStaff, async (req, re
 });
 
 module.exports = router;
+
+
+
+

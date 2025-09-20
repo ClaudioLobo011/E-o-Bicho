@@ -2277,14 +2277,26 @@
       --tw-ring-color: color-mix(in oklab, var(--color-black) 10%, transparent);
     }
   }
+  .ring-blue-100 {
+    --tw-ring-color: var(--color-blue-100);
+  }
   .ring-emerald-100 {
     --tw-ring-color: var(--color-emerald-100);
   }
   .ring-gray-200 {
     --tw-ring-color: var(--color-gray-200);
   }
+  .ring-green-100 {
+    --tw-ring-color: var(--color-green-100);
+  }
   .ring-green-300 {
     --tw-ring-color: var(--color-green-300);
+  }
+  .ring-indigo-100 {
+    --tw-ring-color: var(--color-indigo-100);
+  }
+  .ring-orange-100 {
+    --tw-ring-color: var(--color-orange-100);
   }
   .ring-primary {
     --tw-ring-color: var(--color-primary);
@@ -2850,6 +2862,13 @@
     &:hover {
       @media (hover: hover) {
         background-color: var(--color-secondary);
+      }
+    }
+  }
+  .hover\:bg-sky-50 {
+    &:hover {
+      @media (hover: hover) {
+        background-color: var(--color-sky-50);
       }
     }
   }

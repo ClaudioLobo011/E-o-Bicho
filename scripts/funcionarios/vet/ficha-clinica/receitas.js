@@ -561,7 +561,7 @@ function ensureReceitaModal() {
   layout.appendChild(content);
 
   const bodyWrapper = document.createElement('div');
-  bodyWrapper.className = 'flex flex-1 flex-col gap-5 lg:flex-row';
+  bodyWrapper.className = 'flex flex-1 flex-col gap-5';
   bodyWrapper.style.minHeight = '0';
   content.appendChild(bodyWrapper);
 
@@ -569,11 +569,6 @@ function ensureReceitaModal() {
   leftColumn.className = 'flex min-w-0 flex-1 flex-col gap-4';
   leftColumn.style.minHeight = '0';
   bodyWrapper.appendChild(leftColumn);
-
-  const rightColumn = document.createElement('div');
-  rightColumn.className = 'flex flex-1 flex-col';
-  rightColumn.style.minHeight = '0';
-  bodyWrapper.appendChild(rightColumn);
 
   const selectCard = document.createElement('div');
   selectCard.className = 'rounded-xl border border-slate-200 bg-white p-4 shadow-sm';
@@ -612,7 +607,7 @@ function ensureReceitaModal() {
 
   const previewCard = document.createElement('div');
   previewCard.className = 'flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner';
-  previewCard.style.minHeight = '260px';
+  previewCard.style.minHeight = '420px';
   leftColumn.appendChild(previewCard);
 
   const previewBar = document.createElement('div');
@@ -631,8 +626,8 @@ function ensureReceitaModal() {
   previewCard.appendChild(previewWrapper);
 
   const previewFrame = document.createElement('iframe');
-  previewFrame.className = 'block h-full w-full bg-white';
-  previewFrame.style.minHeight = '260px';
+  previewFrame.className = 'block h-full w-full bg-white overflow-auto';
+  previewFrame.style.minHeight = '0';
   previewFrame.id = 'vet-receita-preview-frame';
   previewFrame.setAttribute('loading', 'lazy');
   previewWrapper.appendChild(previewFrame);
@@ -642,30 +637,6 @@ function ensureReceitaModal() {
   previewEmpty.textContent = 'Selecione uma receita para visualizar com as palavras-chave atualizadas.';
   previewEmpty.dataset.defaultMessage = previewEmpty.textContent;
   previewWrapper.appendChild(previewEmpty);
-
-  const keywordsSection = document.createElement('div');
-  keywordsSection.className = 'flex flex-1 flex-col rounded-xl border border-dashed border-slate-300 bg-white p-4 shadow-sm';
-  keywordsSection.style.minHeight = '0';
-  rightColumn.appendChild(keywordsSection);
-
-  const keywordsTitle = document.createElement('h3');
-  keywordsTitle.className = 'text-sm font-semibold text-slate-700';
-  keywordsTitle.textContent = 'Palavras-chave disponíveis';
-  keywordsSection.appendChild(keywordsTitle);
-
-  const keywordsHelp = document.createElement('p');
-  keywordsHelp.className = 'mt-1 text-xs text-slate-500';
-  keywordsHelp.textContent = 'As palavras abaixo são substituídas automaticamente pelos dados atuais do atendimento.';
-  keywordsSection.appendChild(keywordsHelp);
-
-  const keywordsScroll = document.createElement('div');
-  keywordsScroll.className = 'mt-3 flex-1 overflow-y-auto pr-2';
-  keywordsScroll.style.minHeight = '0';
-  keywordsSection.appendChild(keywordsScroll);
-
-  const keywordsContainer = document.createElement('div');
-  keywordsContainer.className = 'grid gap-2 md:grid-cols-2';
-  keywordsScroll.appendChild(keywordsContainer);
 
   const footer = document.createElement('div');
   footer.className = 'flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-slate-50 px-6 py-4';
@@ -723,7 +694,7 @@ function ensureReceitaModal() {
   receitaModal.emptyState = emptyState;
   receitaModal.saveBtn = saveBtn;
   receitaModal.printBtn = printBtn;
-  receitaModal.keywordContainer = keywordsContainer;
+  receitaModal.keywordContainer = null;
   receitaModal.keywordItems = [];
   receitaModal.templates = [];
   receitaModal.selectedId = '';
@@ -797,7 +768,7 @@ async function updatePreview() {
       previewEmpty.classList.remove('hidden');
     }
     if (previewFrame) {
-      renderPreviewFrameContent(previewFrame, '', { minHeight: 260, background: '#f8fafc' });
+      renderPreviewFrameContent(previewFrame, '', { minHeight: 420, background: '#f8fafc', autoResize: false });
     }
     highlightKeywords('');
     receitaModal.isGenerating = false;
@@ -814,7 +785,7 @@ async function updatePreview() {
     previewEmpty.classList.remove('hidden');
   }
   if (previewFrame) {
-    renderPreviewFrameContent(previewFrame, '', { minHeight: 260, background: '#f8fafc' });
+    renderPreviewFrameContent(previewFrame, '', { minHeight: 420, background: '#f8fafc', autoResize: false });
   }
 
   const requestId = ++previewUpdateToken;
@@ -825,7 +796,7 @@ async function updatePreview() {
     const { html } = await resolveReceitaContent(doc);
     if (requestId !== previewUpdateToken) return;
     if (previewFrame) {
-      renderPreviewFrameContent(previewFrame, html, { minHeight: 260, background: '#f8fafc' });
+      renderPreviewFrameContent(previewFrame, html, { minHeight: 420, background: '#f8fafc', autoResize: false });
     }
     if (previewEmpty) {
       previewEmpty.textContent = defaultMessage;
@@ -839,7 +810,7 @@ async function updatePreview() {
       previewEmpty.classList.remove('hidden');
     }
     if (previewFrame) {
-      renderPreviewFrameContent(previewFrame, '', { minHeight: 260, background: '#f8fafc' });
+      renderPreviewFrameContent(previewFrame, '', { minHeight: 420, background: '#f8fafc', autoResize: false });
     }
   } finally {
     if (requestId === previewUpdateToken) {

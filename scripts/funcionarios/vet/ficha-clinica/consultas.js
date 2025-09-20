@@ -25,6 +25,7 @@ import {
   formatFileSize,
 } from './core.js';
 import { openDocumentPrintWindow } from '../document-utils.js';
+import { openObservacaoModal } from './observacoes.js';
 
 function normalizeConsultaRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -466,7 +467,7 @@ function createAnexoCard(anexo) {
 
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
-  removeBtn.className = 'absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-600 transition hover:bg-rose-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-rose-200';
+  removeBtn.className = 'absolute right-4 top-4 inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 transition hover:bg-indigo-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-200';
   removeBtn.innerHTML = '<i class="fas fa-trash-can text-[10px]"></i><span>Remover</span>';
   removeBtn.title = 'Remover anexo';
 
@@ -546,11 +547,11 @@ function createAnexoCard(anexo) {
 
   arquivos.forEach((file) => {
     const item = document.createElement('div');
-    item.className = 'flex flex-col gap-2 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between';
+    item.className = 'flex flex-wrap items-center justify-between gap-3 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-3 shadow-sm';
     list.appendChild(item);
 
     const info = document.createElement('div');
-    info.className = 'flex items-start gap-3 text-sm text-indigo-700';
+    info.className = 'flex flex-1 min-w-0 items-center gap-3 text-sm text-indigo-700';
     item.appendChild(info);
 
     const iconWrapper = document.createElement('div');
@@ -580,7 +581,7 @@ function createAnexoCard(anexo) {
     textWrap.appendChild(meta);
 
     const actions = document.createElement('div');
-    actions.className = 'flex items-center gap-2';
+    actions.className = 'flex items-center gap-2 flex-shrink-0';
     let hasAction = false;
     if (file.url) {
       const link = document.createElement('a');
@@ -908,6 +909,23 @@ function createObservacaoCard(entry) {
   content.className = 'mt-3 whitespace-pre-wrap text-sm text-gray-700 break-words';
   content.textContent = String(entry.observacao || entry.texto || '').trim();
   card.appendChild(content);
+
+  card.classList.add('cursor-pointer', 'focus:outline-none', 'focus:ring-2', 'focus:ring-amber-200');
+  card.tabIndex = 0;
+
+  const openForEdit = (event) => {
+    if (event.target.closest('button')) return;
+    event.preventDefault();
+    openObservacaoModal(entry);
+  };
+
+  card.addEventListener('click', openForEdit);
+  card.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openForEdit(event);
+    }
+  });
 
   return card;
 }
@@ -1905,8 +1923,56 @@ export function updateConsultaAgendaCard() {
   area.innerHTML = '';
 
   const scroll = document.createElement('div');
-  scroll.className = 'h-full w-full overflow-y-auto p-5 space-y-4';
+  scroll.className = 'h-full w-full overflow-y-auto p-5 space-y-6';
   area.appendChild(scroll);
+
+  if (agendaElement) {
+    scroll.appendChild(agendaElement);
+  }
+
+  const manualVacinaGrid = document.createElement('div');
+  manualVacinaGrid.className = 'grid gap-4 md:grid-cols-2';
+  let manualVacinaHasContent = false;
+
+  if (hasManualConsultas) {
+    manualConsultas.forEach((consulta) => {
+      const card = createManualConsultaCard(consulta);
+      if (card) {
+        manualVacinaGrid.appendChild(card);
+        manualVacinaHasContent = true;
+      }
+    });
+  }
+
+  if (hasVacinas) {
+    const orderedVacinas = [...vacinas];
+    orderedVacinas.sort((a, b) => {
+      const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+    orderedVacinas.forEach((vacina) => {
+      const card = createVacinaCard(vacina);
+      if (card) {
+        manualVacinaGrid.appendChild(card);
+        manualVacinaHasContent = true;
+      }
+    });
+  }
+
+  if (manualVacinaHasContent) {
+    scroll.appendChild(manualVacinaGrid);
+  }
+
+  const restGrid = document.createElement('div');
+  restGrid.className = 'grid gap-4 md:grid-cols-2 xl:grid-cols-3';
+  let restHasContent = false;
+
+  const pushRestCard = (node) => {
+    if (!node) return;
+    restGrid.appendChild(node);
+    restHasContent = true;
+  };
 
   if (hasAnexos) {
     const orderedAnexos = [...anexos];
@@ -1917,7 +1983,7 @@ export function updateConsultaAgendaCard() {
     });
     orderedAnexos.forEach((anexo) => {
       const card = createAnexoCard(anexo);
-      if (card) scroll.appendChild(card);
+      if (card) pushRestCard(card);
     });
   }
 
@@ -1930,26 +1996,13 @@ export function updateConsultaAgendaCard() {
     });
     orderedExames.forEach((exame) => {
       const card = createExameCard(exame);
-      if (card) scroll.appendChild(card);
+      if (card) pushRestCard(card);
     });
   } else if (isLoadingExames) {
     const loadingExames = document.createElement('div');
     loadingExames.className = 'rounded-xl border border-dashed border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600';
     loadingExames.textContent = 'Carregando exames...';
-    scroll.appendChild(loadingExames);
-  }
-
-  if (hasVacinas) {
-    const orderedVacinas = [...vacinas];
-    orderedVacinas.sort((a, b) => {
-      const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bTime - aTime;
-    });
-    orderedVacinas.forEach((vacina) => {
-      const card = createVacinaCard(vacina);
-      if (card) scroll.appendChild(card);
-    });
+    pushRestCard(loadingExames);
   }
 
   if (hasPesos) {
@@ -1966,13 +2019,13 @@ export function updateConsultaAgendaCard() {
     orderedVetPesos.forEach((peso, index) => {
       const previous = orderedVetPesos[index + 1] || null;
       const card = createPesoCard(peso, baselinePeso, previous);
-      if (card) scroll.appendChild(card);
+      if (card) pushRestCard(card);
     });
   } else if (isLoadingPesos) {
     const loadingPesos = document.createElement('div');
     loadingPesos.className = 'rounded-xl border border-dashed border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-600';
     loadingPesos.textContent = 'Carregando registros de peso...';
-    scroll.appendChild(loadingPesos);
+    pushRestCard(loadingPesos);
   }
 
   if (hasObservacoes) {
@@ -1984,7 +2037,7 @@ export function updateConsultaAgendaCard() {
     });
     orderedObservacoes.forEach((observacao) => {
       const card = createObservacaoCard(observacao);
-      if (card) scroll.appendChild(card);
+      if (card) pushRestCard(card);
     });
   }
 
@@ -1997,13 +2050,13 @@ export function updateConsultaAgendaCard() {
     });
     orderedReceitas.forEach((receita) => {
       const card = createReceitaRegistroCard(receita);
-      if (card) scroll.appendChild(card);
+      if (card) pushRestCard(card);
     });
   } else if (isLoadingReceitas) {
     const loadingReceitas = document.createElement('div');
     loadingReceitas.className = 'rounded-xl border border-dashed border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-600';
     loadingReceitas.textContent = 'Carregando receitas salvas...';
-    scroll.appendChild(loadingReceitas);
+    pushRestCard(loadingReceitas);
   }
 
   if (hasDocumentos) {
@@ -2015,23 +2068,16 @@ export function updateConsultaAgendaCard() {
     });
     orderedDocumentos.forEach((documento) => {
       const card = createDocumentoRegistroCard(documento);
-      if (card) scroll.appendChild(card);
+      if (card) pushRestCard(card);
     });
   } else if (isLoadingDocumentos) {
     const loadingDocumentos = document.createElement('div');
     loadingDocumentos.className = 'rounded-xl border border-dashed border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-600';
     loadingDocumentos.textContent = 'Carregando documentos salvos...';
-    scroll.appendChild(loadingDocumentos);
+    pushRestCard(loadingDocumentos);
   }
 
-  if (hasManualConsultas) {
-    manualConsultas.forEach((consulta) => {
-      const card = createManualConsultaCard(consulta);
-      scroll.appendChild(card);
-    });
-  }
-
-  if (agendaElement) {
-    scroll.appendChild(agendaElement);
+  if (restHasContent) {
+    scroll.appendChild(restGrid);
   }
 }

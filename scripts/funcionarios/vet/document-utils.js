@@ -446,7 +446,7 @@ function updatePreviewFrameHeight(frame, minHeight = 320) {
 export function renderPreviewFrameContent(
   frame,
   html,
-  { minHeight = 320, padding = 24, background = '#f1f5f9', allowStyles = true } = {},
+  { minHeight = 320, padding = 24, background = '#f1f5f9', allowStyles = true, autoResize = true } = {},
 ) {
   if (!frame) return '';
   frame.style.minHeight = `${minHeight}px`;
@@ -494,12 +494,22 @@ export function renderPreviewFrameContent(
 
   frame.srcdoc = documentHtml;
 
-  if (!frame.dataset.previewInitialized) {
-    frame.addEventListener('load', () => updatePreviewFrameHeight(frame, minHeight));
-    frame.dataset.previewInitialized = 'true';
+  if (frame._previewResizeHandler) {
+    frame.removeEventListener('load', frame._previewResizeHandler);
+    frame._previewResizeHandler = null;
   }
 
-  setTimeout(() => updatePreviewFrameHeight(frame, minHeight), 60);
+  if (autoResize) {
+    const handler = () => updatePreviewFrameHeight(frame, minHeight);
+    frame._previewResizeHandler = handler;
+    frame.addEventListener('load', handler);
+    frame.dataset.previewAutoResize = 'true';
+    frame.style.overflow = 'hidden';
+    setTimeout(() => updatePreviewFrameHeight(frame, minHeight), 60);
+  } else {
+    frame.dataset.previewAutoResize = 'false';
+    frame.style.overflow = 'auto';
+  }
 
   return sanitized;
 }

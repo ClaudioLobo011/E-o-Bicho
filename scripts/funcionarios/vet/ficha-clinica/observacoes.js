@@ -19,6 +19,9 @@ const observacaoModal = {
   cancelBtn: null,
   closeBtn: null,
   keydownHandler: null,
+  submitDefaultText: '',
+  mode: 'create',
+  editingId: null,
 };
 
 function hasTutorAndPetSelection() {
@@ -221,6 +224,9 @@ function ensureObservacaoModal() {
   observacaoModal.titleInput = nameInput;
   observacaoModal.textInput = textInput;
   observacaoModal.submitBtn = submitBtn;
+  if (submitBtn && !observacaoModal.submitDefaultText) {
+    observacaoModal.submitDefaultText = submitBtn.textContent || submitBtn.innerText || 'Salvar observa??o';
+  }
   observacaoModal.cancelBtn = cancelBtn;
   observacaoModal.closeBtn = closeBtn;
 
@@ -233,11 +239,15 @@ function resetObservacaoModal() {
   if (observacaoModal.submitBtn) {
     observacaoModal.submitBtn.disabled = false;
     observacaoModal.submitBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+    const baseText = observacaoModal.submitDefaultText || 'Salvar observa??o';
+    observacaoModal.submitBtn.textContent = baseText;
   }
   if (observacaoModal.cancelBtn) {
     observacaoModal.cancelBtn.disabled = false;
     observacaoModal.cancelBtn.classList.remove('opacity-50', 'cursor-not-allowed');
   }
+  observacaoModal.mode = 'create';
+  observacaoModal.editingId = null;
 }
 
 function setObservacaoModalSubmitting(isSubmitting) {
@@ -270,10 +280,29 @@ function focusFirstField() {
   }
 }
 
-export function openObservacaoModal() {
+export function openObservacaoModal(record = null) {
   if (!ensureObservacaoSelection()) return;
   const modal = ensureObservacaoModal();
   resetObservacaoModal();
+
+  let isEdit = false;
+  const recordId = record && typeof record === 'object' ? normalizeId(record.id || record._id) : null;
+  if (record && recordId) {
+    isEdit = true;
+    observacaoModal.mode = 'edit';
+    observacaoModal.editingId = recordId;
+    if (observacaoModal.titleInput) {
+      observacaoModal.titleInput.value = record.titulo ? String(record.titulo) : '';
+    }
+    if (observacaoModal.textInput) {
+      observacaoModal.textInput.value = record.observacao ? String(record.observacao) : '';
+    }
+    if (observacaoModal.submitBtn) {
+      const baseText = observacaoModal.submitDefaultText || 'Salvar observa??o';
+      observacaoModal.submitBtn.textContent = baseText.replace(/Salvar/i, 'Atualizar');
+    }
+  }
+
   if (!modal || !modal.overlay) return;
   modal.overlay.classList.remove('hidden');
   modal.overlay.setAttribute('aria-hidden', 'false');
@@ -305,6 +334,8 @@ export function closeObservacaoModal() {
   }
   if (observacaoModal.titleInput) observacaoModal.titleInput.disabled = false;
   if (observacaoModal.textInput) observacaoModal.textInput.disabled = false;
+  observacaoModal.mode = 'create';
+  observacaoModal.editingId = null;
 }
 
 function handleObservacaoSubmit(event) {
@@ -314,13 +345,37 @@ function handleObservacaoSubmit(event) {
   const titulo = observacaoModal.titleInput ? observacaoModal.titleInput.value.trim() : '';
   const texto = observacaoModal.textInput.value.trim();
   if (!texto) {
-    notify('Preencha a observação antes de salvar.', 'warning');
+    notify('Preencha a observa??o antes de salvar.', 'warning');
     observacaoModal.textInput.focus();
     return;
   }
 
   setObservacaoModalSubmitting(true);
   try {
+    const isEdit = observacaoModal.mode === 'edit' && observacaoModal.editingId;
+    if (isEdit) {
+      const targetId = observacaoModal.editingId;
+      const list = Array.isArray(state.observacoes) ? [...state.observacoes] : [];
+      const idx = list.findIndex((item) => normalizeId(item?.id || item?._id) === targetId);
+      if (idx === -1) {
+        throw new Error('N?o foi poss?vel localizar a observa??o selecionada.');
+      }
+      const current = list[idx] || {};
+      const updated = {
+        ...current,
+        titulo,
+        observacao: texto,
+        updatedAt: new Date().toISOString(),
+      };
+      list[idx] = updated;
+      state.observacoes = list;
+      persistObservacoesForSelection();
+      updateConsultaAgendaCard();
+      closeObservacaoModal();
+      notify('Observa??o atualizada com sucesso.', 'success');
+      return;
+    }
+
     const record = {
       id: generateObservacaoId(),
       titulo,
@@ -331,10 +386,10 @@ function handleObservacaoSubmit(event) {
     persistObservacoesForSelection();
     updateConsultaAgendaCard();
     closeObservacaoModal();
-    notify('Observação salva com sucesso.', 'success');
+    notify('Observa??o salva com sucesso.', 'success');
   } catch (error) {
     console.error('handleObservacaoSubmit', error);
-    notify('Não foi possível salvar a observação.', 'error');
+    notify(error.message || 'N?o foi poss?vel salvar a observa??o.', 'error');
   } finally {
     setObservacaoModalSubmitting(false);
   }
