@@ -17,6 +17,11 @@ import {
   restorePersistedSelection,
 } from './tutor.js';
 import { updateCardDisplay, updatePageVisibility, setCardMode } from './ui.js';
+import {
+  initAtendimentoActions,
+  activateHistoricoTab,
+  activateConsultaTab,
+} from './atendimento.js';
 
 export function initFichaClinica() {
   if (els.cliInput) {
@@ -124,6 +129,21 @@ export function initFichaClinica() {
     });
   }
 
+  if (els.consultaTab) {
+    els.consultaTab.addEventListener('click', (event) => {
+      event.preventDefault();
+      activateConsultaTab();
+    });
+  }
+
+  if (els.historicoTab) {
+    els.historicoTab.addEventListener('click', (event) => {
+      event.preventDefault();
+      activateHistoricoTab();
+    });
+  }
+
+  initAtendimentoActions();
   updateCardDisplay();
   restorePersistedSelection();
   updatePageVisibility();

@@ -20,6 +20,7 @@ import { loadPesosFromServer } from './pesos.js';
 import { loadDocumentosFromServer } from './documentos.js';
 import { loadReceitasFromServer } from './receitas.js';
 import { updateCardDisplay, updatePageVisibility, setCardMode } from './ui.js';
+import { loadHistoricoForSelection, setActiveMainTab } from './historico.js';
 
 function hideSugestoes() {
   if (els.cliSug) {
@@ -316,6 +317,7 @@ export async function onSelectPet(petId, opts = {}) {
   if (!skipPersistPet) {
     persistPetId(state.selectedPetId);
   }
+  setActiveMainTab('consulta');
   state.consultas = [];
   state.consultasLoadKey = null;
   state.consultasLoading = false;
@@ -339,6 +341,7 @@ export async function onSelectPet(petId, opts = {}) {
   loadAnexosForSelection();
   loadExamesForSelection();
   loadObservacoesForSelection();
+  loadHistoricoForSelection();
   updateCardDisplay();
   updatePageVisibility();
   if (!state.selectedPetId) {
@@ -379,12 +382,16 @@ export function clearCliente() {
   state.receitas = [];
   state.receitasLoadKey = null;
   state.receitasLoading = false;
+  state.historicos = [];
+  state.historicosLoadKey = null;
   persistAgendaContext(null);
   if (els.cliInput) els.cliInput.value = '';
   hideSugestoes();
   if (els.petSelect) {
     els.petSelect.innerHTML = `<option value="">Selecione o tutor para listar os pets</option>`;
   }
+  setActiveMainTab('consulta');
+  loadHistoricoForSelection();
   setCardMode('tutor');
   if (els.tutorNome) els.tutorNome.textContent = 'Nome Tutor';
   if (els.tutorEmail) els.tutorEmail.textContent = '—';
@@ -415,6 +422,10 @@ export function clearPet() {
   state.receitas = [];
   state.receitasLoadKey = null;
   state.receitasLoading = false;
+  state.historicos = [];
+  state.historicosLoadKey = null;
+  setActiveMainTab('consulta');
+  loadHistoricoForSelection();
   updateCardDisplay();
   updatePageVisibility();
 }

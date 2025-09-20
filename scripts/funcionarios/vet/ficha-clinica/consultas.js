@@ -2446,21 +2446,42 @@ async function handleConsultaSubmit() {
   }
 }
 
-function setConsultaTabActive() {
+export function updateMainTabLayout() {
+  const activeTab = state.activeMainTab === 'historico' ? 'historico' : 'consulta';
+  const consultaActiveClasses = ['bg-sky-600', 'text-white'];
+  const consultaInactiveClasses = ['bg-gray-100', 'text-gray-700', 'hover:bg-gray-50'];
+
   if (els.consultaTab) {
-    els.consultaTab.classList.remove('bg-gray-100', 'text-gray-700', 'hover:bg-gray-50');
-    els.consultaTab.classList.add('bg-sky-600', 'text-white');
+    els.consultaTab.classList.remove(...consultaActiveClasses, ...consultaInactiveClasses);
+    els.consultaTab.classList.add(...(activeTab === 'consulta' ? consultaActiveClasses : consultaInactiveClasses));
   }
+
   if (els.historicoTab) {
-    els.historicoTab.classList.remove('bg-sky-600', 'text-white');
-    els.historicoTab.classList.add('bg-gray-100', 'text-gray-700', 'hover:bg-gray-50');
+    els.historicoTab.classList.remove(...consultaActiveClasses, ...consultaInactiveClasses);
+    els.historicoTab.classList.add(...(activeTab === 'historico' ? consultaActiveClasses : consultaInactiveClasses));
+  }
+
+  if (els.consultaArea) {
+    if (activeTab === 'consulta') {
+      els.consultaArea.classList.remove('hidden');
+    } else {
+      els.consultaArea.classList.add('hidden');
+    }
+  }
+
+  if (els.historicoArea) {
+    if (activeTab === 'historico') {
+      els.historicoArea.classList.remove('hidden');
+    } else {
+      els.historicoArea.classList.add('hidden');
+    }
   }
 }
 
 export function updateConsultaAgendaCard() {
   const area = els.consultaArea;
   if (!area) return;
-  setConsultaTabActive();
+  updateMainTabLayout();
 
   const consultas = Array.isArray(state.consultas) ? state.consultas : [];
   const manualConsultas = consultas.filter((consulta) => !!normalizeId(consulta?.id || consulta?._id));
