@@ -15,11 +15,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
+const BODY_PARSER_LIMIT = '10mb';
+
 
 
 // Middleware
 app.set('socketio', io);
-app.use(express.json());
+app.use(express.json({ limit: BODY_PARSER_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_PARSER_LIMIT }));
 app.use(cors());
 app.use(express.static('public'));
 app.use('/api/funcionarios', require('./routes/adminFuncionarios'));
