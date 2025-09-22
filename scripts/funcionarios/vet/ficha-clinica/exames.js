@@ -1856,12 +1856,16 @@ async function handleExameSubmit() {
 }
 
 export async function deleteExame(exame, options = {}) {
-  const { skipConfirm = false } = options || {};
+  const { skipConfirm = false, suppressNotify = false } = options || {};
   const record = exame && typeof exame === 'object' ? exame : {};
   const exameId = normalizeId(record.id || record._id);
   const servicoId = normalizeId(record.servicoId || record.servico);
   if (!servicoId) {
-    notify('Não foi possível identificar o exame selecionado.', 'error');
+    const message = 'Não foi possível identificar o exame selecionado.';
+    if (suppressNotify) {
+      throw new Error(message);
+    }
+    notify(message, 'error');
     return false;
   }
 
@@ -1871,7 +1875,11 @@ export async function deleteExame(exame, options = {}) {
 
   const appointmentId = normalizeId(state.agendaContext?.appointmentId);
   if (!appointmentId) {
-    notify('Abra a ficha pela agenda para remover exames vinculados a um agendamento.', 'warning');
+    const message = 'Abra a ficha pela agenda para remover exames vinculados a um agendamento.';
+    if (suppressNotify) {
+      throw new Error(message);
+    }
+    notify(message, 'warning');
     return false;
   }
 
@@ -1918,7 +1926,11 @@ export async function deleteExame(exame, options = {}) {
   });
 
   if (!removed) {
-    notify('Não foi possível localizar o serviço do exame no agendamento.', 'error');
+    const message = 'Não foi possível localizar o serviço do exame no agendamento.';
+    if (suppressNotify) {
+      throw new Error(message);
+    }
+    notify(message, 'error');
     return false;
   }
 
@@ -1977,6 +1989,7 @@ export async function deleteExame(exame, options = {}) {
         await deleteAnexo({ id: anexoId, _id: anexoId, observacao: record.anexoObservacao || '' }, {
           skipConfirm: true,
           suppressNotify: true,
+          skipReload: true,
         });
       } catch (attachmentError) {
         console.error('deleteExame deleteAnexo', attachmentError);
@@ -1992,11 +2005,19 @@ export async function deleteExame(exame, options = {}) {
         servicoId,
       }),
     ).catch(() => {});
-    notify('Exame removido com sucesso.', 'success');
+    if (!suppressNotify) {
+      notify('Exame removido com sucesso.', 'success');
+    }
     return true;
   } catch (error) {
     console.error('deleteExame', error);
-    notify(error.message || 'Erro ao remover exame.', 'error');
+    const message = error?.message || 'Erro ao remover exame.';
+    if (!suppressNotify) {
+      notify(message, 'error');
+    }
+    if (suppressNotify) {
+      throw error instanceof Error ? error : new Error(message);
+    }
     return false;
   } finally {
     state.examesLoading = false;

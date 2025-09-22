@@ -405,16 +405,23 @@ function createManualConsultaCard(consulta) {
   return card;
 }
 
-async function deleteConsulta(record, options = {}) {
-  const { skipConfirm = false } = options || {};
+export async function deleteConsulta(record, options = {}) {
+  const { skipConfirm = false, suppressNotify = false } = options || {};
   const consulta = record && typeof record === 'object' ? record : {};
   const consultaId = normalizeId(consulta.id || consulta._id);
+  const missingMessage = 'Não foi possível identificar a consulta selecionada.';
   if (!consultaId) {
-    notify('Não foi possível identificar a consulta selecionada.', 'error');
+    if (suppressNotify) {
+      throw new Error(missingMessage);
+    }
+    notify(missingMessage, 'error');
     return false;
   }
 
   if (!ensureTutorAndPetSelected()) {
+    if (suppressNotify) {
+      throw new Error('Selecione um tutor e um pet para remover a consulta.');
+    }
     return false;
   }
 
@@ -455,12 +462,20 @@ async function deleteConsulta(record, options = {}) {
       return item !== consulta;
     });
     state.consultas = nextConsultas;
-    notify('Consulta removida com sucesso.', 'success');
+    if (!suppressNotify) {
+      notify('Consulta removida com sucesso.', 'success');
+    }
     emitFichaClinicaUpdate({ scope: 'consulta', action: 'delete', consultaId }).catch(() => {});
     return true;
   } catch (error) {
     console.error('deleteConsulta', error);
-    notify(error.message || 'Erro ao remover consulta.', 'error');
+    const message = error?.message || 'Erro ao remover consulta.';
+    if (!suppressNotify) {
+      notify(message, 'error');
+    }
+    if (suppressNotify) {
+      throw error instanceof Error ? error : new Error(message);
+    }
     return false;
   } finally {
     state.consultasLoading = false;

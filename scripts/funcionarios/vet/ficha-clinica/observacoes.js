@@ -511,12 +511,13 @@ function handleObservacaoSubmit(event) {
   }
 }
 
-export function deleteObservacao(observacao) {
+export function deleteObservacao(observacao, options = {}) {
+  const { suppressNotify = false } = options || {};
   const targetId = normalizeId(observacao && typeof observacao === 'object' ? observacao.id || observacao._id : observacao);
-  if (!targetId) return Promise.resolve();
+  if (!targetId) return Promise.resolve(false);
   const current = Array.isArray(state.observacoes) ? state.observacoes : [];
   const filtered = current.filter((item) => normalizeId(item?.id || item?._id) !== targetId);
-  if (filtered.length === current.length) return Promise.resolve();
+  if (filtered.length === current.length) return Promise.resolve(false);
   state.observacoes = filtered;
   persistObservacoesForSelection();
   updateConsultaAgendaCard();
@@ -528,8 +529,10 @@ export function deleteObservacao(observacao) {
       snapshot: safeClone(state.observacoes),
     }),
   ).catch(() => {});
-  notify('Observação removida com sucesso.', 'success');
-  return Promise.resolve();
+  if (!suppressNotify) {
+    notify('Observação removida com sucesso.', 'success');
+  }
+  return Promise.resolve(true);
 }
 
 state.deleteObservacao = deleteObservacao;

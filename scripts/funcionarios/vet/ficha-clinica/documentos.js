@@ -1446,7 +1446,13 @@ export async function deleteDocumentoRegistro(target, options = {}) {
     return true;
   } catch (error) {
     console.error('deleteDocumentoRegistro', error);
-    notify(error.message || 'Não foi possível remover o documento.', 'error');
+    const message = error?.message || 'Não foi possível remover o documento.';
+    if (!suppressNotify) {
+      notify(message, 'error');
+    }
+    if (suppressNotify) {
+      throw error instanceof Error ? error : new Error(message);
+    }
     return false;
   }
 }

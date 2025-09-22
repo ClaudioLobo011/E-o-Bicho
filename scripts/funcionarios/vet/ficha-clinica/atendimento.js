@@ -13,7 +13,12 @@ import {
   isConsultaLockedForCurrentUser,
   isAdminRole,
 } from './core.js';
-import { getConsultasKey, updateConsultaAgendaCard, updateMainTabLayout } from './consultas.js';
+import {
+  getConsultasKey,
+  updateConsultaAgendaCard,
+  updateMainTabLayout,
+  deleteConsulta,
+} from './consultas.js';
 import {
   addHistoricoEntry,
   removeHistoricoEntry,
@@ -24,6 +29,13 @@ import {
   persistHistoricoEntry,
 } from './historico.js';
 import { emitFichaClinicaUpdate } from './real-time.js';
+import { deleteVacina } from './vacinas.js';
+import { deleteAnexo, isExameAttachmentRecord } from './anexos.js';
+import { deleteExame } from './exames.js';
+import { deletePeso } from './pesos.js';
+import { deleteObservacao } from './observacoes.js';
+import { deleteDocumentoRegistro } from './documentos.js';
+import { deleteReceitaRegistro } from './receitas.js';
 
 function deepClone(value) {
   try {
@@ -159,15 +171,173 @@ function resetConsultaState() {
   state.consultasLoading = false;
   state.consultasLoadKey = null;
   state.vacinas = [];
+  state.vacinasLoadKey = null;
   state.anexos = [];
+  state.anexosLoadKey = null;
   state.exames = [];
+  state.examesLoadKey = null;
   state.pesos = [];
+  state.pesosLoadKey = null;
   state.observacoes = [];
+  state.observacoesLoadKey = null;
   state.documentos = [];
+  state.documentosLoadKey = null;
   state.receitas = [];
+  state.receitasLoadKey = null;
 }
 
+function setLimparConsultaProcessing(isProcessing) {
+  if (!els.limparConsultaBtn) return;
+  if (isProcessing) {
+    els.limparConsultaBtn.setAttribute('disabled', 'disabled');
+    els.limparConsultaBtn.classList.add('opacity-60', 'cursor-not-allowed');
+  } else {
+    els.limparConsultaBtn.removeAttribute('disabled');
+    els.limparConsultaBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+  }
+}
+
+let isProcessingLimpeza = false;
 let isProcessingFinalizacao = false;
+
+async function limparConsultaAtual() {
+  if (isProcessingLimpeza) return;
+
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+
+  let confirmed = true;
+  if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+    confirmed = window.confirm('Limpar os registros atuais da consulta? Esta ação não altera o histórico.');
+  }
+  if (!confirmed) return;
+
+  isProcessingLimpeza = true;
+  setLimparConsultaProcessing(true);
+
+  const errorMessages = new Set();
+  const recordError = (tag, error, fallbackMessage) => {
+    if (error) {
+      console.error(tag, error);
+    }
+    const message = (error && error.message) || fallbackMessage;
+    if (message) {
+      errorMessages.add(message);
+    }
+  };
+
+  const hasSelection = !!(clienteId && petId);
+  const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+
+  try {
+    if (hasSelection) {
+      const consultas = Array.isArray(state.consultas) ? [...state.consultas] : [];
+      for (const consulta of consultas) {
+        try {
+          await deleteConsulta(consulta, { skipConfirm: true, suppressNotify: true });
+        } catch (error) {
+          recordError('limparConsultaAtual/deleteConsulta', error, 'Não foi possível remover um registro de consulta.');
+        }
+      }
+
+      if (appointmentId) {
+        const vacinas = Array.isArray(state.vacinas) ? [...state.vacinas] : [];
+        for (const vacina of vacinas) {
+          try {
+            await deleteVacina(vacina, { skipConfirm: true, suppressNotify: true });
+          } catch (error) {
+            recordError('limparConsultaAtual/deleteVacina', error, 'Não foi possível remover uma vacina registrada.');
+          }
+        }
+
+        const exames = Array.isArray(state.exames) ? [...state.exames] : [];
+        for (const exame of exames) {
+          try {
+            await deleteExame(exame, { skipConfirm: true, suppressNotify: true });
+          } catch (error) {
+            recordError('limparConsultaAtual/deleteExame', error, 'Não foi possível remover um exame registrado.');
+          }
+        }
+      }
+
+      const documentos = Array.isArray(state.documentos) ? [...state.documentos] : [];
+      for (const documento of documentos) {
+        try {
+          await deleteDocumentoRegistro(documento, { suppressNotify: true });
+        } catch (error) {
+          recordError('limparConsultaAtual/deleteDocumento', error, 'Não foi possível remover um documento salvo.');
+        }
+      }
+
+      const receitas = Array.isArray(state.receitas) ? [...state.receitas] : [];
+      for (const receita of receitas) {
+        try {
+          await deleteReceitaRegistro(receita, { suppressNotify: true });
+        } catch (error) {
+          recordError('limparConsultaAtual/deleteReceita', error, 'Não foi possível remover uma receita salva.');
+        }
+      }
+
+      const pesos = Array.isArray(state.pesos) ? state.pesos.filter((entry) => entry && !entry.isInitial) : [];
+      for (const peso of pesos) {
+        try {
+          await deletePeso(peso, { skipConfirm: true, suppressNotify: true, skipReload: true });
+        } catch (error) {
+          recordError('limparConsultaAtual/deletePeso', error, 'Não foi possível remover um registro de peso.');
+        }
+      }
+
+      const anexos = Array.isArray(state.anexos)
+        ? state.anexos.filter((anexo) => !isExameAttachmentRecord(anexo))
+        : [];
+      for (const anexo of anexos) {
+        try {
+          await deleteAnexo(anexo, { skipConfirm: true, suppressNotify: true, skipReload: true });
+        } catch (error) {
+          recordError('limparConsultaAtual/deleteAnexo', error, 'Não foi possível remover um anexo enviado.');
+        }
+      }
+
+      const observacoes = Array.isArray(state.observacoes) ? [...state.observacoes] : [];
+      for (const observacao of observacoes) {
+        try {
+          await deleteObservacao(observacao, { suppressNotify: true });
+        } catch (error) {
+          recordError('limparConsultaAtual/deleteObservacao', error, 'Não foi possível remover uma observação registrada.');
+        }
+      }
+    }
+
+    clearLocalStoredDataForSelection(clienteId, petId);
+    resetConsultaState();
+    updateConsultaAgendaCard();
+
+    if (hasSelection) {
+      const eventPayload = buildAtendimentoEventPayload({
+        scope: 'atendimento',
+        action: 'limpar',
+      });
+      emitFichaClinicaUpdate(eventPayload).catch(() => {});
+    }
+
+    if (errorMessages.size) {
+      if (errorMessages.size === 1) {
+        notify([...errorMessages][0], 'warning');
+      } else {
+        console.warn('limparConsultaAtual errors:', [...errorMessages]);
+        notify('Alguns registros não puderam ser removidos. Verifique e tente novamente.', 'warning');
+      }
+    } else {
+      notify('Registros da consulta atual foram limpos.', 'info');
+    }
+  } catch (error) {
+    console.error('limparConsultaAtual', error);
+    notify(error?.message || 'Erro ao limpar os registros da consulta.', 'error');
+  } finally {
+    isProcessingLimpeza = false;
+    setLimparConsultaProcessing(false);
+  }
+}
 
 export async function finalizarAtendimento() {
   if (isProcessingFinalizacao) return;
@@ -555,6 +725,60 @@ export function handleAtendimentoRealTimeEvent(event = {}) {
     return true;
   }
 
+  if (action === 'limpar') {
+    if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+      state.agendaContext = targetAppointmentId ? { appointmentId: targetAppointmentId } : {};
+    } else if (targetAppointmentId) {
+      state.agendaContext.appointmentId = targetAppointmentId;
+    }
+
+    if (targetClienteId) {
+      state.agendaContext.tutorId = targetClienteId;
+    }
+    if (targetPetId) {
+      state.agendaContext.petId = targetPetId;
+    }
+
+    if (event.agendaStatus !== undefined) {
+      state.agendaContext.status = String(event.agendaStatus);
+    }
+
+    if (Array.isArray(event.agendaServicos)) {
+      const servicos = deepClone(event.agendaServicos) || [...event.agendaServicos];
+      state.agendaContext.servicos = servicos;
+      state.agendaContext.totalServicos = servicos.length;
+    } else if (state.agendaContext) {
+      if (Array.isArray(state.agendaContext.servicos)) {
+        state.agendaContext.totalServicos = state.agendaContext.servicos.length;
+      } else {
+        delete state.agendaContext.totalServicos;
+      }
+    }
+
+    if (event.agendaValor !== undefined) {
+      const valor = Number(event.agendaValor);
+      if (!Number.isNaN(valor)) {
+        state.agendaContext.valor = valor;
+      }
+    }
+
+    if (event.agendaProfissional !== undefined) {
+      state.agendaContext.profissionalNome = event.agendaProfissional || '';
+    }
+
+    persistAgendaContext(state.agendaContext);
+
+    const clienteId = targetClienteId || currentClienteId;
+    const petId = targetPetId || currentPetId;
+    if (clienteId && petId) {
+      clearLocalStoredDataForSelection(clienteId, petId);
+    }
+    resetConsultaState();
+    updateConsultaAgendaCard();
+    notify('Os registros da consulta foram limpos por outro usuário.', 'info');
+    return true;
+  }
+
   return false;
 }
 
@@ -568,17 +792,10 @@ export function initAtendimentoActions() {
   if (els.limparConsultaBtn) {
     els.limparConsultaBtn.addEventListener('click', (event) => {
       event.preventDefault();
-      const clienteId = normalizeId(state.selectedCliente?._id);
-      const petId = normalizeId(state.selectedPetId);
-      let confirmed = true;
-      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-        confirmed = window.confirm('Limpar os registros atuais da consulta? Esta ação não altera o histórico.');
+      const result = limparConsultaAtual();
+      if (result && typeof result.then === 'function') {
+        result.catch(() => {});
       }
-      if (!confirmed) return;
-      clearLocalStoredDataForSelection(clienteId, petId);
-      resetConsultaState();
-      updateConsultaAgendaCard();
-      notify('Registros da consulta atual foram limpos.', 'info');
     });
   }
 }
