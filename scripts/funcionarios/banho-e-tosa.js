@@ -167,6 +167,38 @@
     }
   };
 
+  let toolbarWidthRaf = 0;
+  let toolbarResizeListenerBound = false;
+
+  function syncAgendaToolbarWidth() {
+    const toolbar = document.getElementById('agenda-toolbar');
+    if (!toolbar) return;
+
+    const wrapper = agendaList?.parentElement;
+    if (!wrapper) return;
+
+    const listWidth = agendaList ? agendaList.scrollWidth : 0;
+    const fallbackWidth = Math.max(wrapper.clientWidth || 0, agendaList?.clientWidth || 0);
+    const targetWidth = Math.max(listWidth, fallbackWidth, 0);
+
+    if (targetWidth > 0) {
+      const px = `${targetWidth}px`;
+      if (toolbar.style.width !== px) toolbar.style.width = px;
+      if (toolbar.style.minWidth !== px) toolbar.style.minWidth = px;
+    } else {
+      toolbar.style.removeProperty('width');
+      toolbar.style.removeProperty('min-width');
+    }
+  }
+
+  function queueAgendaToolbarWidthSync() {
+    if (toolbarWidthRaf) cancelAnimationFrame(toolbarWidthRaf);
+    toolbarWidthRaf = requestAnimationFrame(() => {
+      toolbarWidthRaf = 0;
+      syncAgendaToolbarWidth();
+    });
+  }
+
   function loadFiltersFromStorage() {
     try {
       const raw = JSON.parse(localStorage.getItem(FILTER_STORAGE_KEY) || 'null');
@@ -207,6 +239,13 @@
     bar.appendChild(filters);
 
     agendaList.parentElement.insertBefore(bar, agendaList); // antes da grade
+
+    queueAgendaToolbarWidthSync();
+
+    if (!toolbarResizeListenerBound) {
+      window.addEventListener('resize', queueAgendaToolbarWidthSync);
+      toolbarResizeListenerBound = true;
+    }
   }
 
   function computeKPIs(items) {
@@ -235,6 +274,8 @@
       ${ (state.filters.statuses.size || state.filters.profIds.size)
           ? `<div class="kpi-chip kpi-muted">Filtrados: <strong>${kF.total}</strong></div>` : '' }
     `;
+
+    queueAgendaToolbarWidthSync();
   }
 
   function renderFilters() {
@@ -739,6 +780,8 @@
         empty.textContent = 'Sem agendamentos para este filtro/dia.';
         agendaList.insertBefore(empty, header.nextSibling);
       }
+
+      queueAgendaToolbarWidthSync();
   }
 
   /** ===== NOVO: visão semanal ===== */
@@ -871,6 +914,8 @@
       empty.textContent = 'Nenhum agendamento no intervalo.';
       agendaList.appendChild(empty);
     }
+
+    queueAgendaToolbarWidthSync();
   }
 
   /** ===== NOVO: visão mensal ===== */
@@ -1004,6 +1049,8 @@
       cell.appendChild(list);
       grid.appendChild(cell);
     });
+
+    queueAgendaToolbarWidthSync();
   }
 
   // Map de estilos por status (cores seguras com Tailwind já usadas no projeto)
