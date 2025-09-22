@@ -1048,12 +1048,16 @@ async function handleVacinaSubmit() {
 }
 
 export async function deleteVacina(vacina, options = {}) {
-  const { skipConfirm = false } = options || {};
+  const { skipConfirm = false, suppressNotify = false } = options || {};
   const record = vacina && typeof vacina === 'object' ? vacina : {};
   const recordId = normalizeId(record.id || record._id);
   const servicoId = normalizeId(record.servicoId || record.servico);
   if (!servicoId) {
-    notify('Não foi possível identificar a vacina selecionada.', 'error');
+    const message = 'Não foi possível identificar a vacina selecionada.';
+    if (suppressNotify) {
+      throw new Error(message);
+    }
+    notify(message, 'error');
     return false;
   }
 
@@ -1063,7 +1067,11 @@ export async function deleteVacina(vacina, options = {}) {
 
   const appointmentId = normalizeId(state.agendaContext?.appointmentId);
   if (!appointmentId) {
-    notify('Abra a ficha pela agenda para remover vacinas vinculadas a um agendamento.', 'warning');
+    const message = 'Abra a ficha pela agenda para remover vacinas vinculadas a um agendamento.';
+    if (suppressNotify) {
+      throw new Error(message);
+    }
+    notify(message, 'warning');
     return false;
   }
 
@@ -1123,7 +1131,11 @@ export async function deleteVacina(vacina, options = {}) {
   });
 
   if (!removed) {
-    notify('Não foi possível localizar a vacina no agendamento.', 'error');
+    const message = 'Não foi possível localizar a vacina no agendamento.';
+    if (suppressNotify) {
+      throw new Error(message);
+    }
+    notify(message, 'error');
     return false;
   }
 
@@ -1178,7 +1190,9 @@ export async function deleteVacina(vacina, options = {}) {
     state.vacinas = nextVacinas;
     persistVacinasForSelection();
     updateConsultaAgendaCard();
-    notify('Vacina removida com sucesso.', 'success');
+    if (!suppressNotify) {
+      notify('Vacina removida com sucesso.', 'success');
+    }
     emitFichaClinicaUpdate(
       buildVacinaEventPayload({
         scope: 'vacina',
@@ -1190,7 +1204,13 @@ export async function deleteVacina(vacina, options = {}) {
     return true;
   } catch (error) {
     console.error('deleteVacina', error);
-    notify(error.message || 'Erro ao remover vacina.', 'error');
+    const message = error?.message || 'Erro ao remover vacina.';
+    if (!suppressNotify) {
+      notify(message, 'error');
+    }
+    if (suppressNotify) {
+      throw error instanceof Error ? error : new Error(message);
+    }
     return false;
   }
 }

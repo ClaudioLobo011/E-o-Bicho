@@ -1278,7 +1278,13 @@ export async function deleteReceitaRegistro(target, options = {}) {
     return true;
   } catch (error) {
     console.error('deleteReceitaRegistro', error);
-    notify(error.message || 'Não foi possível remover a receita.', 'error');
+    const message = error?.message || 'Não foi possível remover a receita.';
+    if (!suppressNotify) {
+      notify(message, 'error');
+    }
+    if (suppressNotify) {
+      throw error instanceof Error ? error : new Error(message);
+    }
     return false;
   }
 }

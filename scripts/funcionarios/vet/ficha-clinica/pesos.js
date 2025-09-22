@@ -486,13 +486,17 @@ export async function loadPesosFromServer(options = {}) {
 }
 
 export async function deletePeso(peso, options = {}) {
-  const { skipConfirm = false } = options || {};
+  const { skipConfirm = false, suppressNotify = false, skipReload = false } = options || {};
   const record = peso && typeof peso === 'object' ? peso : {};
   const normalizedId = normalizeId(record.id || record._id);
   const targetId = sanitizeObjectId(normalizedId);
 
   if (!targetId) {
-    notify('Este registro de peso não pode ser removido.', 'warning');
+    const message = 'Este registro de peso não pode ser removido.';
+    if (suppressNotify) {
+      throw new Error(message);
+    }
+    notify(message, 'warning');
     return false;
   }
 
@@ -510,7 +514,11 @@ export async function deletePeso(peso, options = {}) {
   const clienteId = normalizeId(state.selectedCliente?._id);
   const petId = normalizeId(state.selectedPetId);
   if (!(clienteId && petId)) {
-    notify('Selecione um tutor e um pet para remover registros de peso.', 'warning');
+    const message = 'Selecione um tutor e um pet para remover registros de peso.';
+    if (suppressNotify) {
+      throw new Error(message);
+    }
+    notify(message, 'warning');
     return false;
   }
 
@@ -570,23 +578,30 @@ export async function deletePeso(peso, options = {}) {
     }
 
     updateCardDisplay();
-    notify('Registro de peso removido com sucesso.', 'success');
+    if (!suppressNotify) {
+      notify('Registro de peso removido com sucesso.', 'success');
+    }
 
-    await loadPesosFromServer({ force: true });
+    if (!skipReload) {
+      await loadPesosFromServer({ force: true });
 
-    const orderedAfterReload = getOrderedPesos();
-    const latestAfterReload = orderedAfterReload[0] || null;
-    const syncedWeight = latestAfterReload ? latestAfterReload.peso : null;
-    updatePetWeightInState(syncedWeight);
-    updateCardDisplay();
+      const orderedAfterReload = getOrderedPesos();
+      const latestAfterReload = orderedAfterReload[0] || null;
+      const syncedWeight = latestAfterReload ? latestAfterReload.peso : null;
+      updatePetWeightInState(syncedWeight);
+      updateCardDisplay();
+    }
 
     emitFichaClinicaUpdate({ scope: 'peso', action: 'delete', pesoId: targetId }).catch(() => {});
 
     return true;
   } catch (error) {
     console.error('deletePeso', error);
-    notify(error.message || 'Erro ao remover registro de peso.', 'error');
-    throw error;
+    const message = error?.message || 'Erro ao remover registro de peso.';
+    if (!suppressNotify) {
+      notify(message, 'error');
+    }
+    throw error instanceof Error ? error : new Error(message);
   }
 }
 

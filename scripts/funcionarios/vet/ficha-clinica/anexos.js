@@ -855,7 +855,7 @@ export function handleAnexoRealTimeEvent(event = {}) {
 }
 
 export async function deleteAnexo(anexo, options = {}) {
-  const { skipConfirm = false, suppressNotify = false } = options || {};
+  const { skipConfirm = false, suppressNotify = false, skipReload = false } = options || {};
   const record = anexo && typeof anexo === 'object' ? anexo : {};
   const targetId = normalizeId(record.id || record._id);
   if (!targetId) return false;
@@ -877,7 +877,11 @@ export async function deleteAnexo(anexo, options = {}) {
   const clienteId = normalizeId(state.selectedCliente?._id);
   const petId = normalizeId(state.selectedPetId);
   if (!(clienteId && petId)) {
-    notify('Selecione um tutor e um pet para remover anexos.', 'warning');
+    const message = 'Selecione um tutor e um pet para remover anexos.';
+    if (suppressNotify) {
+      throw new Error(message);
+    }
+    notify(message, 'warning');
     return false;
   }
 
@@ -905,12 +909,17 @@ export async function deleteAnexo(anexo, options = {}) {
       notify('Anexo removido com sucesso.', 'success');
     }
     emitFichaClinicaUpdate({ scope: 'anexo', action: 'delete', anexoId: targetId }).catch(() => {});
-    await loadAnexosFromServer({ force: true });
+    if (!skipReload) {
+      await loadAnexosFromServer({ force: true });
+    }
     return true;
   } catch (error) {
     console.error('deleteAnexo', error);
-    notify(error.message || 'Erro ao remover anexo.', 'error');
-    throw error;
+    const message = error?.message || 'Erro ao remover anexo.';
+    if (!suppressNotify) {
+      notify(message, 'error');
+    }
+    throw error instanceof Error ? error : new Error(message);
   }
 }
 
