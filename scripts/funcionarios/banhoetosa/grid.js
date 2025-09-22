@@ -382,8 +382,7 @@ function navigateToFichaClinica(appointment) {
 function createFichaClinicaChip(appointment) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  const { badgeClass } = statusMeta('agendado');
-  btn.className = `agenda-ficha-chip inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap transition-colors duration-150 ${badgeClass} hover:bg-slate-200 hover:border-slate-300`;
+  btn.className = 'agenda-ficha-chip';
   btn.textContent = 'Ficha Clínica';
   btn.title = 'Abrir ficha clínica';
   btn.addEventListener('click', (ev) => {
@@ -414,20 +413,20 @@ export function renderGrid() {
   const header = document.createElement('div');
   header.style.display = 'grid';
   header.style.gridTemplateColumns = `120px repeat(${Math.max(colCount - 1, 0)}, minmax(var(--agenda-col-w, 360px), 1fr))`;
-  header.className = 'bg-white border-b';
+  header.className = 'agenda-grid-header agenda-grid-header--day';
   const headLabels = ['Hora', ...profs.map(p => p.nome)];
   headLabels.forEach((label, idx) => {
     const cell = document.createElement('div');
-    cell.className = 'px-3 py-2 text-xs font-medium text-slate-600';
+    cell.className = 'px-3 py-2 text-xs font-medium text-slate-600 agenda-grid-header__cell';
     if (idx === 0) {
       cell.textContent = label;
     } else {
       cell.style.textAlign = 'center';
       const wrapper = document.createElement('div');
-      wrapper.className = 'flex items-center justify-center gap-2';
+      wrapper.className = 'flex items-center justify-center gap-2 agenda-grid-header__prof';
 
       const span = document.createElement('span');
-      span.className = 'agenda-head-label inline-block';
+      span.className = 'agenda-head-label inline-block font-semibold';
       span.textContent = label || '';
       wrapper.appendChild(span);
 
@@ -457,7 +456,7 @@ export function renderGrid() {
     header.appendChild(cell);
   });
   const counter = document.createElement('div');
-  counter.className = 'col-span-full text-right px-3 py-1 text-xs text-slate-500';
+  counter.className = 'agenda-grid-summary col-span-full text-right px-3 py-1 text-xs text-slate-500';
   const itemsAll = state.agendamentos || [];
   const items    = getFilteredAgendamentos(itemsAll);
   const filtered = (state.filters.statuses.size || state.filters.profIds.size) ? ` (filtrados: ${items.length})` : '';
@@ -468,6 +467,7 @@ export function renderGrid() {
   const body = document.createElement('div');
   body.style.display = 'grid';
   body.style.gridTemplateColumns = `120px repeat(${Math.max(colCount - 1, 0)}, minmax(var(--agenda-col-w, 360px), 1fr))`;
+  body.className = 'agenda-grid-body agenda-grid-body--day';
   els.agendaList.appendChild(body);
 
   const isToday = normalizeDate(date) === todayStr();
@@ -479,12 +479,16 @@ export function renderGrid() {
     const inBusiness = hourNumber >= BUSINESS_START && hourNumber < BUSINESS_END;
     const isNowRow   = isToday && hh === nowHH;
     const timeCell = document.createElement('div');
-    timeCell.className = 'px-3 py-3 border-b text-sm ' + (isNowRow ? 'bg-sky-50 text-slate-800 font-medium' : 'bg-gray-50 text-gray-600');
+    timeCell.className = 'agenda-time-cell';
+    if (inBusiness) timeCell.classList.add('is-business'); else timeCell.classList.add('is-off');
+    if (isNowRow) timeCell.classList.add('is-now');
     timeCell.textContent = hh;
     body.appendChild(timeCell);
     (profs || []).forEach(p => {
       const cell = document.createElement('div');
-      cell.className = `px-2 py-2 border-b agenda-slot ${inBusiness ? '' : 'bg-slate-50'} ${isNowRow ? 'bg-sky-50' : ''}`;
+      cell.className = 'agenda-slot agenda-day-slot';
+      if (!inBusiness) cell.classList.add('is-off');
+      if (isNowRow) cell.classList.add('is-now');
       cell.dataset.profissionalId = String(p._id);
       cell.dataset.hh = hh;
       body.appendChild(cell);
@@ -516,37 +520,39 @@ export function renderGrid() {
     card.setAttribute('data-appointment-id', a._id || '');
     card.style.setProperty('--stripe', meta.stripe);
     card.style.setProperty('--card-max-w', '260px');
-    card.className = `agenda-card border ${meta.borderClass} cursor-move select-none`;
+    card.className = 'agenda-card cursor-move select-none';
+    card.dataset.status = meta.key;
     card.setAttribute('draggable', 'true');
 
     const headerEl = document.createElement('div');
-    headerEl.className = 'flex items-center justify-between gap-2 pr-14 md:pr-16 mb-1';
+    headerEl.className = 'flex items-center justify-between gap-2 pr-14 md:pr-16 mb-1 agenda-card__head';
     const tutorShort = shortTutorName(a.clienteNome || '');
     const headLabel  = tutorShort ? `${tutorShort} | ${a.pet || ''}` : (a.pet || '');
     headerEl.innerHTML = `
-      <div class="font-semibold text-sm text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
+      <div class="agenda-card__title font-semibold text-sm text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
       ${renderStatusBadge(a.status)}
     `;
 
     const bodyEl = document.createElement('div');
+    bodyEl.classList.add('agenda-card__body');
     if (a.observacoes && String(a.observacoes).trim()) {
       const svc = document.createElement('div');
-      svc.className = 'text-[13px] text-gray-600 clamp-2';
+      svc.className = 'agenda-card__service text-[13px] text-gray-600 clamp-2';
       svc.textContent = a.servico || '';
       const obs = document.createElement('div');
-      obs.className = 'mt-1 text-[12px] text-gray-700 italic clamp-2';
+      obs.className = 'agenda-card__note mt-1 text-[12px] text-gray-700 italic clamp-2';
       obs.textContent = String(a.observacoes).trim();
       bodyEl.appendChild(svc);
       bodyEl.appendChild(obs);
     } else {
-      bodyEl.className = 'text-[13px] text-gray-600 clamp-2';
+      bodyEl.classList.add('text-[13px]', 'text-gray-600', 'clamp-2');
       bodyEl.textContent = a.servico || '';
     }
 
     const footerEl = document.createElement('div');
-    footerEl.className = 'flex items-center justify-end gap-2 pt-1';
+    footerEl.className = 'flex items-center justify-end gap-2 pt-1 agenda-card__footer';
     const price = document.createElement('div');
-    price.className = 'text-[13px] text-gray-800 font-medium';
+    price.className = 'agenda-card__price text-[13px] text-gray-800 font-medium';
     price.textContent = money(a.valor);
     footerEl.appendChild(createFichaClinicaChip(a));
     footerEl.appendChild(price);
@@ -578,7 +584,7 @@ export function renderWeekGrid() {
   const header = document.createElement('div');
   header.style.display = 'grid';
   header.style.gridTemplateColumns = `120px repeat(7, minmax(180px,1fr))`;
-  header.className = 'sticky top-0 z-20 bg-white border-b';
+  header.className = 'agenda-grid-header agenda-grid-header--week';
   header.innerHTML = `
     <div class="px-2 py-2 text-xs text-slate-500">Horário</div>
     ${days.map(d=>{
@@ -590,18 +596,21 @@ export function renderWeekGrid() {
   const body = document.createElement('div');
   body.style.display = 'grid';
   body.style.gridTemplateColumns = `120px repeat(7, minmax(180px,1fr))`;
+  body.className = 'agenda-grid-body agenda-grid-body--week';
   els.agendaList.appendChild(body);
 
   hours.forEach(hh => {
     const hNum = parseInt(hh.slice(0,2),10);
     const inBusiness = (hNum>=BUSINESS_START && hNum< BUSINESS_END);
     const timeCell = document.createElement('div');
-    timeCell.className = `px-2 py-2 border-b text-[12px] ${inBusiness?'text-slate-800':'text-slate-400'}`;
+    timeCell.className = 'agenda-time-cell agenda-time-cell--compact';
+    if (inBusiness) timeCell.classList.add('is-business'); else timeCell.classList.add('is-off');
     timeCell.textContent = hh;
     body.appendChild(timeCell);
     days.forEach(d=>{
       const cell = document.createElement('div');
-      cell.className = 'px-2 py-2 border-b agenda-slot';
+      cell.className = 'agenda-slot agenda-week-slot';
+      if (!inBusiness) cell.classList.add('is-off');
       cell.dataset.day = d;
       cell.dataset.hh  = hh;
       body.appendChild(cell);
@@ -623,36 +632,38 @@ export function renderWeekGrid() {
     card.setAttribute('data-appointment-id', a._id || '');
     card.style.setProperty('--stripe', meta.stripe);
     card.style.setProperty('--card-max-w', '100%');
-    card.className = `agenda-card border ${meta.borderClass} cursor-pointer select-none px-2 py-1`;
+    card.className = 'agenda-card agenda-card--compact cursor-pointer select-none px-2 py-1';
+    card.dataset.status = meta.key;
     card.setAttribute('draggable', 'true');
     card.title = [ a.pet || '', a.servico || '', (a.observacoes ? `Obs: ${String(a.observacoes).trim()}` : '') ].filter(Boolean).join(' • ');
 
     const headerEl = document.createElement('div');
-    headerEl.className = 'flex items-center justify-between gap-2 mb-1';
+    headerEl.className = 'flex items-center justify-between gap-2 mb-1 agenda-card__head';
     const tutorShort = shortTutorName(a.clienteNome || a.tutor || '');
     const headLabel  = tutorShort ? `${tutorShort} | ${a.pet || ''}` : (a.pet || '');
     headerEl.innerHTML = `
-      <div class="font-medium text-[12px] text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
+      <div class="agenda-card__title font-medium text-[12px] text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
     `;
 
     const bodyEl = document.createElement('div');
+    bodyEl.classList.add('agenda-card__body');
     const svc = document.createElement('div');
-    svc.className = 'text-[12px] text-gray-600 truncate';
+    svc.className = 'agenda-card__service text-[12px] text-gray-600 truncate';
     svc.textContent = a.servico || '';
     bodyEl.appendChild(svc);
     if (a.observacoes && String(a.observacoes).trim()) {
       const obs = document.createElement('div');
-      obs.className = 'text-[11px] text-gray-700 italic truncate';
+      obs.className = 'agenda-card__note text-[11px] text-gray-700 italic truncate';
       obs.textContent = String(a.observacoes).trim();
       bodyEl.appendChild(obs);
     }
 
     const footerEl = document.createElement('div');
-    footerEl.className = 'flex items-center justify-end gap-2 pt-0.5';
+    footerEl.className = 'flex items-center justify-end gap-2 pt-0.5 agenda-card__footer';
     const statusEl = document.createElement('div');
     statusEl.innerHTML = renderStatusBadge(a.status).replace('text-xs','text-[10px]');
     const price = document.createElement('div');
-    price.className = 'text-[12px] text-gray-800 font-semibold';
+    price.className = 'agenda-card__price text-[12px] text-gray-800 font-semibold';
     price.textContent = money(a.valor);
     footerEl.appendChild(statusEl);
     footerEl.appendChild(createFichaClinicaChip(a));
@@ -682,7 +693,7 @@ export function renderMonthGrid() {
   const header = document.createElement('div');
   header.style.display = 'grid';
   header.style.gridTemplateColumns = `repeat(7, minmax(180px,1fr))`;
-  header.className = 'sticky top-0 z-20 bg-white border-b';
+  header.className = 'agenda-grid-header agenda-grid-header--month';
   header.innerHTML = weekDays.map(d=>`<div class="px-3 py-2 text-xs font-medium text-slate-700">${d}</div>`).join('');
   els.agendaList.appendChild(header);
 
@@ -691,6 +702,7 @@ export function renderMonthGrid() {
   const grid = document.createElement('div');
   grid.style.display = 'grid';
   grid.style.gridTemplateColumns = `repeat(7, minmax(180px,1fr))`;
+  grid.className = 'agenda-grid-body agenda-grid-body--month';
   els.agendaList.appendChild(grid);
 
   const items = getFilteredAgendamentos((state.agendamentos||[]).slice().sort((a,b)=>(new Date(a.h||a.scheduledAt))-(new Date(b.h||b.scheduledAt))));
@@ -706,14 +718,14 @@ export function renderMonthGrid() {
   days.forEach(d=>{
     const inMonth = (d>=m0 && d<m1);
     const cell = document.createElement('div');
-    cell.className = `min-h-[140px] border p-2 ${inMonth? 'bg-white':'bg-slate-50'} agenda-slot`;
+    cell.className = `min-h-[140px] agenda-slot agenda-month-slot ${inMonth ? '' : 'is-off'}`;
     cell.dataset.day = d;
     const title = document.createElement('div');
-    title.className = `flex items-center justify-between text-[11px] ${inMonth?'text-slate-700':'text-slate-400'}`;
+    title.className = `flex items-center justify-between text-[11px] ${inMonth?'text-slate-700':'text-slate-400'} agenda-month-slot__title`;
     const dayNum = new Date(d+'T00:00:00').getDate();
     title.innerHTML = `<span class="font-semibold">${String(dayNum).padStart(2,'0')}</span>`;
     const list = document.createElement('div');
-    list.className = 'mt-1 space-y-1 agenda-slot';
+    list.className = 'mt-1 space-y-1 agenda-slot agenda-month-list';
     list.dataset.day = d;
     const itemsDay = byDay.get(d) || [];
     itemsDay.forEach((a, idx)=>{
@@ -724,11 +736,12 @@ export function renderMonthGrid() {
       card.setAttribute('data-appointment-id', a._id || '');
       card.style.setProperty('--stripe', meta.stripe);
       card.style.setProperty('--card-max-w', '100%');
-      card.className = `agenda-card border ${meta.borderClass} cursor-pointer select-none px-2 py-1`;
+      card.className = 'agenda-card agenda-card--compact cursor-pointer select-none px-2 py-1';
+      card.dataset.status = meta.key;
       card.setAttribute('draggable', 'true');
       card.title = [ a.pet || '', a.servico || '', (a.observacoes ? `Obs: ${String(a.observacoes).trim()}` : '') ].filter(Boolean).join(' • ');
       const headerEl = document.createElement('div');
-      headerEl.className = 'flex items-center gap-2 pr-14 md:pr-16 mb-1';
+      headerEl.className = 'flex items-center gap-2 pr-14 md:pr-16 mb-1 agenda-card__head';
       headerEl.innerHTML = `
         <span class="inline-flex items-center px-1.5 py-[1px] rounded bg-slate-100 text-[10px] font-medium">${hhmm}</span>
         <div class="flex-1 flex items-center justify-center">
@@ -742,12 +755,12 @@ export function renderMonthGrid() {
       const tutorShort = shortTutorName(rawTutorName);
       const headLabel  = [tutorShort, (a.pet || '')].filter(Boolean).join(' | ');
       const nameEl = document.createElement('div');
-      nameEl.className = 'text-[12px] font-medium text-gray-900 text-center truncate';
+      nameEl.className = 'agenda-card__title text-[12px] font-medium text-gray-900 text-center truncate';
       nameEl.title = headLabel; nameEl.textContent = headLabel;
       const footerEl = document.createElement('div');
-      footerEl.className = 'flex items-center justify-end gap-2 pt-0.5';
+      footerEl.className = 'flex items-center justify-end gap-2 pt-0.5 agenda-card__footer';
       const price = document.createElement('div');
-      price.className = 'text-[12px] text-gray-800 font-semibold';
+      price.className = 'agenda-card__price text-[12px] text-gray-800 font-semibold';
       price.textContent = money(a.valor);
       footerEl.appendChild(createFichaClinicaChip(a));
       footerEl.appendChild(price);
