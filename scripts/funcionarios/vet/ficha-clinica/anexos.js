@@ -17,6 +17,7 @@ import {
   isFinalizadoSelection,
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
+import { emitFichaClinicaUpdate } from './real-time.js';
 
 function generateAnexoId() {
   return `anx-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
@@ -445,6 +446,7 @@ export async function deleteAnexo(anexo, options = {}) {
     if (!suppressNotify) {
       notify('Anexo removido com sucesso.', 'success');
     }
+    emitFichaClinicaUpdate({ scope: 'anexo', action: 'delete', anexoId: targetId }).catch(() => {});
     await loadAnexosFromServer({ force: true });
     return true;
   } catch (error) {
@@ -1236,6 +1238,12 @@ async function handleAnexoSubmit() {
     updateConsultaAgendaCard();
     closeAnexoModal();
     notify(isEditing ? 'Anexos atualizados com sucesso.' : 'Anexos salvos com sucesso.', 'success');
+    const recordId = normalizeId(record?.id || record?._id);
+    emitFichaClinicaUpdate({
+      scope: 'anexo',
+      action: isEditing ? 'update' : 'create',
+      anexoId: recordId || null,
+    }).catch(() => {});
     await loadAnexosFromServer({ force: true });
   } catch (error) {
     console.error('handleAnexoSubmit', error);

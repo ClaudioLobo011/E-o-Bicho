@@ -20,6 +20,7 @@ import {
   isFinalizadoSelection,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard, getConsultasKey } from './consultas.js';
+import { emitFichaClinicaUpdate } from './real-time.js';
 import {
   KEYWORD_GROUPS,
   renderPreviewFrameContent,
@@ -1311,6 +1312,11 @@ export async function uploadDocumentoAssinado(target, file, options = {}) {
   if (!suppressNotify) {
     notify('Documento assinado salvo com sucesso.', 'success');
   }
+  emitFichaClinicaUpdate({
+    scope: 'documento',
+    action: 'signed-upload',
+    documentoRegistroId: recordId,
+  }).catch(() => {});
   return true;
 }
 
@@ -1381,6 +1387,11 @@ export async function removeDocumentoAssinado(target, options = {}) {
   if (!suppressNotify) {
     notify('Documento assinado removido com sucesso.', 'success');
   }
+  emitFichaClinicaUpdate({
+    scope: 'documento',
+    action: 'signed-remove',
+    documentoRegistroId: recordId,
+  }).catch(() => {});
   return true;
 }
 
@@ -1407,6 +1418,11 @@ export async function deleteDocumentoRegistro(target, options = {}) {
           notify('Documento removido com sucesso.', 'success');
         }
         updateConsultaAgendaCard();
+        emitFichaClinicaUpdate({
+          scope: 'documento',
+          action: 'delete',
+          documentoRegistroId: targetId,
+        }).catch(() => {});
         return true;
       }
 
@@ -1422,6 +1438,11 @@ export async function deleteDocumentoRegistro(target, options = {}) {
       notify('Documento removido com sucesso.', 'success');
     }
     updateConsultaAgendaCard();
+    emitFichaClinicaUpdate({
+      scope: 'documento',
+      action: 'delete',
+      documentoRegistroId: targetId,
+    }).catch(() => {});
     return true;
   } catch (error) {
     console.error('deleteDocumentoRegistro', error);
@@ -1500,6 +1521,8 @@ async function handleSave() {
 
     let response;
     let data;
+    let savedRecordId = null;
+    let actionType = null;
     if (isEditing && documentoModal.editingId) {
       response = await api(`/func/vet/documentos-registros/${encodeURIComponent(documentoModal.editingId)}`, {
         method: 'PUT',
@@ -1524,6 +1547,13 @@ async function handleSave() {
         upsertDocumentoRegistroInState(fallbackRecord);
       }
 
+      savedRecordId = normalizeId(
+        (data && (data.id || data._id))
+          || documentoModal.editingId
+          || fallbackRecord?.id
+          || fallbackRecord?._id,
+      );
+      actionType = 'update';
       notify('Documento atualizado na aba de consultas.', 'success');
     } else {
       response = await api('/func/vet/documentos-registros', {
@@ -1552,9 +1582,20 @@ async function handleSave() {
         upsertDocumentoRegistroInState(fallbackRecord);
       }
 
+      savedRecordId = normalizeId(
+        (data && (data.id || data._id))
+          || fallbackRecord?.id
+          || fallbackRecord?._id,
+      );
+      actionType = 'create';
       notify('Documento adicionado na aba de consultas.', 'success');
     }
 
+    emitFichaClinicaUpdate({
+      scope: 'documento',
+      action: actionType || (isEditing ? 'update' : 'create'),
+      documentoRegistroId: savedRecordId || null,
+    }).catch(() => {});
     closeDocumentoModal();
     updateConsultaAgendaCard();
   } catch (error) {

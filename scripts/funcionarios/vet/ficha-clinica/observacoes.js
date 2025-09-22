@@ -9,6 +9,7 @@ import {
   isFinalizadoSelection,
 } from './core.js';
 import { getConsultasKey, updateConsultaAgendaCard } from './consultas.js';
+import { emitFichaClinicaUpdate } from './real-time.js';
 
 const observacaoModal = {
   overlay: null,
@@ -24,6 +25,86 @@ const observacaoModal = {
   mode: 'create',
   editingId: null,
 };
+
+function safeClone(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    if (Array.isArray(value)) {
+      return value.map((item) => (item && typeof item === 'object' ? { ...item } : item));
+    }
+    if (value && typeof value === 'object') {
+      return { ...value };
+    }
+    return value;
+  }
+}
+
+function sortObservacoesByCreatedAt(list) {
+  return [...list].sort((a, b) => {
+    const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bTime - aTime;
+  });
+}
+
+function areObservacoesEqual(current = [], next = []) {
+  if (current.length !== next.length) return false;
+  for (let i = 0; i < current.length; i += 1) {
+    const prev = current[i] || {};
+    const nextItem = next[i] || {};
+    const prevId = normalizeId(prev.id || prev._id);
+    const nextId = normalizeId(nextItem.id || nextItem._id);
+    if (prevId !== nextId) return false;
+    const prevCreated = prev.createdAt ? new Date(prev.createdAt).getTime() : 0;
+    const nextCreated = nextItem.createdAt ? new Date(nextItem.createdAt).getTime() : 0;
+    if (prevCreated !== nextCreated) return false;
+    if (String(prev.titulo || '') !== String(nextItem.titulo || '')) return false;
+    if (String(prev.observacao || '') !== String(nextItem.observacao || '')) return false;
+  }
+  return true;
+}
+
+function buildObservacaoEventPayload(extra = {}) {
+  const event = { ...extra };
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+  if (clienteId) event.clienteId = clienteId;
+  if (petId) event.petId = petId;
+  if (appointmentId) event.appointmentId = appointmentId;
+  return event;
+}
+
+function applyObservacoesSnapshot(rawList) {
+  if (!Array.isArray(rawList)) return false;
+  const normalized = rawList.map(normalizeObservacaoRecord).filter(Boolean);
+  const ordered = sortObservacoesByCreatedAt(normalized);
+  const current = Array.isArray(state.observacoes) ? state.observacoes : [];
+  if (areObservacoesEqual(current, ordered)) return false;
+  state.observacoes = ordered;
+  persistObservacoesForSelection();
+  updateConsultaAgendaCard();
+  return true;
+}
+
+function extractObservacoesSnapshot(event = {}) {
+  if (!event || typeof event !== 'object') return null;
+  const candidates = [
+    event.snapshot,
+    event.observacoesSnapshot,
+    event.records,
+    event.observacoes,
+    event.list,
+  ];
+  for (let i = 0; i < candidates.length; i += 1) {
+    const candidate = candidates[i];
+    if (Array.isArray(candidate)) return candidate;
+  }
+  return null;
+}
 
 function hasTutorAndPetSelection() {
   const tutorId = normalizeId(state.selectedCliente?._id);
@@ -53,13 +134,18 @@ function normalizeObservacaoRecord(raw) {
   const texto = pickFirst(raw.observacao, raw.texto, raw.descricao, raw.description, raw.note, raw.notes);
   if (!texto) return null;
   const createdAt = toIsoOrNull(raw.createdAt || raw.criadoEm || raw.dataCriacao) || new Date().toISOString();
-  return {
+  const updatedAt = toIsoOrNull(raw.updatedAt || raw.atualizadoEm || raw.dataAtualizacao) || null;
+  const record = {
     id,
     _id: id,
     titulo: titulo || '',
     observacao: texto,
     createdAt,
   };
+  if (updatedAt) {
+    record.updatedAt = updatedAt;
+  }
+  return record;
 }
 
 function persistObservacoesForSelection() {
@@ -383,6 +469,15 @@ function handleObservacaoSubmit(event) {
       state.observacoes = list;
       persistObservacoesForSelection();
       updateConsultaAgendaCard();
+      emitFichaClinicaUpdate(
+        buildObservacaoEventPayload({
+          scope: 'observacao',
+          action: 'update',
+          observacaoId: targetId || null,
+          observacao: safeClone(updated),
+          snapshot: safeClone(state.observacoes),
+        }),
+      ).catch(() => {});
       closeObservacaoModal();
       notify('Observa??o atualizada com sucesso.', 'success');
       return;
@@ -397,6 +492,15 @@ function handleObservacaoSubmit(event) {
     state.observacoes = [record, ...(Array.isArray(state.observacoes) ? state.observacoes : [])];
     persistObservacoesForSelection();
     updateConsultaAgendaCard();
+    emitFichaClinicaUpdate(
+      buildObservacaoEventPayload({
+        scope: 'observacao',
+        action: 'create',
+        observacaoId: record.id || null,
+        observacao: safeClone(record),
+        snapshot: safeClone(state.observacoes),
+      }),
+    ).catch(() => {});
     closeObservacaoModal();
     notify('Observa??o salva com sucesso.', 'success');
   } catch (error) {
@@ -416,8 +520,94 @@ export function deleteObservacao(observacao) {
   state.observacoes = filtered;
   persistObservacoesForSelection();
   updateConsultaAgendaCard();
+  emitFichaClinicaUpdate(
+    buildObservacaoEventPayload({
+      scope: 'observacao',
+      action: 'delete',
+      observacaoId: targetId,
+      snapshot: safeClone(state.observacoes),
+    }),
+  ).catch(() => {});
   notify('Observação removida com sucesso.', 'success');
   return Promise.resolve();
 }
 
 state.deleteObservacao = deleteObservacao;
+
+export function handleObservacaoRealTimeEvent(event = {}) {
+  if (!event || typeof event !== 'object') return false;
+  if (event.scope && event.scope !== 'observacao') return false;
+
+  const targetClienteId = normalizeId(event.clienteId || event.tutorId || event.cliente);
+  const targetPetId = normalizeId(event.petId || event.pet);
+  const targetAppointmentId = normalizeId(event.appointmentId || event.agendamentoId || event.appointment);
+
+  const currentClienteId = normalizeId(state.selectedCliente?._id);
+  const currentPetId = normalizeId(state.selectedPetId);
+  const currentAppointmentId = normalizeId(state.agendaContext?.appointmentId);
+
+  if (targetClienteId && currentClienteId && targetClienteId !== currentClienteId) return false;
+  if (targetPetId && currentPetId && targetPetId !== currentPetId) return false;
+  if (targetAppointmentId && currentAppointmentId && targetAppointmentId !== currentAppointmentId) return false;
+
+  const snapshot = extractObservacoesSnapshot(event);
+  if (snapshot) {
+    return applyObservacoesSnapshot(snapshot);
+  }
+
+  const action = String(event.action || '').toLowerCase();
+
+  if (action === 'delete') {
+    const observacaoId = normalizeId(event.observacaoId || event.id || event.recordId);
+    if (!observacaoId) return false;
+    const previous = Array.isArray(state.observacoes) ? state.observacoes : [];
+    const next = previous.filter((item) => normalizeId(item?.id || item?._id) !== observacaoId);
+    if (next.length === previous.length) return false;
+    state.observacoes = next;
+    persistObservacoesForSelection();
+    updateConsultaAgendaCard();
+    return true;
+  }
+
+  const payload = event.observacao || event.record || event.data;
+  if (!payload || typeof payload !== 'object') return false;
+
+  const record = normalizeObservacaoRecord({
+    ...payload,
+    id: payload.id || payload._id || event.observacaoId || event.id || event.recordId,
+  });
+  if (!record) return false;
+
+  const recordId = normalizeId(record.id || record._id);
+  const list = Array.isArray(state.observacoes) ? [...state.observacoes] : [];
+  let replaced = false;
+
+  for (let i = 0; i < list.length; i += 1) {
+    const entry = list[i] || {};
+    const entryId = normalizeId(entry.id || entry._id);
+    if (!entryId || !recordId || entryId !== recordId) continue;
+    const createdAt = record.createdAt || entry.createdAt || new Date().toISOString();
+    list[i] = {
+      ...entry,
+      ...record,
+      id: recordId,
+      _id: recordId,
+      createdAt,
+    };
+    replaced = true;
+    break;
+  }
+
+  if (!replaced) {
+    list.unshift({ ...record, id: recordId, _id: recordId });
+  }
+
+  const ordered = sortObservacoesByCreatedAt(list);
+  const current = Array.isArray(state.observacoes) ? state.observacoes : [];
+  if (areObservacoesEqual(current, ordered)) return false;
+
+  state.observacoes = ordered;
+  persistObservacoesForSelection();
+  updateConsultaAgendaCard();
+  return true;
+}

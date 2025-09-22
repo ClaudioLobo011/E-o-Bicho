@@ -1,13 +1,21 @@
 // Entry initialization for the Vet ficha clínica
 import { els, debounce } from './core.js';
-import { openConsultaModal } from './consultas.js';
-import { openVacinaModal } from './vacinas.js';
-import { openAnexoModal } from './anexos.js';
-import { openDocumentoModal } from './documentos.js';
-import { openReceitaModal } from './receitas.js';
-import { openExameModal } from './exames.js';
-import { openPesoModal } from './pesos.js';
-import { openObservacaoModal } from './observacoes.js';
+import { openConsultaModal, loadConsultasFromServer } from './consultas.js';
+import { openVacinaModal, loadVacinasForSelection, handleVacinaRealTimeEvent } from './vacinas.js';
+import {
+  openAnexoModal,
+  loadAnexosForSelection,
+  loadAnexosFromServer,
+} from './anexos.js';
+import { openDocumentoModal, loadDocumentosFromServer } from './documentos.js';
+import { openReceitaModal, loadReceitasFromServer } from './receitas.js';
+import { openExameModal, loadExamesForSelection, handleExameRealTimeEvent } from './exames.js';
+import { openPesoModal, loadPesosFromServer } from './pesos.js';
+import {
+  openObservacaoModal,
+  loadObservacoesForSelection,
+  handleObservacaoRealTimeEvent,
+} from './observacoes.js';
 import {
   searchClientes,
   hideSugestoes,
@@ -22,9 +30,79 @@ import {
   activateHistoricoTab,
   activateConsultaTab,
   reopenCurrentAgendamento,
+  handleAtendimentoRealTimeEvent,
 } from './atendimento.js';
+import { loadHistoricoForSelection } from './historico.js';
+import {
+  initFichaRealTime,
+  registerFichaUpdateHandler,
+} from './real-time.js';
+
+let remoteSyncTimeout = null;
+let remoteSyncRunning = false;
+
+async function performRemoteSync() {
+  if (remoteSyncRunning) return;
+  remoteSyncRunning = true;
+  try {
+    await Promise.allSettled([
+      loadConsultasFromServer({ force: true }),
+      loadAnexosFromServer({ force: true }),
+      loadPesosFromServer({ force: true }),
+      loadDocumentosFromServer({ force: true }),
+      loadReceitasFromServer({ force: true }),
+      loadHistoricoForSelection(),
+    ]);
+    loadVacinasForSelection();
+    loadAnexosForSelection();
+    loadExamesForSelection();
+    loadObservacoesForSelection();
+    updateCardDisplay();
+    updatePageVisibility();
+  } finally {
+    remoteSyncRunning = false;
+  }
+}
+
+function scheduleRemoteSync() {
+  if (remoteSyncTimeout) return;
+  remoteSyncTimeout = setTimeout(() => {
+    remoteSyncTimeout = null;
+    performRemoteSync().catch((error) => {
+      console.error('Erro ao sincronizar dados da ficha clínica em tempo real.', error);
+    });
+  }, 150);
+}
+
+function handleFichaRealTimeMessage(message) {
+  const event = message && typeof message === 'object' ? message.event : null;
+  let handled = false;
+
+  if (event && typeof event === 'object') {
+    const scope = event.scope;
+    if (scope === 'atendimento') {
+      handled = handleAtendimentoRealTimeEvent(event) || handled;
+    } else if (scope === 'vacina') {
+      handled = handleVacinaRealTimeEvent(event) || handled;
+    } else if (scope === 'exame') {
+      handled = handleExameRealTimeEvent(event) || handled;
+    } else if (scope === 'observacao') {
+      handled = handleObservacaoRealTimeEvent(event) || handled;
+    }
+  }
+
+  if (handled) {
+    updateCardDisplay();
+    updatePageVisibility();
+  }
+
+  scheduleRemoteSync();
+}
 
 export function initFichaClinica() {
+  initFichaRealTime();
+  registerFichaUpdateHandler(handleFichaRealTimeMessage);
+
   if (els.cliInput) {
     const debouncedSearch = debounce((value) => searchClientes(value), 300);
     els.cliInput.addEventListener('input', (event) => {

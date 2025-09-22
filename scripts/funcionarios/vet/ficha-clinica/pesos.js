@@ -16,6 +16,7 @@ import {
   isFinalizadoSelection,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
+import { emitFichaClinicaUpdate } from './real-time.js';
 import { updateCardDisplay } from './ui.js';
 
 function getPesosKey(clienteId, petId) {
@@ -579,6 +580,8 @@ export async function deletePeso(peso, options = {}) {
     updatePetWeightInState(syncedWeight);
     updateCardDisplay();
 
+    emitFichaClinicaUpdate({ scope: 'peso', action: 'delete', pesoId: targetId }).catch(() => {});
+
     return true;
   } catch (error) {
     console.error('deletePeso', error);
@@ -710,6 +713,7 @@ async function handlePesoSubmit(event) {
       const message = typeof data?.message === 'string' ? data.message : 'Erro ao registrar peso.';
       throw new Error(message);
     }
+    const savedRecordId = normalizeId(data?.id || data?._id);
 
     if (pesoModal.form) {
       try { pesoModal.form.reset(); } catch (_) { /* ignore */ }
@@ -722,6 +726,7 @@ async function handlePesoSubmit(event) {
     updateCardDisplay();
 
     await loadPesosFromServer({ force: true });
+    emitFichaClinicaUpdate({ scope: 'peso', action: 'create', pesoId: savedRecordId || null }).catch(() => {});
     notify('Peso registrado com sucesso.', 'success');
   } catch (error) {
     console.error('handlePesoSubmit', error);
@@ -782,6 +787,8 @@ async function submitPesoUpdate(pesoValor) {
     }
 
     await loadPesosFromServer({ force: true });
+    const updatedRecordId = normalizeId(updated?.id || updated?._id || targetId);
+    emitFichaClinicaUpdate({ scope: 'peso', action: 'update', pesoId: updatedRecordId || null }).catch(() => {});
     const ordered = getOrderedPesos();
     const latest = ordered[0] || null;
     updatePetWeightInState(latest ? latest.peso : null);

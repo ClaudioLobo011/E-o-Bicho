@@ -44,6 +44,7 @@ import {
   removeReceitaAssinada,
 } from './receitas.js';
 import { openVacinaModal } from './vacinas.js';
+import { emitFichaClinicaUpdate } from './real-time.js';
 
 function normalizeConsultaRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -455,6 +456,7 @@ async function deleteConsulta(record, options = {}) {
     });
     state.consultas = nextConsultas;
     notify('Consulta removida com sucesso.', 'success');
+    emitFichaClinicaUpdate({ scope: 'consulta', action: 'delete', consultaId }).catch(() => {});
     return true;
   } catch (error) {
     console.error('deleteConsulta', error);
@@ -2455,6 +2457,16 @@ async function handleConsultaSubmit() {
     }
 
     const wasEdit = isEdit;
+    const savedRecordId = normalizeId(
+      (saved && (saved.id || saved._id))
+        || (data && (data.id || data._id))
+        || modal.editingId,
+    );
+    emitFichaClinicaUpdate({
+      scope: 'consulta',
+      action: wasEdit ? 'update' : 'create',
+      consultaId: savedRecordId || null,
+    }).catch(() => {});
     closeConsultaModal();
     notify(wasEdit ? 'Consulta atualizada com sucesso.' : 'Consulta registrada com sucesso.', 'success');
   } catch (error) {
