@@ -215,6 +215,106 @@ function inferExtensionFromFile(file) {
   return '';
 }
 
+function extractAllowedStaffTypes(serviceDoc) {
+  if (!serviceDoc) return [];
+  const raw = [];
+  if (Array.isArray(serviceDoc.tiposPermitidos)) raw.push(...serviceDoc.tiposPermitidos);
+  if (serviceDoc.grupo && Array.isArray(serviceDoc.grupo.tiposPermitidos)) {
+    raw.push(...serviceDoc.grupo.tiposPermitidos);
+  }
+  return [...new Set(raw.map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+function formatWaitingAppointment(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+
+  const appointmentId = normalizeObjectId(doc._id || doc.id || doc.appointmentId);
+  if (!appointmentId) return null;
+
+  const tutorId = normalizeObjectId(doc.cliente?._id || doc.cliente);
+  const petId = normalizeObjectId(doc.pet?._id || doc.pet);
+  const storeId = normalizeObjectId(doc.store?._id || doc.store);
+
+  const itens = Array.isArray(doc.itens) ? doc.itens : [];
+  const servicesSource = itens.length
+    ? itens
+    : (doc.servico
+        ? [{ servico: doc.servico, valor: typeof doc.valor === 'number' ? doc.valor : null }]
+        : []);
+
+  const services = servicesSource.map((item) => {
+    const serviceDoc = item && typeof item.servico === 'object' ? item.servico : null;
+    const serviceId = normalizeObjectId(serviceDoc?._id || item?.servico);
+    const valor = Number(
+      item?.valor ||
+        (serviceDoc && typeof serviceDoc.valor === 'number' ? serviceDoc.valor : 0),
+    ) || 0;
+    const categorias = Array.isArray(serviceDoc?.categorias)
+      ? serviceDoc.categorias.filter(Boolean)
+      : [];
+    return {
+      _id: serviceId || null,
+      nome: serviceDoc && serviceDoc.nome ? String(serviceDoc.nome) : '—',
+      valor,
+      categorias,
+      tiposPermitidos: extractAllowedStaffTypes(serviceDoc || {}),
+    };
+  });
+
+  const total = services.reduce((sum, svc) => sum + Number(svc.valor || 0), 0) || Number(doc.valor || 0) || 0;
+
+  const profissionalDoc = doc.profissional && typeof doc.profissional === 'object' ? doc.profissional : null;
+  const profissionalId = normalizeObjectId(profissionalDoc?._id || doc.profissional);
+  const profissionalNome = profissionalDoc
+    ? (profissionalDoc.nomeCompleto || profissionalDoc.nomeContato || profissionalDoc.razaoSocial || '')
+    : '';
+
+  const clienteDoc = doc.cliente && typeof doc.cliente === 'object' ? doc.cliente : null;
+  const tutorNome = clienteDoc
+    ? (
+        clienteDoc.nomeCompleto ||
+        clienteDoc.nomeContato ||
+        clienteDoc.razaoSocial ||
+        clienteDoc.email ||
+        ''
+      )
+    : '';
+
+  const petDoc = doc.pet && typeof doc.pet === 'object' ? doc.pet : null;
+  const petNome = petDoc && petDoc.nome ? String(petDoc.nome) : '';
+
+  const storeIdCandidates = [];
+  if (storeId) storeIdCandidates.push(storeId);
+  if (Array.isArray(doc.storeIdCandidates)) {
+    doc.storeIdCandidates.forEach((candidate) => {
+      const normalized = normalizeObjectId(candidate);
+      if (normalized && !storeIdCandidates.includes(normalized)) {
+        storeIdCandidates.push(normalized);
+      }
+    });
+  }
+
+  return {
+    _id: appointmentId,
+    id: appointmentId,
+    appointmentId,
+    storeId: storeId || null,
+    storeIdCandidates,
+    clienteId: tutorId || null,
+    tutorNome,
+    petId: petId || null,
+    petNome,
+    status: doc.status || 'em_espera',
+    scheduledAt: toIsoDate(doc.scheduledAt),
+    valor: total,
+    observacoes: typeof doc.observacoes === 'string' ? doc.observacoes.trim() : '',
+    servicos: services,
+    profissionalId: profissionalId || null,
+    profissionalNome,
+    codigoVenda: doc.codigoVenda ? String(doc.codigoVenda) : null,
+  };
+}
+
 function parseStringArray(value) {
   if (!value) return [];
   if (Array.isArray(value)) {
@@ -2419,6 +2519,63 @@ router.get('/vet/anexos', authMiddleware, requireStaff, async (req, res) => {
   } catch (error) {
     console.error('GET /func/vet/anexos', error);
     return res.status(500).json({ message: 'Erro ao carregar anexos.' });
+  }
+});
+
+router.get('/vet/agendamentos/em-espera', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const clienteId = normalizeObjectId(req.query.clienteId);
+    const petId = normalizeObjectId(req.query.petId);
+
+    if (!(clienteId && petId)) {
+      return res.status(400).json({ message: 'clienteId e petId são obrigatórios.' });
+    }
+
+    const role = String(req.user?.role || '').toLowerCase();
+    const isAdminMaster = role === 'admin_master';
+
+    let profissionalId = null;
+    if (isAdminMaster) {
+      profissionalId = normalizeObjectId(req.query.profissionalId);
+    } else {
+      profissionalId = normalizeObjectId(req.user?.id || req.user?._id || req.query.profissionalId);
+    }
+
+    const filter = {
+      cliente: clienteId,
+      pet: petId,
+      status: 'em_espera',
+    };
+
+    if (profissionalId) {
+      filter.profissional = profissionalId;
+    } else if (!isAdminMaster) {
+      return res.json([]);
+    }
+
+    const docs = await Appointment.find(filter)
+      .select('_id store cliente pet itens servico profissional scheduledAt valor status observacoes codigoVenda')
+      .populate('cliente', 'nomeCompleto nomeContato razaoSocial email')
+      .populate('pet', 'nome')
+      .populate({ path: 'profissional', select: 'nomeCompleto nomeContato razaoSocial' })
+      .populate({
+        path: 'servico',
+        select: 'nome categorias grupo tiposPermitidos valor',
+        populate: { path: 'grupo', select: 'tiposPermitidos' },
+      })
+      .populate({
+        path: 'itens.servico',
+        select: 'nome categorias grupo tiposPermitidos valor',
+        populate: { path: 'grupo', select: 'tiposPermitidos' },
+      })
+      .sort({ scheduledAt: 1 })
+      .lean();
+
+    const payload = Array.isArray(docs) ? docs.map(formatWaitingAppointment).filter(Boolean) : [];
+    return res.json(payload);
+  } catch (error) {
+    console.error('GET /func/vet/agendamentos/em-espera', error);
+    return res.status(500).json({ message: 'Erro ao listar agendamentos em espera.' });
   }
 });
 

@@ -27,24 +27,27 @@ import {
   isFinalizadoSelection,
   isConsultaLockedForCurrentUser,
   isAdminRole,
+  persistAgendaContext,
 } from './core.js';
 import { openDocumentPrintWindow } from '../document-utils.js';
 import { openObservacaoModal } from './observacoes.js';
-import { openAnexoModal } from './anexos.js';
+import { openAnexoModal, loadAnexosFromServer } from './anexos.js';
 import { openExameModal } from './exames.js';
-import { openPesoModal } from './pesos.js';
+import { openPesoModal, loadPesosFromServer } from './pesos.js';
 import {
   openDocumentoModal,
   uploadDocumentoAssinado,
   removeDocumentoAssinado,
+  loadDocumentosFromServer,
 } from './documentos.js';
 import {
   openReceitaModal,
   uploadReceitaAssinada,
   removeReceitaAssinada,
+  loadReceitasFromServer,
 } from './receitas.js';
 import { openVacinaModal } from './vacinas.js';
-import { emitFichaClinicaUpdate } from './real-time.js';
+import { emitFichaClinicaUpdate, updateFichaRealTimeSelection } from './real-time.js';
 
 function normalizeConsultaRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -83,6 +86,13 @@ function normalizeConsultaRecord(raw) {
 }
 
 export function getConsultasKey(clienteId, petId) {
+  const tutor = normalizeId(clienteId);
+  const pet = normalizeId(petId);
+  if (!(tutor && pet)) return null;
+  return `${tutor}|${pet}`;
+}
+
+function getWaitingAppointmentsKey(clienteId, petId) {
   const tutor = normalizeId(clienteId);
   const pet = normalizeId(petId);
   if (!(tutor && pet)) return null;
@@ -136,6 +146,8 @@ function findConsultaById(consultaId) {
   if (!targetId) return null;
   return (state.consultas || []).find((consulta) => normalizeId(consulta?.id || consulta?._id) === targetId) || null;
 }
+
+const waitingAppointmentProcessing = new Set();
 
 function setConsultaModalSubmitting(isSubmitting) {
   consultaModal.isSubmitting = !!isSubmitting;
@@ -281,6 +293,122 @@ export async function loadConsultasFromServer(options = {}) {
   }
 }
 
+function normalizeWaitingAppointment(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const appointmentId = normalizeId(raw.appointmentId || raw.id || raw._id);
+  if (!appointmentId) return null;
+
+  const clienteId = normalizeId(raw.clienteId || raw.cliente);
+  const petId = normalizeId(raw.petId || raw.pet);
+  const storeId = normalizeId(raw.storeId || raw.store || raw.store_id);
+
+  const servicesRaw = Array.isArray(raw.servicos) ? raw.servicos : [];
+  const services = servicesRaw.map((svc) => {
+    const serviceId = normalizeId(svc?.id || svc?._id || svc?.servicoId || svc?.servico);
+    const valor = Number(svc?.valor || 0) || 0;
+    const categorias = Array.isArray(svc?.categorias) ? svc.categorias.filter(Boolean) : [];
+    const tiposPermitidos = Array.isArray(svc?.tiposPermitidos) ? svc.tiposPermitidos.filter(Boolean) : [];
+    return {
+      _id: serviceId || null,
+      nome: pickFirst(svc?.nome, svc?.descricao, svc?.label) || 'Serviço',
+      valor,
+      categorias,
+      tiposPermitidos,
+    };
+  });
+
+  const servicesTotal = services.reduce((sum, svc) => sum + Number(svc.valor || 0), 0);
+
+  const storeIdCandidatesRaw = Array.isArray(raw.storeIdCandidates) ? raw.storeIdCandidates : [];
+  const storeIdCandidates = storeIdCandidatesRaw
+    .map((candidate) => normalizeId(candidate))
+    .filter(Boolean);
+  if (storeId && !storeIdCandidates.includes(storeId)) {
+    storeIdCandidates.push(storeId);
+  }
+
+  return {
+    id: appointmentId,
+    _id: appointmentId,
+    appointmentId,
+    clienteId,
+    petId,
+    storeId: storeId || null,
+    storeIdCandidates,
+    status: pickFirst(raw.status) || 'em_espera',
+    scheduledAt: toIsoOrNull(raw.scheduledAt || raw.h || raw.data || raw.scheduledAtIso),
+    valor: Number(raw.valor || servicesTotal) || servicesTotal,
+    observacoes: typeof raw.observacoes === 'string' ? raw.observacoes : '',
+    servicos: services,
+    profissionalId: normalizeId(raw.profissionalId || raw.profissional),
+    profissionalNome: pickFirst(raw.profissionalNome, raw.profissionalLabel, raw.profissional),
+    tutorNome: pickFirst(raw.tutorNome, raw.tutorLabel, raw.tutor),
+    petNome: pickFirst(raw.petNome, raw.petLabel, raw.pet),
+    codigoVenda: pickFirst(raw.codigoVenda) || null,
+  };
+}
+
+export async function loadWaitingAppointments(options = {}) {
+  const { force = false } = options || {};
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+
+  if (!(clienteId && petId)) {
+    state.waitingAppointments = [];
+    state.waitingAppointmentsLoadKey = null;
+    state.waitingAppointmentsLoading = false;
+    updateConsultaAgendaCard();
+    return;
+  }
+
+  const key = getWaitingAppointmentsKey(clienteId, petId);
+
+  if (isFinalizadoSelection(clienteId, petId)) {
+    state.waitingAppointments = [];
+    state.waitingAppointmentsLoadKey = key;
+    state.waitingAppointmentsLoading = false;
+    updateConsultaAgendaCard();
+    return;
+  }
+
+  if (!force && key && state.waitingAppointmentsLoadKey === key) return;
+
+  state.waitingAppointmentsLoading = true;
+  updateConsultaAgendaCard();
+
+  try {
+    const params = new URLSearchParams({ clienteId, petId });
+    const resp = await api(`/func/vet/agendamentos/em-espera?${params.toString()}`);
+    const payload = await resp.json().catch(() => (resp.ok ? [] : {}));
+    if (!resp.ok) {
+      const message = typeof payload?.message === 'string'
+        ? payload.message
+        : 'Erro ao carregar agendamentos em espera.';
+      throw new Error(message);
+    }
+
+    const data = Array.isArray(payload) ? payload : [];
+    const normalized = data.map(normalizeWaitingAppointment).filter(Boolean);
+    normalized.sort((a, b) => {
+      const aTime = a?.scheduledAt ? new Date(a.scheduledAt).getTime() : 0;
+      const bTime = b?.scheduledAt ? new Date(b.scheduledAt).getTime() : 0;
+      return aTime - bTime;
+    });
+
+    state.waitingAppointments = normalized;
+    state.waitingAppointmentsLoadKey = key;
+  } catch (error) {
+    console.error('loadWaitingAppointments', error);
+    state.waitingAppointments = [];
+    state.waitingAppointmentsLoadKey = null;
+    notify(error.message || 'Erro ao carregar agendamentos em espera.', 'error');
+  } finally {
+    state.waitingAppointmentsLoading = false;
+    updateConsultaAgendaCard();
+  }
+}
+
 function createConsultaFieldSection(label, value) {
   const wrapper = document.createElement('div');
   wrapper.className = 'space-y-1';
@@ -402,6 +530,133 @@ function createManualConsultaCard(consulta) {
     }
   });
 
+  return card;
+}
+
+function createWaitingAppointmentItem(appointment) {
+  if (!appointment || typeof appointment !== 'object') return null;
+  const appointmentId = normalizeId(appointment.appointmentId || appointment.id || appointment._id);
+  if (!appointmentId) return null;
+
+  const services = Array.isArray(appointment.servicos) ? appointment.servicos : [];
+  const servicesTotal = services.reduce((sum, svc) => sum + Number(svc?.valor || 0), 0);
+  const totalValue = Number(appointment.valor);
+  const displayTotal = Number.isFinite(totalValue) && totalValue > 0 ? totalValue : servicesTotal;
+
+  const item = document.createElement('div');
+  item.className = 'rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-2';
+  item.dataset.appointmentId = appointmentId;
+
+  const header = document.createElement('div');
+  header.className = 'flex flex-wrap items-start justify-between gap-3';
+  item.appendChild(header);
+
+  const info = document.createElement('div');
+  info.className = 'min-w-0 flex-1 space-y-1';
+  header.appendChild(info);
+
+  const whenText = formatDateTimeDisplay(appointment.scheduledAt);
+  const whenEl = document.createElement('p');
+  whenEl.className = 'text-sm font-semibold text-amber-900';
+  whenEl.textContent = whenText || 'Sem horário definido';
+  info.appendChild(whenEl);
+
+  if (appointment.profissionalNome) {
+    const profEl = document.createElement('p');
+    profEl.className = 'text-xs text-amber-800';
+    profEl.textContent = `Profissional: ${appointment.profissionalNome}`;
+    info.appendChild(profEl);
+  }
+
+  if (services.length) {
+    const servicesEl = document.createElement('p');
+    servicesEl.className = 'text-xs text-amber-800';
+    servicesEl.textContent = `Serviços: ${services.map((svc) => pickFirst(svc?.nome, svc?.descricao, svc?.label) || 'Serviço').join(', ')}`;
+    info.appendChild(servicesEl);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'flex items-center gap-3';
+  header.appendChild(actions);
+
+  const totalEl = document.createElement('span');
+  totalEl.className = 'text-sm font-semibold text-amber-900';
+  totalEl.textContent = formatMoney(displayTotal || 0);
+  actions.appendChild(totalEl);
+
+  const actionBtn = document.createElement('button');
+  actionBtn.type = 'button';
+  actionBtn.className = 'inline-flex items-center gap-2 rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2';
+  actionBtn.innerHTML = '<i class="fas fa-play"></i><span data-label>Iniciar atendimento</span>';
+  actionBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    startWaitingAppointment(appointment, actionBtn);
+  });
+  actions.appendChild(actionBtn);
+
+  if (appointment.observacoes) {
+    const obs = document.createElement('p');
+    obs.className = 'text-xs text-amber-800 whitespace-pre-wrap break-words';
+    obs.textContent = appointment.observacoes;
+    item.appendChild(obs);
+  }
+
+  return item;
+}
+
+function createWaitingAppointmentsCard(appointments, options = {}) {
+  const { loading = false } = options || {};
+  const list = Array.isArray(appointments) ? appointments : [];
+  if (!loading && !list.length) return null;
+
+  const card = document.createElement('div');
+  card.className = 'rounded-xl border border-amber-200 bg-white p-4 shadow-sm space-y-4';
+
+  const header = document.createElement('div');
+  header.className = 'flex items-center justify-between gap-3';
+  card.appendChild(header);
+
+  const title = document.createElement('h3');
+  title.className = 'text-base font-semibold text-amber-800';
+  title.textContent = 'Agendamentos em espera';
+  header.appendChild(title);
+
+  if (loading && !list.length) {
+    const loadingEl = document.createElement('span');
+    loadingEl.className = 'text-xs font-medium text-amber-700';
+    loadingEl.textContent = 'Carregando...';
+    header.appendChild(loadingEl);
+  } else if (list.length) {
+    const badge = document.createElement('span');
+    badge.className = 'inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700';
+    badge.textContent = `${list.length} agendamento${list.length === 1 ? '' : 's'}`;
+    header.appendChild(badge);
+  }
+
+  if (loading && !list.length) {
+    const loadingBox = document.createElement('div');
+    loadingBox.className = 'rounded-lg border border-dashed border-amber-200 bg-amber-50 px-4 py-6 text-center text-sm text-amber-700';
+    loadingBox.textContent = 'Carregando agendamentos em espera...';
+    card.appendChild(loadingBox);
+    return card;
+  }
+
+  const container = document.createElement('div');
+  container.className = 'space-y-3';
+  list.forEach((appointment) => {
+    const item = createWaitingAppointmentItem(appointment);
+    if (item) container.appendChild(item);
+  });
+
+  if (!container.children.length) {
+    const emptyBox = document.createElement('div');
+    emptyBox.className = 'rounded-lg border border-dashed border-amber-200 bg-amber-50 px-4 py-6 text-center text-sm text-amber-700';
+    emptyBox.textContent = 'Nenhum agendamento em espera para este tutor e pet.';
+    card.appendChild(emptyBox);
+    return card;
+  }
+
+  card.appendChild(container);
   return card;
 }
 
@@ -2550,6 +2805,170 @@ function setConsultaActionsAvailability(enabled) {
   });
 }
 
+function applyWaitingAppointmentToContext(appointment, updatePayload = {}) {
+  const appointmentId = normalizeId(appointment?.appointmentId || appointment?.id || appointment?._id);
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  if (!(appointmentId && clienteId && petId)) return false;
+
+  const responseServices = Array.isArray(updatePayload?.servicos) ? updatePayload.servicos : [];
+  const appointmentServices = Array.isArray(appointment?.servicos) ? appointment.servicos : [];
+  const services = (responseServices.length ? responseServices : appointmentServices).map((svc) => {
+    const id = normalizeId(svc?.id || svc?._id || svc?.servicoId || svc?.servico);
+    const valor = Number(svc?.valor || 0) || 0;
+    const categorias = Array.isArray(svc?.categorias) ? svc.categorias.filter(Boolean) : [];
+    const tiposPermitidos = Array.isArray(svc?.tiposPermitidos) ? svc.tiposPermitidos.filter(Boolean) : [];
+    return {
+      _id: id || null,
+      nome: pickFirst(svc?.nome, svc?.descricao, svc?.label) || 'Serviço',
+      valor,
+      categorias,
+      tiposPermitidos,
+    };
+  });
+
+  const totalFromServices = services.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+  const valorTotal = Number(updatePayload?.valor || appointment?.valor || totalFromServices) || totalFromServices;
+
+  if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+    state.agendaContext = {};
+  }
+
+  const storeIdCandidates = Array.isArray(appointment?.storeIdCandidates) ? appointment.storeIdCandidates : [];
+  const normalizedCandidates = storeIdCandidates
+    .map((candidate) => normalizeId(candidate))
+    .filter(Boolean);
+
+  const storeId = normalizeId(appointment?.storeId) || normalizedCandidates[0] || state.agendaContext.storeId || null;
+
+  state.agendaContext = {
+    ...state.agendaContext,
+    appointmentId,
+    tutorId: clienteId,
+    petId,
+    status: 'em_atendimento',
+    scheduledAt: pickFirst(
+      appointment?.scheduledAt,
+      updatePayload?.h,
+      updatePayload?.scheduledAt,
+      state.agendaContext.scheduledAt,
+    ) || null,
+    valor: valorTotal,
+    observacao: pickFirst(appointment?.observacoes, state.agendaContext.observacao),
+    observacoes: pickFirst(appointment?.observacoes, state.agendaContext.observacoes),
+    servicos: services,
+    totalServicos: services.length,
+    profissionalId: normalizeId(
+      updatePayload?.profissionalId || updatePayload?.profissional || appointment?.profissionalId,
+    ) || state.agendaContext.profissionalId || null,
+    profissionalNome: pickFirst(
+      updatePayload?.profissional,
+      updatePayload?.profissionalNome,
+      appointment?.profissionalNome,
+      state.agendaContext.profissionalNome,
+    ),
+  };
+
+  if (storeId) {
+    state.agendaContext.storeId = storeId;
+  }
+
+  if (normalizedCandidates.length) {
+    state.agendaContext.storeIdCandidates = Array.isArray(state.agendaContext.storeIdCandidates)
+      ? state.agendaContext.storeIdCandidates
+      : [];
+    normalizedCandidates.forEach((candidate) => {
+      if (!state.agendaContext.storeIdCandidates.includes(candidate)) {
+        state.agendaContext.storeIdCandidates.push(candidate);
+      }
+    });
+  }
+
+  persistAgendaContext(state.agendaContext);
+  return true;
+}
+
+async function startWaitingAppointment(appointment, triggerButton) {
+  const appointmentId = normalizeId(appointment?.appointmentId || appointment?.id || appointment?._id);
+  if (!appointmentId) return;
+
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  if (!(clienteId && petId)) {
+    notify('Selecione um tutor e um pet para iniciar o atendimento.', 'warning');
+    return;
+  }
+
+  if (waitingAppointmentProcessing.has(appointmentId)) return;
+
+  waitingAppointmentProcessing.add(appointmentId);
+
+  let labelSpan = null;
+  if (triggerButton) {
+    if (triggerButton.dataset.processing === 'true') {
+      waitingAppointmentProcessing.delete(appointmentId);
+      return;
+    }
+    triggerButton.dataset.processing = 'true';
+    triggerButton.disabled = true;
+    triggerButton.classList.add('opacity-60', 'cursor-not-allowed');
+    labelSpan = triggerButton.querySelector('[data-label]');
+    if (labelSpan) {
+      labelSpan.textContent = 'Iniciando...';
+    } else {
+      triggerButton.textContent = 'Iniciando...';
+    }
+  }
+
+  try {
+    const response = await api(`/func/agendamentos/${appointmentId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: 'em_atendimento' }),
+    });
+    const payload = await response.json().catch(() => (response.ok ? {} : {}));
+    if (!response.ok) {
+      const message = typeof payload?.message === 'string' ? payload.message : 'Erro ao atualizar agendamento.';
+      throw new Error(message);
+    }
+
+    applyWaitingAppointmentToContext(appointment, payload);
+    updateFichaRealTimeSelection().catch(() => {});
+
+    state.waitingAppointments = (state.waitingAppointments || []).filter(
+      (item) => normalizeId(item?.appointmentId || item?.id || item?._id) !== appointmentId,
+    );
+    updateConsultaAgendaCard();
+
+    await Promise.all([
+      loadConsultasFromServer({ force: true }),
+      loadAnexosFromServer({ force: true }),
+      loadPesosFromServer({ force: true }),
+      loadDocumentosFromServer({ force: true }),
+      loadReceitasFromServer({ force: true }),
+    ]);
+
+    await loadWaitingAppointments({ force: true });
+
+    notify('Agendamento marcado como em atendimento.', 'success');
+  } catch (error) {
+    console.error('startWaitingAppointment', error);
+    notify(error.message || 'Erro ao iniciar atendimento.', 'error');
+    await loadWaitingAppointments({ force: true });
+  } finally {
+    waitingAppointmentProcessing.delete(appointmentId);
+    if (triggerButton) {
+      delete triggerButton.dataset.processing;
+      triggerButton.disabled = false;
+      triggerButton.classList.remove('opacity-60', 'cursor-not-allowed');
+      if (labelSpan) {
+        labelSpan.textContent = 'Iniciar atendimento';
+      } else {
+        triggerButton.textContent = 'Iniciar atendimento';
+      }
+    }
+  }
+}
+
 export function updateConsultaAgendaCard() {
   const area = els.consultaArea;
   if (!area) return;
@@ -2586,6 +3005,9 @@ export function updateConsultaAgendaCard() {
   const receitas = Array.isArray(state.receitas) ? state.receitas : [];
   const hasReceitas = receitas.length > 0;
   const isLoadingReceitas = !!state.receitasLoading;
+  const waitingAppointments = Array.isArray(state.waitingAppointments) ? state.waitingAppointments : [];
+  const hasWaitingAppointments = waitingAppointments.length > 0;
+  const isLoadingWaitingAppointments = !!state.waitingAppointmentsLoading;
   const context = state.agendaContext;
   const selectedPetId = normalizeId(state.selectedPetId);
   const selectedTutorId = normalizeId(state.selectedCliente?._id);
@@ -2758,13 +3180,14 @@ export function updateConsultaAgendaCard() {
     hasPesos ||
     hasExames ||
     hasObservacoes ||
-    hasDocumentos;
-  const shouldShowPlaceholder = !hasAnyContent;
+    hasDocumentos ||
+    hasWaitingAppointments;
+  const shouldShowPlaceholder = !hasAnyContent && !isLoadingWaitingAppointments;
   const placeholderText = agendaFinalizado
     ? CONSULTA_FINALIZADA_PLACEHOLDER_TEXT
     : CONSULTA_PLACEHOLDER_TEXT;
 
-  if ((isLoadingConsultas || isLoadingAnexos || isLoadingPesos || isLoadingExames) && !hasAnyContent) {
+  if ((isLoadingConsultas || isLoadingAnexos || isLoadingPesos || isLoadingExames) && !hasAnyContent && !isLoadingWaitingAppointments) {
     setAreaClassNames(CONSULTA_PLACEHOLDER_CLASSNAMES);
     area.innerHTML = '';
     const paragraph = document.createElement('p');
@@ -2791,6 +3214,15 @@ export function updateConsultaAgendaCard() {
 
   if (agendaElement) {
     scroll.appendChild(agendaElement);
+  }
+
+  if (isLoadingWaitingAppointments || hasWaitingAppointments) {
+    const waitingCard = createWaitingAppointmentsCard(waitingAppointments, {
+      loading: isLoadingWaitingAppointments,
+    });
+    if (waitingCard) {
+      scroll.appendChild(waitingCard);
+    }
   }
 
   const manualVacinaGrid = document.createElement('div');
