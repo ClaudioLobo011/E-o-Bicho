@@ -12,7 +12,11 @@ import {
   getPersistedState,
   isFinalizadoSelection,
 } from './core.js';
-import { loadConsultasFromServer, updateConsultaAgendaCard } from './consultas.js';
+import {
+  loadConsultasFromServer,
+  loadWaitingAppointments,
+  updateConsultaAgendaCard,
+} from './consultas.js';
 import { loadVacinasForSelection } from './vacinas.js';
 import { loadAnexosForSelection, loadAnexosFromServer } from './anexos.js';
 import { loadExamesForSelection } from './exames.js';
@@ -226,6 +230,9 @@ export async function onSelectCliente(cli, opts = {}) {
   state.receitas = [];
   state.receitasLoadKey = null;
   state.receitasLoading = false;
+  state.waitingAppointments = [];
+  state.waitingAppointmentsLoadKey = null;
+  state.waitingAppointmentsLoading = false;
 
   if (state.agendaContext) {
     const contextTutorId = normalizeId(state.agendaContext.tutorId);
@@ -343,6 +350,9 @@ export async function onSelectPet(petId, opts = {}) {
   state.receitas = [];
   state.receitasLoadKey = null;
   state.receitasLoading = false;
+  state.waitingAppointments = [];
+  state.waitingAppointmentsLoadKey = null;
+  state.waitingAppointmentsLoading = false;
   loadVacinasForSelection();
   loadAnexosForSelection();
   loadExamesForSelection();
@@ -355,6 +365,7 @@ export async function onSelectPet(petId, opts = {}) {
     return;
   }
   await Promise.all([
+    loadWaitingAppointments({ force: true }),
     loadConsultasFromServer({ force: true }),
     loadAnexosFromServer({ force: true }),
     loadPesosFromServer({ force: true }),
@@ -388,6 +399,9 @@ export function clearCliente() {
   state.receitas = [];
   state.receitasLoadKey = null;
   state.receitasLoading = false;
+  state.waitingAppointments = [];
+  state.waitingAppointmentsLoadKey = null;
+  state.waitingAppointmentsLoading = false;
   state.historicos = [];
   state.historicosLoadKey = null;
   state.historicosLoading = false;
@@ -430,6 +444,9 @@ export function clearPet() {
   state.receitas = [];
   state.receitasLoadKey = null;
   state.receitasLoading = false;
+  state.waitingAppointments = [];
+  state.waitingAppointmentsLoadKey = null;
+  state.waitingAppointmentsLoading = false;
   state.historicos = [];
   state.historicosLoadKey = null;
   state.historicosLoading = false;

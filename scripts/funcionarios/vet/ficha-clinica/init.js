@@ -1,6 +1,6 @@
 // Entry initialization for the Vet ficha clínica
 import { els, debounce } from './core.js';
-import { openConsultaModal, loadConsultasFromServer } from './consultas.js';
+import { openConsultaModal, loadConsultasFromServer, loadWaitingAppointments } from './consultas.js';
 import { openVacinaModal, loadVacinasForSelection, handleVacinaRealTimeEvent } from './vacinas.js';
 import {
   openAnexoModal,
@@ -48,6 +48,7 @@ async function performRemoteSync() {
   try {
     await Promise.allSettled([
       loadConsultasFromServer({ force: true }),
+      loadWaitingAppointments({ force: true }),
       loadAnexosFromServer({ force: true }),
       loadPesosFromServer({ force: true }),
       loadDocumentosFromServer({ force: true }),
