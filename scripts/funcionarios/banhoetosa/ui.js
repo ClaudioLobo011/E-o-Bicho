@@ -49,17 +49,17 @@ export function applyZebraAndSublines() {
   const totalRows = Math.floor(cells.length / totalCols);
   for (let row = 0; row < totalRows; row++) {
     const start = row * totalCols;
-    const zebraClass = (row % 2 === 0) ? 'bg-white' : 'bg-slate-50';
+    const zebraClass = (row % 2 === 0) ? 'is-row-even' : 'is-row-odd';
     const tCell = cells[start];
     if (tCell) {
-      tCell.classList.remove('bg-white','bg-slate-50');
+      tCell.classList.remove('bg-white','bg-slate-50','is-row-even','is-row-odd');
       tCell.classList.add(zebraClass);
     }
     for (let col = 1; col < totalCols; col++) {
       const idx = start + col;
       const slot = cells[idx];
       if (!slot) continue;
-      slot.classList.remove('bg-white','bg-slate-50');
+      slot.classList.remove('bg-white','bg-slate-50','is-row-even','is-row-odd');
       slot.classList.add(zebraClass, 'agenda-slot');
     }
   }

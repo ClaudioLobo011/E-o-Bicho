@@ -274,22 +274,22 @@ export function statusMeta(s) {
   const map = {
     agendado: {
       label: 'Agendado', short: 'Agend.', stripe: '#64748B', text: '#0F172A',
-      badgeClass: 'bg-slate-100 text-slate-700 border border-slate-200', borderClass: 'border-slate-300'
+      badgeClass: 'agenda-status-badge agenda-status-badge--agendado', borderClass: 'border-slate-300'
     },
     em_espera: {
       label: 'Em espera', short: 'Espera', stripe: '#B45309', text: '#1F2937',
-      badgeClass: 'bg-amber-50 text-amber-800 border border-amber-200', borderClass: 'border-amber-400'
+      badgeClass: 'agenda-status-badge agenda-status-badge--espera', borderClass: 'border-amber-400'
     },
     em_atendimento: {
       label: 'Em atendimento', short: 'Atend.', stripe: '#1D4ED8', text: '#0B1235',
-      badgeClass: 'bg-blue-50 text-blue-800 border border-blue-200', borderClass: 'border-blue-500'
+      badgeClass: 'agenda-status-badge agenda-status-badge--atendimento', borderClass: 'border-blue-500'
     },
     finalizado: {
       label: 'Finalizado', short: 'Fim.', stripe: '#16A34A', text: '#052E16',
-      badgeClass: 'bg-green-50 text-green-800 border border-green-200', borderClass: 'border-green-500'
+      badgeClass: 'agenda-status-badge agenda-status-badge--finalizado', borderClass: 'border-green-500'
     }
   };
-  return map[k];
+  return { key: k, ...map[k] };
 }
 export function renderStatusBadge(s) {
   const { label, badgeClass } = statusMeta(s);
