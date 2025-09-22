@@ -726,42 +726,43 @@
         const card = document.createElement('div');
         card.setAttribute('data-appointment-id', a._id || '');
         card.style.setProperty('--stripe', meta.stripe);
-        card.style.setProperty('--card-max-w', '260px');
+        card.style.setProperty('--card-max-w', '320px');
         card.className = `agenda-card border ${meta.borderClass} cursor-move select-none`;
+        card.dataset.status = meta.key;
         card.setAttribute('draggable', 'true');
 
         const headerEl = document.createElement('div');
-        // reserva espaço à direita para os botões flutuantes (evita o chip “ficar por baixo”)
-        headerEl.className = 'flex items-center justify-between gap-2 pr-14 md:pr-16 mb-1';
+        headerEl.className = 'agenda-card__head flex justify-between';
 
         // usa o nome do cliente que já vem da API (clienteNome); fallback mantém o comportamento antigo
         const tutorShort = shortTutorName(a.clienteNome || '');
         const headLabel  = tutorShort ? `${tutorShort} | ${a.pet || ''}` : (a.pet || '');
 
         headerEl.innerHTML = `
-          <div class="font-semibold text-sm text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
+          <div class="agenda-card__title font-semibold text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
           ${renderStatusBadge(a.status)}
         `;
 
         const bodyEl = document.createElement('div');
+        bodyEl.classList.add('agenda-card__body');
         if (a.observacoes && String(a.observacoes).trim()) {
           const svc = document.createElement('div');
-          svc.className = 'text-[13px] text-gray-600 clamp-2';
+          svc.className = 'agenda-card__service text-gray-600 clamp-2';
           svc.textContent = a.servico || '';
           const obs = document.createElement('div');
-          obs.className = 'mt-1 text-[12px] text-gray-700 italic clamp-2';
+          obs.className = 'agenda-card__note mt-1 text-gray-700 italic clamp-2';
           obs.textContent = String(a.observacoes).trim();
           bodyEl.appendChild(svc);
           bodyEl.appendChild(obs);
         } else {
-          bodyEl.className = 'text-[13px] text-gray-600 clamp-2';
+          bodyEl.classList.add('text-gray-600', 'clamp-2');
           bodyEl.textContent = a.servico || '';
         }
 
         const footerEl = document.createElement('div');
-        footerEl.className = 'flex items-center justify-end gap-2 pt-1';
+        footerEl.className = 'agenda-card__footer flex items-center justify-end';
         const price = document.createElement('div');
-        price.className = 'text-[13px] text-gray-800 font-medium';
+        price.className = 'agenda-card__price text-gray-800 font-medium';
         price.textContent = money(a.valor);
 
         footerEl.appendChild(price);
@@ -857,7 +858,8 @@
       card.setAttribute('data-appointment-id', a._id || '');
       card.style.setProperty('--stripe', meta.stripe);
       card.style.setProperty('--card-max-w', '100%');                       // ocupa a coluna
-      card.className = `agenda-card border ${meta.borderClass} cursor-pointer select-none px-2 py-1`; // padding menor
+      card.className = `agenda-card agenda-card--compact border ${meta.borderClass} cursor-pointer select-none px-2 py-1`; // padding menor
+      card.dataset.status = meta.key;
       card.setAttribute('draggable', 'true');
       card.title = [
         a.pet || '',
@@ -867,35 +869,36 @@
 
       // Header: Tutor abreviado | Pet (sem hora)
       const headerEl = document.createElement('div');
-      headerEl.className = 'flex items-center justify-between gap-2 mb-1';
+      headerEl.className = 'agenda-card__head flex justify-between';
       const tutorShort = shortTutorName(a.clienteNome || a.tutor || '');
       const headLabel  = tutorShort ? `${tutorShort} | ${a.pet || ''}` : (a.pet || '');
       headerEl.innerHTML = `
-        <div class="font-medium text-[12px] text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
+        <div class="agenda-card__title font-medium text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
         <!-- nada do lado direito no header -->
       `;
 
       // Corpo: serviço 1 linha + observação 1 linha (opcional)
       const bodyEl = document.createElement('div');
+      bodyEl.classList.add('agenda-card__body');
       const svc = document.createElement('div');
-      svc.className = 'text-[12px] text-gray-600 truncate';
+      svc.className = 'agenda-card__service text-gray-600 truncate';
       svc.textContent = a.servico || '';
       bodyEl.appendChild(svc);
       if (a.observacoes && String(a.observacoes).trim()) {
         const obs = document.createElement('div');
-        obs.className = 'text-[11px] text-gray-700 italic truncate';
+        obs.className = 'agenda-card__note text-gray-700 italic truncate';
         obs.textContent = String(a.observacoes).trim();
         bodyEl.appendChild(obs);
       }
 
       // Rodapé: status + valor à direita
       const footerEl = document.createElement('div');
-      footerEl.className = 'flex items-center justify-end gap-2 pt-0.5';
+      footerEl.className = 'agenda-card__footer flex items-center justify-end';
       const statusEl = document.createElement('div');
       // badge menor para caber bem
       statusEl.innerHTML = renderStatusBadge(a.status).replace('text-xs','text-[10px]');
       const price = document.createElement('div');
-      price.className = 'text-[12px] text-gray-800 font-semibold';
+      price.className = 'agenda-card__price text-gray-800 font-semibold';
       price.textContent = money(a.valor);
       footerEl.appendChild(statusEl);
       footerEl.appendChild(price);
@@ -983,7 +986,8 @@
       card.setAttribute('data-appointment-id', a._id || '');
       card.style.setProperty('--stripe', meta.stripe);
       card.style.setProperty('--card-max-w', '100%');
-      card.className = `agenda-card border ${meta.borderClass} cursor-pointer select-none px-2 py-1`; // padding menor
+      card.className = `agenda-card agenda-card--compact border ${meta.borderClass} cursor-pointer select-none px-2 py-1`; // padding menor
+      card.dataset.status = meta.key;
       card.setAttribute('draggable', 'true');
       card.title = [
         a.pet || '',
@@ -993,7 +997,7 @@
 
       // Header: hora + STATUS centralizado (reserva espaço p/ botões à direita)
       const headerEl = document.createElement('div');
-      headerEl.className = 'flex items-center gap-2 pr-14 md:pr-16 mb-1';
+      headerEl.className = 'agenda-card__head flex items-center gap-2';
       headerEl.innerHTML = `
         <span class="inline-flex items-center px-1.5 py-[1px] rounded bg-slate-100 text-[10px] font-medium">${hhmm}</span>
         <div class="flex-1 flex items-center justify-center">
@@ -1016,15 +1020,15 @@
       const headLabel  = [tutorShort, (a.pet || '')].filter(Boolean).join(' | ');
 
       const nameEl = document.createElement('div');
-      nameEl.className = 'text-[12px] font-medium text-gray-900 text-center truncate';
+      nameEl.className = 'agenda-card__title font-medium text-gray-900 text-center truncate';
       nameEl.title = headLabel;
       nameEl.textContent = headLabel;
 
       // Rodapé: manter apenas o valor (R$) à direita
       const footerEl = document.createElement('div');
-      footerEl.className = 'flex items-center justify-end pt-0.5';
+      footerEl.className = 'agenda-card__footer flex items-center justify-end';
       const price = document.createElement('div');
-      price.className = 'text-[12px] text-gray-800 font-semibold';
+      price.className = 'agenda-card__price text-gray-800 font-semibold';
       price.textContent = money(a.valor);
       footerEl.appendChild(price);
 
@@ -1070,7 +1074,7 @@
         short: 'Agend.',
         stripe: '#64748B',     // slate-500
         text: '#0F172A',       // slate-900
-        badgeClass: 'bg-slate-100 text-slate-700 border border-slate-200',
+        badgeClass: 'agenda-status-badge agenda-status-badge--agendado',
         borderClass: 'border-slate-300'
       },
       em_espera: {
@@ -1078,7 +1082,7 @@
         short: 'Espera',
         stripe: '#B45309',     // amber-700
         text: '#1F2937',       // gray-800
-        badgeClass: 'bg-amber-50 text-amber-800 border border-amber-200',
+        badgeClass: 'agenda-status-badge agenda-status-badge--espera',
         borderClass: 'border-amber-400'
       },
       em_atendimento: {
@@ -1086,7 +1090,7 @@
         short: 'Atend.',
         stripe: '#1D4ED8',     // blue-700
         text: '#0B1235',
-        badgeClass: 'bg-blue-50 text-blue-800 border border-blue-200',
+        badgeClass: 'agenda-status-badge agenda-status-badge--atendimento',
         borderClass: 'border-blue-500'
       },
       finalizado: {
@@ -1094,18 +1098,18 @@
         short: 'Fim.',
         stripe: '#16A34A',     // green-600
         text: '#052E16',
-        badgeClass: 'bg-green-50 text-green-800 border border-green-200',
+        badgeClass: 'agenda-status-badge agenda-status-badge--finalizado',
         borderClass: 'border-green-500'
       }
     };
 
-    return map[k];
+    return { key: k, ...map[k] };
   }
 
   function renderStatusBadge(s) {
     const { label, badgeClass } = statusMeta(s);
     // `whitespace-nowrap` garante que o chip não quebre em duas linhas
-    return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${badgeClass}">${label}</span>`;
+    return `<span class="inline-flex items-center px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${badgeClass}">${label}</span>`;
   }
 
   // Modal — modo adicionar
@@ -1760,17 +1764,17 @@
         actions.innerHTML = `
           <div class="agenda-card__actions-row">
             <button type="button" class="agenda-action edit" data-id="${id}" title="Editar" aria-label="Editar agendamento">
-              <i class="fa-solid fa-pen text-[16px] leading-none"></i>
+              <i class="fa-solid fa-pen text-[15px] leading-none"></i>
             </button>
             <button type="button" class="agenda-action status" data-id="${id}" title="Mudar status" aria-label="Mudar status do agendamento">
-              <i class="fa-regular fa-clock text-[16px] leading-none"></i>
+              <i class="fa-regular fa-clock text-[15px] leading-none"></i>
             </button>
           </div>
           <button type="button" class="agenda-action cobrar ${isPaid ? 'text-green-600' : 'text-slate-500'}" data-id="${id}" title="${isPaid ? 'Pago' : 'Registrar pagamento'}" aria-label="${isPaid ? 'Pagamento já registrado' : 'Registrar pagamento'}">
             ${
               isPaid
-                ? `<i class="fa-solid fa-dollar-sign text-[16px] leading-none"></i>`
-                : `<span class="fa-stack text-[12px] leading-none" style="width: 1.25em;">
+                ? `<i class="fa-solid fa-dollar-sign text-[15px] leading-none"></i>`
+                : `<span class="fa-stack text-[11px] leading-none" style="width: 1.15em;">
                     <i class="fa-solid fa-dollar-sign fa-stack-1x"></i>
                     <i class="fa-solid fa-slash fa-stack-1x"></i>
                   </span>`

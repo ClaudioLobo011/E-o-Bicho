@@ -519,17 +519,17 @@ export function renderGrid() {
     const card = document.createElement('div');
     card.setAttribute('data-appointment-id', a._id || '');
     card.style.setProperty('--stripe', meta.stripe);
-    card.style.setProperty('--card-max-w', '260px');
+    card.style.setProperty('--card-max-w', '320px');
     card.className = 'agenda-card cursor-move select-none';
     card.dataset.status = meta.key;
     card.setAttribute('draggable', 'true');
 
     const headerEl = document.createElement('div');
-    headerEl.className = 'flex items-center justify-between gap-2 mb-1 agenda-card__head';
+    headerEl.className = 'agenda-card__head flex justify-between';
     const tutorShort = shortTutorName(a.clienteNome || '');
     const headLabel  = tutorShort ? `${tutorShort} | ${a.pet || ''}` : (a.pet || '');
     headerEl.innerHTML = `
-      <div class="agenda-card__title font-semibold text-sm text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
+      <div class="agenda-card__title font-semibold text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
       ${renderStatusBadge(a.status)}
     `;
 
@@ -537,22 +537,22 @@ export function renderGrid() {
     bodyEl.classList.add('agenda-card__body');
     if (a.observacoes && String(a.observacoes).trim()) {
       const svc = document.createElement('div');
-      svc.className = 'agenda-card__service text-[13px] text-gray-600 clamp-2';
+      svc.className = 'agenda-card__service text-gray-600 clamp-2';
       svc.textContent = a.servico || '';
       const obs = document.createElement('div');
-      obs.className = 'agenda-card__note mt-1 text-[12px] text-gray-700 italic clamp-2';
+      obs.className = 'agenda-card__note mt-1 text-gray-700 italic clamp-2';
       obs.textContent = String(a.observacoes).trim();
       bodyEl.appendChild(svc);
       bodyEl.appendChild(obs);
     } else {
-      bodyEl.classList.add('text-[13px]', 'text-gray-600', 'clamp-2');
+      bodyEl.classList.add('text-gray-600', 'clamp-2');
       bodyEl.textContent = a.servico || '';
     }
 
     const footerEl = document.createElement('div');
-    footerEl.className = 'flex items-center justify-end gap-2 pt-1 agenda-card__footer';
+    footerEl.className = 'agenda-card__footer flex items-center justify-end';
     const price = document.createElement('div');
-    price.className = 'agenda-card__price text-[13px] text-gray-800 font-medium';
+    price.className = 'agenda-card__price text-gray-800 font-medium';
     price.textContent = money(a.valor);
     footerEl.appendChild(createFichaClinicaChip(a));
     footerEl.appendChild(price);
@@ -638,32 +638,32 @@ export function renderWeekGrid() {
     card.title = [ a.pet || '', a.servico || '', (a.observacoes ? `Obs: ${String(a.observacoes).trim()}` : '') ].filter(Boolean).join(' • ');
 
     const headerEl = document.createElement('div');
-    headerEl.className = 'flex items-center justify-between gap-2 mb-1 agenda-card__head';
+    headerEl.className = 'agenda-card__head flex justify-between';
     const tutorShort = shortTutorName(a.clienteNome || a.tutor || '');
     const headLabel  = tutorShort ? `${tutorShort} | ${a.pet || ''}` : (a.pet || '');
     headerEl.innerHTML = `
-      <div class="agenda-card__title font-medium text-[12px] text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
+      <div class="agenda-card__title font-medium text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
     `;
 
     const bodyEl = document.createElement('div');
     bodyEl.classList.add('agenda-card__body');
     const svc = document.createElement('div');
-    svc.className = 'agenda-card__service text-[12px] text-gray-600 truncate';
+    svc.className = 'agenda-card__service text-gray-600 truncate';
     svc.textContent = a.servico || '';
     bodyEl.appendChild(svc);
     if (a.observacoes && String(a.observacoes).trim()) {
       const obs = document.createElement('div');
-      obs.className = 'agenda-card__note text-[11px] text-gray-700 italic truncate';
+      obs.className = 'agenda-card__note text-gray-700 italic truncate';
       obs.textContent = String(a.observacoes).trim();
       bodyEl.appendChild(obs);
     }
 
     const footerEl = document.createElement('div');
-    footerEl.className = 'flex items-center justify-end gap-2 pt-0.5 agenda-card__footer';
+    footerEl.className = 'agenda-card__footer flex items-center justify-end';
     const statusEl = document.createElement('div');
     statusEl.innerHTML = renderStatusBadge(a.status).replace('text-xs','text-[10px]');
     const price = document.createElement('div');
-    price.className = 'agenda-card__price text-[12px] text-gray-800 font-semibold';
+    price.className = 'agenda-card__price text-gray-800 font-semibold';
     price.textContent = money(a.valor);
     footerEl.appendChild(statusEl);
     footerEl.appendChild(createFichaClinicaChip(a));
@@ -741,7 +741,7 @@ export function renderMonthGrid() {
       card.setAttribute('draggable', 'true');
       card.title = [ a.pet || '', a.servico || '', (a.observacoes ? `Obs: ${String(a.observacoes).trim()}` : '') ].filter(Boolean).join(' • ');
       const headerEl = document.createElement('div');
-      headerEl.className = 'flex items-center gap-2 mb-1 agenda-card__head';
+      headerEl.className = 'agenda-card__head flex items-center gap-2';
       headerEl.innerHTML = `
         <span class="inline-flex items-center px-1.5 py-[1px] rounded bg-slate-100 text-[10px] font-medium">${hhmm}</span>
         <div class="flex-1 flex items-center justify-center">
@@ -755,12 +755,12 @@ export function renderMonthGrid() {
       const tutorShort = shortTutorName(rawTutorName);
       const headLabel  = [tutorShort, (a.pet || '')].filter(Boolean).join(' | ');
       const nameEl = document.createElement('div');
-      nameEl.className = 'agenda-card__title text-[12px] font-medium text-gray-900 text-center truncate';
+      nameEl.className = 'agenda-card__title font-medium text-gray-900 text-center truncate';
       nameEl.title = headLabel; nameEl.textContent = headLabel;
       const footerEl = document.createElement('div');
-      footerEl.className = 'flex items-center justify-end gap-2 pt-0.5 agenda-card__footer';
+      footerEl.className = 'agenda-card__footer flex items-center justify-end';
       const price = document.createElement('div');
-      price.className = 'agenda-card__price text-[12px] text-gray-800 font-semibold';
+      price.className = 'agenda-card__price text-gray-800 font-semibold';
       price.textContent = money(a.valor);
       footerEl.appendChild(createFichaClinicaChip(a));
       footerEl.appendChild(price);

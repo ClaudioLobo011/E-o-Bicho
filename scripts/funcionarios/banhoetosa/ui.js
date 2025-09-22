@@ -80,14 +80,14 @@ export function decorateCards() {
     actions.innerHTML = `
       <div class="agenda-card__actions-row">
         <button type="button" class="agenda-action edit" data-id="${id}" title="Editar" aria-label="Editar agendamento">
-          <i class="fa-solid fa-pen text-[16px] leading-none"></i>
+          <i class="fa-solid fa-pen text-[15px] leading-none"></i>
         </button>
         <button type="button" class="agenda-action status" data-id="${id}" title="Mudar status" aria-label="Mudar status do agendamento">
-          <i class="fa-regular fa-clock text-[16px] leading-none"></i>
+          <i class="fa-regular fa-clock text-[15px] leading-none"></i>
         </button>
       </div>
       <button type="button" class="agenda-action cobrar ${isPaid ? 'text-green-600' : 'text-slate-500'}" data-id="${id}" title="${isPaid ? 'Pago' : 'Registrar pagamento'}" aria-label="${isPaid ? 'Pagamento já registrado' : 'Registrar pagamento'}">
-        <i class="fa-solid fa-dollar-sign text-[16px] leading-none"></i>
+        <i class="fa-solid fa-dollar-sign text-[15px] leading-none"></i>
       </button>
     `;
     card.appendChild(actions);
