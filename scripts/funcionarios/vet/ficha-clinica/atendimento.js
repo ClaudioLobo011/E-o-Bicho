@@ -12,6 +12,7 @@ import {
   OBSERVACAO_STORAGE_PREFIX,
   isConsultaLockedForCurrentUser,
   isAdminRole,
+  confirmWithModal,
 } from './core.js';
 import {
   getConsultasKey,
@@ -206,10 +207,12 @@ async function limparConsultaAtual() {
   const clienteId = normalizeId(state.selectedCliente?._id);
   const petId = normalizeId(state.selectedPetId);
 
-  let confirmed = true;
-  if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-    confirmed = window.confirm('Limpar os registros atuais da consulta? Esta ação não altera o histórico.');
-  }
+  const confirmed = await confirmWithModal({
+    title: 'Limpar consulta',
+    message: 'Limpar os registros atuais da consulta? Esta ação não altera o histórico.',
+    confirmText: 'Limpar',
+    cancelText: 'Cancelar',
+  });
   if (!confirmed) return;
 
   isProcessingLimpeza = true;
@@ -364,10 +367,12 @@ export async function finalizarAtendimento() {
     return;
   }
 
-  let confirmed = true;
-  if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-    confirmed = window.confirm('Finalizar o atendimento? Os registros serão movidos para o histórico.');
-  }
+  const confirmed = await confirmWithModal({
+    title: 'Finalizar atendimento',
+    message: 'Finalizar o atendimento? Os registros serão movidos para o histórico.',
+    confirmText: 'Finalizar',
+    cancelText: 'Cancelar',
+  });
   if (!confirmed) return;
 
   isProcessingFinalizacao = true;
@@ -460,10 +465,12 @@ async function reopenHistoricoEntry(entry, closeModal) {
     return;
   }
 
-  let confirmed = true;
-  if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-    confirmed = window.confirm('Reabrir o atendimento para edição? Ele retornará para a aba Consulta.');
-  }
+  const confirmed = await confirmWithModal({
+    title: 'Reabrir atendimento',
+    message: 'Reabrir o atendimento para edição? Ele retornará para a aba Consulta.',
+    confirmText: 'Reabrir',
+    cancelText: 'Cancelar',
+  });
   if (!confirmed) return;
 
   let statusUpdated = false;

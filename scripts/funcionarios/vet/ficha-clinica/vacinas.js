@@ -15,6 +15,7 @@ import {
   getPetPriceCriteria,
   persistAgendaContext,
   isFinalizadoSelection,
+  confirmWithModal,
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
 import { emitFichaClinicaUpdate } from './real-time.js';
@@ -1076,11 +1077,16 @@ export async function deleteVacina(vacina, options = {}) {
   }
 
   const serviceName = pickFirst(record.servicoNome);
-  if (!skipConfirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+  if (!skipConfirm) {
     const question = serviceName
       ? `Remover a aplicação da vacina "${serviceName}"?`
       : 'Remover esta aplicação de vacina?';
-    const confirmed = window.confirm(question);
+    const confirmed = await confirmWithModal({
+      title: 'Remover vacina',
+      message: question,
+      confirmText: 'Remover',
+      cancelText: 'Cancelar',
+    });
     if (!confirmed) {
       return false;
     }

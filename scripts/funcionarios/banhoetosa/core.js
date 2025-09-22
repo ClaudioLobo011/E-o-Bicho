@@ -1,5 +1,6 @@
 // Core/shared state and helpers for Banho e Tosa agenda
 // ES module used by other parts of the feature.
+import { confirmWithModal } from '../shared/confirm-modal.js';
 
 // ----- Auth/API helpers -----
 const _cachedUser = (() => {
@@ -29,6 +30,8 @@ export function isPrivilegedRole() {
   const r = getCurrentRole();
   return r === 'admin' || r === 'admin_master';
 }
+
+export { confirmWithModal };
 
 // ----- Elements -----
 export const els = {

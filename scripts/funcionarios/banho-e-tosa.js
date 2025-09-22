@@ -1388,64 +1388,75 @@
     });
   }
 
-  function confirmAsync(title, message, opts = {}) {
+  async function confirmAsync(title, message, opts = {}) {
     const confirmText = opts.confirmText || 'Excluir';
     const cancelText  = opts.cancelText  || 'Cancelar';
+    const modalEl = modal || null;
 
-    if (typeof window.showModal === 'function') {
-      return new Promise((resolve) => {
-        // 1) Esconde temporariamente o modal de edição (sem desmontar)
-        const prevVis = modal ? modal.style.visibility : '';
-        const prevPe  = modal ? modal.style.pointerEvents : '';
-        if (modal) {
-          modal.style.visibility = 'hidden';
-          modal.style.pointerEvents = 'none';
+    let prevVis;
+    let prevPointerEvents;
+    if (modalEl) {
+      prevVis = modalEl.style.visibility;
+      prevPointerEvents = modalEl.style.pointerEvents;
+      modalEl.style.visibility = 'hidden';
+      modalEl.style.pointerEvents = 'none';
+    }
+
+    const ensureOverlayOnTop = () => {
+      try {
+        const all = Array.from(document.querySelectorAll('body *'));
+        const overlays = all.filter((element) => {
+          const style = getComputedStyle(element);
+          if (style.position !== 'fixed') return false;
+          const rect = element.getBoundingClientRect();
+          return rect.width >= window.innerWidth * 0.95 && rect.height >= window.innerHeight * 0.95;
+        });
+        const overlay = overlays.at(-1);
+        if (overlay) {
+          overlay.style.zIndex = '9999';
+          overlay.style.pointerEvents = 'auto';
         }
+      } catch (_) {}
+    };
 
-        // 2) Abre o modal padrão do projeto
-        window.showModal({
+    if (typeof window !== 'undefined') {
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(ensureOverlayOnTop);
+      }
+      setTimeout(ensureOverlayOnTop, 0);
+    }
+
+    try {
+      if (typeof window.confirmWithModal === 'function') {
+        return await window.confirmWithModal({
           title: title || 'Confirmação',
           message: message || 'Deseja prosseguir?',
           confirmText,
           cancelText,
-          onConfirm: () => { restore(); resolve(true); },
-          onCancel : () => { restore(); resolve(false); }
         });
+      }
 
-        // 3) Após montar, garante overlay por cima de tudo
-        //    (pega o último elemento "fixed" full-screen e sobe o z-index)
-        const bump = () => {
-          try {
-            const all = Array.from(document.querySelectorAll('body *'));
-            const overlays = all.filter(el => {
-              const cs = getComputedStyle(el);
-              if (cs.position !== 'fixed') return false;
-              const r = el.getBoundingClientRect();
-              return r.width >= window.innerWidth * 0.95 && r.height >= window.innerHeight * 0.95;
-            });
-            const overlay = overlays.at(-1);
-            if (overlay) {
-              overlay.style.zIndex = '9999';
-              overlay.style.pointerEvents = 'auto';
-            }
-          } catch (_) { /* noop */ }
-        };
-        requestAnimationFrame(bump);
-        setTimeout(bump, 0);
+      if (typeof window.showModal === 'function') {
+        return await new Promise((resolve) => {
+          window.showModal({
+            title: title || 'Confirmação',
+            message: message || 'Deseja prosseguir?',
+            confirmText,
+            cancelText,
+            onConfirm: () => resolve(true),
+            onCancel: () => resolve(false),
+          });
+        });
+      }
 
-        // 4) Restaura o modal de edição quando fechar a confirmação
-        function restore() {
-          if (modal) {
-            modal.style.visibility = prevVis || '';
-            modal.style.pointerEvents = prevPe || '';
-          }
-        }
-      });
+      console.warn('confirmAsync: modal de confirmação indisponível; prosseguindo automaticamente.');
+      return true;
+    } finally {
+      if (modalEl) {
+        modalEl.style.visibility = prevVis || '';
+        modalEl.style.pointerEvents = prevPointerEvents || '';
+      }
     }
-
-    // Fallback (apenas se o componente não existir)
-    const ok = window.confirm(message || title || 'Confirmar?');
-    return Promise.resolve(!!ok);
   }
 
   async function handleDelete() {
