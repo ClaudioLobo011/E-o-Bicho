@@ -1,9 +1,24 @@
-import { els, state, isPrivilegedRole, notify } from './core.js';
+import { state, isPrivilegedRole, notify } from './core.js';
+
+const ACTION_CLICK_GUARD = Symbol('agendaActionClickHandled');
+const ACTION_BOUND_FLAG = '__banhoAgendaActionsBound';
+
+function swallowPointerDown(ev) {
+  const btn = ev.target?.closest?.('.agenda-action');
+  if (!btn) return;
+  try {
+    if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+  } catch {}
+  ev.stopPropagation();
+}
 
 function onActionClick(ev) {
   const btn = ev.target?.closest?.('.agenda-action');
   if (!btn) return;
   try {
+    if (ev[ACTION_CLICK_GUARD]) return;
+    ev[ACTION_CLICK_GUARD] = true;
+
     ev.preventDefault();
     if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
     ev.stopPropagation();
@@ -53,7 +68,10 @@ function onActionClick(ev) {
 }
 
 export function attachGlobalActionHandlers() {
-  // Captura no documento: intercepta antes de qualquer outro listener
+  if (typeof document === 'undefined') return;
+  if (document[ACTION_BOUND_FLAG]) return;
+  document[ACTION_BOUND_FLAG] = true;
+
+  document.addEventListener('pointerdown', swallowPointerDown, true);
   document.addEventListener('click', onActionClick, true);
-  document.addEventListener('pointerdown', onActionClick, true);
 }

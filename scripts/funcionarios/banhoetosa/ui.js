@@ -3,6 +3,8 @@ import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
 
+const CARD_ACTION_EVENT_FLAG = Symbol('agendaCardActionHandled');
+
 export function enhanceAgendaUI() {
   try {
     applyZebraAndSublines();
@@ -108,6 +110,8 @@ export function decorateCards() {
           e.stopPropagation();
           const current = (state.agendamentos || []).find(x => String(x._id) === String(id));
           if (!current) return;
+          if (e[CARD_ACTION_EVENT_FLAG]) return;
+          e[CARD_ACTION_EVENT_FLAG] = true;
           if (current.pago || current.codigoVenda) {
             notify('Este agendamento já possui código de venda registrado.', 'warning');
             return;
@@ -137,6 +141,8 @@ export function decorateCards() {
           }
           const current = (state.agendamentos || []).find(x => String(x._id) === String(id));
           if (!current) return;
+          if (e[CARD_ACTION_EVENT_FLAG]) return;
+          e[CARD_ACTION_EVENT_FLAG] = true;
           if ((current.pago || current.codigoVenda) && !isPrivilegedRole()) {
             notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning');
             return;
@@ -161,6 +167,8 @@ export function decorateCards() {
           if (vm && !vm.classList.contains('hidden')) { try { vm.classList.add('hidden'); vm.setAttribute('aria-hidden','true'); } catch {} }
           const current = (state.agendamentos || []).find(x => String(x._id) === String(id));
           if (!current) return;
+          if (e[CARD_ACTION_EVENT_FLAG]) return;
+          e[CARD_ACTION_EVENT_FLAG] = true;
           const chain = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
           const cur = (current && current.status) || 'agendado';
           const next = chain[(chain.indexOf(cur) + 1) % chain.length];
