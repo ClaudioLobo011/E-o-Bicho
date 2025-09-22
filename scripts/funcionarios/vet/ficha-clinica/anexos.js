@@ -23,6 +23,11 @@ function generateAnexoId() {
   return `anx-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 }
 
+function isTemporaryAnexoId(value) {
+  if (!value) return false;
+  return /^anx-\d+-\d+$/i.test(String(value));
+}
+
 function generateAnexoFileId() {
   return `anx-file-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 }
@@ -380,69 +385,211 @@ function mergeAnexoFiles(existing = [], incoming = []) {
   return list;
 }
 
+function getAnexoFileSignature(entry) {
+  const comparison = getAnexoFileComparison(entry);
+  const nameTokens = comparison.names ? Array.from(comparison.names) : [];
+  nameTokens.sort();
+  const nameKey = nameTokens.join('|');
+  const sizeKey = comparison.size || 0;
+  const extensionKey = comparison.extension || '';
+  if (!(nameKey || sizeKey || extensionKey)) {
+    return null;
+  }
+  return `${nameKey}#${sizeKey}#${extensionKey}`;
+}
+
+function getAnexoRecordComparison(entry) {
+  const id = normalizeId(entry?.id || entry?._id) || null;
+  const arquivos = Array.isArray(entry?.arquivos) ? entry.arquivos : [];
+  const fileSignatures = arquivos.map((file) => getAnexoFileSignature(file)).filter(Boolean);
+  fileSignatures.sort();
+  const hasFiles = fileSignatures.length > 0;
+  const observacaoKey = typeof entry?.observacao === 'string' ? entry.observacao.trim().toLowerCase() : '';
+  const signature = hasFiles ? `${observacaoKey}::${fileSignatures.join('||')}` : null;
+  return {
+    id,
+    signature,
+    hasFiles,
+    isTemporary: !id || isTemporaryAnexoId(id),
+  };
+}
+
+function mergeAnexoRecordEntry(base, incoming) {
+  if (!base && !incoming) return null;
+  if (!base) return { ...incoming };
+  if (!incoming) return { ...base };
+
+  const baseId = normalizeId(base.id || base._id) || null;
+  const incomingId = normalizeId(incoming.id || incoming._id) || null;
+  const baseTemp = isTemporaryAnexoId(baseId);
+  const incomingTemp = isTemporaryAnexoId(incomingId);
+
+  let resolvedId = baseId;
+  if (incomingId && (!incomingTemp || !baseId || baseTemp)) {
+    resolvedId = incomingId;
+  } else if (!resolvedId && incomingId) {
+    resolvedId = incomingId;
+  }
+  if (!resolvedId) {
+    resolvedId = generateAnexoId();
+  }
+
+  const merged = {
+    ...base,
+    ...incoming,
+    id: resolvedId,
+    _id: resolvedId,
+  };
+  merged.arquivos = mergeAnexoFiles(base?.arquivos, incoming?.arquivos);
+
+  const baseCreated = toIsoOrNull(base?.createdAt);
+  const incomingCreated = toIsoOrNull(incoming?.createdAt);
+  if (baseCreated && incomingCreated) {
+    const baseTime = new Date(baseCreated).getTime();
+    const incomingTime = new Date(incomingCreated).getTime();
+    if (Number.isFinite(baseTime) && Number.isFinite(incomingTime)) {
+      merged.createdAt = new Date(Math.min(baseTime, incomingTime)).toISOString();
+    } else if (incomingCreated) {
+      merged.createdAt = incomingCreated;
+    } else if (baseCreated) {
+      merged.createdAt = baseCreated;
+    }
+  } else if (incomingCreated) {
+    merged.createdAt = incomingCreated;
+  } else if (baseCreated && !merged.createdAt) {
+    merged.createdAt = baseCreated;
+  }
+
+  const baseUpdated = toIsoOrNull(base?.updatedAt);
+  const incomingUpdated = toIsoOrNull(incoming?.updatedAt);
+  if (baseUpdated && incomingUpdated) {
+    const baseTime = new Date(baseUpdated).getTime();
+    const incomingTime = new Date(incomingUpdated).getTime();
+    if (Number.isFinite(baseTime) && Number.isFinite(incomingTime)) {
+      merged.updatedAt = incomingTime > baseTime
+        ? new Date(incomingTime).toISOString()
+        : new Date(baseTime).toISOString();
+    } else if (incomingUpdated) {
+      merged.updatedAt = incomingUpdated;
+    } else if (baseUpdated) {
+      merged.updatedAt = baseUpdated;
+    }
+  } else if (incomingUpdated) {
+    merged.updatedAt = incomingUpdated;
+  } else if (baseUpdated && !merged.updatedAt) {
+    merged.updatedAt = baseUpdated;
+  } else if (!merged.updatedAt && merged.createdAt) {
+    merged.updatedAt = merged.createdAt;
+  }
+
+  const assignIdField = (prop) => {
+    const incomingValue = normalizeId(incoming?.[prop]);
+    const baseValue = normalizeId(base?.[prop]);
+    if (incomingValue) {
+      merged[prop] = incomingValue;
+    } else if (baseValue) {
+      merged[prop] = baseValue;
+    } else if (merged[prop]) {
+      merged[prop] = normalizeId(merged[prop]);
+    }
+    if (!merged[prop]) {
+      delete merged[prop];
+    }
+  };
+  assignIdField('clienteId');
+  assignIdField('petId');
+  assignIdField('appointmentId');
+
+  if (incoming?.observacao !== undefined) {
+    merged.observacao = typeof incoming.observacao === 'string' ? incoming.observacao : '';
+  } else if (base?.observacao !== undefined && merged.observacao === undefined) {
+    merged.observacao = typeof base.observacao === 'string' ? base.observacao : '';
+  }
+
+  return merged;
+}
+
 function mergeAnexoRecords(existing = [], incoming = []) {
-  const map = new Map();
+  const list = [];
+  const idMap = new Map();
+  const signatureMap = new Map();
 
-  const push = (entry) => {
-    if (!entry || typeof entry !== 'object') return;
-    const id = normalizeId(entry.id || entry._id);
-    if (!id) return;
-
-    const createdAt = toIsoOrNull(entry.createdAt) || new Date().toISOString();
-    const updatedAt = toIsoOrNull(entry.updatedAt) || createdAt;
-    const arquivos = mergeAnexoFiles([], entry.arquivos || []);
-
-    const payload = {
-      ...entry,
-      id,
-      _id: id,
-      createdAt,
-      updatedAt,
-      arquivos,
-    };
-
-    const previous = map.get(id);
-    if (previous) {
-      const merged = {
-        ...previous,
-        ...payload,
-        id,
-        _id: id,
-      };
-      merged.arquivos = mergeAnexoFiles(previous.arquivos, payload.arquivos);
-
-      const prevCreated = previous.createdAt ? new Date(previous.createdAt).getTime() : null;
-      const payloadCreated = payload.createdAt ? new Date(payload.createdAt).getTime() : null;
-      if (Number.isFinite(prevCreated) && Number.isFinite(payloadCreated)) {
-        merged.createdAt = new Date(Math.min(prevCreated, payloadCreated)).toISOString();
-      } else if (payload.createdAt) {
-        merged.createdAt = payload.createdAt;
-      } else if (previous.createdAt) {
-        merged.createdAt = previous.createdAt;
-      }
-
-      const prevUpdated = previous.updatedAt ? new Date(previous.updatedAt).getTime() : null;
-      const payloadUpdated = payload.updatedAt ? new Date(payload.updatedAt).getTime() : null;
-      if (Number.isFinite(prevUpdated) && Number.isFinite(payloadUpdated)) {
-        merged.updatedAt = payloadUpdated > prevUpdated ? payload.updatedAt : previous.updatedAt;
-      } else if (payload.updatedAt) {
-        merged.updatedAt = payload.updatedAt;
-      } else if (previous.updatedAt) {
-        merged.updatedAt = previous.updatedAt;
-      } else {
-        merged.updatedAt = merged.createdAt;
-      }
-
-      map.set(id, merged);
-    } else {
-      map.set(id, payload);
+  const register = (record) => {
+    const comparison = getAnexoRecordComparison(record);
+    if (comparison.id) {
+      idMap.set(comparison.id, record);
+    }
+    if (comparison.signature) {
+      signatureMap.set(comparison.signature, record);
     }
   };
 
-  (Array.isArray(existing) ? existing : []).forEach(push);
-  (Array.isArray(incoming) ? incoming : []).forEach(push);
+  const upsert = (entry) => {
+    if (!entry || typeof entry !== 'object') return;
+    const normalized = normalizeAnexoRecord(entry);
+    if (!normalized) return;
+    const comparison = getAnexoRecordComparison(normalized);
 
-  const list = Array.from(map.values());
+    let target = null;
+    if (comparison.id && idMap.has(comparison.id)) {
+      target = idMap.get(comparison.id);
+    } else if (comparison.signature && (comparison.isTemporary || !comparison.id)) {
+      const candidate = signatureMap.get(comparison.signature);
+      if (candidate) {
+        const candidateComparison = getAnexoRecordComparison(candidate);
+        if (candidateComparison.isTemporary || comparison.isTemporary) {
+          target = candidate;
+        }
+      }
+    }
+
+    if (target) {
+      const targetComparison = getAnexoRecordComparison(target);
+      const merged = mergeAnexoRecordEntry(target, normalized);
+      const mergedComparison = getAnexoRecordComparison(merged);
+
+      const index = list.indexOf(target);
+      if (index >= 0) {
+        list[index] = merged;
+      } else {
+        list.push(merged);
+      }
+
+      if (targetComparison.id && targetComparison.id !== mergedComparison.id) {
+        idMap.delete(targetComparison.id);
+      }
+      if (comparison.id && comparison.id !== mergedComparison.id) {
+        idMap.delete(comparison.id);
+      }
+      if (mergedComparison.id) {
+        idMap.set(mergedComparison.id, merged);
+      }
+
+      if (targetComparison.signature && targetComparison.signature !== mergedComparison.signature) {
+        signatureMap.delete(targetComparison.signature);
+      }
+      if (comparison.signature && comparison.signature !== mergedComparison.signature) {
+        signatureMap.delete(comparison.signature);
+      }
+      if (mergedComparison.signature) {
+        signatureMap.set(mergedComparison.signature, merged);
+      }
+    } else {
+      const preparedId = comparison.id || generateAnexoId();
+      const prepared = {
+        ...normalized,
+        id: preparedId,
+        _id: preparedId,
+        arquivos: mergeAnexoFiles([], normalized.arquivos || []),
+      };
+      list.push(prepared);
+      register(prepared);
+    }
+  };
+
+  (Array.isArray(existing) ? existing : []).forEach(upsert);
+  (Array.isArray(incoming) ? incoming : []).forEach(upsert);
+
   list.sort((a, b) => {
     const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
     const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -666,6 +813,45 @@ export async function loadAnexosFromServer(options = {}) {
     state.anexosLoading = false;
     updateConsultaAgendaCard();
   }
+}
+
+export function handleAnexoRealTimeEvent(event = {}) {
+  if (!event || typeof event !== 'object') return false;
+
+  const action = typeof event.action === 'string' ? event.action.toLowerCase() : '';
+  const targetId = normalizeId(event.anexoId || event.id || event._id);
+  let changed = false;
+
+  if (action === 'delete' && targetId) {
+    const current = Array.isArray(state.anexos) ? state.anexos : [];
+    const filtered = current.filter((item) => normalizeId(item?.id || item?._id) !== targetId);
+    if (filtered.length !== current.length) {
+      state.anexos = filtered;
+      updateConsultaAgendaCard();
+      changed = true;
+    }
+    persistAnexosForSelection();
+    return changed;
+  }
+
+  const candidates = [];
+  if (Array.isArray(event.anexos)) candidates.push(...event.anexos);
+  if (event.anexo && typeof event.anexo === 'object') candidates.push(event.anexo);
+  if (event.record && typeof event.record === 'object') candidates.push(event.record);
+
+  candidates.forEach((candidate) => {
+    const saved = upsertAnexoInState(candidate);
+    if (saved) {
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    persistAnexosForSelection();
+    updateConsultaAgendaCard();
+  }
+
+  return changed;
 }
 
 export async function deleteAnexo(anexo, options = {}) {
