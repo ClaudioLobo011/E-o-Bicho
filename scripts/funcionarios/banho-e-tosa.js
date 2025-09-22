@@ -23,6 +23,26 @@
     return r === 'admin' || r === 'admin_master';
   }
 
+  function notify(message, type = 'warning') {
+    const text = String(message || '');
+    const hasWindow = typeof window !== 'undefined';
+
+    if (hasWindow && typeof window.showToast === 'function') {
+      try {
+        window.showToast(text, type);
+        return;
+      } catch (err) {
+        console.error('notify/showToast', err);
+      }
+    }
+
+    if (hasWindow && typeof window.alert === 'function') {
+      window.alert(text);
+    } else if (typeof alert === 'function') {
+      alert(text);
+    }
+  }
+
   // --- Modal de Código de Venda ---
   let __vendaTargetId = null;
 
@@ -2171,7 +2191,7 @@
       const item = state.agendamentos.find(x => String(x._id) === String(id));
       if (!item) return;
       if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) {
-        alert('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.');
+        notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning');
         return;
       }
       openEditModal(item);
@@ -2186,7 +2206,7 @@
       if (!item) return;
 
       if (item.pago || item.codigoVenda) {
-        alert('Este agendamento já possui código de venda registrado.');
+        notify('Este agendamento já possui código de venda registrado.', 'warning');
         return;
       }
         // Fecha a de edição, se por algum motivo estiver visível

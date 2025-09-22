@@ -1,4 +1,4 @@
-import { els, state, isPrivilegedRole, buildLocalDateTime, todayStr, normalizeDate, pad, api } from './core.js';
+import { els, state, isPrivilegedRole, notify, buildLocalDateTime, todayStr, normalizeDate, pad, api } from './core.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
@@ -109,7 +109,7 @@ export function decorateCards() {
           const current = (state.agendamentos || []).find(x => String(x._id) === String(id));
           if (!current) return;
           if (current.pago || current.codigoVenda) {
-            alert('Este agendamento já possui código de venda registrado.');
+            notify('Este agendamento já possui código de venda registrado.', 'warning');
             return;
           }
           // chama via window para evitar ciclo de imports
@@ -138,7 +138,7 @@ export function decorateCards() {
           const current = (state.agendamentos || []).find(x => String(x._id) === String(id));
           if (!current) return;
           if ((current.pago || current.codigoVenda) && !isPrivilegedRole()) {
-            alert('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.');
+            notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning');
             return;
           }
           if (window.__openEditFromUI) {

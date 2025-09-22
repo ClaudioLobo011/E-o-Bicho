@@ -31,6 +31,26 @@ export function isPrivilegedRole() {
   return r === 'admin' || r === 'admin_master';
 }
 
+export function notify(message, type = 'warning') {
+  const text = String(message || '');
+  const hasWindow = typeof window !== 'undefined';
+
+  if (hasWindow && typeof window.showToast === 'function') {
+    try {
+      window.showToast(text, type);
+      return;
+    } catch (err) {
+      console.error('notify/showToast', err);
+    }
+  }
+
+  if (hasWindow && typeof window.alert === 'function') {
+    window.alert(text);
+  } else if (typeof alert === 'function') {
+    alert(text);
+  }
+}
+
 export { confirmWithModal };
 
 // ----- Elements -----

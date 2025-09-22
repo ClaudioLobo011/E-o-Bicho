@@ -1,4 +1,4 @@
-import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole, confirmWithModal } from './core.js';
+import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole, confirmWithModal, notify } from './core.js';
 import { populateModalProfissionais, updateModalProfissionalLabel, getModalProfissionalTipo } from './profissionais.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
@@ -676,7 +676,7 @@ export function bindModalAndActionsEvents() {
       if (vendaOpen) return;
       const item = state.agendamentos.find(x => String(x._id) === String(id));
       if (!item) return;
-      if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) { alert('Este agendamento jÃ¡ foi faturado. Apenas Admin/Admin Master podem editar.'); return; }
+      if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) { notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning'); return; }
       openEditModal(item);
     } else if (btn.classList.contains('status')) {
       const item = state.agendamentos.find(x => String(x._id) === String(id));
@@ -687,7 +687,7 @@ export function bindModalAndActionsEvents() {
     } else if (btn.classList.contains('cobrar')) {
       const item = state.agendamentos.find(x => String(x._id) === String(id));
       if (!item) return;
-      if (item.pago || item.codigoVenda) { alert('Este agendamento jÃ¡ possui cÃ³digo de venda registrado.'); return; }
+      if (item.pago || item.codigoVenda) { notify('Este agendamento já possui código de venda registrado.', 'warning'); return; }
       requestAnimationFrame(() => (window.openVendaModal || openVendaModal)(item));
     }
   }, true);
@@ -704,7 +704,7 @@ export function bindModalAndActionsEvents() {
     if (!id) return;
     const item = state.agendamentos.find(x => String(x._id) === String(id));
     if (!item) return;
-    if (item.pago || item.codigoVenda) { alert('Este agendamento jÃ¡ possui cÃ³digo de venda registrado.'); return; }
+    if (item.pago || item.codigoVenda) { notify('Este agendamento já possui código de venda registrado.', 'warning'); return; }
     // Fecha a de ediÃ§Ã£o, se aberta
     try {
       const modalAdd = document.getElementById('modal-add-servico');
