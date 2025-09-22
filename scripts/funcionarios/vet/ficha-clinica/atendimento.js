@@ -312,6 +312,14 @@ async function limparConsultaAtual() {
     resetConsultaState();
     updateConsultaAgendaCard();
 
+    if (hasSelection) {
+      const eventPayload = buildAtendimentoEventPayload({
+        scope: 'atendimento',
+        action: 'limpar',
+      });
+      emitFichaClinicaUpdate(eventPayload).catch(() => {});
+    }
+
     if (errorMessages.size) {
       if (errorMessages.size === 1) {
         notify([...errorMessages][0], 'warning');
@@ -714,6 +722,60 @@ export function handleAtendimentoRealTimeEvent(event = {}) {
     renderHistoricoArea();
     updateConsultaAgendaCard();
     notify('O atendimento foi reaberto por outro usuário.', 'info');
+    return true;
+  }
+
+  if (action === 'limpar') {
+    if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+      state.agendaContext = targetAppointmentId ? { appointmentId: targetAppointmentId } : {};
+    } else if (targetAppointmentId) {
+      state.agendaContext.appointmentId = targetAppointmentId;
+    }
+
+    if (targetClienteId) {
+      state.agendaContext.tutorId = targetClienteId;
+    }
+    if (targetPetId) {
+      state.agendaContext.petId = targetPetId;
+    }
+
+    if (event.agendaStatus !== undefined) {
+      state.agendaContext.status = String(event.agendaStatus);
+    }
+
+    if (Array.isArray(event.agendaServicos)) {
+      const servicos = deepClone(event.agendaServicos) || [...event.agendaServicos];
+      state.agendaContext.servicos = servicos;
+      state.agendaContext.totalServicos = servicos.length;
+    } else if (state.agendaContext) {
+      if (Array.isArray(state.agendaContext.servicos)) {
+        state.agendaContext.totalServicos = state.agendaContext.servicos.length;
+      } else {
+        delete state.agendaContext.totalServicos;
+      }
+    }
+
+    if (event.agendaValor !== undefined) {
+      const valor = Number(event.agendaValor);
+      if (!Number.isNaN(valor)) {
+        state.agendaContext.valor = valor;
+      }
+    }
+
+    if (event.agendaProfissional !== undefined) {
+      state.agendaContext.profissionalNome = event.agendaProfissional || '';
+    }
+
+    persistAgendaContext(state.agendaContext);
+
+    const clienteId = targetClienteId || currentClienteId;
+    const petId = targetPetId || currentPetId;
+    if (clienteId && petId) {
+      clearLocalStoredDataForSelection(clienteId, petId);
+    }
+    resetConsultaState();
+    updateConsultaAgendaCard();
+    notify('Os registros da consulta foram limpos por outro usuário.', 'info');
     return true;
   }
 
