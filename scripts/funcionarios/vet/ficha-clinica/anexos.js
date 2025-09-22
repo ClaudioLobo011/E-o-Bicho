@@ -23,6 +23,11 @@ function generateAnexoId() {
   return `anx-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 }
 
+function isTemporaryAnexoId(value) {
+  if (!value) return false;
+  return /^anx-\d+-\d+$/i.test(String(value));
+}
+
 function generateAnexoFileId() {
   return `anx-file-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 }
@@ -152,32 +157,439 @@ function normalizeAnexoFileRecord(raw, fallback = {}) {
   };
 }
 
+function isTemporaryAnexoFileId(value) {
+  if (!value) return false;
+  return /^anx-file-\d+-\d+$/i.test(String(value));
+}
+
+function normalizeFileNameForComparison(value) {
+  if (value === null || value === undefined) return '';
+  return sanitizeAttachmentName(value).toLowerCase();
+}
+
+function collectAnexoFileNameTokens(entry) {
+  const tokens = new Set();
+  const push = (raw) => {
+    const normalized = normalizeFileNameForComparison(raw);
+    if (!normalized) return;
+    tokens.add(normalized);
+    if (normalized.includes('.')) {
+      const withoutExt = normalizeFileNameForComparison(normalized.replace(/\.[^.]+$/, ''));
+      if (withoutExt) tokens.add(withoutExt);
+    }
+  };
+  push(entry?.originalName);
+  push(entry?.nome);
+  push(entry?.name);
+  push(entry?.displayName);
+  push(entry?.providedName);
+  push(entry?.uploadName);
+  push(entry?.fileName);
+  return tokens;
+}
+
+function getComparableAnexoExtension(entry) {
+  const candidates = [
+    entry?.extension,
+    entry?.originalName ? getFileExtension(entry.originalName) : '',
+    entry?.nome ? getFileExtension(entry.nome) : '',
+    entry?.name ? getFileExtension(entry.name) : '',
+    entry?.displayName ? getFileExtension(entry.displayName) : '',
+    entry?.uploadName ? getFileExtension(entry.uploadName) : '',
+    entry?.fileName ? getFileExtension(entry.fileName) : '',
+  ];
+  for (const candidate of candidates) {
+    const normalized = normalizeAttachmentExtension(candidate);
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
+function getAnexoFileComparison(entry) {
+  const id = normalizeId(entry?.id || entry?._id) || null;
+  const url = typeof entry?.url === 'string' ? entry.url.trim() : '';
+  const sizeValue = Number(entry?.size ?? 0);
+  const size = Number.isFinite(sizeValue) && sizeValue > 0 ? sizeValue : 0;
+  const extension = getComparableAnexoExtension(entry);
+  const names = collectAnexoFileNameTokens(entry);
+  return {
+    id,
+    url,
+    size,
+    extension,
+    names,
+    isTemporary: isTemporaryAnexoFileId(id),
+  };
+}
+
+function shouldMergeAnexoFiles(base, candidate) {
+  if (!base || !candidate) return false;
+  const baseInfo = getAnexoFileComparison(base);
+  const candidateInfo = getAnexoFileComparison(candidate);
+
+  if (baseInfo.id && candidateInfo.id && baseInfo.id === candidateInfo.id) {
+    return true;
+  }
+  if (baseInfo.url && candidateInfo.url && baseInfo.url === candidateInfo.url) {
+    return true;
+  }
+
+  const allowLooseMatch =
+    baseInfo.isTemporary ||
+    candidateInfo.isTemporary ||
+    !baseInfo.id ||
+    !candidateInfo.id ||
+    !baseInfo.url ||
+    !candidateInfo.url;
+
+  if (!allowLooseMatch) {
+    return false;
+  }
+
+  const sizeMatches =
+    baseInfo.size && candidateInfo.size ? baseInfo.size === candidateInfo.size : true;
+  if (!sizeMatches) {
+    return false;
+  }
+
+  const extensionMatches =
+    baseInfo.extension && candidateInfo.extension ? baseInfo.extension === candidateInfo.extension : true;
+  if (!extensionMatches) {
+    return false;
+  }
+
+  if (baseInfo.names.size && candidateInfo.names.size) {
+    for (const name of baseInfo.names) {
+      if (candidateInfo.names.has(name)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function mergeAnexoFileEntry(base, incoming) {
+  const merged = { ...base };
+  const baseId = normalizeId(base?.id || base?._id) || null;
+  const incomingId = normalizeId(incoming?.id || incoming?._id) || null;
+  const baseTemp = isTemporaryAnexoFileId(baseId);
+  const incomingTemp = isTemporaryAnexoFileId(incomingId);
+
+  if (incomingId && (!incomingTemp || !baseId || baseTemp)) {
+    merged.id = incomingId;
+    merged._id = incomingId;
+  } else if (baseId) {
+    merged.id = baseId;
+    merged._id = baseId;
+  } else if (incomingId) {
+    merged.id = incomingId;
+    merged._id = incomingId;
+  }
+
+  const assignString = (prop) => {
+    const value = incoming?.[prop];
+    if (value !== undefined && value !== null && value !== '') {
+      merged[prop] = value;
+    }
+  };
+
+  assignString('url');
+  assignString('mimeType');
+  assignString('nome');
+  assignString('name');
+  assignString('displayName');
+  assignString('providedName');
+  assignString('originalName');
+  assignString('uploadName');
+  assignString('fileName');
+
+  const incomingSize = Number(incoming?.size ?? 0);
+  if (incomingSize && (!merged.size || merged.size === 0)) {
+    merged.size = incomingSize;
+  }
+
+  const incomingExtension = normalizeAttachmentExtension(incoming?.extension);
+  if (incomingExtension && !merged.extension) {
+    merged.extension = incomingExtension;
+  }
+
+  const baseCreated = toIsoOrNull(base?.createdAt);
+  const incomingCreated = toIsoOrNull(incoming?.createdAt);
+  if (baseCreated && incomingCreated) {
+    const baseTime = new Date(baseCreated).getTime();
+    const incomingTime = new Date(incomingCreated).getTime();
+    if (Number.isFinite(baseTime) && Number.isFinite(incomingTime)) {
+      merged.createdAt = new Date(Math.min(baseTime, incomingTime)).toISOString();
+    } else if (Number.isFinite(incomingTime)) {
+      merged.createdAt = new Date(incomingTime).toISOString();
+    } else if (Number.isFinite(baseTime)) {
+      merged.createdAt = new Date(baseTime).toISOString();
+    }
+  } else if (incomingCreated) {
+    merged.createdAt = incomingCreated;
+  } else if (baseCreated && !merged.createdAt) {
+    merged.createdAt = baseCreated;
+  }
+
+  const baseUpdated = toIsoOrNull(base?.updatedAt);
+  const incomingUpdated = toIsoOrNull(incoming?.updatedAt);
+  if (baseUpdated && incomingUpdated) {
+    const baseTime = new Date(baseUpdated).getTime();
+    const incomingTime = new Date(incomingUpdated).getTime();
+    if (Number.isFinite(baseTime) && Number.isFinite(incomingTime)) {
+      merged.updatedAt = incomingTime > baseTime
+        ? new Date(incomingTime).toISOString()
+        : new Date(baseTime).toISOString();
+    } else if (Number.isFinite(incomingTime)) {
+      merged.updatedAt = new Date(incomingTime).toISOString();
+    } else if (Number.isFinite(baseTime)) {
+      merged.updatedAt = new Date(baseTime).toISOString();
+    }
+  } else if (incomingUpdated) {
+    merged.updatedAt = incomingUpdated;
+  } else if (baseUpdated && !merged.updatedAt) {
+    merged.updatedAt = baseUpdated;
+  } else if (!merged.updatedAt && merged.createdAt) {
+    merged.updatedAt = merged.createdAt;
+  }
+
+  if (incoming?.file) {
+    merged.file = incoming.file;
+  } else if (!incoming?.file && merged.file && !base?.file) {
+    delete merged.file;
+  }
+
+  return merged;
+}
+
 function mergeAnexoFiles(existing = [], incoming = []) {
   const list = [];
-  const map = new Map();
   const push = (item) => {
     const normalized = normalizeAnexoFileRecord(item);
     if (!normalized) return;
-    const key = normalizeId(normalized.id || normalized._id) || `${normalized.nome}|${normalized.originalName}|${normalized.url}`;
-    const previous = map.get(key);
-    if (previous) {
-      const merged = {
-        ...previous,
-        ...normalized,
-      };
-      if (!merged.url && normalized.url) merged.url = normalized.url;
-      if (!merged.mimeType && normalized.mimeType) merged.mimeType = normalized.mimeType;
-      if (!merged.size && normalized.size) merged.size = normalized.size;
-      if (!merged.extension && normalized.extension) merged.extension = normalized.extension;
-      if (!merged.createdAt) merged.createdAt = normalized.createdAt;
-      map.set(key, merged);
+    const index = list.findIndex((entry) => shouldMergeAnexoFiles(entry, normalized));
+    if (index >= 0) {
+      list[index] = mergeAnexoFileEntry(list[index], normalized);
     } else {
-      map.set(key, normalized);
+      list.push(normalized);
     }
   };
   (Array.isArray(existing) ? existing : []).forEach(push);
   (Array.isArray(incoming) ? incoming : []).forEach(push);
-  map.forEach((value) => list.push(value));
+  list.sort((a, b) => {
+    const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bTime - aTime;
+  });
+  return list;
+}
+
+function getAnexoFileSignature(entry) {
+  const comparison = getAnexoFileComparison(entry);
+  const nameTokens = comparison.names ? Array.from(comparison.names) : [];
+  nameTokens.sort();
+  const nameKey = nameTokens.join('|');
+  const sizeKey = comparison.size || 0;
+  const extensionKey = comparison.extension || '';
+  if (!(nameKey || sizeKey || extensionKey)) {
+    return null;
+  }
+  return `${nameKey}#${sizeKey}#${extensionKey}`;
+}
+
+function getAnexoRecordComparison(entry) {
+  const id = normalizeId(entry?.id || entry?._id) || null;
+  const arquivos = Array.isArray(entry?.arquivos) ? entry.arquivos : [];
+  const fileSignatures = arquivos.map((file) => getAnexoFileSignature(file)).filter(Boolean);
+  fileSignatures.sort();
+  const hasFiles = fileSignatures.length > 0;
+  const observacaoKey = typeof entry?.observacao === 'string' ? entry.observacao.trim().toLowerCase() : '';
+  const signature = hasFiles ? `${observacaoKey}::${fileSignatures.join('||')}` : null;
+  return {
+    id,
+    signature,
+    hasFiles,
+    isTemporary: !id || isTemporaryAnexoId(id),
+  };
+}
+
+function mergeAnexoRecordEntry(base, incoming) {
+  if (!base && !incoming) return null;
+  if (!base) return { ...incoming };
+  if (!incoming) return { ...base };
+
+  const baseId = normalizeId(base.id || base._id) || null;
+  const incomingId = normalizeId(incoming.id || incoming._id) || null;
+  const baseTemp = isTemporaryAnexoId(baseId);
+  const incomingTemp = isTemporaryAnexoId(incomingId);
+
+  let resolvedId = baseId;
+  if (incomingId && (!incomingTemp || !baseId || baseTemp)) {
+    resolvedId = incomingId;
+  } else if (!resolvedId && incomingId) {
+    resolvedId = incomingId;
+  }
+  if (!resolvedId) {
+    resolvedId = generateAnexoId();
+  }
+
+  const merged = {
+    ...base,
+    ...incoming,
+    id: resolvedId,
+    _id: resolvedId,
+  };
+  merged.arquivos = mergeAnexoFiles(base?.arquivos, incoming?.arquivos);
+
+  const baseCreated = toIsoOrNull(base?.createdAt);
+  const incomingCreated = toIsoOrNull(incoming?.createdAt);
+  if (baseCreated && incomingCreated) {
+    const baseTime = new Date(baseCreated).getTime();
+    const incomingTime = new Date(incomingCreated).getTime();
+    if (Number.isFinite(baseTime) && Number.isFinite(incomingTime)) {
+      merged.createdAt = new Date(Math.min(baseTime, incomingTime)).toISOString();
+    } else if (incomingCreated) {
+      merged.createdAt = incomingCreated;
+    } else if (baseCreated) {
+      merged.createdAt = baseCreated;
+    }
+  } else if (incomingCreated) {
+    merged.createdAt = incomingCreated;
+  } else if (baseCreated && !merged.createdAt) {
+    merged.createdAt = baseCreated;
+  }
+
+  const baseUpdated = toIsoOrNull(base?.updatedAt);
+  const incomingUpdated = toIsoOrNull(incoming?.updatedAt);
+  if (baseUpdated && incomingUpdated) {
+    const baseTime = new Date(baseUpdated).getTime();
+    const incomingTime = new Date(incomingUpdated).getTime();
+    if (Number.isFinite(baseTime) && Number.isFinite(incomingTime)) {
+      merged.updatedAt = incomingTime > baseTime
+        ? new Date(incomingTime).toISOString()
+        : new Date(baseTime).toISOString();
+    } else if (incomingUpdated) {
+      merged.updatedAt = incomingUpdated;
+    } else if (baseUpdated) {
+      merged.updatedAt = baseUpdated;
+    }
+  } else if (incomingUpdated) {
+    merged.updatedAt = incomingUpdated;
+  } else if (baseUpdated && !merged.updatedAt) {
+    merged.updatedAt = baseUpdated;
+  } else if (!merged.updatedAt && merged.createdAt) {
+    merged.updatedAt = merged.createdAt;
+  }
+
+  const assignIdField = (prop) => {
+    const incomingValue = normalizeId(incoming?.[prop]);
+    const baseValue = normalizeId(base?.[prop]);
+    if (incomingValue) {
+      merged[prop] = incomingValue;
+    } else if (baseValue) {
+      merged[prop] = baseValue;
+    } else if (merged[prop]) {
+      merged[prop] = normalizeId(merged[prop]);
+    }
+    if (!merged[prop]) {
+      delete merged[prop];
+    }
+  };
+  assignIdField('clienteId');
+  assignIdField('petId');
+  assignIdField('appointmentId');
+
+  if (incoming?.observacao !== undefined) {
+    merged.observacao = typeof incoming.observacao === 'string' ? incoming.observacao : '';
+  } else if (base?.observacao !== undefined && merged.observacao === undefined) {
+    merged.observacao = typeof base.observacao === 'string' ? base.observacao : '';
+  }
+
+  return merged;
+}
+
+function mergeAnexoRecords(existing = [], incoming = []) {
+  const list = [];
+  const idMap = new Map();
+  const signatureMap = new Map();
+
+  const register = (record) => {
+    const comparison = getAnexoRecordComparison(record);
+    if (comparison.id) {
+      idMap.set(comparison.id, record);
+    }
+    if (comparison.signature) {
+      signatureMap.set(comparison.signature, record);
+    }
+  };
+
+  const upsert = (entry) => {
+    if (!entry || typeof entry !== 'object') return;
+    const normalized = normalizeAnexoRecord(entry);
+    if (!normalized) return;
+    const comparison = getAnexoRecordComparison(normalized);
+
+    let target = null;
+    if (comparison.id && idMap.has(comparison.id)) {
+      target = idMap.get(comparison.id);
+    } else if (comparison.signature && (comparison.isTemporary || !comparison.id)) {
+      const candidate = signatureMap.get(comparison.signature);
+      if (candidate) {
+        const candidateComparison = getAnexoRecordComparison(candidate);
+        if (candidateComparison.isTemporary || comparison.isTemporary) {
+          target = candidate;
+        }
+      }
+    }
+
+    if (target) {
+      const targetComparison = getAnexoRecordComparison(target);
+      const merged = mergeAnexoRecordEntry(target, normalized);
+      const mergedComparison = getAnexoRecordComparison(merged);
+
+      const index = list.indexOf(target);
+      if (index >= 0) {
+        list[index] = merged;
+      } else {
+        list.push(merged);
+      }
+
+      if (targetComparison.id && targetComparison.id !== mergedComparison.id) {
+        idMap.delete(targetComparison.id);
+      }
+      if (comparison.id && comparison.id !== mergedComparison.id) {
+        idMap.delete(comparison.id);
+      }
+      if (mergedComparison.id) {
+        idMap.set(mergedComparison.id, merged);
+      }
+
+      if (targetComparison.signature && targetComparison.signature !== mergedComparison.signature) {
+        signatureMap.delete(targetComparison.signature);
+      }
+      if (comparison.signature && comparison.signature !== mergedComparison.signature) {
+        signatureMap.delete(comparison.signature);
+      }
+      if (mergedComparison.signature) {
+        signatureMap.set(mergedComparison.signature, merged);
+      }
+    } else {
+      const preparedId = comparison.id || generateAnexoId();
+      const prepared = {
+        ...normalized,
+        id: preparedId,
+        _id: preparedId,
+        arquivos: mergeAnexoFiles([], normalized.arquivos || []),
+      };
+      list.push(prepared);
+      register(prepared);
+    }
+  };
+
+  (Array.isArray(existing) ? existing : []).forEach(upsert);
+  (Array.isArray(incoming) ? incoming : []).forEach(upsert);
+
   list.sort((a, b) => {
     const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
     const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -255,15 +667,16 @@ export function loadAnexosForSelection() {
     }
     return;
   }
+  const existing = Array.isArray(state.anexos) ? state.anexos : [];
   try {
     const raw = localStorage.getItem(key);
     if (!raw) {
-      state.anexos = [];
+      if (!existing.length) state.anexos = [];
       return;
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      state.anexos = [];
+      if (!existing.length) state.anexos = [];
       return;
     }
     const normalized = parsed.map((item) => normalizeAnexoRecord(item)).filter(Boolean);
@@ -273,9 +686,15 @@ export function loadAnexosForSelection() {
       return bTime - aTime;
     });
     const filtered = normalized.filter((item) => !isExameAttachmentRecord(item));
-    state.anexos = filtered;
+    if (filtered.length) {
+      state.anexos = existing.length ? mergeAnexoRecords(existing, filtered) : filtered;
+    } else if (!existing.length) {
+      state.anexos = [];
+    }
   } catch {
-    state.anexos = [];
+    if (!Array.isArray(state.anexos) || !state.anexos.length) {
+      state.anexos = [];
+    }
   }
 }
 
@@ -394,6 +813,45 @@ export async function loadAnexosFromServer(options = {}) {
     state.anexosLoading = false;
     updateConsultaAgendaCard();
   }
+}
+
+export function handleAnexoRealTimeEvent(event = {}) {
+  if (!event || typeof event !== 'object') return false;
+
+  const action = typeof event.action === 'string' ? event.action.toLowerCase() : '';
+  const targetId = normalizeId(event.anexoId || event.id || event._id);
+  let changed = false;
+
+  if (action === 'delete' && targetId) {
+    const current = Array.isArray(state.anexos) ? state.anexos : [];
+    const filtered = current.filter((item) => normalizeId(item?.id || item?._id) !== targetId);
+    if (filtered.length !== current.length) {
+      state.anexos = filtered;
+      updateConsultaAgendaCard();
+      changed = true;
+    }
+    persistAnexosForSelection();
+    return changed;
+  }
+
+  const candidates = [];
+  if (Array.isArray(event.anexos)) candidates.push(...event.anexos);
+  if (event.anexo && typeof event.anexo === 'object') candidates.push(event.anexo);
+  if (event.record && typeof event.record === 'object') candidates.push(event.record);
+
+  candidates.forEach((candidate) => {
+    const saved = upsertAnexoInState(candidate);
+    if (saved) {
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    persistAnexosForSelection();
+    updateConsultaAgendaCard();
+  }
+
+  return changed;
 }
 
 export async function deleteAnexo(anexo, options = {}) {

@@ -6,6 +6,7 @@ import {
   openAnexoModal,
   loadAnexosForSelection,
   loadAnexosFromServer,
+  handleAnexoRealTimeEvent,
 } from './anexos.js';
 import { openDocumentoModal, loadDocumentosFromServer } from './documentos.js';
 import { openReceitaModal, loadReceitasFromServer } from './receitas.js';
@@ -88,6 +89,8 @@ function handleFichaRealTimeMessage(message) {
       handled = handleExameRealTimeEvent(event) || handled;
     } else if (scope === 'observacao') {
       handled = handleObservacaoRealTimeEvent(event) || handled;
+    } else if (scope === 'anexo') {
+      handled = handleAnexoRealTimeEvent(event) || handled;
     }
   }
 
