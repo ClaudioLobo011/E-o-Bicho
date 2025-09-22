@@ -1,4 +1,4 @@
-﻿import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole } from './core.js';
+import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole, confirmWithModal, notify } from './core.js';
 import { populateModalProfissionais, updateModalProfissionalLabel, getModalProfissionalTipo } from './profissionais.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
@@ -559,34 +559,57 @@ export async function handleDelete() {
   enhanceAgendaUI();
 }
 
-export function confirmAsync(title, message, opts = {}) {
+export async function confirmAsync(title, message, opts = {}) {
   const confirmText = opts.confirmText || 'Excluir';
   const cancelText  = opts.cancelText  || 'Cancelar';
-  if (typeof window.showModal === 'function') {
-    return new Promise((resolve) => {
-      const prevVis = els.modal ? els.modal.style.visibility : '';
-      const prevPe  = els.modal ? els.modal.style.pointerEvents : '';
-      if (els.modal) { els.modal.style.visibility = 'hidden'; els.modal.style.pointerEvents = 'none'; }
-      window.showModal({
-        title: title || 'ConfirmaÃ§Ã£o', message: message || 'Deseja prosseguir?', confirmText, cancelText,
-        onConfirm: () => { restore(); resolve(true); },
-        onCancel : () => { restore(); resolve(false); }
-      });
-      const bump = () => {
-        try {
-          const all = Array.from(document.querySelectorAll('body *'));
-          const overlays = all.filter(el => { const cs = getComputedStyle(el); if (cs.position !== 'fixed') return false; const r = el.getBoundingClientRect(); return r.width >= window.innerWidth * 0.95 && r.height >= window.innerHeight * 0.95; });
-          const overlay = overlays.at(-1);
-          if (overlay) { overlay.style.zIndex = '9999'; overlay.style.pointerEvents = 'auto'; }
-        } catch {}
-      };
-      requestAnimationFrame(bump);
-      setTimeout(bump, 0);
-      function restore() { if (els.modal) { els.modal.style.visibility = prevVis || ''; els.modal.style.pointerEvents = prevPe || ''; } }
-    });
+  const modalEl = els.modal || null;
+
+  let prevVis;
+  let prevPointerEvents;
+  if (modalEl) {
+    prevVis = modalEl.style.visibility;
+    prevPointerEvents = modalEl.style.pointerEvents;
+    modalEl.style.visibility = 'hidden';
+    modalEl.style.pointerEvents = 'none';
   }
-  const ok = window.confirm(message || title || 'Confirmar?');
-  return Promise.resolve(!!ok);
+
+  const ensureOverlayOnTop = () => {
+    try {
+      const all = Array.from(document.querySelectorAll('body *'));
+      const overlays = all.filter((element) => {
+        const style = getComputedStyle(element);
+        if (style.position !== 'fixed') return false;
+        const rect = element.getBoundingClientRect();
+        return rect.width >= window.innerWidth * 0.95 && rect.height >= window.innerHeight * 0.95;
+      });
+      const overlay = overlays.at(-1);
+      if (overlay) {
+        overlay.style.zIndex = '9999';
+        overlay.style.pointerEvents = 'auto';
+      }
+    } catch (_) {}
+  };
+
+  if (typeof window !== 'undefined') {
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(ensureOverlayOnTop);
+    }
+    setTimeout(ensureOverlayOnTop, 0);
+  }
+
+  try {
+    return await confirmWithModal({
+      title: title || 'Confirmação',
+      message: message || 'Deseja prosseguir?',
+      confirmText,
+      cancelText,
+    });
+  } finally {
+    if (modalEl) {
+      modalEl.style.visibility = prevVis || '';
+      modalEl.style.pointerEvents = prevPointerEvents || '';
+    }
+  }
 }
 
 export function bindModalAndActionsEvents() {
@@ -653,7 +676,7 @@ export function bindModalAndActionsEvents() {
       if (vendaOpen) return;
       const item = state.agendamentos.find(x => String(x._id) === String(id));
       if (!item) return;
-      if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) { alert('Este agendamento jÃ¡ foi faturado. Apenas Admin/Admin Master podem editar.'); return; }
+      if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) { notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning'); return; }
       openEditModal(item);
     } else if (btn.classList.contains('status')) {
       const item = state.agendamentos.find(x => String(x._id) === String(id));
@@ -664,7 +687,7 @@ export function bindModalAndActionsEvents() {
     } else if (btn.classList.contains('cobrar')) {
       const item = state.agendamentos.find(x => String(x._id) === String(id));
       if (!item) return;
-      if (item.pago || item.codigoVenda) { alert('Este agendamento jÃ¡ possui cÃ³digo de venda registrado.'); return; }
+      if (item.pago || item.codigoVenda) { notify('Este agendamento já possui código de venda registrado.', 'warning'); return; }
       requestAnimationFrame(() => (window.openVendaModal || openVendaModal)(item));
     }
   }, true);
@@ -681,7 +704,7 @@ export function bindModalAndActionsEvents() {
     if (!id) return;
     const item = state.agendamentos.find(x => String(x._id) === String(id));
     if (!item) return;
-    if (item.pago || item.codigoVenda) { alert('Este agendamento jÃ¡ possui cÃ³digo de venda registrado.'); return; }
+    if (item.pago || item.codigoVenda) { notify('Este agendamento já possui código de venda registrado.', 'warning'); return; }
     // Fecha a de ediÃ§Ã£o, se aberta
     try {
       const modalAdd = document.getElementById('modal-add-servico');

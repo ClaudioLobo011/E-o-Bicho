@@ -14,6 +14,7 @@ import {
   pesoModal,
   sanitizeObjectId,
   isFinalizadoSelection,
+  confirmWithModal,
 } from './core.js';
 import { ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
 import { emitFichaClinicaUpdate } from './real-time.js';
@@ -500,12 +501,17 @@ export async function deletePeso(peso, options = {}) {
     return false;
   }
 
-  if (!skipConfirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+  if (!skipConfirm) {
     const weightText = formatPetWeight(record.peso) || 'este registro de peso';
     const question = record.isInitial
       ? `Remover o registro de peso inicial (${weightText})?`
       : `Remover o registro de peso ${weightText}?`;
-    const confirmed = window.confirm(question);
+    const confirmed = await confirmWithModal({
+      title: 'Remover peso',
+      message: question,
+      confirmText: 'Remover',
+      cancelText: 'Cancelar',
+    });
     if (!confirmed) {
       return false;
     }

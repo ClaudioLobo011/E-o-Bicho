@@ -5,6 +5,7 @@ import {
   getPreviewText,
   renderPreviewFrameContent,
 } from './document-utils.js';
+import { confirmWithModal } from '../shared/confirm-modal.js';
 
 const state = {
   documents: [],
@@ -803,20 +804,11 @@ function renderList() {
 }
 
 function confirmAction(title, message, confirmText = 'Excluir') {
-  return new Promise((resolve) => {
-    if (typeof window.showModal === 'function') {
-      window.showModal({
-        title: title || 'Confirmação',
-        message: message || 'Deseja prosseguir?',
-        confirmText,
-        cancelText: 'Cancelar',
-        onConfirm: () => resolve(true),
-        onCancel: () => resolve(false),
-      });
-      return;
-    }
-    const ok = window.confirm(message || title || 'Confirmar?');
-    resolve(ok);
+  return confirmWithModal({
+    title: title || 'Confirmação',
+    message: message || 'Deseja prosseguir?',
+    confirmText,
+    cancelText: 'Cancelar',
   });
 }
 

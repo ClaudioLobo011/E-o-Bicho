@@ -28,6 +28,7 @@ import {
   isConsultaLockedForCurrentUser,
   isAdminRole,
   persistAgendaContext,
+  confirmWithModal,
 } from './core.js';
 import { openDocumentPrintWindow } from '../document-utils.js';
 import { openObservacaoModal } from './observacoes.js';
@@ -681,11 +682,16 @@ export async function deleteConsulta(record, options = {}) {
   }
 
   const serviceName = pickFirst(consulta.servicoNome);
-  if (!skipConfirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+  if (!skipConfirm) {
     const question = serviceName
       ? `Remover o registro de consulta vinculado ao serviço "${serviceName}"?`
       : 'Remover este registro de consulta?';
-    const confirmed = window.confirm(question);
+    const confirmed = await confirmWithModal({
+      title: 'Remover consulta',
+      message: question,
+      confirmText: 'Remover',
+      cancelText: 'Cancelar',
+    });
     if (!confirmed) {
       return false;
     }

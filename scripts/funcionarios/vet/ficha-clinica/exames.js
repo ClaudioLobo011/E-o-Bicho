@@ -20,6 +20,7 @@ import {
   ANEXO_ALLOWED_MIME_TYPES,
   getAuthToken,
   isFinalizadoSelection,
+  confirmWithModal,
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
 import { loadAnexosFromServer, deleteAnexo } from './anexos.js';
@@ -1886,7 +1887,7 @@ export async function deleteExame(exame, options = {}) {
   const serviceName = pickFirst(record.servicoNome);
   const hasFiles = Array.isArray(record.arquivos) && record.arquivos.length > 0;
 
-  if (!skipConfirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+  if (!skipConfirm) {
     const questionParts = [];
     if (serviceName) {
       questionParts.push(`Remover o exame "${serviceName}"?`);
@@ -1896,7 +1897,12 @@ export async function deleteExame(exame, options = {}) {
     if (hasFiles) {
       questionParts.push('Os arquivos enviados serão excluídos.');
     }
-    const confirmed = window.confirm(questionParts.join('\n'));
+    const confirmed = await confirmWithModal({
+      title: 'Remover exame',
+      message: questionParts.join(' '),
+      confirmText: 'Remover',
+      cancelText: 'Cancelar',
+    });
     if (!confirmed) {
       return false;
     }

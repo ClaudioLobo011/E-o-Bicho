@@ -1,9 +1,24 @@
-import { els, state, isPrivilegedRole } from './core.js';
+import { state, isPrivilegedRole, notify } from './core.js';
+
+const ACTION_CLICK_GUARD = Symbol('agendaActionClickHandled');
+const ACTION_BOUND_FLAG = '__banhoAgendaActionsBound';
+
+function swallowPointerDown(ev) {
+  const btn = ev.target?.closest?.('.agenda-action');
+  if (!btn) return;
+  try {
+    if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+  } catch {}
+  ev.stopPropagation();
+}
 
 function onActionClick(ev) {
   const btn = ev.target?.closest?.('.agenda-action');
   if (!btn) return;
   try {
+    if (ev[ACTION_CLICK_GUARD]) return;
+    ev[ACTION_CLICK_GUARD] = true;
+
     ev.preventDefault();
     if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
     ev.stopPropagation();
@@ -14,7 +29,7 @@ function onActionClick(ev) {
     if (!item) return;
 
     if (btn.classList.contains('cobrar')) {
-      if (item.pago || item.codigoVenda) { alert('Este agendamento já possui código de venda registrado.'); return; }
+      if (item.pago || item.codigoVenda) { notify('Este agendamento já possui código de venda registrado.', 'warning'); return; }
       // fecha edição, se aberta
       try {
         const modalAdd = document.getElementById('modal-add-servico');
@@ -33,7 +48,7 @@ function onActionClick(ev) {
       const vm = document.getElementById('venda-modal');
       const vendaOpen = vm && !vm.classList.contains('hidden');
       if (vendaOpen) { try { vm.classList.add('hidden'); vm.setAttribute('aria-hidden','true'); } catch {} }
-      if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) { alert('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.'); return; }
+      if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) { notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning'); return; }
       if (window.__openEditFromUI) window.__openEditFromUI(item);
       return;
     }
@@ -53,7 +68,10 @@ function onActionClick(ev) {
 }
 
 export function attachGlobalActionHandlers() {
-  // Captura no documento: intercepta antes de qualquer outro listener
+  if (typeof document === 'undefined') return;
+  if (document[ACTION_BOUND_FLAG]) return;
+  document[ACTION_BOUND_FLAG] = true;
+
+  document.addEventListener('pointerdown', swallowPointerDown, true);
   document.addEventListener('click', onActionClick, true);
-  document.addEventListener('pointerdown', onActionClick, true);
 }

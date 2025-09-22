@@ -15,6 +15,7 @@ import {
   EXAME_ATTACHMENT_OBSERVACAO_PREFIX,
   getAuthToken,
   isFinalizadoSelection,
+  confirmWithModal,
 } from './core.js';
 import { getConsultasKey, ensureTutorAndPetSelected, updateConsultaAgendaCard } from './consultas.js';
 import { emitFichaClinicaUpdate } from './real-time.js';
@@ -863,12 +864,17 @@ export async function deleteAnexo(anexo, options = {}) {
   const arquivos = Array.isArray(record.arquivos) ? record.arquivos.filter(Boolean) : [];
   const firstFile = arquivos.length ? arquivos[0] : null;
 
-  if (!skipConfirm && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+  if (!skipConfirm) {
     const mainName = pickFirst(firstFile?.nome, firstFile?.originalName);
     const question = mainName
       ? `Remover o anexo "${mainName}"? O arquivo será excluído do Google Drive.`
       : 'Remover este anexo? O arquivo será excluído do Google Drive.';
-    const confirmed = window.confirm(question);
+    const confirmed = await confirmWithModal({
+      title: 'Remover anexo',
+      message: question,
+      confirmText: 'Remover',
+      cancelText: 'Cancelar',
+    });
     if (!confirmed) {
       return false;
     }

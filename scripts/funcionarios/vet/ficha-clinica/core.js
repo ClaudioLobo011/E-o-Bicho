@@ -1,4 +1,5 @@
 // Core utilities and shared state for the Vet ficha clínica feature
+import { confirmWithModal } from '../../shared/confirm-modal.js';
 
 let authToken = null;
 try {
@@ -80,6 +81,8 @@ export function isAdminRole(role = getCurrentUserRole()) {
   const normalized = String(role || '').toLowerCase();
   return normalized === 'admin' || normalized === 'admin_master';
 }
+
+export { confirmWithModal };
 
 export const els = {
   cliInput: document.getElementById('vet-cli-input'),

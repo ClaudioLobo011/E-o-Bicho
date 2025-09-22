@@ -1,4 +1,25 @@
 (function () {
+  const TOAST_DEDUP_KEY = '__agendaToastState';
+  const TOAST_DEDUP_WINDOW = 1200;
+
+  function getToastStore() {
+    if (typeof window !== 'undefined') return window;
+    if (typeof globalThis !== 'undefined') return globalThis;
+    if (typeof self !== 'undefined') return self;
+    return null;
+  }
+
+  function getLastToast() {
+    const store = getToastStore();
+    return store && store[TOAST_DEDUP_KEY];
+  }
+
+  function rememberToast(text) {
+    const store = getToastStore();
+    if (!store) return;
+    store[TOAST_DEDUP_KEY] = { text, time: Date.now() };
+  }
+
   // Helper para requisições com token
   const token = JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token || null;
   function api(url, opts = {}) {
@@ -21,6 +42,38 @@
   function isPrivilegedRole() {
     const r = getCurrentRole();
     return r === 'admin' || r === 'admin_master';
+  }
+
+  function notify(message, type = 'warning') {
+    const text = String(message || '');
+    if (!text) return;
+    const hasWindow = typeof window !== 'undefined';
+
+    const last = getLastToast();
+    const now = Date.now();
+    if (last && last.text === text && now - last.time < TOAST_DEDUP_WINDOW) {
+      return;
+    }
+
+    if (hasWindow && typeof window.showToast === 'function') {
+      try {
+        window.showToast(text, type);
+        rememberToast(text);
+        return;
+      } catch (err) {
+        console.error('notify/showToast', err);
+      }
+    }
+
+    if (hasWindow && typeof window.alert === 'function') {
+      rememberToast(text);
+      window.alert(text);
+    } else if (typeof alert === 'function') {
+      rememberToast(text);
+      alert(text);
+    } else {
+      rememberToast(text);
+    }
   }
 
   // --- Modal de Código de Venda ---
@@ -1388,64 +1441,75 @@
     });
   }
 
-  function confirmAsync(title, message, opts = {}) {
+  async function confirmAsync(title, message, opts = {}) {
     const confirmText = opts.confirmText || 'Excluir';
     const cancelText  = opts.cancelText  || 'Cancelar';
+    const modalEl = modal || null;
 
-    if (typeof window.showModal === 'function') {
-      return new Promise((resolve) => {
-        // 1) Esconde temporariamente o modal de edição (sem desmontar)
-        const prevVis = modal ? modal.style.visibility : '';
-        const prevPe  = modal ? modal.style.pointerEvents : '';
-        if (modal) {
-          modal.style.visibility = 'hidden';
-          modal.style.pointerEvents = 'none';
+    let prevVis;
+    let prevPointerEvents;
+    if (modalEl) {
+      prevVis = modalEl.style.visibility;
+      prevPointerEvents = modalEl.style.pointerEvents;
+      modalEl.style.visibility = 'hidden';
+      modalEl.style.pointerEvents = 'none';
+    }
+
+    const ensureOverlayOnTop = () => {
+      try {
+        const all = Array.from(document.querySelectorAll('body *'));
+        const overlays = all.filter((element) => {
+          const style = getComputedStyle(element);
+          if (style.position !== 'fixed') return false;
+          const rect = element.getBoundingClientRect();
+          return rect.width >= window.innerWidth * 0.95 && rect.height >= window.innerHeight * 0.95;
+        });
+        const overlay = overlays.at(-1);
+        if (overlay) {
+          overlay.style.zIndex = '9999';
+          overlay.style.pointerEvents = 'auto';
         }
+      } catch (_) {}
+    };
 
-        // 2) Abre o modal padrão do projeto
-        window.showModal({
+    if (typeof window !== 'undefined') {
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(ensureOverlayOnTop);
+      }
+      setTimeout(ensureOverlayOnTop, 0);
+    }
+
+    try {
+      if (typeof window.confirmWithModal === 'function') {
+        return await window.confirmWithModal({
           title: title || 'Confirmação',
           message: message || 'Deseja prosseguir?',
           confirmText,
           cancelText,
-          onConfirm: () => { restore(); resolve(true); },
-          onCancel : () => { restore(); resolve(false); }
         });
+      }
 
-        // 3) Após montar, garante overlay por cima de tudo
-        //    (pega o último elemento "fixed" full-screen e sobe o z-index)
-        const bump = () => {
-          try {
-            const all = Array.from(document.querySelectorAll('body *'));
-            const overlays = all.filter(el => {
-              const cs = getComputedStyle(el);
-              if (cs.position !== 'fixed') return false;
-              const r = el.getBoundingClientRect();
-              return r.width >= window.innerWidth * 0.95 && r.height >= window.innerHeight * 0.95;
-            });
-            const overlay = overlays.at(-1);
-            if (overlay) {
-              overlay.style.zIndex = '9999';
-              overlay.style.pointerEvents = 'auto';
-            }
-          } catch (_) { /* noop */ }
-        };
-        requestAnimationFrame(bump);
-        setTimeout(bump, 0);
+      if (typeof window.showModal === 'function') {
+        return await new Promise((resolve) => {
+          window.showModal({
+            title: title || 'Confirmação',
+            message: message || 'Deseja prosseguir?',
+            confirmText,
+            cancelText,
+            onConfirm: () => resolve(true),
+            onCancel: () => resolve(false),
+          });
+        });
+      }
 
-        // 4) Restaura o modal de edição quando fechar a confirmação
-        function restore() {
-          if (modal) {
-            modal.style.visibility = prevVis || '';
-            modal.style.pointerEvents = prevPe || '';
-          }
-        }
-      });
+      console.warn('confirmAsync: modal de confirmação indisponível; prosseguindo automaticamente.');
+      return true;
+    } finally {
+      if (modalEl) {
+        modalEl.style.visibility = prevVis || '';
+        modalEl.style.pointerEvents = prevPointerEvents || '';
+      }
     }
-
-    // Fallback (apenas se o componente não existir)
-    const ok = window.confirm(message || title || 'Confirmar?');
-    return Promise.resolve(!!ok);
   }
 
   async function handleDelete() {
@@ -2160,7 +2224,7 @@
       const item = state.agendamentos.find(x => String(x._id) === String(id));
       if (!item) return;
       if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) {
-        alert('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.');
+        notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning');
         return;
       }
       openEditModal(item);
@@ -2175,7 +2239,7 @@
       if (!item) return;
 
       if (item.pago || item.codigoVenda) {
-        alert('Este agendamento já possui código de venda registrado.');
+        notify('Este agendamento já possui código de venda registrado.', 'warning');
         return;
       }
         // Fecha a de edição, se por algum motivo estiver visível

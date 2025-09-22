@@ -1,5 +1,6 @@
 // Core/shared state and helpers for Banho e Tosa agenda
 // ES module used by other parts of the feature.
+import { confirmWithModal } from '../shared/confirm-modal.js';
 
 // ----- Auth/API helpers -----
 const _cachedUser = (() => {
@@ -29,6 +30,62 @@ export function isPrivilegedRole() {
   const r = getCurrentRole();
   return r === 'admin' || r === 'admin_master';
 }
+
+const TOAST_DEDUP_KEY = '__agendaToastState';
+const TOAST_DEDUP_WINDOW = 1200;
+
+function getToastStore() {
+  if (typeof window !== 'undefined') return window;
+  if (typeof globalThis !== 'undefined') return globalThis;
+  if (typeof self !== 'undefined') return self;
+  return null;
+}
+
+function getLastToast() {
+  const store = getToastStore();
+  return store && store[TOAST_DEDUP_KEY];
+}
+
+function rememberToast(text) {
+  const store = getToastStore();
+  if (!store) return;
+  store[TOAST_DEDUP_KEY] = { text, time: Date.now() };
+}
+
+export function notify(message, type = 'warning') {
+  const text = String(message || '');
+  if (!text) return;
+
+  const last = getLastToast();
+  const now = Date.now();
+  if (last && last.text === text && now - last.time < TOAST_DEDUP_WINDOW) {
+    return;
+  }
+
+  const hasWindow = typeof window !== 'undefined';
+
+  if (hasWindow && typeof window.showToast === 'function') {
+    try {
+      window.showToast(text, type);
+      rememberToast(text);
+      return;
+    } catch (err) {
+      console.error('notify/showToast', err);
+    }
+  }
+
+  if (hasWindow && typeof window.alert === 'function') {
+    rememberToast(text);
+    window.alert(text);
+  } else if (typeof alert === 'function') {
+    rememberToast(text);
+    alert(text);
+  } else {
+    rememberToast(text);
+  }
+}
+
+export { confirmWithModal };
 
 // ----- Elements -----
 export const els = {
