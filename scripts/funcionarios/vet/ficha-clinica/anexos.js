@@ -186,6 +186,77 @@ function mergeAnexoFiles(existing = [], incoming = []) {
   return list;
 }
 
+function mergeAnexoRecords(existing = [], incoming = []) {
+  const map = new Map();
+
+  const push = (entry) => {
+    if (!entry || typeof entry !== 'object') return;
+    const id = normalizeId(entry.id || entry._id);
+    if (!id) return;
+
+    const createdAt = toIsoOrNull(entry.createdAt) || new Date().toISOString();
+    const updatedAt = toIsoOrNull(entry.updatedAt) || createdAt;
+    const arquivos = mergeAnexoFiles([], entry.arquivos || []);
+
+    const payload = {
+      ...entry,
+      id,
+      _id: id,
+      createdAt,
+      updatedAt,
+      arquivos,
+    };
+
+    const previous = map.get(id);
+    if (previous) {
+      const merged = {
+        ...previous,
+        ...payload,
+        id,
+        _id: id,
+      };
+      merged.arquivos = mergeAnexoFiles(previous.arquivos, payload.arquivos);
+
+      const prevCreated = previous.createdAt ? new Date(previous.createdAt).getTime() : null;
+      const payloadCreated = payload.createdAt ? new Date(payload.createdAt).getTime() : null;
+      if (Number.isFinite(prevCreated) && Number.isFinite(payloadCreated)) {
+        merged.createdAt = new Date(Math.min(prevCreated, payloadCreated)).toISOString();
+      } else if (payload.createdAt) {
+        merged.createdAt = payload.createdAt;
+      } else if (previous.createdAt) {
+        merged.createdAt = previous.createdAt;
+      }
+
+      const prevUpdated = previous.updatedAt ? new Date(previous.updatedAt).getTime() : null;
+      const payloadUpdated = payload.updatedAt ? new Date(payload.updatedAt).getTime() : null;
+      if (Number.isFinite(prevUpdated) && Number.isFinite(payloadUpdated)) {
+        merged.updatedAt = payloadUpdated > prevUpdated ? payload.updatedAt : previous.updatedAt;
+      } else if (payload.updatedAt) {
+        merged.updatedAt = payload.updatedAt;
+      } else if (previous.updatedAt) {
+        merged.updatedAt = previous.updatedAt;
+      } else {
+        merged.updatedAt = merged.createdAt;
+      }
+
+      map.set(id, merged);
+    } else {
+      map.set(id, payload);
+    }
+  };
+
+  (Array.isArray(existing) ? existing : []).forEach(push);
+  (Array.isArray(incoming) ? incoming : []).forEach(push);
+
+  const list = Array.from(map.values());
+  list.sort((a, b) => {
+    const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bTime - aTime;
+  });
+  return list;
+}
+
 function normalizeAnexoRecord(raw, fallbackFiles = []) {
   if (!raw && (!fallbackFiles || !fallbackFiles.length)) return null;
   const source = raw && typeof raw === 'object' ? raw : {};
@@ -255,15 +326,16 @@ export function loadAnexosForSelection() {
     }
     return;
   }
+  const existing = Array.isArray(state.anexos) ? state.anexos : [];
   try {
     const raw = localStorage.getItem(key);
     if (!raw) {
-      state.anexos = [];
+      if (!existing.length) state.anexos = [];
       return;
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      state.anexos = [];
+      if (!existing.length) state.anexos = [];
       return;
     }
     const normalized = parsed.map((item) => normalizeAnexoRecord(item)).filter(Boolean);
@@ -273,9 +345,15 @@ export function loadAnexosForSelection() {
       return bTime - aTime;
     });
     const filtered = normalized.filter((item) => !isExameAttachmentRecord(item));
-    state.anexos = filtered;
+    if (filtered.length) {
+      state.anexos = existing.length ? mergeAnexoRecords(existing, filtered) : filtered;
+    } else if (!existing.length) {
+      state.anexos = [];
+    }
   } catch {
-    state.anexos = [];
+    if (!Array.isArray(state.anexos) || !state.anexos.length) {
+      state.anexos = [];
+    }
   }
 }
 
