@@ -293,5 +293,5 @@ export function statusMeta(s) {
 }
 export function renderStatusBadge(s) {
   const { label, badgeClass } = statusMeta(s);
-  return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${badgeClass}">${label}</span>`;
+  return `<span class="inline-flex items-center px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${badgeClass}">${label}</span>`;
 }
