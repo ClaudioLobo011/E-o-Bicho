@@ -525,7 +525,7 @@ export function renderGrid() {
     card.setAttribute('draggable', 'true');
 
     const headerEl = document.createElement('div');
-    headerEl.className = 'flex items-center justify-between gap-2 pr-14 md:pr-16 mb-1 agenda-card__head';
+    headerEl.className = 'flex items-center justify-between gap-2 mb-1 agenda-card__head';
     const tutorShort = shortTutorName(a.clienteNome || '');
     const headLabel  = tutorShort ? `${tutorShort} | ${a.pet || ''}` : (a.pet || '');
     headerEl.innerHTML = `
@@ -741,7 +741,7 @@ export function renderMonthGrid() {
       card.setAttribute('draggable', 'true');
       card.title = [ a.pet || '', a.servico || '', (a.observacoes ? `Obs: ${String(a.observacoes).trim()}` : '') ].filter(Boolean).join(' • ');
       const headerEl = document.createElement('div');
-      headerEl.className = 'flex items-center gap-2 pr-14 md:pr-16 mb-1 agenda-card__head';
+      headerEl.className = 'flex items-center gap-2 mb-1 agenda-card__head';
       headerEl.innerHTML = `
         <span class="inline-flex items-center px-1.5 py-[1px] rounded bg-slate-100 text-[10px] font-medium">${hhmm}</span>
         <div class="flex-1 flex items-center justify-center">

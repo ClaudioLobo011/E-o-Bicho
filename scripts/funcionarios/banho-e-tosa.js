@@ -1755,19 +1755,18 @@
         const isPaid = !!item.pago || !!item.codigoVenda;
 
         const actions = document.createElement('div');
-        // flex em coluna para ter a “segunda linha” abaixo do '+'
-        actions.className = 'agenda-card__actions absolute top-1 right-1 hidden md:flex flex-col items-end gap-1';
+        actions.className = 'agenda-card__actions';
 
         actions.innerHTML = `
-          <div class="flex items-center gap-1">
-            <button type="button" class="agenda-action edit" data-id="${id}" title="Editar">
+          <div class="agenda-card__actions-row">
+            <button type="button" class="agenda-action edit" data-id="${id}" title="Editar" aria-label="Editar agendamento">
               <i class="fa-solid fa-pen text-[16px] leading-none"></i>
             </button>
-            <button type="button" class="agenda-action status" data-id="${id}" title="Mudar status">
+            <button type="button" class="agenda-action status" data-id="${id}" title="Mudar status" aria-label="Mudar status do agendamento">
               <i class="fa-regular fa-clock text-[16px] leading-none"></i>
             </button>
           </div>
-          <button type="button" class="agenda-action cobrar ${isPaid ? 'text-green-600' : 'text-slate-500'}" data-id="${id}" title="${isPaid ? 'Pago' : 'Registrar pagamento'}">
+          <button type="button" class="agenda-action cobrar ${isPaid ? 'text-green-600' : 'text-slate-500'}" data-id="${id}" title="${isPaid ? 'Pago' : 'Registrar pagamento'}" aria-label="${isPaid ? 'Pagamento já registrado' : 'Registrar pagamento'}">
             ${
               isPaid
                 ? `<i class="fa-solid fa-dollar-sign text-[16px] leading-none"></i>`
@@ -1779,6 +1778,7 @@
           </button>
         `;
         card.appendChild(actions);
+        card.classList.add('agenda-card--with-actions');
 
         // Se faturado e sem permissão -> não permitir arrastar/editar visualmente
         if ((!!item.pago || !!item.codigoVenda) && !isPrivilegedRole()) {
