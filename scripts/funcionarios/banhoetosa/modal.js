@@ -866,17 +866,45 @@ export async function updateStatusQuick(id, status) {
     try {
       const appointment = findAppointmentById(idStr);
       const checkinContext = appointment || { _id: idStr };
+      let checkinTriggerScheduled = false;
+
+      const ensureCheckinOpening = () => {
+        if (checkinTriggerScheduled) return;
+        checkinTriggerScheduled = true;
+        clearPendingCheckinQueue();
+        checkinSource = checkinContext;
+
+        const payload = { id: idStr, appointment: checkinContext };
+        const run = () => {
+          try {
+            const job = triggerCheckinOpen(payload, 8);
+            if (job && typeof job.catch === 'function') {
+              job.catch((error) => {
+                console.error('updateStatusQuick.triggerCheckinOpen', error);
+              });
+            }
+          } catch (error) {
+            console.error('updateStatusQuick.triggerCheckinOpen', error);
+          }
+        };
+
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(run);
+        } else {
+          setTimeout(run, 0);
+        }
+      };
+
       shouldOpenCheckin = await confirmCheckinPrompt(appointment, {
+        onConfirm: () => {
+          ensureCheckinOpening();
+        },
         onCancel: () => {
           clearPendingCheckinQueue();
         },
       });
       if (shouldOpenCheckin) {
-        checkinSource = checkinContext;
-        const immediate = await triggerCheckinOpen({ id: idStr, appointment: checkinContext }, 8);
-        if (!immediate) {
-          shouldOpenCheckin = false;
-        }
+        ensureCheckinOpening();
       } else {
         clearPendingCheckinQueue();
       }
