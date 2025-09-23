@@ -79,7 +79,12 @@ function scheduleCheckinOpen(context, attempts = 5) {
 
   __pendingCheckin = { id, fallback, attempts: tries };
 
-  __pendingCheckinTimer = setTimeout(() => attemptOpenPendingCheckin(__pendingCheckin.attempts), 0);
+  const initialAttempts = __pendingCheckin.attempts;
+
+  __pendingCheckinTimer = setTimeout(() => {
+    if (!__pendingCheckin) return;
+    attemptOpenPendingCheckin(initialAttempts);
+  }, 0);
 }
 
 if (typeof document !== 'undefined') {
