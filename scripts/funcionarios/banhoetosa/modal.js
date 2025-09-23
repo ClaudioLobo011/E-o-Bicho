@@ -4,9 +4,92 @@ import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
 import { enhanceAgendaUI } from './ui.js';
+import { confirmCheckinPrompt, openCheckinModal, findAppointmentById, closeCheckinModal, isCheckinModalOpen } from './checkin.js';
 
 let __vendaTargetId = null;
 let __vendaLastFocus = null;
+
+let __pendingCheckin = null;
+let __pendingCheckinTimer = null;
+let __pendingCheckinPromise = null;
+
+function clearPendingCheckinQueue() {
+  if (__pendingCheckinTimer) {
+    clearTimeout(__pendingCheckinTimer);
+    __pendingCheckinTimer = null;
+  }
+  __pendingCheckin = null;
+}
+
+function attemptOpenPendingCheckin(remainingAttempts) {
+  __pendingCheckinTimer = null;
+  if (!__pendingCheckin) return;
+
+  if (__pendingCheckinPromise) {
+    __pendingCheckinTimer = setTimeout(() => attemptOpenPendingCheckin(remainingAttempts), 50);
+    return;
+  }
+
+  const { id, fallback } = __pendingCheckin;
+  const latest = (id ? findAppointmentById(id) : null) || fallback;
+
+  if (!latest) {
+    if (remainingAttempts <= 0) {
+      clearPendingCheckinQueue();
+      return;
+    }
+    __pendingCheckinTimer = setTimeout(() => attemptOpenPendingCheckin(remainingAttempts - 1), 120);
+    return;
+  }
+
+  __pendingCheckinPromise = Promise.resolve(openCheckinModal(latest))
+    .catch((error) => {
+      console.error('agenda check-in open', error);
+    })
+    .finally(() => {
+      __pendingCheckinPromise = null;
+    });
+
+  __pendingCheckinPromise.then(() => {
+    if (!__pendingCheckin) return;
+    if (isCheckinModalOpen()) {
+      clearPendingCheckinQueue();
+    } else if (remainingAttempts > 0) {
+      __pendingCheckinTimer = setTimeout(() => attemptOpenPendingCheckin(remainingAttempts - 1), 160);
+    } else {
+      clearPendingCheckinQueue();
+    }
+  });
+}
+
+function scheduleCheckinOpen(context, attempts = 5) {
+  clearPendingCheckinQueue();
+
+  if (!context) return;
+
+  const fallback = context.appointment || context;
+  const idCandidate = context.id ?? fallback?._id ?? fallback?.id ?? '';
+  const id = idCandidate ? String(idCandidate) : '';
+
+  if (!id && !fallback) {
+    return;
+  }
+
+  const tries = Math.max(1, attempts | 0);
+
+  __pendingCheckin = { id, fallback, attempts: tries };
+
+  __pendingCheckinTimer = setTimeout(() => attemptOpenPendingCheckin(__pendingCheckin.attempts), 0);
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('agenda:checkin:opened', () => {
+    clearPendingCheckinQueue();
+  });
+  document.addEventListener('agenda:checkin:closed', () => {
+    clearPendingCheckinQueue();
+  });
+}
 
 export function openVendaModal(item) {
   __vendaTargetId = item?._id || null;
@@ -723,8 +806,28 @@ export function bindModalAndActionsEvents() {
 }
 
 export async function updateStatusQuick(id, status) {
+  const idStr = id != null ? String(id) : '';
+  let shouldOpenCheckin = false;
+  let checkinSource = null;
+  if (status === 'em_atendimento') {
+    try {
+      const appointment = findAppointmentById(idStr);
+      shouldOpenCheckin = await confirmCheckinPrompt(appointment);
+      if (shouldOpenCheckin) {
+        checkinSource = appointment || { _id: idStr };
+        scheduleCheckinOpen({ id: idStr, appointment: checkinSource }, 8);
+      } else {
+        clearPendingCheckinQueue();
+      }
+    } catch (error) {
+      console.error('updateStatusQuick.checkinPrompt', error);
+      clearPendingCheckinQueue();
+    }
+  } else {
+    clearPendingCheckinQueue();
+  }
   try {
-    const resp = await api(`/func/agendamentos/${id}`, { method: 'PUT', body: JSON.stringify({ status }) });
+    const resp = await api(`/func/agendamentos/${idStr}`, { method: 'PUT', body: JSON.stringify({ status }) });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.message || 'Erro ao mudar status');
@@ -734,8 +837,18 @@ export async function updateStatusQuick(id, status) {
     renderFilters();
     renderGrid();
     enhanceAgendaUI();
+    if (shouldOpenCheckin && !isCheckinModalOpen()) {
+      const latest = findAppointmentById(idStr) || checkinSource || { _id: idStr };
+      scheduleCheckinOpen({ id: idStr, appointment: latest }, 5);
+    }
   } catch (e) {
     console.error('updateStatusQuick', e);
+    if (shouldOpenCheckin) {
+      try {
+        closeCheckinModal();
+      } catch (_) {}
+      clearPendingCheckinQueue();
+    }
     alert(e.message || 'Erro ao mudar status');
   }
 }
