@@ -1,5 +1,5 @@
 import {
-  state, els,
+  state, els, api,
   normalizeDate, todayStr, pad, money, shortTutorName,
   clearChildren, getFilteredAgendamentos, getVisibleProfissionais,
   updateHeaderLabel, localDateStr, addDays, startOfWeek, startOfMonth, startOfNextMonth,
@@ -71,6 +71,90 @@ function normalizeObjectId(value) {
     .replace(/^ObjectId\(["']?/, '')
     .replace(/["']?\)$/, '');
   return OBJECT_ID_REGEX.test(cleaned) ? cleaned : '';
+}
+
+function coerceToDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === 'number' && !Number.isNaN(value)) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const direct = new Date(trimmed);
+    if (!Number.isNaN(direct.getTime())) return direct;
+
+    const spaceNormalized = trimmed.includes('T') ? trimmed : trimmed.replace(' ', 'T');
+    const normalized = new Date(spaceNormalized);
+    if (!Number.isNaN(normalized.getTime())) return normalized;
+
+    if (!/[TZ]$/i.test(spaceNormalized)) {
+      const withZ = new Date(`${spaceNormalized}Z`);
+      if (!Number.isNaN(withZ.getTime())) return withZ;
+    }
+
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+      const [dd, mm, yyyy] = trimmed.split('/').map(Number);
+      const date = new Date(yyyy, mm - 1, dd, 0, 0, 0, 0);
+      if (!Number.isNaN(date.getTime())) return date;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const [yyyy, mm, dd] = trimmed.split('-').map(Number);
+      const date = new Date(yyyy, mm - 1, dd, 0, 0, 0, 0);
+      if (!Number.isNaN(date.getTime())) return date;
+    }
+  }
+  return null;
+}
+
+function getAppointmentDateKey(appointment) {
+  if (!appointment) return '';
+  const candidates = [
+    appointment.h,
+    appointment.scheduledAt,
+    appointment.scheduled_at,
+    appointment.dataHora,
+    appointment.data,
+  ];
+
+  for (const candidate of candidates) {
+    const date = coerceToDate(candidate);
+    if (date) {
+      return localDateStr(date);
+    }
+  }
+  return '';
+}
+
+async function fetchAppointmentDetails(appointment) {
+  const appointmentId = normalizeId(appointment?._id);
+  const dateKey = getAppointmentDateKey(appointment);
+  if (!appointmentId || !dateKey) return null;
+
+  try {
+    const params = new URLSearchParams({ date: dateKey });
+    const storeId = normalizeObjectId(state.selectedStoreId);
+    if (storeId) params.set('storeId', storeId);
+
+    const resp = await api(`/func/agendamentos?${params.toString()}`);
+    if (!resp.ok) return null;
+    const list = await resp.json().catch(() => null);
+    if (!Array.isArray(list) || !list.length) return null;
+
+    const found = list.find(item => normalizeId(item?._id) === appointmentId);
+    if (!found) return null;
+
+    return { ...appointment, ...found };
+  } catch (err) {
+    console.error('fetchAppointmentDetails', err);
+    return null;
+  }
 }
 
 function extractTutorPayload(appointment) {
@@ -281,11 +365,23 @@ function extractAppointmentServices(appointment) {
   });
 }
 
-function persistFichaClinicaContext(appointment) {
+async function persistFichaClinicaContext(appointment) {
   try {
-    const tutor = extractTutorPayload(appointment);
-    const petId = extractPetId(appointment);
+    let workingAppointment = appointment || null;
+    let tutor = extractTutorPayload(workingAppointment);
+    let petId = extractPetId(workingAppointment);
+
+    if (!(tutor && tutor._id && petId)) {
+      const detailed = await fetchAppointmentDetails(workingAppointment);
+      if (detailed) {
+        workingAppointment = detailed;
+        tutor = extractTutorPayload(workingAppointment);
+        petId = extractPetId(workingAppointment);
+      }
+    }
+
     if (!tutor || !tutor._id || !petId) return false;
+
     const payload = {
       _id: tutor._id,
       nome: tutor.nome || '',
@@ -294,41 +390,43 @@ function persistFichaClinicaContext(appointment) {
     };
     localStorage.setItem(VET_FICHA_CLIENTE_KEY, JSON.stringify(payload));
     localStorage.setItem(VET_FICHA_PET_KEY, petId);
-    const appointmentId = normalizeId(appointment._id);
+
+    const appointmentId = normalizeId(workingAppointment?._id);
     const profissionalNome = pickFirst(
-      typeof appointment.profissional === 'string' ? appointment.profissional : '',
-      appointment.profissionalNome,
-      appointment?.profissional?.nome,
-      appointment?.profissional?.nomeCompleto,
-      appointment?.profissional?.nomeContato,
-      appointment?.profissional?.razaoSocial
+      typeof workingAppointment?.profissional === 'string' ? workingAppointment.profissional : '',
+      workingAppointment?.profissionalNome,
+      workingAppointment?.profissional?.nome,
+      workingAppointment?.profissional?.nomeCompleto,
+      workingAppointment?.profissional?.nomeContato,
+      workingAppointment?.profissional?.razaoSocial
     );
+
     const storeCandidatesRaw = [
-      appointment.storeId,
-      appointment.store?._id,
-      appointment.store?.id,
-      appointment.store?.storeId,
-      appointment.store,
-      appointment.store_id,
-      appointment.storeID,
-      appointment.empresaId,
-      appointment.empresa_id,
-      appointment.empresaID,
-      appointment.empresa?._id,
-      appointment.empresa?.id,
-      appointment.empresa,
-      appointment.lojaId,
-      appointment.loja_id,
-      appointment.lojaID,
-      appointment.loja?._id,
-      appointment.loja?.id,
-      appointment.loja,
-      appointment.filialId,
-      appointment.filial_id,
-      appointment.filialID,
-      appointment.filial?._id,
-      appointment.filial?.id,
-      appointment.filial,
+      workingAppointment?.storeId,
+      workingAppointment?.store?._id,
+      workingAppointment?.store?.id,
+      workingAppointment?.store?.storeId,
+      workingAppointment?.store,
+      workingAppointment?.store_id,
+      workingAppointment?.storeID,
+      workingAppointment?.empresaId,
+      workingAppointment?.empresa_id,
+      workingAppointment?.empresaID,
+      workingAppointment?.empresa?._id,
+      workingAppointment?.empresa?.id,
+      workingAppointment?.empresa,
+      workingAppointment?.lojaId,
+      workingAppointment?.loja_id,
+      workingAppointment?.lojaID,
+      workingAppointment?.loja?._id,
+      workingAppointment?.loja?.id,
+      workingAppointment?.loja,
+      workingAppointment?.filialId,
+      workingAppointment?.filial_id,
+      workingAppointment?.filialID,
+      workingAppointment?.filial?._id,
+      workingAppointment?.filial?.id,
+      workingAppointment?.filial,
       state.selectedStoreId,
     ];
     const storeIdCandidates = [];
@@ -349,34 +447,88 @@ function persistFichaClinicaContext(appointment) {
       petId,
       storeId: storeId || null,
       appointmentId,
-      scheduledAt: appointment.h || appointment.scheduledAt || appointment.data || appointment.dataHora || '',
-      profissionalId: normalizeId(appointment.profissionalId || appointment?.profissional?._id),
+      scheduledAt: workingAppointment?.h
+        || workingAppointment?.scheduledAt
+        || workingAppointment?.data
+        || workingAppointment?.dataHora
+        || '',
+      profissionalId: normalizeId(workingAppointment?.profissionalId || workingAppointment?.profissional?._id),
       profissionalNome,
-      status: appointment.status || 'agendado',
-      valor: Number(appointment.valor || 0),
-      observacoes: typeof appointment.observacoes === 'string' ? appointment.observacoes.trim() : '',
-      servicos: extractAppointmentServices(appointment),
-      totalServicos: Array.isArray(appointment.servicos) ? appointment.servicos.length : (appointment.servico ? 1 : 0),
+      status: workingAppointment?.status || 'agendado',
+      valor: Number(workingAppointment?.valor || 0),
+      observacoes: typeof workingAppointment?.observacoes === 'string'
+        ? workingAppointment.observacoes.trim()
+        : '',
+      servicos: extractAppointmentServices(workingAppointment),
+      totalServicos: Array.isArray(workingAppointment?.servicos)
+        ? workingAppointment.servicos.length
+        : (workingAppointment?.servico ? 1 : 0),
     };
+
+    const codigoVenda = pickFirst(
+      workingAppointment?.codigoVenda,
+      workingAppointment?.codigo_venda,
+      workingAppointment?.codVenda,
+      workingAppointment?.cod_venda,
+    );
+    if (codigoVenda) {
+      agendaContext.codigoVenda = codigoVenda;
+    }
+
+    let pagoFlag;
+    if (typeof workingAppointment?.pago !== 'undefined') {
+      if (typeof workingAppointment.pago === 'boolean') {
+        pagoFlag = workingAppointment.pago;
+      } else if (typeof workingAppointment.pago === 'number') {
+        pagoFlag = !Number.isNaN(workingAppointment.pago) && workingAppointment.pago !== 0;
+      } else if (typeof workingAppointment.pago === 'string') {
+        const normalizedPago = workingAppointment.pago.trim().toLowerCase();
+        if (['true', '1', 'sim', 'yes', 'y'].includes(normalizedPago)) {
+          pagoFlag = true;
+        } else if (['false', '0', 'nao', 'não', 'no', 'n'].includes(normalizedPago)) {
+          pagoFlag = false;
+        } else if (normalizedPago) {
+          pagoFlag = true;
+        }
+      } else {
+        pagoFlag = !!workingAppointment.pago;
+      }
+    }
+    if (typeof pagoFlag === 'boolean') {
+      agendaContext.pago = pagoFlag;
+    }
+    if ((agendaContext.pago === true) || codigoVenda) {
+      agendaContext.pagamentoRegistrado = true;
+    }
     if (storeIdCandidates.length) {
       agendaContext.storeIdCandidates = storeIdCandidates;
     }
+
     localStorage.setItem(VET_FICHA_AGENDA_CONTEXT_KEY, JSON.stringify(agendaContext));
     return true;
   } catch (err) {
     console.error('persistFichaClinicaContext', err);
-    try { localStorage.removeItem(VET_FICHA_AGENDA_CONTEXT_KEY); } catch (_) {}
+    try {
+      localStorage.removeItem(VET_FICHA_CLIENTE_KEY);
+      localStorage.removeItem(VET_FICHA_PET_KEY);
+      localStorage.removeItem(VET_FICHA_AGENDA_CONTEXT_KEY);
+    } catch (_) {}
     return false;
   }
 }
 
-function navigateToFichaClinica(appointment) {
-  const prepared = persistFichaClinicaContext(appointment);
-  if (!prepared) {
+async function navigateToFichaClinica(appointment) {
+  try {
+    const prepared = await persistFichaClinicaContext(appointment);
+    if (!prepared) {
+      alert('Não foi possível preparar a ficha clínica. Tutor ou pet não encontrados.');
+      return;
+    }
+    window.location.href = 'vet-ficha-clinica.html';
+  } catch (err) {
+    console.error('navigateToFichaClinica', err);
     alert('Não foi possível preparar a ficha clínica. Tutor ou pet não encontrados.');
-    return;
   }
-  window.location.href = 'vet-ficha-clinica.html';
 }
 
 function createFichaClinicaChip(appointment) {

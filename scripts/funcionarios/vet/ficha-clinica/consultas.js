@@ -174,6 +174,18 @@ export function ensureTutorAndPetSelected() {
     notify('Selecione um tutor e um pet para registrar a consulta.', 'warning');
     return false;
   }
+  const contextAppointmentId = normalizeId(state.agendaContext?.appointmentId);
+  if (contextAppointmentId) {
+    const contextStatus = normalizeForCompare(state.agendaContext?.status);
+    if (contextStatus === 'finalizado') {
+      notify('O atendimento já foi finalizado.', 'warning');
+      return false;
+    }
+    if (contextStatus !== 'em_atendimento') {
+      notify('Inicie o atendimento para registrar informações.', 'warning');
+      return false;
+    }
+  }
   if (isConsultaLockedForCurrentUser()) {
     notify('Apenas o veterinário responsável pode realizar esta ação.', 'warning');
     return false;
@@ -2795,6 +2807,7 @@ function setConsultaActionsAvailability(enabled) {
     els.addExameBtn,
     els.addPesoBtn,
     els.addObservacaoBtn,
+    els.colocarEmEsperaBtn,
     els.finalizarAtendimentoBtn,
     els.limparConsultaBtn,
   ];
@@ -3021,6 +3034,7 @@ export function updateConsultaAgendaCard() {
   const contextTutorId = normalizeId(context?.tutorId);
   const agendaStatus = normalizeForCompare(context?.status);
   const agendaFinalizado = agendaStatus === 'finalizado';
+  const agendaAtivo = agendaStatus === 'em_atendimento';
 
   let agendaElement = null;
   let hasAgendaContent = false;
@@ -3052,8 +3066,34 @@ export function updateConsultaAgendaCard() {
     }
   }
 
-  const consultaLocked = contextMatches && !agendaFinalizado && isConsultaLockedForCurrentUser(context);
-  const canMutate = contextMatches && !agendaFinalizado && !consultaLocked;
+  if (els.colocarEmEsperaBtn) {
+    const esperaBtn = els.colocarEmEsperaBtn;
+    const idleLabel = esperaBtn.dataset.idleLabel
+      || ((esperaBtn.textContent || '').trim() ? (esperaBtn.textContent || '').trim() : 'Colocar em espera');
+    if (!esperaBtn.dataset.idleLabel) {
+      esperaBtn.dataset.idleLabel = idleLabel;
+    }
+    const shouldShowEspera = contextMatches && agendaAtivo;
+    if (shouldShowEspera) {
+      esperaBtn.classList.remove('hidden');
+      esperaBtn.removeAttribute('aria-hidden');
+      if (esperaBtn.dataset.processing === 'true') {
+        // keep current label while processing
+      } else {
+        esperaBtn.textContent = esperaBtn.dataset.idleLabel || 'Colocar em espera';
+      }
+    } else {
+      esperaBtn.classList.add('hidden');
+      esperaBtn.setAttribute('aria-hidden', 'true');
+      esperaBtn.classList.remove('opacity-60', 'opacity-50', 'cursor-not-allowed');
+      esperaBtn.removeAttribute('disabled');
+      esperaBtn.textContent = idleLabel;
+      delete esperaBtn.dataset.processing;
+    }
+  }
+
+  const consultaLocked = contextMatches && agendaAtivo && isConsultaLockedForCurrentUser(context);
+  const canMutate = contextMatches && agendaAtivo && !consultaLocked;
   setConsultaActionsAvailability(canMutate);
 
   if (consultaLocked) {
@@ -3065,7 +3105,7 @@ export function updateConsultaAgendaCard() {
     return;
   }
 
-  if (contextMatches && !agendaFinalizado) {
+  if (contextMatches && !agendaFinalizado && agendaAtivo) {
     const allServices = Array.isArray(context.servicos) ? context.servicos : [];
     const vetServices = getVetServices(allServices);
     const filteredOut = Math.max(allServices.length - vetServices.length, 0);

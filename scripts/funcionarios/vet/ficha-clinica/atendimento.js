@@ -19,6 +19,7 @@ import {
   updateConsultaAgendaCard,
   updateMainTabLayout,
   deleteConsulta,
+  loadWaitingAppointments,
 } from './consultas.js';
 import {
   addHistoricoEntry,
@@ -198,8 +199,33 @@ function setLimparConsultaProcessing(isProcessing) {
   }
 }
 
+function setColocarEmEsperaProcessing(isProcessing) {
+  const btn = els.colocarEmEsperaBtn;
+  if (!btn) return;
+
+  const currentLabel = (btn.textContent || '').trim();
+  const idleLabel = btn.dataset.idleLabel || (currentLabel ? currentLabel : 'Colocar em espera');
+  if (!btn.dataset.idleLabel) {
+    btn.dataset.idleLabel = idleLabel;
+  }
+
+  if (isProcessing) {
+    btn.dataset.processing = 'true';
+    btn.setAttribute('disabled', 'disabled');
+    btn.classList.remove('opacity-50');
+    btn.classList.add('opacity-60', 'cursor-not-allowed');
+    btn.textContent = 'Colocando...';
+  } else {
+    delete btn.dataset.processing;
+    btn.classList.remove('opacity-60', 'opacity-50', 'cursor-not-allowed');
+    btn.removeAttribute('disabled');
+    btn.textContent = btn.dataset.idleLabel || 'Colocar em espera';
+  }
+}
+
 let isProcessingLimpeza = false;
 let isProcessingFinalizacao = false;
+let isProcessingColocarEmEspera = false;
 
 async function limparConsultaAtual() {
   if (isProcessingLimpeza) return;
@@ -339,6 +365,108 @@ async function limparConsultaAtual() {
   } finally {
     isProcessingLimpeza = false;
     setLimparConsultaProcessing(false);
+  }
+}
+
+export async function colocarAtendimentoEmEspera() {
+  if (isProcessingColocarEmEspera) return;
+
+  const clienteId = normalizeId(state.selectedCliente?._id);
+  const petId = normalizeId(state.selectedPetId);
+  const appointmentId = normalizeId(state.agendaContext?.appointmentId);
+
+  if (!(clienteId && petId)) {
+    notify('Selecione um tutor e um pet antes de colocar o atendimento em espera.', 'warning');
+    return;
+  }
+
+  if (!appointmentId) {
+    notify('Abra a ficha pela agenda para colocar o atendimento em espera.', 'warning');
+    return;
+  }
+
+  const status = String(state.agendaContext?.status || '').toLowerCase();
+  if (status !== 'em_atendimento') {
+    notify('Inicie o atendimento para colocá-lo em espera.', 'warning');
+    return;
+  }
+
+  if (isConsultaLockedForCurrentUser()) {
+    notify('Apenas o veterinário responsável pode colocar este atendimento em espera.', 'warning');
+    return;
+  }
+
+  const confirmed = await confirmWithModal({
+    title: 'Colocar em espera',
+    message:
+      'Colocar o atendimento em espera? Ele retornará para a fila de espera e as ações ficarão bloqueadas até ser retomado.',
+    confirmText: 'Colocar em espera',
+    cancelText: 'Cancelar',
+  });
+  if (!confirmed) return;
+
+  isProcessingColocarEmEspera = true;
+  setColocarEmEsperaProcessing(true);
+
+  try {
+    const response = await api(`/func/agendamentos/${appointmentId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: 'em_espera' }),
+    });
+    const data = await response.json().catch(() => (response.ok ? {} : {}));
+    if (!response.ok) {
+      const message = typeof data?.message === 'string'
+        ? data.message
+        : 'Erro ao atualizar status do agendamento.';
+      throw new Error(message);
+    }
+
+    if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+      state.agendaContext = {};
+    }
+
+    state.agendaContext.status = 'em_espera';
+
+    if (Array.isArray(data?.servicos)) {
+      state.agendaContext.servicos = data.servicos;
+      state.agendaContext.totalServicos = data.servicos.length;
+    } else if (Array.isArray(state.agendaContext.servicos)) {
+      state.agendaContext.totalServicos = state.agendaContext.servicos.length;
+    } else if (state.agendaContext) {
+      delete state.agendaContext.totalServicos;
+    }
+
+    if (data?.valor !== undefined) {
+      const valor = Number(data.valor);
+      if (!Number.isNaN(valor)) {
+        state.agendaContext.valor = valor;
+      }
+    }
+
+    if (typeof data?.profissional === 'string') {
+      state.agendaContext.profissionalNome = data.profissional;
+    } else if (typeof data?.profissionalNome === 'string') {
+      state.agendaContext.profissionalNome = data.profissionalNome;
+    }
+
+    persistAgendaContext(state.agendaContext);
+
+    await loadWaitingAppointments({ force: true });
+    updateConsultaAgendaCard();
+
+    const eventPayload = buildAtendimentoEventPayload({
+      scope: 'atendimento',
+      action: 'espera',
+    });
+    emitFichaClinicaUpdate(eventPayload).catch(() => {});
+
+    notify('Atendimento retornou para a fila de espera.', 'success');
+  } catch (error) {
+    console.error('colocarAtendimentoEmEspera', error);
+    notify(error.message || 'Erro ao colocar atendimento em espera.', 'error');
+  } finally {
+    isProcessingColocarEmEspera = false;
+    setColocarEmEsperaProcessing(false);
   }
 }
 
@@ -732,6 +860,55 @@ export function handleAtendimentoRealTimeEvent(event = {}) {
     return true;
   }
 
+  if (action === 'espera') {
+    if (!state.agendaContext || typeof state.agendaContext !== 'object') {
+      state.agendaContext = targetAppointmentId ? { appointmentId: targetAppointmentId } : {};
+    } else if (targetAppointmentId) {
+      state.agendaContext.appointmentId = targetAppointmentId;
+    }
+
+    if (targetClienteId) {
+      state.agendaContext.tutorId = targetClienteId;
+    }
+    if (targetPetId) {
+      state.agendaContext.petId = targetPetId;
+    }
+
+    const status = String(event.agendaStatus || 'em_espera');
+    state.agendaContext.status = status;
+
+    if (Array.isArray(event.agendaServicos)) {
+      const servicos = deepClone(event.agendaServicos) || [...event.agendaServicos];
+      state.agendaContext.servicos = servicos;
+      state.agendaContext.totalServicos = servicos.length;
+    } else if (state.agendaContext) {
+      if (Array.isArray(state.agendaContext.servicos)) {
+        state.agendaContext.totalServicos = state.agendaContext.servicos.length;
+      } else {
+        delete state.agendaContext.totalServicos;
+      }
+    }
+
+    if (event.agendaValor !== undefined) {
+      const valor = Number(event.agendaValor);
+      if (!Number.isNaN(valor)) {
+        state.agendaContext.valor = valor;
+      }
+    }
+
+    if (event.agendaProfissional !== undefined) {
+      state.agendaContext.profissionalNome = event.agendaProfissional || '';
+    }
+
+    persistAgendaContext(state.agendaContext);
+
+    loadWaitingAppointments({ force: true }).catch(() => {});
+    updateConsultaAgendaCard();
+
+    notify('O atendimento foi colocado em espera por outro usuário.', 'info');
+    return true;
+  }
+
   if (action === 'limpar') {
     if (!state.agendaContext || typeof state.agendaContext !== 'object') {
       state.agendaContext = targetAppointmentId ? { appointmentId: targetAppointmentId } : {};
@@ -790,6 +967,19 @@ export function handleAtendimentoRealTimeEvent(event = {}) {
 }
 
 export function initAtendimentoActions() {
+  if (els.colocarEmEsperaBtn) {
+    if (!els.colocarEmEsperaBtn.dataset.idleLabel) {
+      const idleText = (els.colocarEmEsperaBtn.textContent || '').trim() || 'Colocar em espera';
+      els.colocarEmEsperaBtn.dataset.idleLabel = idleText;
+    }
+    els.colocarEmEsperaBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      const result = colocarAtendimentoEmEspera();
+      if (result && typeof result.then === 'function') {
+        result.catch(() => {});
+      }
+    });
+  }
   if (els.finalizarAtendimentoBtn) {
     els.finalizarAtendimentoBtn.addEventListener('click', (event) => {
       event.preventDefault();
