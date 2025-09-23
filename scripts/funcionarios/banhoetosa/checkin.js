@@ -402,12 +402,23 @@ export async function openCheckinModal(appointment) {
   await hydrateFields();
 }
 
-export async function confirmCheckinPrompt(appointment) {
+export async function confirmCheckinPrompt(appointment, handlers = {}) {
   const cliente = appointment?.clienteNome ? ` do cliente ${appointment.clienteNome}` : '';
   const pet = appointment?.pet ? `${cliente ? ' e do pet ' : ' do pet '}${appointment.pet}` : '';
   const message = cliente || pet
     ? `Deseja realizar o check-in${cliente}${pet}?`
     : 'Deseja realizar o check-in agora?';
+
+  const { onConfirm, onCancel, onFinally } = handlers || {};
+
+  const invoke = (fn, ...args) => {
+    if (typeof fn !== 'function') return;
+    try {
+      fn(...args);
+    } catch (error) {
+      console.error('confirmCheckinPrompt handler', error);
+    }
+  };
 
   try {
     return await confirmWithModal({
@@ -415,6 +426,9 @@ export async function confirmCheckinPrompt(appointment) {
       message,
       confirmText: 'Sim',
       cancelText: 'Agora não',
+      onConfirm: () => invoke(onConfirm, appointment),
+      onCancel: () => invoke(onCancel, appointment),
+      onFinally: (didConfirm) => invoke(onFinally, didConfirm, appointment),
     });
   } catch (error) {
     console.error('confirmCheckinPrompt', error);

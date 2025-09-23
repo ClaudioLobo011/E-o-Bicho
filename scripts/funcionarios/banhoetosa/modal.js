@@ -816,10 +816,21 @@ export async function updateStatusQuick(id, status) {
   if (status === 'em_atendimento') {
     try {
       const appointment = findAppointmentById(idStr);
-      shouldOpenCheckin = await confirmCheckinPrompt(appointment);
+      const checkinContext = appointment || { _id: idStr };
+      shouldOpenCheckin = await confirmCheckinPrompt(appointment, {
+        onConfirm: () => {
+          checkinSource = checkinContext;
+          scheduleCheckinOpen({ id: idStr, appointment: checkinContext }, 8);
+        },
+        onCancel: () => {
+          clearPendingCheckinQueue();
+        },
+      });
       if (shouldOpenCheckin) {
-        checkinSource = appointment || { _id: idStr };
-        scheduleCheckinOpen({ id: idStr, appointment: checkinSource }, 8);
+        if (!checkinSource) {
+          checkinSource = checkinContext;
+          scheduleCheckinOpen({ id: idStr, appointment: checkinContext }, 8);
+        }
       } else {
         clearPendingCheckinQueue();
       }
