@@ -86,6 +86,55 @@ function scheduleCheckinOpen(context, attempts = 5) {
   }, 0);
 }
 
+function normalizeCheckinPayload(context) {
+  if (!context) return null;
+
+  const base = context.appointment ?? context;
+  const rawId = context.id ?? base?._id ?? base?.id ?? '';
+  const id = rawId ? String(rawId) : '';
+
+  const appointment =
+    base && typeof base === 'object'
+      ? { ...base }
+      : {};
+
+  if (id) {
+    if (!appointment._id) appointment._id = id;
+    if (!appointment.id) appointment.id = id;
+  }
+
+  if (!id && !Object.keys(appointment).length) {
+    return null;
+  }
+
+  return { id, appointment };
+}
+
+async function triggerCheckinOpen(context, attempts = 5) {
+  const payload = normalizeCheckinPayload(context);
+  if (!payload) {
+    clearPendingCheckinQueue();
+    return null;
+  }
+
+  let opened = false;
+
+  try {
+    await openCheckinModal(payload.appointment);
+    opened = isCheckinModalOpen();
+  } catch (error) {
+    console.error('agenda check-in immediate open', error);
+  }
+
+  if (!opened) {
+    scheduleCheckinOpen(payload, attempts);
+  } else {
+    clearPendingCheckinQueue();
+  }
+
+  return payload;
+}
+
 if (typeof document !== 'undefined') {
   document.addEventListener('agenda:checkin:opened', () => {
     clearPendingCheckinQueue();
@@ -817,20 +866,45 @@ export async function updateStatusQuick(id, status) {
     try {
       const appointment = findAppointmentById(idStr);
       const checkinContext = appointment || { _id: idStr };
+      let checkinTriggerScheduled = false;
+
+      const ensureCheckinOpening = () => {
+        if (checkinTriggerScheduled) return;
+        checkinTriggerScheduled = true;
+        clearPendingCheckinQueue();
+        checkinSource = checkinContext;
+
+        const payload = { id: idStr, appointment: checkinContext };
+        const run = () => {
+          try {
+            const job = triggerCheckinOpen(payload, 8);
+            if (job && typeof job.catch === 'function') {
+              job.catch((error) => {
+                console.error('updateStatusQuick.triggerCheckinOpen', error);
+              });
+            }
+          } catch (error) {
+            console.error('updateStatusQuick.triggerCheckinOpen', error);
+          }
+        };
+
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(run);
+        } else {
+          setTimeout(run, 0);
+        }
+      };
+
       shouldOpenCheckin = await confirmCheckinPrompt(appointment, {
         onConfirm: () => {
-          checkinSource = checkinContext;
-          scheduleCheckinOpen({ id: idStr, appointment: checkinContext }, 8);
+          ensureCheckinOpening();
         },
         onCancel: () => {
           clearPendingCheckinQueue();
         },
       });
       if (shouldOpenCheckin) {
-        if (!checkinSource) {
-          checkinSource = checkinContext;
-          scheduleCheckinOpen({ id: idStr, appointment: checkinContext }, 8);
-        }
+        ensureCheckinOpening();
       } else {
         clearPendingCheckinQueue();
       }
@@ -854,7 +928,7 @@ export async function updateStatusQuick(id, status) {
     enhanceAgendaUI();
     if (shouldOpenCheckin && !isCheckinModalOpen()) {
       const latest = findAppointmentById(idStr) || checkinSource || { _id: idStr };
-      scheduleCheckinOpen({ id: idStr, appointment: latest }, 5);
+      await triggerCheckinOpen({ id: idStr, appointment: latest }, 5);
     }
   } catch (e) {
     console.error('updateStatusQuick', e);
