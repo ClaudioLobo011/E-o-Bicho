@@ -2807,6 +2807,7 @@ function setConsultaActionsAvailability(enabled) {
     els.addExameBtn,
     els.addPesoBtn,
     els.addObservacaoBtn,
+    els.colocarEmEsperaBtn,
     els.finalizarAtendimentoBtn,
     els.limparConsultaBtn,
   ];
@@ -3062,6 +3063,32 @@ export function updateConsultaAgendaCard() {
       reopenBtn.setAttribute('aria-hidden', 'true');
       delete reopenBtn.dataset.processing;
       reopenBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+    }
+  }
+
+  if (els.colocarEmEsperaBtn) {
+    const esperaBtn = els.colocarEmEsperaBtn;
+    const idleLabel = esperaBtn.dataset.idleLabel
+      || ((esperaBtn.textContent || '').trim() ? (esperaBtn.textContent || '').trim() : 'Colocar em espera');
+    if (!esperaBtn.dataset.idleLabel) {
+      esperaBtn.dataset.idleLabel = idleLabel;
+    }
+    const shouldShowEspera = contextMatches && agendaAtivo;
+    if (shouldShowEspera) {
+      esperaBtn.classList.remove('hidden');
+      esperaBtn.removeAttribute('aria-hidden');
+      if (esperaBtn.dataset.processing === 'true') {
+        // keep current label while processing
+      } else {
+        esperaBtn.textContent = esperaBtn.dataset.idleLabel || 'Colocar em espera';
+      }
+    } else {
+      esperaBtn.classList.add('hidden');
+      esperaBtn.setAttribute('aria-hidden', 'true');
+      esperaBtn.classList.remove('opacity-60', 'opacity-50', 'cursor-not-allowed');
+      esperaBtn.removeAttribute('disabled');
+      esperaBtn.textContent = idleLabel;
+      delete esperaBtn.dataset.processing;
     }
   }
 
