@@ -820,7 +820,17 @@ export async function updateStatusQuick(id, status) {
       shouldOpenCheckin = await confirmCheckinPrompt(appointment, {
         onConfirm: () => {
           checkinSource = checkinContext;
-          scheduleCheckinOpen({ id: idStr, appointment: checkinContext }, 8);
+          const payload = { id: idStr, appointment: checkinContext };
+          scheduleCheckinOpen(payload, 8);
+          try {
+            if (!isCheckinModalOpen()) {
+              Promise.resolve(openCheckinModal(checkinContext)).catch((error) => {
+                console.error('updateStatusQuick.openCheckinModal', error);
+              });
+            }
+          } catch (error) {
+            console.error('updateStatusQuick.openCheckinModal.sync', error);
+          }
         },
         onCancel: () => {
           clearPendingCheckinQueue();
@@ -854,7 +864,15 @@ export async function updateStatusQuick(id, status) {
     enhanceAgendaUI();
     if (shouldOpenCheckin && !isCheckinModalOpen()) {
       const latest = findAppointmentById(idStr) || checkinSource || { _id: idStr };
-      scheduleCheckinOpen({ id: idStr, appointment: latest }, 5);
+      const payload = { id: idStr, appointment: latest };
+      try {
+        Promise.resolve(openCheckinModal(latest)).catch((error) => {
+          console.error('updateStatusQuick.openCheckinModal.postUpdate', error);
+        });
+      } catch (error) {
+        console.error('updateStatusQuick.openCheckinModal.postUpdateSync', error);
+      }
+      scheduleCheckinOpen(payload, 5);
     }
   } catch (e) {
     console.error('updateStatusQuick', e);
