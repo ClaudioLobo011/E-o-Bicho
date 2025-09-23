@@ -174,6 +174,18 @@ export function ensureTutorAndPetSelected() {
     notify('Selecione um tutor e um pet para registrar a consulta.', 'warning');
     return false;
   }
+  const contextAppointmentId = normalizeId(state.agendaContext?.appointmentId);
+  if (contextAppointmentId) {
+    const contextStatus = normalizeForCompare(state.agendaContext?.status);
+    if (contextStatus === 'finalizado') {
+      notify('O atendimento já foi finalizado.', 'warning');
+      return false;
+    }
+    if (contextStatus !== 'em_atendimento') {
+      notify('Inicie o atendimento para registrar informações.', 'warning');
+      return false;
+    }
+  }
   if (isConsultaLockedForCurrentUser()) {
     notify('Apenas o veterinário responsável pode realizar esta ação.', 'warning');
     return false;
@@ -3021,6 +3033,7 @@ export function updateConsultaAgendaCard() {
   const contextTutorId = normalizeId(context?.tutorId);
   const agendaStatus = normalizeForCompare(context?.status);
   const agendaFinalizado = agendaStatus === 'finalizado';
+  const agendaAtivo = agendaStatus === 'em_atendimento';
 
   let agendaElement = null;
   let hasAgendaContent = false;
@@ -3052,8 +3065,8 @@ export function updateConsultaAgendaCard() {
     }
   }
 
-  const consultaLocked = contextMatches && !agendaFinalizado && isConsultaLockedForCurrentUser(context);
-  const canMutate = contextMatches && !agendaFinalizado && !consultaLocked;
+  const consultaLocked = contextMatches && agendaAtivo && isConsultaLockedForCurrentUser(context);
+  const canMutate = contextMatches && agendaAtivo && !consultaLocked;
   setConsultaActionsAvailability(canMutate);
 
   if (consultaLocked) {
@@ -3065,7 +3078,7 @@ export function updateConsultaAgendaCard() {
     return;
   }
 
-  if (contextMatches && !agendaFinalizado) {
+  if (contextMatches && !agendaFinalizado && agendaAtivo) {
     const allServices = Array.isArray(context.servicos) ? context.servicos : [];
     const vetServices = getVetServices(allServices);
     const filteredOut = Math.max(allServices.length - vetServices.length, 0);
