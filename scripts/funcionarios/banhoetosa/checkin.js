@@ -1,6 +1,8 @@
 import { state, api, confirmWithModal } from './core.js';
 
 const READONLY_CLASSES = ['bg-gray-100', 'cursor-not-allowed'];
+const READY_RETRY_LIMIT = 20;
+const READY_RETRY_DELAY = 30; // intervalo em milissegundos entre tentativas ao aguardar o DOM
 
 let cachedEls = null;
 let isBound = false;
@@ -36,6 +38,52 @@ function getEls() {
     cachedEls = queryElements();
   }
   return cachedEls;
+}
+
+function wait(ms = 0) {
+  return new Promise((resolve) => {
+    if (ms <= 0) {
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => resolve());
+        return;
+      }
+      setTimeout(resolve, 0);
+      return;
+    }
+    setTimeout(resolve, ms);
+  });
+}
+
+function whenDocumentReady() {
+  if (typeof document === 'undefined') return Promise.resolve();
+  if (document.readyState === 'loading') {
+    return new Promise((resolve) => {
+      document.addEventListener('DOMContentLoaded', resolve, { once: true });
+    });
+  }
+  return Promise.resolve();
+}
+
+async function ensureCheckinModalReady() {
+  if (initCheckinModal()) {
+    return getEls();
+  }
+
+  await whenDocumentReady();
+  if (initCheckinModal()) {
+    return getEls();
+  }
+
+  for (let attempt = 0; attempt < READY_RETRY_LIMIT; attempt += 1) {
+    const els = getEls();
+    if (els.root) {
+      initCheckinModal();
+      return els;
+    }
+    await wait(READY_RETRY_DELAY);
+  }
+
+  return getEls();
 }
 
 function setText(el, value, fallback = '—') {
@@ -295,9 +343,11 @@ function collectPayload() {
 }
 
 export async function openCheckinModal(appointment) {
-  initCheckinModal();
-  const els = getEls();
-  if (!els.root) return;
+  const els = await ensureCheckinModalReady();
+  if (!els || !els.root) {
+    console.warn('checkin modal: elemento não encontrado para abertura.');
+    return;
+  }
 
   const appointmentId = appointment?._id || appointment?.id || '';
   const clienteId = appointment?.clienteId || appointment?.cliente?.id || appointment?.cliente?._id || '';
@@ -337,18 +387,25 @@ export async function confirmCheckinPrompt(appointment) {
 }
 
 export function initCheckinModal() {
-  if (isBound) return;
+  if (isBound) {
+    return !!getEls().root;
+  }
   const els = getEls();
-  if (!els.root) return;
+  if (!els.root) {
+    return false;
+  }
 
   isBound = true;
-  els.closeBtn?.addEventListener('click', closeCheckinModal);
-  els.cancelBtn?.addEventListener('click', closeCheckinModal);
-  els.root.addEventListener('click', (ev) => {
+
+  const handleBackdrop = (ev) => {
     if (ev.target === els.root) {
       closeCheckinModal();
     }
-  });
+  };
+
+  els.closeBtn?.addEventListener('click', closeCheckinModal);
+  els.cancelBtn?.addEventListener('click', closeCheckinModal);
+  els.root.addEventListener('click', handleBackdrop);
   els.confirmBtn?.addEventListener('click', () => {
     const payload = collectPayload();
     try {
@@ -358,10 +415,18 @@ export function initCheckinModal() {
     }
     closeCheckinModal();
   });
+
+  try {
+    document.removeEventListener('DOMContentLoaded', initCheckinModal);
+  } catch (_) {
+    // ignore: o listener pode não existir ou o navegador não suportar esta assinatura
+  }
+
+  return true;
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initCheckinModal);
+  document.addEventListener('DOMContentLoaded', initCheckinModal, { once: true });
 } else {
   initCheckinModal();
 }
