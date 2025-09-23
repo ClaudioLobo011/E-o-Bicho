@@ -271,6 +271,11 @@ function showModal() {
     els.root.style.zIndex = '2147483647';
     els.root.removeAttribute('inert');
     els.root.setAttribute('aria-hidden', 'false');
+    try {
+      document.dispatchEvent(new CustomEvent('agenda:checkin:opened'));
+    } catch (_) {
+      // ignore dispatch failures (ex.: CustomEvent indisponível)
+    }
   } catch (error) {
     console.warn('checkin modal style', error);
   }
@@ -335,6 +340,11 @@ export function closeCheckinModal() {
   }
   lastFocus = null;
   currentContext = null;
+  try {
+    document.dispatchEvent(new CustomEvent('agenda:checkin:closed'));
+  } catch (_) {
+    // CustomEvent pode não existir em navegadores muito antigos; ignorar
+  }
 }
 
 export function isCheckinModalOpen() {
