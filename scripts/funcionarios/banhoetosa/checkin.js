@@ -258,26 +258,40 @@ function showModal() {
   const els = getEls();
   if (!els.root) return;
 
+  const root = els.root;
+
   lastFocus = document.activeElement;
 
-  els.root.classList.remove('hidden');
-  els.root.classList.add('flex');
+  root.classList.remove('hidden');
+  root.classList.add('flex');
+
   try {
-    els.root.style.display = 'flex';
-    els.root.style.visibility = 'visible';
-    els.root.style.opacity = '1';
-    els.root.style.pointerEvents = 'auto';
-    els.root.style.position = 'fixed';
-    els.root.style.zIndex = '2147483647';
-    els.root.removeAttribute('inert');
-    els.root.setAttribute('aria-hidden', 'false');
-    try {
-      document.dispatchEvent(new CustomEvent('agenda:checkin:opened'));
-    } catch (_) {
-      // ignore dispatch failures (ex.: CustomEvent indisponível)
+    if (document.body && root.parentElement !== document.body) {
+      document.body.appendChild(root);
     }
   } catch (error) {
+    console.warn('checkin modal append', error);
+  }
+
+  try {
+    root.style.display = 'flex';
+    root.style.visibility = 'visible';
+    root.style.opacity = '1';
+    root.style.pointerEvents = 'auto';
+    root.style.position = 'fixed';
+    root.style.zIndex = '2147483647';
+    root.removeAttribute('inert');
+    root.setAttribute('aria-hidden', 'false');
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
+  } catch (error) {
     console.warn('checkin modal style', error);
+  }
+
+  try {
+    document.dispatchEvent(new CustomEvent('agenda:checkin:opened'));
+  } catch (_) {
+    // ignore dispatch failures (ex.: CustomEvent indisponível)
   }
 
   requestAnimationFrame(() => {
@@ -314,30 +328,39 @@ export function closeCheckinModal() {
   const els = getEls();
   if (!els.root) return;
 
+  const root = els.root;
   const active = document.activeElement;
-  if (els.root.contains(active)) {
+  const restore = (lastFocus && document.contains(lastFocus)) ? lastFocus : document.body;
+
+  if (root.contains(active)) {
     try {
-      active.blur();
-    } catch {}
+      restore?.focus?.();
+    } catch {
+      try {
+        active?.blur?.();
+      } catch {}
+    }
   }
 
-  els.root.classList.add('hidden');
-  els.root.classList.remove('flex');
+  root.classList.add('hidden');
+  root.classList.remove('flex');
   try {
-    els.root.style.display = 'none';
-    els.root.style.visibility = 'hidden';
-    els.root.style.pointerEvents = 'none';
-    els.root.setAttribute('aria-hidden', 'true');
-    els.root.setAttribute('inert', '');
+    root.style.display = 'none';
+    root.style.visibility = 'hidden';
+    root.style.opacity = '0';
+    root.style.pointerEvents = 'none';
+    root.setAttribute('aria-hidden', 'true');
+    root.setAttribute('inert', '');
   } catch (error) {
     console.warn('hide checkin modal', error);
   }
 
-  if (lastFocus && document.contains(lastFocus)) {
+  if (restore && document.contains(restore)) {
     try {
-      lastFocus.focus();
+      restore.focus();
     } catch {}
   }
+
   lastFocus = null;
   currentContext = null;
   try {
