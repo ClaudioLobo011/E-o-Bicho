@@ -11,6 +11,8 @@ import {
   persistAgendaContext,
   getPersistedState,
   isFinalizadoSelection,
+  isAgendaContextForSelection,
+  isAgendaContextPaid,
 } from './core.js';
 import {
   loadConsultasFromServer,
@@ -329,7 +331,13 @@ export async function onSelectPet(petId, opts = {}) {
     persistPetId(state.selectedPetId);
   }
   updateFichaRealTimeSelection().catch(() => {});
-  const defaultToHistorico = isFinalizadoSelection(state.selectedCliente?._id, state.selectedPetId);
+  const clienteId = state.selectedCliente?._id;
+  const petIdNormalized = state.selectedPetId;
+  const context = state.agendaContext;
+  const matchesSelection = isAgendaContextForSelection(clienteId, petIdNormalized, context);
+  const defaultToHistorico =
+    isFinalizadoSelection(clienteId, petIdNormalized, context) ||
+    (matchesSelection && isAgendaContextPaid(context));
   setActiveMainTab(defaultToHistorico ? 'historico' : 'consulta');
   state.consultas = [];
   state.consultasLoadKey = null;

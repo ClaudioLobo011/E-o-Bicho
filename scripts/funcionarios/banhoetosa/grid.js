@@ -358,6 +358,35 @@ function persistFichaClinicaContext(appointment) {
       servicos: extractAppointmentServices(appointment),
       totalServicos: Array.isArray(appointment.servicos) ? appointment.servicos.length : (appointment.servico ? 1 : 0),
     };
+    const codigoVenda = pickFirst(appointment.codigoVenda);
+    if (codigoVenda) {
+      agendaContext.codigoVenda = codigoVenda;
+    }
+    let pagoFlag;
+    if (typeof appointment.pago !== 'undefined') {
+      if (typeof appointment.pago === 'boolean') {
+        pagoFlag = appointment.pago;
+      } else if (typeof appointment.pago === 'number') {
+        pagoFlag = !Number.isNaN(appointment.pago) && appointment.pago !== 0;
+      } else if (typeof appointment.pago === 'string') {
+        const normalizedPago = appointment.pago.trim().toLowerCase();
+        if (['true', '1', 'sim', 'yes', 'y'].includes(normalizedPago)) {
+          pagoFlag = true;
+        } else if (['false', '0', 'nao', 'não', 'no', 'n'].includes(normalizedPago)) {
+          pagoFlag = false;
+        } else if (normalizedPago) {
+          pagoFlag = true;
+        }
+      } else {
+        pagoFlag = !!appointment.pago;
+      }
+    }
+    if (typeof pagoFlag === 'boolean') {
+      agendaContext.pago = pagoFlag;
+    }
+    if ((agendaContext.pago === true) || codigoVenda) {
+      agendaContext.pagamentoRegistrado = true;
+    }
     if (storeIdCandidates.length) {
       agendaContext.storeIdCandidates = storeIdCandidates;
     }

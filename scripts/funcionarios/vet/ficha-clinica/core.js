@@ -410,9 +410,8 @@ export function isAgendaContextFinalizado(context = state.agendaContext) {
   return status === 'finalizado';
 }
 
-export function isFinalizadoSelection(clienteId, petId, context = state.agendaContext) {
+export function isAgendaContextForSelection(clienteId, petId, context = state.agendaContext) {
   if (!context || typeof context !== 'object') return false;
-  if (!isAgendaContextFinalizado(context)) return false;
   const appointmentId = normalizeId(context.appointmentId);
   if (!appointmentId) return false;
   const tutorId = normalizeId(context.tutorId);
@@ -421,6 +420,43 @@ export function isFinalizadoSelection(clienteId, petId, context = state.agendaCo
   const targetPetId = normalizeId(petId);
   if (!(tutorId && petContextId && targetTutorId && targetPetId)) return false;
   return tutorId === targetTutorId && petContextId === targetPetId;
+}
+
+export function isFinalizadoSelection(clienteId, petId, context = state.agendaContext) {
+  if (!isAgendaContextFinalizado(context)) return false;
+  return isAgendaContextForSelection(clienteId, petId, context);
+}
+
+export function isAgendaContextPaid(context = state.agendaContext) {
+  if (!context || typeof context !== 'object') return false;
+  if (context.pagamentoRegistrado) return true;
+
+  const pagoValue = context.pago;
+  if (typeof pagoValue === 'boolean') {
+    if (pagoValue) return true;
+  } else if (typeof pagoValue === 'number') {
+    if (!Number.isNaN(pagoValue) && pagoValue !== 0) return true;
+  } else if (typeof pagoValue === 'string') {
+    const normalized = pagoValue.trim().toLowerCase();
+    if (['true', '1', 'sim', 'yes', 'y'].includes(normalized)) {
+      return true;
+    }
+    if (['false', '0', 'nao', 'não', 'no', 'n'].includes(normalized)) {
+      // explicit false
+    } else if (normalized) {
+      return true;
+    }
+  } else if (pagoValue) {
+    return true;
+  }
+
+  const codigoVenda = pickFirst(
+    context.codigoVenda,
+    context.codigo_venda,
+    context.codVenda,
+    context.cod_venda,
+  );
+  return !!codigoVenda;
 }
 
 export function isConsultaLockedForCurrentUser(context = state.agendaContext) {
