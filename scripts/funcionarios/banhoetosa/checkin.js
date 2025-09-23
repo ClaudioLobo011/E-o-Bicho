@@ -284,6 +284,27 @@ function showModal() {
   });
 }
 
+function isModalVisible(root) {
+  if (!root || root.classList.contains('hidden')) return false;
+  const style = (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function')
+    ? window.getComputedStyle(root)
+    : root.style;
+
+  if (!style) return true;
+
+  const display = style.display ?? root.style.display;
+  const visibility = style.visibility ?? root.style.visibility;
+  const pointerEvents = style.pointerEvents ?? root.style.pointerEvents;
+  const opacity = style.opacity ?? root.style.opacity;
+
+  if (display === 'none') return false;
+  if (visibility === 'hidden') return false;
+  if (pointerEvents === 'none') return false;
+  if (opacity === '0') return false;
+
+  return true;
+}
+
 export function closeCheckinModal() {
   const els = getEls();
   if (!els.root) return;
@@ -314,6 +335,11 @@ export function closeCheckinModal() {
   }
   lastFocus = null;
   currentContext = null;
+}
+
+export function isCheckinModalOpen() {
+  const els = getEls();
+  return isModalVisible(els.root);
 }
 
 function collectPayload() {
