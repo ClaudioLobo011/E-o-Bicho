@@ -4,6 +4,7 @@ import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
 import { enhanceAgendaUI } from './ui.js';
+import { confirmCheckinPrompt, openCheckinModal, findAppointmentById } from './checkin.js';
 
 let __vendaTargetId = null;
 let __vendaLastFocus = null;
@@ -723,6 +724,19 @@ export function bindModalAndActionsEvents() {
 }
 
 export async function updateStatusQuick(id, status) {
+  let shouldOpenCheckin = false;
+  let checkinSource = null;
+  if (status === 'em_atendimento') {
+    try {
+      const appointment = findAppointmentById(id);
+      shouldOpenCheckin = await confirmCheckinPrompt(appointment);
+      if (shouldOpenCheckin) {
+        checkinSource = appointment || { _id: id };
+      }
+    } catch (error) {
+      console.error('updateStatusQuick.checkinPrompt', error);
+    }
+  }
   try {
     const resp = await api(`/func/agendamentos/${id}`, { method: 'PUT', body: JSON.stringify({ status }) });
     if (!resp.ok) {
@@ -734,6 +748,12 @@ export async function updateStatusQuick(id, status) {
     renderFilters();
     renderGrid();
     enhanceAgendaUI();
+    if (shouldOpenCheckin) {
+      const latest = findAppointmentById(id) || checkinSource;
+      if (latest) {
+        openCheckinModal(latest);
+      }
+    }
   } catch (e) {
     console.error('updateStatusQuick', e);
     alert(e.message || 'Erro ao mudar status');

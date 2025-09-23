@@ -9,6 +9,7 @@ const User = require('../models/User');
 const Pet = require('../models/Pet');
 const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
+const UserAddress = require('../models/UserAddress');
 
 const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
 
@@ -685,6 +686,26 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
     const inscricaoEstadual = typeof u.inscricaoEstadual === 'string' ? u.inscricaoEstadual : '';
     const documentoPrincipal = cpf || cnpj || inscricaoEstadual || '';
     const cpfCnpj = cpf || cnpj || '';
+    let address = null;
+    try {
+      const addrDoc = await UserAddress.findOne({ user: id })
+        .sort({ isDefault: -1, updatedAt: -1 })
+        .lean();
+      if (addrDoc) {
+        address = {
+          cep: addrDoc.cep || '',
+          logradouro: addrDoc.logradouro || '',
+          numero: addrDoc.numero || '',
+          complemento: addrDoc.complemento || '',
+          bairro: addrDoc.bairro || '',
+          cidade: addrDoc.cidade || '',
+          uf: addrDoc.uf || '',
+        };
+      }
+    } catch (err) {
+      console.error('GET /func/clientes/:id -> endereço', err);
+    }
+
     res.json({
       _id: u._id,
       nome,
@@ -698,6 +719,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       documento: documentoPrincipal,
       documentoPrincipal,
       doc: documentoPrincipal,
+      address,
     });
   } catch (e) {
     console.error('GET /func/clientes/:id', e);
