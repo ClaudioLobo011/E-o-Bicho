@@ -7,6 +7,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalTitle = document.getElementById('modal-title');
   const form = document.getElementById('edit-funcionario-form');
   const inputId = document.getElementById('edit-id');
+  const inputCodigo = document.getElementById('edit-codigo');
+  const inputDataCadastro = document.getElementById('edit-data-cadastro');
+  const selectSituacao = document.getElementById('edit-situacao');
   const inputNome = document.getElementById('edit-nome');
   const inputEmail = document.getElementById('edit-email');
   const inputPassword = document.getElementById('edit-password');
@@ -15,6 +18,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const passwordBar = document.getElementById('password-bar');
   const gruposBox = document.getElementById('edit-grupos');
   const empresasBox = document.getElementById('edit-empresas');
+  const selectSexo = document.getElementById('edit-sexo');
+  const empresaContratualSelect = document.getElementById('edit-empresa-contratual');
+  const enderecoCep = document.getElementById('edit-endereco-cep');
+  const enderecoLogradouro = document.getElementById('edit-endereco-endereco');
+  const enderecoNumero = document.getElementById('edit-endereco-numero');
+  const enderecoComplemento = document.getElementById('edit-endereco-complemento');
+  const enderecoBairro = document.getElementById('edit-endereco-bairro');
+  const enderecoCidade = document.getElementById('edit-endereco-cidade');
+  const btnAddEndereco = document.getElementById('btn-add-endereco');
+  const listaEnderecos = document.getElementById('lista-enderecos');
+  const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
+  const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
 
   // Modal Search
   const modalSearch = document.getElementById('modal-search-user');
@@ -44,6 +59,155 @@ document.addEventListener('DOMContentLoaded', () => {
     admin_master: 'Admin Master',
   };
   const roleRank = { cliente: 0, funcionario: 1, admin: 2, admin_master: 3 };
+  let enderecos = [];
+  let empresasDisponiveis = [];
+
+  function formatDateDisplay(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  function setCodigoValue(value) {
+    if (!inputCodigo) return;
+    if (value) {
+      inputCodigo.value = value;
+      inputCodigo.dataset.originalValue = value;
+      inputCodigo.dataset.hasValue = 'true';
+    } else {
+      inputCodigo.value = 'Gerado automaticamente';
+      inputCodigo.dataset.originalValue = '';
+      inputCodigo.dataset.hasValue = 'false';
+    }
+  }
+
+  function setDataCadastroValue(value) {
+    if (!inputDataCadastro) return;
+    if (value) {
+      inputDataCadastro.value = formatDateDisplay(value);
+      inputDataCadastro.dataset.originalValue = value;
+      inputDataCadastro.dataset.hasValue = 'true';
+    } else {
+      const now = new Date();
+      inputDataCadastro.value = formatDateDisplay(now.toISOString());
+      inputDataCadastro.dataset.originalValue = '';
+      inputDataCadastro.dataset.hasValue = 'false';
+    }
+  }
+
+  function setEmpresaContratualValue(value, label = 'Empresa selecionada') {
+    if (!empresaContratualSelect) return;
+    if (value) {
+      const exists = Array.from(empresaContratualSelect.options || []).some((opt) => opt.value === value);
+      if (!exists) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label || 'Empresa selecionada';
+        empresaContratualSelect.appendChild(opt);
+      }
+      empresaContratualSelect.value = value;
+    } else {
+      empresaContratualSelect.value = '';
+    }
+    empresaContratualSelect.dataset.selectedValue = value || '';
+  }
+
+  function normalizeEndereco(item = {}) {
+    return {
+      cep: item.cep || '',
+      logradouro: item.logradouro || item.endereco || '',
+      numero: item.numero || '',
+      complemento: item.complemento || '',
+      bairro: item.bairro || '',
+      cidade: item.cidade || '',
+    };
+  }
+
+  function clearEnderecoForm() {
+    if (!enderecoCep) return;
+    enderecoCep.value = '';
+    enderecoLogradouro.value = '';
+    enderecoNumero.value = '';
+    enderecoComplemento.value = '';
+    enderecoBairro.value = '';
+    enderecoCidade.value = '';
+  }
+
+  function renderEnderecosList() {
+    if (!listaEnderecos) return;
+    if (!Array.isArray(enderecos) || enderecos.length === 0) {
+      listaEnderecos.innerHTML = '<p class="text-sm text-gray-500">Nenhum endereço cadastrado.</p>';
+      return;
+    }
+    const cards = enderecos.map((item, index) => {
+      const titulo = item.logradouro || '-';
+      const linha2 = [item.numero, item.complemento].filter(Boolean).join(' • ');
+      const linha3 = [item.bairro, item.cidade].filter(Boolean).join(' - ');
+      const cep = item.cep ? `CEP: ${item.cep}` : '';
+      return `
+        <div class="border rounded-lg px-4 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3" data-endereco-index="${index}">
+          <div class="text-sm text-gray-700">
+            <p class="font-semibold">${titulo}</p>
+            ${linha2 ? `<p class="text-gray-600">${linha2}</p>` : ''}
+            ${linha3 ? `<p class="text-gray-600">${linha3}</p>` : ''}
+            ${cep ? `<p class="text-gray-500 text-xs">${cep}</p>` : ''}
+          </div>
+          <div class="flex justify-end">
+            <button type="button" class="text-sm font-medium text-red-600 hover:text-red-800" data-remove-endereco="${index}">Remover</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    listaEnderecos.innerHTML = cards;
+  }
+
+  function activateTab(target) {
+    tabButtons.forEach((btn) => {
+      const isActive = btn.dataset.tabTarget === target;
+      btn.classList.toggle('bg-emerald-50', isActive);
+      btn.classList.toggle('text-emerald-700', isActive);
+      btn.classList.toggle('text-gray-600', !isActive);
+    });
+    tabPanels.forEach((panel) => {
+      panel.classList.toggle('hidden', panel.dataset.tabPanel !== target);
+    });
+  }
+
+  tabButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tabTarget || 'dados';
+      activateTab(target);
+    });
+  });
+  activateTab('dados');
+
+  btnAddEndereco?.addEventListener('click', () => {
+    const novo = normalizeEndereco({
+      cep: (enderecoCep?.value || '').trim(),
+      logradouro: (enderecoLogradouro?.value || '').trim(),
+      numero: (enderecoNumero?.value || '').trim(),
+      complemento: (enderecoComplemento?.value || '').trim(),
+      bairro: (enderecoBairro?.value || '').trim(),
+      cidade: (enderecoCidade?.value || '').trim(),
+    });
+    if (!novo.logradouro) {
+      toastWarn('Informe ao menos o endereço para adicionar.');
+      return;
+    }
+    enderecos.push(novo);
+    renderEnderecosList();
+    clearEnderecoForm();
+  });
+
+  listaEnderecos?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-remove-endereco]');
+    if (!btn) return;
+    const index = Number(btn.getAttribute('data-remove-endereco'));
+    if (Number.isNaN(index)) return;
+    enderecos.splice(index, 1);
+    renderEnderecosList();
+  });
 
   function headers(extra = {}) {
     return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...extra };
@@ -124,26 +288,59 @@ document.addEventListener('DOMContentLoaded', () => {
   function openModal(mode, data = null) {
     const opts = optionsForActor(ACTOR_ROLE);
     roleSelect.innerHTML = opts.map(v => `<option value="${v}">${ROLE_LABEL[v]}</option>`).join('');
+    const codigoValor = data?.codigo || data?.codigoFuncionario || data?.matricula || data?._id || '';
+    const dataCadastroValor = data?.dataCadastro || data?.createdAt || '';
+    const situacaoValor = data?.situacao || 'ativo';
+    const sexoValor = data?.sexo || '';
+    const empresaContratualValor = data?.empresaContratual || data?.empresaContratualId || '';
+    const empresaContratualLabel = data?.empresaContratualNome || '';
 
-  if (mode === 'create') {
-    modalTitle.textContent = 'Adicionar Funcionário';
-    inputId.value = ''; inputNome.value = ''; inputEmail.value = ''; inputPassword.value = '';
-    roleSelect.value = opts[0] || 'funcionario';
-    passwordBar.style.width = '0%';
-    setGruposSelected([]);
-    setEmpresasSelected([]);
-  } else {
-    modalTitle.textContent = 'Editar Funcionário';
-    inputId.value = data._id;
-    inputNome.value = getNome(data);
-    inputEmail.value = data.email || '';
-    inputPassword.value = '';
-    roleSelect.value = opts.includes(data.role) ? data.role : (opts[0] || 'funcionario');
-    passwordBar.style.width = '0%';
-    setGruposSelected(Array.isArray(data.grupos) ? data.grupos : []);
-    setEmpresasSelected(Array.isArray(data.empresas) ? data.empresas : []);
-  }
-    modal.classList.remove('hidden'); modal.classList.add('flex');
+    if (mode === 'create') {
+      modalTitle.textContent = 'Adicionar Funcionário';
+      inputId.value = '';
+      setCodigoValue('');
+      setDataCadastroValue('');
+      inputNome.value = '';
+      inputEmail.value = '';
+      inputPassword.value = '';
+      if (selectSituacao) selectSituacao.value = 'ativo';
+      if (selectSexo) selectSexo.value = '';
+      setEmpresaContratualValue('');
+      roleSelect.value = opts[0] || 'funcionario';
+      passwordBar.style.width = '0%';
+      setGruposSelected([]);
+      setEmpresasSelected([]);
+      enderecos = [];
+    } else {
+      modalTitle.textContent = 'Editar Funcionário';
+      inputId.value = data._id;
+      setCodigoValue(codigoValor);
+      setDataCadastroValue(dataCadastroValor);
+      inputNome.value = getNome(data);
+      inputEmail.value = data.email || '';
+      inputPassword.value = '';
+      if (selectSituacao) selectSituacao.value = situacaoValor;
+      if (selectSexo) selectSexo.value = sexoValor;
+      setEmpresaContratualValue(empresaContratualValor, empresaContratualLabel);
+      roleSelect.value = opts.includes(data.role) ? data.role : (opts[0] || 'funcionario');
+      passwordBar.style.width = '0%';
+      setGruposSelected(Array.isArray(data.grupos) ? data.grupos : []);
+      setEmpresasSelected(Array.isArray(data.empresas) ? data.empresas : []);
+      enderecos = Array.isArray(data.enderecos) ? data.enderecos.map(normalizeEndereco) : [];
+    }
+
+    if (mode === 'create' && empresaContratualSelect) {
+      empresaContratualSelect.dataset.selectedValue = '';
+    }
+    if (mode === 'edit' && empresaContratualSelect) {
+      empresaContratualSelect.dataset.selectedValue = empresaContratualValor || '';
+    }
+
+    renderEnderecosList();
+    clearEnderecoForm();
+    activateTab('dados');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
   }
   function closeModal()      { modal.classList.add('hidden'); modal.classList.remove('flex'); }
   function openSearchModal() { modalSearch.classList.remove('hidden'); modalSearch.classList.add('flex'); searchInput.value = ''; searchUsers(''); }
@@ -308,15 +505,29 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch(`${API_CONFIG.BASE_URL}/stores`);
       if (!res.ok) throw new Error('Falha ao carregar empresas');
       const stores = await res.json();
-      empresasBox.innerHTML = (stores || []).map(s => `
+      empresasDisponiveis = Array.isArray(stores) ? stores : [];
+      empresasBox.innerHTML = empresasDisponiveis.map(s => `
         <label class="inline-flex items-center gap-2">
           <input type="checkbox" value="${s._id}" class="rounded border-gray-300">
           <span>${s.nome || 'Sem nome'}</span>
         </label>
       `).join('');
+
+      if (empresaContratualSelect) {
+        const selected = empresaContratualSelect.dataset.selectedValue || '';
+        const selectOptions = ['<option value="">Selecione uma empresa</option>',
+          ...empresasDisponiveis.map(s => `<option value="${s._id}">${s.nome || 'Sem nome'}</option>`)
+        ];
+        empresaContratualSelect.innerHTML = selectOptions.join('');
+        const selectedEmpresa = empresasDisponiveis.find((s) => s._id === selected);
+        setEmpresaContratualValue(selected, selectedEmpresa?.nome || 'Empresa selecionada');
+      }
     } catch (err) {
       console.error(err);
       empresasBox.innerHTML = '<p class="text-sm text-red-600">Erro ao carregar empresas.</p>';
+      if (empresaContratualSelect) {
+        empresaContratualSelect.innerHTML = '<option value="">Selecione uma empresa</option>';
+      }
     }
   }
   function getSelectedEmpresas() {
@@ -408,6 +619,26 @@ document.addEventListener('DOMContentLoaded', () => {
       grupos: getSelectedGrupos(),
       empresas: getSelectedEmpresas(),
     };
+    if (selectSituacao) {
+      payload.situacao = selectSituacao.value || 'ativo';
+    }
+    if (selectSexo) {
+      const sexoVal = selectSexo.value || '';
+      if (sexoVal) payload.sexo = sexoVal;
+    }
+    if (empresaContratualSelect) {
+      const contratualVal = empresaContratualSelect.value || '';
+      if (contratualVal) payload.empresaContratual = contratualVal;
+    }
+    if (Array.isArray(enderecos)) {
+      payload.enderecos = enderecos;
+    }
+    if (inputCodigo && inputCodigo.dataset?.hasValue === 'true') {
+      payload.codigo = inputCodigo.dataset.originalValue || inputCodigo.value;
+    }
+    if (inputDataCadastro && inputDataCadastro.dataset?.hasValue === 'true') {
+      payload.dataCadastro = inputDataCadastro.dataset.originalValue || inputDataCadastro.value;
+    }
     const pwd = inputPassword.value.trim();
     if (pwd) payload.senha = pwd;
 
