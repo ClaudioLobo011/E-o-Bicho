@@ -573,7 +573,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const opts = optionsForActor(ACTOR_ROLE);
     roleSelect.innerHTML = opts.map(v => `<option value="${v}">${ROLE_LABEL[v]}</option>`).join('');
     const codigoValor = data?.codigo || data?.codigoFuncionario || data?.matricula || data?._id || '';
-    const dataCadastroValor = data?.dataCadastro || data?.createdAt || '';
+    const dataCadastroValor = data?.dataCadastro || data?.criadoEm || data?.createdAt || '';
     const situacaoValor = data?.situacao || 'ativo';
     const sexoValor = normalizeSexoValue(data?.genero ?? data?.sexo);
     const empresaContratualValor = data?.empresaContratual || data?.empresaContratualId || '';
