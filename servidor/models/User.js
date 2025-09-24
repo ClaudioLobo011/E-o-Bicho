@@ -62,6 +62,24 @@ const userSchema = new Schema({
   salarioContratual: { type: Number, min: 0 },
   horasSemanais: { type: Number, min: 0 },
   horasMensais: { type: Number, min: 0 },
+  passagensPorDia: { type: Number, min: 0 },
+  valorPassagem: { type: Number, min: 0 },
+  banco: { type: String, trim: true },
+  tipoContaBancaria: {
+    type: String,
+    enum: ['corrente', 'poupanca', 'cartao_salario', 'conta_salario'],
+    lowercase: true,
+    trim: true,
+  },
+  agencia: { type: String, trim: true },
+  conta: { type: String, trim: true },
+  tipoChavePix: {
+    type: String,
+    enum: ['cpf', 'cnpj', 'email', 'telefone'],
+    lowercase: true,
+    trim: true,
+  },
+  chavePix: { type: String, trim: true },
 
   // --- Campos Específicos de Pessoa Jurídica ---
   razaoSocial: { type: String },

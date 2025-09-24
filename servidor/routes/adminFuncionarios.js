@@ -87,6 +87,14 @@ function userToDTO(u) {
     salarioContratual: typeof u.salarioContratual === 'number' ? u.salarioContratual : null,
     horasSemanais: typeof u.horasSemanais === 'number' ? u.horasSemanais : null,
     horasMensais: typeof u.horasMensais === 'number' ? u.horasMensais : null,
+    passagensPorDia: typeof u.passagensPorDia === 'number' ? u.passagensPorDia : null,
+    valorPassagem: typeof u.valorPassagem === 'number' ? u.valorPassagem : null,
+    banco: u.banco || '',
+    tipoContaBancaria: u.tipoContaBancaria || '',
+    agencia: u.agencia || '',
+    conta: u.conta || '',
+    tipoChavePix: u.tipoChavePix || '',
+    chavePix: u.chavePix || '',
   };
 }
 
@@ -116,7 +124,7 @@ router.get('/', authMiddleware, requireAdmin, async (req, res) => {
     const users = await User
       .find(
         { role: { $in: ['admin_master', 'admin', 'funcionario'] } },
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
       )
       .lean();
 
@@ -166,7 +174,7 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
     const users = await User
       .find(
         filter,
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
       )
       .sort({ createdAt: -1 })
       .limit(lim)
@@ -201,7 +209,7 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 
     const ret = await User.findById(
       userId,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
     ).lean();
     res.json({ message: 'Usuário transformado com sucesso.', funcionario: userToDTO(ret) });
   } catch (err) {
@@ -217,7 +225,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const u = await User.findById(
       req.params.id,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
     ).lean();
     if (!u || !['admin_master', 'admin', 'funcionario'].includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
@@ -335,6 +343,38 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
     const horasMensais = parseNumber(req.body.horasMensais, { allowFloat: true, min: 0 });
     if (horasMensais !== undefined) {
       doc.horasMensais = horasMensais;
+    }
+    const passagensPorDia = parseNumber(req.body.passagensPorDia, { min: 0 });
+    if (passagensPorDia !== undefined) {
+      doc.passagensPorDia = passagensPorDia;
+    }
+    const valorPassagem = parseNumber(req.body.valorPassagem, { allowFloat: true, min: 0 });
+    if (valorPassagem !== undefined) {
+      doc.valorPassagem = valorPassagem;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'banco')) {
+      const banco = (req.body.banco || '').trim();
+      doc.banco = banco || null;
+    }
+    const tipoContaBancaria = parseEnum(req.body.tipoContaBancaria, ['corrente', 'poupanca', 'cartao_salario', 'conta_salario']);
+    if (tipoContaBancaria !== undefined) {
+      doc.tipoContaBancaria = tipoContaBancaria;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'agencia')) {
+      const agencia = (req.body.agencia || '').trim();
+      doc.agencia = agencia || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'conta')) {
+      const conta = (req.body.conta || '').trim();
+      doc.conta = conta || null;
+    }
+    const tipoChavePix = parseEnum(req.body.tipoChavePix, ['cpf', 'cnpj', 'email', 'telefone']);
+    if (tipoChavePix !== undefined) {
+      doc.tipoChavePix = tipoChavePix;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'chavePix')) {
+      const chavePix = (req.body.chavePix || '').trim();
+      doc.chavePix = chavePix || null;
     }
 
     const novo = await User.create(doc);
@@ -460,11 +500,43 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
     if (horasMensais !== undefined) {
       update.horasMensais = horasMensais;
     }
+    const passagensPorDia = parseNumber(req.body.passagensPorDia, { min: 0 });
+    if (passagensPorDia !== undefined) {
+      update.passagensPorDia = passagensPorDia;
+    }
+    const valorPassagem = parseNumber(req.body.valorPassagem, { allowFloat: true, min: 0 });
+    if (valorPassagem !== undefined) {
+      update.valorPassagem = valorPassagem;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'banco')) {
+      const banco = (req.body.banco || '').trim();
+      update.banco = banco || null;
+    }
+    const tipoContaBancaria = parseEnum(req.body.tipoContaBancaria, ['corrente', 'poupanca', 'cartao_salario', 'conta_salario']);
+    if (tipoContaBancaria !== undefined) {
+      update.tipoContaBancaria = tipoContaBancaria;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'agencia')) {
+      const agencia = (req.body.agencia || '').trim();
+      update.agencia = agencia || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'conta')) {
+      const conta = (req.body.conta || '').trim();
+      update.conta = conta || null;
+    }
+    const tipoChavePix = parseEnum(req.body.tipoChavePix, ['cpf', 'cnpj', 'email', 'telefone']);
+    if (tipoChavePix !== undefined) {
+      update.tipoChavePix = tipoChavePix;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'chavePix')) {
+      const chavePix = (req.body.chavePix || '').trim();
+      update.chavePix = chavePix || null;
+    }
 
     const updated = await User.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais' }
+      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix' }
     ).lean();
 
     res.json({ message: 'Funcionário atualizado com sucesso.', funcionario: userToDTO(updated) });

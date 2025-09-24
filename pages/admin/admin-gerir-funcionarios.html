@@ -308,8 +308,62 @@
                 </div>
               </div>
             </div>
-            <div class="tab-panel hidden" data-tab-panel="informacoes-gerais">
-              <div class="p-4 rounded-lg bg-emerald-50 text-emerald-700 text-xs">Em desenvolvimento</div>
+            <div class="tab-panel hidden space-y-3" data-tab-panel="informacoes-gerais">
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-passagens-dia" class="block font-medium mb-1">Passagens por dia</label>
+                  <input id="edit-passagens-dia" type="number" min="0" step="1" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-valor-passagem" class="block font-medium mb-1">Valor da passagem</label>
+                  <input id="edit-valor-passagem" type="number" min="0" step="0.01" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0,00" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-banco" class="block font-medium mb-1">Banco</label>
+                  <input id="edit-banco" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nome do banco" />
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-tipo-conta-bancaria" class="block font-medium mb-1">Tipo de conta</label>
+                  <select id="edit-tipo-conta-bancaria" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Selecione</option>
+                    <option value="corrente">Corrente</option>
+                    <option value="poupanca">Poupança</option>
+                    <option value="cartao_salario">Cartão Salário</option>
+                    <option value="conta_salario">Conta Salário</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-agencia" class="block font-medium mb-1">Agência</label>
+                  <input id="edit-agencia" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0000" />
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-conta" class="block font-medium mb-1">Conta</label>
+                  <input id="edit-conta" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="000000-0" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-tipo-chave-pix" class="block font-medium mb-1">Tipo de chave Pix</label>
+                  <select id="edit-tipo-chave-pix" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Selecione</option>
+                    <option value="cpf">CPF</option>
+                    <option value="cnpj">CNPJ</option>
+                    <option value="email">Email</option>
+                    <option value="telefone">Telefone</option>
+                  </select>
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-chave-pix" class="block font-medium mb-1">Chave Pix</label>
+                  <input id="edit-chave-pix" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Informe a chave Pix" />
+                </div>
+              </div>
             </div>
             <div class="tab-panel hidden" data-tab-panel="trabalhista">
               <div class="p-4 rounded-lg bg-emerald-50 text-emerald-700 text-xs">Em desenvolvimento</div>

@@ -47,6 +47,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const tipoContratoSelect = document.getElementById('edit-tipo-contrato');
   const horasSemanaisInput = document.getElementById('edit-horas-semanais');
   const horasMensaisInput = document.getElementById('edit-horas-mensais');
+  const passagensPorDiaInput = document.getElementById('edit-passagens-dia');
+  const valorPassagemInput = document.getElementById('edit-valor-passagem');
+  const bancoInput = document.getElementById('edit-banco');
+  const tipoContaBancariaSelect = document.getElementById('edit-tipo-conta-bancaria');
+  const agenciaInput = document.getElementById('edit-agencia');
+  const contaInput = document.getElementById('edit-conta');
+  const tipoChavePixSelect = document.getElementById('edit-tipo-chave-pix');
+  const chavePixInput = document.getElementById('edit-chave-pix');
   const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
   const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
 
@@ -647,6 +655,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (tipoContratoSelect) tipoContratoSelect.value = '';
       if (horasSemanaisInput) horasSemanaisInput.value = '';
       if (horasMensaisInput) horasMensaisInput.value = '';
+      if (passagensPorDiaInput) passagensPorDiaInput.value = '';
+      if (valorPassagemInput) valorPassagemInput.value = '';
+      if (bancoInput) bancoInput.value = '';
+      if (tipoContaBancariaSelect) tipoContaBancariaSelect.value = '';
+      if (agenciaInput) agenciaInput.value = '';
+      if (contaInput) contaInput.value = '';
+      if (tipoChavePixSelect) tipoChavePixSelect.value = '';
+      if (chavePixInput) chavePixInput.value = '';
     } else {
       modalTitle.textContent = 'Editar Funcionário';
       inputId.value = data._id;
@@ -681,6 +697,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (tipoContratoSelect) tipoContratoSelect.value = data.tipoContrato || '';
       if (horasSemanaisInput) horasSemanaisInput.value = typeof data.horasSemanais === 'number' ? data.horasSemanais : (data.horasSemanais || '');
       if (horasMensaisInput) horasMensaisInput.value = typeof data.horasMensais === 'number' ? data.horasMensais : (data.horasMensais || '');
+      if (passagensPorDiaInput) passagensPorDiaInput.value = typeof data.passagensPorDia === 'number' ? data.passagensPorDia : (data.passagensPorDia || '');
+      if (valorPassagemInput) valorPassagemInput.value = typeof data.valorPassagem === 'number' ? data.valorPassagem : (data.valorPassagem || '');
+      if (bancoInput) bancoInput.value = data.banco || '';
+      if (tipoContaBancariaSelect) tipoContaBancariaSelect.value = data.tipoContaBancaria || '';
+      if (agenciaInput) agenciaInput.value = data.agencia || '';
+      if (contaInput) contaInput.value = data.conta || '';
+      if (tipoChavePixSelect) tipoChavePixSelect.value = data.tipoChavePix || '';
+      if (chavePixInput) chavePixInput.value = data.chavePix || '';
     }
 
     if (mode === 'create' && empresaContratualSelect) {
@@ -1044,6 +1068,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (horasMensaisInput) {
       payload.horasMensais = parseNumberValue(horasMensaisInput.value, true);
+    }
+    if (passagensPorDiaInput) {
+      payload.passagensPorDia = parseNumberValue(passagensPorDiaInput.value, false);
+    }
+    if (valorPassagemInput) {
+      payload.valorPassagem = parseNumberValue(valorPassagemInput.value, true);
+    }
+    if (bancoInput) {
+      const banco = bancoInput.value.trim();
+      payload.banco = banco || null;
+    }
+    if (tipoContaBancariaSelect) {
+      payload.tipoContaBancaria = tipoContaBancariaSelect.value || null;
+    }
+    if (agenciaInput) {
+      const agencia = agenciaInput.value.trim();
+      payload.agencia = agencia || null;
+    }
+    if (contaInput) {
+      const conta = contaInput.value.trim();
+      payload.conta = conta || null;
+    }
+    if (tipoChavePixSelect) {
+      payload.tipoChavePix = tipoChavePixSelect.value || null;
+    }
+    if (chavePixInput) {
+      const chavePix = chavePixInput.value.trim();
+      payload.chavePix = chavePix || null;
     }
 
     if (inputCelular) {
