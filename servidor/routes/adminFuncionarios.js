@@ -35,6 +35,7 @@ function userToDTO(u) {
     nome: normName(u),
     grupos: Array.isArray(u.grupos) ? u.grupos : [],
     empresas: Array.isArray(u.empresas) ? u.empresas : [],
+    genero: u.genero || '',
   };
 }
 
@@ -64,7 +65,7 @@ router.get('/', authMiddleware, requireAdmin, async (req, res) => {
     const users = await User
       .find(
         { role: { $in: ['admin_master', 'admin', 'funcionario'] } },
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos empresas'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos empresas genero'
       )
       .lean();
 
@@ -114,7 +115,7 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
     const users = await User
       .find(
         filter,
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos genero'
       )
       .sort({ createdAt: -1 })
       .limit(lim)
@@ -149,7 +150,7 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 
     const ret = await User.findById(
       userId,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos' // +grupos
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos genero' // +grupos
     ).lean();
     res.json({ message: 'Usuário transformado com sucesso.', funcionario: userToDTO(ret) });
   } catch (err) {
@@ -165,7 +166,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const u = await User.findById(
       req.params.id,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos empresas'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos empresas genero'
     ).lean();
     if (!u || !['admin_master', 'admin', 'funcionario'].includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
@@ -202,6 +203,12 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
       if (razaoSocial) doc.razaoSocial = razaoSocial.trim();
     } else {
       doc.nomeCompleto = (nomeCompleto || nome || '').trim();
+    }
+
+    if (typeof req.body.genero !== 'undefined') {
+      doc.genero = (req.body.genero || '').trim();
+    } else if (typeof req.body.sexo !== 'undefined') {
+      doc.genero = (req.body.sexo || '').trim();
     }
 
     const ALLOWED_GROUPS = ['gerente','vendedor','esteticista','veterinario'];
@@ -285,10 +292,16 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
 
     if (senha && senha.length >= 8) update.senha = await bcrypt.hash(senha, 10);
 
+    if (typeof req.body.genero !== 'undefined') {
+      update.genero = (req.body.genero || '').trim();
+    } else if (typeof req.body.sexo !== 'undefined') {
+      update.genero = (req.body.sexo || '').trim();
+    }
+
     const updated = await User.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos' }
+      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos genero' }
     ).lean();
 
     res.json({ message: 'Funcionário atualizado com sucesso.', funcionario: userToDTO(updated) });

@@ -63,6 +63,69 @@ document.addEventListener('DOMContentLoaded', () => {
   let enderecos = [];
   let empresasDisponiveis = [];
   let enderecoEditandoIndex = null;
+  let lastCepConsultado = '';
+  let lastEnderecoViaCep = null;
+
+  function onlyDigits(value = '') {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  function formatCEP(value = '') {
+    const digits = onlyDigits(value).slice(0, 8);
+    if (digits.length <= 5) return digits;
+    return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  }
+
+  async function consultarViaCep(valorCep) {
+    const clean = onlyDigits(valorCep);
+    if (clean.length !== 8) {
+      throw new Error('Informe um CEP com 8 dígitos.');
+    }
+    const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+    if (!res.ok) throw new Error('Não foi possível consultar o CEP informado.');
+    const data = await res.json();
+    if (data?.erro) throw new Error('CEP não encontrado.');
+    return {
+      cep: formatCEP(clean),
+      logradouro: data.logradouro || '',
+      bairro: data.bairro || '',
+      cidade: data.localidade || '',
+      uf: data.uf || '',
+      ibge: data.ibge || '',
+    };
+  }
+
+  function aplicarViaCepNosCampos(dados) {
+    if (!dados) return;
+    if (enderecoCep) enderecoCep.value = dados.cep || '';
+    if (enderecoLogradouro) enderecoLogradouro.value = dados.logradouro || '';
+    if (enderecoBairro) enderecoBairro.value = dados.bairro || '';
+    if (enderecoCidade) enderecoCidade.value = dados.cidade || '';
+    if (enderecoApelido && !enderecoApelido.value) enderecoApelido.value = 'Principal';
+  }
+
+  async function garantirPreenchimentoPorCep(force = false) {
+    if (!enderecoCep) return null;
+    const raw = enderecoCep.value || '';
+    const clean = onlyDigits(raw);
+    if (clean.length !== 8) return null;
+    if (!force && clean === lastCepConsultado) return lastEnderecoViaCep;
+
+    try {
+      const via = await consultarViaCep(clean);
+      lastCepConsultado = clean;
+      lastEnderecoViaCep = via;
+      aplicarViaCepNosCampos(via);
+      if (typeof window.showToast === 'function') {
+        window.showToast('Endereço preenchido pelo CEP.', 'success', 1500);
+      }
+      return via;
+    } catch (err) {
+      console.error(err);
+      toastWarn(err.message || 'Não foi possível buscar o CEP informado.');
+      return null;
+    }
+  }
 
   function formatDateDisplay(value) {
     if (!value) return '';
@@ -149,13 +212,15 @@ document.addEventListener('DOMContentLoaded', () => {
   function normalizeEndereco(item = {}) {
     return {
       _id: item._id || item.id || null,
-      cep: item.cep || '',
+      cep: formatCEP(item.cep || ''),
       logradouro: item.logradouro || item.endereco || '',
       numero: item.numero || '',
       complemento: item.complemento || '',
       bairro: item.bairro || '',
       cidade: item.cidade || '',
       apelido: item.apelido || '',
+      uf: item.uf || '',
+      ibge: item.ibge || '',
       isDefault: item.isDefault === true,
     };
   }
@@ -169,6 +234,8 @@ document.addEventListener('DOMContentLoaded', () => {
     enderecoBairro.value = '';
     enderecoCidade.value = '';
     if (enderecoApelido) enderecoApelido.value = 'Principal';
+    lastCepConsultado = '';
+    lastEnderecoViaCep = null;
     enderecoEditandoIndex = null;
     updateEnderecoButtonLabel();
   }
@@ -182,8 +249,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const cards = enderecos.map((item, index) => {
       const titulo = item.apelido || item.logradouro || '-';
       const linha2 = [item.numero, item.complemento].filter(Boolean).join(' • ');
-      const linha3 = [item.bairro, item.cidade].filter(Boolean).join(' - ');
-      const cep = item.cep ? `CEP: ${item.cep}` : '';
+      const cidadeUf = [item.cidade, item.uf].filter(Boolean).join(' - ');
+      const linha3 = [item.bairro, cidadeUf].filter(Boolean).join(' - ');
+      const cep = item.cep ? `CEP: ${formatCEP(item.cep)}` : '';
       const badge = item.isDefault ? '<span class="ml-2 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full uppercase">Principal</span>' : '';
       return `
         <div class="border rounded-lg px-3 py-2 flex flex-col md:flex-row md:items-center md:justify-between gap-2" data-endereco-index="${index}">
@@ -210,13 +278,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function preencherEnderecoForm(item = {}) {
     if (!enderecoCep) return;
-    enderecoCep.value = item.cep || '';
+    enderecoCep.value = formatCEP(item.cep || '');
     enderecoLogradouro.value = item.logradouro || '';
     enderecoNumero.value = item.numero || '';
     enderecoComplemento.value = item.complemento || '';
     enderecoBairro.value = item.bairro || '';
     enderecoCidade.value = item.cidade || '';
     if (enderecoApelido) enderecoApelido.value = item.apelido || '';
+    lastCepConsultado = onlyDigits(item.cep || '');
+    lastEnderecoViaCep = item.cep ? {
+      cep: formatCEP(item.cep),
+      logradouro: item.logradouro || '',
+      bairro: item.bairro || '',
+      cidade: item.cidade || '',
+      uf: item.uf || '',
+      ibge: item.ibge || '',
+    } : null;
   }
 
   async function carregarEnderecosFuncionario(userId) {
@@ -280,7 +357,38 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   activateTab('dados');
 
+  if (enderecoCep) {
+    enderecoCep.addEventListener('input', () => {
+      const formatted = formatCEP(enderecoCep.value || '');
+      if (enderecoCep.value !== formatted) {
+        enderecoCep.value = formatted;
+        if (typeof enderecoCep.selectionStart === 'number') {
+          const pos = formatted.length;
+          enderecoCep.setSelectionRange(pos, pos);
+        }
+      }
+    });
+    enderecoCep.addEventListener('blur', () => { void garantirPreenchimentoPorCep(false); });
+    enderecoCep.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        void garantirPreenchimentoPorCep(true);
+      }
+    });
+  }
+
   btnAddEndereco?.addEventListener('click', async () => {
+    const logradouroAntes = enderecoLogradouro?.value || '';
+    if (!logradouroAntes) {
+      await garantirPreenchimentoPorCep(true);
+    }
+    const cepDigits = onlyDigits(enderecoCep?.value || '');
+    const viaCepData = (lastEnderecoViaCep && onlyDigits(lastEnderecoViaCep.cep || '') === cepDigits)
+      ? lastEnderecoViaCep
+      : null;
+    const enderecoAnterior = (typeof enderecoEditandoIndex === 'number' && enderecos[enderecoEditandoIndex])
+      ? enderecos[enderecoEditandoIndex]
+      : {};
     const novo = normalizeEndereco({
       cep: (enderecoCep?.value || '').trim(),
       logradouro: (enderecoLogradouro?.value || '').trim(),
@@ -289,6 +397,8 @@ document.addEventListener('DOMContentLoaded', () => {
       bairro: (enderecoBairro?.value || '').trim(),
       cidade: (enderecoCidade?.value || '').trim(),
       apelido: (enderecoApelido?.value || '').trim(),
+      uf: (viaCepData?.uf ?? enderecoAnterior.uf) || undefined,
+      ibge: (viaCepData?.ibge ?? enderecoAnterior.ibge) || undefined,
     });
     if (!novo.logradouro) {
       toastWarn('Informe ao menos o endereço para adicionar.');
@@ -445,7 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const codigoValor = data?.codigo || data?.codigoFuncionario || data?.matricula || data?._id || '';
     const dataCadastroValor = data?.dataCadastro || data?.createdAt || '';
     const situacaoValor = data?.situacao || 'ativo';
-    const sexoValor = normalizeSexoValue(data?.sexo);
+    const sexoValor = normalizeSexoValue(data?.genero ?? data?.sexo);
     const empresaContratualValor = data?.empresaContratual || data?.empresaContratualId || '';
     const empresaContratualLabel = data?.empresaContratualNome || '';
 
@@ -784,7 +894,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (selectSexo) {
       const sexoVal = selectSexo.value || '';
-      if (sexoVal) payload.sexo = sexoVal;
+      payload.genero = sexoVal;
     }
     if (empresaContratualSelect) {
       const contratualVal = empresaContratualSelect.value || '';
