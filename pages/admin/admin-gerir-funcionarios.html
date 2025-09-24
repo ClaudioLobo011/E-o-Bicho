@@ -71,23 +71,22 @@
           </div>
         </div>
 
-        <div>
-          <div class="flex justify-between items-center">
-            <label for="edit-password" class="block font-medium mb-1">Senha</label>
-            <button type="button" id="toggle-password" class="text-xs text-emerald-600 hover:underline">Mostrar</button>
-          </div>
-          <input id="edit-password" type="password" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Definir/alterar senha (opcional)"/>
-          <div class="mt-1 flex items-center gap-2">
-            <div id="password-strength" class="h-1 w-full bg-gray-200 rounded">
-              <div id="password-bar" class="h-1 w-0 bg-emerald-600 rounded transition-all"></div>
-            </div>
-            <span id="password-hint" class="text-xs text-gray-500">Mín. 8 + letra + número + símbolo</span>
-          </div>
-          <p class="text-xs text-gray-500 mt-1">Preencha apenas se quiser definir/alterar a senha.</p>
-        </div>
-
         <div class="grid grid-cols-12 gap-3">
-          <div class="col-span-12 md:col-span-3">
+          <div class="col-span-12 md:col-span-8 space-y-2">
+            <div class="flex justify-between items-center">
+              <label for="edit-password" class="block font-medium mb-1">Senha</label>
+              <button type="button" id="toggle-password" class="text-xs text-emerald-600 hover:underline">Mostrar</button>
+            </div>
+            <input id="edit-password" type="password" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Definir/alterar senha (opcional)"/>
+            <div class="mt-1 flex items-center gap-2">
+              <div id="password-strength" class="h-1 w-full bg-gray-200 rounded">
+                <div id="password-bar" class="h-1 w-0 bg-emerald-600 rounded transition-all"></div>
+              </div>
+              <span id="password-hint" class="text-xs text-gray-500">Mín. 8 + letra + número + símbolo</span>
+            </div>
+            <p class="text-xs text-gray-500">Preencha apenas se quiser definir/alterar a senha.</p>
+          </div>
+          <div class="col-span-12 md:col-span-4">
             <label for="edit-sexo" class="block font-medium mb-1">Sexo</label>
             <select id="edit-sexo" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
               <option value="">Selecione</option>
@@ -95,19 +94,6 @@
               <option value="feminino">Feminino</option>
               <option value="nao_informar">Prefere não dizer</option>
             </select>
-          </div>
-          <div class="col-span-12 md:col-span-4">
-            <label for="edit-empresa-contratual" class="block font-medium mb-1">Empresa Contratual</label>
-            <select id="edit-empresa-contratual" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-              <option value="">Selecione uma empresa</option>
-            </select>
-          </div>
-          <div id="field-empresas" class="col-span-12 md:col-span-5 space-y-2">
-            <label class="block font-medium">Empresa Gerencial</label>
-            <div id="edit-empresas" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <!-- Opções carregadas dinamicamente -->
-            </div>
-            <p class="text-xs text-gray-500">Selecione uma ou mais empresas (lojas) para o funcionário.</p>
           </div>
         </div>
 
@@ -152,6 +138,21 @@
                   </label>
                 </div>
                 <p class="text-xs text-gray-500">Selecione um ou mais grupos.</p>
+              </div>
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-empresa-contratual" class="block font-medium mb-1">Empresa Contratual</label>
+                  <select id="edit-empresa-contratual" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Selecione uma empresa</option>
+                  </select>
+                </div>
+                <div id="field-empresas" class="col-span-12 md:col-span-6 space-y-2">
+                  <label class="block font-medium">Empresa Gerencial</label>
+                  <div id="edit-empresas" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <!-- Opções carregadas dinamicamente -->
+                  </div>
+                  <p class="text-xs text-gray-500">Selecione uma ou mais empresas (lojas) para o funcionário.</p>
+                </div>
               </div>
             </div>
 

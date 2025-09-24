@@ -3476,6 +3476,11 @@
       grid-column: span 7 / span 7;
     }
   }
+  .md\:col-span-8 {
+    @media (width >= 48rem) {
+      grid-column: span 8 / span 8;
+    }
+  }
   .md\:col-span-9 {
     @media (width >= 48rem) {
       grid-column: span 9 / span 9;
