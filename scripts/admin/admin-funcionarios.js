@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const inputEmail = document.getElementById('edit-email');
   const inputPassword = document.getElementById('edit-password');
   const togglePassword = document.getElementById('toggle-password');
+  const togglePasswordIcon = document.getElementById('toggle-password-icon');
   const roleSelect = document.getElementById('edit-role');
   const passwordBar = document.getElementById('password-bar');
   const gruposBox = document.getElementById('edit-grupos');
@@ -752,9 +753,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape' && isModalOpen(modalSearch)) closeSearchModal();
   });
 
-  togglePassword.addEventListener('click', () => {
-    if (inputPassword.type === 'password') { inputPassword.type = 'text'; togglePassword.textContent = 'Ocultar'; }
-    else { inputPassword.type = 'password'; togglePassword.textContent = 'Mostrar'; }
+  togglePassword?.addEventListener('click', () => {
+    const willShow = inputPassword.type === 'password';
+    inputPassword.type = willShow ? 'text' : 'password';
+    togglePassword.setAttribute('aria-label', willShow ? 'Ocultar senha' : 'Mostrar senha');
+    if (togglePasswordIcon) {
+      togglePasswordIcon.classList.remove('fa-eye', 'fa-eye-slash');
+      togglePasswordIcon.classList.add(willShow ? 'fa-eye-slash' : 'fa-eye');
+    }
   });
   inputPassword.addEventListener('input', () => passwordBar.style.width = `${passwordScore(inputPassword.value)}%`);
 
