@@ -65,10 +65,6 @@
               <option value="afastado">Afastado</option>
             </select>
           </div>
-          <div class="col-span-12 md:col-span-6">
-            <label for="edit-email" class="block font-medium mb-1">Email</label>
-            <input id="edit-email" type="email" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="email@dominio.com" required/>
-          </div>
         </div>
 
         <div class="grid grid-cols-12 gap-3 items-start">
@@ -201,8 +197,24 @@
               </div>
             </div>
 
-            <div class="tab-panel hidden" data-tab-panel="contato">
-              <div class="p-4 rounded-lg bg-emerald-50 text-emerald-700 text-sm">Em desenvolvimento</div>
+            <div class="tab-panel hidden space-y-3" data-tab-panel="contato">
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-email" class="block font-medium mb-1">Email</label>
+                  <input id="edit-email" type="email" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="email@dominio.com" required />
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-celular" class="block font-medium mb-1">Celular</label>
+                  <input id="edit-celular" type="tel" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="(00) 00000-0000" required />
+                </div>
+              </div>
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-telefone" class="block font-medium mb-1">Telefone</label>
+                  <input id="edit-telefone" type="tel" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="(00) 0000-0000" />
+                  <p class="text-xs text-gray-500 mt-1">Opcional. Informe um telefone fixo, se houver.</p>
+                </div>
+              </div>
             </div>
             <div class="tab-panel hidden" data-tab-panel="dados-complementares">
               <div class="p-4 rounded-lg bg-emerald-50 text-emerald-700 text-xs">Em desenvolvimento</div>

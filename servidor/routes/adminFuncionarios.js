@@ -30,6 +30,7 @@ function userToDTO(u) {
     role: u.role,
     tipoConta: u.tipoConta,
     celular: u.celular,
+    telefone: u.telefone,
     cpf: u.cpf,
     cnpj: u.cnpj,
     nome: normName(u),
@@ -65,7 +66,7 @@ router.get('/', authMiddleware, requireAdmin, async (req, res) => {
     const users = await User
       .find(
         { role: { $in: ['admin_master', 'admin', 'funcionario'] } },
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos empresas genero'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero'
       )
       .lean();
 
@@ -115,7 +116,7 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
     const users = await User
       .find(
         filter,
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos genero'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero'
       )
       .sort({ createdAt: -1 })
       .limit(lim)
@@ -150,7 +151,7 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 
     const ret = await User.findById(
       userId,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos genero' // +grupos
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero' // +grupos
     ).lean();
     res.json({ message: 'Usuário transformado com sucesso.', funcionario: userToDTO(ret) });
   } catch (err) {
@@ -166,7 +167,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const u = await User.findById(
       req.params.id,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos empresas genero'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero'
     ).lean();
     if (!u || !['admin_master', 'admin', 'funcionario'].includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
@@ -181,7 +182,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
 // CRIA funcionário (novo usuário)
 router.post('/', authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { nome, nomeCompleto, nomeContato, razaoSocial, email, senha, role, tipoConta, celular, grupos } = req.body;
+    const { nome, nomeCompleto, nomeContato, razaoSocial, email, senha, role, tipoConta, celular, telefone, grupos } = req.body;
 
     if (!email || !senha || !celular) {
       return res.status(400).json({ message: 'Email, senha e celular são obrigatórios.' });
@@ -198,6 +199,7 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
     const conta = (tipoConta === 'pessoa_juridica') ? 'pessoa_juridica' : 'pessoa_fisica';
 
     const doc = { tipoConta: conta, email, senha: hash, celular, role: cargo };
+    if (telefone) doc.telefone = telefone;
     if (conta === 'pessoa_juridica') {
       doc.nomeContato = (nomeContato || nome || '').trim();
       if (razaoSocial) doc.razaoSocial = razaoSocial.trim();
@@ -241,7 +243,7 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
 // ATUALIZA funcionário (policy aplicada para mudar role)
 router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { nome, nomeCompleto, nomeContato, razaoSocial, email, senha, role, tipoConta, celular, grupos } = req.body;
+    const { nome, nomeCompleto, nomeContato, razaoSocial, email, senha, role, tipoConta, celular, telefone, grupos } = req.body;
 
     const target = await User.findById(req.params.id, 'role');
     if (!target) return res.status(404).json({ message: 'Funcionário não encontrado.' });
@@ -249,6 +251,7 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
     const update = {};
     if (email) update.email = email;
     if (celular) update.celular = celular;
+    if (typeof telefone !== 'undefined') update.telefone = telefone || '';
 
     if (role) {
       if (!['admin', 'funcionario', 'admin_master'].includes(role)) {
@@ -301,7 +304,7 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
     const updated = await User.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular cpf cnpj grupos genero' }
+      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero' }
     ).lean();
 
     res.json({ message: 'Funcionário atualizado com sucesso.', funcionario: userToDTO(updated) });

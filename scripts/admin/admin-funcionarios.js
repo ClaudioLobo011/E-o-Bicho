@@ -12,6 +12,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectSituacao = document.getElementById('edit-situacao');
   const inputNome = document.getElementById('edit-nome');
   const inputEmail = document.getElementById('edit-email');
+  const inputCelular = document.getElementById('edit-celular');
+  const inputTelefone = document.getElementById('edit-telefone');
   const inputPassword = document.getElementById('edit-password');
   const togglePassword = document.getElementById('toggle-password');
   const togglePasswordIcon = document.getElementById('toggle-password-icon');
@@ -75,6 +77,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const digits = onlyDigits(value).slice(0, 8);
     if (digits.length <= 5) return digits;
     return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  }
+
+  function formatPhone(value = '') {
+    const digits = onlyDigits(value).slice(0, 11);
+    if (digits.length >= 11) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+    }
+    if (digits.length >= 10) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
+    }
+    if (digits.length >= 6) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, digits.length - 4)}-${digits.slice(-4)}`;
+    }
+    if (digits.length > 2) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    }
+    return digits;
   }
 
   async function consultarViaCep(valorCep) {
@@ -567,6 +586,8 @@ document.addEventListener('DOMContentLoaded', () => {
       setDataCadastroValue('');
       inputNome.value = '';
       inputEmail.value = '';
+      if (inputCelular) inputCelular.value = '';
+      if (inputTelefone) inputTelefone.value = '';
       inputPassword.value = '';
       if (selectSituacao) selectSituacao.value = 'ativo';
       if (selectSexo) selectSexo.value = '';
@@ -584,6 +605,8 @@ document.addEventListener('DOMContentLoaded', () => {
       setDataCadastroValue(dataCadastroValor);
       inputNome.value = getNome(data);
       inputEmail.value = data.email || '';
+      if (inputCelular) inputCelular.value = formatPhone(data.celular || '');
+      if (inputTelefone) inputTelefone.value = formatPhone(data.telefone || '');
       inputPassword.value = '';
       if (selectSituacao) selectSituacao.value = situacaoValor;
       if (selectSexo) selectSexo.value = sexoValor;
@@ -764,6 +787,20 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   inputPassword.addEventListener('input', () => passwordBar.style.width = `${passwordScore(inputPassword.value)}%`);
 
+  function attachPhoneMask(input) {
+    if (!input) return;
+    input.addEventListener('input', (event) => {
+      const digits = onlyDigits(event.target.value);
+      event.target.value = formatPhone(digits);
+    });
+    input.addEventListener('blur', (event) => {
+      event.target.value = formatPhone(event.target.value);
+    });
+  }
+
+  attachPhoneMask(inputCelular);
+  attachPhoneMask(inputTelefone);
+
   function getSelectedGrupos() {
     if (!gruposBox) return [];
     return Array.from(gruposBox.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
@@ -895,6 +932,21 @@ document.addEventListener('DOMContentLoaded', () => {
       grupos: getSelectedGrupos(),
       empresas: getSelectedEmpresas(),
     };
+
+    if (inputCelular) {
+      const celularDigits = onlyDigits(inputCelular.value);
+      if (!celularDigits) {
+        toastWarn('Informe um celular válido.');
+        inputCelular.focus();
+        return;
+      }
+      payload.celular = celularDigits;
+    }
+
+    if (inputTelefone) {
+      const telefoneDigits = onlyDigits(inputTelefone.value);
+      payload.telefone = telefoneDigits;
+    }
     if (selectSituacao) {
       payload.situacao = selectSituacao.value || 'ativo';
     }
