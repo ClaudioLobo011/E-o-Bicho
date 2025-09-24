@@ -365,8 +365,44 @@
                 </div>
               </div>
             </div>
-            <div class="tab-panel hidden" data-tab-panel="trabalhista">
-              <div class="p-4 rounded-lg bg-emerald-50 text-emerald-700 text-xs">Em desenvolvimento</div>
+            <div class="tab-panel hidden space-y-3" data-tab-panel="trabalhista">
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-emissao-rg" class="block font-medium mb-1">Emissão RG</label>
+                  <input id="edit-emissao-rg" type="date" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-rg" class="block font-medium mb-1">RG</label>
+                  <input id="edit-rg" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="00.000.000-0" />
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-rg-orgao" class="block font-medium mb-1">Órgão Expedidor</label>
+                  <input id="edit-rg-orgao" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="SSP" />
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-cpf" class="block font-medium mb-1">CPF</label>
+                  <input id="edit-cpf" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="000.000.000-00" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-habilitacao" class="block font-medium mb-1">Habilitação</label>
+                  <input id="edit-habilitacao" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Número da CNH" />
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-habilitacao-categoria" class="block font-medium mb-1">Categoria</label>
+                  <input id="edit-habilitacao-categoria" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Ex.: B" />
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-habilitacao-orgao" class="block font-medium mb-1">Órgão Emissor</label>
+                  <input id="edit-habilitacao-orgao" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Detran" />
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-habilitacao-validade" class="block font-medium mb-1">Validade</label>
+                  <input id="edit-habilitacao-validade" type="date" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+              </div>
             </div>
             <div class="tab-panel hidden" data-tab-panel="cursos">
               <div class="p-4 rounded-lg bg-emerald-50 text-emerald-700 text-xs">Em desenvolvimento</div>

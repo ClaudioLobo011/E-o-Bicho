@@ -55,6 +55,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const contaInput = document.getElementById('edit-conta');
   const tipoChavePixSelect = document.getElementById('edit-tipo-chave-pix');
   const chavePixInput = document.getElementById('edit-chave-pix');
+  const emissaoRgInput = document.getElementById('edit-emissao-rg');
+  const rgInput = document.getElementById('edit-rg');
+  const rgOrgaoInput = document.getElementById('edit-rg-orgao');
+  const cpfInput = document.getElementById('edit-cpf');
+  const habilitacaoInput = document.getElementById('edit-habilitacao');
+  const habilitacaoCategoriaInput = document.getElementById('edit-habilitacao-categoria');
+  const habilitacaoOrgaoInput = document.getElementById('edit-habilitacao-orgao');
+  const habilitacaoValidadeInput = document.getElementById('edit-habilitacao-validade');
   const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
   const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
 
@@ -100,6 +108,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const digits = onlyDigits(value).slice(0, 8);
     if (digits.length <= 5) return digits;
     return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  }
+
+  function formatCPF(value = '') {
+    const digits = onlyDigits(value).slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) {
+      return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    }
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
   }
 
   function formatPhone(value = '') {
@@ -663,6 +681,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (contaInput) contaInput.value = '';
       if (tipoChavePixSelect) tipoChavePixSelect.value = '';
       if (chavePixInput) chavePixInput.value = '';
+      if (emissaoRgInput) emissaoRgInput.value = '';
+      if (rgInput) rgInput.value = '';
+      if (rgOrgaoInput) rgOrgaoInput.value = '';
+      if (cpfInput) cpfInput.value = '';
+      if (habilitacaoInput) habilitacaoInput.value = '';
+      if (habilitacaoCategoriaInput) habilitacaoCategoriaInput.value = '';
+      if (habilitacaoOrgaoInput) habilitacaoOrgaoInput.value = '';
+      if (habilitacaoValidadeInput) habilitacaoValidadeInput.value = '';
     } else {
       modalTitle.textContent = 'Editar Funcionário';
       inputId.value = data._id;
@@ -705,6 +731,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (contaInput) contaInput.value = data.conta || '';
       if (tipoChavePixSelect) tipoChavePixSelect.value = data.tipoChavePix || '';
       if (chavePixInput) chavePixInput.value = data.chavePix || '';
+      if (emissaoRgInput) emissaoRgInput.value = formatDateForInput(data.rgEmissao);
+      if (rgInput) rgInput.value = data.rgNumero || '';
+      if (rgOrgaoInput) rgOrgaoInput.value = data.rgOrgaoExpedidor || '';
+      if (cpfInput) cpfInput.value = formatCPF(data.cpf || '');
+      if (habilitacaoInput) habilitacaoInput.value = data.habilitacaoNumero || '';
+      if (habilitacaoCategoriaInput) habilitacaoCategoriaInput.value = data.habilitacaoCategoria || '';
+      if (habilitacaoOrgaoInput) habilitacaoOrgaoInput.value = data.habilitacaoOrgaoEmissor || '';
+      if (habilitacaoValidadeInput) habilitacaoValidadeInput.value = formatDateForInput(data.habilitacaoValidade);
     }
 
     if (mode === 'create' && empresaContratualSelect) {
@@ -888,6 +922,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   attachPhoneMask(inputCelular);
   attachPhoneMask(inputTelefone);
+
+  if (cpfInput) {
+    cpfInput.addEventListener('input', (event) => {
+      event.target.value = formatCPF(event.target.value);
+    });
+    cpfInput.addEventListener('blur', (event) => {
+      event.target.value = formatCPF(event.target.value);
+    });
+  }
 
   function getSelectedGrupos() {
     if (!gruposBox) return [];
@@ -1096,6 +1139,41 @@ document.addEventListener('DOMContentLoaded', () => {
     if (chavePixInput) {
       const chavePix = chavePixInput.value.trim();
       payload.chavePix = chavePix || null;
+    }
+    if (emissaoRgInput) {
+      payload.rgEmissao = emissaoRgInput.value || null;
+    }
+    if (rgInput) {
+      const rgNumero = rgInput.value.trim();
+      payload.rgNumero = rgNumero || null;
+    }
+    if (rgOrgaoInput) {
+      const rgOrgao = rgOrgaoInput.value.trim();
+      payload.rgOrgaoExpedidor = rgOrgao || null;
+    }
+    if (cpfInput) {
+      const cpfDigits = onlyDigits(cpfInput.value);
+      if (cpfDigits && cpfDigits.length !== 11) {
+        toastWarn('Informe um CPF válido com 11 dígitos.');
+        cpfInput.focus();
+        return;
+      }
+      payload.cpf = cpfDigits || null;
+    }
+    if (habilitacaoInput) {
+      const habilitacaoNumero = habilitacaoInput.value.trim();
+      payload.habilitacaoNumero = habilitacaoNumero || null;
+    }
+    if (habilitacaoCategoriaInput) {
+      const categoria = habilitacaoCategoriaInput.value.trim();
+      payload.habilitacaoCategoria = categoria || null;
+    }
+    if (habilitacaoOrgaoInput) {
+      const orgao = habilitacaoOrgaoInput.value.trim();
+      payload.habilitacaoOrgaoEmissor = orgao || null;
+    }
+    if (habilitacaoValidadeInput) {
+      payload.habilitacaoValidade = habilitacaoValidadeInput.value || null;
     }
 
     if (inputCelular) {

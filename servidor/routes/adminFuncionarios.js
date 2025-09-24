@@ -67,6 +67,9 @@ function userToDTO(u) {
     grupos: Array.isArray(u.grupos) ? u.grupos : [],
     empresas: Array.isArray(u.empresas) ? u.empresas : [],
     genero: u.genero || '',
+    rgEmissao: u.rgEmissao || null,
+    rgNumero: u.rgNumero || '',
+    rgOrgaoExpedidor: u.rgOrgaoExpedidor || '',
     situacao: u.situacao || 'ativo',
     dataCadastro: u.dataCadastro || u.criadoEm || null,
     criadoEm: u.criadoEm || null,
@@ -79,6 +82,10 @@ function userToDTO(u) {
     exameMedico: u.exameMedico || null,
     dataDemissao: u.dataDemissao || null,
     cargoCarteira: u.cargoCarteira || '',
+    habilitacaoNumero: u.habilitacaoNumero || '',
+    habilitacaoCategoria: u.habilitacaoCategoria || '',
+    habilitacaoOrgaoEmissor: u.habilitacaoOrgaoEmissor || '',
+    habilitacaoValidade: u.habilitacaoValidade || null,
     nomeMae: u.nomeMae || '',
     nascimentoMae: u.nascimentoMae || null,
     nomeConjuge: u.nomeConjuge || '',
@@ -209,7 +216,7 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 
     const ret = await User.findById(
       userId,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
     ).lean();
     res.json({ message: 'Usuário transformado com sucesso.', funcionario: userToDTO(ret) });
   } catch (err) {
@@ -225,7 +232,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const u = await User.findById(
       req.params.id,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
     ).lean();
     if (!u || !['admin_master', 'admin', 'funcionario'].includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
@@ -271,6 +278,23 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
       doc.genero = (req.body.sexo || '').trim();
     }
 
+    if (Object.prototype.hasOwnProperty.call(req.body, 'rgEmissao')) {
+      doc.rgEmissao = parseDate(req.body.rgEmissao);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'rgNumero')) {
+      const rgNumero = (req.body.rgNumero || '').trim();
+      doc.rgNumero = rgNumero || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'rgOrgaoExpedidor')) {
+      const rgOrgao = (req.body.rgOrgaoExpedidor || '').trim();
+      doc.rgOrgaoExpedidor = rgOrgao || null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'cpf')) {
+      const cpfDigits = String(req.body.cpf || '').replace(/\D/g, '');
+      doc.cpf = cpfDigits || null;
+    }
+
     const ALLOWED_GROUPS = ['gerente','vendedor','esteticista','veterinario'];
     let gruposArr = [];
     if (Array.isArray(grupos)) gruposArr = grupos;
@@ -312,6 +336,21 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body, 'cargoCarteira')) {
       const cargo = (req.body.cargoCarteira || '').trim();
       doc.cargoCarteira = cargo || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'habilitacaoNumero')) {
+      const habilitacaoNumero = (req.body.habilitacaoNumero || '').trim();
+      doc.habilitacaoNumero = habilitacaoNumero || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'habilitacaoCategoria')) {
+      const categoria = (req.body.habilitacaoCategoria || '').trim();
+      doc.habilitacaoCategoria = categoria || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'habilitacaoOrgaoEmissor')) {
+      const orgao = (req.body.habilitacaoOrgaoEmissor || '').trim();
+      doc.habilitacaoOrgaoEmissor = orgao || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'habilitacaoValidade')) {
+      doc.habilitacaoValidade = parseDate(req.body.habilitacaoValidade);
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'nomeMae')) {
       const nomeMae = (req.body.nomeMae || '').trim();
@@ -440,6 +479,22 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
 
     if (senha && senha.length >= 8) update.senha = await bcrypt.hash(senha, 10);
 
+    if (Object.prototype.hasOwnProperty.call(req.body, 'rgEmissao')) {
+      update.rgEmissao = parseDate(req.body.rgEmissao);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'rgNumero')) {
+      const rgNumero = (req.body.rgNumero || '').trim();
+      update.rgNumero = rgNumero || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'rgOrgaoExpedidor')) {
+      const rgOrgao = (req.body.rgOrgaoExpedidor || '').trim();
+      update.rgOrgaoExpedidor = rgOrgao || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'cpf')) {
+      const cpfDigits = String(req.body.cpf || '').replace(/\D/g, '');
+      update.cpf = cpfDigits || null;
+    }
+
     if (typeof req.body.genero !== 'undefined') {
       update.genero = (req.body.genero || '').trim();
     } else if (typeof req.body.sexo !== 'undefined') {
@@ -468,6 +523,21 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body, 'cargoCarteira')) {
       const cargo = (req.body.cargoCarteira || '').trim();
       update.cargoCarteira = cargo || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'habilitacaoNumero')) {
+      const habilitacaoNumero = (req.body.habilitacaoNumero || '').trim();
+      update.habilitacaoNumero = habilitacaoNumero || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'habilitacaoCategoria')) {
+      const categoria = (req.body.habilitacaoCategoria || '').trim();
+      update.habilitacaoCategoria = categoria || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'habilitacaoOrgaoEmissor')) {
+      const orgao = (req.body.habilitacaoOrgaoEmissor || '').trim();
+      update.habilitacaoOrgaoEmissor = orgao || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'habilitacaoValidade')) {
+      update.habilitacaoValidade = parseDate(req.body.habilitacaoValidade);
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'nomeMae')) {
       const nomeMae = (req.body.nomeMae || '').trim();
@@ -536,7 +606,7 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
     const updated = await User.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix' }
+      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix' }
     ).lean();
 
     res.json({ message: 'Funcionário atualizado com sucesso.', funcionario: userToDTO(updated) });
