@@ -974,6 +974,45 @@
 
 }
 
+@layer utilities {
+  .max-w-modal-wide {
+    max-width: min(1200px, 96vw);
+  }
+
+  .form-compact {
+    font-size: 0.875rem;
+  }
+
+  .form-compact label {
+    font-size: 0.75rem;
+    color: var(--color-gray-600);
+  }
+
+  .form-compact input,
+  .form-compact select,
+  .form-compact textarea {
+    font-size: 0.875rem;
+  }
+
+  .form-compact .tab-button {
+    font-size: 0.75rem;
+  }
+
+  @media (width >= 48rem) {
+    .md\:col-span-5 {
+      grid-column: span 5 / span 5;
+    }
+
+    .md\:col-span-6 {
+      grid-column: span 6 / span 6;
+    }
+
+    .md\:col-span-9 {
+      grid-column: span 9 / span 9;
+    }
+  }
+}
+
 /* =========================================================
    Agenda (Banho e Tosa) — melhorias visuais
    - largura fixa um pouco maior nos cards

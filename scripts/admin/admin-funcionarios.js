@@ -113,6 +113,37 @@ document.addEventListener('DOMContentLoaded', () => {
     empresaContratualSelect.dataset.selectedValue = value || '';
   }
 
+  function normalizeSexoValue(value) {
+    if (!value) return '';
+    const normalized = String(value)
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+      .trim();
+    if (['masculino', 'm', 'male', 'homem'].includes(normalized)) return 'masculino';
+    if (['feminino', 'f', 'female', 'mulher'].includes(normalized)) return 'feminino';
+    if (
+      [
+        'nao_informar',
+        'naoinformar',
+        'nao informar',
+        'nao informado',
+        'nao declarado',
+        'prefere nao dizer',
+        'prefere nao informar',
+        'prefere_nao_dizer',
+        'na',
+        'n/a',
+        'indefinido',
+      ].includes(normalized)
+    ) {
+      return 'nao_informar';
+    }
+    if (['masculina', 'masculine'].includes(normalized)) return 'masculino';
+    if (['feminina', 'feminine'].includes(normalized)) return 'feminino';
+    return '';
+  }
+
   function normalizeEndereco(item = {}) {
     return {
       cep: item.cep || '',
@@ -137,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderEnderecosList() {
     if (!listaEnderecos) return;
     if (!Array.isArray(enderecos) || enderecos.length === 0) {
-      listaEnderecos.innerHTML = '<p class="text-sm text-gray-500">Nenhum endereço cadastrado.</p>';
+      listaEnderecos.innerHTML = '<p class="text-xs text-gray-500">Nenhum endereço cadastrado.</p>';
       return;
     }
     const cards = enderecos.map((item, index) => {
@@ -146,15 +177,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const linha3 = [item.bairro, item.cidade].filter(Boolean).join(' - ');
       const cep = item.cep ? `CEP: ${item.cep}` : '';
       return `
-        <div class="border rounded-lg px-4 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3" data-endereco-index="${index}">
-          <div class="text-sm text-gray-700">
+        <div class="border rounded-lg px-3 py-2 flex flex-col md:flex-row md:items-center md:justify-between gap-2" data-endereco-index="${index}">
+          <div class="text-xs text-gray-700">
             <p class="font-semibold">${titulo}</p>
             ${linha2 ? `<p class="text-gray-600">${linha2}</p>` : ''}
             ${linha3 ? `<p class="text-gray-600">${linha3}</p>` : ''}
             ${cep ? `<p class="text-gray-500 text-xs">${cep}</p>` : ''}
           </div>
           <div class="flex justify-end">
-            <button type="button" class="text-sm font-medium text-red-600 hover:text-red-800" data-remove-endereco="${index}">Remover</button>
+            <button type="button" class="text-xs font-medium text-red-600 hover:text-red-800" data-remove-endereco="${index}">Remover</button>
           </div>
         </div>
       `;
@@ -291,7 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const codigoValor = data?.codigo || data?.codigoFuncionario || data?.matricula || data?._id || '';
     const dataCadastroValor = data?.dataCadastro || data?.createdAt || '';
     const situacaoValor = data?.situacao || 'ativo';
-    const sexoValor = data?.sexo || '';
+    const sexoValor = normalizeSexoValue(data?.sexo);
     const empresaContratualValor = data?.empresaContratual || data?.empresaContratualId || '';
     const empresaContratualLabel = data?.empresaContratualNome || '';
 
