@@ -14,6 +14,36 @@ function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function parseDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function parseNumber(value, { allowFloat = false, min = null } = {}) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    if (min !== null && value < min) return null;
+    return value;
+  }
+  const normalized = String(value).trim().replace(',', '.');
+  if (!normalized) return null;
+  const parsed = allowFloat ? Number.parseFloat(normalized) : Number.parseInt(normalized, 10);
+  if (!Number.isFinite(parsed)) return null;
+  if (min !== null && parsed < min) return null;
+  return parsed;
+}
+
+function parseEnum(value, allowed = []) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const normalized = String(value).trim().toLowerCase();
+  return allowed.includes(normalized) ? normalized : null;
+}
+
 function normName(u) {
   return (
     (u.nomeCompleto && String(u.nomeCompleto).trim()) ||
@@ -40,6 +70,23 @@ function userToDTO(u) {
     situacao: u.situacao || 'ativo',
     dataCadastro: u.dataCadastro || u.criadoEm || null,
     criadoEm: u.criadoEm || null,
+    periodoExperienciaInicio: u.periodoExperienciaInicio || null,
+    periodoExperienciaFim: u.periodoExperienciaFim || null,
+    dataAdmissao: u.dataAdmissao || null,
+    diasProrrogacaoExperiencia: typeof u.diasProrrogacaoExperiencia === 'number'
+      ? u.diasProrrogacaoExperiencia
+      : null,
+    exameMedico: u.exameMedico || null,
+    dataDemissao: u.dataDemissao || null,
+    cargoCarteira: u.cargoCarteira || '',
+    nomeMae: u.nomeMae || '',
+    nascimentoMae: u.nascimentoMae || null,
+    nomeConjuge: u.nomeConjuge || '',
+    formaPagamento: u.formaPagamento || '',
+    tipoContrato: u.tipoContrato || '',
+    salarioContratual: typeof u.salarioContratual === 'number' ? u.salarioContratual : null,
+    horasSemanais: typeof u.horasSemanais === 'number' ? u.horasSemanais : null,
+    horasMensais: typeof u.horasMensais === 'number' ? u.horasMensais : null,
   };
 }
 
@@ -69,7 +116,7 @@ router.get('/', authMiddleware, requireAdmin, async (req, res) => {
     const users = await User
       .find(
         { role: { $in: ['admin_master', 'admin', 'funcionario'] } },
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais'
       )
       .lean();
 
@@ -119,7 +166,7 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
     const users = await User
       .find(
         filter,
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero situacao criadoEm dataCadastro'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais'
       )
       .sort({ createdAt: -1 })
       .limit(lim)
@@ -154,7 +201,7 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 
     const ret = await User.findById(
       userId,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais'
     ).lean();
     res.json({ message: 'Usuário transformado com sucesso.', funcionario: userToDTO(ret) });
   } catch (err) {
@@ -170,7 +217,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const u = await User.findById(
       req.params.id,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais'
     ).lean();
     if (!u || !['admin_master', 'admin', 'funcionario'].includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
@@ -234,6 +281,61 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
       empresasArr = empresasArr.filter(id => foundIds.has(String(id)));
     }
     doc.empresas = empresasArr;
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'periodoExperienciaInicio')) {
+      doc.periodoExperienciaInicio = parseDate(req.body.periodoExperienciaInicio);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'periodoExperienciaFim')) {
+      doc.periodoExperienciaFim = parseDate(req.body.periodoExperienciaFim);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'dataAdmissao')) {
+      doc.dataAdmissao = parseDate(req.body.dataAdmissao);
+    }
+    const diasProrrogacao = parseNumber(req.body.diasProrrogacaoExperiencia, { min: 0 });
+    if (diasProrrogacao !== undefined) {
+      doc.diasProrrogacaoExperiencia = diasProrrogacao;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'exameMedico')) {
+      doc.exameMedico = parseDate(req.body.exameMedico);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'dataDemissao')) {
+      doc.dataDemissao = parseDate(req.body.dataDemissao);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'cargoCarteira')) {
+      const cargo = (req.body.cargoCarteira || '').trim();
+      doc.cargoCarteira = cargo || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'nomeMae')) {
+      const nomeMae = (req.body.nomeMae || '').trim();
+      doc.nomeMae = nomeMae || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'nascimentoMae')) {
+      doc.nascimentoMae = parseDate(req.body.nascimentoMae);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'nomeConjuge')) {
+      const nomeConjuge = (req.body.nomeConjuge || '').trim();
+      doc.nomeConjuge = nomeConjuge || null;
+    }
+    const formaPagamento = parseEnum(req.body.formaPagamento, ['mensal', 'quinzenal', 'semanal', 'diaria']);
+    if (formaPagamento !== undefined) {
+      doc.formaPagamento = formaPagamento;
+    }
+    const tipoContrato = parseEnum(req.body.tipoContrato, ['clt', 'mei', 'estagiario', 'temporario', 'avulso']);
+    if (tipoContrato !== undefined) {
+      doc.tipoContrato = tipoContrato;
+    }
+    const salarioContratual = parseNumber(req.body.salarioContratual, { allowFloat: true, min: 0 });
+    if (salarioContratual !== undefined) {
+      doc.salarioContratual = salarioContratual;
+    }
+    const horasSemanais = parseNumber(req.body.horasSemanais, { allowFloat: true, min: 0 });
+    if (horasSemanais !== undefined) {
+      doc.horasSemanais = horasSemanais;
+    }
+    const horasMensais = parseNumber(req.body.horasMensais, { allowFloat: true, min: 0 });
+    if (horasMensais !== undefined) {
+      doc.horasMensais = horasMensais;
+    }
 
     const novo = await User.create(doc);
     res.status(201).json({ message: 'Funcionário criado com sucesso.', id: novo._id });
@@ -304,10 +406,65 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
       update.genero = (req.body.sexo || '').trim();
     }
 
+    if (Object.prototype.hasOwnProperty.call(req.body, 'periodoExperienciaInicio')) {
+      update.periodoExperienciaInicio = parseDate(req.body.periodoExperienciaInicio);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'periodoExperienciaFim')) {
+      update.periodoExperienciaFim = parseDate(req.body.periodoExperienciaFim);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'dataAdmissao')) {
+      update.dataAdmissao = parseDate(req.body.dataAdmissao);
+    }
+    const diasProrrogacao = parseNumber(req.body.diasProrrogacaoExperiencia, { min: 0 });
+    if (diasProrrogacao !== undefined) {
+      update.diasProrrogacaoExperiencia = diasProrrogacao;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'exameMedico')) {
+      update.exameMedico = parseDate(req.body.exameMedico);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'dataDemissao')) {
+      update.dataDemissao = parseDate(req.body.dataDemissao);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'cargoCarteira')) {
+      const cargo = (req.body.cargoCarteira || '').trim();
+      update.cargoCarteira = cargo || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'nomeMae')) {
+      const nomeMae = (req.body.nomeMae || '').trim();
+      update.nomeMae = nomeMae || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'nascimentoMae')) {
+      update.nascimentoMae = parseDate(req.body.nascimentoMae);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'nomeConjuge')) {
+      const nomeConjuge = (req.body.nomeConjuge || '').trim();
+      update.nomeConjuge = nomeConjuge || null;
+    }
+    const formaPagamento = parseEnum(req.body.formaPagamento, ['mensal', 'quinzenal', 'semanal', 'diaria']);
+    if (formaPagamento !== undefined) {
+      update.formaPagamento = formaPagamento;
+    }
+    const tipoContrato = parseEnum(req.body.tipoContrato, ['clt', 'mei', 'estagiario', 'temporario', 'avulso']);
+    if (tipoContrato !== undefined) {
+      update.tipoContrato = tipoContrato;
+    }
+    const salarioContratual = parseNumber(req.body.salarioContratual, { allowFloat: true, min: 0 });
+    if (salarioContratual !== undefined) {
+      update.salarioContratual = salarioContratual;
+    }
+    const horasSemanais = parseNumber(req.body.horasSemanais, { allowFloat: true, min: 0 });
+    if (horasSemanais !== undefined) {
+      update.horasSemanais = horasSemanais;
+    }
+    const horasMensais = parseNumber(req.body.horasMensais, { allowFloat: true, min: 0 });
+    if (horasMensais !== undefined) {
+      update.horasMensais = horasMensais;
+    }
+
     const updated = await User.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro' }
+      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais' }
     ).lean();
 
     res.json({ message: 'Funcionário atualizado com sucesso.', funcionario: userToDTO(updated) });

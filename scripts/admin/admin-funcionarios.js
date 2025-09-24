@@ -32,6 +32,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const enderecoApelido = document.getElementById('edit-endereco-apelido');
   const btnAddEndereco = document.getElementById('btn-add-endereco');
   const listaEnderecos = document.getElementById('lista-enderecos');
+  const periodoExperienciaInicioInput = document.getElementById('edit-periodo-experiencia-inicio');
+  const periodoExperienciaFimInput = document.getElementById('edit-periodo-experiencia-fim');
+  const dataAdmissaoInput = document.getElementById('edit-data-admissao');
+  const diasProrrogacaoInput = document.getElementById('edit-dias-prorrogacao');
+  const exameMedicoInput = document.getElementById('edit-exame-medico');
+  const dataDemissaoInput = document.getElementById('edit-data-demissao');
+  const cargoCarteiraInput = document.getElementById('edit-cargo-carteira');
+  const salarioContratualInput = document.getElementById('edit-salario-contratual');
+  const nomeMaeInput = document.getElementById('edit-nome-mae');
+  const nascimentoMaeInput = document.getElementById('edit-nascimento-mae');
+  const nomeConjugeInput = document.getElementById('edit-nome-conjuge');
+  const formaPagamentoSelect = document.getElementById('edit-forma-pagamento');
+  const tipoContratoSelect = document.getElementById('edit-tipo-contrato');
+  const horasSemanaisInput = document.getElementById('edit-horas-semanais');
+  const horasMensaisInput = document.getElementById('edit-horas-mensais');
   const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
   const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
 
@@ -179,6 +194,25 @@ document.addEventListener('DOMContentLoaded', () => {
       inputDataCadastro.dataset.originalValue = '';
       inputDataCadastro.dataset.hasValue = 'false';
     }
+  }
+
+  function formatDateForInput(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function parseNumberValue(raw, allowFloat = false) {
+    if (raw === null || raw === undefined) return null;
+    const trimmed = String(raw).trim();
+    if (!trimmed) return null;
+    const normalized = trimmed.replace(',', '.');
+    const value = allowFloat ? Number.parseFloat(normalized) : Number.parseInt(normalized, 10);
+    return Number.isFinite(value) ? value : null;
   }
 
   function setEmpresaContratualValue(value, label = 'Empresa selecionada') {
@@ -598,6 +632,21 @@ document.addEventListener('DOMContentLoaded', () => {
       setEmpresasSelected([]);
       enderecos = [];
       enderecoEditandoIndex = null;
+      if (periodoExperienciaInicioInput) periodoExperienciaInicioInput.value = '';
+      if (periodoExperienciaFimInput) periodoExperienciaFimInput.value = '';
+      if (dataAdmissaoInput) dataAdmissaoInput.value = '';
+      if (diasProrrogacaoInput) diasProrrogacaoInput.value = '';
+      if (exameMedicoInput) exameMedicoInput.value = '';
+      if (dataDemissaoInput) dataDemissaoInput.value = '';
+      if (cargoCarteiraInput) cargoCarteiraInput.value = '';
+      if (salarioContratualInput) salarioContratualInput.value = '';
+      if (nomeMaeInput) nomeMaeInput.value = '';
+      if (nascimentoMaeInput) nascimentoMaeInput.value = '';
+      if (nomeConjugeInput) nomeConjugeInput.value = '';
+      if (formaPagamentoSelect) formaPagamentoSelect.value = '';
+      if (tipoContratoSelect) tipoContratoSelect.value = '';
+      if (horasSemanaisInput) horasSemanaisInput.value = '';
+      if (horasMensaisInput) horasMensaisInput.value = '';
     } else {
       modalTitle.textContent = 'Editar Funcionário';
       inputId.value = data._id;
@@ -617,6 +666,21 @@ document.addEventListener('DOMContentLoaded', () => {
       setEmpresasSelected(Array.isArray(data.empresas) ? data.empresas : []);
       enderecos = Array.isArray(data.enderecos) ? data.enderecos.map(normalizeEndereco) : [];
       enderecoEditandoIndex = null;
+      if (periodoExperienciaInicioInput) periodoExperienciaInicioInput.value = formatDateForInput(data.periodoExperienciaInicio);
+      if (periodoExperienciaFimInput) periodoExperienciaFimInput.value = formatDateForInput(data.periodoExperienciaFim);
+      if (dataAdmissaoInput) dataAdmissaoInput.value = formatDateForInput(data.dataAdmissao);
+      if (diasProrrogacaoInput) diasProrrogacaoInput.value = data.diasProrrogacaoExperiencia ?? '';
+      if (exameMedicoInput) exameMedicoInput.value = formatDateForInput(data.exameMedico);
+      if (dataDemissaoInput) dataDemissaoInput.value = formatDateForInput(data.dataDemissao);
+      if (cargoCarteiraInput) cargoCarteiraInput.value = data.cargoCarteira || '';
+      if (salarioContratualInput) salarioContratualInput.value = typeof data.salarioContratual === 'number' ? data.salarioContratual : (data.salarioContratual || '');
+      if (nomeMaeInput) nomeMaeInput.value = data.nomeMae || '';
+      if (nascimentoMaeInput) nascimentoMaeInput.value = formatDateForInput(data.nascimentoMae);
+      if (nomeConjugeInput) nomeConjugeInput.value = data.nomeConjuge || '';
+      if (formaPagamentoSelect) formaPagamentoSelect.value = data.formaPagamento || '';
+      if (tipoContratoSelect) tipoContratoSelect.value = data.tipoContrato || '';
+      if (horasSemanaisInput) horasSemanaisInput.value = typeof data.horasSemanais === 'number' ? data.horasSemanais : (data.horasSemanais || '');
+      if (horasMensaisInput) horasMensaisInput.value = typeof data.horasMensais === 'number' ? data.horasMensais : (data.horasMensais || '');
     }
 
     if (mode === 'create' && empresaContratualSelect) {
@@ -932,6 +996,55 @@ document.addEventListener('DOMContentLoaded', () => {
       grupos: getSelectedGrupos(),
       empresas: getSelectedEmpresas(),
     };
+
+    if (periodoExperienciaInicioInput) {
+      payload.periodoExperienciaInicio = periodoExperienciaInicioInput.value || null;
+    }
+    if (periodoExperienciaFimInput) {
+      payload.periodoExperienciaFim = periodoExperienciaFimInput.value || null;
+    }
+    if (dataAdmissaoInput) {
+      payload.dataAdmissao = dataAdmissaoInput.value || null;
+    }
+    if (diasProrrogacaoInput) {
+      payload.diasProrrogacaoExperiencia = parseNumberValue(diasProrrogacaoInput.value, false);
+    }
+    if (exameMedicoInput) {
+      payload.exameMedico = exameMedicoInput.value || null;
+    }
+    if (dataDemissaoInput) {
+      payload.dataDemissao = dataDemissaoInput.value || null;
+    }
+    if (cargoCarteiraInput) {
+      const cargoCarteira = cargoCarteiraInput.value.trim();
+      payload.cargoCarteira = cargoCarteira || null;
+    }
+    if (salarioContratualInput) {
+      payload.salarioContratual = parseNumberValue(salarioContratualInput.value, true);
+    }
+    if (nomeMaeInput) {
+      const nomeMae = nomeMaeInput.value.trim();
+      payload.nomeMae = nomeMae || null;
+    }
+    if (nascimentoMaeInput) {
+      payload.nascimentoMae = nascimentoMaeInput.value || null;
+    }
+    if (nomeConjugeInput) {
+      const nomeConjuge = nomeConjugeInput.value.trim();
+      payload.nomeConjuge = nomeConjuge || null;
+    }
+    if (formaPagamentoSelect) {
+      payload.formaPagamento = formaPagamentoSelect.value || null;
+    }
+    if (tipoContratoSelect) {
+      payload.tipoContrato = tipoContratoSelect.value || null;
+    }
+    if (horasSemanaisInput) {
+      payload.horasSemanais = parseNumberValue(horasSemanaisInput.value, true);
+    }
+    if (horasMensaisInput) {
+      payload.horasMensais = parseNumberValue(horasMensaisInput.value, true);
+    }
 
     if (inputCelular) {
       const celularDigits = onlyDigits(inputCelular.value);

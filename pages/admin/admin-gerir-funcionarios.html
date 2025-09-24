@@ -216,8 +216,97 @@
                 </div>
               </div>
             </div>
-            <div class="tab-panel hidden" data-tab-panel="dados-complementares">
-              <div class="p-4 rounded-lg bg-emerald-50 text-emerald-700 text-xs">Em desenvolvimento</div>
+            <div class="tab-panel hidden space-y-3" data-tab-panel="dados-complementares">
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-4">
+                  <label for="edit-periodo-experiencia-inicio" class="block font-medium mb-1">Período de Experiência (Início)</label>
+                  <input id="edit-periodo-experiencia-inicio" type="date" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div class="col-span-12 md:col-span-4">
+                  <label for="edit-periodo-experiencia-fim" class="block font-medium mb-1">Período de Experiência (Fim)</label>
+                  <input id="edit-periodo-experiencia-fim" type="date" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div class="col-span-12 md:col-span-4">
+                  <label for="edit-data-admissao" class="block font-medium mb-1">Data de Admissão</label>
+                  <input id="edit-data-admissao" type="date" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-4">
+                  <label for="edit-dias-prorrogacao" class="block font-medium mb-1">Dias de Prorrogação de Experiência</label>
+                  <input id="edit-dias-prorrogacao" type="number" min="0" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
+                </div>
+                <div class="col-span-12 md:col-span-4">
+                  <label for="edit-exame-medico" class="block font-medium mb-1">Exame Médico</label>
+                  <input id="edit-exame-medico" type="date" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div class="col-span-12 md:col-span-4">
+                  <label for="edit-data-demissao" class="block font-medium mb-1">Data de Demissão</label>
+                  <input id="edit-data-demissao" type="date" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-cargo-carteira" class="block font-medium mb-1">Cargo Carteira</label>
+                  <input id="edit-cargo-carteira" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Cargo registrado" />
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-salario-contratual" class="block font-medium mb-1">Salário Contratual</label>
+                  <input id="edit-salario-contratual" type="number" min="0" step="0.01" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0,00" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-4">
+                  <label for="edit-nome-mae" class="block font-medium mb-1">Nome da Mãe</label>
+                  <input id="edit-nome-mae" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div class="col-span-12 md:col-span-4">
+                  <label for="edit-nascimento-mae" class="block font-medium mb-1">Nascimento da Mãe</label>
+                  <input id="edit-nascimento-mae" type="date" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div class="col-span-12 md:col-span-4">
+                  <label for="edit-nome-conjuge" class="block font-medium mb-1">Nome do Cônjuge</label>
+                  <input id="edit-nome-conjuge" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-forma-pagamento" class="block font-medium mb-1">Forma de Pagamento</label>
+                  <select id="edit-forma-pagamento" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Selecione</option>
+                    <option value="mensal">Mensal</option>
+                    <option value="quinzenal">Quinzenal</option>
+                    <option value="semanal">Semanal</option>
+                    <option value="diaria">Diária</option>
+                  </select>
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-tipo-contrato" class="block font-medium mb-1">Tipo de Contrato</label>
+                  <select id="edit-tipo-contrato" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Selecione</option>
+                    <option value="clt">CLT</option>
+                    <option value="mei">MEI</option>
+                    <option value="estagiario">Estagiário</option>
+                    <option value="temporario">Temporário</option>
+                    <option value="avulso">Avulso</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-horas-semanais" class="block font-medium mb-1">Horas Semanais</label>
+                  <input id="edit-horas-semanais" type="number" min="0" step="0.1" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-horas-mensais" class="block font-medium mb-1">Horas Mensais</label>
+                  <input id="edit-horas-mensais" type="number" min="0" step="0.1" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
+                </div>
+              </div>
             </div>
             <div class="tab-panel hidden" data-tab-panel="informacoes-gerais">
               <div class="p-4 rounded-lg bg-emerald-50 text-emerald-700 text-xs">Em desenvolvimento</div>
