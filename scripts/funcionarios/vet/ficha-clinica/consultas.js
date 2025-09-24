@@ -402,7 +402,14 @@ export async function loadWaitingAppointments(options = {}) {
     }
 
     const data = Array.isArray(payload) ? payload : [];
-    const normalized = data.map(normalizeWaitingAppointment).filter(Boolean);
+    const normalized = data
+      .map(normalizeWaitingAppointment)
+      .filter(Boolean)
+      .map((appointment) => {
+        const vetServices = getVetServices(appointment?.servicos);
+        return { ...appointment, vetServices };
+      })
+      .filter((appointment) => Array.isArray(appointment.vetServices) && appointment.vetServices.length > 0);
     normalized.sort((a, b) => {
       const aTime = a?.scheduledAt ? new Date(a.scheduledAt).getTime() : 0;
       const bTime = b?.scheduledAt ? new Date(b.scheduledAt).getTime() : 0;
@@ -551,10 +558,17 @@ function createWaitingAppointmentItem(appointment) {
   const appointmentId = normalizeId(appointment.appointmentId || appointment.id || appointment._id);
   if (!appointmentId) return null;
 
-  const services = Array.isArray(appointment.servicos) ? appointment.servicos : [];
-  const servicesTotal = services.reduce((sum, svc) => sum + Number(svc?.valor || 0), 0);
-  const totalValue = Number(appointment.valor);
-  const displayTotal = Number.isFinite(totalValue) && totalValue > 0 ? totalValue : servicesTotal;
+  const allServices = Array.isArray(appointment.servicos) ? appointment.servicos : [];
+  const vetServices = Array.isArray(appointment.vetServices)
+    ? appointment.vetServices.filter(Boolean)
+    : getVetServices(allServices);
+  if (!vetServices.length) return null;
+
+  const servicesTotal = vetServices.reduce((sum, svc) => sum + Number(svc?.valor || 0), 0);
+  const appointmentTotal = Number(appointment.valor);
+  const displayTotal = servicesTotal > 0
+    ? servicesTotal
+    : (Number.isFinite(appointmentTotal) && appointmentTotal > 0 ? appointmentTotal : 0);
 
   const item = document.createElement('div');
   item.className = 'rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-2';
@@ -581,11 +595,21 @@ function createWaitingAppointmentItem(appointment) {
     info.appendChild(profEl);
   }
 
-  if (services.length) {
+  if (vetServices.length) {
     const servicesEl = document.createElement('p');
     servicesEl.className = 'text-xs text-amber-800';
-    servicesEl.textContent = `Serviços: ${services.map((svc) => pickFirst(svc?.nome, svc?.descricao, svc?.label) || 'Serviço').join(', ')}`;
+    servicesEl.textContent = `Serviços veterinários: ${vetServices
+      .map((svc) => pickFirst(svc?.nome, svc?.descricao, svc?.label) || 'Serviço')
+      .join(', ')}`;
     info.appendChild(servicesEl);
+  }
+
+  const hiddenCount = Math.max(allServices.length - vetServices.length, 0);
+  if (hiddenCount > 0) {
+    const hiddenEl = document.createElement('p');
+    hiddenEl.className = 'text-[11px] text-amber-700';
+    hiddenEl.textContent = `${hiddenCount} serviço(s) de outras categorias foram ocultados.`;
+    info.appendChild(hiddenEl);
   }
 
   const actions = document.createElement('div');
