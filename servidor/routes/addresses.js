@@ -4,6 +4,12 @@ const mongoose = require('mongoose');
 const UserAddress = require('../models/UserAddress');
 const requireAuth = require('../middlewares/requireAuth');
 
+function canManageOtherAddresses(user, ownerId) {
+  if (!user) return false;
+  if (user.id === String(ownerId)) return true;
+  return user.role === 'admin_master' || user.role === 'admin';
+}
+
 // GET /api/addresses/:userId -> lista endereços do usuário
 router.get('/:userId', requireAuth, async (req, res) => {
   try {
@@ -13,8 +19,8 @@ router.get('/:userId', requireAuth, async (req, res) => {
       return res.status(400).json({ message: 'userId inválido' });
     }
 
-    // só o próprio usuário ou admin_master pode acessar
-    if (req.user.id !== userId && req.user.role !== 'admin_master') {
+    // só o próprio usuário ou administradores podem acessar
+    if (!canManageOtherAddresses(req.user, userId)) {
       return res.status(403).json({ message: 'Acesso negado' });
     }
 
@@ -38,8 +44,8 @@ router.post('/', requireAuth, async (req, res) => {
       return res.status(400).json({ message: 'userId inválido' });
     }
 
-    // só o próprio usuário ou admin_master pode criar
-    if (req.user.id !== userId && req.user.role !== 'admin_master') {
+    // só o próprio usuário ou administradores podem criar
+    if (!canManageOtherAddresses(req.user, userId)) {
       return res.status(403).json({ message: 'Acesso negado' });
     }
 
@@ -87,6 +93,87 @@ router.post('/', requireAuth, async (req, res) => {
     res.status(201).json(addr);
   } catch (err) {
     console.error('Erro ao criar endereço:', err);
+    res.status(500).json({ message: 'Erro no servidor' });
+  }
+});
+
+// PUT /api/addresses/:id -> atualiza um endereço existente
+router.put('/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Endereço inválido' });
+    }
+
+    const addr = await UserAddress.findById(id);
+    if (!addr) {
+      return res.status(404).json({ message: 'Endereço não encontrado' });
+    }
+
+    if (!canManageOtherAddresses(req.user, addr.user)) {
+      return res.status(403).json({ message: 'Acesso negado' });
+    }
+
+    const {
+      apelido,
+      cep,
+      logradouro,
+      numero,
+      complemento,
+      bairro,
+      cidade,
+      uf,
+      ibge,
+      isDefault,
+    } = req.body || {};
+
+    if (typeof apelido !== 'undefined') addr.apelido = (apelido || 'Principal').trim();
+    if (typeof cep !== 'undefined') addr.cep = cep;
+    if (typeof logradouro !== 'undefined') addr.logradouro = logradouro || '';
+    if (typeof numero !== 'undefined') addr.numero = numero || '';
+    if (typeof complemento !== 'undefined') addr.complemento = complemento || '';
+    if (typeof bairro !== 'undefined') addr.bairro = bairro || '';
+    if (typeof cidade !== 'undefined') addr.cidade = cidade || '';
+    if (typeof uf !== 'undefined') addr.uf = uf || '';
+    if (typeof ibge !== 'undefined') addr.ibge = ibge || '';
+
+    if (typeof isDefault === 'boolean') {
+      if (isDefault) {
+        await UserAddress.updateMany({ user: addr.user, _id: { $ne: addr._id } }, { $set: { isDefault: false } });
+      }
+      addr.isDefault = isDefault;
+    }
+
+    await addr.save();
+    const refreshed = await UserAddress.findById(id);
+    res.json(refreshed);
+  } catch (err) {
+    console.error('Erro ao atualizar endereço:', err);
+    res.status(500).json({ message: 'Erro no servidor' });
+  }
+});
+
+// DELETE /api/addresses/:id -> remove um endereço
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Endereço inválido' });
+    }
+
+    const addr = await UserAddress.findById(id);
+    if (!addr) {
+      return res.status(404).json({ message: 'Endereço não encontrado' });
+    }
+
+    if (!canManageOtherAddresses(req.user, addr.user)) {
+      return res.status(403).json({ message: 'Acesso negado' });
+    }
+
+    await addr.deleteOne();
+    res.json({ message: 'Endereço removido com sucesso.' });
+  } catch (err) {
+    console.error('Erro ao remover endereço:', err);
     res.status(500).json({ message: 'Erro no servidor' });
   }
 });

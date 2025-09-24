@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const enderecoComplemento = document.getElementById('edit-endereco-complemento');
   const enderecoBairro = document.getElementById('edit-endereco-bairro');
   const enderecoCidade = document.getElementById('edit-endereco-cidade');
+  const enderecoApelido = document.getElementById('edit-endereco-apelido');
   const btnAddEndereco = document.getElementById('btn-add-endereco');
   const listaEnderecos = document.getElementById('lista-enderecos');
   const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
@@ -61,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const roleRank = { cliente: 0, funcionario: 1, admin: 2, admin_master: 3 };
   let enderecos = [];
   let empresasDisponiveis = [];
+  let enderecoEditandoIndex = null;
 
   function formatDateDisplay(value) {
     if (!value) return '';
@@ -146,12 +148,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function normalizeEndereco(item = {}) {
     return {
+      _id: item._id || item.id || null,
       cep: item.cep || '',
       logradouro: item.logradouro || item.endereco || '',
       numero: item.numero || '',
       complemento: item.complemento || '',
       bairro: item.bairro || '',
       cidade: item.cidade || '',
+      apelido: item.apelido || '',
+      isDefault: item.isDefault === true,
     };
   }
 
@@ -163,6 +168,9 @@ document.addEventListener('DOMContentLoaded', () => {
     enderecoComplemento.value = '';
     enderecoBairro.value = '';
     enderecoCidade.value = '';
+    if (enderecoApelido) enderecoApelido.value = 'Principal';
+    enderecoEditandoIndex = null;
+    updateEnderecoButtonLabel();
   }
 
   function renderEnderecosList() {
@@ -172,25 +180,84 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const cards = enderecos.map((item, index) => {
-      const titulo = item.logradouro || '-';
+      const titulo = item.apelido || item.logradouro || '-';
       const linha2 = [item.numero, item.complemento].filter(Boolean).join(' • ');
       const linha3 = [item.bairro, item.cidade].filter(Boolean).join(' - ');
       const cep = item.cep ? `CEP: ${item.cep}` : '';
+      const badge = item.isDefault ? '<span class="ml-2 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full uppercase">Principal</span>' : '';
       return `
         <div class="border rounded-lg px-3 py-2 flex flex-col md:flex-row md:items-center md:justify-between gap-2" data-endereco-index="${index}">
           <div class="text-xs text-gray-700">
-            <p class="font-semibold">${titulo}</p>
+            <p class="font-semibold flex items-center gap-1">${titulo}${badge}</p>
             ${linha2 ? `<p class="text-gray-600">${linha2}</p>` : ''}
             ${linha3 ? `<p class="text-gray-600">${linha3}</p>` : ''}
             ${cep ? `<p class="text-gray-500 text-xs">${cep}</p>` : ''}
           </div>
-          <div class="flex justify-end">
-            <button type="button" class="text-xs font-medium text-red-600 hover:text-red-800" data-remove-endereco="${index}">Remover</button>
+          <div class="flex justify-end gap-3">
+            <button type="button" class="text-xs font-medium text-emerald-600 hover:text-emerald-800" data-edit-endereco="${index}">Editar</button>
+            <button type="button" class="text-xs font-medium text-red-600 hover:text-red-800" data-remove-endereco="${index}">Excluir</button>
           </div>
         </div>
       `;
     }).join('');
     listaEnderecos.innerHTML = cards;
+  }
+
+  function updateEnderecoButtonLabel() {
+    if (!btnAddEndereco) return;
+    btnAddEndereco.textContent = enderecoEditandoIndex !== null ? 'Salvar alterações' : 'Adicionar endereço';
+  }
+
+  function preencherEnderecoForm(item = {}) {
+    if (!enderecoCep) return;
+    enderecoCep.value = item.cep || '';
+    enderecoLogradouro.value = item.logradouro || '';
+    enderecoNumero.value = item.numero || '';
+    enderecoComplemento.value = item.complemento || '';
+    enderecoBairro.value = item.bairro || '';
+    enderecoCidade.value = item.cidade || '';
+    if (enderecoApelido) enderecoApelido.value = item.apelido || '';
+  }
+
+  async function carregarEnderecosFuncionario(userId) {
+    if (!listaEnderecos) return;
+    if (!userId) {
+      renderEnderecosList();
+      return;
+    }
+    listaEnderecos.innerHTML = '<p class="text-xs text-gray-500">Carregando endereços cadastrados...</p>';
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/addresses/${userId}`, { headers: headers() });
+      if (!res.ok) throw new Error('Falha ao carregar endereços');
+      const data = await res.json();
+      enderecos = Array.isArray(data) ? data.map(normalizeEndereco) : [];
+      renderEnderecosList();
+    } catch (err) {
+      console.error(err);
+      listaEnderecos.innerHTML = '<p class="text-xs text-red-600">Não foi possível carregar os endereços.</p>';
+    }
+  }
+
+  async function salvarEnderecoRemoto(userId, payload, enderecoId = null) {
+    if (!userId) return null;
+    const body = JSON.stringify({ ...payload, userId });
+    const url = enderecoId ? `${API_CONFIG.BASE_URL}/addresses/${enderecoId}` : `${API_CONFIG.BASE_URL}/addresses`;
+    const method = enderecoId ? 'PUT' : 'POST';
+    const res = await fetch(url, { method, headers: headers(), body });
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '');
+      throw new Error(errorBody || 'Falha ao salvar endereço');
+    }
+    return res.json().catch(() => null);
+  }
+
+  async function removerEnderecoRemoto(enderecoId) {
+    if (!enderecoId) return;
+    const res = await fetch(`${API_CONFIG.BASE_URL}/addresses/${enderecoId}`, { method: 'DELETE', headers: headers() });
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => '');
+      throw new Error(errorBody || 'Falha ao remover endereço');
+    }
   }
 
   function activateTab(target) {
@@ -213,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   activateTab('dados');
 
-  btnAddEndereco?.addEventListener('click', () => {
+  btnAddEndereco?.addEventListener('click', async () => {
     const novo = normalizeEndereco({
       cep: (enderecoCep?.value || '').trim(),
       logradouro: (enderecoLogradouro?.value || '').trim(),
@@ -221,23 +288,79 @@ document.addEventListener('DOMContentLoaded', () => {
       complemento: (enderecoComplemento?.value || '').trim(),
       bairro: (enderecoBairro?.value || '').trim(),
       cidade: (enderecoCidade?.value || '').trim(),
+      apelido: (enderecoApelido?.value || '').trim(),
     });
     if (!novo.logradouro) {
       toastWarn('Informe ao menos o endereço para adicionar.');
       return;
     }
-    enderecos.push(novo);
-    renderEnderecosList();
-    clearEnderecoForm();
+    const funcionarioId = (inputId?.value || '').trim();
+    const editing = typeof enderecoEditandoIndex === 'number' && enderecos[enderecoEditandoIndex];
+
+    try {
+      if (funcionarioId) {
+        const targetId = editing ? enderecos[enderecoEditandoIndex]._id : null;
+        await salvarEnderecoRemoto(funcionarioId, novo, targetId);
+        await carregarEnderecosFuncionario(funcionarioId);
+        toastOk(editing ? 'Endereço atualizado com sucesso.' : 'Endereço adicionado ao cadastro.');
+      } else {
+        if (editing) {
+          enderecos[enderecoEditandoIndex] = { ...enderecos[enderecoEditandoIndex], ...novo };
+        } else {
+          enderecos.push(novo);
+        }
+        renderEnderecosList();
+      }
+      clearEnderecoForm();
+    } catch (err) {
+      console.error(err);
+      toastError(err.message || 'Erro ao salvar endereço.');
+    }
   });
 
-  listaEnderecos?.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-remove-endereco]');
-    if (!btn) return;
-    const index = Number(btn.getAttribute('data-remove-endereco'));
-    if (Number.isNaN(index)) return;
-    enderecos.splice(index, 1);
-    renderEnderecosList();
+  listaEnderecos?.addEventListener('click', async (e) => {
+    const btnEditar = e.target.closest('button[data-edit-endereco]');
+    if (btnEditar) {
+      const index = Number(btnEditar.getAttribute('data-edit-endereco'));
+      if (!Number.isNaN(index) && enderecos[index]) {
+        enderecoEditandoIndex = index;
+        preencherEnderecoForm(enderecos[index]);
+        updateEnderecoButtonLabel();
+      }
+      return;
+    }
+
+    const btnRemover = e.target.closest('button[data-remove-endereco]');
+    if (!btnRemover) return;
+    const index = Number(btnRemover.getAttribute('data-remove-endereco'));
+    if (Number.isNaN(index) || !enderecos[index]) return;
+
+    const confirmar = await confirmAction({
+      title: 'Remover endereço',
+      message: 'Tem certeza que deseja remover este endereço do cadastro?',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+    });
+    if (!confirmar) return;
+
+    const funcionarioId = (inputId?.value || '').trim();
+    const alvo = enderecos[index];
+    try {
+      if (funcionarioId && alvo?._id) {
+        await removerEnderecoRemoto(alvo._id);
+        toastOk('Endereço removido com sucesso.');
+        await carregarEnderecosFuncionario(funcionarioId);
+      } else {
+        enderecos.splice(index, 1);
+        renderEnderecosList();
+      }
+      if (enderecoEditandoIndex === index) {
+        clearEnderecoForm();
+      }
+    } catch (err) {
+      console.error(err);
+      toastError(err.message || 'Erro ao remover endereço.');
+    }
   });
 
   function headers(extra = {}) {
@@ -342,6 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setGruposSelected([]);
       setEmpresasSelected([]);
       enderecos = [];
+      enderecoEditandoIndex = null;
     } else {
       modalTitle.textContent = 'Editar Funcionário';
       inputId.value = data._id;
@@ -358,6 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setGruposSelected(Array.isArray(data.grupos) ? data.grupos : []);
       setEmpresasSelected(Array.isArray(data.empresas) ? data.empresas : []);
       enderecos = Array.isArray(data.enderecos) ? data.enderecos.map(normalizeEndereco) : [];
+      enderecoEditandoIndex = null;
     }
 
     if (mode === 'create' && empresaContratualSelect) {
@@ -372,6 +497,10 @@ document.addEventListener('DOMContentLoaded', () => {
     activateTab('dados');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+
+    if (mode === 'edit' && data?._id) {
+      carregarEnderecosFuncionario(data._id);
+    }
   }
   function closeModal()      { modal.classList.add('hidden'); modal.classList.remove('flex'); }
   function openSearchModal() { modalSearch.classList.remove('hidden'); modalSearch.classList.add('flex'); searchInput.value = ''; searchUsers(''); }
