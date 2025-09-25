@@ -87,6 +87,17 @@ const userSchema = new Schema({
     trim: true,
   },
   chavePix: { type: String, trim: true },
+  cursos: [{
+    nome: { type: String, trim: true },
+    data: { type: Date },
+    situacao: {
+      type: String,
+      enum: ['concluido', 'cursando'],
+      lowercase: true,
+      trim: true,
+    },
+    observacao: { type: String, trim: true },
+  }],
 
   // --- Campos Específicos de Pessoa Jurídica ---
   razaoSocial: { type: String },

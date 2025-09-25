@@ -9,6 +9,7 @@ const Store = require('../models/Store');
 
 // ----- helpers / policies -----
 const roleRank = { cliente: 0, funcionario: 1, admin: 2, admin_master: 3 };
+const CURSO_SITUACOES = ['concluido', 'cursando'];
 
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -42,6 +43,43 @@ function parseEnum(value, allowed = []) {
   if (value === null || value === '') return null;
   const normalized = String(value).trim().toLowerCase();
   return allowed.includes(normalized) ? normalized : null;
+}
+
+function sanitizeCursosPayload(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const nome = (item.nome || item.curso || item.formacao || '').trim();
+      if (!nome) return null;
+
+      const curso = { nome };
+
+      if (Object.prototype.hasOwnProperty.call(item, 'data')) {
+        if (item.data instanceof Date) {
+          curso.data = item.data;
+        } else {
+          curso.data = parseDate(item.data);
+        }
+      }
+
+      const situacao = parseEnum(item.situacao, CURSO_SITUACOES);
+      if (situacao !== undefined) {
+        curso.situacao = situacao;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(item, 'observacao')) {
+        const obs = (item.observacao || '').trim();
+        curso.observacao = obs || null;
+      }
+
+      if (item._id && mongoose.Types.ObjectId.isValid(item._id)) {
+        curso._id = item._id;
+      }
+
+      return curso;
+    })
+    .filter(Boolean);
 }
 
 function normName(u) {
@@ -102,6 +140,15 @@ function userToDTO(u) {
     conta: u.conta || '',
     tipoChavePix: u.tipoChavePix || '',
     chavePix: u.chavePix || '',
+    cursos: Array.isArray(u.cursos)
+      ? u.cursos.map((curso) => ({
+          _id: curso?._id ? String(curso._id) : null,
+          nome: curso?.nome || '',
+          data: curso?.data || null,
+          situacao: curso?.situacao || '',
+          observacao: curso?.observacao || '',
+        }))
+      : [],
   };
 }
 
@@ -131,7 +178,7 @@ router.get('/', authMiddleware, requireAdmin, async (req, res) => {
     const users = await User
       .find(
         { role: { $in: ['admin_master', 'admin', 'funcionario'] } },
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos'
       )
       .lean();
 
@@ -181,7 +228,7 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
     const users = await User
       .find(
         filter,
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos'
       )
       .sort({ createdAt: -1 })
       .limit(lim)
@@ -216,7 +263,7 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 
     const ret = await User.findById(
       userId,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos'
     ).lean();
     res.json({ message: 'Usuário transformado com sucesso.', funcionario: userToDTO(ret) });
   } catch (err) {
@@ -232,7 +279,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const u = await User.findById(
       req.params.id,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos'
     ).lean();
     if (!u || !['admin_master', 'admin', 'funcionario'].includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
@@ -414,6 +461,10 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body, 'chavePix')) {
       const chavePix = (req.body.chavePix || '').trim();
       doc.chavePix = chavePix || null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'cursos')) {
+      doc.cursos = sanitizeCursosPayload(req.body.cursos);
     }
 
     const novo = await User.create(doc);
@@ -603,10 +654,14 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
       update.chavePix = chavePix || null;
     }
 
+    if (Object.prototype.hasOwnProperty.call(req.body, 'cursos')) {
+      update.cursos = sanitizeCursosPayload(req.body.cursos);
+    }
+
     const updated = await User.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix' }
+      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos' }
     ).lean();
 
     res.json({ message: 'Funcionário atualizado com sucesso.', funcionario: userToDTO(updated) });

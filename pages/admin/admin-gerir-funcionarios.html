@@ -404,8 +404,35 @@
                 </div>
               </div>
             </div>
-            <div class="tab-panel hidden" data-tab-panel="cursos">
-              <div class="p-4 rounded-lg bg-emerald-50 text-emerald-700 text-xs">Em desenvolvimento</div>
+            <div class="tab-panel hidden space-y-3" data-tab-panel="cursos">
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-6">
+                  <label for="edit-curso-nome" class="block font-medium mb-1">Formação/Curso</label>
+                  <input id="edit-curso-nome" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nome do curso" />
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-curso-data" class="block font-medium mb-1">Data</label>
+                  <input id="edit-curso-data" type="date" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-curso-situacao" class="block font-medium mb-1">Situação</label>
+                  <select id="edit-curso-situacao" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Selecione</option>
+                    <option value="concluido">Concluído</option>
+                    <option value="cursando">Cursando</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label for="edit-curso-observacao" class="block font-medium mb-1">Observação</label>
+                <textarea id="edit-curso-observacao" rows="2" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Notas adicionais"></textarea>
+              </div>
+              <div class="flex justify-end">
+                <button type="button" id="btn-add-curso" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Adicionar curso</button>
+              </div>
+              <div id="lista-cursos" class="space-y-3">
+                <p class="text-xs text-gray-500">Nenhum curso cadastrado.</p>
+              </div>
             </div>
             <div class="tab-panel hidden" data-tab-panel="horarios">
               <div class="p-4 rounded-lg bg-emerald-50 text-emerald-700 text-xs">Em desenvolvimento</div>

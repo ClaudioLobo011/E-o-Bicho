@@ -63,6 +63,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const habilitacaoCategoriaInput = document.getElementById('edit-habilitacao-categoria');
   const habilitacaoOrgaoInput = document.getElementById('edit-habilitacao-orgao');
   const habilitacaoValidadeInput = document.getElementById('edit-habilitacao-validade');
+  const cursoNomeInput = document.getElementById('edit-curso-nome');
+  const cursoDataInput = document.getElementById('edit-curso-data');
+  const cursoSituacaoSelect = document.getElementById('edit-curso-situacao');
+  const cursoObservacaoInput = document.getElementById('edit-curso-observacao');
+  const btnAddCurso = document.getElementById('btn-add-curso');
+  const listaCursos = document.getElementById('lista-cursos');
   const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
   const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
 
@@ -97,6 +103,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let enderecos = [];
   let empresasDisponiveis = [];
   let enderecoEditandoIndex = null;
+  let cursos = [];
+  let cursoEditandoIndex = null;
   let lastCepConsultado = '';
   let lastEnderecoViaCep = null;
 
@@ -417,6 +425,97 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function normalizeCurso(item = {}) {
+    if (!item || typeof item !== 'object') {
+      return { _id: null, nome: '', data: '', situacao: '', observacao: '' };
+    }
+    const nome = (item.nome || item.curso || item.formacao || '').trim();
+    const rawData = item.data || item.dataConclusao || item.dataFim || item.dataInicio || '';
+    const data = rawData ? (formatDateForInput(rawData) || rawData) : '';
+    const situacaoRaw = (item.situacao || item.status || '').toLowerCase();
+    const situacao = ['concluido', 'cursando'].includes(situacaoRaw) ? situacaoRaw : '';
+    const observacao = (item.observacao || item.obs || '').trim();
+    return {
+      _id: item._id ? String(item._id) : null,
+      nome,
+      data,
+      situacao,
+      observacao,
+    };
+  }
+
+  function renderCursosList() {
+    if (!listaCursos) return;
+    if (!Array.isArray(cursos) || cursos.length === 0) {
+      listaCursos.innerHTML = '<p class="text-xs text-gray-500">Nenhum curso cadastrado.</p>';
+      return;
+    }
+    const cards = cursos.map((item, index) => {
+      const titulo = item.nome || '(Sem nome)';
+      const data = item.data ? formatDateDisplay(item.data) : '';
+      const situacao = item.situacao === 'concluido'
+        ? 'Concluído'
+        : item.situacao === 'cursando'
+          ? 'Cursando'
+          : '';
+      const observacao = item.observacao ? `<p class="text-gray-600">${item.observacao}</p>` : '';
+      const detalhes = [data, situacao].filter(Boolean).join(' • ');
+      return `
+        <div class="border rounded-lg px-3 py-2 flex flex-col md:flex-row md:items-center md:justify-between gap-2" data-curso-index="${index}">
+          <div class="text-xs text-gray-700">
+            <p class="font-semibold">${titulo}</p>
+            ${detalhes ? `<p class="text-gray-600">${detalhes}</p>` : ''}
+            ${observacao}
+          </div>
+          <div class="flex justify-end gap-3">
+            <button type="button" class="text-xs font-medium text-emerald-600 hover:text-emerald-800" data-edit-curso="${index}">Editar</button>
+            <button type="button" class="text-xs font-medium text-red-600 hover:text-red-800" data-remove-curso="${index}">Excluir</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    listaCursos.innerHTML = cards;
+  }
+
+  function updateCursoButtonLabel() {
+    if (!btnAddCurso) return;
+    btnAddCurso.textContent = cursoEditandoIndex !== null ? 'Salvar alterações' : 'Adicionar curso';
+  }
+
+  function clearCursoForm() {
+    if (cursoNomeInput) cursoNomeInput.value = '';
+    if (cursoDataInput) cursoDataInput.value = '';
+    if (cursoSituacaoSelect) cursoSituacaoSelect.value = '';
+    if (cursoObservacaoInput) cursoObservacaoInput.value = '';
+    cursoEditandoIndex = null;
+    updateCursoButtonLabel();
+  }
+
+  function preencherCursoForm(item = {}) {
+    if (cursoNomeInput) cursoNomeInput.value = item.nome || '';
+    if (cursoDataInput) cursoDataInput.value = item.data || '';
+    if (cursoSituacaoSelect) cursoSituacaoSelect.value = item.situacao || '';
+    if (cursoObservacaoInput) cursoObservacaoInput.value = item.observacao || '';
+  }
+
+  function sanitizeCursosForPayload(list = []) {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((curso) => {
+        const normalized = normalizeCurso(curso);
+        if (!normalized.nome) return null;
+        const payloadCurso = {
+          nome: normalized.nome,
+          data: normalized.data || null,
+          situacao: normalized.situacao || null,
+          observacao: normalized.observacao || null,
+        };
+        if (normalized._id) payloadCurso._id = normalized._id;
+        return payloadCurso;
+      })
+      .filter(Boolean);
+  }
+
   function activateTab(target) {
     tabButtons.forEach((btn) => {
       const isActive = btn.dataset.tabTarget === target;
@@ -553,6 +652,72 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  btnAddCurso?.addEventListener('click', () => {
+    const nome = (cursoNomeInput?.value || '').trim();
+    if (!nome) {
+      toastWarn('Informe a formação ou curso.');
+      cursoNomeInput?.focus();
+      return;
+    }
+    const situacaoRaw = (cursoSituacaoSelect?.value || '').toLowerCase();
+    if (!['concluido', 'cursando'].includes(situacaoRaw)) {
+      toastWarn('Selecione a situação do curso.');
+      cursoSituacaoSelect?.focus();
+      return;
+    }
+    const novo = normalizeCurso({
+      _id: (typeof cursoEditandoIndex === 'number' && cursos[cursoEditandoIndex]) ? cursos[cursoEditandoIndex]._id : null,
+      nome,
+      data: cursoDataInput?.value || '',
+      situacao: situacaoRaw,
+      observacao: (cursoObservacaoInput?.value || '').trim(),
+    });
+
+    if (typeof cursoEditandoIndex === 'number' && cursos[cursoEditandoIndex]) {
+      cursos[cursoEditandoIndex] = { ...cursos[cursoEditandoIndex], ...novo };
+    } else {
+      cursos.push(novo);
+    }
+
+    renderCursosList();
+    clearCursoForm();
+  });
+
+  listaCursos?.addEventListener('click', async (e) => {
+    const btnEditar = e.target.closest('button[data-edit-curso]');
+    if (btnEditar) {
+      const index = Number(btnEditar.getAttribute('data-edit-curso'));
+      if (!Number.isNaN(index) && cursos[index]) {
+        cursoEditandoIndex = index;
+        preencherCursoForm(cursos[index]);
+        updateCursoButtonLabel();
+      }
+      return;
+    }
+
+    const btnRemover = e.target.closest('button[data-remove-curso]');
+    if (!btnRemover) return;
+
+    const index = Number(btnRemover.getAttribute('data-remove-curso'));
+    if (Number.isNaN(index) || !cursos[index]) return;
+
+    const confirmar = await confirmAction({
+      title: 'Remover curso',
+      message: 'Tem certeza que deseja remover este curso do cadastro?',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+    });
+    if (!confirmar) return;
+
+    cursos.splice(index, 1);
+    if (cursoEditandoIndex === index) {
+      clearCursoForm();
+    } else if (typeof cursoEditandoIndex === 'number' && cursoEditandoIndex > index) {
+      cursoEditandoIndex -= 1;
+    }
+    renderCursosList();
+  });
+
   function headers(extra = {}) {
     return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...extra };
   }
@@ -658,6 +823,8 @@ document.addEventListener('DOMContentLoaded', () => {
       setEmpresasSelected([]);
       enderecos = [];
       enderecoEditandoIndex = null;
+      cursos = [];
+      cursoEditandoIndex = null;
       if (periodoExperienciaInicioInput) periodoExperienciaInicioInput.value = '';
       if (periodoExperienciaFimInput) periodoExperienciaFimInput.value = '';
       if (dataAdmissaoInput) dataAdmissaoInput.value = '';
@@ -708,6 +875,8 @@ document.addEventListener('DOMContentLoaded', () => {
       setEmpresasSelected(Array.isArray(data.empresas) ? data.empresas : []);
       enderecos = Array.isArray(data.enderecos) ? data.enderecos.map(normalizeEndereco) : [];
       enderecoEditandoIndex = null;
+      cursos = Array.isArray(data.cursos) ? data.cursos.map(normalizeCurso) : [];
+      cursoEditandoIndex = null;
       if (periodoExperienciaInicioInput) periodoExperienciaInicioInput.value = formatDateForInput(data.periodoExperienciaInicio);
       if (periodoExperienciaFimInput) periodoExperienciaFimInput.value = formatDateForInput(data.periodoExperienciaFim);
       if (dataAdmissaoInput) dataAdmissaoInput.value = formatDateForInput(data.dataAdmissao);
@@ -749,7 +918,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     renderEnderecosList();
+    renderCursosList();
     clearEnderecoForm();
+    clearCursoForm();
     activateTab('dados');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
@@ -1203,6 +1374,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (Array.isArray(enderecos)) {
       payload.enderecos = enderecos;
+    }
+    if (Array.isArray(cursos)) {
+      payload.cursos = sanitizeCursosForPayload(cursos);
     }
     if (inputCodigo && inputCodigo.dataset?.hasValue === 'true') {
       payload.codigo = inputCodigo.dataset.originalValue || inputCodigo.value;
