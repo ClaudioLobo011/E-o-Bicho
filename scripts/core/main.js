@@ -44,7 +44,7 @@ async function loadComponents() {
                 
                 if (id === 'admin-sidebar-placeholder') {
                     updateActiveAdminLink();
-                    try { initAdminHoverMenus(); } catch(_) {}
+                    try { initAdminSidebar(); } catch(_) {}
                 }
 
                 if (id === 'func-sidebar-placeholder') {
@@ -63,62 +63,157 @@ function updateActiveAdminLink() {
     const wrapper = document.getElementById('admin-sidebar-placeholder');
     if (!wrapper) return;
 
-    const inactiveClasses = ['text-gray-600', 'hover:bg-gray-100'];
-    const activeClasses   = ['bg-primary/10', 'text-primary', 'font-bold', 'border-l-4', 'border-primary'];
+    const panel = wrapper.querySelector('[data-admin-sidebar-panel]');
+    if (!panel) return;
 
-    const navLinks = wrapper.querySelectorAll('nav a');
+    const inactiveClasses = ['text-gray-600', 'hover:bg-gray-50'];
+    const activeClasses   = ['bg-primary/10', 'text-primary', 'font-semibold'];
+
+    const navLinks = panel.querySelectorAll('nav a[href]');
+    let activeLink = null;
+
     navLinks.forEach(link => {
       const href = link.getAttribute('href');
-      // Deixa os links reais com a marcação automática
-      if (href && href !== '#') {
-        const url = new URL(href, window.location.origin);
-        const isActive = window.location.pathname.endsWith(url.pathname);
-        if (isActive) {
-          link.classList.remove(...inactiveClasses);
-          link.classList.add(...activeClasses);
-          link.classList.remove('hover:bg-gray-100');
-        } else {
-          link.classList.remove(...activeClasses);
-          link.classList.add(...inactiveClasses);
-        }
+      if (!href || href === '#') {
+        link.classList.remove(...activeClasses);
+        link.classList.add('text-gray-600');
+        link.removeAttribute('aria-current');
+        return;
+      }
+
+      const url = new URL(href, window.location.origin);
+      const isActive = window.location.pathname.endsWith(url.pathname);
+
+      if (isActive) {
+        activeLink = link;
+        link.classList.remove(...inactiveClasses);
+        link.classList.add(...activeClasses);
+        link.classList.remove('hover:bg-gray-50');
+        link.setAttribute('aria-current', 'page');
+      } else {
+        link.classList.remove(...activeClasses);
+        link.classList.add(...inactiveClasses);
+        link.removeAttribute('aria-current');
       }
     });
 
-    // Extra: quando estivermos em /vet-*, marcar o botão Veterinário (#func-vet-hover)
-    const path = window.location.pathname;
-    const isVetInner = /\/pages\/funcionarios\/vet-(ficha-clinica|documentos|receitas|assinatura)\.html$/.test(path);
-    if (isVetInner) {
-      const vetBtn = wrapper.querySelector('#func-vet-hover');
-      if (vetBtn) {
-        vetBtn.classList.add('bg-primary/10','text-primary','font-bold');
-        vetBtn.classList.remove('text-gray-600');
+    if (!activeLink) return;
+
+    let parentContent = activeLink.closest('[data-accordion-content]');
+    while (parentContent) {
+      parentContent.classList.remove('hidden');
+      parentContent.dataset.open = 'true';
+
+      const toggle = parentContent.previousElementSibling;
+      if (toggle && toggle.hasAttribute('data-accordion-button')) {
+        toggle.setAttribute('aria-expanded', 'true');
+        const chevron = toggle.querySelector('[data-chevron]');
+        if (chevron) chevron.classList.add('rotate-180');
       }
+
+      parentContent = toggle ? toggle.closest('[data-accordion-content]') : null;
     }
 }
 
-function getAdminMenuData() {
-  return {
-    empresa: [
-      { label: 'Nossas Lojas',                 icon: 'fas fa-store',          href: '/pages/admin/admin-nossas-lojas.html',      status: '' },
-      { label: 'Gerir Funcionários',          icon: 'fas fa-user-gear',      href: '/pages/admin/admin-gerir-funcionarios.html',status: '' },
-      { label: 'Configurações de Entrega',    icon: 'fas fa-truck-fast',     href: '/pages/admin/admin-entregas.html',          status: '' },
-      { label: 'Pedidos',                      icon: 'fas fa-receipt',        href: '#',                                          status: '' }, // não existe ainda
-      { label: 'Clientes',                     icon: 'fas fa-users',          href: '#',                                          status: '' }, // não existe ainda
-    ],
-    estoque: [
-      { label: 'Produtos',         icon: 'fas fa-box-open',   href: '/pages/admin/admin-produtos.html',     status: '' },
-      { label: 'Destaques',        icon: 'fas fa-star',       href: '/pages/admin/admin-destaques.html',    status: '' },
-      { label: 'Promoções',        icon: 'fas fa-tag',        href: '/pages/admin/admin-promocoes.html',    status: '' },
-      { label: 'Categorias',       icon: 'fas fa-list',       href: '/pages/admin/admin-categorias.html',   status: '' },
-      { label: 'Importar Planilha',icon: 'fas fa-file-upload',href: '/pages/admin/admin-importar.html',     status: '' },
-    ],
-    servicos: [
-      { label: 'Cadastro de Serviço',                  icon: 'fas fa-scissors',      href: '/pages/admin/admin-servicos.html', status: '' },
-      { label: 'Cadastro de Grupo de Serviço',         icon: 'fas fa-folder-tree',   href: '/pages/admin/admin-servicos-grupos.html', status: '' },
-      { label: 'Cadastro de Comissão por Grupo',       icon: 'fas fa-chart-simple',  href: '#', status: 'Novo' },
-      { label: 'Cadastro de Comissão por Profissional',icon: 'fas fa-user-tie',      href: '#', status: 'Novo' },
-    ]
+function initAdminSidebar() {
+  const wrapper = document.getElementById('admin-sidebar-placeholder');
+  if (!wrapper) return;
+
+  const panel = wrapper.querySelector('[data-admin-sidebar-panel]');
+  if (!panel) return;
+
+  const overlay = wrapper.querySelector('[data-admin-sidebar-overlay]');
+  const toggleButtons = document.querySelectorAll('[data-admin-sidebar-trigger]');
+  const closeButtons = wrapper.querySelectorAll('[data-admin-sidebar-close]');
+
+  const isDesktop = () => window.matchMedia('(min-width: 768px)').matches;
+
+  const openSidebar = () => {
+    panel.classList.add('translate-x-0');
+    panel.classList.remove('-translate-x-full');
+    panel.setAttribute('aria-hidden', 'false');
+    if (overlay) {
+      if (!isDesktop()) {
+        overlay.classList.remove('pointer-events-none');
+        overlay.classList.add('opacity-100');
+      }
+    }
+    if (!isDesktop()) {
+      document.body.classList.add('overflow-hidden');
+    }
   };
+
+  const closeSidebar = () => {
+    panel.classList.remove('translate-x-0');
+    panel.classList.add('-translate-x-full');
+    panel.setAttribute('aria-hidden', 'true');
+    if (overlay) {
+      overlay.classList.add('pointer-events-none');
+      overlay.classList.remove('opacity-100');
+    }
+    document.body.classList.remove('overflow-hidden');
+  };
+
+  toggleButtons.forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (panel.classList.contains('-translate-x-full')) {
+        openSidebar();
+      } else {
+        closeSidebar();
+      }
+    });
+  });
+
+  closeButtons.forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      closeSidebar();
+    });
+  });
+
+  overlay?.addEventListener('click', closeSidebar);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeSidebar();
+    }
+  });
+
+  const accordionButtons = wrapper.querySelectorAll('[data-accordion-button]');
+  accordionButtons.forEach(button => {
+    const content = button.nextElementSibling;
+    if (!content || !content.hasAttribute('data-accordion-content')) return;
+
+    const chevron = button.querySelector('[data-chevron]');
+
+    const setOpenState = (isOpen) => {
+      if (isOpen) {
+        content.classList.remove('hidden');
+        content.dataset.open = 'true';
+        button.setAttribute('aria-expanded', 'true');
+        if (chevron) chevron.classList.add('rotate-180');
+      } else {
+        content.classList.add('hidden');
+        content.dataset.open = 'false';
+        button.setAttribute('aria-expanded', 'false');
+        if (chevron) chevron.classList.remove('rotate-180');
+      }
+    };
+
+    const shouldOpen = button.dataset.defaultOpen === 'true' || content.dataset.open === 'true' || !content.classList.contains('hidden');
+    setOpenState(shouldOpen);
+
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      const currentlyOpen = button.getAttribute('aria-expanded') === 'true';
+      setOpenState(!currentlyOpen);
+    });
+  });
+
+  panel.querySelectorAll('a[href="#"]').forEach(link => {
+    link.addEventListener('click', (event) => event.preventDefault());
+  });
 }
 
 function initFuncionarioVetHoverMenu() {
@@ -186,7 +281,7 @@ function initFuncionarioVetHoverMenu() {
     panel.classList.add('opacity-0','pointer-events-none','translate-y-2');
   };
 
-  // Interações (hover/click) — igual ao Admin
+  // Interações (hover/click)
   trigger.addEventListener('mouseenter', () => {
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     showPanel();
@@ -216,206 +311,6 @@ function initFuncionarioVetHoverMenu() {
     trigger.classList.add('bg-primary/10','text-primary','font-bold');
     trigger.classList.remove('text-gray-600');
   }
-}
-
-function initAdminHoverMenus() {
-  const wrap = document.getElementById('admin-sidebar-placeholder');
-  if (!wrap) return;
-  const DATA = getAdminMenuData();
-
-  // painel flutuante (reutilizável)
-  let panel = document.getElementById('admin-hover-panel');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'admin-hover-panel';
-    panel.className = 'fixed z-[9998] bg-white shadow-xl ring-1 ring-black/10 rounded-lg opacity-0 pointer-events-none transform scale-95 transition-all';
-    panel.style.minWidth = '280px';
-    document.body.appendChild(panel);
-  }
-
-  let hideTimer = null;
-  const showPanel = (anchorEl, title, items=[]) => {
-    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-    const rect = anchorEl.getBoundingClientRect();
-    panel.innerHTML = `
-      <div class="px-3 py-2 border-b bg-gray-50 rounded-t-lg text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <i class="fas fa-layer-group text-gray-400"></i><span>${title}</span>
-      </div>
-      <div class="p-2">
-        <ul class="divide-y divide-gray-100">
-          ${items.map(({label,icon,href,status})=>`
-            <li>
-              <a href="${href||'#'}" class="flex items-center justify-between px-3 py-2 rounded hover:bg-gray-50">
-                <span class="inline-flex items-center gap-2 text-gray-700"><i class="${icon||'fas fa-circle'} w-5 text-center"></i>${label}</span>
-                ${status?`<span class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">${status}</span>`:''}
-              </a>
-            </li>`).join('')}
-        </ul>
-      </div>`;
-    const top = rect.bottom + window.scrollY + 6;
-    const left = Math.min(Math.max(rect.left + window.scrollX - 20, 8), window.scrollX + window.innerWidth - panel.offsetWidth - 8);
-    panel.style.top = `${top}px`;
-    panel.style.left = `${left}px`;
-    panel.classList.remove('pointer-events-none');
-    requestAnimationFrame(()=>{
-      panel.classList.remove('opacity-0','scale-95');
-    });
-
-    // impedir navegação para itens "#"
-    panel.querySelectorAll('a[href="#"]').forEach(a=>{
-      a.addEventListener('click', (e)=>{ e.preventDefault(); alert(`${a.textContent.trim()}: em construção.`); });
-    });
-  };
-
-  const hidePanel = () => {
-    panel.classList.add('opacity-0','scale-95');
-    hideTimer = setTimeout(()=>{ panel.classList.add('pointer-events-none'); }, 120);
-  };
-
-  // fecha ao clicar fora
-  document.addEventListener('click', (e)=>{
-    if (!panel.contains(e.target) && !wrap.contains(e.target)) hidePanel();
-  });
-
-  // hover em cada item
-  wrap.querySelectorAll('[data-group]').forEach(el => {
-    const key = el.getAttribute('data-group');
-    const title = el.textContent.trim();
-    const items = DATA[key] || [];
-    el.addEventListener('mouseenter', ()=> showPanel(el, title, items));
-    el.addEventListener('mouseleave', ()=> { hideTimer = setTimeout(hidePanel, 150); });
-    el.addEventListener('click', (e)=>{ e.preventDefault(); showPanel(el, title, items); });
-  });
-  panel.addEventListener('mouseenter', ()=>{ if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } });
-  panel.addEventListener('mouseleave', ()=> hidePanel());
-}
-
-function buildAdminRightDrawer() {
-  if (document.getElementById('admin-drawer')) return;
-
-  // Backdrop
-  const backdrop = document.createElement('div');
-  backdrop.id = 'admin-drawer-backdrop';
-  backdrop.className = 'fixed inset-0 bg-black/30 opacity-0 pointer-events-none transition-opacity z-40';
-
-  // Drawer
-  const drawer = document.createElement('aside');
-  drawer.id = 'admin-drawer';
-  drawer.className = 'fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl transform translate-x-full transition-transform z-50 flex flex-col';
-
-  drawer.innerHTML = `
-    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-      <div class="flex items-center gap-2">
-        <i class="fas fa-layer-group text-gray-400"></i>
-        <h3 id="admin-drawer-title" class="text-lg font-bold text-gray-800">Opções</h3>
-      </div>
-      <button id="admin-drawer-close" class="p-2 rounded hover:bg-gray-100" aria-label="Fechar">
-        <i class="fas fa-xmark"></i>
-      </button>
-    </div>
-    <div id="admin-drawer-content" class="p-2">
-      <!-- itens entram aqui -->
-    </div>
-  `;
-
-  document.body.appendChild(backdrop);
-  document.body.appendChild(drawer);
-
-  // Fechar
-  const close = () => closeAdminRightDrawer();
-  backdrop.addEventListener('click', close);
-  drawer.querySelector('#admin-drawer-close').addEventListener('click', close);
-  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') close(); });
-}
-
-function openAdminRightDrawer(title, items) {
-  const backdrop = document.getElementById('admin-drawer-backdrop');
-  const drawer = document.getElementById('admin-drawer');
-  const content = document.getElementById('admin-drawer-content');
-  const titleEl = document.getElementById('admin-drawer-title');
-  if (!backdrop || !drawer || !content) return;
-
-  titleEl.textContent = title;
-
-  // Monta a lista de opções
-  content.innerHTML = '';
-  const ul = document.createElement('ul');
-  ul.className = 'divide-y divide-gray-200';
-
-  items.forEach(({ label, icon, href, status }) => {
-    const li = document.createElement('li');
-    li.innerHTML = `
-      <a href="${href || '#'}" class="flex items-center justify-between p-4 hover:bg-gray-50 rounded-lg transition">
-        <span class="inline-flex items-center gap-3 text-gray-700">
-          <i class="${icon || 'fas fa-circle'} w-6 text-center"></i>
-          <span class="font-medium">${label}</span>
-        </span>
-        <span class="flex items-center gap-2">
-          ${status ? `<span class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">${status}</span>` : ''}
-          <i class="fas fa-chevron-right text-xs text-gray-400"></i>
-        </span>
-      </a>
-    `;
-    // Para enquanto estiver sem páginas, evita navegar e mostra "em construção"
-    li.querySelector('a').addEventListener('click', (e) => {
-      const hrefAttr = (href || '#').trim();
-      if (hrefAttr === '#') {
-        e.preventDefault();
-        alert(`${label}: em construção.`);
-      }
-    });
-    ul.appendChild(li);
-  });
-
-  content.appendChild(ul);
-
-  // Abre
-  backdrop.classList.remove('pointer-events-none');
-  requestAnimationFrame(() => {
-    backdrop.classList.add('opacity-100');
-    drawer.classList.remove('translate-x-full');
-  });
-}
-
-function closeAdminRightDrawer() {
-  const backdrop = document.getElementById('admin-drawer-backdrop');
-  const drawer = document.getElementById('admin-drawer');
-  if (!backdrop || !drawer) return;
-  backdrop.classList.remove('opacity-100');
-  drawer.classList.add('translate-x-full');
-  // Ao terminar a transição, desabilita pointer-events
-  setTimeout(() => {
-    backdrop.classList.add('pointer-events-none');
-  }, 200);
-}
-
-function updateActiveAccountLink() {
-  const wrapper = document.getElementById('account-sidebar-placeholder');
-  if (!wrapper) return;
-
-  const current = window.location.pathname + window.location.search + window.location.hash;
-  const navLinks = wrapper.querySelectorAll('nav a');
-
-  const inactiveClasses = ['text-gray-600', 'hover:bg-gray-100'];
-  const activeClasses   = ['bg-primary/10', 'text-primary', 'font-bold', 'border-l-4', 'border-primary'];
-
-  navLinks.forEach(link => {
-    const href = link.getAttribute('href');
-    if (!href || href === '#') return;
-
-    // Normaliza comparando só o pathname
-    const url = new URL(href, window.location.origin);
-    const isActive = window.location.pathname.endsWith(url.pathname);
-
-    if (isActive) {
-      link.classList.remove(...inactiveClasses);
-      link.classList.add(...activeClasses);
-      link.classList.remove('hover:bg-gray-100');
-    } else {
-      link.classList.remove(...activeClasses);
-      link.classList.add(...inactiveClasses);
-    }
-  });
 }
 
 function updateActiveFuncionariosLink() {

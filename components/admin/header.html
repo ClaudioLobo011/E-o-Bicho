@@ -1,12 +1,18 @@
   <header class="bg-white shadow-sm">
     <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-        <a href="/index.html">
-            <img src="/public/image/logo.svg" alt="Logotipo E o Bicho" class="h-20 w-auto">
+      <div class="flex items-center gap-4">
+        <button type="button" data-admin-sidebar-trigger class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+          <span class="sr-only">Abrir menu administrativo</span>
+          <i class="fas fa-bars text-lg"></i>
+        </button>
+        <a href="/index.html" class="inline-flex">
+          <img src="/public/image/logo.svg" alt="Logotipo E o Bicho" class="h-20 w-auto">
         </a>
+      </div>
 
-        <div class="flex items-center text-gray-500">
-            <span class="border-r border-gray-300 h-6 mr-4"></span>
-            <span class="font-semibold text-sm">Administrador</span>
-        </div>
+      <div class="flex items-center text-gray-500">
+        <span class="border-r border-gray-300 h-6 mr-4"></span>
+        <span class="font-semibold text-sm">Administrador</span>
+      </div>
     </div>
-</header>
+  </header>

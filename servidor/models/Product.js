@@ -17,16 +17,45 @@ const productSchema = new mongoose.Schema({
     descricao: { type: String, required: false, default: '' },
     custo: { type: Number, required: true },
     venda: { type: Number, required: true },
+    unidade: { type: String, trim: true, default: '' },
+    referencia: { type: String, trim: true, default: '' },
     imagemPrincipal: { type: String, default: '/image/placeholder.png' },
     imagens: [{ // Um array que guardará os caminhos para as imagens
         type: String
     }],
+    codigosComplementares: {
+        type: [String],
+        default: []
+    },
     stock: { type: Number, required: false, default: 0 },
+    estoques: {
+        type: [{
+            deposito: { type: mongoose.Schema.Types.ObjectId, ref: 'Deposit', required: true },
+            quantidade: { type: Number, default: 0 },
+            unidade: { type: String, trim: true, default: '' }
+        }],
+        default: []
+    },
     categorias: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Category'
     }],
     marca: { type: String, required: false },
+    fornecedores: {
+        type: [{
+            fornecedor: { type: String, trim: true, required: true },
+            codigoProduto: { type: String, trim: true },
+            unidadeEntrada: { type: String, trim: true },
+            tipoCalculo: { type: String, trim: true },
+            valorCalculo: { type: Number, default: null }
+        }],
+        default: []
+    },
+    dataCadastro: { type: Date, default: null },
+    peso: { type: Number, default: null },
+    iat: { type: String, trim: true, default: '' },
+    tipoProduto: { type: String, trim: true, default: '' },
+    ncm: { type: String, trim: true, default: '' },
     searchableString: { type: String, select: false },
     isDestaque: { // Para saber se o produto é um destaque ou não
         type: Boolean,
@@ -70,6 +99,13 @@ const productSchema = new mongoose.Schema({
 
 // Middleware do Mongoose: é executado ANTES de salvar qualquer produto
 productSchema.pre('save', function(next) {
+    if (Array.isArray(this.estoques) && this.estoques.length > 0) {
+        const total = this.estoques.reduce((acc, item) => {
+            const quantidade = Number(item?.quantidade);
+            return acc + (Number.isFinite(quantidade) ? quantidade : 0);
+        }, 0);
+        this.stock = Number.isFinite(total) ? total : this.stock;
+    }
     // Cria a string de pesquisa normalizada a partir dos campos relevantes
     this.searchableString = normalizeText(
         `${this.nome} ${this.cod} ${this.marca} ${this.codbarras}`

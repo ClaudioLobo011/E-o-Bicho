@@ -214,7 +214,13 @@ async function getCategoryPath(categoryId) {
 // GET /api/products/:id (pública)
 router.get('/:id', async (req, res) => {
     try {
-        const product = await Product.findById(req.params.id).populate('categorias').lean();
+        const product = await Product.findById(req.params.id)
+            .populate('categorias')
+            .populate({
+                path: 'estoques.deposito',
+                populate: { path: 'empresa' }
+            })
+            .lean();
         if (!product) return res.status(404).json({ message: 'Produto não encontrado.' });
 
         if (product.categorias && product.categorias.length > 0) {
@@ -234,13 +240,103 @@ router.get('/:id', async (req, res) => {
 // PUT /api/products/:id (restrito)
 router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
-        const { descricao, marca, stock, categorias, especificacoes } = req.body;
+        const payload = req.body || {};
+
+        const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
+        const parseDate = (value) => {
+            if (!value) return null;
+            const parsed = new Date(value);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        };
+        const parseNumber = (value) => {
+            if (value === null || value === undefined || value === '') return null;
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        const fornecedores = Array.isArray(payload.fornecedores)
+            ? payload.fornecedores
+                .map((item) => {
+                    const fornecedor = normalizeString(item?.fornecedor);
+                    if (!fornecedor) return null;
+                    const valorCalculo = parseNumber(item?.valorCalculo);
+                    return {
+                        fornecedor,
+                        codigoProduto: normalizeString(item?.codigoProduto),
+                        unidadeEntrada: normalizeString(item?.unidadeEntrada),
+                        tipoCalculo: normalizeString(item?.tipoCalculo),
+                        valorCalculo: valorCalculo,
+                    };
+                })
+                .filter(Boolean)
+            : [];
+
+        const estoques = Array.isArray(payload.estoques)
+            ? payload.estoques
+                .map((item) => {
+                    const deposito = item?.deposito || item?.depositId;
+                    if (!deposito) return null;
+                    const quantidade = parseNumber(item?.quantidade);
+                    return {
+                        deposito,
+                        quantidade: quantidade === null ? 0 : quantidade,
+                        unidade: normalizeString(item?.unidade),
+                    };
+                })
+                .filter(Boolean)
+            : [];
+
+        const updatePayload = {};
+
+        if (payload.descricao !== undefined) updatePayload.descricao = payload.descricao;
+        if (payload.marca !== undefined) updatePayload.marca = payload.marca;
+        if (payload.categorias !== undefined) updatePayload.categorias = Array.isArray(payload.categorias) ? payload.categorias : [];
+        if (payload.especificacoes !== undefined) updatePayload.especificacoes = payload.especificacoes;
+        if (payload.unidade !== undefined) updatePayload.unidade = normalizeString(payload.unidade);
+        if (payload.referencia !== undefined) updatePayload.referencia = normalizeString(payload.referencia);
+        if (payload.dataCadastro !== undefined) updatePayload.dataCadastro = parseDate(payload.dataCadastro);
+        if (payload.peso !== undefined) updatePayload.peso = parseNumber(payload.peso);
+        if (payload.iat !== undefined) updatePayload.iat = normalizeString(payload.iat);
+        if (payload.tipoProduto !== undefined) updatePayload.tipoProduto = normalizeString(payload.tipoProduto);
+        if (payload.ncm !== undefined) updatePayload.ncm = normalizeString(payload.ncm);
+        if (payload.custo !== undefined) updatePayload.custo = parseNumber(payload.custo);
+        if (payload.venda !== undefined) updatePayload.venda = parseNumber(payload.venda);
+        if (payload.codigosComplementares !== undefined) {
+            updatePayload.codigosComplementares = Array.isArray(payload.codigosComplementares)
+                ? payload.codigosComplementares.map((code) => normalizeString(code)).filter(Boolean)
+                : [];
+        }
+
+        updatePayload.fornecedores = fornecedores;
+        updatePayload.estoques = estoques;
+
+        if (estoques.length > 0) {
+            const totalStock = estoques.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
+            updatePayload.stock = totalStock;
+        } else if (payload.stock !== undefined) {
+            const parsedStock = parseNumber(payload.stock);
+            updatePayload.stock = parsedStock === null ? 0 : parsedStock;
+        }
+
         const updatedProduct = await Product.findByIdAndUpdate(
             req.params.id,
-            { descricao, marca, stock, categorias, especificacoes },
-            { new: true }
+            updatePayload,
+            { new: true, runValidators: true }
         );
-        res.json(updatedProduct);
+
+        if (!updatedProduct) {
+            return res.status(404).json({ message: 'Produto não encontrado.' });
+        }
+
+        const populatedProduct = await Product.findById(req.params.id)
+            .populate('categorias')
+            .populate({
+                path: 'estoques.deposito',
+                populate: { path: 'empresa' }
+            })
+            .lean();
+
+        res.json(populatedProduct);
     } catch (error) {
         console.error("Erro ao atualizar produto:", error);
         res.status(500).json({ message: 'Erro no servidor.' });
