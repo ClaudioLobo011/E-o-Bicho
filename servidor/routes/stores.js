@@ -48,6 +48,10 @@ const parseCoordinate = (value) => {
     return Number.isFinite(parsed) ? parsed : null;
 };
 
+const hasNativePkcs12Support =
+    typeof tls?.createSecureContext === 'function' &&
+    typeof crypto?.X509Certificate === 'function';
+
 const encryptBuffer = (buffer) => {
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(CERTIFICATE_KEY), iv);
@@ -70,7 +74,13 @@ const parseOpenSslDateToIso = (value = '') => {
     return parsed.toISOString().slice(0, 10);
 };
 
+const OPENSSL_UNAVAILABLE_MESSAGE = 'OpenSSL não está disponível no servidor.';
+const OPENSSL_INSTALL_HELP = `${OPENSSL_UNAVAILABLE_MESSAGE} Instale o utilitário de linha de comando OpenSSL e certifique-se de que o executável "openssl" esteja no PATH do sistema (ex.: "apt install openssl" em distribuições Debian/Ubuntu, "brew install openssl" no macOS ou o pacote Win64 OpenSSL no Windows).`;
+
 const extractMetadataWithNode = (buffer, password) => {
+    if (!hasNativePkcs12Support) {
+        throw new Error('Este runtime do Node.js não possui suporte nativo para leitura de arquivos PKCS#12.');
+    }
     try {
         const secureContext = tls.createSecureContext({ pfx: buffer, passphrase: password });
         const derCertificate = secureContext.context.getCertificate();
@@ -174,14 +184,45 @@ const extractCertificateMetadataWithOpenSsl = async (buffer, password) => {
     }
 };
 
+const shouldBubbleError = (error) => {
+    if (!error) return false;
+    const message = String(error.message || '').toLowerCase();
+    return (
+        message.includes('senha do certificado incorreta') ||
+        message.includes('senha incorreta') ||
+        message.includes('certificado pkcs#12 inválido')
+    );
+};
+
 const extractCertificateMetadata = async (buffer, password) => {
+    let nativeError = null;
+
+    if (hasNativePkcs12Support) {
+        try {
+            return extractMetadataWithNode(buffer, password);
+        } catch (error) {
+            if (shouldBubbleError(error)) {
+                throw error;
+            }
+            nativeError = error;
+        }
+    }
+
     try {
         return await extractCertificateMetadataWithOpenSsl(buffer, password);
     } catch (error) {
-        if (error?.message && error.message.includes('OpenSSL não está disponível')) {
-            // Ambiente local sem o binário do OpenSSL: recorre à API nativa do Node.js.
-            return extractMetadataWithNode(buffer, password);
+        if (error?.message && error.message.includes(OPENSSL_UNAVAILABLE_MESSAGE)) {
+            if (hasNativePkcs12Support && nativeError) {
+                throw nativeError;
+            }
+
+            if (hasNativePkcs12Support) {
+                return extractMetadataWithNode(buffer, password);
+            }
+
+            throw new Error(OPENSSL_INSTALL_HELP);
         }
+
         throw error;
     }
 };
