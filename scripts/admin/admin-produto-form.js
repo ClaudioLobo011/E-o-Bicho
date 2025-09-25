@@ -23,6 +23,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const depositEmptyState = document.getElementById('deposit-empty-state');
     const depositTableWrapper = document.getElementById('deposit-table-wrapper');
     const depositTotalDisplay = document.getElementById('deposit-total-display');
+    const unitSelect = document.getElementById('unidade');
+
+    const getSelectedProductUnit = () => (unitSelect?.value || '').trim();
 
     // --- LÓGICA DAS ABAS (Geral / Especificações) ---
     const productTabLinks = document.querySelectorAll('#product-tabs .tab-link');
@@ -70,10 +73,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let supplierEntries = [];
     let allDeposits = [];
     const depositStockMap = new Map();
+    let lastSelectedProductUnit = getSelectedProductUnit();
 
     const ensureDepositEntry = (depositId) => {
         if (!depositStockMap.has(depositId)) {
-            depositStockMap.set(depositId, { quantidade: null, unidade: '' });
+            depositStockMap.set(depositId, { quantidade: null, unidade: getSelectedProductUnit() });
         }
     };
 
@@ -94,6 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderDepositStockRows = () => {
         if (!depositTableBody) return;
+        const selectedUnit = getSelectedProductUnit();
 
         if (!Array.isArray(allDeposits) || allDeposits.length === 0) {
             depositTableBody.innerHTML = '';
@@ -110,7 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
         allDeposits.forEach((deposit) => {
             const depositId = deposit._id;
             ensureDepositEntry(depositId);
-            const entry = depositStockMap.get(depositId) || { quantidade: null, unidade: '' };
+            const entry = depositStockMap.get(depositId) || { quantidade: null, unidade: selectedUnit };
+            const normalizedUnit = (entry?.unidade || '').trim() || selectedUnit;
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -129,28 +135,34 @@ document.addEventListener('DOMContentLoaded', () => {
             const qtyInput = tr.querySelector('input[data-deposit-field="quantidade"]');
             const unitInput = tr.querySelector('input[data-deposit-field="unidade"]');
 
+            depositStockMap.set(depositId, {
+                quantidade: entry?.quantidade ?? null,
+                unidade: normalizedUnit,
+            });
+
             if (qtyInput) {
                 const quantityValue = entry?.quantidade;
                 qtyInput.value = quantityValue === null || quantityValue === undefined ? '' : quantityValue;
                 qtyInput.addEventListener('input', (event) => {
                     const rawValue = event.target.value;
                     const parsed = rawValue === '' ? null : Number(rawValue);
-                    const current = depositStockMap.get(depositId) || { quantidade: null, unidade: '' };
+                    const current = depositStockMap.get(depositId) || { quantidade: null, unidade: selectedUnit };
+                    const currentUnit = (current?.unidade || '').trim() || selectedUnit;
                     depositStockMap.set(depositId, {
                         quantidade: rawValue === '' ? null : (Number.isFinite(parsed) ? parsed : current.quantidade),
-                        unidade: current.unidade || '',
+                        unidade: currentUnit,
                     });
                     updateDepositTotalDisplay();
                 });
             }
 
             if (unitInput) {
-                unitInput.value = entry?.unidade || '';
+                unitInput.value = normalizedUnit;
                 unitInput.addEventListener('input', (event) => {
-                    const current = depositStockMap.get(depositId) || { quantidade: null, unidade: '' };
+                    const current = depositStockMap.get(depositId) || { quantidade: null, unidade: selectedUnit };
                     depositStockMap.set(depositId, {
                         quantidade: current.quantidade,
-                        unidade: event.target.value,
+                        unidade: event.target.value.trim(),
                     });
                 });
             }
@@ -159,13 +171,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         updateDepositTotalDisplay();
+        lastSelectedProductUnit = getSelectedProductUnit();
     };
 
     const applyDepositsFromProduct = (product) => {
         depositStockMap.clear();
         if (Array.isArray(allDeposits)) {
             allDeposits.forEach((deposit) => {
-                depositStockMap.set(deposit._id, { quantidade: null, unidade: '' });
+                depositStockMap.set(deposit._id, { quantidade: null, unidade: getSelectedProductUnit() });
             });
         }
 
@@ -176,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const quantidadeNumber = Number(estoque?.quantidade);
                 depositStockMap.set(depositId, {
                     quantidade: Number.isFinite(quantidadeNumber) ? quantidadeNumber : null,
-                    unidade: estoque?.unidade || '',
+                    unidade: (estoque?.unidade || '').trim() || getSelectedProductUnit(),
                 });
             });
         }
@@ -347,8 +360,9 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('#cod').value = product.cod || '';
         form.querySelector('#codbarras').value = product.codbarras || '';
         form.querySelector('#descricao').value = product.descricao || '';
-        if (form.querySelector('#unidade')) {
-            form.querySelector('#unidade').value = product.unidade || '';
+        if (unitSelect) {
+            unitSelect.value = product.unidade || '';
+            lastSelectedProductUnit = getSelectedProductUnit();
         }
         if (form.querySelector('#referencia')) {
             form.querySelector('#referencia').value = product.referencia || '';
@@ -550,6 +564,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     addSupplierBtn?.addEventListener('click', handleAddSupplier);
+
+    unitSelect?.addEventListener('change', () => {
+        const newUnit = getSelectedProductUnit();
+        depositStockMap.forEach((entry, depositId) => {
+            const quantidade = entry?.quantidade ?? null;
+            const currentUnit = (entry?.unidade || '').trim();
+            if (!currentUnit || currentUnit === lastSelectedProductUnit) {
+                depositStockMap.set(depositId, { quantidade, unidade: newUnit });
+            } else {
+                depositStockMap.set(depositId, { quantidade, unidade: currentUnit });
+            }
+        });
+        lastSelectedProductUnit = newUnit;
+        renderDepositStockRows();
+    });
 
     const handleSaveCategories = () => {
         const selectedCheckboxes = categoryTreeContainer.querySelectorAll('input[type="checkbox"]:checked');
