@@ -21,6 +21,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const nomeFantasiaInput = document.getElementById('store-nome');
     const cnpjInput = document.getElementById('store-cnpj');
     const cnaeInput = document.getElementById('store-cnae');
+    const cnaeDescricaoInput = document.getElementById('store-cnae-descricao');
+    const cnaeSecundarioInput = document.getElementById('store-cnae-secundario');
+    const cnaeSecundarioDescricaoInput = document.getElementById('store-cnae-secundario-descricao');
     const inscricaoEstadualInput = document.getElementById('store-inscricao-estadual');
     const inscricaoMunicipalInput = document.getElementById('store-inscricao-municipal');
     const regimeTributarioSelect = document.getElementById('store-regime-tributario');
@@ -39,10 +42,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const certificadoValidadeInput = document.getElementById('store-certificado-validade');
     const certificadoStatusText = document.getElementById('store-certificado-status');
     const certificadoAtualText = document.getElementById('store-certificado-atual');
+    const cscIdProducaoInput = document.getElementById('store-csc-id-producao');
+    const cscTokenProducaoInput = document.getElementById('store-csc-token-producao');
+    const cscTokenProducaoHelper = document.getElementById('store-csc-token-producao-helper');
+    const cscTokenProducaoClearBtn = document.getElementById('store-csc-token-producao-clear');
+    const cscIdHomologacaoInput = document.getElementById('store-csc-id-homologacao');
+    const cscTokenHomologacaoInput = document.getElementById('store-csc-token-homologacao');
+    const cscTokenHomologacaoHelper = document.getElementById('store-csc-token-homologacao-helper');
+    const cscTokenHomologacaoClearBtn = document.getElementById('store-csc-token-homologacao-clear');
     const contadorNomeInput = document.getElementById('store-contador-nome');
-    const contadorEmailInput = document.getElementById('store-contador-email');
-    const contadorTelefoneInput = document.getElementById('store-contador-telefone');
+    const contadorCpfInput = document.getElementById('store-contador-cpf');
     const contadorCrcInput = document.getElementById('store-contador-crc');
+    const contadorCnpjInput = document.getElementById('store-contador-cnpj');
+    const contadorCepInput = document.getElementById('store-contador-cep');
+    const contadorEnderecoInput = document.getElementById('store-contador-endereco');
+    const contadorCidadeInput = document.getElementById('store-contador-cidade');
+    const contadorNumeroInput = document.getElementById('store-contador-numero');
+    const contadorBairroInput = document.getElementById('store-contador-bairro');
+    const contadorComplementoInput = document.getElementById('store-contador-complemento');
+    const contadorRazaoSocialInput = document.getElementById('store-contador-razao-social');
+    const contadorTelefoneInput = document.getElementById('store-contador-telefone');
+    const contadorFaxInput = document.getElementById('store-contador-fax');
+    const contadorCelularInput = document.getElementById('store-contador-celular');
+    const contadorEmailInput = document.getElementById('store-contador-email');
     const closeModalBtn = document.getElementById('close-store-modal');
     const tabButtons = Array.from(document.querySelectorAll('#store-modal .tab-button'));
     const tabPanels = Array.from(document.querySelectorAll('#store-modal .tab-panel'));
@@ -55,6 +77,173 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Utilidades de formulário ---
     const enderecoFields = [logradouroInput, numeroInput, complementoInput, municipioInput, ufInput];
+
+    const formatSingleCnaeValue = (value = '') => {
+        const digits = String(value || '').replace(/\D/g, '').slice(0, 7);
+        if (!digits) return '';
+        if (digits.length <= 4) return digits;
+
+        let formatted = digits.slice(0, 4);
+        formatted += `-${digits.slice(4, 5)}`;
+        if (digits.length > 5) {
+            formatted += `/${digits.slice(5, 7)}`;
+        }
+        return formatted;
+    };
+
+    const formatMultipleCnaesValue = (value = '') => {
+        if (Array.isArray(value)) {
+            const formattedArray = value
+                .map((item) => formatSingleCnaeValue(item))
+                .filter((item) => item.length > 0);
+            return formattedArray.join(', ');
+        }
+
+        const raw = String(value || '');
+        const tokens = raw.split(/[,;\n]+/);
+        const formattedTokens = tokens
+            .map((token) => formatSingleCnaeValue(token))
+            .filter((token) => token.length > 0);
+        const hasTrailingSeparator = /[,;\n]+\s*$/.test(raw);
+        let result = formattedTokens.join(', ');
+        if (hasTrailingSeparator && result.length > 0) {
+            result += ', ';
+        }
+        return result;
+    };
+
+    const applyCnaeMaskToInput = (input, { allowMultiple = false } = {}) => {
+        if (!input) return;
+        const formatter = allowMultiple ? formatMultipleCnaesValue : formatSingleCnaeValue;
+        const updateValue = () => {
+            const formatted = formatter(input.value);
+            if (formatted === input.value) return;
+            input.value = formatted;
+            if (document.activeElement === input) {
+                try {
+                    input.setSelectionRange(formatted.length, formatted.length);
+                } catch (error) {
+                    // Ignore selection errors for unsupported input types
+                }
+            }
+        };
+        input.addEventListener('input', updateValue);
+        input.addEventListener('blur', updateValue);
+    };
+
+    applyCnaeMaskToInput(cnaeInput);
+    applyCnaeMaskToInput(cnaeSecundarioInput, { allowMultiple: true });
+
+    const CSC_TOKEN_DEFAULT_MESSAGES = {
+        producao: 'Informe o token do CSC de produção fornecido pela SEFAZ.',
+        homologacao: 'Informe o token do CSC de homologação fornecido pela SEFAZ.'
+    };
+
+    const setCscTokenState = (input, { stored = false, cleared = false } = {}) => {
+        if (!input) return;
+        input.dataset.stored = stored ? 'true' : 'false';
+        input.dataset.cleared = cleared ? 'true' : 'false';
+    };
+
+    const updateCscTokenHelper = (input, helper, defaultMessage) => {
+        if (!helper) return;
+        if (!input) {
+            helper.textContent = defaultMessage;
+            return;
+        }
+
+        const value = (input.value || '').trim();
+        const stored = input.dataset.stored === 'true';
+        const cleared = input.dataset.cleared === 'true';
+
+        let message = defaultMessage;
+        if (value.length > 0) {
+            message = 'Um novo token será salvo ao confirmar.';
+        } else if (cleared) {
+            message = 'O token atual será removido ao salvar.';
+        } else if (stored) {
+            message = 'Um token está armazenado. Deixe em branco para manter ou informe um novo para substituir.';
+        }
+
+        helper.textContent = message;
+    };
+
+    const updateCscTokenClearButton = (button, isCleared) => {
+        if (!button) return;
+        button.textContent = isCleared ? 'Desfazer' : 'Remover';
+    };
+
+    const resetCscTokenInput = (input, helper, defaultMessage, clearButton) => {
+        if (!input) return;
+        input.value = '';
+        setCscTokenState(input, { stored: false, cleared: false });
+        updateCscTokenHelper(input, helper, defaultMessage);
+        updateCscTokenClearButton(clearButton, false);
+    };
+
+    const toggleCscTokenCleared = (input, helper, defaultMessage, clearButton) => {
+        if (!input) return;
+        const isCurrentlyCleared = input.dataset.cleared === 'true';
+        if (!isCurrentlyCleared) {
+            input.value = '';
+        }
+        setCscTokenState(input, {
+            stored: input.dataset.stored === 'true',
+            cleared: !isCurrentlyCleared
+        });
+        updateCscTokenHelper(input, helper, defaultMessage);
+        updateCscTokenClearButton(clearButton, !isCurrentlyCleared);
+        input.focus();
+    };
+
+    const registerCscTokenInputEvents = (input, helper, defaultMessage, clearButton) => {
+        if (!input) return;
+        input.addEventListener('input', () => {
+            if (input.dataset.cleared === 'true') {
+                setCscTokenState(input, {
+                    stored: input.dataset.stored === 'true',
+                    cleared: false
+                });
+                updateCscTokenClearButton(clearButton, false);
+            }
+            updateCscTokenHelper(input, helper, defaultMessage);
+        });
+        input.addEventListener('change', () => updateCscTokenHelper(input, helper, defaultMessage));
+        input.addEventListener('blur', () => updateCscTokenHelper(input, helper, defaultMessage));
+    };
+
+    registerCscTokenInputEvents(
+        cscTokenProducaoInput,
+        cscTokenProducaoHelper,
+        CSC_TOKEN_DEFAULT_MESSAGES.producao,
+        cscTokenProducaoClearBtn
+    );
+    registerCscTokenInputEvents(
+        cscTokenHomologacaoInput,
+        cscTokenHomologacaoHelper,
+        CSC_TOKEN_DEFAULT_MESSAGES.homologacao,
+        cscTokenHomologacaoClearBtn
+    );
+
+    cscTokenProducaoClearBtn?.addEventListener('click', (event) => {
+        event.preventDefault();
+        toggleCscTokenCleared(
+            cscTokenProducaoInput,
+            cscTokenProducaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.producao,
+            cscTokenProducaoClearBtn
+        );
+    });
+
+    cscTokenHomologacaoClearBtn?.addEventListener('click', (event) => {
+        event.preventDefault();
+        toggleCscTokenCleared(
+            cscTokenHomologacaoInput,
+            cscTokenHomologacaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.homologacao,
+            cscTokenHomologacaoClearBtn
+        );
+    });
 
     const buildEnderecoCompleto = () => {
         const logradouro = (logradouroInput?.value || '').trim();
@@ -415,6 +604,10 @@ document.addEventListener('DOMContentLoaded', () => {
         activateTab('endereco');
         buildEnderecoCompleto();
 
+        if (cnaeInput) cnaeInput.value = '';
+        if (cnaeDescricaoInput) cnaeDescricaoInput.value = '';
+        if (cnaeSecundarioInput) cnaeSecundarioInput.value = '';
+        if (cnaeSecundarioDescricaoInput) cnaeSecundarioDescricaoInput.value = '';
         diasDaSemana.forEach(({ key }) => {
             const dayRow = horarioContainer.querySelector(`[data-day="${key}"]`);
             const inputs = dayRow.querySelectorAll('.time-input');
@@ -432,8 +625,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (certificadoSenhaInput) certificadoSenhaInput.value = '';
         if (certificadoValidadeInput) certificadoValidadeInput.value = '';
         if (certificadoAtualText) certificadoAtualText.textContent = 'Nenhum certificado armazenado.';
+        if (cscIdProducaoInput) cscIdProducaoInput.value = '';
+        if (cscIdHomologacaoInput) cscIdHomologacaoInput.value = '';
+        resetCscTokenInput(
+            cscTokenProducaoInput,
+            cscTokenProducaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.producao,
+            cscTokenProducaoClearBtn
+        );
+        resetCscTokenInput(
+            cscTokenHomologacaoInput,
+            cscTokenHomologacaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.homologacao,
+            cscTokenHomologacaoClearBtn
+        );
         updateCertificadoStatus('', 'muted');
-
         modal.classList.remove('hidden');
 
         setTimeout(() => {
@@ -461,7 +667,55 @@ document.addEventListener('DOMContentLoaded', () => {
             razaoSocialInput.value = store.razaoSocial || '';
             nomeFantasiaInput.value = store.nomeFantasia || store.nome || '';
             cnpjInput.value = store.cnpj || '';
-            cnaeInput.value = store.cnaePrincipal || store.cnae || '';
+            if (cscIdProducaoInput) cscIdProducaoInput.value = store.cscIdProducao || '';
+            if (cscIdHomologacaoInput) cscIdHomologacaoInput.value = store.cscIdHomologacao || '';
+            if (cscTokenProducaoInput) {
+                cscTokenProducaoInput.value = '';
+                setCscTokenState(cscTokenProducaoInput, {
+                    stored: Boolean(store.cscTokenProducaoArmazenado),
+                    cleared: false
+                });
+                updateCscTokenHelper(
+                    cscTokenProducaoInput,
+                    cscTokenProducaoHelper,
+                    CSC_TOKEN_DEFAULT_MESSAGES.producao
+                );
+                updateCscTokenClearButton(cscTokenProducaoClearBtn, false);
+            }
+            if (cscTokenHomologacaoInput) {
+                cscTokenHomologacaoInput.value = '';
+                setCscTokenState(cscTokenHomologacaoInput, {
+                    stored: Boolean(store.cscTokenHomologacaoArmazenado),
+                    cleared: false
+                });
+                updateCscTokenHelper(
+                    cscTokenHomologacaoInput,
+                    cscTokenHomologacaoHelper,
+                    CSC_TOKEN_DEFAULT_MESSAGES.homologacao
+                );
+                updateCscTokenClearButton(cscTokenHomologacaoClearBtn, false);
+            }
+            if (cnaeInput) {
+                const cnaePrincipalValue = store.cnaePrincipal || store.cnae || '';
+                cnaeInput.value = formatSingleCnaeValue(cnaePrincipalValue);
+            }
+            if (cnaeDescricaoInput) {
+                cnaeDescricaoInput.value = store.cnaePrincipalDescricao
+                    || store.cnaeDescricao
+                    || store.cnaeDescricaoPrincipal
+                    || '';
+            }
+            if (cnaeSecundarioInput) {
+                const rawCnaeSecundario = Array.isArray(store.cnaesSecundarios)
+                    ? store.cnaesSecundarios
+                    : (store.cnaeSecundario || store.cnaeSecundaria || store.cnaeSecundarios || '');
+                cnaeSecundarioInput.value = formatMultipleCnaesValue(rawCnaeSecundario);
+            }
+            if (cnaeSecundarioDescricaoInput) {
+                cnaeSecundarioDescricaoInput.value = store.cnaeSecundarioDescricao
+                    || store.cnaeDescricaoSecundario
+                    || '';
+            }
             inscricaoEstadualInput.value = store.inscricaoEstadual || '';
             inscricaoMunicipalInput.value = store.inscricaoMunicipal || '';
             regimeTributarioSelect.value = store.regimeTributario || '';
@@ -476,10 +730,21 @@ document.addEventListener('DOMContentLoaded', () => {
             complementoInput.value = store.complemento || '';
             codIbgeMunicipioInput.value = store.codigoIbgeMunicipio || store.codIbgeMunicipio || '';
             codUfInput.value = store.codigoUf || store.codUf || '';
-            contadorNomeInput.value = store.contadorNome || store.contador?.nome || '';
-            contadorEmailInput.value = store.contadorEmail || store.contador?.email || '';
-            contadorTelefoneInput.value = store.contadorTelefone || store.contador?.telefone || '';
-            contadorCrcInput.value = store.contadorCrc || store.contador?.crc || '';
+            if (contadorNomeInput) contadorNomeInput.value = store.contadorNome || store.contador?.nome || '';
+            if (contadorCpfInput) contadorCpfInput.value = store.contadorCpf || store.contador?.cpf || '';
+            if (contadorCrcInput) contadorCrcInput.value = store.contadorCrc || store.contador?.crc || '';
+            if (contadorCnpjInput) contadorCnpjInput.value = store.contadorCnpj || store.contador?.cnpj || '';
+            if (contadorCepInput) contadorCepInput.value = store.contadorCep || store.contador?.cep || '';
+            if (contadorEnderecoInput) contadorEnderecoInput.value = store.contadorEndereco || store.contador?.endereco || '';
+            if (contadorCidadeInput) contadorCidadeInput.value = store.contadorCidade || store.contador?.cidade || '';
+            if (contadorNumeroInput) contadorNumeroInput.value = store.contadorNumero || store.contador?.numero || '';
+            if (contadorBairroInput) contadorBairroInput.value = store.contadorBairro || store.contador?.bairro || '';
+            if (contadorComplementoInput) contadorComplementoInput.value = store.contadorComplemento || store.contador?.complemento || '';
+            if (contadorRazaoSocialInput) contadorRazaoSocialInput.value = store.contadorRazaoSocial || store.contador?.razaoSocial || '';
+            if (contadorTelefoneInput) contadorTelefoneInput.value = store.contadorTelefone || store.contador?.telefone || '';
+            if (contadorFaxInput) contadorFaxInput.value = store.contadorFax || store.contador?.fax || '';
+            if (contadorCelularInput) contadorCelularInput.value = store.contadorCelular || store.contador?.celular || '';
+            if (contadorEmailInput) contadorEmailInput.value = store.contadorEmail || store.contador?.email || '';
             certificadoValidadeInput.value = store.certificadoValidade || '';
             if (certificadoSenhaInput) certificadoSenhaInput.value = '';
             if (certificadoAtualText) {
@@ -593,6 +858,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (certificadoSenhaInput) certificadoSenhaInput.value = '';
         if (certificadoValidadeInput) certificadoValidadeInput.value = '';
         if (certificadoAtualText) certificadoAtualText.textContent = 'Nenhum certificado armazenado.';
+        if (cscIdProducaoInput) cscIdProducaoInput.value = '';
+        if (cscIdHomologacaoInput) cscIdHomologacaoInput.value = '';
+        resetCscTokenInput(
+            cscTokenProducaoInput,
+            cscTokenProducaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.producao,
+            cscTokenProducaoClearBtn
+        );
+        resetCscTokenInput(
+            cscTokenHomologacaoInput,
+            cscTokenHomologacaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.homologacao,
+            cscTokenHomologacaoClearBtn
+        );
         updateCertificadoStatus('', 'muted');
         if (locationMarker) {
             locationMarker.remove();
@@ -693,6 +972,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    contadorCepInput?.addEventListener('blur', async () => {
+        const cepValue = contadorCepInput.value || '';
+        const sanitizedCep = cepValue.replace(/\D/g, '');
+        if (sanitizedCep.length !== 8) {
+            return;
+        }
+
+        let cepData = null;
+        try {
+            cepData = await buscarEnderecoPorCep(sanitizedCep);
+        } catch (error) {
+            showModal({ title: 'Erro ao consultar CEP', message: error.message || 'Não foi possível consultar o CEP do contador. Tente novamente.', confirmText: 'OK' });
+            return;
+        }
+
+        if (!cepData) {
+            showModal({ title: 'CEP não encontrado', message: 'Revise o CEP informado ou preencha os dados do contador manualmente.', confirmText: 'OK' });
+            return;
+        }
+
+        if (contadorEnderecoInput) contadorEnderecoInput.value = cepData.logradouro || '';
+        if (contadorBairroInput) contadorBairroInput.value = cepData.bairro || '';
+        if (contadorCidadeInput) contadorCidadeInput.value = cepData.localidade || '';
+        if (contadorComplementoInput) contadorComplementoInput.value = cepData.complemento || '';
+    });
+
     tableBody.addEventListener('click', (event) => {
         const target = event.target;
         const action = target.dataset.action;
@@ -734,12 +1039,29 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.disabled = true;
 
         const enderecoCompleto = buildEnderecoCompleto();
+        const formattedCnaePrincipal = cnaeInput ? formatSingleCnaeValue(cnaeInput.value) : '';
+        if (cnaeInput) cnaeInput.value = formattedCnaePrincipal;
+        let formattedCnaeSecundario = cnaeSecundarioInput ? formatMultipleCnaesValue(cnaeSecundarioInput.value) : '';
+        formattedCnaeSecundario = formattedCnaeSecundario.replace(/[,\s]+$/, '');
+        if (cnaeSecundarioInput) cnaeSecundarioInput.value = formattedCnaeSecundario;
+        const cnaesSecundarios = formattedCnaeSecundario
+            ? formattedCnaeSecundario.split(/,\s*/).map((value) => value.trim()).filter((value) => value.length > 0)
+            : [];
+        const cscIdProducaoValue = (cscIdProducaoInput?.value || '').trim();
+        const cscIdHomologacaoValue = (cscIdHomologacaoInput?.value || '').trim();
+        const cscTokenProducaoValue = (cscTokenProducaoInput?.value || '').trim();
+        const cscTokenHomologacaoValue = (cscTokenHomologacaoInput?.value || '').trim();
+
         const storeData = {
             nome: nomeFantasiaInput.value,
             nomeFantasia: nomeFantasiaInput.value,
             razaoSocial: razaoSocialInput.value,
             cnpj: cnpjInput.value,
-            cnaePrincipal: cnaeInput.value,
+            cnaePrincipal: formattedCnaePrincipal,
+            cnaePrincipalDescricao: cnaeDescricaoInput?.value || '',
+            cnaeSecundario: formattedCnaeSecundario,
+            cnaeSecundarioDescricao: cnaeSecundarioDescricaoInput?.value || '',
+            cnaesSecundarios,
             inscricaoEstadual: inscricaoEstadualInput.value,
             inscricaoMunicipal: inscricaoMunicipalInput.value,
             regimeTributario: regimeTributarioSelect.value,
@@ -759,13 +1081,42 @@ document.addEventListener('DOMContentLoaded', () => {
             longitude: parseFloat(lonInput.value) || null,
             servicos: selectedServices,
             horario: {},
-            contadorNome: contadorNomeInput.value,
-            contadorEmail: contadorEmailInput.value,
-            contadorTelefone: contadorTelefoneInput.value,
-            contadorCrc: contadorCrcInput.value,
-            certificadoValidade: certificadoValidadeInput.value
+            contadorNome: contadorNomeInput?.value || '',
+            contadorCpf: contadorCpfInput?.value || '',
+            contadorCrc: contadorCrcInput?.value || '',
+            contadorCnpj: contadorCnpjInput?.value || '',
+            contadorCep: contadorCepInput?.value || '',
+            contadorEndereco: contadorEnderecoInput?.value || '',
+            contadorCidade: contadorCidadeInput?.value || '',
+            contadorNumero: contadorNumeroInput?.value || '',
+            contadorBairro: contadorBairroInput?.value || '',
+            contadorComplemento: contadorComplementoInput?.value || '',
+            contadorRazaoSocial: contadorRazaoSocialInput?.value || '',
+            contadorTelefone: contadorTelefoneInput?.value || '',
+            contadorFax: contadorFaxInput?.value || '',
+            contadorCelular: contadorCelularInput?.value || '',
+            contadorEmail: contadorEmailInput?.value || '',
+            certificadoValidade: certificadoValidadeInput.value,
+            cscIdProducao: cscIdProducaoValue,
+            cscIdHomologacao: cscIdHomologacaoValue
         };
-        
+
+        if (cscTokenProducaoInput) {
+            if (cscTokenProducaoValue) {
+                storeData.cscTokenProducao = cscTokenProducaoValue;
+            } else if (cscTokenProducaoInput.dataset.cleared === 'true') {
+                storeData.cscTokenProducao = '';
+            }
+        }
+
+        if (cscTokenHomologacaoInput) {
+            if (cscTokenHomologacaoValue) {
+                storeData.cscTokenHomologacao = cscTokenHomologacaoValue;
+            } else if (cscTokenHomologacaoInput.dataset.cleared === 'true') {
+                storeData.cscTokenHomologacao = '';
+            }
+        }
+
         diasDaSemana.forEach(({ key }) => {
             const dayRow = horarioContainer.querySelector(`[data-day="${key}"]`);
             storeData.horario[key] = {

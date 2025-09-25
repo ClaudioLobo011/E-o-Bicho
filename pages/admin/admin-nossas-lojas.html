@@ -78,13 +78,9 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-12 gap-2">
-                            <div class="col-span-12 md:col-span-6">
+                            <div class="col-span-12">
                                 <label for="store-cnpj" class="block font-medium mb-0.5">CNPJ</label>
                                 <input type="text" id="store-cnpj" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="00.000.000/0000-00" />
-                            </div>
-                            <div class="col-span-12 md:col-span-6">
-                                <label for="store-cnae" class="block font-medium mb-0.5">CNAE Principal</label>
-                                <input type="text" id="store-cnae" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0000-0/00" />
                             </div>
                         </div>
                         <div class="grid grid-cols-12 gap-2">
@@ -131,11 +127,12 @@
                     <div class="border-b border-gray-200">
                         <nav class="flex flex-wrap gap-2" role="tablist">
                             <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold bg-emerald-50 text-emerald-700" data-tab-target="endereco">Endereço</button>
-                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="certificado">Certificado</button>
                             <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="contador">Contador</button>
-                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="filiais">Filiais</button>
                             <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="logo">Logo</button>
+                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="filiais">Filiais</button>
                             <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="funcionamento">Funcionamento</button>
+                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="atividade-economica">Atividade Econômica</button>
+                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="certificado">Certificado</button>
                         </nav>
                     </div>
 
@@ -188,7 +185,134 @@
                             </div>
                         </div>
 
-                        <div class="tab-panel hidden space-y-2" data-tab-panel="certificado">
+                        <div class="tab-panel hidden space-y-2" data-tab-panel="contador">
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-nome" class="block font-medium mb-0.5">Nome</label>
+                                    <input type="text" id="store-contador-nome" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                                </div>
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-cpf" class="block font-medium mb-0.5">CPF</label>
+                                    <input type="text" id="store-contador-cpf" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="000.000.000-00" />
+                                </div>
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-crc" class="block font-medium mb-0.5">CRC</label>
+                                    <input type="text" id="store-contador-crc" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="000000/O-0" />
+                                </div>
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-cnpj" class="block font-medium mb-0.5">CNPJ</label>
+                                    <input type="text" id="store-contador-cnpj" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="00.000.000/0000-00" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-cep" class="block font-medium mb-0.5">CEP</label>
+                                    <input type="text" id="store-contador-cep" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="00000-000" />
+                                </div>
+                                <div class="col-span-12 md:col-span-6">
+                                    <label for="store-contador-endereco" class="block font-medium mb-0.5">Endereço</label>
+                                    <input type="text" id="store-contador-endereco" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Rua, avenida..." />
+                                </div>
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-cidade" class="block font-medium mb-0.5">Cidade</label>
+                                    <input type="text" id="store-contador-cidade" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-numero" class="block font-medium mb-0.5">Número</label>
+                                    <input type="text" id="store-contador-numero" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                                </div>
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-bairro" class="block font-medium mb-0.5">Bairro</label>
+                                    <input type="text" id="store-contador-bairro" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                                </div>
+                                <div class="col-span-12 md:col-span-6">
+                                    <label for="store-contador-complemento" class="block font-medium mb-0.5">Complemento</label>
+                                    <input type="text" id="store-contador-complemento" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-12">
+                                    <label for="store-contador-razao-social" class="block font-medium mb-0.5">Razão Social do Escritório</label>
+                                    <input type="text" id="store-contador-razao-social" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-telefone" class="block font-medium mb-0.5">Telefone</label>
+                                    <input type="text" id="store-contador-telefone" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="(00) 0000-0000" />
+                                </div>
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-fax" class="block font-medium mb-0.5">Fax</label>
+                                    <input type="text" id="store-contador-fax" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="(00) 0000-0000" />
+                                </div>
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-celular" class="block font-medium mb-0.5">Celular</label>
+                                    <input type="text" id="store-contador-celular" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="(00) 00000-0000" />
+                                </div>
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-email" class="block font-medium mb-0.5">Email</label>
+                                    <input type="email" id="store-contador-email" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="contador@empresa.com" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-panel hidden space-y-2" data-tab-panel="logo">
+                            <div>
+                                <label for="store-image-input" class="block font-medium mb-0.5">Atualizar imagem/Logo da Loja</label>
+                                <input type="file" id="store-image-input" class="w-full text-sm" accept="image/*" />
+                                <p class="helper-text text-gray-500">A imagem selecionada aparecerá no topo deste modal e nas vitrines da loja.</p>
+                            </div>
+                        </div>
+
+                        <div class="tab-panel hidden space-y-2" data-tab-panel="filiais">
+                            <p class="helper-text text-gray-500">Associe as filiais vinculadas a esta loja.</p>
+                            <div id="store-filiais-list" class="border rounded-lg p-3 bg-gray-50">
+                                <p class="text-sm text-gray-600">Nenhuma filial selecionada.</p>
+                            </div>
+                        </div>
+
+                        <div class="tab-panel hidden space-y-3" data-tab-panel="funcionamento">
+                            <fieldset class="border rounded-lg p-3">
+                                <legend class="px-2 text-sm font-semibold">Horário de Funcionamento</legend>
+                                <div id="horario-inputs-container" class="space-y-3 mt-2"></div>
+                            </fieldset>
+                            <div>
+                                <label class="block font-medium mb-0.5">Serviços Disponíveis</label>
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <button type="button" id="open-services-modal-btn" class="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold">Adicionar / Remover</button>
+                                    <div id="service-tags-container" class="flex flex-wrap gap-2"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-panel hidden space-y-2" data-tab-panel="atividade-economica">
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-12 md:col-span-6 space-y-1.5">
+                                    <div>
+                                        <label for="store-cnae" class="block font-medium mb-0.5">CNAE Principal</label>
+                                        <input type="text" id="store-cnae" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0000-0/00" />
+                                    </div>
+                                    <div>
+                                        <label for="store-cnae-descricao" class="block font-medium mb-0.5">Descrição do CNAE Principal</label>
+                                        <textarea id="store-cnae-descricao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" rows="2" placeholder="Descreva a atividade principal"></textarea>
+                                    </div>
+                                </div>
+                                <div class="col-span-12 md:col-span-6 space-y-1.5">
+                                    <div>
+                                        <label for="store-cnae-secundario" class="block font-medium mb-0.5">CNAE Secundário</label>
+                                        <input type="text" id="store-cnae-secundario" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0000-0/00" />
+                                    </div>
+                                    <div>
+                                        <label for="store-cnae-secundario-descricao" class="block font-medium mb-0.5">Descrição do CNAE Secundário</label>
+                                        <textarea id="store-cnae-secundario-descricao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" rows="2" placeholder="Descreva a atividade secundária"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-panel hidden space-y-3" data-tab-panel="certificado">
                             <div class="grid grid-cols-12 gap-2">
                                 <div class="col-span-12 md:col-span-6">
                                     <label for="store-certificado-arquivo" class="block font-medium mb-0.5">Arquivo do Certificado</label>
@@ -205,59 +329,35 @@
                                     <input type="date" id="store-certificado-validade" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                                 </div>
                             </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-12 md:col-span-6 space-y-1.5">
+                                    <label for="store-csc-id-producao" class="block font-medium mb-0.5">CSC ID (Produção)</label>
+                                    <input type="text" id="store-csc-id-producao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Informe o ID do CSC de produção" autocomplete="off" />
+                                </div>
+                                <div class="col-span-12 md:col-span-6 space-y-1.5">
+                                    <label for="store-csc-token-producao" class="block font-medium mb-0.5">CSC Token (Produção)</label>
+                                    <div class="flex gap-2">
+                                        <input type="password" id="store-csc-token-producao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Digite o token de produção" autocomplete="new-password" />
+                                        <button type="button" id="store-csc-token-producao-clear" class="px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50">Remover</button>
+                                    </div>
+                                    <p id="store-csc-token-producao-helper" class="helper-text text-gray-500 text-xs">Informe o token do CSC de produção fornecido pela SEFAZ.</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-12 md:col-span-6 space-y-1.5">
+                                    <label for="store-csc-id-homologacao" class="block font-medium mb-0.5">CSC ID (Homologação)</label>
+                                    <input type="text" id="store-csc-id-homologacao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Informe o ID do CSC de homologação" autocomplete="off" />
+                                </div>
+                                <div class="col-span-12 md:col-span-6 space-y-1.5">
+                                    <label for="store-csc-token-homologacao" class="block font-medium mb-0.5">CSC Token (Homologação)</label>
+                                    <div class="flex gap-2">
+                                        <input type="password" id="store-csc-token-homologacao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Digite o token de homologação" autocomplete="new-password" />
+                                        <button type="button" id="store-csc-token-homologacao-clear" class="px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50">Remover</button>
+                                    </div>
+                                    <p id="store-csc-token-homologacao-helper" class="helper-text text-gray-500 text-xs">Informe o token do CSC de homologação fornecido pela SEFAZ.</p>
+                                </div>
+                            </div>
                             <p id="store-certificado-status" class="helper-text text-gray-500"></p>
-                        </div>
-
-                        <div class="tab-panel hidden space-y-2" data-tab-panel="contador">
-                            <div class="grid grid-cols-12 gap-2">
-                                <div class="col-span-12 md:col-span-6">
-                                    <label for="store-contador-nome" class="block font-medium mb-0.5">Nome do Contador</label>
-                                    <input type="text" id="store-contador-nome" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                                </div>
-                                <div class="col-span-12 md:col-span-6">
-                                    <label for="store-contador-email" class="block font-medium mb-0.5">Email do Contador</label>
-                                    <input type="email" id="store-contador-email" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="contador@empresa.com" />
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-12 gap-2">
-                                <div class="col-span-12 md:col-span-6">
-                                    <label for="store-contador-telefone" class="block font-medium mb-0.5">Telefone</label>
-                                    <input type="text" id="store-contador-telefone" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="(00) 0000-0000" />
-                                </div>
-                                <div class="col-span-12 md:col-span-6">
-                                    <label for="store-contador-crc" class="block font-medium mb-0.5">CRC</label>
-                                    <input type="text" id="store-contador-crc" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="000000/O-0" />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="tab-panel hidden space-y-2" data-tab-panel="filiais">
-                            <p class="helper-text text-gray-500">Associe as filiais vinculadas a esta loja.</p>
-                            <div id="store-filiais-list" class="border rounded-lg p-3 bg-gray-50">
-                                <p class="text-sm text-gray-600">Nenhuma filial selecionada.</p>
-                            </div>
-                        </div>
-
-                        <div class="tab-panel hidden space-y-2" data-tab-panel="logo">
-                            <div>
-                                <label for="store-image-input" class="block font-medium mb-0.5">Atualizar imagem/Logo da Loja</label>
-                                <input type="file" id="store-image-input" class="w-full text-sm" accept="image/*" />
-                                <p class="helper-text text-gray-500">A imagem selecionada aparecerá no topo deste modal e nas vitrines da loja.</p>
-                            </div>
-                        </div>
-
-                        <div class="tab-panel hidden space-y-3" data-tab-panel="funcionamento">
-                            <fieldset class="border rounded-lg p-3">
-                                <legend class="px-2 text-sm font-semibold">Horário de Funcionamento</legend>
-                                <div id="horario-inputs-container" class="space-y-3 mt-2"></div>
-                            </fieldset>
-                            <div>
-                                <label class="block font-medium mb-0.5">Serviços Disponíveis</label>
-                                <div class="flex flex-wrap items-center gap-3">
-                                    <button type="button" id="open-services-modal-btn" class="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold">Adicionar / Remover</button>
-                                    <div id="service-tags-container" class="flex flex-wrap gap-2"></div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
