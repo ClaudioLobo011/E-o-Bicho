@@ -1,0 +1,120 @@
+{
+  "defaults": {
+    "origem": "0",
+    "cest": "",
+    "csosn": "102",
+    "cst": "00",
+    "cfop": {
+      "nfe": {
+        "dentroEstado": "5102",
+        "foraEstado": "6102",
+        "transferencia": "5152",
+        "devolucao": "5202",
+        "industrializacao": "5101"
+      },
+      "nfce": {
+        "dentroEstado": "5102",
+        "foraEstado": "6108",
+        "transferencia": "5656",
+        "devolucao": "5202",
+        "industrializacao": "5101"
+      }
+    },
+    "pis": {
+      "codigo": "01",
+      "cst": "01",
+      "aliquota": 1.65,
+      "tipoCalculo": "percentual"
+    },
+    "cofins": {
+      "codigo": "01",
+      "cst": "01",
+      "aliquota": 7.6,
+      "tipoCalculo": "percentual"
+    },
+    "ipi": {
+      "cst": "53",
+      "codigoEnquadramento": "999",
+      "aliquota": 0,
+      "tipoCalculo": "percentual"
+    },
+    "fcp": {
+      "indicador": "0",
+      "aliquota": 0,
+      "aplica": false
+    }
+  },
+  "tipoProduto": {
+    "Consumo Interno": {
+      "cfop": {
+        "nfe": {
+          "dentroEstado": "5405",
+          "foraEstado": "6404"
+        },
+        "nfce": {
+          "dentroEstado": "5405",
+          "foraEstado": "6404"
+        }
+      }
+    },
+    "Bonificação": {
+      "cfop": {
+        "nfe": {
+          "dentroEstado": "5910",
+          "foraEstado": "6910"
+        },
+        "nfce": {
+          "dentroEstado": "5910",
+          "foraEstado": "6910"
+        }
+      },
+      "pis": {
+        "cst": "49",
+        "aliquota": 0,
+        "tipoCalculo": "isento"
+      },
+      "cofins": {
+        "cst": "49",
+        "aliquota": 0,
+        "tipoCalculo": "isento"
+      }
+    }
+  },
+  "ncmOverrides": {
+    "33051000": {
+      "cest": "0100500",
+      "pis": {
+        "aliquota": 0,
+        "tipoCalculo": "isento",
+        "cst": "06"
+      },
+      "cofins": {
+        "aliquota": 0,
+        "tipoCalculo": "isento",
+        "cst": "06"
+      }
+    },
+    "21069090": {
+      "csosn": "103",
+      "cst": "60",
+      "fcp": {
+        "indicador": "1",
+        "aliquota": 2
+      }
+    }
+  },
+  "regime": {
+    "simples": {
+      "csosn": "102",
+      "cst": ""
+    },
+    "mei": {
+      "csosn": "103",
+      "cst": ""
+    },
+    "normal": {
+      "csosn": "",
+      "cst": "00"
+    }
+  }
+}

@@ -25,6 +25,166 @@ document.addEventListener('DOMContentLoaded', () => {
     const depositTotalDisplay = document.getElementById('deposit-total-display');
     const unitSelect = document.getElementById('unidade');
 
+    const fiscalInputs = {
+        origem: document.getElementById('fiscal-origem'),
+        csosn: document.getElementById('fiscal-csosn'),
+        cst: document.getElementById('fiscal-cst'),
+        cest: document.getElementById('fiscal-cest'),
+        statusNfe: document.getElementById('fiscal-status-nfe'),
+        statusNfce: document.getElementById('fiscal-status-nfce'),
+        cfop: {
+            nfe: {
+                interno: document.getElementById('fiscal-cfop-nfe-interno'),
+                interestadual: document.getElementById('fiscal-cfop-nfe-interestadual'),
+                transferencia: document.getElementById('fiscal-cfop-nfe-transferencia'),
+                devolucao: document.getElementById('fiscal-cfop-nfe-devolucao'),
+                industrializacao: document.getElementById('fiscal-cfop-nfe-industrializacao'),
+            },
+            nfce: {
+                interno: document.getElementById('fiscal-cfop-nfce-interno'),
+                interestadual: document.getElementById('fiscal-cfop-nfce-interestadual'),
+                transferencia: document.getElementById('fiscal-cfop-nfce-transferencia'),
+                devolucao: document.getElementById('fiscal-cfop-nfce-devolucao'),
+                industrializacao: document.getElementById('fiscal-cfop-nfce-industrializacao'),
+            },
+        },
+        pis: {
+            codigo: document.getElementById('fiscal-pis-codigo'),
+            cst: document.getElementById('fiscal-pis-cst'),
+            aliquota: document.getElementById('fiscal-pis-aliquota'),
+            tipo: document.getElementById('fiscal-pis-tipo'),
+        },
+        cofins: {
+            codigo: document.getElementById('fiscal-cofins-codigo'),
+            cst: document.getElementById('fiscal-cofins-cst'),
+            aliquota: document.getElementById('fiscal-cofins-aliquota'),
+            tipo: document.getElementById('fiscal-cofins-tipo'),
+        },
+        ipi: {
+            cst: document.getElementById('fiscal-ipi-cst'),
+            enquadramento: document.getElementById('fiscal-ipi-enquadramento'),
+            aliquota: document.getElementById('fiscal-ipi-aliquota'),
+            tipo: document.getElementById('fiscal-ipi-tipo'),
+        },
+        fcp: {
+            indicador: document.getElementById('fiscal-fcp-indicador'),
+            aliquota: document.getElementById('fiscal-fcp-aliquota'),
+            aplica: document.getElementById('fiscal-fcp-aplica'),
+        },
+    };
+
+    const parseNullableNumber = (value) => {
+        if (value === null || value === undefined || value === '') return null;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const setInputValue = (input, value) => {
+        if (!input) return;
+        if (input.type === 'checkbox') {
+            input.checked = Boolean(value);
+        } else if (input.tagName === 'SELECT') {
+            input.value = value !== undefined && value !== null ? String(value) : '';
+        } else {
+            input.value = value !== undefined && value !== null ? value : '';
+        }
+    };
+
+    const populateFiscalFields = (fiscal = {}) => {
+        setInputValue(fiscalInputs.origem, fiscal?.origem || '0');
+        setInputValue(fiscalInputs.csosn, fiscal?.csosn || '');
+        setInputValue(fiscalInputs.cst, fiscal?.cst || '');
+        setInputValue(fiscalInputs.cest, fiscal?.cest || '');
+        setInputValue(fiscalInputs.statusNfe, fiscal?.status?.nfe || 'pendente');
+        setInputValue(fiscalInputs.statusNfce, fiscal?.status?.nfce || 'pendente');
+
+        const cfopNfe = fiscal?.cfop?.nfe || {};
+        const cfopNfce = fiscal?.cfop?.nfce || {};
+        setInputValue(fiscalInputs.cfop.nfe.interno, cfopNfe?.dentroEstado || '');
+        setInputValue(fiscalInputs.cfop.nfe.interestadual, cfopNfe?.foraEstado || '');
+        setInputValue(fiscalInputs.cfop.nfe.transferencia, cfopNfe?.transferencia || '');
+        setInputValue(fiscalInputs.cfop.nfe.devolucao, cfopNfe?.devolucao || '');
+        setInputValue(fiscalInputs.cfop.nfe.industrializacao, cfopNfe?.industrializacao || '');
+        setInputValue(fiscalInputs.cfop.nfce.interno, cfopNfce?.dentroEstado || '');
+        setInputValue(fiscalInputs.cfop.nfce.interestadual, cfopNfce?.foraEstado || '');
+        setInputValue(fiscalInputs.cfop.nfce.transferencia, cfopNfce?.transferencia || '');
+        setInputValue(fiscalInputs.cfop.nfce.devolucao, cfopNfce?.devolucao || '');
+        setInputValue(fiscalInputs.cfop.nfce.industrializacao, cfopNfce?.industrializacao || '');
+
+        const pis = fiscal?.pis || {};
+        setInputValue(fiscalInputs.pis.codigo, pis?.codigo || '');
+        setInputValue(fiscalInputs.pis.cst, pis?.cst || '');
+        setInputValue(fiscalInputs.pis.aliquota, pis?.aliquota ?? '');
+        setInputValue(fiscalInputs.pis.tipo, pis?.tipoCalculo || 'percentual');
+
+        const cofins = fiscal?.cofins || {};
+        setInputValue(fiscalInputs.cofins.codigo, cofins?.codigo || '');
+        setInputValue(fiscalInputs.cofins.cst, cofins?.cst || '');
+        setInputValue(fiscalInputs.cofins.aliquota, cofins?.aliquota ?? '');
+        setInputValue(fiscalInputs.cofins.tipo, cofins?.tipoCalculo || 'percentual');
+
+        const ipi = fiscal?.ipi || {};
+        setInputValue(fiscalInputs.ipi.cst, ipi?.cst || '');
+        setInputValue(fiscalInputs.ipi.enquadramento, ipi?.codigoEnquadramento || '');
+        setInputValue(fiscalInputs.ipi.aliquota, ipi?.aliquota ?? '');
+        setInputValue(fiscalInputs.ipi.tipo, ipi?.tipoCalculo || 'percentual');
+
+        const fcp = fiscal?.fcp || {};
+        setInputValue(fiscalInputs.fcp.indicador, fcp?.indicador || '0');
+        setInputValue(fiscalInputs.fcp.aliquota, fcp?.aliquota ?? '');
+        setInputValue(fiscalInputs.fcp.aplica, fcp?.aplica || false);
+    };
+
+    const collectFiscalData = () => ({
+        origem: fiscalInputs.origem?.value || '0',
+        csosn: fiscalInputs.csosn?.value?.trim() || '',
+        cst: fiscalInputs.cst?.value?.trim() || '',
+        cest: fiscalInputs.cest?.value?.trim() || '',
+        status: {
+            nfe: fiscalInputs.statusNfe?.value || 'pendente',
+            nfce: fiscalInputs.statusNfce?.value || 'pendente',
+        },
+        cfop: {
+            nfe: {
+                dentroEstado: fiscalInputs.cfop.nfe.interno?.value?.trim() || '',
+                foraEstado: fiscalInputs.cfop.nfe.interestadual?.value?.trim() || '',
+                transferencia: fiscalInputs.cfop.nfe.transferencia?.value?.trim() || '',
+                devolucao: fiscalInputs.cfop.nfe.devolucao?.value?.trim() || '',
+                industrializacao: fiscalInputs.cfop.nfe.industrializacao?.value?.trim() || '',
+            },
+            nfce: {
+                dentroEstado: fiscalInputs.cfop.nfce.interno?.value?.trim() || '',
+                foraEstado: fiscalInputs.cfop.nfce.interestadual?.value?.trim() || '',
+                transferencia: fiscalInputs.cfop.nfce.transferencia?.value?.trim() || '',
+                devolucao: fiscalInputs.cfop.nfce.devolucao?.value?.trim() || '',
+                industrializacao: fiscalInputs.cfop.nfce.industrializacao?.value?.trim() || '',
+            },
+        },
+        pis: {
+            codigo: fiscalInputs.pis.codigo?.value?.trim() || '',
+            cst: fiscalInputs.pis.cst?.value?.trim() || '',
+            aliquota: parseNullableNumber(fiscalInputs.pis.aliquota?.value ?? null),
+            tipoCalculo: fiscalInputs.pis.tipo?.value || 'percentual',
+        },
+        cofins: {
+            codigo: fiscalInputs.cofins.codigo?.value?.trim() || '',
+            cst: fiscalInputs.cofins.cst?.value?.trim() || '',
+            aliquota: parseNullableNumber(fiscalInputs.cofins.aliquota?.value ?? null),
+            tipoCalculo: fiscalInputs.cofins.tipo?.value || 'percentual',
+        },
+        ipi: {
+            cst: fiscalInputs.ipi.cst?.value?.trim() || '',
+            codigoEnquadramento: fiscalInputs.ipi.enquadramento?.value?.trim() || '',
+            aliquota: parseNullableNumber(fiscalInputs.ipi.aliquota?.value ?? null),
+            tipoCalculo: fiscalInputs.ipi.tipo?.value || 'percentual',
+        },
+        fcp: {
+            indicador: fiscalInputs.fcp.indicador?.value || '0',
+            aliquota: parseNullableNumber(fiscalInputs.fcp.aliquota?.value ?? null),
+            aplica: Boolean(fiscalInputs.fcp.aplica?.checked),
+        },
+    });
+
     const getSelectedProductUnit = () => (unitSelect?.value || '').trim();
 
     // --- LÓGICA DAS ABAS (Geral / Especificações) ---
@@ -402,6 +562,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ncmInput) {
             ncmInput.value = product.ncm || '';
         }
+        populateFiscalFields(product.fiscal || {});
         supplierEntries = Array.isArray(product.fornecedores)
             ? product.fornecedores.map((item) => ({
                 fornecedor: item.fornecedor || '',
@@ -650,6 +811,7 @@ document.addEventListener('DOMContentLoaded', () => {
             codigosComplementares: additionalBarcodesRaw,
             estoques: depositPayload,
             stock: totalStock,
+            fiscal: collectFiscalData(),
         };
 
         const dataCadastroValue = formData.get('data-cadastro');

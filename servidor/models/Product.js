@@ -10,6 +10,53 @@ const normalizeText = (text) => {
         .replace(/[\u0300-\u036f]/g, ""); // Remove os acentos
 };
 
+const fiscalTaxSchema = new mongoose.Schema({
+    codigo: { type: String, trim: true, default: '' },
+    cst: { type: String, trim: true, default: '' },
+    aliquota: { type: Number, default: null },
+    tipoCalculo: { type: String, trim: true, default: 'percentual' },
+    valorBase: { type: Number, default: null },
+}, { _id: false });
+
+const fiscalCfopSchema = new mongoose.Schema({
+    dentroEstado: { type: String, trim: true, default: '' },
+    foraEstado: { type: String, trim: true, default: '' },
+    transferencia: { type: String, trim: true, default: '' },
+    devolucao: { type: String, trim: true, default: '' },
+    industrializacao: { type: String, trim: true, default: '' },
+}, { _id: false });
+
+const fiscalSchema = new mongoose.Schema({
+    origem: { type: String, trim: true, default: '0' },
+    cest: { type: String, trim: true, default: '' },
+    csosn: { type: String, trim: true, default: '' },
+    cst: { type: String, trim: true, default: '' },
+    cfop: {
+        nfe: { type: fiscalCfopSchema, default: () => ({}) },
+        nfce: { type: fiscalCfopSchema, default: () => ({}) },
+    },
+    pis: { type: fiscalTaxSchema, default: () => ({}) },
+    cofins: { type: fiscalTaxSchema, default: () => ({}) },
+    ipi: {
+        cst: { type: String, trim: true, default: '' },
+        codigoEnquadramento: { type: String, trim: true, default: '' },
+        aliquota: { type: Number, default: null },
+        tipoCalculo: { type: String, trim: true, default: 'percentual' },
+        valorBase: { type: Number, default: null },
+    },
+    fcp: {
+        indicador: { type: String, trim: true, default: '0' },
+        aliquota: { type: Number, default: null },
+        aplica: { type: Boolean, default: false },
+    },
+    status: {
+        nfe: { type: String, enum: ['pendente', 'parcial', 'aprovado'], default: 'pendente' },
+        nfce: { type: String, enum: ['pendente', 'parcial', 'aprovado'], default: 'pendente' },
+    },
+    atualizadoEm: { type: Date, default: null },
+    atualizadoPor: { type: String, trim: true, default: '' },
+}, { _id: false });
+
 const productSchema = new mongoose.Schema({
     cod: { type: String, required: true, unique: true },
     codbarras: { type: String, required: true, unique: true },
@@ -91,7 +138,8 @@ const productSchema = new mongoose.Schema({
         pet: { type: [String], default: [] },   // ex.: Cachorro, Gato, Pássaros, etc.
         porteRaca: { type: [String], default: [] }, // ex.: Mini, Pequeno, Médio, Grande, Gigante
         apresentacao: { type: String, default: '' }
-    }
+    },
+    fiscal: { type: fiscalSchema, default: () => ({}) }
 
 }, {
     timestamps: true
