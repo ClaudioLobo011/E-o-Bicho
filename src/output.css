@@ -475,6 +475,9 @@
   .col-span-3 {
     grid-column: span 3 / span 3;
   }
+  .col-span-6 {
+    grid-column: span 6 / span 6;
+  }
   .col-span-9 {
     grid-column: span 9 / span 9;
   }
@@ -765,6 +768,9 @@
   }
   .max-h-\[90vh\] {
     max-height: 90vh;
+  }
+  .max-h-\[94vh\] {
+    max-height: 94vh;
   }
   .max-h-\[350px\] {
     max-height: 350px;
@@ -2954,6 +2960,13 @@
       }
     }
   }
+  .hover\:text-emerald-800 {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-emerald-800);
+      }
+    }
+  }
   .hover\:text-gray-500 {
     &:hover {
       @media (hover: hover) {
@@ -3454,9 +3467,24 @@
       grid-column: span 4 / span 4;
     }
   }
+  .md\:col-span-5 {
+    @media (width >= 48rem) {
+      grid-column: span 5 / span 5;
+    }
+  }
+  .md\:col-span-6 {
+    @media (width >= 48rem) {
+      grid-column: span 6 / span 6;
+    }
+  }
   .md\:col-span-7 {
     @media (width >= 48rem) {
       grid-column: span 7 / span 7;
+    }
+  }
+  .md\:col-span-9 {
+    @media (width >= 48rem) {
+      grid-column: span 9 / span 9;
     }
   }
   .md\:col-span-10 {
@@ -4691,6 +4719,38 @@
   }
   .kpi-muted {
     opacity: .75;
+  }
+}
+@layer utilities {
+  .max-w-modal-wide {
+    max-width: min(1400px, 98vw);
+  }
+  .modal-body-fixed {
+    min-height: 60vh;
+  }
+  .form-compact {
+    font-size: 0.875rem;
+  }
+  .form-compact label {
+    font-size: 0.75rem;
+    color: var(--color-gray-600);
+  }
+  .form-compact input, .form-compact select, .form-compact textarea {
+    font-size: 0.875rem;
+  }
+  .form-compact .tab-button {
+    font-size: 0.75rem;
+  }
+  @media (width >= 48rem) {
+    .md\:col-span-5 {
+      grid-column: span 5 / span 5;
+    }
+    .md\:col-span-6 {
+      grid-column: span 6 / span 6;
+    }
+    .md\:col-span-9 {
+      grid-column: span 9 / span 9;
+    }
   }
 }
 @layer components {
