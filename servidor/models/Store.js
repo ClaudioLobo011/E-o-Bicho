@@ -7,28 +7,57 @@ const horarioDiaSchema = new mongoose.Schema({
     fechada: { type: Boolean, default: false }
 }, { _id: false });
 
+const regimeTributarioEnum = ['simples', 'mei', 'normal'];
+
 const storeSchema = new mongoose.Schema({
-    nome: { type: String, required: true },
+    nome: { type: String, required: true, trim: true },
+    nomeFantasia: { type: String, trim: true },
+    razaoSocial: { type: String, trim: true },
+    cnpj: { type: String, trim: true },
+    cnaePrincipal: { type: String, trim: true },
+    inscricaoEstadual: { type: String, trim: true },
+    inscricaoMunicipal: { type: String, trim: true },
+    regimeTributario: { type: String, enum: [...regimeTributarioEnum, ''], default: '' },
+    emailFiscal: { type: String, trim: true },
+    telefone: { type: String, trim: true },
+    whatsapp: { type: String, trim: true },
     imagem: { type: String, default: '/image/placeholder.png' },
-    endereco: { type: String, required: true },
-    cep: { type: String },
+    endereco: { type: String, trim: true },
+    cep: { type: String, trim: true },
+    municipio: { type: String, trim: true },
+    uf: { type: String, trim: true, uppercase: true },
+    logradouro: { type: String, trim: true },
+    numero: { type: String, trim: true },
+    complemento: { type: String, trim: true },
+    codigoIbgeMunicipio: { type: String, trim: true },
+    codigoUf: { type: String, trim: true },
     latitude: { type: Number },
     longitude: { type: Number },
-    telefone: { type: String },
-    whatsapp: { type: String },
-    // O campo 'horario' agora é um objeto estruturado
+    contadorNome: { type: String, trim: true },
+    contadorEmail: { type: String, trim: true },
+    contadorTelefone: { type: String, trim: true },
+    contadorCrc: { type: String, trim: true },
+    certificadoValidade: { type: String, trim: true },
+    certificadoArquivoNome: { type: String, trim: true },
+    certificadoSenhaCriptografada: { type: String, select: false },
+    certificadoArquivoCriptografado: { type: String, select: false },
+    certificadoFingerprint: { type: String, trim: true },
     horario: {
-        domingo: horarioDiaSchema,
-        segunda: horarioDiaSchema,
-        terca: horarioDiaSchema,
-        quarta: horarioDiaSchema,
-        quinta: horarioDiaSchema,
-        sexta: horarioDiaSchema,
-        sabado: horarioDiaSchema
+        domingo: { type: horarioDiaSchema, default: () => ({}) },
+        segunda: { type: horarioDiaSchema, default: () => ({}) },
+        terca: { type: horarioDiaSchema, default: () => ({}) },
+        quarta: { type: horarioDiaSchema, default: () => ({}) },
+        quinta: { type: horarioDiaSchema, default: () => ({}) },
+        sexta: { type: horarioDiaSchema, default: () => ({}) },
+        sabado: { type: horarioDiaSchema, default: () => ({}) }
     },
-    servicos: [{
-        type: String
-    }]
+    servicos: {
+        type: [{
+            type: String,
+            trim: true
+        }],
+        default: []
+    }
 }, {
     timestamps: true
 });

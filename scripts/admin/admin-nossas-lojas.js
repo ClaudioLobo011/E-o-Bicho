@@ -16,13 +16,209 @@ document.addEventListener('DOMContentLoaded', () => {
     const imagePreview = document.getElementById('image-preview');
     const imageInput = document.getElementById('store-image-input');
     const cepInput = document.getElementById('store-cep');
-    const enderecoInput = document.getElementById('store-endereco');
+    const enderecoHiddenInput = document.getElementById('store-endereco');
+    const razaoSocialInput = document.getElementById('store-razao-social');
+    const nomeFantasiaInput = document.getElementById('store-nome');
+    const cnpjInput = document.getElementById('store-cnpj');
+    const cnaeInput = document.getElementById('store-cnae');
+    const inscricaoEstadualInput = document.getElementById('store-inscricao-estadual');
+    const inscricaoMunicipalInput = document.getElementById('store-inscricao-municipal');
+    const regimeTributarioSelect = document.getElementById('store-regime-tributario');
+    const emailFiscalInput = document.getElementById('store-email-fiscal');
+    const telefoneInput = document.getElementById('store-telefone');
+    const celularInput = document.getElementById('store-whatsapp');
+    const municipioInput = document.getElementById('store-municipio');
+    const ufInput = document.getElementById('store-uf');
+    const logradouroInput = document.getElementById('store-logradouro');
+    const numeroInput = document.getElementById('store-numero');
+    const complementoInput = document.getElementById('store-complemento');
+    const codIbgeMunicipioInput = document.getElementById('store-cod-ibge-municipio');
+    const codUfInput = document.getElementById('store-cod-uf');
+    const certificadoArquivoInput = document.getElementById('store-certificado-arquivo');
+    const certificadoSenhaInput = document.getElementById('store-certificado-senha');
+    const certificadoValidadeInput = document.getElementById('store-certificado-validade');
+    const certificadoStatusText = document.getElementById('store-certificado-status');
+    const certificadoAtualText = document.getElementById('store-certificado-atual');
+    const contadorNomeInput = document.getElementById('store-contador-nome');
+    const contadorEmailInput = document.getElementById('store-contador-email');
+    const contadorTelefoneInput = document.getElementById('store-contador-telefone');
+    const contadorCrcInput = document.getElementById('store-contador-crc');
+    const closeModalBtn = document.getElementById('close-store-modal');
+    const tabButtons = Array.from(document.querySelectorAll('#store-modal .tab-button'));
+    const tabPanels = Array.from(document.querySelectorAll('#store-modal .tab-panel'));
 
     // -- REFERÊNCIAS PARA O MAPA DE LOCALIZAÇÃO --
     let locationMap = null;
     let locationMarker = null;
     const latInput = document.getElementById('store-latitude');
     const lonInput = document.getElementById('store-longitude');
+
+    // --- Utilidades de formulário ---
+    const enderecoFields = [logradouroInput, numeroInput, complementoInput, municipioInput, ufInput];
+
+    const buildEnderecoCompleto = () => {
+        const logradouro = (logradouroInput?.value || '').trim();
+        const numero = (numeroInput?.value || '').trim();
+        const complemento = (complementoInput?.value || '').trim();
+        const municipio = (municipioInput?.value || '').trim();
+        const uf = (ufInput?.value || '').trim();
+
+        const partes = [];
+        if (logradouro) {
+            partes.push(numero ? `${logradouro}, ${numero}` : logradouro);
+        }
+        if (complemento) {
+            partes.push(complemento);
+        }
+        if (municipio || uf) {
+            const regiao = [municipio, uf].filter(Boolean).join(' - ');
+            if (regiao) partes.push(regiao);
+        }
+
+        const enderecoCompleto = partes.join(' | ');
+        if (enderecoHiddenInput) enderecoHiddenInput.value = enderecoCompleto;
+        return enderecoCompleto;
+    };
+
+    enderecoFields.forEach(field => field?.addEventListener('input', buildEnderecoCompleto));
+
+    const updateCertificadoStatus = (message = '', tone = 'muted') => {
+        if (!certificadoStatusText) return;
+        certificadoStatusText.textContent = message;
+        certificadoStatusText.classList.remove('text-gray-500', 'text-red-600', 'text-emerald-600');
+        if (tone === 'error') {
+            certificadoStatusText.classList.add('text-red-600');
+        } else if (tone === 'success') {
+            certificadoStatusText.classList.add('text-emerald-600');
+        } else {
+            certificadoStatusText.classList.add('text-gray-500');
+        }
+    };
+
+    const formatDateForDisplay = (isoDate = '') => {
+        const parts = isoDate.split('-');
+        if (parts.length !== 3) return isoDate;
+        const [year, month, day] = parts;
+        if (!year || !month || !day) return isoDate;
+        return `${day}/${month}/${year}`;
+    };
+
+    const previewCertificate = async () => {
+        if (!certificadoArquivoInput || !certificadoSenhaInput) return;
+        const file = certificadoArquivoInput.files?.[0];
+        const senha = (certificadoSenhaInput.value || '').trim();
+        if (!file || !senha) {
+            updateCertificadoStatus('', 'muted');
+            return;
+        }
+
+        try {
+            updateCertificadoStatus('Validando certificado...', 'muted');
+            const formData = new FormData();
+            formData.append('certificado', file);
+            formData.append('senha', senha);
+
+            const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+            const token = loggedInUser?.token;
+            if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+
+            const response = await fetch(`${API_CONFIG.BASE_URL}/stores/certificate/preview`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result?.message || 'Falha ao validar o certificado.');
+            }
+
+            if (result.validade) {
+                certificadoValidadeInput.value = result.validade;
+            }
+            updateCertificadoStatus('Certificado validado com sucesso.', 'success');
+        } catch (error) {
+            certificadoValidadeInput.value = '';
+            updateCertificadoStatus(error.message || 'Não foi possível validar o certificado.', 'error');
+        }
+    };
+
+    const uploadCertificateForStore = async (storeId) => {
+        const file = certificadoArquivoInput?.files?.[0];
+        const senha = (certificadoSenhaInput?.value || '').trim();
+        if (!storeId || !file || !senha) {
+            return null;
+        }
+
+        const formData = new FormData();
+        formData.append('certificado', file);
+        formData.append('senha', senha);
+
+        const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+        const token = loggedInUser?.token;
+        if (!token) {
+            throw new Error('Sessão expirada. Faça login novamente.');
+        }
+
+        const response = await fetch(`${API_CONFIG.BASE_URL}/stores/${storeId}/certificate`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result?.message || 'Não foi possível salvar o certificado.');
+        }
+
+        if (result.validade) {
+            certificadoValidadeInput.value = result.validade;
+        }
+
+        if (certificadoAtualText) {
+            const partes = [];
+            if (result.arquivo || file.name) {
+                partes.push(`Arquivo armazenado: ${result.arquivo || file.name}`);
+            }
+            if (result.validade) {
+                partes.push(`Validade: ${formatDateForDisplay(result.validade)}`);
+            }
+            if (result.fingerprint) {
+                partes.push(`Fingerprint: ${result.fingerprint}`);
+            }
+            certificadoAtualText.textContent = partes.length ? partes.join(' • ') : 'Certificado armazenado.';
+        }
+
+        updateCertificadoStatus('Certificado armazenado com sucesso.', 'success');
+        certificadoArquivoInput.value = '';
+        certificadoSenhaInput.value = '';
+
+        return result;
+    };
+
+    const activateTab = (target) => {
+        tabButtons.forEach((button) => {
+            const isActive = button.dataset.tabTarget === target;
+            button.classList.toggle('bg-emerald-50', isActive);
+            button.classList.toggle('text-emerald-700', isActive);
+            button.classList.toggle('text-gray-600', !isActive);
+            button.classList.toggle('hover:text-gray-800', !isActive);
+        });
+        tabPanels.forEach((panel) => {
+            panel.classList.toggle('hidden', panel.dataset.tabPanel !== target);
+        });
+        if (target === 'endereco') {
+            setTimeout(() => {
+                if (locationMap) {
+                    locationMap.invalidateSize();
+                }
+            }, 50);
+        }
+    };
+
+    tabButtons.forEach((button) => {
+        button.addEventListener('click', () => activateTab(button.dataset.tabTarget));
+    });
+
+    activateTab('endereco');
 
     // --- Dados e Constantes ---
     const diasDaSemana = [
@@ -36,6 +232,36 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
     const availableServices = ['Banho e Tosa', 'Veterinária', 'Farmácia'];
     let selectedServices = [];
+
+    const ufIbgeCodes = {
+        AC: '12',
+        AL: '27',
+        AP: '16',
+        AM: '13',
+        BA: '29',
+        CE: '23',
+        DF: '53',
+        ES: '32',
+        GO: '52',
+        MA: '21',
+        MT: '51',
+        MS: '50',
+        MG: '31',
+        PA: '15',
+        PB: '25',
+        PR: '41',
+        PE: '26',
+        PI: '22',
+        RJ: '33',
+        RN: '24',
+        RS: '43',
+        RO: '11',
+        RR: '14',
+        SC: '42',
+        SP: '35',
+        SE: '28',
+        TO: '17',
+    };
 
     // --- Funções do Modal de Serviços ---
     const openServicesModal = () => {
@@ -77,6 +303,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    certificadoArquivoInput?.addEventListener('change', () => {
+        if (!certificadoArquivoInput.files?.length) {
+            updateCertificadoStatus('', 'muted');
+            return;
+        }
+        previewCertificate();
+    });
+
+    certificadoSenhaInput?.addEventListener('blur', previewCertificate);
+    certificadoSenhaInput?.addEventListener('change', previewCertificate);
+    certificadoSenhaInput?.addEventListener('input', () => updateCertificadoStatus('', 'muted'));
+
     // --- Criação Dinâmica dos Horários ---
     const createHorarioInputs = () => {
         horarioContainer.innerHTML = '';
@@ -98,6 +336,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
     
+    async function buscarEnderecoPorCep(cep) {
+        const sanitizedCep = cep.replace(/\D/g, '');
+        if (sanitizedCep.length !== 8) return null;
+
+        const url = `https://viacep.com.br/ws/${sanitizedCep}/json/`;
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error('Não foi possível consultar o CEP no momento.');
+            }
+            const data = await response.json();
+            if (data.erro) {
+                return null;
+            }
+            return data;
+        } catch (error) {
+            console.error('Erro ao consultar CEP:', error);
+            throw error;
+        }
+    }
+
     // --- FUNÇÃO DE GEOCODIFICAÇÃO ROBUSTA ---
     async function geocodeAddress(address, cep) {
         const fullAddress = `${address || ''}, ${cep || ''}`;
@@ -153,21 +412,34 @@ document.addEventListener('DOMContentLoaded', () => {
         form.reset();
         selectedServices = [];
         renderServiceTags();
+        activateTab('endereco');
+        buildEnderecoCompleto();
+
         diasDaSemana.forEach(({ key }) => {
             const dayRow = horarioContainer.querySelector(`[data-day="${key}"]`);
             const inputs = dayRow.querySelectorAll('.time-input');
             const checkbox = dayRow.querySelector('.fechada-checkbox');
-            inputs.forEach(input => input.disabled = false);
+            inputs.forEach(input => {
+                input.disabled = false;
+                input.value = '';
+            });
             checkbox.checked = false;
         });
+
         imagePreview.src = '/public/image/placeholder.png';
         imageInput.value = '';
+        if (certificadoArquivoInput) certificadoArquivoInput.value = '';
+        if (certificadoSenhaInput) certificadoSenhaInput.value = '';
+        if (certificadoValidadeInput) certificadoValidadeInput.value = '';
+        if (certificadoAtualText) certificadoAtualText.textContent = 'Nenhum certificado armazenado.';
+        updateCertificadoStatus('', 'muted');
+
         modal.classList.remove('hidden');
 
         setTimeout(() => {
             if (locationMap) {
-                locationMap.invalidateSize();
                 locationMap.setView([-22.9068, -43.1729], 12);
+                locationMap.invalidateSize();
                 if (locationMarker) {
                     locationMarker.remove();
                     locationMarker = null;
@@ -183,16 +455,54 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch(`${API_CONFIG.BASE_URL}/stores/${storeId}`);
             if (!response.ok) throw new Error('Falha ao carregar dados da loja.');
             const store = await response.json();
-            
+
             modalTitle.textContent = 'Editar Loja';
             hiddenStoreId.value = store._id;
-            document.getElementById('store-nome').value = store.nome;
-            enderecoInput.value = store.endereco;
-            cepInput.value = store.cep;
-            document.getElementById('store-telefone').value = store.telefone;
-            document.getElementById('store-whatsapp').value = store.whatsapp;
+            razaoSocialInput.value = store.razaoSocial || '';
+            nomeFantasiaInput.value = store.nomeFantasia || store.nome || '';
+            cnpjInput.value = store.cnpj || '';
+            cnaeInput.value = store.cnaePrincipal || store.cnae || '';
+            inscricaoEstadualInput.value = store.inscricaoEstadual || '';
+            inscricaoMunicipalInput.value = store.inscricaoMunicipal || '';
+            regimeTributarioSelect.value = store.regimeTributario || '';
+            emailFiscalInput.value = store.emailFiscal || '';
+            telefoneInput.value = store.telefone || '';
+            celularInput.value = store.whatsapp || store.celular || '';
+            cepInput.value = store.cep || '';
+            municipioInput.value = store.municipio || '';
+            ufInput.value = store.uf || '';
+            logradouroInput.value = store.logradouro || '';
+            numeroInput.value = store.numero || '';
+            complementoInput.value = store.complemento || '';
+            codIbgeMunicipioInput.value = store.codigoIbgeMunicipio || store.codIbgeMunicipio || '';
+            codUfInput.value = store.codigoUf || store.codUf || '';
+            contadorNomeInput.value = store.contadorNome || store.contador?.nome || '';
+            contadorEmailInput.value = store.contadorEmail || store.contador?.email || '';
+            contadorTelefoneInput.value = store.contadorTelefone || store.contador?.telefone || '';
+            contadorCrcInput.value = store.contadorCrc || store.contador?.crc || '';
+            certificadoValidadeInput.value = store.certificadoValidade || '';
+            if (certificadoSenhaInput) certificadoSenhaInput.value = '';
+            if (certificadoAtualText) {
+                const partes = [];
+                if (store.certificadoArquivoNome) {
+                    partes.push(`Arquivo armazenado: ${store.certificadoArquivoNome}`);
+                }
+                if (store.certificadoValidade) {
+                    partes.push(`Validade: ${formatDateForDisplay(store.certificadoValidade)}`);
+                }
+                if (store.certificadoFingerprint) {
+                    partes.push(`Fingerprint: ${store.certificadoFingerprint}`);
+                }
+                certificadoAtualText.textContent = partes.length ? partes.join(' • ') : 'Nenhum certificado armazenado.';
+            }
+            updateCertificadoStatus('', 'muted');
+            if (enderecoHiddenInput) enderecoHiddenInput.value = store.endereco || '';
+            if (!logradouroInput.value && store.endereco) logradouroInput.value = store.endereco;
+            buildEnderecoCompleto();
+
             selectedServices = store.servicos || [];
             renderServiceTags();
+            activateTab('endereco');
 
             diasDaSemana.forEach(({ key }) => {
                 const horarioDia = store.horario ? store.horario[key] : null;
@@ -203,50 +513,63 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (horarioDia) {
                     abreInput.value = horarioDia.abre || '';
                     fechaInput.value = horarioDia.fecha || '';
-                    fechadaCheckbox.checked = horarioDia.fechada;
+                    fechadaCheckbox.checked = Boolean(horarioDia.fechada);
                     abreInput.disabled = horarioDia.fechada;
                     fechaInput.disabled = horarioDia.fechada;
+                } else {
+                    abreInput.value = '';
+                    fechaInput.value = '';
+                    fechadaCheckbox.checked = false;
+                    abreInput.disabled = false;
+                    fechaInput.disabled = false;
                 }
             });
-            imagePreview.src = `${API_CONFIG.SERVER_URL}${store.imagem}`;
+
+            if (store.imagem) {
+                const isAbsolute = /^https?:/i.test(store.imagem);
+                imagePreview.src = isAbsolute ? store.imagem : `${API_CONFIG.SERVER_URL}${store.imagem}`;
+            } else {
+                imagePreview.src = '/public/image/placeholder.png';
+            }
             imageInput.value = '';
+            if (certificadoArquivoInput) certificadoArquivoInput.value = '';
+
             modal.classList.remove('hidden');
 
             setTimeout(async () => {
                 if (locationMap) {
                     locationMap.invalidateSize();
-                    if (locationMarker) locationMarker.remove();
+                    if (locationMarker) {
+                        locationMarker.remove();
+                        locationMarker = null;
+                    }
 
                     let initialCoords = null;
                     let initialZoom = 12;
 
-                    // 1. Prioriza as coordenadas exatas já salvas.
                     if (store.latitude && store.longitude) {
                         initialCoords = { lat: store.latitude, lng: store.longitude };
                         initialZoom = 17;
-                    // 2. Se não existirem, tenta buscar pelo endereço completo como fallback.
                     } else {
-                        const foundCoords = await geocodeAddress(store.endereco, store.cep);
+                        const enderecoConsulta = buildEnderecoCompleto() || store.endereco;
+                        const foundCoords = await geocodeAddress(enderecoConsulta, store.cep);
                         if (foundCoords) {
                             initialCoords = foundCoords;
                             initialZoom = 17;
                         }
                     }
 
-                    // 3. Se tudo falhar, usa a localização padrão.
                     if (!initialCoords) {
                         initialCoords = { lat: -22.9068, lng: -43.1729 };
                     }
 
                     locationMap.setView([initialCoords.lat, initialCoords.lng], initialZoom);
 
-                    // Se a loja já tiver coordenadas salvas, coloca o marcador e os valores nos inputs.
                     if (store.latitude && store.longitude) {
                         locationMarker = L.marker(initialCoords).addTo(locationMap);
                         latInput.value = store.latitude;
                         lonInput.value = store.longitude;
                     } else {
-                        locationMarker = null;
                         latInput.value = '';
                         lonInput.value = '';
                     }
@@ -257,7 +580,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const closeModal = () => modal.classList.add('hidden');
+    const closeModal = () => {
+        modal.classList.add('hidden');
+        form.reset();
+        selectedServices = [];
+        renderServiceTags();
+        activateTab('endereco');
+        buildEnderecoCompleto();
+        imagePreview.src = '/public/image/placeholder.png';
+        imageInput.value = '';
+        if (certificadoArquivoInput) certificadoArquivoInput.value = '';
+        if (certificadoSenhaInput) certificadoSenhaInput.value = '';
+        if (certificadoValidadeInput) certificadoValidadeInput.value = '';
+        if (certificadoAtualText) certificadoAtualText.textContent = 'Nenhum certificado armazenado.';
+        updateCertificadoStatus('', 'muted');
+        if (locationMarker) {
+            locationMarker.remove();
+            locationMarker = null;
+        }
+        latInput.value = '';
+        lonInput.value = '';
+    };
 
     // --- Renderização da Tabela ---
     async function fetchAndDisplayStores() {
@@ -287,6 +630,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Event Listeners ---
     addStoreBtn.addEventListener('click', openModalForNew);
     cancelBtn.addEventListener('click', closeModal);
+    closeModalBtn?.addEventListener('click', closeModal);
     openServicesModalBtn.addEventListener('click', openServicesModal);
     saveServicesModalBtn.addEventListener('click', saveServicesSelection);
 
@@ -305,23 +649,47 @@ document.addEventListener('DOMContentLoaded', () => {
     
     cepInput.addEventListener('blur', async () => {
         const cepValue = cepInput.value;
-        const enderecoValue = enderecoInput.value;
-        if (cepValue.replace(/\D/g, '').length === 8) {
-            const coords = await geocodeAddress(enderecoValue, cepValue);
-            if (coords && locationMap) {
-                locationMap.setView([coords.lat, coords.lng], 17);
-                showModal({ 
-                    title: 'Localização Encontrada', 
-                    message: 'O mapa foi centralizado na morada informada. Agora, clique no local exato da loja para ajustar.', 
-                    confirmText: 'Entendi' 
-                });
-            } else {
-                showModal({
-                    title: 'Endereço não encontrado',
-                    message: 'Não foi possível encontrar este endereço. Verifique os dados ou aponte a localização manualmente no mapa.',
-                    confirmText: 'OK'
-                });
-            }
+        const sanitizedCep = cepValue.replace(/\D/g, '');
+        if (sanitizedCep.length !== 8) {
+            return;
+        }
+
+        let cepData = null;
+        try {
+            cepData = await buscarEnderecoPorCep(sanitizedCep);
+        } catch (error) {
+            showModal({ title: 'Erro', message: error.message || 'Não foi possível consultar o CEP. Tente novamente.', confirmText: 'OK' });
+            return;
+        }
+
+        if (!cepData) {
+            showModal({ title: 'CEP não encontrado', message: 'Revise o CEP informado ou preencha os campos manualmente.', confirmText: 'OK' });
+            return;
+        }
+
+        logradouroInput.value = cepData.logradouro || '';
+        complementoInput.value = cepData.complemento || '';
+        municipioInput.value = cepData.localidade || '';
+        ufInput.value = (cepData.uf || '').toUpperCase();
+        codIbgeMunicipioInput.value = cepData.ibge || '';
+        codUfInput.value = ufIbgeCodes[ufInput.value] || '';
+        buildEnderecoCompleto();
+
+        const enderecoValue = buildEnderecoCompleto() || enderecoHiddenInput?.value;
+        const coords = await geocodeAddress(enderecoValue, cepValue);
+        if (coords && locationMap) {
+            locationMap.setView([coords.lat, coords.lng], 17);
+            showModal({
+                title: 'Localização Encontrada',
+                message: 'O mapa foi centralizado na morada informada. Agora, clique no local exato da loja para ajustar.',
+                confirmText: 'Entendi'
+            });
+        } else {
+            showModal({
+                title: 'Endereço não encontrado',
+                message: 'Não foi possível encontrar este endereço. Verifique os dados ou aponte a localização manualmente no mapa.',
+                confirmText: 'OK'
+            });
         }
     });
 
@@ -365,16 +733,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const submitButton = document.getElementById('save-store-modal-btn');
         submitButton.disabled = true;
 
+        const enderecoCompleto = buildEnderecoCompleto();
         const storeData = {
-            nome: document.getElementById('store-nome').value,
-            endereco: enderecoInput.value,
+            nome: nomeFantasiaInput.value,
+            nomeFantasia: nomeFantasiaInput.value,
+            razaoSocial: razaoSocialInput.value,
+            cnpj: cnpjInput.value,
+            cnaePrincipal: cnaeInput.value,
+            inscricaoEstadual: inscricaoEstadualInput.value,
+            inscricaoMunicipal: inscricaoMunicipalInput.value,
+            regimeTributario: regimeTributarioSelect.value,
+            emailFiscal: emailFiscalInput.value,
+            telefone: telefoneInput.value,
+            whatsapp: celularInput.value,
             cep: cepInput.value,
+            municipio: municipioInput.value,
+            uf: ufInput.value,
+            logradouro: logradouroInput.value,
+            numero: numeroInput.value,
+            complemento: complementoInput.value,
+            codigoIbgeMunicipio: codIbgeMunicipioInput.value,
+            codigoUf: codUfInput.value,
+            endereco: enderecoCompleto,
             latitude: parseFloat(latInput.value) || null,
             longitude: parseFloat(lonInput.value) || null,
-            telefone: document.getElementById('store-telefone').value,
-            whatsapp: document.getElementById('store-whatsapp').value,
             servicos: selectedServices,
-            horario: {}
+            horario: {},
+            contadorNome: contadorNomeInput.value,
+            contadorEmail: contadorEmailInput.value,
+            contadorTelefone: contadorTelefoneInput.value,
+            contadorCrc: contadorCrcInput.value,
+            certificadoValidade: certificadoValidadeInput.value
         };
         
         diasDaSemana.forEach(({ key }) => {
@@ -408,6 +797,21 @@ document.addEventListener('DOMContentLoaded', () => {
                         'Authorization': `Bearer ${token}`
                     }
                 });
+            }
+
+            if (certificadoArquivoInput?.files?.length && (certificadoSenhaInput?.value || '').trim()) {
+                try {
+                    await uploadCertificateForStore(savedStore._id);
+                } catch (certError) {
+                    updateCertificadoStatus(certError.message || 'Não foi possível salvar o certificado.', 'error');
+                    showModal({
+                        title: 'Certificado não armazenado',
+                        message: certError.message || 'A loja foi atualizada, mas o certificado digital não pôde ser salvo. Verifique o arquivo e a senha e tente novamente.',
+                        confirmText: 'OK'
+                    });
+                    submitButton.disabled = false;
+                    return;
+                }
             }
 
             closeModal();

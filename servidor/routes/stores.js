@@ -4,11 +4,16 @@ const Store = require('../models/Store');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const os = require('os');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const tls = require('tls');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
 // Configuração do Multer para upload de imagens das lojas
-const storage = multer.diskStorage({
+const storeImageStorage = multer.diskStorage({
     destination: function (req, file, cb) {
         const dir = 'public/uploads/stores';
         if (!fs.existsSync(dir)){
@@ -20,14 +25,326 @@ const storage = multer.diskStorage({
         cb(null, `store-${req.params.id}${path.extname(file.originalname)}`);
     }
 });
-const upload = multer({ storage: storage });
+const uploadStoreImage = multer({ storage: storeImageStorage });
+const uploadCertificate = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 }
+});
+const execFileAsync = promisify(execFile);
+const fsPromises = fs.promises;
+
+const CERTIFICATE_KEY = (process.env.CERTIFICATE_SECRET_KEY || 'dev-cert-key-por-favor-altere').padEnd(32, '0').slice(0, 32);
+
+const allowedRegimes = new Set(['simples', 'mei', 'normal']);
+const weekDays = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+
+const trimString = (value) => (typeof value === 'string' ? value.trim() : '');
+const normalizeUf = (value) => trimString(value).toUpperCase();
+const parseCoordinate = (value) => {
+    if (value === null || value === undefined) return null;
+    const normalized = typeof value === 'string' ? value.trim() : value;
+    if (normalized === '') return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const hasNativePkcs12Support =
+    typeof tls?.createSecureContext === 'function' &&
+    typeof crypto?.X509Certificate === 'function';
+
+const encryptBuffer = (buffer) => {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(CERTIFICATE_KEY), iv);
+    const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return Buffer.concat([iv, tag, encrypted]).toString('base64');
+};
+
+const encryptText = (value) => encryptBuffer(Buffer.from(String(value || ''), 'utf8'));
+
+const isValidCertificateExtension = (filename = '') => /\.(pfx|p12)$/i.test(filename);
+
+const parseOpenSslDateToIso = (value = '') => {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+        return '';
+    }
+    return parsed.toISOString().slice(0, 10);
+};
+
+const OPENSSL_UNAVAILABLE_MESSAGE = 'OpenSSL não está disponível no servidor.';
+const OPENSSL_INSTALL_HELP = `${OPENSSL_UNAVAILABLE_MESSAGE} Instale o utilitário de linha de comando OpenSSL e certifique-se de que o executável "openssl" esteja no PATH do sistema (ex.: "apt install openssl" em distribuições Debian/Ubuntu, "brew install openssl" no macOS ou o pacote Win64 OpenSSL no Windows).`;
+
+const extractMetadataWithNode = (buffer, password) => {
+    if (!hasNativePkcs12Support) {
+        throw new Error('Este runtime do Node.js não possui suporte nativo para leitura de arquivos PKCS#12.');
+    }
+    try {
+        const secureContext = tls.createSecureContext({ pfx: buffer, passphrase: password });
+        const derCertificate = secureContext.context.getCertificate();
+
+        if (!derCertificate || !derCertificate.length) {
+            throw new Error('Não foi possível localizar o certificado no arquivo enviado.');
+        }
+
+        const x509 = new crypto.X509Certificate(derCertificate);
+        const validade = parseOpenSslDateToIso(x509.validTo);
+        if (!validade) {
+            throw new Error('Não foi possível identificar a data de validade do certificado.');
+        }
+
+        const fingerprint = (x509.fingerprint || '').toUpperCase();
+
+        return { validade, fingerprint };
+    } catch (error) {
+        const message = String(error?.message || '').toLowerCase();
+        if (message.includes('mac verify failure') || message.includes('invalid password') || message.includes('bad decrypt')) {
+            throw new Error('Senha do certificado incorreta.');
+        }
+        if (message.includes('pkcs12') || message.includes('asn1') || message.includes('unable to load') || message.includes('not a pkcs12')) {
+            throw new Error('Certificado PKCS#12 inválido.');
+        }
+
+        throw new Error('Não foi possível processar o certificado.');
+    }
+};
+
+const extractCertificateMetadataWithOpenSsl = async (buffer, password) => {
+    const tmpDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'store-cert-'));
+    const pfxPath = path.join(tmpDir, 'certificado.pfx');
+    const pemPath = path.join(tmpDir, 'certificado.pem');
+    try {
+        await fsPromises.writeFile(pfxPath, buffer);
+        try {
+            await execFileAsync('openssl', [
+                'pkcs12',
+                '-in', pfxPath,
+                '-clcerts',
+                '-nokeys',
+                '-passin', `pass:${password}`,
+                '-out', pemPath,
+                '-nodes'
+            ]);
+        } catch (error) {
+            if (error?.code === 'ENOENT') {
+                throw new Error('OpenSSL não está disponível no servidor.');
+            }
+            const stderr = String(error?.stderr || '').toLowerCase();
+            if (stderr.includes('mac verify failure') || stderr.includes('invalid password')) {
+                throw new Error('Senha do certificado incorreta.');
+            }
+            if (stderr.includes('pkcs12 routines') || stderr.includes('pkcs12_parse')) {
+                throw new Error('Certificado PKCS#12 inválido.');
+            }
+            throw new Error('Não foi possível processar o certificado.');
+        }
+
+        let stdout;
+        try {
+            ({ stdout } = await execFileAsync('openssl', [
+                'x509',
+                '-in', pemPath,
+                '-noout',
+                '-enddate',
+                '-fingerprint',
+                '-sha1'
+            ]));
+        } catch (error) {
+            if (error?.code === 'ENOENT') {
+                throw new Error('OpenSSL não está disponível no servidor.');
+            }
+            const stderr = String(error?.stderr || '').toLowerCase();
+            if (stderr.includes('unable to load certificate')) {
+                throw new Error('Não foi possível ler o certificado gerado.');
+            }
+            throw new Error('Falha ao extrair dados do certificado.');
+        }
+
+        const lines = String(stdout || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+        let validadeRaw = '';
+        let fingerprint = '';
+        for (const line of lines) {
+            if (line.startsWith('notAfter=')) {
+                validadeRaw = line.replace('notAfter=', '').trim();
+            } else if (line.toUpperCase().startsWith('SHA1 FINGERPRINT=')) {
+                fingerprint = line.split('=')[1]?.trim() || '';
+            }
+        }
+
+        const validade = parseOpenSslDateToIso(validadeRaw);
+        if (!validade) {
+            throw new Error('Não foi possível identificar a data de validade do certificado.');
+        }
+
+        return { validade, fingerprint };
+    } finally {
+        await fsPromises.rm(tmpDir, { recursive: true, force: true });
+    }
+};
+
+const shouldBubbleError = (error) => {
+    if (!error) return false;
+    const message = String(error.message || '').toLowerCase();
+    return (
+        message.includes('senha do certificado incorreta') ||
+        message.includes('senha incorreta')
+    );
+};
+
+const extractCertificateMetadata = async (buffer, password) => {
+    let nativeError = null;
+
+    if (hasNativePkcs12Support) {
+        try {
+            return extractMetadataWithNode(buffer, password);
+        } catch (error) {
+            if (shouldBubbleError(error)) {
+                throw error;
+            }
+            nativeError = error;
+        }
+    }
+
+    try {
+        return await extractCertificateMetadataWithOpenSsl(buffer, password);
+    } catch (error) {
+        if (error?.message && error.message.includes(OPENSSL_UNAVAILABLE_MESSAGE)) {
+            if (hasNativePkcs12Support && nativeError) {
+                throw nativeError;
+            }
+
+            if (hasNativePkcs12Support) {
+                return extractMetadataWithNode(buffer, password);
+            }
+
+            throw new Error(OPENSSL_INSTALL_HELP);
+        }
+
+        throw error;
+    }
+};
+
+const sanitizeHorario = (horario) => {
+    const result = {};
+    weekDays.forEach((day) => {
+        const source = horario && typeof horario === 'object' ? horario[day] : null;
+        result[day] = {
+            abre: trimString(source?.abre),
+            fecha: trimString(source?.fecha),
+            fechada: Boolean(source?.fechada)
+        };
+    });
+    return result;
+};
+
+const sanitizeStorePayload = (body = {}) => {
+    const nomeFantasia = trimString(body.nomeFantasia) || trimString(body.nome);
+    const nome = trimString(body.nome) || nomeFantasia || trimString(body.razaoSocial);
+    const razaoSocial = trimString(body.razaoSocial);
+    const cnpj = trimString(body.cnpj);
+    const cnaePrincipal = trimString(body.cnaePrincipal || body.cnae);
+    const inscricaoEstadual = trimString(body.inscricaoEstadual);
+    const inscricaoMunicipal = trimString(body.inscricaoMunicipal);
+    const regime = trimString(body.regimeTributario).toLowerCase();
+    const regimeTributario = allowedRegimes.has(regime) ? regime : '';
+    const emailFiscal = trimString(body.emailFiscal);
+    const telefone = trimString(body.telefone);
+    const whatsapp = trimString(body.whatsapp || body.celular);
+    const cep = trimString(body.cep);
+    const municipio = trimString(body.municipio);
+    const uf = normalizeUf(body.uf);
+    const logradouro = trimString(body.logradouro);
+    const numero = trimString(body.numero);
+    const complemento = trimString(body.complemento);
+    const codigoIbgeMunicipio = trimString(body.codigoIbgeMunicipio || body.codIbgeMunicipio);
+    const codigoUf = trimString(body.codigoUf || body.codUf);
+    const endereco = trimString(body.endereco);
+    const latitude = parseCoordinate(body.latitude);
+    const longitude = parseCoordinate(body.longitude);
+    const contadorNome = trimString(body.contadorNome || body.contador?.nome);
+    const contadorEmail = trimString(body.contadorEmail || body.contador?.email);
+    const contadorTelefone = trimString(body.contadorTelefone || body.contador?.telefone);
+    const contadorCrc = trimString(body.contadorCrc || body.contador?.crc);
+    const certificadoValidade = trimString(body.certificadoValidade || body.certificado?.validade);
+
+    const servicos = Array.isArray(body.servicos)
+        ? Array.from(new Set(
+            body.servicos
+                .map((service) => trimString(service))
+                .filter((service) => service.length > 0)
+        ))
+        : [];
+
+    const horario = sanitizeHorario(body.horario);
+
+    const payload = {
+        nome,
+        nomeFantasia,
+        razaoSocial,
+        cnpj,
+        cnaePrincipal,
+        inscricaoEstadual,
+        inscricaoMunicipal,
+        regimeTributario,
+        emailFiscal,
+        telefone,
+        whatsapp,
+        endereco,
+        cep,
+        municipio,
+        uf,
+        logradouro,
+        numero,
+        complemento,
+        codigoIbgeMunicipio,
+        codigoUf,
+        latitude,
+        longitude,
+        contadorNome,
+        contadorEmail,
+        contadorTelefone,
+        contadorCrc,
+        certificadoValidade,
+        horario,
+        servicos
+    };
+
+    const imagem = trimString(body.imagem);
+    if (imagem) payload.imagem = imagem;
+
+    return payload;
+};
+
+router.post('/certificate/preview', requireAuth, authorizeRoles('admin', 'admin_master'), uploadCertificate.single('certificado'), async (req, res) => {
+    try {
+        const senha = trimString(req.body?.senha);
+        if (!req.file) {
+            return res.status(400).json({ message: 'Envie o arquivo do certificado (.pfx ou .p12).' });
+        }
+        if (!isValidCertificateExtension(req.file.originalname)) {
+            return res.status(400).json({ message: 'Formato de certificado inválido. Utilize arquivos .pfx ou .p12.' });
+        }
+        if (!senha) {
+            return res.status(400).json({ message: 'Informe a senha do certificado.' });
+        }
+
+        const metadata = await extractCertificateMetadata(req.file.buffer, senha);
+        res.json(metadata);
+    } catch (error) {
+        const status = error.message && error.message.includes('OpenSSL') ? 500 : 400;
+        console.error('Erro ao validar certificado:', error);
+        res.status(status).json({ message: error.message || 'Não foi possível validar o certificado.' });
+    }
+});
 
 // GET /api/stores - Público
 router.get('/', async (req, res) => {
     try {
         const stores = await Store.find({}).sort({ nome: 1 });
         res.json(stores);
-    } catch (error) { 
+    } catch (error) {
         console.error("Erro ao buscar lojas:", error);
         res.status(500).json({ message: 'Erro no servidor.' }); 
     }
@@ -48,24 +365,76 @@ router.get('/:id', async (req, res) => {
 // POST /api/stores - Criar loja (restrito)
 router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
-        const newStore = new Store(req.body);
+        const payload = sanitizeStorePayload(req.body);
+        if (!payload.nome) {
+            return res.status(400).json({ message: 'O nome da loja é obrigatório.' });
+        }
+        const newStore = new Store(payload);
         const savedStore = await newStore.save();
         res.status(201).json(savedStore);
-    } catch (error) { 
+    } catch (error) {
         console.error("Erro ao criar loja:", error);
-        res.status(500).json({ message: 'Erro ao criar loja.' }); 
+        res.status(500).json({ message: 'Erro ao criar loja.' });
     }
 });
 
 // PUT /api/stores/:id - Atualizar loja (restrito)
 router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
-        const updatedStore = await Store.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const payload = sanitizeStorePayload(req.body);
+        if (!payload.nome) {
+            return res.status(400).json({ message: 'O nome da loja é obrigatório.' });
+        }
+        const updatedStore = await Store.findByIdAndUpdate(
+            req.params.id,
+            payload,
+            { new: true, runValidators: true }
+        );
         if (!updatedStore) return res.status(404).json({ message: 'Loja não encontrada.' });
         res.json(updatedStore);
-    } catch (error) { 
+    } catch (error) {
         console.error("Erro ao atualizar loja:", error);
-        res.status(500).json({ message: 'Erro ao atualizar loja.' }); 
+        res.status(500).json({ message: 'Erro ao atualizar loja.' });
+    }
+});
+
+router.post('/:id/certificate', requireAuth, authorizeRoles('admin', 'admin_master'), uploadCertificate.single('certificado'), async (req, res) => {
+    try {
+        const senha = trimString(req.body?.senha);
+        if (!req.file) {
+            return res.status(400).json({ message: 'Envie o arquivo do certificado (.pfx ou .p12).' });
+        }
+        if (!isValidCertificateExtension(req.file.originalname)) {
+            return res.status(400).json({ message: 'Formato de certificado inválido. Utilize arquivos .pfx ou .p12.' });
+        }
+        if (!senha) {
+            return res.status(400).json({ message: 'Informe a senha do certificado.' });
+        }
+
+        const store = await Store.findById(req.params.id).select('+certificadoArquivoCriptografado +certificadoSenhaCriptografada');
+        if (!store) {
+            return res.status(404).json({ message: 'Loja não encontrada.' });
+        }
+
+        const metadata = await extractCertificateMetadata(req.file.buffer, senha);
+
+        store.certificadoArquivoCriptografado = encryptBuffer(req.file.buffer);
+        store.certificadoSenhaCriptografada = encryptText(senha);
+        store.certificadoArquivoNome = req.file.originalname;
+        store.certificadoValidade = metadata.validade;
+        store.certificadoFingerprint = metadata.fingerprint;
+        await store.save();
+
+        res.json({
+            message: 'Certificado armazenado com sucesso.',
+            validade: metadata.validade,
+            fingerprint: metadata.fingerprint,
+            arquivo: store.certificadoArquivoNome
+        });
+    } catch (error) {
+        const status = error.message && error.message.includes('OpenSSL') ? 500 : 400;
+        console.error('Erro ao salvar certificado:', error);
+        res.status(status).json({ message: error.message || 'Não foi possível salvar o certificado.' });
     }
 });
 
@@ -82,7 +451,7 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
 });
 
 // POST /api/stores/:id/upload - Upload de imagem (restrito)
-router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'), upload.single('imagem'), async (req, res) => {
+router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'), uploadStoreImage.single('imagem'), async (req, res) => {
     try {
         const store = await Store.findById(req.params.id);
         if (!store) {
