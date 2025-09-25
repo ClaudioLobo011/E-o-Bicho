@@ -28,49 +28,104 @@
                     <p class="text-gray-600 mt-1">Altere os dados do produto abaixo.</p>
 
                     <form id="edit-product-form" class="mt-6 space-y-6">
-                        <div class="border-b mb-4">
-                            <nav id="product-tabs" class="flex space-x-6">
-                                <button type="button" class="tab-link text-sm font-semibold text-primary border-b-2 border-primary pb-2" data-tab="tab-geral">Geral</button>
-                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2" data-tab="tab-especificacoes">Especificações</button>
+                        <div class="space-y-6">
+                            <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+                                <div class="lg:col-span-1">
+                                    <label for="cod" class="block text-sm font-medium text-gray-700">Cod. Interno (SKU)</label>
+                                    <input type="text" id="cod" name="cod" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div class="lg:col-span-2">
+                                    <label for="nome" class="block text-sm font-medium text-gray-700">Descrição</label>
+                                    <input type="text" id="nome" name="nome" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div class="lg:col-span-2">
+                                    <label for="codbarras" class="block text-sm font-medium text-gray-700">Código de Barras</label>
+                                    <input type="text" id="codbarras" name="codbarras" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div class="lg:col-span-1">
+                                    <label for="unidade" class="block text-sm font-medium text-gray-700">Unidade</label>
+                                    <select id="unidade" name="unidade" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Selecionar...</option>
+                                        <option value="UN">Unidade (UN)</option>
+                                        <option value="KG">Quilograma (KG)</option>
+                                        <option value="G">Grama (G)</option>
+                                        <option value="MG">Miligrama (MG)</option>
+                                        <option value="L">Litro (L)</option>
+                                        <option value="ML">Mililitro (ML)</option>
+                                        <option value="CX">Caixa (CX)</option>
+                                        <option value="PCT">Pacote (PCT)</option>
+                                        <option value="SC">Saco (SC)</option>
+                                        <option value="FD">Fardo (FD)</option>
+                                        <option value="DZ">Dúzia (DZ)</option>
+                                    </select>
+                                </div>
+                                <div class="lg:col-span-2">
+                                    <label for="referencia" class="block text-sm font-medium text-gray-700">Referência</label>
+                                    <input type="text" id="referencia" name="referencia" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Informe a referência do fabricante">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border-b">
+                            <nav id="product-tabs" class="flex flex-wrap gap-3">
+                                <button type="button" class="tab-link text-sm font-semibold text-primary border-b-2 border-primary pb-2" data-tab="tab-prices">Preços</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-barcodes">Código de Barras</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-config">Configurações</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-classification">Classificação</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-supplier">Fornecedor</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-stock">Estoque</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-images">Foto do Produto</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-complement">Complemento</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-integration">Integração</button>
                             </nav>
                         </div>
 
-                        <div id="tab-geral" class="space-y-6">
+                        <div id="tab-prices" class="space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label for="custo" class="block text-sm font-medium text-gray-700">Preço de Custo (R$)</label>
+                                    <input type="number" step="0.01" id="custo" name="custo" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label for="markup" class="block text-sm font-medium text-gray-700">Markup (%)</label>
+                                    <input type="number" step="0.01" id="markup" name="markup" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                    <p class="mt-2 text-xs text-gray-500">O markup é atualizado automaticamente ao alterar o custo ou o preço de venda.</p>
+                                </div>
+                                <div>
+                                    <label for="venda" class="block text-sm font-medium text-gray-700">Preço de Venda (R$)</label>
+                                    <input type="number" step="0.01" id="venda" name="venda" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-barcodes" class="space-y-6 hidden">
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label for="nome" class="block text-sm font-medium text-gray-700">Nome do Produto</label>
-                                    <input type="text" id="nome" name="nome" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                    <label for="spec-codbarras" class="block text-sm font-medium text-gray-700">Código de Barras Principal</label>
+                                    <input type="text" id="spec-codbarras" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
                                 </div>
+                                <div>
+                                    <label for="barcode-additional" class="block text-sm font-medium text-gray-700">Códigos Complementares</label>
+                                    <textarea id="barcode-additional" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Liste outros códigos de barras separados por linha"></textarea>
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-500">Utilize esta aba para documentar códigos de barras alternativos utilizados em outros sistemas ou embalagens.</p>
+                        </div>
+
+                        <div id="tab-config" class="space-y-6 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label for="marca" class="block text-sm font-medium text-gray-700">Marca</label>
                                     <input type="text" id="marca" name="marca" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
                                 </div>
                                 <div>
-                                    <label for="cod" class="block text-sm font-medium text-gray-700">Código Interno (SKU)</label>
-                                    <input type="text" id="cod" name="cod" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
-                                </div>
-                                <div>
-                                    <label for="codbarras" class="block text-sm font-medium text-gray-700">Código de Barras (EAN)</label>
-                                    <input type="text" id="codbarras" name="codbarras" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
-                                </div>
-                                <div class="md:col-span-2">
-                                    <label for="descricao" class="block text-sm font-medium text-gray-700">Descrição</label>
-                                    <textarea id="descricao" name="descricao" rows="4" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"></textarea>
-                                </div>
-                                <div>
-                                    <label for="custo" class="block text-sm font-medium text-gray-700">Preço de Custo (R$)</label>
-                                    <input type="number" step="0.01" id="custo" name="custo" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
-                                </div>
-                                <div>
-                                    <label for="venda" class="block text-sm font-medium text-gray-700">Preço de Venda (R$)</label>
-                                    <input type="number" step="0.01" id="venda" name="venda" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
-                                </div>
-                                <div>
-                                    <label for="stock" class="block text-sm font-medium text-gray-700">Stock</label>
-                                    <input type="number" id="stock" name="stock" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                    <label for="spec-apresentacao" class="block text-sm font-medium text-gray-700">Apresentação</label>
+                                    <input type="text" id="spec-apresentacao" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
                                 </div>
                             </div>
+                        </div>
 
+                        <div id="tab-classification" class="space-y-6 hidden">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Categorias Atuais</label>
                                 <div id="category-tags-container" class="flex flex-wrap gap-2 items-center min-h-[2.5rem] p-2 border border-gray-200 rounded-md bg-gray-50"></div>
@@ -79,18 +134,6 @@
                                     Adicionar / Remover Categorias
                                 </button>
                             </div>
-
-                            <div class="border-t pt-6">
-                                <h3 class="text-lg font-medium text-gray-800">Gerir Imagens</h3>
-                                <div id="existing-images-grid" class="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4"></div>
-                                <div class="mt-6">
-                                    <label for="imageUpload" class="block text-sm font-medium text-gray-700">Adicionar novas imagens</label>
-                                    <input type="file" id="imageUpload" name="imagens" multiple class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20">
-                                </div>
-                            </div>
-                        </div>
-
-                        <div id="tab-especificacoes" class="space-y-6 hidden">
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700">Idade</label>
@@ -123,13 +166,69 @@
                                         <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Lagartos" class="form-checkbox"> Lagartos</label>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-supplier" class="space-y-6 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label for="spec-apresentacao" class="block text-sm font-medium text-gray-700">Apresentação</label>
-                                    <input type="text" id="spec-apresentacao" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                    <label for="supplier-name" class="block text-sm font-medium text-gray-700">Fornecedor Principal</label>
+                                    <input type="text" id="supplier-name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Nome do fornecedor">
                                 </div>
                                 <div>
-                                    <label for="spec-codbarras" class="block text-sm font-medium text-gray-700">Código de Barras (EAN)</label>
-                                    <input type="text" id="spec-codbarras" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                    <label for="supplier-code" class="block text-sm font-medium text-gray-700">Código do Fornecedor</label>
+                                    <input type="text" id="supplier-code" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Código interno do fornecedor">
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-500">Informações do fornecedor são mantidas apenas para referência interna no momento.</p>
+                        </div>
+
+                        <div id="tab-stock" class="space-y-6 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="stock" class="block text-sm font-medium text-gray-700">Estoque Atual</label>
+                                    <input type="number" id="stock" name="stock" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label for="stock-location" class="block text-sm font-medium text-gray-700">Localização</label>
+                                    <input type="text" id="stock-location" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Ex.: Loja 01 - Corredor A">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-images" class="space-y-6 hidden">
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-800">Galeria do Produto</h3>
+                                <div id="existing-images-grid" class="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4"></div>
+                            </div>
+                            <div>
+                                <label for="imageUpload" class="block text-sm font-medium text-gray-700">Adicionar novas imagens</label>
+                                <input type="file" id="imageUpload" name="imagens" multiple class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20">
+                            </div>
+                        </div>
+
+                        <div id="tab-complement" class="space-y-6 hidden">
+                            <div>
+                                <label for="descricao" class="block text-sm font-medium text-gray-700">Descrição Detalhada</label>
+                                <textarea id="descricao" name="descricao" rows="6" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Inclua informações adicionais, instruções de uso ou observações relevantes"></textarea>
+                            </div>
+                        </div>
+
+                        <div id="tab-integration" class="space-y-6 hidden">
+                            <p class="text-sm text-gray-500">Configure parâmetros específicos de integrações externas, como marketplaces ou ERP, quando disponíveis.</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="integration-sku" class="block text-sm font-medium text-gray-700">SKU Externo</label>
+                                    <input type="text" id="integration-sku" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Identificador utilizado em sistemas externos">
+                                </div>
+                                <div>
+                                    <label for="integration-status" class="block text-sm font-medium text-gray-700">Status de Integração</label>
+                                    <select id="integration-status" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Não sincronizado</option>
+                                        <option value="synced">Sincronizado</option>
+                                        <option value="pending">Pendente de sincronização</option>
+                                        <option value="error">Erro na última sincronização</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>

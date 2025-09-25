@@ -15,30 +15,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- LÓGICA DAS ABAS (Geral / Especificações) ---
     const productTabLinks = document.querySelectorAll('#product-tabs .tab-link');
-    const productTabContents = {
-        'tab-geral': document.getElementById('tab-geral'),
-        'tab-especificacoes': document.getElementById('tab-especificacoes'),
-    };
+    const productTabContents = {};
+    productTabLinks.forEach((btn) => {
+        const tabId = btn.dataset.tab;
+        if (tabId) {
+            productTabContents[tabId] = document.getElementById(tabId);
+        }
+    });
+
     function activateProductTab(tabId) {
         Object.entries(productTabContents).forEach(([id, el]) => {
             if (!el) return;
-            if (id === tabId) el.classList.remove('hidden'); else el.classList.add('hidden');
+            if (id === tabId) {
+                el.classList.remove('hidden');
+            } else {
+                el.classList.add('hidden');
+            }
         });
+
         productTabLinks.forEach((btn) => {
             const isActive = btn.dataset.tab === tabId;
             btn.classList.toggle('text-primary', isActive);
-            btn.classList.toggle('border-primary', isActive);
             btn.classList.toggle('text-gray-500', !isActive);
+            btn.classList.toggle('border-primary', isActive);
             btn.classList.toggle('border-transparent', !isActive);
-            btn.classList.toggle('hover:border-gray-300', !isActive);
         });
     }
+
     if (productTabLinks.length) {
         productTabLinks.forEach((btn) => {
             btn.addEventListener('click', () => activateProductTab(btn.dataset.tab));
         });
-        // Garante aba inicial correta (a que já vem com text-primary) ou default 'Geral'
-        activateProductTab(document.querySelector('#product-tabs .tab-link.text-primary')?.dataset.tab || 'tab-geral');
+        const initialTab = document.querySelector('#product-tabs .tab-link.text-primary')?.dataset.tab || productTabLinks[0]?.dataset.tab;
+        if (initialTab) activateProductTab(initialTab);
     }
 
     // --- ESTADO DA PÁGINA ---
@@ -46,6 +55,48 @@ document.addEventListener('DOMContentLoaded', () => {
     const productId = urlParams.get('id');
     let productCategories = []; // Array de IDs das categorias selecionadas
     let allHierarchicalCategories = []; // Guarda a árvore de categorias
+    let allFlatCategories = []; // Lista plana de categorias para consultas rápidas
+
+    // --- CAMPOS RELACIONADOS A PREÇOS ---
+    const costInput = document.getElementById('custo');
+    const saleInput = document.getElementById('venda');
+    const markupInput = document.getElementById('markup');
+    let isUpdatingFromMarkup = false;
+    let isUpdatingFromPrice = false;
+
+    const updateMarkupFromValues = () => {
+        if (!costInput || !saleInput || !markupInput || isUpdatingFromMarkup) return;
+        const cost = parseFloat(costInput.value);
+        const sale = parseFloat(saleInput.value);
+
+        if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(sale)) {
+            markupInput.value = '';
+            return;
+        }
+
+        const markup = ((sale - cost) / cost) * 100;
+        isUpdatingFromPrice = true;
+        markupInput.value = Number.isFinite(markup) ? markup.toFixed(2) : '';
+        isUpdatingFromPrice = false;
+    };
+
+    const updateSaleFromMarkup = () => {
+        if (!costInput || !saleInput || !markupInput || isUpdatingFromPrice) return;
+        const cost = parseFloat(costInput.value);
+        const markup = parseFloat(markupInput.value);
+
+        if (!Number.isFinite(cost) || cost < 0 || !Number.isFinite(markup)) return;
+
+        const sale = cost * (1 + (markup / 100));
+        isUpdatingFromMarkup = true;
+        saleInput.value = Number.isFinite(sale) ? sale.toFixed(2) : '';
+        isUpdatingFromMarkup = false;
+        updateMarkupFromValues();
+    };
+
+    costInput?.addEventListener('input', updateMarkupFromValues);
+    saleInput?.addEventListener('input', updateMarkupFromValues);
+    markupInput?.addEventListener('input', updateSaleFromMarkup);
 
     if (!productId) {
         alert("ID do produto não encontrado!");
@@ -111,14 +162,37 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('#cod').value = product.cod || '';
         form.querySelector('#codbarras').value = product.codbarras || '';
         form.querySelector('#descricao').value = product.descricao || '';
-        form.querySelector('#custo').value = product.custo || 0;
-        form.querySelector('#venda').value = product.venda || 0;
+        if (form.querySelector('#unidade')) {
+            form.querySelector('#unidade').value = product.unidade || '';
+        }
+        if (form.querySelector('#referencia')) {
+            form.querySelector('#referencia').value = product.referencia || '';
+        }
+        if (form.querySelector('#barcode-additional')) {
+            form.querySelector('#barcode-additional').value = Array.isArray(product.codigosComplementares) ? product.codigosComplementares.join('\n') : '';
+        }
+        const custoNumber = Number(product.custo);
+        const vendaNumber = Number(product.venda);
+        form.querySelector('#custo').value = Number.isFinite(custoNumber) ? custoNumber.toFixed(2) : '';
+        form.querySelector('#venda').value = Number.isFinite(vendaNumber) ? vendaNumber.toFixed(2) : '';
         form.querySelector('#stock').value = product.stock || 0;
+        if (markupInput) {
+            const cost = parseFloat(costInput?.value || '0');
+            const sale = parseFloat(saleInput?.value || '0');
+            if (Number.isFinite(cost) && cost > 0 && Number.isFinite(sale)) {
+                const markup = ((sale - cost) / cost) * 100;
+                markupInput.value = Number.isFinite(markup) ? markup.toFixed(2) : '';
+            } else {
+                markupInput.value = '';
+            }
+        }
 
-        productCategories = product.categorias.map(cat => cat._id);
-        renderCategoryTags(product.categorias);
+        const categoriasAtuais = Array.isArray(product.categorias) ? product.categorias : [];
+        productCategories = categoriasAtuais.map(cat => cat._id);
+        renderCategoryTags(categoriasAtuais);
 
-        existingImagesGrid.innerHTML = product.imagens.map(imgUrl => `
+        const imagens = Array.isArray(product.imagens) ? product.imagens : [];
+        existingImagesGrid.innerHTML = imagens.map(imgUrl => `
             <div class="relative group">
                 <img src="${API_CONFIG.SERVER_URL}${imgUrl}" alt="Imagem do produto" class="w-full h-24 object-cover rounded-md border">
                 <div class="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -147,45 +221,24 @@ document.addEventListener('DOMContentLoaded', () => {
         // Código de barras (somente visual)
         const eanInput = document.getElementById('spec-codbarras');
         if (eanInput) eanInput.value = product.codbarras || '';
+
+        updateMarkupFromValues();
     };
 
-    const initializeSaveCategoryButton = (allFlatCategories) => {
-        saveCategoryModalBtn.addEventListener('click', () => {
-            const selectedCheckboxes = categoryTreeContainer.querySelectorAll('input[type="checkbox"]:checked');
-            productCategories = Array.from(selectedCheckboxes).map(cb => cb.value);
-            
-            // Usamos uma única chamada à API para obter todas as categorias de uma vez
-            fetch(`${API_CONFIG.BASE_URL}/categories`).then(res => res.json()).then(allFlatCategories => {
-                
-                // 1. Renderiza as tags, como antes
-                const selectedCategoryObjects = allFlatCategories.filter(cat => productCategories.includes(cat._id));
-                renderCategoryTags(selectedCategoryObjects);
-
-                // 2. Lógica para encontrar e preencher a marca
-                const categoryMap = new Map(allFlatCategories.map(cat => [cat._id.toString(), cat]));
-                let brandName = '';
-
-                for (const selectedCat of selectedCategoryObjects) {
-                    let current = selectedCat;
-                    while (current && current.parent) {
-                        const parent = categoryMap.get(current.parent.toString());
-                        if (parent && parent.nome === 'Marcas') {
-                            brandName = selectedCat.nome; // Encontrou! A marca é o nome da categoria selecionada.
-                            break; // Para o loop interno
-                        }
-                        current = parent;
-                    }
-                    if (brandName) break; // Para o loop externo se já encontrou a marca
+    const getBrandFromCategories = (selectedCategoryObjects) => {
+        if (!selectedCategoryObjects?.length || !allFlatCategories?.length) return '';
+        const categoryMap = new Map(allFlatCategories.map(cat => [cat._id.toString(), cat]));
+        for (const selectedCat of selectedCategoryObjects) {
+            let current = selectedCat;
+            while (current && current.parent) {
+                const parent = categoryMap.get(current.parent.toString());
+                if (parent && parent.nome === 'Marcas') {
+                    return selectedCat.nome;
                 }
-
-                // 3. Preenche o campo 'marca' no formulário
-                if (brandName) {
-                    form.querySelector('#marca').value = brandName;
-                }
-
-                categoryModal.classList.add('hidden');
-            });
-        });
+                current = parent;
+            }
+        }
+        return '';
     };
 
     const initializePage = async () => {
@@ -194,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const [productRes, hierarchicalRes, flatRes] = await Promise.all([
                 fetch(`${API_CONFIG.BASE_URL}/products/${productId}`),
                 fetch(`${API_CONFIG.BASE_URL}/categories/hierarchical`),
-                fetch(`${API_CONFIG.BASE_URL}/categories`) // <-- ADICIONADO: Busca a lista plana aqui
+                fetch(`${API_CONFIG.BASE_URL}/categories`)
             ]);
 
             if (!productRes.ok || !hierarchicalRes.ok || !flatRes.ok) {
@@ -203,11 +256,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const product = await productRes.json();
             allHierarchicalCategories = await hierarchicalRes.json();
-            const allFlatCategories = await flatRes.json(); // <-- Guarda a lista plana
+            allFlatCategories = await flatRes.json();
 
-            // Passa a lista plana de categorias para a lógica do botão de salvar
-            initializeSaveCategoryButton(allFlatCategories); 
-            
             populateForm(product);
             populateCategoryTree(allHierarchicalCategories, productCategories);
 
@@ -226,43 +276,22 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelCategoryModalBtn.addEventListener('click', () => categoryModal.classList.add('hidden'));
     closeCategoryModalBtn.addEventListener('click', () => categoryModal.classList.add('hidden'));
 
-    // ▼▼▼ ALTERAÇÃO: Lógica de preenchimento automático da marca adicionada aqui ▼▼▼
-    saveCategoryModalBtn.addEventListener('click', () => {
+    const handleSaveCategories = () => {
         const selectedCheckboxes = categoryTreeContainer.querySelectorAll('input[type="checkbox"]:checked');
         productCategories = Array.from(selectedCheckboxes).map(cb => cb.value);
-        
-        // Usamos uma única chamada à API para obter todas as categorias de uma vez
-        fetch(`${API_CONFIG.BASE_URL}/categories`).then(res => res.json()).then(allFlatCategories => {
-            
-            // 1. Renderiza as tags, como antes
-            const selectedCategoryObjects = allFlatCategories.filter(cat => productCategories.includes(cat._id));
-            renderCategoryTags(selectedCategoryObjects);
 
-            // 2. Lógica para encontrar e preencher a marca
-            const categoryMap = new Map(allFlatCategories.map(cat => [cat._id.toString(), cat]));
-            let brandName = '';
+        const selectedCategoryObjects = allFlatCategories.filter(cat => productCategories.includes(cat._id));
+        renderCategoryTags(selectedCategoryObjects);
 
-            for (const selectedCat of selectedCategoryObjects) {
-                let current = selectedCat;
-                while (current && current.parent) {
-                    const parent = categoryMap.get(current.parent.toString());
-                    if (parent && parent.nome === 'Marcas') {
-                        brandName = selectedCat.nome; // Encontrou! A marca é o nome da categoria selecionada.
-                        break; // Para o loop interno
-                    }
-                    current = parent;
-                }
-                if (brandName) break; // Para o loop externo se já encontrou a marca
-            }
+        const brandName = getBrandFromCategories(selectedCategoryObjects);
+        if (brandName) {
+            form.querySelector('#marca').value = brandName;
+        }
 
-            // 3. Preenche o campo 'marca'
-            if (brandName) {
-                form.querySelector('#marca').value = brandName;
-            }
+        categoryModal.classList.add('hidden');
+    };
 
-            categoryModal.classList.add('hidden');
-        });
-    });
+    saveCategoryModalBtn.addEventListener('click', handleSaveCategories);
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
