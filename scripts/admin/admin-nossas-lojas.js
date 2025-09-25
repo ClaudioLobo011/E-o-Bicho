@@ -119,6 +119,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const availableServices = ['Banho e Tosa', 'Veterinária', 'Farmácia'];
     let selectedServices = [];
 
+    const ufIbgeCodes = {
+        AC: '12',
+        AL: '27',
+        AP: '16',
+        AM: '13',
+        BA: '29',
+        CE: '23',
+        DF: '53',
+        ES: '32',
+        GO: '52',
+        MA: '21',
+        MT: '51',
+        MS: '50',
+        MG: '31',
+        PA: '15',
+        PB: '25',
+        PR: '41',
+        PE: '26',
+        PI: '22',
+        RJ: '33',
+        RN: '24',
+        RS: '43',
+        RO: '11',
+        RR: '14',
+        SC: '42',
+        SP: '35',
+        SE: '28',
+        TO: '17',
+    };
+
     // --- Funções do Modal de Serviços ---
     const openServicesModal = () => {
         servicesCheckboxContainer.innerHTML = '';
@@ -180,6 +210,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
     
+    async function buscarEnderecoPorCep(cep) {
+        const sanitizedCep = cep.replace(/\D/g, '');
+        if (sanitizedCep.length !== 8) return null;
+
+        const url = `https://viacep.com.br/ws/${sanitizedCep}/json/`;
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error('Não foi possível consultar o CEP no momento.');
+            }
+            const data = await response.json();
+            if (data.erro) {
+                return null;
+            }
+            return data;
+        } catch (error) {
+            console.error('Erro ao consultar CEP:', error);
+            throw error;
+        }
+    }
+
     // --- FUNÇÃO DE GEOCODIFICAÇÃO ROBUSTA ---
     async function geocodeAddress(address, cep) {
         const fullAddress = `${address || ''}, ${cep || ''}`;
@@ -450,23 +501,47 @@ document.addEventListener('DOMContentLoaded', () => {
     
     cepInput.addEventListener('blur', async () => {
         const cepValue = cepInput.value;
-        if (cepValue.replace(/\D/g, '').length === 8) {
-            const enderecoValue = buildEnderecoCompleto() || enderecoHiddenInput?.value;
-            const coords = await geocodeAddress(enderecoValue, cepValue);
-            if (coords && locationMap) {
-                locationMap.setView([coords.lat, coords.lng], 17);
-                showModal({
-                    title: 'Localização Encontrada', 
-                    message: 'O mapa foi centralizado na morada informada. Agora, clique no local exato da loja para ajustar.', 
-                    confirmText: 'Entendi' 
-                });
-            } else {
-                showModal({
-                    title: 'Endereço não encontrado',
-                    message: 'Não foi possível encontrar este endereço. Verifique os dados ou aponte a localização manualmente no mapa.',
-                    confirmText: 'OK'
-                });
-            }
+        const sanitizedCep = cepValue.replace(/\D/g, '');
+        if (sanitizedCep.length !== 8) {
+            return;
+        }
+
+        let cepData = null;
+        try {
+            cepData = await buscarEnderecoPorCep(sanitizedCep);
+        } catch (error) {
+            showModal({ title: 'Erro', message: error.message || 'Não foi possível consultar o CEP. Tente novamente.', confirmText: 'OK' });
+            return;
+        }
+
+        if (!cepData) {
+            showModal({ title: 'CEP não encontrado', message: 'Revise o CEP informado ou preencha os campos manualmente.', confirmText: 'OK' });
+            return;
+        }
+
+        logradouroInput.value = cepData.logradouro || '';
+        complementoInput.value = cepData.complemento || '';
+        municipioInput.value = cepData.localidade || '';
+        ufInput.value = (cepData.uf || '').toUpperCase();
+        codIbgeMunicipioInput.value = cepData.ibge || '';
+        codUfInput.value = ufIbgeCodes[ufInput.value] || '';
+        buildEnderecoCompleto();
+
+        const enderecoValue = buildEnderecoCompleto() || enderecoHiddenInput?.value;
+        const coords = await geocodeAddress(enderecoValue, cepValue);
+        if (coords && locationMap) {
+            locationMap.setView([coords.lat, coords.lng], 17);
+            showModal({
+                title: 'Localização Encontrada',
+                message: 'O mapa foi centralizado na morada informada. Agora, clique no local exato da loja para ajustar.',
+                confirmText: 'Entendi'
+            });
+        } else {
+            showModal({
+                title: 'Endereço não encontrado',
+                message: 'Não foi possível encontrar este endereço. Verifique os dados ou aponte a localização manualmente no mapa.',
+                confirmText: 'OK'
+            });
         }
     });
 
