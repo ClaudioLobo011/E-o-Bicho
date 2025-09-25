@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const nomeFantasiaInput = document.getElementById('store-nome');
     const cnpjInput = document.getElementById('store-cnpj');
     const cnaeInput = document.getElementById('store-cnae');
+    const cnaeSecundarioInput = document.getElementById('store-cnae-secundario');
     const inscricaoEstadualInput = document.getElementById('store-inscricao-estadual');
     const inscricaoMunicipalInput = document.getElementById('store-inscricao-municipal');
     const regimeTributarioSelect = document.getElementById('store-regime-tributario');
@@ -433,6 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (certificadoValidadeInput) certificadoValidadeInput.value = '';
         if (certificadoAtualText) certificadoAtualText.textContent = 'Nenhum certificado armazenado.';
         updateCertificadoStatus('', 'muted');
+        if (cnaeSecundarioInput) cnaeSecundarioInput.value = '';
 
         modal.classList.remove('hidden');
 
@@ -462,6 +464,12 @@ document.addEventListener('DOMContentLoaded', () => {
             nomeFantasiaInput.value = store.nomeFantasia || store.nome || '';
             cnpjInput.value = store.cnpj || '';
             cnaeInput.value = store.cnaePrincipal || store.cnae || '';
+            if (cnaeSecundarioInput) {
+                const cnaeSecundario = Array.isArray(store.cnaesSecundarios)
+                    ? store.cnaesSecundarios.join(', ')
+                    : (store.cnaeSecundario || store.cnaeSecundaria || store.cnaeSecundarios || '');
+                cnaeSecundarioInput.value = cnaeSecundario || '';
+            }
             inscricaoEstadualInput.value = store.inscricaoEstadual || '';
             inscricaoMunicipalInput.value = store.inscricaoMunicipal || '';
             regimeTributarioSelect.value = store.regimeTributario || '';
@@ -740,6 +748,7 @@ document.addEventListener('DOMContentLoaded', () => {
             razaoSocial: razaoSocialInput.value,
             cnpj: cnpjInput.value,
             cnaePrincipal: cnaeInput.value,
+            cnaeSecundario: cnaeSecundarioInput ? cnaeSecundarioInput.value : '',
             inscricaoEstadual: inscricaoEstadualInput.value,
             inscricaoMunicipal: inscricaoMunicipalInput.value,
             regimeTributario: regimeTributarioSelect.value,
