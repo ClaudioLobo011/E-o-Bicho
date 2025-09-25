@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin: Regras Fiscais Automáticas</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+    <div id="admin-header-placeholder"></div>
+
+    <main class="container mx-auto px-4 py-8 min-h-screen">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <aside class="md:col-span-4">
+                <div id="admin-sidebar-placeholder"></div>
+            </aside>
+
+            <div class="md:col-span-4 space-y-8">
+                <section class="bg-white rounded-xl shadow p-6">
+                    <header class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-800">Regras fiscais automáticas</h1>
+                            <p class="text-gray-600">Sugira e aplique CFOP, CSOSN/CST e tributos automaticamente com base nas informações do produto.</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button id="fiscal-regras-refresh" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+                                <i class="fas fa-sync-alt"></i>
+                                Atualizar lista
+                            </button>
+                        </div>
+                    </header>
+
+                    <div class="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-4">
+                        <div class="lg:col-span-4">
+                            <label for="fiscal-regras-store" class="block text-sm font-medium text-gray-700">Empresa</label>
+                            <select id="fiscal-regras-store" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                                <option value="">Selecione uma empresa</option>
+                            </select>
+                        </div>
+                        <div class="lg:col-span-3">
+                            <span class="block text-sm font-medium text-gray-700">Modalidade</span>
+                            <div class="mt-1 inline-flex rounded-md border border-gray-200 bg-gray-50 p-1 text-sm font-semibold text-gray-600" role="group">
+                                <button type="button" data-modalidade="nfe" class="fiscal-regras-modalidade-btn inline-flex items-center gap-2 rounded-md px-3 py-2 transition focus:outline-none focus:ring-2 focus:ring-primary">
+                                    <i class="fas fa-file-invoice"></i>
+                                    NF-e
+                                </button>
+                                <button type="button" data-modalidade="nfce" class="fiscal-regras-modalidade-btn inline-flex items-center gap-2 rounded-md px-3 py-2 transition focus:outline-none focus:ring-2 focus:ring-primary">
+                                    <i class="fas fa-receipt"></i>
+                                    NFC-e
+                                </button>
+                            </div>
+                        </div>
+                        <div class="lg:col-span-3">
+                            <label for="fiscal-regras-status" class="block text-sm font-medium text-gray-700">Status</label>
+                            <select id="fiscal-regras-status" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                                <option value="">Todos</option>
+                                <option value="pendente">Pendentes</option>
+                                <option value="parcial">Parciais</option>
+                                <option value="aprovado">Aprovados</option>
+                            </select>
+                        </div>
+                        <div class="lg:col-span-2">
+                            <label for="fiscal-regras-search" class="block text-sm font-medium text-gray-700">Buscar</label>
+                            <input type="text" id="fiscal-regras-search" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Nome, SKU ou código">
+                        </div>
+                    </div>
+                </section>
+
+                <section id="fiscal-regras-icms" class="hidden bg-white rounded-xl shadow p-6">
+                    <header class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-lg font-semibold text-gray-800">Referências de ICMS (Simples Nacional)</h2>
+                            <p class="text-sm text-gray-500">Percentuais cadastrados para a empresa selecionada.</p>
+                        </div>
+                        <a href="admin-fiscal-icms-simples.html" class="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
+                            <i class="fas fa-external-link-alt"></i>
+                            Gerenciar ICMS
+                        </a>
+                    </header>
+                    <div class="mt-4 overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left font-medium text-gray-700">Código</th>
+                                    <th class="px-4 py-2 text-right font-medium text-gray-700">Percentual</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fiscal-regras-icms-body" class="divide-y divide-gray-100 bg-white"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="bg-white rounded-xl shadow p-6">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-lg font-semibold text-gray-800">Produtos</h2>
+                        <span id="fiscal-regras-counter" class="text-sm text-gray-500">Selecione uma empresa para carregar os produtos.</span>
+                    </div>
+                    <div id="fiscal-regras-alert" class="mt-4 hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700"></div>
+                    <div id="fiscal-regras-list" class="mt-6 space-y-6"></div>
+                    <div id="fiscal-regras-empty" class="mt-6 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500 hidden">
+                        Nenhum produto encontrado para os filtros selecionados.
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <div id="admin-footer-placeholder"></div>
+
+    <script>var basePath = '../../';</script>
+    <script src="../../scripts/core/config.js"></script>
+    <script src="../../scripts/core/ui.js"></script>
+    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/admin/admin.js"></script>
+    <script src="../../scripts/admin/admin-fiscal-regras.js"></script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+const express = require('express');
+const router = express.Router();
+const requireAuth = require('../middlewares/requireAuth');
+const authorizeRoles = require('../middlewares/authorizeRoles');
+const Product = require('../models/Product');
+const Store = require('../models/Store');
+const IcmsSimples = require('../models/IcmsSimples');
+const {
+  generateProductFiscalReport,
+  mergeFiscalData,
+} = require('../services/fiscalRuleEngine');
+
+const parsePositiveInt = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const buildSearchQuery = (searchTerm = '') => {
+  const trimmed = searchTerm.trim();
+  if (!trimmed) return null;
+  const regex = new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  return {
+    $or: [
+      { nome: regex },
+      { cod: regex },
+      { codbarras: regex },
+    ],
+  };
+};
+
+router.get('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+  try {
+    const {
+      storeId,
+      modalidade = 'nfe',
+      status,
+      search = '',
+      limit = 20,
+      page = 1,
+    } = req.query;
+
+    if (!storeId) {
+      return res.status(400).json({ message: 'É necessário informar a empresa (storeId).' });
+    }
+
+    const store = await Store.findById(storeId).lean();
+    if (!store) {
+      return res.status(404).json({ message: 'Empresa não encontrada.' });
+    }
+
+    const query = {};
+    const searchQuery = buildSearchQuery(search);
+    if (searchQuery) {
+      Object.assign(query, searchQuery);
+    }
+
+    const normalizedModalidade = (modalidade || '').toLowerCase();
+    const normalizedStatus = (status || '').toLowerCase();
+    const allowedStatus = new Set(['pendente', 'parcial', 'aprovado']);
+    if (allowedStatus.has(normalizedStatus)) {
+      query[`fiscal.status.${normalizedModalidade === 'nfce' ? 'nfce' : 'nfe'}`] = normalizedStatus;
+    }
+
+    const total = await Product.countDocuments(query);
+    const pageSize = parsePositiveInt(limit, 20);
+    const currentPage = parsePositiveInt(page, 1);
+
+    const products = await Product.find(query)
+      .sort({ nome: 1 })
+      .skip(pageSize * (currentPage - 1))
+      .limit(pageSize)
+      .lean();
+
+    const icmsEntries = await IcmsSimples.find({ empresa: storeId }).populate('empresa').lean();
+    const icmsSimplesMap = {};
+    icmsEntries.forEach((entry) => {
+      if (entry && entry.codigo !== undefined && entry.valor !== undefined) {
+        icmsSimplesMap[entry.codigo] = entry.valor;
+      }
+    });
+
+    const reports = products.map((product) => (
+      generateProductFiscalReport(product, store, {
+        modalidade: normalizedModalidade,
+        icmsSimplesMap,
+      })
+    ));
+
+    res.json({
+      page: currentPage,
+      limit: pageSize,
+      total,
+      pages: Math.ceil(total / pageSize) || 1,
+      modalidade: normalizedModalidade,
+      store: {
+        _id: store._id,
+        nome: store.nome,
+        regimeTributario: store.regimeTributario,
+        uf: store.uf,
+      },
+      icmsSimples: icmsEntries,
+      produtos: reports,
+    });
+  } catch (error) {
+    console.error('Erro ao gerar sugestões fiscais:', error);
+    res.status(500).json({ message: 'Erro ao gerar sugestões fiscais.' });
+  }
+});
+
+router.post('/apply', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+  try {
+    const { items } = req.body || {};
+    if (!Array.isArray(items) || !items.length) {
+      return res.status(400).json({ message: 'Nenhum item informado para atualização.' });
+    }
+
+    const updated = [];
+    const failures = [];
+
+    for (const item of items) {
+      if (!item || !item.productId || !item.fiscal) {
+        failures.push({ productId: item?.productId, reason: 'Dados incompletos.' });
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+
+      try {
+        const product = await Product.findById(item.productId);
+        if (!product) {
+          failures.push({ productId: item.productId, reason: 'Produto não encontrado.' });
+          // eslint-disable-next-line no-continue
+          continue;
+        }
+
+        const mergedFiscal = mergeFiscalData(product.fiscal || {}, item.fiscal || {});
+        mergedFiscal.atualizadoEm = new Date();
+        mergedFiscal.atualizadoPor = req.user?.id || '';
+        product.fiscal = mergedFiscal;
+        await product.save();
+
+        const store = item.storeId ? await Store.findById(item.storeId).lean() : null;
+        const contextStore = store || {};
+        const report = generateProductFiscalReport(product.toObject(), contextStore, {});
+        updated.push(report);
+      } catch (error) {
+        console.error('Erro ao aplicar regra fiscal para produto:', item?.productId, error);
+        failures.push({ productId: item?.productId, reason: 'Erro ao atualizar.' });
+      }
+    }
+
+    res.json({ updated, failures });
+  } catch (error) {
+    console.error('Erro ao aplicar regras fiscais:', error);
+    res.status(500).json({ message: 'Erro ao aplicar regras fiscais.' });
+  }
+});
+
+router.get('/:productId', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+  try {
+    const { storeId } = req.query;
+    const { productId } = req.params;
+    if (!storeId) {
+      return res.status(400).json({ message: 'Informe a empresa (storeId).' });
+    }
+    const [store, product, icmsEntries] = await Promise.all([
+      Store.findById(storeId).lean(),
+      Product.findById(productId).lean(),
+      IcmsSimples.find({ empresa: storeId }).lean(),
+    ]);
+
+    if (!store) {
+      return res.status(404).json({ message: 'Empresa não encontrada.' });
+    }
+    if (!product) {
+      return res.status(404).json({ message: 'Produto não encontrado.' });
+    }
+
+    const icmsSimplesMap = {};
+    icmsEntries.forEach((entry) => {
+      if (entry && entry.codigo !== undefined && entry.valor !== undefined) {
+        icmsSimplesMap[entry.codigo] = entry.valor;
+      }
+    });
+
+    const report = generateProductFiscalReport(product, store, { icmsSimplesMap });
+    res.json({
+      store: {
+        _id: store._id,
+        nome: store.nome,
+        regimeTributario: store.regimeTributario,
+        uf: store.uf,
+      },
+      produto: report,
+      icmsSimples: icmsEntries,
+    });
+  } catch (error) {
+    console.error('Erro ao consultar regras fiscais do produto:', error);
+    res.status(500).json({ message: 'Erro ao consultar regras fiscais do produto.' });
+  }
+});
+
+module.exports = router;

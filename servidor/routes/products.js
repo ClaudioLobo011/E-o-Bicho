@@ -238,9 +238,80 @@ router.get('/:id', async (req, res) => {
 });
 
 // PUT /api/products/:id (restrito)
+const fiscalStatusAllowed = new Set(['pendente', 'parcial', 'aprovado']);
+
+const sanitizeFiscalString = (value, fallback = '') => {
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number') return String(value);
+    return fallback;
+};
+
+const sanitizeFiscalNumber = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const sanitizeFiscalTax = (tax = {}, existing = {}) => ({
+    codigo: sanitizeFiscalString(tax?.codigo, existing?.codigo || ''),
+    cst: sanitizeFiscalString(tax?.cst, existing?.cst || ''),
+    aliquota: sanitizeFiscalNumber(tax?.aliquota ?? existing?.aliquota ?? null),
+    tipoCalculo: sanitizeFiscalString(tax?.tipoCalculo, existing?.tipoCalculo || 'percentual') || 'percentual',
+    valorBase: sanitizeFiscalNumber(tax?.valorBase ?? existing?.valorBase ?? null),
+});
+
+const sanitizeFiscalCfop = (cfop = {}, existing = {}) => ({
+    dentroEstado: sanitizeFiscalString(cfop?.dentroEstado, existing?.dentroEstado || ''),
+    foraEstado: sanitizeFiscalString(cfop?.foraEstado, existing?.foraEstado || ''),
+    transferencia: sanitizeFiscalString(cfop?.transferencia, existing?.transferencia || ''),
+    devolucao: sanitizeFiscalString(cfop?.devolucao, existing?.devolucao || ''),
+    industrializacao: sanitizeFiscalString(cfop?.industrializacao, existing?.industrializacao || ''),
+});
+
+const sanitizeFiscalStatus = (value, existing = 'pendente') => {
+    const normalized = sanitizeFiscalString(value, existing || 'pendente').toLowerCase();
+    return fiscalStatusAllowed.has(normalized) ? normalized : (fiscalStatusAllowed.has(existing) ? existing : 'pendente');
+};
+
+const sanitizeFiscalData = (rawFiscal = {}, existingFiscal = {}, updatedBy = '') => ({
+    origem: sanitizeFiscalString(rawFiscal?.origem, existingFiscal?.origem || '0') || '0',
+    cest: sanitizeFiscalString(rawFiscal?.cest, existingFiscal?.cest || ''),
+    csosn: sanitizeFiscalString(rawFiscal?.csosn, existingFiscal?.csosn || ''),
+    cst: sanitizeFiscalString(rawFiscal?.cst, existingFiscal?.cst || ''),
+    cfop: {
+        nfe: sanitizeFiscalCfop(rawFiscal?.cfop?.nfe, existingFiscal?.cfop?.nfe || {}),
+        nfce: sanitizeFiscalCfop(rawFiscal?.cfop?.nfce, existingFiscal?.cfop?.nfce || {}),
+    },
+    pis: sanitizeFiscalTax(rawFiscal?.pis, existingFiscal?.pis || {}),
+    cofins: sanitizeFiscalTax(rawFiscal?.cofins, existingFiscal?.cofins || {}),
+    ipi: {
+        cst: sanitizeFiscalString(rawFiscal?.ipi?.cst, existingFiscal?.ipi?.cst || ''),
+        codigoEnquadramento: sanitizeFiscalString(rawFiscal?.ipi?.codigoEnquadramento, existingFiscal?.ipi?.codigoEnquadramento || ''),
+        aliquota: sanitizeFiscalNumber(rawFiscal?.ipi?.aliquota ?? existingFiscal?.ipi?.aliquota ?? null),
+        tipoCalculo: sanitizeFiscalString(rawFiscal?.ipi?.tipoCalculo, existingFiscal?.ipi?.tipoCalculo || 'percentual') || 'percentual',
+        valorBase: sanitizeFiscalNumber(rawFiscal?.ipi?.valorBase ?? existingFiscal?.ipi?.valorBase ?? null),
+    },
+    fcp: {
+        indicador: sanitizeFiscalString(rawFiscal?.fcp?.indicador, existingFiscal?.fcp?.indicador || '0') || '0',
+        aliquota: sanitizeFiscalNumber(rawFiscal?.fcp?.aliquota ?? existingFiscal?.fcp?.aliquota ?? null),
+        aplica: Boolean(rawFiscal?.fcp?.aplica ?? existingFiscal?.fcp?.aplica ?? false),
+    },
+    status: {
+        nfe: sanitizeFiscalStatus(rawFiscal?.status?.nfe, existingFiscal?.status?.nfe || 'pendente'),
+        nfce: sanitizeFiscalStatus(rawFiscal?.status?.nfce, existingFiscal?.status?.nfce || 'pendente'),
+    },
+    atualizadoEm: new Date(),
+    atualizadoPor: sanitizeFiscalString(rawFiscal?.atualizadoPor, updatedBy || existingFiscal?.atualizadoPor || ''),
+});
+
 router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
         const payload = req.body || {};
+
+        const existingProduct = await Product.findById(req.params.id);
+        if (!existingProduct) {
+            return res.status(404).json({ message: 'Produto não encontrado.' });
+        }
 
         const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
         const parseDate = (value) => {
@@ -318,15 +389,15 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             updatePayload.stock = parsedStock === null ? 0 : parsedStock;
         }
 
+        if (payload.fiscal !== undefined) {
+            updatePayload.fiscal = sanitizeFiscalData(payload.fiscal, existingProduct?.fiscal || {}, req.user?.id || '');
+        }
+
         const updatedProduct = await Product.findByIdAndUpdate(
             req.params.id,
             updatePayload,
             { new: true, runValidators: true }
         );
-
-        if (!updatedProduct) {
-            return res.status(404).json({ message: 'Produto não encontrado.' });
-        }
 
         const populatedProduct = await Product.findById(req.params.id)
             .populate('categorias')
