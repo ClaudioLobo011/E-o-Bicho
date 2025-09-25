@@ -38,8 +38,10 @@ const storeSchema = new mongoose.Schema({
     contadorTelefone: { type: String, trim: true },
     contadorCrc: { type: String, trim: true },
     certificadoValidade: { type: String, trim: true },
-    certificadoSenha: { type: String },
     certificadoArquivoNome: { type: String, trim: true },
+    certificadoSenhaCriptografada: { type: String, select: false },
+    certificadoArquivoCriptografado: { type: String, select: false },
+    certificadoFingerprint: { type: String, trim: true },
     horario: {
         domingo: { type: horarioDiaSchema, default: () => ({}) },
         segunda: { type: horarioDiaSchema, default: () => ({}) },

@@ -194,6 +194,7 @@
                                     <label for="store-certificado-arquivo" class="block font-medium mb-0.5">Arquivo do Certificado</label>
                                     <input type="file" id="store-certificado-arquivo" class="w-full text-sm" accept=".pfx,.p12" />
                                     <p class="helper-text text-gray-500">Formatos aceitos: .pfx, .p12</p>
+                                    <p id="store-certificado-atual" class="helper-text text-gray-500">Nenhum certificado armazenado.</p>
                                 </div>
                                 <div class="col-span-12 md:col-span-3">
                                     <label for="store-certificado-senha" class="block font-medium mb-0.5">Senha</label>
@@ -204,6 +205,7 @@
                                     <input type="date" id="store-certificado-validade" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                                 </div>
                             </div>
+                            <p id="store-certificado-status" class="helper-text text-gray-500"></p>
                         </div>
 
                         <div class="tab-panel hidden space-y-2" data-tab-panel="contador">

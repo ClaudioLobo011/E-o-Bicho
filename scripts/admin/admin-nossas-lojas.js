@@ -37,6 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const certificadoArquivoInput = document.getElementById('store-certificado-arquivo');
     const certificadoSenhaInput = document.getElementById('store-certificado-senha');
     const certificadoValidadeInput = document.getElementById('store-certificado-validade');
+    const certificadoStatusText = document.getElementById('store-certificado-status');
+    const certificadoAtualText = document.getElementById('store-certificado-atual');
     const contadorNomeInput = document.getElementById('store-contador-nome');
     const contadorEmailInput = document.getElementById('store-contador-email');
     const contadorTelefoneInput = document.getElementById('store-contador-telefone');
@@ -79,6 +81,118 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     enderecoFields.forEach(field => field?.addEventListener('input', buildEnderecoCompleto));
+
+    const updateCertificadoStatus = (message = '', tone = 'muted') => {
+        if (!certificadoStatusText) return;
+        certificadoStatusText.textContent = message;
+        certificadoStatusText.classList.remove('text-gray-500', 'text-red-600', 'text-emerald-600');
+        if (tone === 'error') {
+            certificadoStatusText.classList.add('text-red-600');
+        } else if (tone === 'success') {
+            certificadoStatusText.classList.add('text-emerald-600');
+        } else {
+            certificadoStatusText.classList.add('text-gray-500');
+        }
+    };
+
+    const formatDateForDisplay = (isoDate = '') => {
+        const parts = isoDate.split('-');
+        if (parts.length !== 3) return isoDate;
+        const [year, month, day] = parts;
+        if (!year || !month || !day) return isoDate;
+        return `${day}/${month}/${year}`;
+    };
+
+    const previewCertificate = async () => {
+        if (!certificadoArquivoInput || !certificadoSenhaInput) return;
+        const file = certificadoArquivoInput.files?.[0];
+        const senha = (certificadoSenhaInput.value || '').trim();
+        if (!file || !senha) {
+            updateCertificadoStatus('', 'muted');
+            return;
+        }
+
+        try {
+            updateCertificadoStatus('Validando certificado...', 'muted');
+            const formData = new FormData();
+            formData.append('certificado', file);
+            formData.append('senha', senha);
+
+            const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+            const token = loggedInUser?.token;
+            if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+
+            const response = await fetch(`${API_CONFIG.BASE_URL}/stores/certificate/preview`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result?.message || 'Falha ao validar o certificado.');
+            }
+
+            if (result.validade) {
+                certificadoValidadeInput.value = result.validade;
+            }
+            updateCertificadoStatus('Certificado validado com sucesso.', 'success');
+        } catch (error) {
+            certificadoValidadeInput.value = '';
+            updateCertificadoStatus(error.message || 'Não foi possível validar o certificado.', 'error');
+        }
+    };
+
+    const uploadCertificateForStore = async (storeId) => {
+        const file = certificadoArquivoInput?.files?.[0];
+        const senha = (certificadoSenhaInput?.value || '').trim();
+        if (!storeId || !file || !senha) {
+            return null;
+        }
+
+        const formData = new FormData();
+        formData.append('certificado', file);
+        formData.append('senha', senha);
+
+        const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+        const token = loggedInUser?.token;
+        if (!token) {
+            throw new Error('Sessão expirada. Faça login novamente.');
+        }
+
+        const response = await fetch(`${API_CONFIG.BASE_URL}/stores/${storeId}/certificate`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result?.message || 'Não foi possível salvar o certificado.');
+        }
+
+        if (result.validade) {
+            certificadoValidadeInput.value = result.validade;
+        }
+
+        if (certificadoAtualText) {
+            const partes = [];
+            if (result.arquivo || file.name) {
+                partes.push(`Arquivo armazenado: ${result.arquivo || file.name}`);
+            }
+            if (result.validade) {
+                partes.push(`Validade: ${formatDateForDisplay(result.validade)}`);
+            }
+            if (result.fingerprint) {
+                partes.push(`Fingerprint: ${result.fingerprint}`);
+            }
+            certificadoAtualText.textContent = partes.length ? partes.join(' • ') : 'Certificado armazenado.';
+        }
+
+        updateCertificadoStatus('Certificado armazenado com sucesso.', 'success');
+        certificadoArquivoInput.value = '';
+        certificadoSenhaInput.value = '';
+
+        return result;
+    };
 
     const activateTab = (target) => {
         tabButtons.forEach((button) => {
@@ -188,6 +302,18 @@ document.addEventListener('DOMContentLoaded', () => {
             reader.readAsDataURL(file);
         }
     });
+
+    certificadoArquivoInput?.addEventListener('change', () => {
+        if (!certificadoArquivoInput.files?.length) {
+            updateCertificadoStatus('', 'muted');
+            return;
+        }
+        previewCertificate();
+    });
+
+    certificadoSenhaInput?.addEventListener('blur', previewCertificate);
+    certificadoSenhaInput?.addEventListener('change', previewCertificate);
+    certificadoSenhaInput?.addEventListener('input', () => updateCertificadoStatus('', 'muted'));
 
     // --- Criação Dinâmica dos Horários ---
     const createHorarioInputs = () => {
@@ -303,6 +429,10 @@ document.addEventListener('DOMContentLoaded', () => {
         imagePreview.src = '/public/image/placeholder.png';
         imageInput.value = '';
         if (certificadoArquivoInput) certificadoArquivoInput.value = '';
+        if (certificadoSenhaInput) certificadoSenhaInput.value = '';
+        if (certificadoValidadeInput) certificadoValidadeInput.value = '';
+        if (certificadoAtualText) certificadoAtualText.textContent = 'Nenhum certificado armazenado.';
+        updateCertificadoStatus('', 'muted');
 
         modal.classList.remove('hidden');
 
@@ -350,8 +480,22 @@ document.addEventListener('DOMContentLoaded', () => {
             contadorEmailInput.value = store.contadorEmail || store.contador?.email || '';
             contadorTelefoneInput.value = store.contadorTelefone || store.contador?.telefone || '';
             contadorCrcInput.value = store.contadorCrc || store.contador?.crc || '';
-            certificadoSenhaInput.value = store.certificadoSenha || '';
             certificadoValidadeInput.value = store.certificadoValidade || '';
+            if (certificadoSenhaInput) certificadoSenhaInput.value = '';
+            if (certificadoAtualText) {
+                const partes = [];
+                if (store.certificadoArquivoNome) {
+                    partes.push(`Arquivo armazenado: ${store.certificadoArquivoNome}`);
+                }
+                if (store.certificadoValidade) {
+                    partes.push(`Validade: ${formatDateForDisplay(store.certificadoValidade)}`);
+                }
+                if (store.certificadoFingerprint) {
+                    partes.push(`Fingerprint: ${store.certificadoFingerprint}`);
+                }
+                certificadoAtualText.textContent = partes.length ? partes.join(' • ') : 'Nenhum certificado armazenado.';
+            }
+            updateCertificadoStatus('', 'muted');
             if (enderecoHiddenInput) enderecoHiddenInput.value = store.endereco || '';
             if (!logradouroInput.value && store.endereco) logradouroInput.value = store.endereco;
             buildEnderecoCompleto();
@@ -446,6 +590,10 @@ document.addEventListener('DOMContentLoaded', () => {
         imagePreview.src = '/public/image/placeholder.png';
         imageInput.value = '';
         if (certificadoArquivoInput) certificadoArquivoInput.value = '';
+        if (certificadoSenhaInput) certificadoSenhaInput.value = '';
+        if (certificadoValidadeInput) certificadoValidadeInput.value = '';
+        if (certificadoAtualText) certificadoAtualText.textContent = 'Nenhum certificado armazenado.';
+        updateCertificadoStatus('', 'muted');
         if (locationMarker) {
             locationMarker.remove();
             locationMarker = null;
@@ -615,9 +763,7 @@ document.addEventListener('DOMContentLoaded', () => {
             contadorEmail: contadorEmailInput.value,
             contadorTelefone: contadorTelefoneInput.value,
             contadorCrc: contadorCrcInput.value,
-            certificadoValidade: certificadoValidadeInput.value,
-            certificadoSenha: certificadoSenhaInput.value,
-            certificadoArquivoNome: certificadoArquivoInput?.files?.[0]?.name || ''
+            certificadoValidade: certificadoValidadeInput.value
         };
         
         diasDaSemana.forEach(({ key }) => {
@@ -651,6 +797,21 @@ document.addEventListener('DOMContentLoaded', () => {
                         'Authorization': `Bearer ${token}`
                     }
                 });
+            }
+
+            if (certificadoArquivoInput?.files?.length && (certificadoSenhaInput?.value || '').trim()) {
+                try {
+                    await uploadCertificateForStore(savedStore._id);
+                } catch (certError) {
+                    updateCertificadoStatus(certError.message || 'Não foi possível salvar o certificado.', 'error');
+                    showModal({
+                        title: 'Certificado não armazenado',
+                        message: certError.message || 'A loja foi atualizada, mas o certificado digital não pôde ser salvo. Verifique o arquivo e a senha e tente novamente.',
+                        confirmText: 'OK'
+                    });
+                    submitButton.disabled = false;
+                    return;
+                }
             }
 
             closeModal();
