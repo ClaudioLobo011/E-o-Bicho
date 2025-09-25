@@ -211,17 +211,56 @@
                         </div>
 
                         <div id="tab-supplier" class="space-y-6 hidden">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div>
-                                    <label for="supplier-name" class="block text-sm font-medium text-gray-700">Fornecedor Principal</label>
+                                    <label for="supplier-name" class="block text-sm font-medium text-gray-700">Fornecedor</label>
                                     <input type="text" id="supplier-name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Nome do fornecedor">
                                 </div>
                                 <div>
-                                    <label for="supplier-code" class="block text-sm font-medium text-gray-700">Código do Fornecedor</label>
-                                    <input type="text" id="supplier-code" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Código interno do fornecedor">
+                                    <label for="supplier-product-code" class="block text-sm font-medium text-gray-700">Cod. Produto do Fornecedor</label>
+                                    <input type="text" id="supplier-product-code" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Código usado pelo fornecedor">
+                                </div>
+                                <div>
+                                    <label for="supplier-entry-unit" class="block text-sm font-medium text-gray-700">Unidade de Entrada</label>
+                                    <select id="supplier-entry-unit" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Selecionar...</option>
+                                        <option value="UN">Unidade (UN)</option>
+                                        <option value="KG">Quilograma (KG)</option>
+                                        <option value="G">Grama (G)</option>
+                                        <option value="MG">Miligrama (MG)</option>
+                                        <option value="L">Litro (L)</option>
+                                        <option value="ML">Mililitro (ML)</option>
+                                        <option value="CX">Caixa (CX)</option>
+                                        <option value="PCT">Pacote (PCT)</option>
+                                        <option value="SC">Saco (SC)</option>
+                                        <option value="FD">Fardo (FD)</option>
+                                        <option value="DZ">Dúzia (DZ)</option>
+                                    </select>
                                 </div>
                             </div>
-                            <p class="text-sm text-gray-500">Informações do fornecedor são mantidas apenas para referência interna no momento.</p>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label for="supplier-calc-type" class="block text-sm font-medium text-gray-700">Tipo de Cálculo</label>
+                                    <select id="supplier-calc-type" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Selecionar...</option>
+                                        <option value="Multiplicar">Multiplicar</option>
+                                        <option value="Dividir">Dividir</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="supplier-calc-value" class="block text-sm font-medium text-gray-700">Valor do Cálculo</label>
+                                    <input type="number" step="0.0001" id="supplier-calc-value" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Informe o fator">
+                                </div>
+                                <div class="flex items-end">
+                                    <button type="button" id="add-supplier-btn" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-semibold rounded-md shadow-sm text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary w-full">
+                                        <i class="fas fa-plus mr-2"></i>
+                                        Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="supplier-list" class="space-y-4">
+                                <p class="text-sm text-gray-500">Nenhum fornecedor adicional adicionado.</p>
+                            </div>
                         </div>
 
                         <div id="tab-stock" class="space-y-6 hidden">

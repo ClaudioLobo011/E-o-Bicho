@@ -12,6 +12,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveCategoryModalBtn = document.getElementById('save-category-modal-btn');
     const cancelCategoryModalBtn = document.getElementById('cancel-category-modal-btn');
     const closeCategoryModalBtn = document.getElementById('close-category-modal-btn');
+    const supplierNameInput = document.getElementById('supplier-name');
+    const supplierProductCodeInput = document.getElementById('supplier-product-code');
+    const supplierEntryUnitSelect = document.getElementById('supplier-entry-unit');
+    const supplierCalcTypeSelect = document.getElementById('supplier-calc-type');
+    const supplierCalcValueInput = document.getElementById('supplier-calc-value');
+    const addSupplierBtn = document.getElementById('add-supplier-btn');
+    const supplierListContainer = document.getElementById('supplier-list');
 
     // --- LÓGICA DAS ABAS (Geral / Especificações) ---
     const productTabLinks = document.querySelectorAll('#product-tabs .tab-link');
@@ -56,6 +63,65 @@ document.addEventListener('DOMContentLoaded', () => {
     let productCategories = []; // Array de IDs das categorias selecionadas
     let allHierarchicalCategories = []; // Guarda a árvore de categorias
     let allFlatCategories = []; // Lista plana de categorias para consultas rápidas
+    let supplierEntries = [];
+
+    const resetSupplierForm = () => {
+        if (supplierNameInput) supplierNameInput.value = '';
+        if (supplierProductCodeInput) supplierProductCodeInput.value = '';
+        if (supplierEntryUnitSelect) supplierEntryUnitSelect.value = '';
+        if (supplierCalcTypeSelect) supplierCalcTypeSelect.value = '';
+        if (supplierCalcValueInput) supplierCalcValueInput.value = '';
+    };
+
+    const renderSupplierEntries = () => {
+        if (!supplierListContainer) return;
+        supplierListContainer.innerHTML = '';
+
+        if (!supplierEntries.length) {
+            supplierListContainer.innerHTML = '<p class="text-sm text-gray-500">Nenhum fornecedor adicional adicionado.</p>';
+            return;
+        }
+
+        supplierEntries.forEach((entry, index) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border border-gray-200 rounded-md p-4 bg-gray-50';
+
+            const title = document.createElement('div');
+            title.className = 'flex items-start justify-between gap-4';
+
+            const infoContainer = document.createElement('div');
+            infoContainer.className = 'space-y-1 text-sm text-gray-700';
+
+            const supplierLine = document.createElement('p');
+            supplierLine.innerHTML = `<span class="font-semibold">Fornecedor:</span> ${entry.fornecedor}`;
+            const codeLine = document.createElement('p');
+            codeLine.innerHTML = `<span class="font-semibold">Código do produto:</span> ${entry.codigoProduto || '—'}`;
+            const unitLine = document.createElement('p');
+            unitLine.innerHTML = `<span class="font-semibold">Unidade de entrada:</span> ${entry.unidadeEntrada || '—'}`;
+            const calcLine = document.createElement('p');
+            const valorCalculo = Number.isFinite(entry.valorCalculo) ? entry.valorCalculo : '—';
+            calcLine.innerHTML = `<span class="font-semibold">Cálculo:</span> ${entry.tipoCalculo || '—'} ${valorCalculo !== '—' ? `(${valorCalculo})` : ''}`;
+
+            infoContainer.appendChild(supplierLine);
+            infoContainer.appendChild(codeLine);
+            infoContainer.appendChild(unitLine);
+            infoContainer.appendChild(calcLine);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'text-xs font-semibold text-red-600 hover:text-red-700';
+            removeBtn.textContent = 'Remover';
+            removeBtn.addEventListener('click', () => {
+                supplierEntries.splice(index, 1);
+                renderSupplierEntries();
+            });
+
+            title.appendChild(infoContainer);
+            title.appendChild(removeBtn);
+            wrapper.appendChild(title);
+            supplierListContainer.appendChild(wrapper);
+        });
+    };
 
     // --- CAMPOS RELACIONADOS A PREÇOS ---
     const costInput = document.getElementById('custo');
@@ -203,6 +269,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ncmInput) {
             ncmInput.value = product.ncm || '';
         }
+        supplierEntries = Array.isArray(product.fornecedores)
+            ? product.fornecedores.map((item) => ({
+                fornecedor: item.fornecedor || '',
+                codigoProduto: item.codigoProduto || item.codigo || '',
+                unidadeEntrada: item.unidadeEntrada || item.unidade || '',
+                tipoCalculo: item.tipoCalculo || '',
+                valorCalculo: Number.isFinite(Number(item.valorCalculo)) ? Number(item.valorCalculo) : null,
+            }))
+            : [];
+        renderSupplierEntries();
+        resetSupplierForm();
         if (form.querySelector('#barcode-additional')) {
             form.querySelector('#barcode-additional').value = Array.isArray(product.codigosComplementares) ? product.codigosComplementares.join('\n') : '';
         }
@@ -311,6 +388,43 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelCategoryModalBtn.addEventListener('click', () => categoryModal.classList.add('hidden'));
     closeCategoryModalBtn.addEventListener('click', () => categoryModal.classList.add('hidden'));
 
+    const handleAddSupplier = () => {
+        const fornecedor = supplierNameInput?.value.trim();
+        const codigoProduto = supplierProductCodeInput?.value.trim();
+        const unidadeEntrada = supplierEntryUnitSelect?.value;
+        const tipoCalculo = supplierCalcTypeSelect?.value;
+        const valorCalculoRaw = supplierCalcValueInput?.value.trim();
+
+        if (!fornecedor) {
+            alert('Informe o nome do fornecedor.');
+            return;
+        }
+        if (!unidadeEntrada) {
+            alert('Selecione a unidade de entrada.');
+            return;
+        }
+        if (!tipoCalculo) {
+            alert('Selecione o tipo de cálculo.');
+            return;
+        }
+
+        let valorCalculo = null;
+        if (valorCalculoRaw) {
+            const parsed = Number(valorCalculoRaw);
+            if (!Number.isFinite(parsed)) {
+                alert('Informe um valor de cálculo válido.');
+                return;
+            }
+            valorCalculo = parsed;
+        }
+
+        supplierEntries.push({ fornecedor, codigoProduto, unidadeEntrada, tipoCalculo, valorCalculo });
+        renderSupplierEntries();
+        resetSupplierForm();
+    };
+
+    addSupplierBtn?.addEventListener('click', handleAddSupplier);
+
     const handleSaveCategories = () => {
         const selectedCheckboxes = categoryTreeContainer.querySelectorAll('input[type="checkbox"]:checked');
         productCategories = Array.from(selectedCheckboxes).map(cb => cb.value);
@@ -340,6 +454,13 @@ document.addEventListener('DOMContentLoaded', () => {
             marca: formData.get('marca'),
             stock: formData.get('stock'),
             categorias: productCategories,
+            fornecedores: supplierEntries.map((item) => ({
+                fornecedor: item.fornecedor,
+                codigoProduto: item.codigoProduto || null,
+                unidadeEntrada: item.unidadeEntrada || null,
+                tipoCalculo: item.tipoCalculo || null,
+                valorCalculo: item.valorCalculo,
+            })),
             especificacoes: {
                 idade: Array.from(form.querySelectorAll('input[name="spec-idade"]:checked')).map(i => i.value),
                 pet: Array.from(form.querySelectorAll('input[name="spec-pet"]:checked')).map(i => i.value),
