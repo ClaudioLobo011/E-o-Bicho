@@ -41,9 +41,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const certificadoStatusText = document.getElementById('store-certificado-status');
     const certificadoAtualText = document.getElementById('store-certificado-atual');
     const contadorNomeInput = document.getElementById('store-contador-nome');
-    const contadorEmailInput = document.getElementById('store-contador-email');
-    const contadorTelefoneInput = document.getElementById('store-contador-telefone');
+    const contadorCpfInput = document.getElementById('store-contador-cpf');
     const contadorCrcInput = document.getElementById('store-contador-crc');
+    const contadorCnpjInput = document.getElementById('store-contador-cnpj');
+    const contadorCepInput = document.getElementById('store-contador-cep');
+    const contadorEnderecoInput = document.getElementById('store-contador-endereco');
+    const contadorCidadeInput = document.getElementById('store-contador-cidade');
+    const contadorNumeroInput = document.getElementById('store-contador-numero');
+    const contadorBairroInput = document.getElementById('store-contador-bairro');
+    const contadorComplementoInput = document.getElementById('store-contador-complemento');
+    const contadorRazaoSocialInput = document.getElementById('store-contador-razao-social');
+    const contadorTelefoneInput = document.getElementById('store-contador-telefone');
+    const contadorFaxInput = document.getElementById('store-contador-fax');
+    const contadorCelularInput = document.getElementById('store-contador-celular');
+    const contadorEmailInput = document.getElementById('store-contador-email');
     const closeModalBtn = document.getElementById('close-store-modal');
     const tabButtons = Array.from(document.querySelectorAll('#store-modal .tab-button'));
     const tabPanels = Array.from(document.querySelectorAll('#store-modal .tab-panel'));
@@ -484,10 +495,21 @@ document.addEventListener('DOMContentLoaded', () => {
             complementoInput.value = store.complemento || '';
             codIbgeMunicipioInput.value = store.codigoIbgeMunicipio || store.codIbgeMunicipio || '';
             codUfInput.value = store.codigoUf || store.codUf || '';
-            contadorNomeInput.value = store.contadorNome || store.contador?.nome || '';
-            contadorEmailInput.value = store.contadorEmail || store.contador?.email || '';
-            contadorTelefoneInput.value = store.contadorTelefone || store.contador?.telefone || '';
-            contadorCrcInput.value = store.contadorCrc || store.contador?.crc || '';
+            if (contadorNomeInput) contadorNomeInput.value = store.contadorNome || store.contador?.nome || '';
+            if (contadorCpfInput) contadorCpfInput.value = store.contadorCpf || store.contador?.cpf || '';
+            if (contadorCrcInput) contadorCrcInput.value = store.contadorCrc || store.contador?.crc || '';
+            if (contadorCnpjInput) contadorCnpjInput.value = store.contadorCnpj || store.contador?.cnpj || '';
+            if (contadorCepInput) contadorCepInput.value = store.contadorCep || store.contador?.cep || '';
+            if (contadorEnderecoInput) contadorEnderecoInput.value = store.contadorEndereco || store.contador?.endereco || '';
+            if (contadorCidadeInput) contadorCidadeInput.value = store.contadorCidade || store.contador?.cidade || '';
+            if (contadorNumeroInput) contadorNumeroInput.value = store.contadorNumero || store.contador?.numero || '';
+            if (contadorBairroInput) contadorBairroInput.value = store.contadorBairro || store.contador?.bairro || '';
+            if (contadorComplementoInput) contadorComplementoInput.value = store.contadorComplemento || store.contador?.complemento || '';
+            if (contadorRazaoSocialInput) contadorRazaoSocialInput.value = store.contadorRazaoSocial || store.contador?.razaoSocial || '';
+            if (contadorTelefoneInput) contadorTelefoneInput.value = store.contadorTelefone || store.contador?.telefone || '';
+            if (contadorFaxInput) contadorFaxInput.value = store.contadorFax || store.contador?.fax || '';
+            if (contadorCelularInput) contadorCelularInput.value = store.contadorCelular || store.contador?.celular || '';
+            if (contadorEmailInput) contadorEmailInput.value = store.contadorEmail || store.contador?.email || '';
             certificadoValidadeInput.value = store.certificadoValidade || '';
             if (certificadoSenhaInput) certificadoSenhaInput.value = '';
             if (certificadoAtualText) {
@@ -701,6 +723,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    contadorCepInput?.addEventListener('blur', async () => {
+        const cepValue = contadorCepInput.value || '';
+        const sanitizedCep = cepValue.replace(/\D/g, '');
+        if (sanitizedCep.length !== 8) {
+            return;
+        }
+
+        let cepData = null;
+        try {
+            cepData = await buscarEnderecoPorCep(sanitizedCep);
+        } catch (error) {
+            showModal({ title: 'Erro ao consultar CEP', message: error.message || 'Não foi possível consultar o CEP do contador. Tente novamente.', confirmText: 'OK' });
+            return;
+        }
+
+        if (!cepData) {
+            showModal({ title: 'CEP não encontrado', message: 'Revise o CEP informado ou preencha os dados do contador manualmente.', confirmText: 'OK' });
+            return;
+        }
+
+        if (contadorEnderecoInput) contadorEnderecoInput.value = cepData.logradouro || '';
+        if (contadorBairroInput) contadorBairroInput.value = cepData.bairro || '';
+        if (contadorCidadeInput) contadorCidadeInput.value = cepData.localidade || '';
+        if (contadorComplementoInput) contadorComplementoInput.value = cepData.complemento || '';
+    });
+
     tableBody.addEventListener('click', (event) => {
         const target = event.target;
         const action = target.dataset.action;
@@ -742,13 +790,19 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.disabled = true;
 
         const enderecoCompleto = buildEnderecoCompleto();
+        const rawCnaeSecundario = cnaeSecundarioInput ? cnaeSecundarioInput.value : '';
+        const cnaesSecundarios = rawCnaeSecundario
+            ? rawCnaeSecundario.split(/[;,\n]/).map((value) => value.trim()).filter((value) => value.length > 0)
+            : [];
+
         const storeData = {
             nome: nomeFantasiaInput.value,
             nomeFantasia: nomeFantasiaInput.value,
             razaoSocial: razaoSocialInput.value,
             cnpj: cnpjInput.value,
             cnaePrincipal: cnaeInput.value,
-            cnaeSecundario: cnaeSecundarioInput ? cnaeSecundarioInput.value : '',
+            cnaeSecundario: rawCnaeSecundario,
+            cnaesSecundarios,
             inscricaoEstadual: inscricaoEstadualInput.value,
             inscricaoMunicipal: inscricaoMunicipalInput.value,
             regimeTributario: regimeTributarioSelect.value,
@@ -768,10 +822,21 @@ document.addEventListener('DOMContentLoaded', () => {
             longitude: parseFloat(lonInput.value) || null,
             servicos: selectedServices,
             horario: {},
-            contadorNome: contadorNomeInput.value,
-            contadorEmail: contadorEmailInput.value,
-            contadorTelefone: contadorTelefoneInput.value,
-            contadorCrc: contadorCrcInput.value,
+            contadorNome: contadorNomeInput?.value || '',
+            contadorCpf: contadorCpfInput?.value || '',
+            contadorCrc: contadorCrcInput?.value || '',
+            contadorCnpj: contadorCnpjInput?.value || '',
+            contadorCep: contadorCepInput?.value || '',
+            contadorEndereco: contadorEnderecoInput?.value || '',
+            contadorCidade: contadorCidadeInput?.value || '',
+            contadorNumero: contadorNumeroInput?.value || '',
+            contadorBairro: contadorBairroInput?.value || '',
+            contadorComplemento: contadorComplementoInput?.value || '',
+            contadorRazaoSocial: contadorRazaoSocialInput?.value || '',
+            contadorTelefone: contadorTelefoneInput?.value || '',
+            contadorFax: contadorFaxInput?.value || '',
+            contadorCelular: contadorCelularInput?.value || '',
+            contadorEmail: contadorEmailInput?.value || '',
             certificadoValidade: certificadoValidadeInput.value
         };
         

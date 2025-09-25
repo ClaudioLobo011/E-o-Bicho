@@ -363,6 +363,14 @@ const sanitizeStorePayload = (body = {}) => {
     const razaoSocial = trimString(body.razaoSocial);
     const cnpj = trimString(body.cnpj);
     const cnaePrincipal = trimString(body.cnaePrincipal || body.cnae);
+    const rawCnaeSecundario = trimString(body.cnaeSecundario || body.cnaeSecundaria);
+    const cnaesSecundariosArray = Array.isArray(body.cnaesSecundarios)
+        ? body.cnaesSecundarios
+        : (rawCnaeSecundario ? rawCnaeSecundario.split(/[;,\n]/) : []);
+    const cnaesSecundarios = cnaesSecundariosArray
+        .map((value) => trimString(value))
+        .filter((value) => value.length > 0);
+    const cnaeSecundario = cnaesSecundarios.join(', ');
     const inscricaoEstadual = trimString(body.inscricaoEstadual);
     const inscricaoMunicipal = trimString(body.inscricaoMunicipal);
     const regime = trimString(body.regimeTributario).toLowerCase();
@@ -382,9 +390,20 @@ const sanitizeStorePayload = (body = {}) => {
     const latitude = parseCoordinate(body.latitude);
     const longitude = parseCoordinate(body.longitude);
     const contadorNome = trimString(body.contadorNome || body.contador?.nome);
-    const contadorEmail = trimString(body.contadorEmail || body.contador?.email);
-    const contadorTelefone = trimString(body.contadorTelefone || body.contador?.telefone);
+    const contadorCpf = trimString(body.contadorCpf || body.contador?.cpf);
     const contadorCrc = trimString(body.contadorCrc || body.contador?.crc);
+    const contadorCnpj = trimString(body.contadorCnpj || body.contador?.cnpj);
+    const contadorCep = trimString(body.contadorCep || body.contador?.cep);
+    const contadorEndereco = trimString(body.contadorEndereco || body.contador?.endereco);
+    const contadorCidade = trimString(body.contadorCidade || body.contador?.cidade);
+    const contadorNumero = trimString(body.contadorNumero || body.contador?.numero);
+    const contadorBairro = trimString(body.contadorBairro || body.contador?.bairro);
+    const contadorComplemento = trimString(body.contadorComplemento || body.contador?.complemento);
+    const contadorRazaoSocial = trimString(body.contadorRazaoSocial || body.contador?.razaoSocial);
+    const contadorTelefone = trimString(body.contadorTelefone || body.contador?.telefone);
+    const contadorFax = trimString(body.contadorFax || body.contador?.fax);
+    const contadorCelular = trimString(body.contadorCelular || body.contador?.celular);
+    const contadorEmail = trimString(body.contadorEmail || body.contador?.email);
     const certificadoValidade = trimString(body.certificadoValidade || body.certificado?.validade);
 
     const servicos = Array.isArray(body.servicos)
@@ -403,6 +422,8 @@ const sanitizeStorePayload = (body = {}) => {
         razaoSocial,
         cnpj,
         cnaePrincipal,
+        cnaeSecundario,
+        cnaesSecundarios,
         inscricaoEstadual,
         inscricaoMunicipal,
         regimeTributario,
@@ -421,9 +442,20 @@ const sanitizeStorePayload = (body = {}) => {
         latitude,
         longitude,
         contadorNome,
-        contadorEmail,
-        contadorTelefone,
+        contadorCpf,
         contadorCrc,
+        contadorCnpj,
+        contadorCep,
+        contadorEndereco,
+        contadorCidade,
+        contadorNumero,
+        contadorBairro,
+        contadorComplemento,
+        contadorRazaoSocial,
+        contadorTelefone,
+        contadorFax,
+        contadorCelular,
+        contadorEmail,
         certificadoValidade,
         horario,
         servicos
