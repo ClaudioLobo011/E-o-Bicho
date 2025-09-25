@@ -2,15 +2,12 @@
   'use strict';
 
   const ALLOWED_CODES = [1, 2, 3, 4];
-  const formatter = new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
+  const numberFormatter = new Intl.NumberFormat('pt-BR', {
     minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 
   const selectElement = (id) => document.getElementById(id);
-
-  const formatCurrency = (value) => formatter.format(Number.isFinite(value) ? value : 0);
 
   const setButtonDisabled = (button, disabled) => {
     if (!button) return;
@@ -19,25 +16,11 @@
     button.classList.toggle('cursor-not-allowed', !!disabled);
   };
 
-  const parseCurrencyFromInput = (input) => {
+  const parseNumericInput = (input) => {
     if (!input) return 0;
-    const stored = Number(input.dataset.numericValue);
-    if (Number.isFinite(stored)) {
-      return stored;
-    }
-    const digits = String(input.value || '').replace(/\D/g, '');
-    if (!digits) return 0;
-    return Number((Number(digits) / 100).toFixed(2));
-  };
-
-  const handleCurrencyInput = (event) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement)) return;
-    const digits = input.value.replace(/\D/g, '');
-    const cents = digits ? parseInt(digits, 10) : 0;
-    const numericValue = Number((cents / 100).toFixed(2));
-    input.dataset.numericValue = numericValue.toString();
-    input.value = formatCurrency(numericValue);
+    const rawValue = String(input.value || '').replace(',', '.');
+    const parsed = Number.parseFloat(rawValue);
+    return Number.isFinite(parsed) ? parsed : 0;
   };
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -98,7 +81,8 @@
 
       tableBody.innerHTML = sorted.map((registro) => {
         const empresaNome = registro?.empresa?.nome || registro?.empresa?.nomeFantasia || registro?.empresa?.razaoSocial || '—';
-        const valor = formatCurrency(registro?.valor ?? 0);
+        const valorNumero = Number.isFinite(registro?.valor) ? registro.valor : 0;
+        const valor = `${numberFormatter.format(valorNumero)}%`;
         return `
           <tr>
             <td class="px-4 py-3 text-gray-700">${registro.codigo}</td>
@@ -207,11 +191,9 @@
 
     const resetValueInput = () => {
       if (!valueInput) return;
-      valueInput.dataset.numericValue = '0';
-      valueInput.value = formatCurrency(0);
+      valueInput.value = '';
     };
 
-    valueInput?.addEventListener('input', handleCurrencyInput);
     resetValueInput();
 
     companySelect?.addEventListener('change', () => {
@@ -223,7 +205,7 @@
       if (!companySelect || !valueInput) return;
 
       const empresa = companySelect.value;
-      const valor = parseCurrencyFromInput(valueInput);
+      const valor = parseNumericInput(valueInput);
       const codigo = codeInput?.value || '';
 
       if (!empresa) {
