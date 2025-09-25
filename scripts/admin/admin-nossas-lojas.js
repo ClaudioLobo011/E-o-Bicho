@@ -16,13 +16,95 @@ document.addEventListener('DOMContentLoaded', () => {
     const imagePreview = document.getElementById('image-preview');
     const imageInput = document.getElementById('store-image-input');
     const cepInput = document.getElementById('store-cep');
-    const enderecoInput = document.getElementById('store-endereco');
+    const enderecoHiddenInput = document.getElementById('store-endereco');
+    const razaoSocialInput = document.getElementById('store-razao-social');
+    const nomeFantasiaInput = document.getElementById('store-nome');
+    const cnpjInput = document.getElementById('store-cnpj');
+    const cnaeInput = document.getElementById('store-cnae');
+    const inscricaoEstadualInput = document.getElementById('store-inscricao-estadual');
+    const inscricaoMunicipalInput = document.getElementById('store-inscricao-municipal');
+    const regimeTributarioSelect = document.getElementById('store-regime-tributario');
+    const emailFiscalInput = document.getElementById('store-email-fiscal');
+    const telefoneInput = document.getElementById('store-telefone');
+    const celularInput = document.getElementById('store-whatsapp');
+    const municipioInput = document.getElementById('store-municipio');
+    const ufInput = document.getElementById('store-uf');
+    const logradouroInput = document.getElementById('store-logradouro');
+    const numeroInput = document.getElementById('store-numero');
+    const complementoInput = document.getElementById('store-complemento');
+    const codIbgeMunicipioInput = document.getElementById('store-cod-ibge-municipio');
+    const codUfInput = document.getElementById('store-cod-uf');
+    const certificadoArquivoInput = document.getElementById('store-certificado-arquivo');
+    const certificadoSenhaInput = document.getElementById('store-certificado-senha');
+    const certificadoValidadeInput = document.getElementById('store-certificado-validade');
+    const contadorNomeInput = document.getElementById('store-contador-nome');
+    const contadorEmailInput = document.getElementById('store-contador-email');
+    const contadorTelefoneInput = document.getElementById('store-contador-telefone');
+    const contadorCrcInput = document.getElementById('store-contador-crc');
+    const closeModalBtn = document.getElementById('close-store-modal');
+    const tabButtons = Array.from(document.querySelectorAll('#store-modal .tab-button'));
+    const tabPanels = Array.from(document.querySelectorAll('#store-modal .tab-panel'));
 
     // -- REFERÊNCIAS PARA O MAPA DE LOCALIZAÇÃO --
     let locationMap = null;
     let locationMarker = null;
     const latInput = document.getElementById('store-latitude');
     const lonInput = document.getElementById('store-longitude');
+
+    // --- Utilidades de formulário ---
+    const enderecoFields = [logradouroInput, numeroInput, complementoInput, municipioInput, ufInput];
+
+    const buildEnderecoCompleto = () => {
+        const logradouro = (logradouroInput?.value || '').trim();
+        const numero = (numeroInput?.value || '').trim();
+        const complemento = (complementoInput?.value || '').trim();
+        const municipio = (municipioInput?.value || '').trim();
+        const uf = (ufInput?.value || '').trim();
+
+        const partes = [];
+        if (logradouro) {
+            partes.push(numero ? `${logradouro}, ${numero}` : logradouro);
+        }
+        if (complemento) {
+            partes.push(complemento);
+        }
+        if (municipio || uf) {
+            const regiao = [municipio, uf].filter(Boolean).join(' - ');
+            if (regiao) partes.push(regiao);
+        }
+
+        const enderecoCompleto = partes.join(' | ');
+        if (enderecoHiddenInput) enderecoHiddenInput.value = enderecoCompleto;
+        return enderecoCompleto;
+    };
+
+    enderecoFields.forEach(field => field?.addEventListener('input', buildEnderecoCompleto));
+
+    const activateTab = (target) => {
+        tabButtons.forEach((button) => {
+            const isActive = button.dataset.tabTarget === target;
+            button.classList.toggle('bg-emerald-50', isActive);
+            button.classList.toggle('text-emerald-700', isActive);
+            button.classList.toggle('text-gray-600', !isActive);
+            button.classList.toggle('hover:text-gray-800', !isActive);
+        });
+        tabPanels.forEach((panel) => {
+            panel.classList.toggle('hidden', panel.dataset.tabPanel !== target);
+        });
+        if (target === 'endereco') {
+            setTimeout(() => {
+                if (locationMap) {
+                    locationMap.invalidateSize();
+                }
+            }, 50);
+        }
+    };
+
+    tabButtons.forEach((button) => {
+        button.addEventListener('click', () => activateTab(button.dataset.tabTarget));
+    });
+
+    activateTab('endereco');
 
     // --- Dados e Constantes ---
     const diasDaSemana = [
@@ -153,21 +235,30 @@ document.addEventListener('DOMContentLoaded', () => {
         form.reset();
         selectedServices = [];
         renderServiceTags();
+        activateTab('endereco');
+        buildEnderecoCompleto();
+
         diasDaSemana.forEach(({ key }) => {
             const dayRow = horarioContainer.querySelector(`[data-day="${key}"]`);
             const inputs = dayRow.querySelectorAll('.time-input');
             const checkbox = dayRow.querySelector('.fechada-checkbox');
-            inputs.forEach(input => input.disabled = false);
+            inputs.forEach(input => {
+                input.disabled = false;
+                input.value = '';
+            });
             checkbox.checked = false;
         });
+
         imagePreview.src = '/public/image/placeholder.png';
         imageInput.value = '';
+        if (certificadoArquivoInput) certificadoArquivoInput.value = '';
+
         modal.classList.remove('hidden');
 
         setTimeout(() => {
             if (locationMap) {
-                locationMap.invalidateSize();
                 locationMap.setView([-22.9068, -43.1729], 12);
+                locationMap.invalidateSize();
                 if (locationMarker) {
                     locationMarker.remove();
                     locationMarker = null;
@@ -183,16 +274,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch(`${API_CONFIG.BASE_URL}/stores/${storeId}`);
             if (!response.ok) throw new Error('Falha ao carregar dados da loja.');
             const store = await response.json();
-            
+
             modalTitle.textContent = 'Editar Loja';
             hiddenStoreId.value = store._id;
-            document.getElementById('store-nome').value = store.nome;
-            enderecoInput.value = store.endereco;
-            cepInput.value = store.cep;
-            document.getElementById('store-telefone').value = store.telefone;
-            document.getElementById('store-whatsapp').value = store.whatsapp;
+            razaoSocialInput.value = store.razaoSocial || '';
+            nomeFantasiaInput.value = store.nomeFantasia || store.nome || '';
+            cnpjInput.value = store.cnpj || '';
+            cnaeInput.value = store.cnaePrincipal || store.cnae || '';
+            inscricaoEstadualInput.value = store.inscricaoEstadual || '';
+            inscricaoMunicipalInput.value = store.inscricaoMunicipal || '';
+            regimeTributarioSelect.value = store.regimeTributario || '';
+            emailFiscalInput.value = store.emailFiscal || '';
+            telefoneInput.value = store.telefone || '';
+            celularInput.value = store.whatsapp || store.celular || '';
+            cepInput.value = store.cep || '';
+            municipioInput.value = store.municipio || '';
+            ufInput.value = store.uf || '';
+            logradouroInput.value = store.logradouro || '';
+            numeroInput.value = store.numero || '';
+            complementoInput.value = store.complemento || '';
+            codIbgeMunicipioInput.value = store.codigoIbgeMunicipio || store.codIbgeMunicipio || '';
+            codUfInput.value = store.codigoUf || store.codUf || '';
+            contadorNomeInput.value = store.contadorNome || store.contador?.nome || '';
+            contadorEmailInput.value = store.contadorEmail || store.contador?.email || '';
+            contadorTelefoneInput.value = store.contadorTelefone || store.contador?.telefone || '';
+            contadorCrcInput.value = store.contadorCrc || store.contador?.crc || '';
+            certificadoSenhaInput.value = store.certificadoSenha || '';
+            certificadoValidadeInput.value = store.certificadoValidade || '';
+            if (enderecoHiddenInput) enderecoHiddenInput.value = store.endereco || '';
+            if (!logradouroInput.value && store.endereco) logradouroInput.value = store.endereco;
+            buildEnderecoCompleto();
+
             selectedServices = store.servicos || [];
             renderServiceTags();
+            activateTab('endereco');
 
             diasDaSemana.forEach(({ key }) => {
                 const horarioDia = store.horario ? store.horario[key] : null;
@@ -203,50 +318,63 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (horarioDia) {
                     abreInput.value = horarioDia.abre || '';
                     fechaInput.value = horarioDia.fecha || '';
-                    fechadaCheckbox.checked = horarioDia.fechada;
+                    fechadaCheckbox.checked = Boolean(horarioDia.fechada);
                     abreInput.disabled = horarioDia.fechada;
                     fechaInput.disabled = horarioDia.fechada;
+                } else {
+                    abreInput.value = '';
+                    fechaInput.value = '';
+                    fechadaCheckbox.checked = false;
+                    abreInput.disabled = false;
+                    fechaInput.disabled = false;
                 }
             });
-            imagePreview.src = `${API_CONFIG.SERVER_URL}${store.imagem}`;
+
+            if (store.imagem) {
+                const isAbsolute = /^https?:/i.test(store.imagem);
+                imagePreview.src = isAbsolute ? store.imagem : `${API_CONFIG.SERVER_URL}${store.imagem}`;
+            } else {
+                imagePreview.src = '/public/image/placeholder.png';
+            }
             imageInput.value = '';
+            if (certificadoArquivoInput) certificadoArquivoInput.value = '';
+
             modal.classList.remove('hidden');
 
             setTimeout(async () => {
                 if (locationMap) {
                     locationMap.invalidateSize();
-                    if (locationMarker) locationMarker.remove();
+                    if (locationMarker) {
+                        locationMarker.remove();
+                        locationMarker = null;
+                    }
 
                     let initialCoords = null;
                     let initialZoom = 12;
 
-                    // 1. Prioriza as coordenadas exatas já salvas.
                     if (store.latitude && store.longitude) {
                         initialCoords = { lat: store.latitude, lng: store.longitude };
                         initialZoom = 17;
-                    // 2. Se não existirem, tenta buscar pelo endereço completo como fallback.
                     } else {
-                        const foundCoords = await geocodeAddress(store.endereco, store.cep);
+                        const enderecoConsulta = buildEnderecoCompleto() || store.endereco;
+                        const foundCoords = await geocodeAddress(enderecoConsulta, store.cep);
                         if (foundCoords) {
                             initialCoords = foundCoords;
                             initialZoom = 17;
                         }
                     }
 
-                    // 3. Se tudo falhar, usa a localização padrão.
                     if (!initialCoords) {
                         initialCoords = { lat: -22.9068, lng: -43.1729 };
                     }
 
                     locationMap.setView([initialCoords.lat, initialCoords.lng], initialZoom);
 
-                    // Se a loja já tiver coordenadas salvas, coloca o marcador e os valores nos inputs.
                     if (store.latitude && store.longitude) {
                         locationMarker = L.marker(initialCoords).addTo(locationMap);
                         latInput.value = store.latitude;
                         lonInput.value = store.longitude;
                     } else {
-                        locationMarker = null;
                         latInput.value = '';
                         lonInput.value = '';
                     }
@@ -257,7 +385,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const closeModal = () => modal.classList.add('hidden');
+    const closeModal = () => {
+        modal.classList.add('hidden');
+        form.reset();
+        selectedServices = [];
+        renderServiceTags();
+        activateTab('endereco');
+        buildEnderecoCompleto();
+        imagePreview.src = '/public/image/placeholder.png';
+        imageInput.value = '';
+        if (certificadoArquivoInput) certificadoArquivoInput.value = '';
+        if (locationMarker) {
+            locationMarker.remove();
+            locationMarker = null;
+        }
+        latInput.value = '';
+        lonInput.value = '';
+    };
 
     // --- Renderização da Tabela ---
     async function fetchAndDisplayStores() {
@@ -287,6 +431,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Event Listeners ---
     addStoreBtn.addEventListener('click', openModalForNew);
     cancelBtn.addEventListener('click', closeModal);
+    closeModalBtn?.addEventListener('click', closeModal);
     openServicesModalBtn.addEventListener('click', openServicesModal);
     saveServicesModalBtn.addEventListener('click', saveServicesSelection);
 
@@ -305,12 +450,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     cepInput.addEventListener('blur', async () => {
         const cepValue = cepInput.value;
-        const enderecoValue = enderecoInput.value;
         if (cepValue.replace(/\D/g, '').length === 8) {
+            const enderecoValue = buildEnderecoCompleto() || enderecoHiddenInput?.value;
             const coords = await geocodeAddress(enderecoValue, cepValue);
             if (coords && locationMap) {
                 locationMap.setView([coords.lat, coords.lng], 17);
-                showModal({ 
+                showModal({
                     title: 'Localização Encontrada', 
                     message: 'O mapa foi centralizado na morada informada. Agora, clique no local exato da loja para ajustar.', 
                     confirmText: 'Entendi' 
@@ -365,16 +510,39 @@ document.addEventListener('DOMContentLoaded', () => {
         const submitButton = document.getElementById('save-store-modal-btn');
         submitButton.disabled = true;
 
+        const enderecoCompleto = buildEnderecoCompleto();
         const storeData = {
-            nome: document.getElementById('store-nome').value,
-            endereco: enderecoInput.value,
+            nome: nomeFantasiaInput.value,
+            nomeFantasia: nomeFantasiaInput.value,
+            razaoSocial: razaoSocialInput.value,
+            cnpj: cnpjInput.value,
+            cnaePrincipal: cnaeInput.value,
+            inscricaoEstadual: inscricaoEstadualInput.value,
+            inscricaoMunicipal: inscricaoMunicipalInput.value,
+            regimeTributario: regimeTributarioSelect.value,
+            emailFiscal: emailFiscalInput.value,
+            telefone: telefoneInput.value,
+            whatsapp: celularInput.value,
             cep: cepInput.value,
+            municipio: municipioInput.value,
+            uf: ufInput.value,
+            logradouro: logradouroInput.value,
+            numero: numeroInput.value,
+            complemento: complementoInput.value,
+            codigoIbgeMunicipio: codIbgeMunicipioInput.value,
+            codigoUf: codUfInput.value,
+            endereco: enderecoCompleto,
             latitude: parseFloat(latInput.value) || null,
             longitude: parseFloat(lonInput.value) || null,
-            telefone: document.getElementById('store-telefone').value,
-            whatsapp: document.getElementById('store-whatsapp').value,
             servicos: selectedServices,
-            horario: {}
+            horario: {},
+            contadorNome: contadorNomeInput.value,
+            contadorEmail: contadorEmailInput.value,
+            contadorTelefone: contadorTelefoneInput.value,
+            contadorCrc: contadorCrcInput.value,
+            certificadoValidade: certificadoValidadeInput.value,
+            certificadoSenha: certificadoSenhaInput.value,
+            certificadoArquivoNome: certificadoArquivoInput?.files?.[0]?.name || ''
         };
         
         diasDaSemana.forEach(({ key }) => {
