@@ -5,7 +5,33 @@ const Store = require('../models/Store');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
-const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
+const normalizeString = (value) => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+};
+
+const extractNumericValue = (code) => {
+    const normalized = normalizeString(code);
+    if (!normalized) return 0;
+    const matches = normalized.match(/\d+/g);
+    if (!matches) {
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return matches.reduce((max, part) => {
+        const parsed = Number(part);
+        return Number.isFinite(parsed) && parsed > max ? parsed : max;
+    }, 0);
+};
+
+const generateNextSequentialCode = async () => {
+    const deposits = await Deposit.find({}, 'codigo').lean();
+    const highest = deposits.reduce((max, deposit) => {
+        const current = extractNumericValue(deposit?.codigo);
+        return current > max ? current : max;
+    }, 0);
+    return String(highest + 1);
+};
 
 router.get('/', async (req, res) => {
     try {
@@ -27,12 +53,11 @@ router.get('/', async (req, res) => {
 
 router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
-        const codigo = normalizeString(req.body.codigo);
         const nome = normalizeString(req.body.nome);
         const empresa = normalizeString(req.body.empresa);
 
-        if (!codigo || !nome || !empresa) {
-            return res.status(400).json({ message: 'Código, nome e empresa são obrigatórios.' });
+        if (!nome || !empresa) {
+            return res.status(400).json({ message: 'Nome e empresa são obrigatórios.' });
         }
 
         const storeExists = await Store.exists({ _id: empresa });
@@ -40,9 +65,16 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
             return res.status(400).json({ message: 'Empresa informada não foi encontrada.' });
         }
 
-        const existing = await Deposit.findOne({ codigo });
-        if (existing) {
-            return res.status(409).json({ message: 'Já existe um depósito com este código.' });
+        let codigo = await generateNextSequentialCode();
+        let attempts = 0;
+        while (await Deposit.exists({ codigo }) && attempts < 5) {
+            const numeric = extractNumericValue(codigo) + 1;
+            codigo = String(numeric);
+            attempts += 1;
+        }
+
+        if (await Deposit.exists({ codigo })) {
+            return res.status(409).json({ message: 'Não foi possível gerar um novo código de depósito. Tente novamente.' });
         }
 
         const deposit = await Deposit.create({ codigo, nome, empresa });

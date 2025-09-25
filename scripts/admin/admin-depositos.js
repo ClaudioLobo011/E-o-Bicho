@@ -23,12 +23,43 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const extractNumericValue = (value) => {
+        const normalized = String(value ?? '').trim();
+        if (!normalized) return 0;
+        const matches = normalized.match(/\d+/g);
+        if (!matches) {
+            const parsed = Number(normalized);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+        return matches.reduce((max, part) => {
+            const parsed = Number(part);
+            return Number.isFinite(parsed) && parsed > max ? parsed : max;
+        }, 0);
+    };
+
+    const computeNextCodeValue = () => {
+        if (!Array.isArray(deposits) || !deposits.length) {
+            return '1';
+        }
+        const highest = deposits.reduce((max, deposit) => {
+            const current = extractNumericValue(deposit?.codigo);
+            return current > max ? current : max;
+        }, 0);
+        return String(highest + 1);
+    };
+
+    const fillNextCode = () => {
+        if (!codeInput || editingDepositId) return;
+        codeInput.value = computeNextCodeValue();
+    };
+
     const resetForm = () => {
         editingDepositId = null;
         idInput.value = '';
         form.reset();
         submitLabel.textContent = 'Cadastrar depósito';
         cancelEditButton.classList.add('hidden');
+        fillNextCode();
     };
 
     const populateCompanySelect = () => {
@@ -47,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!deposits.length) {
             tableBody.innerHTML = '';
             emptyState?.classList.remove('hidden');
+            fillNextCode();
             return;
         }
         emptyState?.classList.add('hidden');
@@ -70,6 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </tr>
             `;
         }).join('');
+        fillNextCode();
     };
 
     const fetchStores = async () => {
@@ -204,6 +237,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     (async () => {
+        codeInput?.setAttribute('readonly', 'readonly');
+        codeInput?.classList.add('bg-gray-100', 'cursor-not-allowed');
         await Promise.all([fetchStores(), fetchDeposits()]);
+        fillNextCode();
     })();
 });
