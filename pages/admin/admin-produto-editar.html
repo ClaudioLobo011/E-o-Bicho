@@ -71,7 +71,9 @@
                                 <button type="button" class="tab-link text-sm font-semibold text-primary border-b-2 border-primary pb-2" data-tab="tab-prices">Preços</button>
                                 <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-barcodes">Código de Barras</button>
                                 <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-config">Configurações</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-info">Informações</button>
                                 <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-classification">Classificação</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-fiscal">Informações fiscais</button>
                                 <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-supplier">Fornecedor</button>
                                 <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-stock">Estoque</button>
                                 <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-images">Foto do Produto</button>
@@ -125,6 +127,36 @@
                             </div>
                         </div>
 
+                        <div id="tab-info" class="space-y-6 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="data-cadastro" class="block text-sm font-medium text-gray-700">Data de Cadastro</label>
+                                    <input type="date" id="data-cadastro" name="data-cadastro" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label for="peso" class="block text-sm font-medium text-gray-700">Peso (Kg)</label>
+                                    <input type="number" step="0.001" id="peso" name="peso" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Informe o peso em quilogramas">
+                                </div>
+                                <div>
+                                    <label for="iat" class="block text-sm font-medium text-gray-700">IAT</label>
+                                    <select id="iat" name="iat" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Selecionar...</option>
+                                        <option value="Arredondamento">Arredondamento</option>
+                                        <option value="Truncamento">Truncamento</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="tipo-produto" class="block text-sm font-medium text-gray-700">Tipo de Produto</label>
+                                    <select id="tipo-produto" name="tipo-produto" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Selecionar...</option>
+                                        <option value="Revenda">Revenda</option>
+                                        <option value="Consumo Interno">Consumo Interno</option>
+                                        <option value="Bonificação">Bonificação</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="tab-classification" class="space-y-6 hidden">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Categorias Atuais</label>
@@ -165,6 +197,15 @@
                                         <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Tartarugas" class="form-checkbox"> Tartarugas</label>
                                         <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Lagartos" class="form-checkbox"> Lagartos</label>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-fiscal" class="space-y-6 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div class="md:col-span-1">
+                                    <label for="ncm" class="block text-sm font-medium text-gray-700">NCM</label>
+                                    <input type="text" id="ncm" name="ncm" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Informe o código NCM">
                                 </div>
                             </div>
                         </div>

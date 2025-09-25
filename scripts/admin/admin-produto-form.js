@@ -168,6 +168,41 @@ document.addEventListener('DOMContentLoaded', () => {
         if (form.querySelector('#referencia')) {
             form.querySelector('#referencia').value = product.referencia || '';
         }
+        const dataCadastroInput = form.querySelector('#data-cadastro');
+        if (dataCadastroInput) {
+            const rawDate = product.dataCadastro || product.createdAt || '';
+            if (rawDate) {
+                const rawDateStr = String(rawDate);
+                const [datePart] = rawDateStr.split('T');
+                if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+                    dataCadastroInput.value = datePart;
+                } else {
+                    const parsedDate = new Date(rawDateStr);
+                    dataCadastroInput.value = Number.isNaN(parsedDate.getTime())
+                        ? ''
+                        : parsedDate.toISOString().split('T')[0];
+                }
+            } else {
+                dataCadastroInput.value = '';
+            }
+        }
+        const pesoInput = form.querySelector('#peso');
+        if (pesoInput) {
+            const pesoValue = Number(product.peso);
+            pesoInput.value = Number.isFinite(pesoValue) ? pesoValue : '';
+        }
+        const iatSelect = form.querySelector('#iat');
+        if (iatSelect) {
+            iatSelect.value = product.iat || '';
+        }
+        const tipoProdutoSelect = form.querySelector('#tipo-produto');
+        if (tipoProdutoSelect) {
+            tipoProdutoSelect.value = product.tipoProduto || '';
+        }
+        const ncmInput = form.querySelector('#ncm');
+        if (ncmInput) {
+            ncmInput.value = product.ncm || '';
+        }
         if (form.querySelector('#barcode-additional')) {
             form.querySelector('#barcode-additional').value = Array.isArray(product.codigosComplementares) ? product.codigosComplementares.join('\n') : '';
         }
@@ -312,6 +347,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 apresentacao: (document.getElementById('spec-apresentacao')?.value || '').trim()
             }
         };
+
+        const dataCadastroValue = formData.get('data-cadastro');
+        const pesoValue = formData.get('peso');
+        const iatValue = formData.get('iat');
+        const tipoProdutoValue = formData.get('tipo-produto');
+        const ncmValue = formData.get('ncm');
+
+        updateData.dataCadastro = dataCadastroValue ? dataCadastroValue : null;
+        const parsedPeso = pesoValue ? Number(pesoValue) : null;
+        updateData.peso = Number.isFinite(parsedPeso) ? parsedPeso : null;
+        updateData.iat = iatValue || null;
+        updateData.tipoProduto = tipoProdutoValue || null;
+        updateData.ncm = ncmValue ? ncmValue.trim() : null;
 
         try {
             const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
