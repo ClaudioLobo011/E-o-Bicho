@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const os = require('os');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
+const tls = require('tls');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
@@ -69,7 +70,38 @@ const parseOpenSslDateToIso = (value = '') => {
     return parsed.toISOString().slice(0, 10);
 };
 
-const extractCertificateMetadata = async (buffer, password) => {
+const extractMetadataWithNode = (buffer, password) => {
+    try {
+        const secureContext = tls.createSecureContext({ pfx: buffer, passphrase: password });
+        const derCertificate = secureContext.context.getCertificate();
+
+        if (!derCertificate || !derCertificate.length) {
+            throw new Error('Não foi possível localizar o certificado no arquivo enviado.');
+        }
+
+        const x509 = new crypto.X509Certificate(derCertificate);
+        const validade = parseOpenSslDateToIso(x509.validTo);
+        if (!validade) {
+            throw new Error('Não foi possível identificar a data de validade do certificado.');
+        }
+
+        const fingerprint = (x509.fingerprint || '').toUpperCase();
+
+        return { validade, fingerprint };
+    } catch (error) {
+        const message = String(error?.message || '').toLowerCase();
+        if (message.includes('mac verify failure') || message.includes('invalid password') || message.includes('bad decrypt')) {
+            throw new Error('Senha do certificado incorreta.');
+        }
+        if (message.includes('pkcs12') || message.includes('asn1') || message.includes('unable to load') || message.includes('not a pkcs12')) {
+            throw new Error('Certificado PKCS#12 inválido.');
+        }
+
+        throw new Error('Não foi possível processar o certificado.');
+    }
+};
+
+const extractCertificateMetadataWithOpenSsl = async (buffer, password) => {
     const tmpDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'store-cert-'));
     const pfxPath = path.join(tmpDir, 'certificado.pfx');
     const pemPath = path.join(tmpDir, 'certificado.pem');
@@ -139,6 +171,18 @@ const extractCertificateMetadata = async (buffer, password) => {
         return { validade, fingerprint };
     } finally {
         await fsPromises.rm(tmpDir, { recursive: true, force: true });
+    }
+};
+
+const extractCertificateMetadata = async (buffer, password) => {
+    try {
+        return await extractCertificateMetadataWithOpenSsl(buffer, password);
+    } catch (error) {
+        if (error?.message && error.message.includes('OpenSSL não está disponível')) {
+            // Ambiente local sem o binário do OpenSSL: recorre à API nativa do Node.js.
+            return extractMetadataWithNode(buffer, password);
+        }
+        throw error;
     }
 };
 
