@@ -123,17 +123,20 @@ function initAdminSidebar() {
   if (!panel) return;
 
   const overlay = wrapper.querySelector('[data-admin-sidebar-overlay]');
-  const toggleBtn = wrapper.querySelector('[data-admin-sidebar-toggle]');
-  const closeBtn = wrapper.querySelector('[data-admin-sidebar-close]');
+  const toggleButtons = document.querySelectorAll('[data-admin-sidebar-trigger]');
+  const closeButtons = wrapper.querySelectorAll('[data-admin-sidebar-close]');
 
   const isDesktop = () => window.matchMedia('(min-width: 768px)').matches;
 
   const openSidebar = () => {
     panel.classList.add('translate-x-0');
     panel.classList.remove('-translate-x-full');
+    panel.setAttribute('aria-hidden', 'false');
     if (overlay) {
-      overlay.classList.remove('pointer-events-none');
-      overlay.classList.add('opacity-100');
+      if (!isDesktop()) {
+        overlay.classList.remove('pointer-events-none');
+        overlay.classList.add('opacity-100');
+      }
     }
     if (!isDesktop()) {
       document.body.classList.add('overflow-hidden');
@@ -143,6 +146,7 @@ function initAdminSidebar() {
   const closeSidebar = () => {
     panel.classList.remove('translate-x-0');
     panel.classList.add('-translate-x-full');
+    panel.setAttribute('aria-hidden', 'true');
     if (overlay) {
       overlay.classList.add('pointer-events-none');
       overlay.classList.remove('opacity-100');
@@ -150,14 +154,22 @@ function initAdminSidebar() {
     document.body.classList.remove('overflow-hidden');
   };
 
-  toggleBtn?.addEventListener('click', (event) => {
-    event.preventDefault();
-    openSidebar();
+  toggleButtons.forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (panel.classList.contains('-translate-x-full')) {
+        openSidebar();
+      } else {
+        closeSidebar();
+      }
+    });
   });
 
-  closeBtn?.addEventListener('click', (event) => {
-    event.preventDefault();
-    closeSidebar();
+  closeButtons.forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      closeSidebar();
+    });
   });
 
   overlay?.addEventListener('click', closeSidebar);
