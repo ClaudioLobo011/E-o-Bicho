@@ -34,7 +34,7 @@
 
   <!-- MODAL: EDITAR/CRIAR -->
   <div id="modal-edit-funcionario" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white w-full max-w-modal-wide mx-4 rounded-lg shadow-lg max-h-[90vh] flex flex-col">
+    <div class="bg-white w-full max-w-modal-wide mx-2 rounded-lg shadow-lg max-h-[94vh] flex flex-col">
       <div class="flex justify-between items-center px-5 py-3 border-b">
         <h2 id="modal-title" class="text-lg font-semibold">Editar Funcionário</h2>
         <button id="modal-close" class="text-gray-500 hover:text-gray-700">
@@ -42,7 +42,7 @@
         </button>
       </div>
 
-      <form id="edit-funcionario-form" class="px-5 py-4 space-y-5 overflow-y-auto form-compact">
+      <form id="edit-funcionario-form" class="px-5 py-4 space-y-5 overflow-y-auto form-compact modal-body-fixed">
         <input type="hidden" id="edit-id"/>
 
         <div class="grid grid-cols-12 gap-3">
@@ -91,6 +91,47 @@
               <option value="masculino">Masculino</option>
               <option value="feminino">Feminino</option>
               <option value="nao_informar">Prefere não dizer</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-12 gap-3 items-start">
+          <div class="col-span-12 md:col-span-3">
+            <label for="edit-data-nascimento" class="block font-medium mb-1">Data de nascimento</label>
+            <input id="edit-data-nascimento" type="date" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label for="edit-raca-cor" class="block font-medium mb-1">Raça/Cor</label>
+            <select id="edit-raca-cor" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="">Selecione</option>
+              <option value="nao_informar">Não informar</option>
+              <option value="indigena">Indígena</option>
+              <option value="branco">Branco</option>
+              <option value="preto">Preto</option>
+              <option value="amarelo">Amarelo</option>
+              <option value="pardo">Pardo</option>
+            </select>
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label for="edit-deficiencia" class="block font-medium mb-1">Deficiência</label>
+            <select id="edit-deficiencia" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="">Selecione</option>
+              <option value="nao_portador">Não portador</option>
+              <option value="fisica">Física</option>
+              <option value="auditiva">Auditiva</option>
+              <option value="visual">Visual</option>
+              <option value="intelectual">Intelectual</option>
+              <option value="multipla">Múltipla</option>
+            </select>
+          </div>
+          <div class="col-span-12 md:col-span-3">
+            <label for="edit-estado-civil" class="block font-medium mb-1">Estado civil</label>
+            <select id="edit-estado-civil" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="">Selecione</option>
+              <option value="solteiro">Solteiro(a)</option>
+              <option value="casado">Casado(a)</option>
+              <option value="separado">Separado(a)</option>
+              <option value="viuvo">Viúvo(a)</option>
             </select>
           </div>
         </div>

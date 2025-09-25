@@ -22,6 +22,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const gruposBox = document.getElementById('edit-grupos');
   const empresasBox = document.getElementById('edit-empresas');
   const selectSexo = document.getElementById('edit-sexo');
+  const dataNascimentoInput = document.getElementById('edit-data-nascimento');
+  const racaCorSelect = document.getElementById('edit-raca-cor');
+  const deficienciaSelect = document.getElementById('edit-deficiencia');
+  const estadoCivilSelect = document.getElementById('edit-estado-civil');
   const empresaContratualSelect = document.getElementById('edit-empresa-contratual');
   const enderecoCep = document.getElementById('edit-endereco-cep');
   const enderecoLogradouro = document.getElementById('edit-endereco-endereco');
@@ -304,6 +308,32 @@ document.addEventListener('DOMContentLoaded', () => {
       empresaContratualSelect.value = '';
     }
     empresaContratualSelect.dataset.selectedValue = value || '';
+  }
+
+  function setSelectValue(selectEl, value) {
+    if (!selectEl) return;
+    if (value === undefined || value === null) {
+      selectEl.value = '';
+      return;
+    }
+    const raw = String(value).trim();
+    if (!raw) {
+      selectEl.value = '';
+      return;
+    }
+    const options = Array.from(selectEl.options || []);
+    const lower = raw.toLowerCase();
+    if (options.some((opt) => opt.value === lower)) {
+      selectEl.value = lower;
+      return;
+    }
+    const normalized = raw
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_');
+    const matched = options.find((opt) => opt.value === normalized);
+    selectEl.value = matched ? matched.value : '';
   }
 
   function normalizeSexoValue(value) {
@@ -1227,6 +1257,10 @@ document.addEventListener('DOMContentLoaded', () => {
       inputPassword.value = '';
       if (selectSituacao) selectSituacao.value = 'ativo';
       if (selectSexo) selectSexo.value = '';
+      if (dataNascimentoInput) dataNascimentoInput.value = '';
+      if (racaCorSelect) racaCorSelect.value = '';
+      if (deficienciaSelect) deficienciaSelect.value = '';
+      if (estadoCivilSelect) estadoCivilSelect.value = '';
       setEmpresaContratualValue('');
       roleSelect.value = opts[0] || 'funcionario';
       passwordBar.style.width = '0%';
@@ -1281,6 +1315,10 @@ document.addEventListener('DOMContentLoaded', () => {
       inputPassword.value = '';
       if (selectSituacao) selectSituacao.value = situacaoValor;
       if (selectSexo) selectSexo.value = sexoValor;
+      if (dataNascimentoInput) dataNascimentoInput.value = formatDateForInput(data.dataNascimento);
+      setSelectValue(racaCorSelect, data.racaCor);
+      setSelectValue(deficienciaSelect, data.deficiencia);
+      setSelectValue(estadoCivilSelect, data.estadoCivil);
       setEmpresaContratualValue(empresaContratualValor, empresaContratualLabel);
       roleSelect.value = opts.includes(data.role) ? data.role : (opts[0] || 'funcionario');
       passwordBar.style.width = '0%';
@@ -1786,6 +1824,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selectSexo) {
       const sexoVal = selectSexo.value || '';
       payload.genero = sexoVal;
+    }
+    if (dataNascimentoInput) {
+      payload.dataNascimento = dataNascimentoInput.value || null;
+    }
+    if (racaCorSelect) {
+      payload.racaCor = racaCorSelect.value || null;
+    }
+    if (deficienciaSelect) {
+      payload.deficiencia = deficienciaSelect.value || null;
+    }
+    if (estadoCivilSelect) {
+      payload.estadoCivil = estadoCivilSelect.value || null;
     }
     if (empresaContratualSelect) {
       const contratualVal = empresaContratualSelect.value || '';

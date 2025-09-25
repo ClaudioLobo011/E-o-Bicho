@@ -976,7 +976,11 @@
 
 @layer utilities {
   .max-w-modal-wide {
-    max-width: min(1200px, 96vw);
+    max-width: min(1400px, 98vw);
+  }
+
+  .modal-body-fixed {
+    min-height: 60vh;
   }
 
   .form-compact {

@@ -15,6 +15,9 @@ const HORARIO_TIPOS = ['jornada', 'escala'];
 const HORARIO_MODALIDADES_JORNADA = ['diurna', 'noturna', 'integral', 'parcial', 'extraordinaria', 'intermitente', 'estagio', 'remota', 'reduzida'];
 const HORARIO_MODALIDADES_ESCALA = ['6x1', '5x1', '12x36'];
 const HORARIO_MODALIDADES = [...HORARIO_MODALIDADES_JORNADA, ...HORARIO_MODALIDADES_ESCALA];
+const RACA_COR_OPCOES = ['nao_informar', 'indigena', 'branco', 'preto', 'amarelo', 'pardo'];
+const DEFICIENCIA_OPCOES = ['nao_portador', 'fisica', 'auditiva', 'visual', 'intelectual', 'multipla'];
+const ESTADO_CIVIL_OPCOES = ['solteiro', 'casado', 'separado', 'viuvo'];
 
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -218,6 +221,10 @@ function userToDTO(u) {
     grupos: Array.isArray(u.grupos) ? u.grupos : [],
     empresas: Array.isArray(u.empresas) ? u.empresas : [],
     genero: u.genero || '',
+    dataNascimento: u.dataNascimento || null,
+    racaCor: u.racaCor || '',
+    deficiencia: u.deficiencia || '',
+    estadoCivil: u.estadoCivil || '',
     rgEmissao: u.rgEmissao || null,
     rgNumero: u.rgNumero || '',
     rgOrgaoExpedidor: u.rgOrgaoExpedidor || '',
@@ -302,7 +309,7 @@ router.get('/', authMiddleware, requireAdmin, async (req, res) => {
     const users = await User
       .find(
         { role: { $in: ['admin_master', 'admin', 'funcionario'] } },
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
       )
       .lean();
 
@@ -352,7 +359,7 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
     const users = await User
       .find(
         filter,
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero dataNascimento racaCor deficiencia estadoCivil situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
       )
       .sort({ createdAt: -1 })
       .limit(lim)
@@ -387,7 +394,7 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 
     const ret = await User.findById(
       userId,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
     ).lean();
     res.json({ message: 'Usuário transformado com sucesso.', funcionario: userToDTO(ret) });
   } catch (err) {
@@ -403,7 +410,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const u = await User.findById(
       req.params.id,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
     ).lean();
     if (!u || !['admin_master', 'admin', 'funcionario'].includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
@@ -447,6 +454,22 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
       doc.genero = (req.body.genero || '').trim();
     } else if (typeof req.body.sexo !== 'undefined') {
       doc.genero = (req.body.sexo || '').trim();
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'dataNascimento')) {
+      doc.dataNascimento = parseDate(req.body.dataNascimento);
+    }
+    const racaCor = parseEnum(req.body.racaCor, RACA_COR_OPCOES);
+    if (racaCor !== undefined) {
+      doc.racaCor = racaCor;
+    }
+    const deficiencia = parseEnum(req.body.deficiencia, DEFICIENCIA_OPCOES);
+    if (deficiencia !== undefined) {
+      doc.deficiencia = deficiencia;
+    }
+    const estadoCivil = parseEnum(req.body.estadoCivil, ESTADO_CIVIL_OPCOES);
+    if (estadoCivil !== undefined) {
+      doc.estadoCivil = estadoCivil;
     }
 
     if (Object.prototype.hasOwnProperty.call(req.body, 'rgEmissao')) {
@@ -679,6 +702,22 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
       update.genero = (req.body.sexo || '').trim();
     }
 
+    if (Object.prototype.hasOwnProperty.call(req.body, 'dataNascimento')) {
+      update.dataNascimento = parseDate(req.body.dataNascimento);
+    }
+    const racaCorUpdate = parseEnum(req.body.racaCor, RACA_COR_OPCOES);
+    if (racaCorUpdate !== undefined) {
+      update.racaCor = racaCorUpdate;
+    }
+    const deficienciaUpdate = parseEnum(req.body.deficiencia, DEFICIENCIA_OPCOES);
+    if (deficienciaUpdate !== undefined) {
+      update.deficiencia = deficienciaUpdate;
+    }
+    const estadoCivilUpdate = parseEnum(req.body.estadoCivil, ESTADO_CIVIL_OPCOES);
+    if (estadoCivilUpdate !== undefined) {
+      update.estadoCivil = estadoCivilUpdate;
+    }
+
     if (Object.prototype.hasOwnProperty.call(req.body, 'periodoExperienciaInicio')) {
       update.periodoExperienciaInicio = parseDate(req.body.periodoExperienciaInicio);
     }
@@ -791,7 +830,7 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
     const updated = await User.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios' }
+      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero dataNascimento racaCor deficiencia estadoCivil rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios' }
     ).lean();
 
     res.json({ message: 'Funcionário atualizado com sucesso.', funcionario: userToDTO(updated) });
