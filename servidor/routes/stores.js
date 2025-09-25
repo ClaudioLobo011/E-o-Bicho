@@ -65,13 +65,53 @@ const encryptText = (value) => encryptBuffer(Buffer.from(String(value || ''), 'u
 const isValidCertificateExtension = (filename = '') => /\.(pfx|p12)$/i.test(filename);
 
 const parseOpenSslDateToIso = (value = '') => {
-    const trimmed = value.trim();
+    const trimmed = value.trim().replace(/[\u200e\u200f]/g, '');
     if (!trimmed) return '';
+
+    const slashMatch = trimmed.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (slashMatch) {
+        const [, part1, part2, rawYear, rawHour = '0', rawMinute = '0', rawSecond = '0'] = slashMatch;
+        const first = Number(part1);
+        const second = Number(part2);
+        let year = Number(rawYear);
+        if (rawYear.length === 2) {
+            year += year >= 70 ? 1900 : 2000;
+        }
+
+        let day = first;
+        let month = second;
+
+        if (first > 12 && second <= 12) {
+            day = first;
+            month = second;
+        } else if (second > 12 && first <= 12) {
+            day = second;
+            month = first;
+        }
+
+        const hour = Number(rawHour);
+        const minute = Number(rawMinute);
+        const secondPart = Number(rawSecond);
+
+        const date = new Date(Date.UTC(year, month - 1, day, hour, minute, secondPart));
+        if (!Number.isNaN(date.getTime())) {
+            return date.toISOString().slice(0, 10);
+        }
+    }
+
     const parsed = new Date(trimmed);
     if (Number.isNaN(parsed.getTime())) {
         return '';
     }
     return parsed.toISOString().slice(0, 10);
+};
+
+const parseSha1ToFingerprint = (value = '') => {
+    const normalized = value.replace(/[^a-f0-9]/gi, '').toUpperCase();
+    if (normalized.length !== 40) {
+        return '';
+    }
+    return normalized.match(/.{1,2}/g).join(':');
 };
 
 const OPENSSL_UNAVAILABLE_MESSAGE = 'OpenSSL não está disponível no servidor.';
@@ -108,6 +148,68 @@ const extractMetadataWithNode = (buffer, password) => {
         }
 
         throw new Error('Não foi possível processar o certificado.');
+    }
+};
+
+const extractCertificateMetadataWithCertutil = async (buffer, password) => {
+    if (process.platform !== 'win32') {
+        throw new Error('Certutil não está disponível neste sistema operacional.');
+    }
+
+    const tmpDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'store-cert-'));
+    const pfxPath = path.join(tmpDir, 'certificado.pfx');
+
+    try {
+        await fsPromises.writeFile(pfxPath, buffer);
+
+        let stdout;
+        try {
+            ({ stdout } = await execFileAsync('certutil', ['-dump', '-p', password, pfxPath]));
+        } catch (error) {
+            const output = `${error?.stdout || ''}\n${error?.stderr || ''}`.toLowerCase();
+
+            if (output.includes('wrong password') || output.includes('incorrect password') || output.includes('senha incorreta')) {
+                throw new Error('Senha do certificado incorreta.');
+            }
+
+            if (
+                output.includes('0x80090029') ||
+                output.includes('0x8009000b') ||
+                output.includes('pfx') ||
+                output.includes('pkcs12')
+            ) {
+                throw new Error('Certificado PKCS#12 inválido.');
+            }
+
+            throw new Error('Não foi possível processar o certificado.');
+        }
+
+        const lines = String(stdout || '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+        const validadeLine = lines.find((line) => line.toLowerCase().startsWith('notafter'));
+        const fingerprintLine = lines.find((line) => line.toLowerCase().startsWith('cert hash(sha1)'));
+
+        if (!validadeLine) {
+            throw new Error('Não foi possível identificar a data de validade do certificado.');
+        }
+
+        const validadeRaw = validadeLine.split(':').slice(1).join(':').trim();
+        const validade = parseOpenSslDateToIso(validadeRaw);
+        if (!validade) {
+            throw new Error('Não foi possível identificar a data de validade do certificado.');
+        }
+
+        let fingerprint = '';
+        if (fingerprintLine) {
+            fingerprint = parseSha1ToFingerprint(fingerprintLine.split(':').slice(1).join(':'));
+        }
+
+        return { validade, fingerprint };
+    } finally {
+        await fsPromises.rm(tmpDir, { recursive: true, force: true });
     }
 };
 
@@ -195,6 +297,7 @@ const shouldBubbleError = (error) => {
 
 const extractCertificateMetadata = async (buffer, password) => {
     let nativeError = null;
+    let certutilError = null;
 
     if (hasNativePkcs12Support) {
         try {
@@ -207,16 +310,31 @@ const extractCertificateMetadata = async (buffer, password) => {
         }
     }
 
+    if (process.platform === 'win32') {
+        try {
+            return await extractCertificateMetadataWithCertutil(buffer, password);
+        } catch (error) {
+            if (shouldBubbleError(error)) {
+                throw error;
+            }
+            certutilError = error;
+        }
+    }
+
     try {
         return await extractCertificateMetadataWithOpenSsl(buffer, password);
     } catch (error) {
         if (error?.message && error.message.includes(OPENSSL_UNAVAILABLE_MESSAGE)) {
-            if (hasNativePkcs12Support && nativeError) {
+            if (certutilError) {
+                throw certutilError;
+            }
+
+            if (nativeError) {
                 throw nativeError;
             }
 
             if (hasNativePkcs12Support) {
-                return extractMetadataWithNode(buffer, password);
+                throw new Error(OPENSSL_INSTALL_HELP);
             }
 
             throw new Error(OPENSSL_INSTALL_HELP);
