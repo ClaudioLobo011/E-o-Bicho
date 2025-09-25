@@ -247,11 +247,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function formatDateForInput(value) {
     if (!value) return '';
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+      const [datePart] = trimmed.split('T');
+      if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) return datePart;
+    }
+
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return '';
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
 
