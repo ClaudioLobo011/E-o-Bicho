@@ -189,8 +189,7 @@ const shouldBubbleError = (error) => {
     const message = String(error.message || '').toLowerCase();
     return (
         message.includes('senha do certificado incorreta') ||
-        message.includes('senha incorreta') ||
-        message.includes('certificado pkcs#12 inválido')
+        message.includes('senha incorreta')
     );
 };
 
