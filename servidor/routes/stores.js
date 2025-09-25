@@ -363,7 +363,17 @@ const sanitizeStorePayload = (body = {}) => {
     const razaoSocial = trimString(body.razaoSocial);
     const cnpj = trimString(body.cnpj);
     const cnaePrincipal = trimString(body.cnaePrincipal || body.cnae);
+    const cnaePrincipalDescricao = trimString(
+        body.cnaePrincipalDescricao
+        || body.cnaeDescricao
+        || body.cnaeDescricaoPrincipal
+    );
     const rawCnaeSecundario = trimString(body.cnaeSecundario || body.cnaeSecundaria);
+    const cnaeSecundarioDescricao = trimString(
+        body.cnaeSecundarioDescricao
+        || body.cnaeDescricaoSecundario
+        || body.cnaeSecundariaDescricao
+    );
     const cnaesSecundariosArray = Array.isArray(body.cnaesSecundarios)
         ? body.cnaesSecundarios
         : (rawCnaeSecundario ? rawCnaeSecundario.split(/[;,\n]/) : []);
@@ -423,6 +433,8 @@ const sanitizeStorePayload = (body = {}) => {
         cnpj,
         cnaePrincipal,
         cnaeSecundario,
+        cnaePrincipalDescricao,
+        cnaeSecundarioDescricao,
         cnaesSecundarios,
         inscricaoEstadual,
         inscricaoMunicipal,

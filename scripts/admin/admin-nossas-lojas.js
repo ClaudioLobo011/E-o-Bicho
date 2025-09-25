@@ -21,7 +21,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const nomeFantasiaInput = document.getElementById('store-nome');
     const cnpjInput = document.getElementById('store-cnpj');
     const cnaeInput = document.getElementById('store-cnae');
+    const cnaeDescricaoInput = document.getElementById('store-cnae-descricao');
     const cnaeSecundarioInput = document.getElementById('store-cnae-secundario');
+    const cnaeSecundarioDescricaoInput = document.getElementById('store-cnae-secundario-descricao');
     const inscricaoEstadualInput = document.getElementById('store-inscricao-estadual');
     const inscricaoMunicipalInput = document.getElementById('store-inscricao-municipal');
     const regimeTributarioSelect = document.getElementById('store-regime-tributario');
@@ -67,6 +69,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Utilidades de formulário ---
     const enderecoFields = [logradouroInput, numeroInput, complementoInput, municipioInput, ufInput];
+
+    const formatSingleCnaeValue = (value = '') => {
+        const digits = String(value || '').replace(/\D/g, '').slice(0, 7);
+        if (!digits) return '';
+        if (digits.length <= 4) return digits;
+
+        let formatted = digits.slice(0, 4);
+        formatted += `-${digits.slice(4, 5)}`;
+        if (digits.length > 5) {
+            formatted += `/${digits.slice(5, 7)}`;
+        }
+        return formatted;
+    };
+
+    const formatMultipleCnaesValue = (value = '') => {
+        if (Array.isArray(value)) {
+            const formattedArray = value
+                .map((item) => formatSingleCnaeValue(item))
+                .filter((item) => item.length > 0);
+            return formattedArray.join(', ');
+        }
+
+        const raw = String(value || '');
+        const tokens = raw.split(/[,;\n]+/);
+        const formattedTokens = tokens
+            .map((token) => formatSingleCnaeValue(token))
+            .filter((token) => token.length > 0);
+        const hasTrailingSeparator = /[,;\n]+\s*$/.test(raw);
+        let result = formattedTokens.join(', ');
+        if (hasTrailingSeparator && result.length > 0) {
+            result += ', ';
+        }
+        return result;
+    };
+
+    const applyCnaeMaskToInput = (input, { allowMultiple = false } = {}) => {
+        if (!input) return;
+        const formatter = allowMultiple ? formatMultipleCnaesValue : formatSingleCnaeValue;
+        const updateValue = () => {
+            const formatted = formatter(input.value);
+            if (formatted === input.value) return;
+            input.value = formatted;
+            if (document.activeElement === input) {
+                try {
+                    input.setSelectionRange(formatted.length, formatted.length);
+                } catch (error) {
+                    // Ignore selection errors for unsupported input types
+                }
+            }
+        };
+        input.addEventListener('input', updateValue);
+        input.addEventListener('blur', updateValue);
+    };
+
+    applyCnaeMaskToInput(cnaeInput);
+    applyCnaeMaskToInput(cnaeSecundarioInput, { allowMultiple: true });
 
     const buildEnderecoCompleto = () => {
         const logradouro = (logradouroInput?.value || '').trim();
@@ -427,6 +485,10 @@ document.addEventListener('DOMContentLoaded', () => {
         activateTab('endereco');
         buildEnderecoCompleto();
 
+        if (cnaeInput) cnaeInput.value = '';
+        if (cnaeDescricaoInput) cnaeDescricaoInput.value = '';
+        if (cnaeSecundarioInput) cnaeSecundarioInput.value = '';
+        if (cnaeSecundarioDescricaoInput) cnaeSecundarioDescricaoInput.value = '';
         diasDaSemana.forEach(({ key }) => {
             const dayRow = horarioContainer.querySelector(`[data-day="${key}"]`);
             const inputs = dayRow.querySelectorAll('.time-input');
@@ -445,8 +507,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (certificadoValidadeInput) certificadoValidadeInput.value = '';
         if (certificadoAtualText) certificadoAtualText.textContent = 'Nenhum certificado armazenado.';
         updateCertificadoStatus('', 'muted');
-        if (cnaeSecundarioInput) cnaeSecundarioInput.value = '';
-
         modal.classList.remove('hidden');
 
         setTimeout(() => {
@@ -474,12 +534,26 @@ document.addEventListener('DOMContentLoaded', () => {
             razaoSocialInput.value = store.razaoSocial || '';
             nomeFantasiaInput.value = store.nomeFantasia || store.nome || '';
             cnpjInput.value = store.cnpj || '';
-            cnaeInput.value = store.cnaePrincipal || store.cnae || '';
+            if (cnaeInput) {
+                const cnaePrincipalValue = store.cnaePrincipal || store.cnae || '';
+                cnaeInput.value = formatSingleCnaeValue(cnaePrincipalValue);
+            }
+            if (cnaeDescricaoInput) {
+                cnaeDescricaoInput.value = store.cnaePrincipalDescricao
+                    || store.cnaeDescricao
+                    || store.cnaeDescricaoPrincipal
+                    || '';
+            }
             if (cnaeSecundarioInput) {
-                const cnaeSecundario = Array.isArray(store.cnaesSecundarios)
-                    ? store.cnaesSecundarios.join(', ')
+                const rawCnaeSecundario = Array.isArray(store.cnaesSecundarios)
+                    ? store.cnaesSecundarios
                     : (store.cnaeSecundario || store.cnaeSecundaria || store.cnaeSecundarios || '');
-                cnaeSecundarioInput.value = cnaeSecundario || '';
+                cnaeSecundarioInput.value = formatMultipleCnaesValue(rawCnaeSecundario);
+            }
+            if (cnaeSecundarioDescricaoInput) {
+                cnaeSecundarioDescricaoInput.value = store.cnaeSecundarioDescricao
+                    || store.cnaeDescricaoSecundario
+                    || '';
             }
             inscricaoEstadualInput.value = store.inscricaoEstadual || '';
             inscricaoMunicipalInput.value = store.inscricaoMunicipal || '';
@@ -790,9 +864,13 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.disabled = true;
 
         const enderecoCompleto = buildEnderecoCompleto();
-        const rawCnaeSecundario = cnaeSecundarioInput ? cnaeSecundarioInput.value : '';
-        const cnaesSecundarios = rawCnaeSecundario
-            ? rawCnaeSecundario.split(/[;,\n]/).map((value) => value.trim()).filter((value) => value.length > 0)
+        const formattedCnaePrincipal = cnaeInput ? formatSingleCnaeValue(cnaeInput.value) : '';
+        if (cnaeInput) cnaeInput.value = formattedCnaePrincipal;
+        let formattedCnaeSecundario = cnaeSecundarioInput ? formatMultipleCnaesValue(cnaeSecundarioInput.value) : '';
+        formattedCnaeSecundario = formattedCnaeSecundario.replace(/[,\s]+$/, '');
+        if (cnaeSecundarioInput) cnaeSecundarioInput.value = formattedCnaeSecundario;
+        const cnaesSecundarios = formattedCnaeSecundario
+            ? formattedCnaeSecundario.split(/,\s*/).map((value) => value.trim()).filter((value) => value.length > 0)
             : [];
 
         const storeData = {
@@ -800,8 +878,10 @@ document.addEventListener('DOMContentLoaded', () => {
             nomeFantasia: nomeFantasiaInput.value,
             razaoSocial: razaoSocialInput.value,
             cnpj: cnpjInput.value,
-            cnaePrincipal: cnaeInput.value,
-            cnaeSecundario: rawCnaeSecundario,
+            cnaePrincipal: formattedCnaePrincipal,
+            cnaePrincipalDescricao: cnaeDescricaoInput?.value || '',
+            cnaeSecundario: formattedCnaeSecundario,
+            cnaeSecundarioDescricao: cnaeSecundarioDescricaoInput?.value || '',
             cnaesSecundarios,
             inscricaoEstadual: inscricaoEstadualInput.value,
             inscricaoMunicipal: inscricaoMunicipalInput.value,

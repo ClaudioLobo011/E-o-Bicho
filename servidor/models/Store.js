@@ -15,7 +15,9 @@ const storeSchema = new mongoose.Schema({
     razaoSocial: { type: String, trim: true },
     cnpj: { type: String, trim: true },
     cnaePrincipal: { type: String, trim: true },
+    cnaePrincipalDescricao: { type: String, trim: true },
     cnaeSecundario: { type: String, trim: true },
+    cnaeSecundarioDescricao: { type: String, trim: true },
     cnaesSecundarios: {
         type: [{ type: String, trim: true }],
         default: []
