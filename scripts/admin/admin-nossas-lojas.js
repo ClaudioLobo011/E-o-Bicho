@@ -42,6 +42,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const certificadoValidadeInput = document.getElementById('store-certificado-validade');
     const certificadoStatusText = document.getElementById('store-certificado-status');
     const certificadoAtualText = document.getElementById('store-certificado-atual');
+    const cscIdProducaoInput = document.getElementById('store-csc-id-producao');
+    const cscTokenProducaoInput = document.getElementById('store-csc-token-producao');
+    const cscTokenProducaoHelper = document.getElementById('store-csc-token-producao-helper');
+    const cscTokenProducaoClearBtn = document.getElementById('store-csc-token-producao-clear');
+    const cscIdHomologacaoInput = document.getElementById('store-csc-id-homologacao');
+    const cscTokenHomologacaoInput = document.getElementById('store-csc-token-homologacao');
+    const cscTokenHomologacaoHelper = document.getElementById('store-csc-token-homologacao-helper');
+    const cscTokenHomologacaoClearBtn = document.getElementById('store-csc-token-homologacao-clear');
     const contadorNomeInput = document.getElementById('store-contador-nome');
     const contadorCpfInput = document.getElementById('store-contador-cpf');
     const contadorCrcInput = document.getElementById('store-contador-crc');
@@ -125,6 +133,117 @@ document.addEventListener('DOMContentLoaded', () => {
 
     applyCnaeMaskToInput(cnaeInput);
     applyCnaeMaskToInput(cnaeSecundarioInput, { allowMultiple: true });
+
+    const CSC_TOKEN_DEFAULT_MESSAGES = {
+        producao: 'Informe o token do CSC de produção fornecido pela SEFAZ.',
+        homologacao: 'Informe o token do CSC de homologação fornecido pela SEFAZ.'
+    };
+
+    const setCscTokenState = (input, { stored = false, cleared = false } = {}) => {
+        if (!input) return;
+        input.dataset.stored = stored ? 'true' : 'false';
+        input.dataset.cleared = cleared ? 'true' : 'false';
+    };
+
+    const updateCscTokenHelper = (input, helper, defaultMessage) => {
+        if (!helper) return;
+        if (!input) {
+            helper.textContent = defaultMessage;
+            return;
+        }
+
+        const value = (input.value || '').trim();
+        const stored = input.dataset.stored === 'true';
+        const cleared = input.dataset.cleared === 'true';
+
+        let message = defaultMessage;
+        if (value.length > 0) {
+            message = 'Um novo token será salvo ao confirmar.';
+        } else if (cleared) {
+            message = 'O token atual será removido ao salvar.';
+        } else if (stored) {
+            message = 'Um token está armazenado. Deixe em branco para manter ou informe um novo para substituir.';
+        }
+
+        helper.textContent = message;
+    };
+
+    const updateCscTokenClearButton = (button, isCleared) => {
+        if (!button) return;
+        button.textContent = isCleared ? 'Desfazer' : 'Remover';
+    };
+
+    const resetCscTokenInput = (input, helper, defaultMessage, clearButton) => {
+        if (!input) return;
+        input.value = '';
+        setCscTokenState(input, { stored: false, cleared: false });
+        updateCscTokenHelper(input, helper, defaultMessage);
+        updateCscTokenClearButton(clearButton, false);
+    };
+
+    const toggleCscTokenCleared = (input, helper, defaultMessage, clearButton) => {
+        if (!input) return;
+        const isCurrentlyCleared = input.dataset.cleared === 'true';
+        if (!isCurrentlyCleared) {
+            input.value = '';
+        }
+        setCscTokenState(input, {
+            stored: input.dataset.stored === 'true',
+            cleared: !isCurrentlyCleared
+        });
+        updateCscTokenHelper(input, helper, defaultMessage);
+        updateCscTokenClearButton(clearButton, !isCurrentlyCleared);
+        input.focus();
+    };
+
+    const registerCscTokenInputEvents = (input, helper, defaultMessage, clearButton) => {
+        if (!input) return;
+        input.addEventListener('input', () => {
+            if (input.dataset.cleared === 'true') {
+                setCscTokenState(input, {
+                    stored: input.dataset.stored === 'true',
+                    cleared: false
+                });
+                updateCscTokenClearButton(clearButton, false);
+            }
+            updateCscTokenHelper(input, helper, defaultMessage);
+        });
+        input.addEventListener('change', () => updateCscTokenHelper(input, helper, defaultMessage));
+        input.addEventListener('blur', () => updateCscTokenHelper(input, helper, defaultMessage));
+    };
+
+    registerCscTokenInputEvents(
+        cscTokenProducaoInput,
+        cscTokenProducaoHelper,
+        CSC_TOKEN_DEFAULT_MESSAGES.producao,
+        cscTokenProducaoClearBtn
+    );
+    registerCscTokenInputEvents(
+        cscTokenHomologacaoInput,
+        cscTokenHomologacaoHelper,
+        CSC_TOKEN_DEFAULT_MESSAGES.homologacao,
+        cscTokenHomologacaoClearBtn
+    );
+
+    cscTokenProducaoClearBtn?.addEventListener('click', (event) => {
+        event.preventDefault();
+        toggleCscTokenCleared(
+            cscTokenProducaoInput,
+            cscTokenProducaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.producao,
+            cscTokenProducaoClearBtn
+        );
+    });
+
+    cscTokenHomologacaoClearBtn?.addEventListener('click', (event) => {
+        event.preventDefault();
+        toggleCscTokenCleared(
+            cscTokenHomologacaoInput,
+            cscTokenHomologacaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.homologacao,
+            cscTokenHomologacaoClearBtn
+        );
+    });
 
     const buildEnderecoCompleto = () => {
         const logradouro = (logradouroInput?.value || '').trim();
@@ -506,6 +625,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (certificadoSenhaInput) certificadoSenhaInput.value = '';
         if (certificadoValidadeInput) certificadoValidadeInput.value = '';
         if (certificadoAtualText) certificadoAtualText.textContent = 'Nenhum certificado armazenado.';
+        if (cscIdProducaoInput) cscIdProducaoInput.value = '';
+        if (cscIdHomologacaoInput) cscIdHomologacaoInput.value = '';
+        resetCscTokenInput(
+            cscTokenProducaoInput,
+            cscTokenProducaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.producao,
+            cscTokenProducaoClearBtn
+        );
+        resetCscTokenInput(
+            cscTokenHomologacaoInput,
+            cscTokenHomologacaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.homologacao,
+            cscTokenHomologacaoClearBtn
+        );
         updateCertificadoStatus('', 'muted');
         modal.classList.remove('hidden');
 
@@ -534,6 +667,34 @@ document.addEventListener('DOMContentLoaded', () => {
             razaoSocialInput.value = store.razaoSocial || '';
             nomeFantasiaInput.value = store.nomeFantasia || store.nome || '';
             cnpjInput.value = store.cnpj || '';
+            if (cscIdProducaoInput) cscIdProducaoInput.value = store.cscIdProducao || '';
+            if (cscIdHomologacaoInput) cscIdHomologacaoInput.value = store.cscIdHomologacao || '';
+            if (cscTokenProducaoInput) {
+                cscTokenProducaoInput.value = '';
+                setCscTokenState(cscTokenProducaoInput, {
+                    stored: Boolean(store.cscTokenProducaoArmazenado),
+                    cleared: false
+                });
+                updateCscTokenHelper(
+                    cscTokenProducaoInput,
+                    cscTokenProducaoHelper,
+                    CSC_TOKEN_DEFAULT_MESSAGES.producao
+                );
+                updateCscTokenClearButton(cscTokenProducaoClearBtn, false);
+            }
+            if (cscTokenHomologacaoInput) {
+                cscTokenHomologacaoInput.value = '';
+                setCscTokenState(cscTokenHomologacaoInput, {
+                    stored: Boolean(store.cscTokenHomologacaoArmazenado),
+                    cleared: false
+                });
+                updateCscTokenHelper(
+                    cscTokenHomologacaoInput,
+                    cscTokenHomologacaoHelper,
+                    CSC_TOKEN_DEFAULT_MESSAGES.homologacao
+                );
+                updateCscTokenClearButton(cscTokenHomologacaoClearBtn, false);
+            }
             if (cnaeInput) {
                 const cnaePrincipalValue = store.cnaePrincipal || store.cnae || '';
                 cnaeInput.value = formatSingleCnaeValue(cnaePrincipalValue);
@@ -697,6 +858,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (certificadoSenhaInput) certificadoSenhaInput.value = '';
         if (certificadoValidadeInput) certificadoValidadeInput.value = '';
         if (certificadoAtualText) certificadoAtualText.textContent = 'Nenhum certificado armazenado.';
+        if (cscIdProducaoInput) cscIdProducaoInput.value = '';
+        if (cscIdHomologacaoInput) cscIdHomologacaoInput.value = '';
+        resetCscTokenInput(
+            cscTokenProducaoInput,
+            cscTokenProducaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.producao,
+            cscTokenProducaoClearBtn
+        );
+        resetCscTokenInput(
+            cscTokenHomologacaoInput,
+            cscTokenHomologacaoHelper,
+            CSC_TOKEN_DEFAULT_MESSAGES.homologacao,
+            cscTokenHomologacaoClearBtn
+        );
         updateCertificadoStatus('', 'muted');
         if (locationMarker) {
             locationMarker.remove();
@@ -872,6 +1047,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const cnaesSecundarios = formattedCnaeSecundario
             ? formattedCnaeSecundario.split(/,\s*/).map((value) => value.trim()).filter((value) => value.length > 0)
             : [];
+        const cscIdProducaoValue = (cscIdProducaoInput?.value || '').trim();
+        const cscIdHomologacaoValue = (cscIdHomologacaoInput?.value || '').trim();
+        const cscTokenProducaoValue = (cscTokenProducaoInput?.value || '').trim();
+        const cscTokenHomologacaoValue = (cscTokenHomologacaoInput?.value || '').trim();
 
         const storeData = {
             nome: nomeFantasiaInput.value,
@@ -917,9 +1096,27 @@ document.addEventListener('DOMContentLoaded', () => {
             contadorFax: contadorFaxInput?.value || '',
             contadorCelular: contadorCelularInput?.value || '',
             contadorEmail: contadorEmailInput?.value || '',
-            certificadoValidade: certificadoValidadeInput.value
+            certificadoValidade: certificadoValidadeInput.value,
+            cscIdProducao: cscIdProducaoValue,
+            cscIdHomologacao: cscIdHomologacaoValue
         };
-        
+
+        if (cscTokenProducaoInput) {
+            if (cscTokenProducaoValue) {
+                storeData.cscTokenProducao = cscTokenProducaoValue;
+            } else if (cscTokenProducaoInput.dataset.cleared === 'true') {
+                storeData.cscTokenProducao = '';
+            }
+        }
+
+        if (cscTokenHomologacaoInput) {
+            if (cscTokenHomologacaoValue) {
+                storeData.cscTokenHomologacao = cscTokenHomologacaoValue;
+            } else if (cscTokenHomologacaoInput.dataset.cleared === 'true') {
+                storeData.cscTokenHomologacao = '';
+            }
+        }
+
         diasDaSemana.forEach(({ key }) => {
             const dayRow = horarioContainer.querySelector(`[data-day="${key}"]`);
             storeData.horario[key] = {

@@ -60,6 +60,12 @@ const storeSchema = new mongoose.Schema({
     certificadoSenhaCriptografada: { type: String, select: false },
     certificadoArquivoCriptografado: { type: String, select: false },
     certificadoFingerprint: { type: String, trim: true },
+    cscIdProducao: { type: String, trim: true },
+    cscTokenProducaoCriptografado: { type: String, select: false },
+    cscTokenProducaoArmazenado: { type: Boolean, default: false },
+    cscIdHomologacao: { type: String, trim: true },
+    cscTokenHomologacaoCriptografado: { type: String, select: false },
+    cscTokenHomologacaoArmazenado: { type: Boolean, default: false },
     horario: {
         domingo: { type: horarioDiaSchema, default: () => ({}) },
         segunda: { type: horarioDiaSchema, default: () => ({}) },

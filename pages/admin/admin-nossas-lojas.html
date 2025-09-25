@@ -312,7 +312,7 @@
                             </div>
                         </div>
 
-                        <div class="tab-panel hidden space-y-2" data-tab-panel="certificado">
+                        <div class="tab-panel hidden space-y-3" data-tab-panel="certificado">
                             <div class="grid grid-cols-12 gap-2">
                                 <div class="col-span-12 md:col-span-6">
                                     <label for="store-certificado-arquivo" class="block font-medium mb-0.5">Arquivo do Certificado</label>
@@ -327,6 +327,34 @@
                                 <div class="col-span-12 md:col-span-3">
                                     <label for="store-certificado-validade" class="block font-medium mb-0.5">Validade</label>
                                     <input type="date" id="store-certificado-validade" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-12 md:col-span-6 space-y-1.5">
+                                    <label for="store-csc-id-producao" class="block font-medium mb-0.5">CSC ID (Produção)</label>
+                                    <input type="text" id="store-csc-id-producao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Informe o ID do CSC de produção" autocomplete="off" />
+                                </div>
+                                <div class="col-span-12 md:col-span-6 space-y-1.5">
+                                    <label for="store-csc-token-producao" class="block font-medium mb-0.5">CSC Token (Produção)</label>
+                                    <div class="flex gap-2">
+                                        <input type="password" id="store-csc-token-producao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Digite o token de produção" autocomplete="new-password" />
+                                        <button type="button" id="store-csc-token-producao-clear" class="px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50">Remover</button>
+                                    </div>
+                                    <p id="store-csc-token-producao-helper" class="helper-text text-gray-500 text-xs">Informe o token do CSC de produção fornecido pela SEFAZ.</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-12 md:col-span-6 space-y-1.5">
+                                    <label for="store-csc-id-homologacao" class="block font-medium mb-0.5">CSC ID (Homologação)</label>
+                                    <input type="text" id="store-csc-id-homologacao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Informe o ID do CSC de homologação" autocomplete="off" />
+                                </div>
+                                <div class="col-span-12 md:col-span-6 space-y-1.5">
+                                    <label for="store-csc-token-homologacao" class="block font-medium mb-0.5">CSC Token (Homologação)</label>
+                                    <div class="flex gap-2">
+                                        <input type="password" id="store-csc-token-homologacao" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Digite o token de homologação" autocomplete="new-password" />
+                                        <button type="button" id="store-csc-token-homologacao-clear" class="px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50">Remover</button>
+                                    </div>
+                                    <p id="store-csc-token-homologacao-helper" class="helper-text text-gray-500 text-xs">Informe o token do CSC de homologação fornecido pela SEFAZ.</p>
                                 </div>
                             </div>
                             <p id="store-certificado-status" class="helper-text text-gray-500"></p>

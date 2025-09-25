@@ -415,6 +415,12 @@ const sanitizeStorePayload = (body = {}) => {
     const contadorCelular = trimString(body.contadorCelular || body.contador?.celular);
     const contadorEmail = trimString(body.contadorEmail || body.contador?.email);
     const certificadoValidade = trimString(body.certificadoValidade || body.certificado?.validade);
+    const cscIdProducao = trimString(body.cscIdProducao);
+    const cscIdHomologacao = trimString(body.cscIdHomologacao);
+    const cscTokenProducao = trimString(body.cscTokenProducao);
+    const cscTokenHomologacao = trimString(body.cscTokenHomologacao);
+    const hasCscTokenProducao = Object.prototype.hasOwnProperty.call(body, 'cscTokenProducao');
+    const hasCscTokenHomologacao = Object.prototype.hasOwnProperty.call(body, 'cscTokenHomologacao');
 
     const servicos = Array.isArray(body.servicos)
         ? Array.from(new Set(
@@ -469,9 +475,31 @@ const sanitizeStorePayload = (body = {}) => {
         contadorCelular,
         contadorEmail,
         certificadoValidade,
+        cscIdProducao,
+        cscIdHomologacao,
         horario,
         servicos
     };
+
+    if (hasCscTokenProducao) {
+        if (cscTokenProducao) {
+            payload.cscTokenProducaoCriptografado = encryptText(cscTokenProducao);
+            payload.cscTokenProducaoArmazenado = true;
+        } else {
+            payload.cscTokenProducaoCriptografado = null;
+            payload.cscTokenProducaoArmazenado = false;
+        }
+    }
+
+    if (hasCscTokenHomologacao) {
+        if (cscTokenHomologacao) {
+            payload.cscTokenHomologacaoCriptografado = encryptText(cscTokenHomologacao);
+            payload.cscTokenHomologacaoArmazenado = true;
+        } else {
+            payload.cscTokenHomologacaoCriptografado = null;
+            payload.cscTokenHomologacaoArmazenado = false;
+        }
+    }
 
     const imagem = trimString(body.imagem);
     if (imagem) payload.imagem = imagem;
