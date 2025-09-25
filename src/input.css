@@ -979,27 +979,42 @@
     max-width: min(1400px, 98vw);
   }
 
+  .modal-shell {
+    height: clamp(520px, 78vh, 620px);
+  }
+
+  @media (max-width: 768px) {
+    .modal-shell {
+      height: calc(100vh - 2rem);
+    }
+  }
+
   .modal-body-fixed {
-    min-height: 60vh;
+    flex: 1;
+    min-height: 0;
   }
 
   .form-compact {
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
   }
 
   .form-compact label {
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     color: var(--color-gray-600);
   }
 
   .form-compact input,
   .form-compact select,
   .form-compact textarea {
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
   }
 
   .form-compact .tab-button {
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
+  }
+
+  .form-compact .helper-text {
+    font-size: 0.6875rem;
   }
 
   @media (width >= 48rem) {
