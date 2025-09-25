@@ -4723,10 +4723,10 @@
 }
 @layer utilities {
   .max-w-modal-wide {
-    max-width: min(1400px, 98vw);
+    max-width: min(1600px, 98vw);
   }
   .modal-shell {
-    height: clamp(520px, 78vh, 620px);
+    height: clamp(640px, 85vh, 820px);
   }
   @media (max-width: 768px) {
     .modal-shell {
