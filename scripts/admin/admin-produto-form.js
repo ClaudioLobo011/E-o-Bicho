@@ -19,6 +19,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const supplierCalcValueInput = document.getElementById('supplier-calc-value');
     const addSupplierBtn = document.getElementById('add-supplier-btn');
     const supplierListContainer = document.getElementById('supplier-list');
+    const depositTableBody = document.getElementById('deposit-stock-tbody');
+    const depositEmptyState = document.getElementById('deposit-empty-state');
+    const depositTableWrapper = document.getElementById('deposit-table-wrapper');
+    const depositTotalDisplay = document.getElementById('deposit-total-display');
 
     // --- LÓGICA DAS ABAS (Geral / Especificações) ---
     const productTabLinks = document.querySelectorAll('#product-tabs .tab-link');
@@ -64,6 +68,121 @@ document.addEventListener('DOMContentLoaded', () => {
     let allHierarchicalCategories = []; // Guarda a árvore de categorias
     let allFlatCategories = []; // Lista plana de categorias para consultas rápidas
     let supplierEntries = [];
+    let allDeposits = [];
+    const depositStockMap = new Map();
+
+    const ensureDepositEntry = (depositId) => {
+        if (!depositStockMap.has(depositId)) {
+            depositStockMap.set(depositId, { quantidade: null, unidade: '' });
+        }
+    };
+
+    const updateDepositTotalDisplay = () => {
+        if (!depositTotalDisplay) return;
+        let total = 0;
+        depositStockMap.forEach((entry) => {
+            const value = Number(entry?.quantidade);
+            if (Number.isFinite(value)) {
+                total += value;
+            }
+        });
+        depositTotalDisplay.textContent = total.toLocaleString('pt-BR', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 3,
+        });
+    };
+
+    const renderDepositStockRows = () => {
+        if (!depositTableBody) return;
+
+        if (!Array.isArray(allDeposits) || allDeposits.length === 0) {
+            depositTableBody.innerHTML = '';
+            depositEmptyState?.classList.remove('hidden');
+            depositTableWrapper?.classList.add('hidden');
+            updateDepositTotalDisplay();
+            return;
+        }
+
+        depositEmptyState?.classList.add('hidden');
+        depositTableWrapper?.classList.remove('hidden');
+        depositTableBody.innerHTML = '';
+
+        allDeposits.forEach((deposit) => {
+            const depositId = deposit._id;
+            ensureDepositEntry(depositId);
+            const entry = depositStockMap.get(depositId) || { quantidade: null, unidade: '' };
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="px-4 py-3 text-gray-700">
+                    <div class="font-medium text-gray-800">${deposit.nome}</div>
+                    <div class="text-xs text-gray-500">${deposit.codigo}${deposit?.empresa?.nome ? ` • ${deposit.empresa.nome}` : ''}</div>
+                </td>
+                <td class="px-4 py-3">
+                    <input type="number" step="0.001" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" data-deposit-id="${depositId}" data-deposit-field="quantidade">
+                </td>
+                <td class="px-4 py-3">
+                    <input type="text" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" data-deposit-id="${depositId}" data-deposit-field="unidade" placeholder="Ex.: UN, CX">
+                </td>
+            `;
+
+            const qtyInput = tr.querySelector('input[data-deposit-field="quantidade"]');
+            const unitInput = tr.querySelector('input[data-deposit-field="unidade"]');
+
+            if (qtyInput) {
+                const quantityValue = entry?.quantidade;
+                qtyInput.value = quantityValue === null || quantityValue === undefined ? '' : quantityValue;
+                qtyInput.addEventListener('input', (event) => {
+                    const rawValue = event.target.value;
+                    const parsed = rawValue === '' ? null : Number(rawValue);
+                    const current = depositStockMap.get(depositId) || { quantidade: null, unidade: '' };
+                    depositStockMap.set(depositId, {
+                        quantidade: rawValue === '' ? null : (Number.isFinite(parsed) ? parsed : current.quantidade),
+                        unidade: current.unidade || '',
+                    });
+                    updateDepositTotalDisplay();
+                });
+            }
+
+            if (unitInput) {
+                unitInput.value = entry?.unidade || '';
+                unitInput.addEventListener('input', (event) => {
+                    const current = depositStockMap.get(depositId) || { quantidade: null, unidade: '' };
+                    depositStockMap.set(depositId, {
+                        quantidade: current.quantidade,
+                        unidade: event.target.value,
+                    });
+                });
+            }
+
+            depositTableBody.appendChild(tr);
+        });
+
+        updateDepositTotalDisplay();
+    };
+
+    const applyDepositsFromProduct = (product) => {
+        depositStockMap.clear();
+        if (Array.isArray(allDeposits)) {
+            allDeposits.forEach((deposit) => {
+                depositStockMap.set(deposit._id, { quantidade: null, unidade: '' });
+            });
+        }
+
+        if (Array.isArray(product?.estoques)) {
+            product.estoques.forEach((estoque) => {
+                const depositId = estoque?.deposito?._id || estoque?.deposito;
+                if (!depositId) return;
+                const quantidadeNumber = Number(estoque?.quantidade);
+                depositStockMap.set(depositId, {
+                    quantidade: Number.isFinite(quantidadeNumber) ? quantidadeNumber : null,
+                    unidade: estoque?.unidade || '',
+                });
+            });
+        }
+
+        renderDepositStockRows();
+    };
 
     const resetSupplierForm = () => {
         if (supplierNameInput) supplierNameInput.value = '';
@@ -280,6 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
             : [];
         renderSupplierEntries();
         resetSupplierForm();
+        applyDepositsFromProduct(product);
         if (form.querySelector('#barcode-additional')) {
             form.querySelector('#barcode-additional').value = Array.isArray(product.codigosComplementares) ? product.codigosComplementares.join('\n') : '';
         }
@@ -287,7 +407,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const vendaNumber = Number(product.venda);
         form.querySelector('#custo').value = Number.isFinite(custoNumber) ? custoNumber.toFixed(2) : '';
         form.querySelector('#venda').value = Number.isFinite(vendaNumber) ? vendaNumber.toFixed(2) : '';
-        form.querySelector('#stock').value = product.stock || 0;
         if (markupInput) {
             const cost = parseFloat(costInput?.value || '0');
             const sale = parseFloat(saleInput?.value || '0');
@@ -355,20 +474,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const initializePage = async () => {
         try {
-            // Usa Promise.all para buscar dados do produto e TODAS as categorias em paralelo
-            const [productRes, hierarchicalRes, flatRes] = await Promise.all([
+            // Usa Promise.all para buscar dados do produto, depósitos e categorias em paralelo
+            const [productRes, hierarchicalRes, flatRes, depositsRes] = await Promise.all([
                 fetch(`${API_CONFIG.BASE_URL}/products/${productId}`),
                 fetch(`${API_CONFIG.BASE_URL}/categories/hierarchical`),
-                fetch(`${API_CONFIG.BASE_URL}/categories`)
+                fetch(`${API_CONFIG.BASE_URL}/categories`),
+                fetch(`${API_CONFIG.BASE_URL}/deposits`)
             ]);
 
-            if (!productRes.ok || !hierarchicalRes.ok || !flatRes.ok) {
+            if (!productRes.ok || !hierarchicalRes.ok || !flatRes.ok || !depositsRes.ok) {
                 throw new Error('Falha ao carregar os dados iniciais da página.');
             }
 
             const product = await productRes.json();
             allHierarchicalCategories = await hierarchicalRes.json();
             allFlatCategories = await flatRes.json();
+            const depositsPayload = await depositsRes.json();
+            allDeposits = Array.isArray(depositsPayload?.deposits)
+                ? depositsPayload.deposits
+                : Array.isArray(depositsPayload)
+                    ? depositsPayload
+                    : [];
 
             populateForm(product);
             populateCategoryTree(allHierarchicalCategories, productCategories);
@@ -449,10 +575,35 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>A Salvar...`;
         
         const formData = new FormData(form);
+        const additionalBarcodesRaw = (formData.get('barcode-additional') || '')
+            .split('\n')
+            .map((code) => code.trim())
+            .filter(Boolean);
+
+        const depositPayload = [];
+        depositStockMap.forEach((entry, depositId) => {
+            if (!depositId) return;
+            const unidade = (entry?.unidade || '').trim();
+            const quantidadeValue = entry?.quantidade;
+            const hasQuantity = quantidadeValue !== null && quantidadeValue !== undefined && quantidadeValue !== '';
+            if (!hasQuantity && !unidade) return;
+            const parsedQuantity = Number(quantidadeValue);
+            depositPayload.push({
+                deposito: depositId,
+                quantidade: Number.isFinite(parsedQuantity) ? parsedQuantity : 0,
+                unidade,
+            });
+        });
+
+        const totalStock = depositPayload.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
+
         const updateData = {
             descricao: formData.get('descricao'),
             marca: formData.get('marca'),
-            stock: formData.get('stock'),
+            unidade: formData.get('unidade'),
+            referencia: formData.get('referencia'),
+            custo: formData.get('custo'),
+            venda: formData.get('venda'),
             categorias: productCategories,
             fornecedores: supplierEntries.map((item) => ({
                 fornecedor: item.fornecedor,
@@ -466,7 +617,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 pet: Array.from(form.querySelectorAll('input[name="spec-pet"]:checked')).map(i => i.value),
                 porteRaca: Array.from(form.querySelectorAll('input[name="spec-porte"]:checked')).map(i => i.value),
                 apresentacao: (document.getElementById('spec-apresentacao')?.value || '').trim()
-            }
+            },
+            codigosComplementares: additionalBarcodesRaw,
+            estoques: depositPayload,
+            stock: totalStock,
         };
 
         const dataCadastroValue = formData.get('data-cadastro');
