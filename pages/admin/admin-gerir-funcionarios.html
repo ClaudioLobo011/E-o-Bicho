@@ -434,8 +434,44 @@
                 <p class="text-xs text-gray-500">Nenhum curso cadastrado.</p>
               </div>
             </div>
-            <div class="tab-panel hidden" data-tab-panel="horarios">
-              <div class="p-4 rounded-lg bg-emerald-50 text-emerald-700 text-xs">Em desenvolvimento</div>
+            <div class="tab-panel hidden space-y-4" data-tab-panel="horarios">
+              <div class="grid grid-cols-12 gap-3">
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-tipo-jornada" class="block font-medium mb-1">Tipo de Jornada</label>
+                  <select id="edit-tipo-jornada" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Selecione</option>
+                    <option value="jornada">Jornada</option>
+                    <option value="escala">Escala</option>
+                  </select>
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                  <label for="edit-modalidade-jornada" class="block font-medium mb-1">Modalidade</label>
+                  <select id="edit-modalidade-jornada" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Selecione</option>
+                  </select>
+                </div>
+                <div class="col-span-6 md:col-span-2">
+                  <label for="edit-horario-inicio" class="block font-medium mb-1">Hora de Início</label>
+                  <input id="edit-horario-inicio" type="time" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div class="col-span-6 md:col-span-2">
+                  <label for="edit-horario-fim" class="block font-medium mb-1">Hora de Término</label>
+                  <input id="edit-horario-fim" type="time" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div class="col-span-6 md:col-span-2">
+                  <label for="edit-almoco-inicio" class="block font-medium mb-1">Almoço Início</label>
+                  <input id="edit-almoco-inicio" type="time" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div class="col-span-6 md:col-span-2">
+                  <label for="edit-almoco-fim" class="block font-medium mb-1">Almoço Fim</label>
+                  <input id="edit-almoco-fim" type="time" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+              </div>
+              <div class="flex items-center justify-end gap-2">
+                <button type="button" id="btn-cancelar-horario" class="px-3 py-2 rounded-lg border text-sm font-semibold text-gray-600 hidden">Cancelar edição</button>
+                <button type="button" id="btn-add-horario" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Adicionar horário</button>
+              </div>
+              <div id="grade-horarios" class="overflow-x-auto"></div>
             </div>
           </div>
         </div>

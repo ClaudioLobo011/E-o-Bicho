@@ -10,6 +10,11 @@ const Store = require('../models/Store');
 // ----- helpers / policies -----
 const roleRank = { cliente: 0, funcionario: 1, admin: 2, admin_master: 3 };
 const CURSO_SITUACOES = ['concluido', 'cursando'];
+const HORARIO_DIAS = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
+const HORARIO_TIPOS = ['jornada', 'escala'];
+const HORARIO_MODALIDADES_JORNADA = ['diurna', 'noturna', 'integral', 'parcial', 'extraordinaria', 'intermitente', 'estagio', 'remota', 'reduzida'];
+const HORARIO_MODALIDADES_ESCALA = ['6x1', '5x1', '12x36'];
+const HORARIO_MODALIDADES = [...HORARIO_MODALIDADES_JORNADA, ...HORARIO_MODALIDADES_ESCALA];
 
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -82,6 +87,114 @@ function sanitizeCursosPayload(raw) {
     .filter(Boolean);
 }
 
+function normalizeDiaValue(value) {
+  if (!value) return null;
+  const normalized = String(value)
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+  if (normalized.startsWith('seg')) return 'segunda';
+  if (normalized.startsWith('ter')) return 'terca';
+  if (normalized.startsWith('qua')) return 'quarta';
+  if (normalized.startsWith('qui')) return 'quinta';
+  if (normalized.startsWith('sex')) return 'sexta';
+  if (normalized.startsWith('sab')) return 'sabado';
+  if (normalized.startsWith('dom')) return 'domingo';
+  return null;
+}
+
+function normalizeHorarioTipo(value) {
+  if (!value) return null;
+  const normalized = String(value).toLowerCase().trim();
+  return HORARIO_TIPOS.includes(normalized) ? normalized : null;
+}
+
+function normalizeHorarioModalidade(tipo, value) {
+  if (!value) return null;
+  const normalized = String(value)
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+  const compact = normalized.replace(/[^a-z0-9]/g, '');
+  if (tipo === 'escala') {
+    if (compact.includes('6') && compact.includes('1')) return '6x1';
+    if (compact.includes('5') && compact.includes('1')) return '5x1';
+    if (compact.includes('12') && (compact.includes('36') || (compact.includes('3') && compact.includes('6')))) return '12x36';
+    if (HORARIO_MODALIDADES_ESCALA.includes(normalized)) return normalized;
+    if (HORARIO_MODALIDADES_ESCALA.includes(compact)) return compact;
+    return null;
+  }
+  if (tipo === 'jornada') {
+    if (normalized.includes('diurn')) return 'diurna';
+    if (normalized.includes('noturn')) return 'noturna';
+    if (normalized.includes('integral')) return 'integral';
+    if (normalized.includes('parcial')) return 'parcial';
+    if (normalized.includes('extra')) return 'extraordinaria';
+    if (normalized.includes('intermit')) return 'intermitente';
+    if (normalized.includes('estag')) return 'estagio';
+    if (normalized.includes('remot')) return 'remota';
+    if (normalized.includes('reduz')) return 'reduzida';
+    if (HORARIO_MODALIDADES_JORNADA.includes(normalized)) return normalized;
+    return null;
+  }
+  if (HORARIO_MODALIDADES.includes(normalized)) return normalized;
+  return null;
+}
+
+function sanitizeHorarioTime(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (/^\d{2}:\d{2}$/.test(raw)) return raw;
+  if (/^\d{1,2}:\d{2}$/.test(raw)) {
+    const [h, m] = raw.split(':');
+    const hour = Math.min(Math.max(parseInt(h, 10), 0), 23).toString().padStart(2, '0');
+    const minute = Math.min(Math.max(parseInt(m, 10), 0), 59).toString().padStart(2, '0');
+    return `${hour}:${minute}`;
+  }
+  if (/^\d{3,4}$/.test(raw)) {
+    const padded = raw.padStart(4, '0');
+    const hour = Math.min(Math.max(parseInt(padded.slice(0, 2), 10), 0), 23).toString().padStart(2, '0');
+    const minute = Math.min(Math.max(parseInt(padded.slice(2), 10), 0), 59).toString().padStart(2, '0');
+    return `${hour}:${minute}`;
+  }
+  const attempt = new Date(`1970-01-01T${raw}`);
+  if (!Number.isNaN(attempt.getTime())) {
+    const hour = attempt.getHours().toString().padStart(2, '0');
+    const minute = attempt.getMinutes().toString().padStart(2, '0');
+    return `${hour}:${minute}`;
+  }
+  return null;
+}
+
+function sanitizeHorariosPayload(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const dia = normalizeDiaValue(item.dia || item.diaSemana || item.day);
+      if (!dia || !HORARIO_DIAS.includes(dia)) return null;
+      const tipo = normalizeHorarioTipo(item.tipoJornada || item.tipo || item.categoria);
+      const modalidade = tipo ? normalizeHorarioModalidade(tipo, item.modalidade || item.modalidadeJornada || item.jornada || item.escala) : null;
+      const horaInicio = sanitizeHorarioTime(item.horaInicio || item.inicio || item.horarioInicio);
+      const horaFim = sanitizeHorarioTime(item.horaFim || item.termino || item.horarioFim);
+      const almocoInicio = sanitizeHorarioTime(item.almocoInicio || item.intervaloInicio || item.almoco);
+      const almocoFim = sanitizeHorarioTime(item.almocoFim || item.intervaloFim);
+      if (!(tipo || modalidade || horaInicio || horaFim || almocoInicio || almocoFim)) return null;
+      const horario = { dia };
+      if (tipo) horario.tipoJornada = tipo;
+      if (modalidade && HORARIO_MODALIDADES.includes(modalidade)) horario.modalidade = modalidade;
+      if (horaInicio) horario.horaInicio = horaInicio;
+      if (horaFim) horario.horaFim = horaFim;
+      if (almocoInicio) horario.almocoInicio = almocoInicio;
+      if (almocoFim) horario.almocoFim = almocoFim;
+      return horario;
+    })
+    .filter(Boolean);
+}
+
 function normName(u) {
   return (
     (u.nomeCompleto && String(u.nomeCompleto).trim()) ||
@@ -149,6 +262,17 @@ function userToDTO(u) {
           observacao: curso?.observacao || '',
         }))
       : [],
+    horarios: Array.isArray(u.horarios)
+      ? u.horarios.map((horario) => ({
+          dia: horario?.dia || '',
+          tipoJornada: horario?.tipoJornada || '',
+          modalidade: horario?.modalidade || '',
+          horaInicio: horario?.horaInicio || '',
+          horaFim: horario?.horaFim || '',
+          almocoInicio: horario?.almocoInicio || '',
+          almocoFim: horario?.almocoFim || '',
+        }))
+      : [],
   };
 }
 
@@ -178,7 +302,7 @@ router.get('/', authMiddleware, requireAdmin, async (req, res) => {
     const users = await User
       .find(
         { role: { $in: ['admin_master', 'admin', 'funcionario'] } },
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
       )
       .lean();
 
@@ -228,7 +352,7 @@ router.get('/buscar-usuarios', authMiddleware, requireAdmin, async (req, res) =>
     const users = await User
       .find(
         filter,
-        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos'
+        'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos genero situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
       )
       .sort({ createdAt: -1 })
       .limit(lim)
@@ -263,7 +387,7 @@ router.post('/transformar', authMiddleware, requireAdmin, async (req, res) => {
 
     const ret = await User.findById(
       userId,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
     ).lean();
     res.json({ message: 'Usuário transformado com sucesso.', funcionario: userToDTO(ret) });
   } catch (err) {
@@ -279,7 +403,7 @@ router.get('/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const u = await User.findById(
       req.params.id,
-      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos'
+      'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios'
     ).lean();
     if (!u || !['admin_master', 'admin', 'funcionario'].includes(u.role)) {
       return res.status(404).json({ message: 'Funcionário não encontrado.' });
@@ -465,6 +589,9 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
 
     if (Object.prototype.hasOwnProperty.call(req.body, 'cursos')) {
       doc.cursos = sanitizeCursosPayload(req.body.cursos);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'horarios')) {
+      doc.horarios = sanitizeHorariosPayload(req.body.horarios);
     }
 
     const novo = await User.create(doc);
@@ -657,11 +784,14 @@ router.put('/:id', authMiddleware, requireAdmin, async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body, 'cursos')) {
       update.cursos = sanitizeCursosPayload(req.body.cursos);
     }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'horarios')) {
+      update.horarios = sanitizeHorariosPayload(req.body.horarios);
+    }
 
     const updated = await User.findByIdAndUpdate(
       req.params.id,
       update,
-      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos' }
+      { new: true, runValidators: true, fields: 'nomeCompleto nomeContato razaoSocial email role tipoConta celular telefone cpf cnpj grupos empresas genero rgEmissao rgNumero rgOrgaoExpedidor situacao criadoEm dataCadastro periodoExperienciaInicio periodoExperienciaFim dataAdmissao diasProrrogacaoExperiencia exameMedico dataDemissao cargoCarteira habilitacaoNumero habilitacaoCategoria habilitacaoOrgaoEmissor habilitacaoValidade nomeMae nascimentoMae nomeConjuge formaPagamento tipoContrato salarioContratual horasSemanais horasMensais passagensPorDia valorPassagem banco tipoContaBancaria agencia conta tipoChavePix chavePix cursos horarios' }
     ).lean();
 
     res.json({ message: 'Funcionário atualizado com sucesso.', funcionario: userToDTO(updated) });

@@ -69,6 +69,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const cursoObservacaoInput = document.getElementById('edit-curso-observacao');
   const btnAddCurso = document.getElementById('btn-add-curso');
   const listaCursos = document.getElementById('lista-cursos');
+  const tipoJornadaSelect = document.getElementById('edit-tipo-jornada');
+  const modalidadeJornadaSelect = document.getElementById('edit-modalidade-jornada');
+  const horarioInicioInput = document.getElementById('edit-horario-inicio');
+  const horarioFimInput = document.getElementById('edit-horario-fim');
+  const almocoInicioInput = document.getElementById('edit-almoco-inicio');
+  const almocoFimInput = document.getElementById('edit-almoco-fim');
+  const btnAddHorario = document.getElementById('btn-add-horario');
+  const btnCancelarHorario = document.getElementById('btn-cancelar-horario');
+  const gradeHorariosContainer = document.getElementById('grade-horarios');
   const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
   const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
 
@@ -105,6 +114,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let enderecoEditandoIndex = null;
   let cursos = [];
   let cursoEditandoIndex = null;
+  let horariosSemana = [];
+  let horarioEditandoDia = null;
   let lastCepConsultado = '';
   let lastEnderecoViaCep = null;
 
@@ -248,6 +259,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const value = allowFloat ? Number.parseFloat(normalized) : Number.parseInt(normalized, 10);
     return Number.isFinite(value) ? value : null;
   }
+
+  const DIAS_SEMANA_ORDER = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
+  const DIA_LABEL = {
+    segunda: 'Segunda',
+    terca: 'Terça',
+    quarta: 'Quarta',
+    quinta: 'Quinta',
+    sexta: 'Sexta',
+    sabado: 'Sábado',
+    domingo: 'Domingo',
+  };
+
+  const JORNADA_MODALIDADES = [
+    { value: 'diurna', label: 'Diurna' },
+    { value: 'noturna', label: 'Noturna' },
+    { value: 'integral', label: 'Integral' },
+    { value: 'parcial', label: 'Parcial' },
+    { value: 'extraordinaria', label: 'Extraordinária' },
+    { value: 'intermitente', label: 'Intermitente' },
+    { value: 'estagio', label: 'Estágio' },
+    { value: 'remota', label: 'Remota' },
+    { value: 'reduzida', label: 'Reduzida' },
+  ];
+
+  const ESCALA_MODALIDADES = [
+    { value: '6x1', label: '6 por 1' },
+    { value: '5x1', label: '5 por 1' },
+    { value: '12x36', label: '12 por 36' },
+  ];
 
   function setEmpresaContratualValue(value, label = 'Empresa selecionada') {
     if (!empresaContratualSelect) return;
@@ -516,6 +556,280 @@ document.addEventListener('DOMContentLoaded', () => {
       .filter(Boolean);
   }
 
+  function normalizeDiaValue(value) {
+    if (!value) return null;
+    const normalized = String(value)
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+      .trim();
+    if (normalized.startsWith('seg')) return 'segunda';
+    if (normalized.startsWith('ter')) return 'terca';
+    if (normalized.startsWith('qua')) return 'quarta';
+    if (normalized.startsWith('qui')) return 'quinta';
+    if (normalized.startsWith('sex')) return 'sexta';
+    if (normalized.startsWith('sab')) return 'sabado';
+    if (normalized.startsWith('dom')) return 'domingo';
+    return null;
+  }
+
+  function normalizeModalidadeValue(tipo, value) {
+    if (!value) return '';
+    const normalized = String(value)
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+      .trim();
+    const compact = normalized.replace(/[^a-z0-9]/g, '');
+
+    if (tipo === 'escala') {
+      if (compact.includes('6') && compact.includes('1')) return '6x1';
+      if (compact.includes('5') && compact.includes('1')) return '5x1';
+      if (compact.includes('12') && (compact.includes('36') || compact.includes('3') && compact.includes('6'))) return '12x36';
+      const allowed = ESCALA_MODALIDADES.map((o) => o.value);
+      if (allowed.includes(value)) return value;
+      if (allowed.includes(normalized)) return normalized;
+      if (allowed.includes(compact)) return compact;
+      return '';
+    }
+
+    if (tipo === 'jornada') {
+      if (normalized.includes('diurn')) return 'diurna';
+      if (normalized.includes('noturn')) return 'noturna';
+      if (normalized.includes('integral')) return 'integral';
+      if (normalized.includes('parcial')) return 'parcial';
+      if (normalized.includes('extra')) return 'extraordinaria';
+      if (normalized.includes('intermit')) return 'intermitente';
+      if (normalized.includes('estag')) return 'estagio';
+      if (normalized.includes('remot')) return 'remota';
+      if (normalized.includes('reduz')) return 'reduzida';
+      const allowed = JORNADA_MODALIDADES.map((o) => o.value);
+      if (allowed.includes(value)) return value;
+      if (allowed.includes(normalized)) return normalized;
+      return '';
+    }
+
+    return '';
+  }
+
+  function sanitizeTimeValue(value) {
+    if (!value) return '';
+    const raw = String(value).trim();
+    if (!raw) return '';
+    if (/^\d{2}:\d{2}$/.test(raw)) return raw;
+    if (/^\d{1,2}:\d{2}$/.test(raw)) {
+      const [h, m] = raw.split(':');
+      const hour = String(Math.min(Number.parseInt(h, 10), 23)).padStart(2, '0');
+      const minute = String(Math.min(Number.parseInt(m, 10), 59)).padStart(2, '0');
+      return `${hour}:${minute}`;
+    }
+    if (/^\d{3,4}$/.test(raw)) {
+      const padded = raw.padStart(4, '0');
+      const hour = String(Math.min(Number.parseInt(padded.slice(0, 2), 10), 23)).padStart(2, '0');
+      const minute = String(Math.min(Number.parseInt(padded.slice(2), 10), 59)).padStart(2, '0');
+      return `${hour}:${minute}`;
+    }
+    const attempt = new Date(`1970-01-01T${raw}`);
+    if (!Number.isNaN(attempt.getTime())) {
+      const hour = String(attempt.getHours()).padStart(2, '0');
+      const minute = String(attempt.getMinutes()).padStart(2, '0');
+      return `${hour}:${minute}`;
+    }
+    return '';
+  }
+
+  function createHorarioDia(dia) {
+    return {
+      dia,
+      tipoJornada: '',
+      modalidade: '',
+      horaInicio: '',
+      horaFim: '',
+      almocoInicio: '',
+      almocoFim: '',
+    };
+  }
+
+  function createDefaultHorarios() {
+    return DIAS_SEMANA_ORDER.map((dia) => createHorarioDia(dia));
+  }
+
+  function normalizeHorario(item = {}) {
+    if (!item || typeof item !== 'object') return null;
+    const dia = normalizeDiaValue(item.dia || item.diaSemana || item.dia_semana || item.day || item.weekday);
+    if (!dia) return null;
+    const tipoRaw = (item.tipoJornada || item.tipo || item.categoria || '').toString().toLowerCase().trim();
+    const tipoJornada = ['jornada', 'escala'].includes(tipoRaw) ? tipoRaw : '';
+    const modalidadeRaw = item.modalidade || item.modalidadeJornada || item.jornada || item.escala || item.modelo || '';
+    const modalidade = tipoJornada ? normalizeModalidadeValue(tipoJornada, modalidadeRaw) : '';
+    return {
+      dia,
+      tipoJornada,
+      modalidade,
+      horaInicio: sanitizeTimeValue(item.horaInicio || item.horarioInicio || item.inicio || item.hora_inicio || item.hora || ''),
+      horaFim: sanitizeTimeValue(item.horaFim || item.horarioFim || item.termino || item.hora_fim || ''),
+      almocoInicio: sanitizeTimeValue(item.almocoInicio || item.intervaloInicio || item.almoco_inicio || item.almoco || ''),
+      almocoFim: sanitizeTimeValue(item.almocoFim || item.intervaloFim || item.almoco_fim || ''),
+    };
+  }
+
+  function mergeHorariosWithDefaults(list = []) {
+    const base = createDefaultHorarios();
+    if (!Array.isArray(list)) return base;
+    list.forEach((item) => {
+      const normalized = normalizeHorario(item);
+      if (!normalized || !normalized.dia) return;
+      const idx = base.findIndex((d) => d.dia === normalized.dia);
+      if (idx >= 0) {
+        base[idx] = { ...base[idx], ...normalized };
+      }
+    });
+    return base;
+  }
+
+  function updateModalidadeOptions(tipo, selectedValue = '') {
+    if (!modalidadeJornadaSelect) return;
+    modalidadeJornadaSelect.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Selecione';
+    modalidadeJornadaSelect.appendChild(placeholder);
+
+    const source = tipo === 'escala' ? ESCALA_MODALIDADES : tipo === 'jornada' ? JORNADA_MODALIDADES : [];
+    source.forEach((opt) => {
+      const option = document.createElement('option');
+      option.value = opt.value;
+      option.textContent = opt.label;
+      modalidadeJornadaSelect.appendChild(option);
+    });
+
+    if (selectedValue) {
+      const exists = source.some((opt) => opt.value === selectedValue);
+      modalidadeJornadaSelect.value = exists ? selectedValue : '';
+    } else {
+      modalidadeJornadaSelect.value = '';
+    }
+  }
+
+  function updateHorarioButtonLabel() {
+    if (!btnAddHorario) return;
+    if (horarioEditandoDia !== null && horarioEditandoDia >= 0 && horarioEditandoDia < DIAS_SEMANA_ORDER.length) {
+      const dia = DIAS_SEMANA_ORDER[horarioEditandoDia];
+      const label = DIA_LABEL[dia] || 'dia';
+      btnAddHorario.textContent = `Salvar ${label.toLowerCase()}`;
+      if (btnCancelarHorario) btnCancelarHorario.classList.remove('hidden');
+    } else {
+      btnAddHorario.textContent = 'Adicionar horário';
+      if (btnCancelarHorario) btnCancelarHorario.classList.add('hidden');
+    }
+  }
+
+  function clearHorarioForm(preserveTipo = false) {
+    if (!preserveTipo && tipoJornadaSelect) {
+      tipoJornadaSelect.value = '';
+    }
+    if (!preserveTipo) {
+      updateModalidadeOptions(tipoJornadaSelect ? tipoJornadaSelect.value : '', '');
+    }
+    if (!preserveTipo && modalidadeJornadaSelect) modalidadeJornadaSelect.value = '';
+    if (horarioInicioInput) horarioInicioInput.value = '';
+    if (horarioFimInput) horarioFimInput.value = '';
+    if (almocoInicioInput) almocoInicioInput.value = '';
+    if (almocoFimInput) almocoFimInput.value = '';
+    horarioEditandoDia = null;
+    updateHorarioButtonLabel();
+  }
+
+  function preencherHorarioForm(item = {}) {
+    if (tipoJornadaSelect) {
+      tipoJornadaSelect.value = item.tipoJornada || '';
+    }
+    updateModalidadeOptions(tipoJornadaSelect ? tipoJornadaSelect.value : '', item.modalidade || '');
+    if (modalidadeJornadaSelect) modalidadeJornadaSelect.value = item.modalidade || '';
+    if (horarioInicioInput) horarioInicioInput.value = item.horaInicio || '';
+    if (horarioFimInput) horarioFimInput.value = item.horaFim || '';
+    if (almocoInicioInput) almocoInicioInput.value = item.almocoInicio || '';
+    if (almocoFimInput) almocoFimInput.value = item.almocoFim || '';
+  }
+
+  function renderHorariosGrade() {
+    if (!gradeHorariosContainer) return;
+    if (!Array.isArray(horariosSemana) || horariosSemana.length === 0) {
+      gradeHorariosContainer.innerHTML = '<p class="text-xs text-gray-500">Nenhum horário cadastrado.</p>';
+      return;
+    }
+
+    const rows = horariosSemana.map((item, index) => {
+      const diaLabel = DIA_LABEL[item.dia] || item.dia;
+      const tipo = item.tipoJornada ? (item.tipoJornada === 'jornada' ? 'Jornada' : 'Escala') : '-';
+      const modalidadeSource = item.tipoJornada === 'escala' ? ESCALA_MODALIDADES : JORNADA_MODALIDADES;
+      const modalidadeLabel = (modalidadeSource.find((opt) => opt.value === item.modalidade) || {}).label || '-';
+      const horaInicio = item.horaInicio || '-';
+      const almocoInicio = item.almocoInicio || '-';
+      const almocoFim = item.almocoFim || '-';
+      const horaFim = item.horaFim || '-';
+      const hasDados = item.tipoJornada || item.modalidade || item.horaInicio || item.horaFim || item.almocoInicio || item.almocoFim;
+      const badge = hasDados ? '' : '<span class="text-[10px] text-gray-400 uppercase">Sem horário</span>';
+      return `
+        <tr class="border-b" data-horario-dia="${index}">
+          <td class="px-3 py-2 text-xs font-semibold text-gray-700">${diaLabel}${badge ? `<div>${badge}</div>` : ''}</td>
+          <td class="px-3 py-2 text-xs text-gray-600">${tipo}</td>
+          <td class="px-3 py-2 text-xs text-gray-600">${modalidadeLabel}</td>
+          <td class="px-3 py-2 text-xs text-gray-700">${horaInicio}</td>
+          <td class="px-3 py-2 text-xs text-gray-700">${almocoInicio}</td>
+          <td class="px-3 py-2 text-xs text-gray-700">${almocoFim}</td>
+          <td class="px-3 py-2 text-xs text-gray-700">${horaFim}</td>
+          <td class="px-3 py-2 text-xs text-right">
+            <div class="flex justify-end gap-2">
+              <button type="button" class="text-xs font-medium text-emerald-600 hover:text-emerald-800" data-edit-horario="${index}">Editar</button>
+              <button type="button" class="text-xs font-medium text-red-600 hover:text-red-800" data-clear-horario="${index}">Limpar</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    gradeHorariosContainer.innerHTML = `
+      <table class="min-w-full border rounded-lg overflow-hidden">
+        <thead class="bg-gray-50">
+          <tr class="text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <th class="px-3 py-2">Dia</th>
+            <th class="px-3 py-2">Tipo</th>
+            <th class="px-3 py-2">Modalidade</th>
+            <th class="px-3 py-2">Início</th>
+            <th class="px-3 py-2">Almoço início</th>
+            <th class="px-3 py-2">Almoço fim</th>
+            <th class="px-3 py-2">Término</th>
+            <th class="px-3 py-2 text-right">Ações</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white text-xs">${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function sanitizeHorariosForPayload(list = []) {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((item) => {
+        const normalized = normalizeHorario(item);
+        if (!normalized || !normalized.dia) return null;
+        const hasDados = normalized.tipoJornada || normalized.modalidade || normalized.horaInicio || normalized.horaFim || normalized.almocoInicio || normalized.almocoFim;
+        if (!hasDados) return null;
+        const payloadItem = {
+          dia: normalized.dia,
+        };
+        if (normalized.tipoJornada) payloadItem.tipoJornada = normalized.tipoJornada;
+        if (normalized.modalidade) payloadItem.modalidade = normalized.modalidade;
+        if (normalized.horaInicio) payloadItem.horaInicio = normalized.horaInicio;
+        if (normalized.horaFim) payloadItem.horaFim = normalized.horaFim;
+        if (normalized.almocoInicio) payloadItem.almocoInicio = normalized.almocoInicio;
+        if (normalized.almocoFim) payloadItem.almocoFim = normalized.almocoFim;
+        return payloadItem;
+      })
+      .filter(Boolean);
+  }
+
   function activateTab(target) {
     tabButtons.forEach((btn) => {
       const isActive = btn.dataset.tabTarget === target;
@@ -535,6 +849,103 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
   activateTab('dados');
+
+  horariosSemana = createDefaultHorarios();
+  renderHorariosGrade();
+  updateHorarioButtonLabel();
+  updateModalidadeOptions(tipoJornadaSelect ? tipoJornadaSelect.value : '');
+
+  tipoJornadaSelect?.addEventListener('change', () => {
+    const tipo = tipoJornadaSelect.value || '';
+    updateModalidadeOptions(tipo, '');
+    if (!tipo && modalidadeJornadaSelect) modalidadeJornadaSelect.value = '';
+  });
+
+  btnAddHorario?.addEventListener('click', () => {
+    const tipo = tipoJornadaSelect?.value || '';
+    if (!tipo) {
+      toastWarn('Selecione o tipo de jornada.');
+      tipoJornadaSelect?.focus();
+      return;
+    }
+    const modalidade = modalidadeJornadaSelect?.value || '';
+    if (!modalidade) {
+      toastWarn('Selecione a modalidade da jornada.');
+      modalidadeJornadaSelect?.focus();
+      return;
+    }
+    const horaInicio = sanitizeTimeValue(horarioInicioInput?.value || '');
+    if (!horaInicio) {
+      toastWarn('Informe a hora de início.');
+      horarioInicioInput?.focus();
+      return;
+    }
+    const horaFim = sanitizeTimeValue(horarioFimInput?.value || '');
+    if (!horaFim) {
+      toastWarn('Informe a hora de término.');
+      horarioFimInput?.focus();
+      return;
+    }
+    const almocoInicio = sanitizeTimeValue(almocoInicioInput?.value || '');
+    const almocoFim = sanitizeTimeValue(almocoFimInput?.value || '');
+
+    if (horarioInicioInput) horarioInicioInput.value = horaInicio;
+    if (horarioFimInput) horarioFimInput.value = horaFim;
+    if (almocoInicioInput) almocoInicioInput.value = almocoInicio;
+    if (almocoFimInput) almocoFimInput.value = almocoFim;
+
+    const dados = {
+      tipoJornada: tipo,
+      modalidade,
+      horaInicio,
+      horaFim,
+      almocoInicio,
+      almocoFim,
+    };
+
+    if (horarioEditandoDia !== null && horariosSemana[horarioEditandoDia]) {
+      const diaLabel = DIA_LABEL[horariosSemana[horarioEditandoDia].dia] || 'dia';
+      horariosSemana[horarioEditandoDia] = { ...horariosSemana[horarioEditandoDia], ...dados };
+      toastOk(`Horário atualizado para ${diaLabel.toLowerCase()}.`);
+    } else {
+      horariosSemana = horariosSemana.map((item) => ({ ...item, ...dados, dia: item.dia }));
+      toastOk('Horário padrão aplicado para toda a semana.');
+    }
+
+    renderHorariosGrade();
+    clearHorarioForm(true);
+  });
+
+  btnCancelarHorario?.addEventListener('click', () => {
+    clearHorarioForm(true);
+  });
+
+  gradeHorariosContainer?.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('button[data-edit-horario]');
+    if (editBtn) {
+      const index = Number(editBtn.getAttribute('data-edit-horario'));
+      if (!Number.isNaN(index) && horariosSemana[index]) {
+        horarioEditandoDia = index;
+        preencherHorarioForm(horariosSemana[index]);
+        updateHorarioButtonLabel();
+        tipoJornadaSelect?.focus();
+      }
+      return;
+    }
+
+    const clearBtn = e.target.closest('button[data-clear-horario]');
+    if (!clearBtn) return;
+    const index = Number(clearBtn.getAttribute('data-clear-horario'));
+    if (Number.isNaN(index) || !horariosSemana[index]) return;
+    const diaAtual = horariosSemana[index].dia;
+    horariosSemana[index] = createHorarioDia(diaAtual);
+    renderHorariosGrade();
+    if (horarioEditandoDia === index) {
+      clearHorarioForm(true);
+    }
+    const diaLabel = DIA_LABEL[diaAtual] || 'dia';
+    toastOk(`Horário limpo para ${diaLabel.toLowerCase()}.`);
+  });
 
   if (enderecoCep) {
     enderecoCep.addEventListener('input', () => {
@@ -825,6 +1236,8 @@ document.addEventListener('DOMContentLoaded', () => {
       enderecoEditandoIndex = null;
       cursos = [];
       cursoEditandoIndex = null;
+      horariosSemana = createDefaultHorarios();
+      horarioEditandoDia = null;
       if (periodoExperienciaInicioInput) periodoExperienciaInicioInput.value = '';
       if (periodoExperienciaFimInput) periodoExperienciaFimInput.value = '';
       if (dataAdmissaoInput) dataAdmissaoInput.value = '';
@@ -877,6 +1290,10 @@ document.addEventListener('DOMContentLoaded', () => {
       enderecoEditandoIndex = null;
       cursos = Array.isArray(data.cursos) ? data.cursos.map(normalizeCurso) : [];
       cursoEditandoIndex = null;
+      horariosSemana = Array.isArray(data.horarios) && data.horarios.length
+        ? mergeHorariosWithDefaults(data.horarios)
+        : createDefaultHorarios();
+      horarioEditandoDia = null;
       if (periodoExperienciaInicioInput) periodoExperienciaInicioInput.value = formatDateForInput(data.periodoExperienciaInicio);
       if (periodoExperienciaFimInput) periodoExperienciaFimInput.value = formatDateForInput(data.periodoExperienciaFim);
       if (dataAdmissaoInput) dataAdmissaoInput.value = formatDateForInput(data.dataAdmissao);
@@ -919,8 +1336,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderEnderecosList();
     renderCursosList();
+    renderHorariosGrade();
     clearEnderecoForm();
     clearCursoForm();
+    clearHorarioForm(false);
     activateTab('dados');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
@@ -1377,6 +1796,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (Array.isArray(cursos)) {
       payload.cursos = sanitizeCursosForPayload(cursos);
+    }
+    if (Array.isArray(horariosSemana)) {
+      payload.horarios = sanitizeHorariosForPayload(horariosSemana);
     }
     if (inputCodigo && inputCodigo.dataset?.hasValue === 'true') {
       payload.codigo = inputCodigo.dataset.originalValue || inputCodigo.value;
