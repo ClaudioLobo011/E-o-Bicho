@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin: Configurações do PDV - E o Bicho</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+    <div id="admin-header-placeholder"></div>
+
+    <main class="container mx-auto px-4 py-8 min-h-screen">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <aside class="md:col-span-4">
+                <div id="admin-sidebar-placeholder"></div>
+            </aside>
+
+            <div class="md:col-span-4 space-y-6">
+                <header class="bg-white border border-gray-100 rounded-xl shadow-sm p-6 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-800">Configurações do PDV</h1>
+                        <p class="text-sm text-gray-600">Defina impressões, descontos, emissão fiscal e depósito padrão por ponto de venda.</p>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs text-gray-500">
+                        <i class="fas fa-database text-primary"></i>
+                        <span>Alterações salvas diretamente no banco do PDV</span>
+                    </div>
+                </header>
+
+                <section class="bg-white border border-gray-100 rounded-xl shadow-sm p-6 space-y-4">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div>
+                            <label for="company-select" class="block text-sm font-semibold text-gray-700 mb-1">Empresa</label>
+                            <select id="company-select" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                <option value="">Selecione uma empresa</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="pdv-select" class="block text-sm font-semibold text-gray-700 mb-1">PDV</label>
+                            <select id="pdv-select" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" disabled>
+                                <option value="">Selecione um PDV</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p id="pdv-selection-hint" class="text-xs text-gray-500">Escolha a empresa para carregar os PDVs disponíveis.</p>
+                </section>
+
+                <section class="bg-white border border-gray-100 rounded-xl shadow-sm p-6">
+                    <div id="config-empty-state" class="flex flex-col items-center justify-center text-center text-gray-500 py-12">
+                        <i class="fas fa-cash-register text-3xl mb-3 text-gray-400"></i>
+                        <p class="text-sm font-medium">Selecione uma empresa e um PDV para configurar.</p>
+                    </div>
+
+                    <div id="config-content" class="hidden space-y-6">
+                        <nav class="flex flex-wrap gap-2 border-b border-gray-200 pb-1" aria-label="Abas de configuração">
+                            <button type="button" class="tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-primary text-primary rounded-t" data-tab-target="impressao">Impressão</button>
+                            <button type="button" class="tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary" data-tab-target="venda">Venda</button>
+                            <button type="button" class="tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary" data-tab-target="administrativo">Administrativo</button>
+                            <button type="button" class="tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary" data-tab-target="fiscal">Fiscal</button>
+                            <button type="button" class="tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary" data-tab-target="estoque">Estoque</button>
+                        </nav>
+
+                        <div class="space-y-6">
+                            <div data-tab-panel="impressao">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div class="space-y-3">
+                                        <span class="block text-sm font-semibold text-gray-700">Sempre imprimir comprovante</span>
+                                        <div class="flex flex-wrap gap-3" role="radiogroup">
+                                            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                                                <input type="radio" name="sempre-imprimir" value="sim" class="text-primary focus:ring-primary" data-config-field>
+                                                <span>Sim</span>
+                                            </label>
+                                            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                                                <input type="radio" name="sempre-imprimir" value="nao" class="text-primary focus:ring-primary" data-config-field>
+                                                <span>Não</span>
+                                            </label>
+                                            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                                                <input type="radio" name="sempre-imprimir" value="perguntar" class="text-primary focus:ring-primary" data-config-field>
+                                                <span>Perguntar</span>
+                                            </label>
+                                        </div>
+                                        <p class="text-xs text-gray-500">Defina o comportamento padrão após finalizar uma venda.</p>
+                                    </div>
+                                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                                        <p class="font-medium text-gray-700">Dica rápida</p>
+                                        <p class="mt-2">Configure impressoras diferentes para cada documento. As vias podem ser ajustadas individualmente conforme a rotina do caixa.</p>
+                                    </div>
+                                </div>
+
+                                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                                    <div class="p-4 border border-gray-200 rounded-lg space-y-3">
+                                        <h3 class="text-sm font-semibold text-gray-700">Impressora de Venda</h3>
+                                        <input type="text" id="impressora-venda-nome" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome ou endereço" data-config-field>
+                                        <div>
+                                            <label for="impressora-venda-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
+                                            <input type="number" id="impressora-venda-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                        </div>
+                                    </div>
+                                    <div class="p-4 border border-gray-200 rounded-lg space-y-3">
+                                        <h3 class="text-sm font-semibold text-gray-700">Impressora de Orçamento</h3>
+                                        <input type="text" id="impressora-orcamento-nome" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome ou endereço" data-config-field>
+                                        <div>
+                                            <label for="impressora-orcamento-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
+                                            <input type="number" id="impressora-orcamento-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                        </div>
+                                    </div>
+                                    <div class="p-4 border border-gray-200 rounded-lg space-y-3">
+                                        <h3 class="text-sm font-semibold text-gray-700">Contas a Receber</h3>
+                                        <input type="text" id="impressora-contas-nome" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome ou endereço" data-config-field>
+                                        <div>
+                                            <label for="impressora-contas-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
+                                            <input type="number" id="impressora-contas-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                        </div>
+                                    </div>
+                                    <div class="p-4 border border-gray-200 rounded-lg space-y-3">
+                                        <h3 class="text-sm font-semibold text-gray-700">Impressora do Caixa</h3>
+                                        <input type="text" id="impressora-caixa-nome" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome ou endereço" data-config-field>
+                                        <div>
+                                            <label for="impressora-caixa-vias" class="block text-xs font-medium text-gray-600 mb-1">Vias</label>
+                                            <input type="number" id="impressora-caixa-vias" min="1" max="10" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div data-tab-panel="venda" class="hidden">
+                                <div class="space-y-4">
+                                    <div>
+                                        <span class="block text-sm font-semibold text-gray-700 mb-2">Permitir desconto por perfil</span>
+                                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <label class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-primary/50">
+                                                <input type="checkbox" value="funcionario" class="desconto-checkbox text-primary focus:ring-primary" data-config-field>
+                                                <span>Funcionário</span>
+                                            </label>
+                                            <label class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-primary/50">
+                                                <input type="checkbox" value="gerente" class="desconto-checkbox text-primary focus:ring-primary" data-config-field>
+                                                <span>Gerente</span>
+                                            </label>
+                                            <label class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-primary/50">
+                                                <input type="checkbox" value="admin" class="desconto-checkbox text-primary focus:ring-primary" data-config-field>
+                                                <span>Admin</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <p class="text-xs text-gray-500">Os perfis marcados poderão aplicar descontos diretamente no PDV.</p>
+                                </div>
+                            </div>
+
+                            <div data-tab-panel="administrativo" class="hidden">
+                                <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-600">
+                                    <p class="font-semibold text-gray-700">Centralize orientações internas</p>
+                                    <p class="mt-2">Use esta aba para registrar procedimentos administrativos, senhas de fechamento ou recados para o time do caixa. Nenhuma configuração automática é aplicada aqui.</p>
+                                </div>
+                            </div>
+
+                            <div data-tab-panel="fiscal" class="hidden">
+                                <div class="space-y-4">
+                                    <div>
+                                        <span class="block text-sm font-semibold text-gray-700 mb-2">Tipo de emissão padrão</span>
+                                        <div class="flex flex-wrap gap-3" role="radiogroup">
+                                            <label class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-primary/50">
+                                                <input type="radio" name="tipo-emissao" value="matricial" class="text-primary focus:ring-primary" data-config-field>
+                                                <span>Matricial</span>
+                                            </label>
+                                            <label class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-primary/50">
+                                                <input type="radio" name="tipo-emissao" value="fiscal" class="text-primary focus:ring-primary" data-config-field>
+                                                <span>Fiscal</span>
+                                            </label>
+                                            <label class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-primary/50">
+                                                <input type="radio" name="tipo-emissao" value="ambos" class="text-primary focus:ring-primary" data-config-field>
+                                                <span>Ambos</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <p class="text-xs text-gray-500">A emissão padrão define qual layout o PDV utilizará ao iniciar uma venda fiscal.</p>
+                                </div>
+                            </div>
+
+                            <div data-tab-panel="estoque" class="hidden">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="deposito-padrao" class="block text-sm font-semibold text-gray-700 mb-1">Depósito padrão</label>
+                                        <select id="deposito-padrao" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            <option value="">Selecione um depósito</option>
+                                        </select>
+                                        <p class="mt-2 text-xs text-gray-500">Os produtos reservados neste PDV serão vinculados ao depósito selecionado.</p>
+                                    </div>
+                                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                                        <p class="font-medium text-gray-700">Sem o depósito cadastrado?</p>
+                                        <p class="mt-1">Acesse a aba de <a href="./admin-depositos.html" class="text-primary font-semibold hover:underline">Depósitos</a> para criar novas unidades e volte para selecioná-las aqui.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pt-4 border-t border-gray-100">
+                            <p id="config-status" class="text-xs text-gray-500">As alterações só serão aplicadas após salvar.</p>
+                            <button id="save-config-button" class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-secondary transition disabled:opacity-60 disabled:pointer-events-none">
+                                <i class="fas fa-save"></i>
+                                <span>Salvar configurações</span>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <div id="admin-footer-placeholder"></div>
+    <div id="modal-placeholder"></div>
+    <div id="confirm-modal-placeholder"></div>
+
+    <script>var basePath = '../../';</script>
+    <script src="../../scripts/core/config.js"></script>
+    <script src="../../scripts/core/ui.js"></script>
+    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/admin/admin.js"></script>
+    <script src="../../scripts/admin/admin-configuracoes-pdv.js"></script>
+</body>
+</html>
