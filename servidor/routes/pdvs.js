@@ -432,11 +432,12 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
 
     await pdv.save();
 
-    const populated = await pdv
-      .populate('empresa')
-      .populate('configuracoesEstoque.depositoPadrao');
+    await pdv.populate([
+      { path: 'empresa' },
+      { path: 'configuracoesEstoque.depositoPadrao' },
+    ]);
 
-    res.json(populated);
+    res.json(pdv);
   } catch (error) {
     const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
     const message =
