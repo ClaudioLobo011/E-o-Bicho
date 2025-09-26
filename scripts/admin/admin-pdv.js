@@ -1263,7 +1263,7 @@
       console.warn('Não foi possível abrir a janela de impressão.');
       return;
     }
-    printWindow.document.write(`<!DOCTYPE html>
+    const markup = `<!DOCTYPE html>
       <html lang="pt-BR">
         <head>
           <meta charset="utf-8">
@@ -1276,14 +1276,18 @@
         <body>
           <pre>${content}</pre>
         </body>
-      </html>`);
+      </html>`;
+    printWindow.document.open();
+    printWindow.document.write(markup);
     printWindow.document.close();
-    printWindow.focus();
-    try {
-      printWindow.print();
-    } catch (error) {
-      console.warn('Falha ao acionar impressão automática do fechamento.', error);
-    }
+    printWindow.onload = () => {
+      printWindow.focus();
+      try {
+        printWindow.print();
+      } catch (error) {
+        console.warn('Falha ao acionar impressão automática do fechamento.', error);
+      }
+    };
   };
 
   const promptPrintFechamento = () => {
