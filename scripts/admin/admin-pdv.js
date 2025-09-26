@@ -11,6 +11,17 @@
     { id: 'pix', label: 'Pix' },
   ];
 
+  const vendaPaymentCatalog = [
+    { id: 'dinheiro', label: 'Dinheiro' },
+    { id: 'debito', label: 'Cartão de débito' },
+    {
+      id: 'credito',
+      label: 'Cartão de crédito',
+      installments: Array.from({ length: 12 }, (_, index) => index + 1),
+    },
+    { id: 'pix', label: 'Pix' },
+  ];
+
   const caixaActions = [
     {
       id: 'abertura',
@@ -82,6 +93,9 @@
     quantidade: 1,
     itens: [],
     pagamentos: pagamentosCatalog.map((payment) => ({ ...payment, valor: 0 })),
+    vendaPagamentos: [],
+    vendaDesconto: 0,
+    vendaAcrescimo: 0,
     summary: { abertura: 0, recebido: 0, saldo: 0 },
     history: [],
     lastMovement: null,
@@ -90,6 +104,9 @@
 
   const elements = {};
   let searchTimeout = null;
+  let paymentModalState = null;
+
+  const createUid = () => `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
   const notify = (message, type = 'info') => {
     if (typeof window?.showToast === 'function') {
@@ -238,6 +255,7 @@
     elements.itemsEmpty = document.getElementById('pdv-items-empty');
     elements.itemsCount = document.getElementById('pdv-items-count');
     elements.itemsTotal = document.getElementById('pdv-items-total');
+    elements.finalizeButton = document.getElementById('pdv-finalize-sale');
 
     elements.caixaActions = document.getElementById('pdv-caixa-actions');
     elements.caixaStateLabel = document.getElementById('pdv-caixa-state-label');
@@ -261,6 +279,30 @@
     elements.historyList = document.getElementById('pdv-history-list');
     elements.historyEmpty = document.getElementById('pdv-history-empty');
     elements.clearHistory = document.getElementById('pdv-clear-history');
+
+    elements.finalizeModal = document.getElementById('pdv-finalize-modal');
+    elements.finalizeClose = document.getElementById('pdv-finalize-close');
+    elements.finalizeBack = document.getElementById('pdv-sale-back');
+    elements.finalizeConfirm = document.getElementById('pdv-sale-confirm');
+    elements.finalizeDifference = document.getElementById('pdv-sale-difference');
+    elements.finalizeBackdrop = elements.finalizeModal?.querySelector('[data-pdv-finalize-dismiss]') || null;
+    elements.saleMethods = document.getElementById('pdv-sale-methods');
+    elements.salePaymentsList = document.getElementById('pdv-sale-payments-preview');
+    elements.salePaymentsEmpty = document.getElementById('pdv-sale-payments-empty');
+    elements.saleTotal = document.getElementById('pdv-sale-total');
+    elements.saleDiscount = document.getElementById('pdv-sale-discount');
+    elements.salePaid = document.getElementById('pdv-sale-paid');
+    elements.saleAdjust = document.getElementById('pdv-sale-adjust');
+    elements.saleItemAdjust = document.getElementById('pdv-sale-item-adjust');
+
+    elements.paymentValueModal = document.getElementById('pdv-payment-value-modal');
+    elements.paymentValueTitle = document.getElementById('pdv-payment-value-title');
+    elements.paymentValueSubtitle = document.getElementById('pdv-payment-value-subtitle');
+    elements.paymentValueInput = document.getElementById('pdv-payment-value-input');
+    elements.paymentValueHint = document.getElementById('pdv-payment-value-hint');
+    elements.paymentValueConfirm = document.getElementById('pdv-payment-value-confirm');
+    elements.paymentValueCancel = document.getElementById('pdv-payment-value-cancel');
+    elements.paymentValueBackdrop = elements.paymentValueModal?.querySelector('[data-pdv-payment-dismiss]') || null;
   };
   const updateWorkspaceVisibility = (visible) => {
     if (elements.workspace) {
@@ -331,6 +373,7 @@
         ? 'Caixa aberto e pronto para registrar vendas.'
         : 'Abra o caixa para iniciar as vendas.';
     }
+    updateFinalizeButton();
   };
 
   const updateWorkspaceInfo = () => {
@@ -447,6 +490,8 @@
       elements.itemsEmpty.classList.remove('hidden');
       elements.itemsCount.textContent = '0 itens';
       elements.itemsTotal.textContent = formatCurrency(0);
+      updateFinalizeButton();
+      updateSaleSummary();
       return;
     }
     const fragment = document.createDocumentFragment();
@@ -473,6 +518,342 @@
       state.itens.length === 1 ? '1 item' : `${state.itens.length} itens`;
     const total = state.itens.reduce((sum, item) => sum + item.subtotal, 0);
     elements.itemsTotal.textContent = formatCurrency(total);
+    updateFinalizeButton();
+    updateSaleSummary();
+  };
+
+  const getSaleTotalBruto = () => state.itens.reduce((sum, item) => sum + item.subtotal, 0);
+  const getSaleTotalLiquido = () => {
+    const bruto = getSaleTotalBruto();
+    const liquido = bruto + state.vendaAcrescimo - state.vendaDesconto;
+    return liquido < 0 ? 0 : liquido;
+  };
+  const getSalePagoTotal = () =>
+    state.vendaPagamentos.reduce((sum, payment) => sum + safeNumber(payment.valor), 0);
+
+  const updateFinalizeButton = () => {
+    if (!elements.finalizeButton) return;
+    const disabled = !state.caixaAberto || !state.itens.length;
+    elements.finalizeButton.disabled = disabled;
+    elements.finalizeButton.classList.toggle('opacity-60', disabled);
+    elements.finalizeButton.classList.toggle('cursor-not-allowed', disabled);
+  };
+
+  const renderSalePaymentsPreview = () => {
+    if (!elements.salePaymentsList || !elements.salePaymentsEmpty) return;
+    elements.salePaymentsList.innerHTML = '';
+    if (!state.vendaPagamentos.length) {
+      elements.salePaymentsList.classList.add('hidden');
+      elements.salePaymentsEmpty.classList.remove('hidden');
+      updateSaleSummary();
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    state.vendaPagamentos.forEach((payment) => {
+      const li = document.createElement('li');
+      li.className = 'flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2';
+      const installmentsLabel = payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
+      li.innerHTML = `
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-gray-700">${payment.label}${installmentsLabel}</p>
+          <p class="text-xs text-gray-500">${formatCurrency(payment.valor)}</p>
+        </div>
+        <button type="button" class="text-xs text-red-500 hover:text-red-600" data-sale-remove="${payment.uid}">
+          <i class="fas fa-times"></i>
+        </button>
+      `;
+      fragment.appendChild(li);
+    });
+    elements.salePaymentsList.appendChild(fragment);
+    elements.salePaymentsList.classList.remove('hidden');
+    elements.salePaymentsEmpty.classList.add('hidden');
+    updateSaleSummary();
+  };
+
+  const renderSalePaymentMethods = () => {
+    if (!elements.saleMethods) return;
+    const html = vendaPaymentCatalog
+      .map((method) => {
+        if (Array.isArray(method.installments) && method.installments.length) {
+          const installments = method.installments
+            .map((installment) => {
+              const label = installment === 1 ? 'À vista' : `${installment}x`;
+              return `<button type="button" class="rounded border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-installment="${method.id}:${installment}">${label}</button>`;
+            })
+            .join('');
+          return `
+            <li class="rounded-xl border border-gray-200 bg-white p-4">
+              <button type="button" class="flex w-full items-center justify-between text-sm font-semibold text-gray-700" data-sale-method-toggle="${method.id}">
+                <span>${method.label}</span>
+                <i class="fas fa-chevron-down text-xs" aria-hidden="true"></i>
+              </button>
+              <div class="mt-3 hidden flex flex-wrap gap-2" data-sale-options="${method.id}">
+                ${installments}
+              </div>
+            </li>
+          `;
+        }
+        return `
+          <li>
+            <button type="button" class="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-primary hover:text-primary" data-sale-method="${method.id}">
+              <span>${method.label}</span>
+              <i class="fas fa-arrow-right text-xs"></i>
+            </button>
+          </li>
+        `;
+      })
+      .join('');
+    elements.saleMethods.innerHTML = html;
+  };
+
+  const openFinalizeModal = () => {
+    if (!state.caixaAberto) {
+      notify('Abra o caixa antes de finalizar uma venda.', 'warning');
+      return;
+    }
+    if (!state.itens.length) {
+      notify('Adicione itens para finalizar a venda.', 'warning');
+      return;
+    }
+    renderSalePaymentMethods();
+    renderSalePaymentsPreview();
+    updateSaleSummary();
+    if (elements.finalizeModal) {
+      elements.finalizeModal.classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
+    }
+  };
+
+  const toggleFinalizeOptions = (methodId) => {
+    if (!elements.saleMethods || !methodId) return;
+    const options = elements.saleMethods.querySelector(`[data-sale-options="${methodId}"]`);
+    const toggle = elements.saleMethods.querySelector(`[data-sale-method-toggle="${methodId}"] i`);
+    if (options) {
+      options.classList.toggle('hidden');
+      if (toggle) {
+        toggle.classList.toggle('rotate-180', !options.classList.contains('hidden'));
+      }
+    }
+  };
+
+  const closePaymentValueModal = (preserveBodyScroll = false) => {
+    if (elements.paymentValueModal) {
+      elements.paymentValueModal.classList.add('hidden');
+    }
+    if (elements.paymentValueInput) {
+      elements.paymentValueInput.value = '';
+    }
+    if (elements.paymentValueHint) {
+      elements.paymentValueHint.textContent = '';
+    }
+    paymentModalState = null;
+    if (!preserveBodyScroll) {
+      document.body.classList.remove('overflow-hidden');
+    }
+  };
+
+  const closeFinalizeModal = () => {
+    if (!elements.finalizeModal) return;
+    elements.finalizeModal.classList.add('hidden');
+    closePaymentValueModal(true);
+    document.body.classList.remove('overflow-hidden');
+  };
+
+  const openPaymentValueModal = (method, parcelas) => {
+    return new Promise((resolve, reject) => {
+      if (!elements.paymentValueModal || !elements.paymentValueInput) {
+        reject(new Error('Modal de pagamento indisponível.'));
+        return;
+      }
+      if (paymentModalState) {
+        paymentModalState.reject?.(new Error('Substituído'));
+      }
+      const restante = Math.max(getSaleTotalLiquido() - getSalePagoTotal(), 0);
+      const parcelasLabel = parcelas > 1 ? `${parcelas}x` : 'à vista';
+      if (elements.paymentValueTitle) {
+        elements.paymentValueTitle.textContent = `Receber em ${method.label}`;
+      }
+      if (elements.paymentValueSubtitle) {
+        elements.paymentValueSubtitle.textContent = `Pagamento ${parcelasLabel}.`;
+      }
+      if (elements.paymentValueHint) {
+        elements.paymentValueHint.textContent = restante > 0
+          ? `Restante sugerido: ${formatCurrency(restante)}.`
+          : 'Informe o valor recebido para este pagamento.';
+      }
+      elements.paymentValueInput.value = restante > 0 ? restante.toFixed(2) : '';
+      paymentModalState = { resolve, reject, method, parcelas };
+      elements.paymentValueModal.classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
+      setTimeout(() => elements.paymentValueInput?.focus(), 60);
+    });
+  };
+
+  const handlePaymentValueConfirm = () => {
+    if (!paymentModalState) return;
+    const value = safeNumber(elements.paymentValueInput?.value || 0);
+    if (value <= 0) {
+      notify('Informe um valor válido para o pagamento.', 'warning');
+      elements.paymentValueInput?.focus();
+      return;
+    }
+    paymentModalState.resolve({
+      valor: value,
+      method: paymentModalState.method,
+      parcelas: paymentModalState.parcelas,
+    });
+    const preserve =
+      elements.finalizeModal && !elements.finalizeModal.classList.contains('hidden');
+    closePaymentValueModal(preserve);
+  };
+
+  const handlePaymentValueCancel = () => {
+    if (!paymentModalState) {
+      const preserve =
+        elements.finalizeModal && !elements.finalizeModal.classList.contains('hidden');
+      closePaymentValueModal(preserve);
+      return;
+    }
+    paymentModalState.reject?.(new Error('Cancelado'));
+    const preserve =
+      elements.finalizeModal && !elements.finalizeModal.classList.contains('hidden');
+    closePaymentValueModal(preserve);
+  };
+
+  const handleSaleMethodsClick = async (event) => {
+    const toggleButton = event.target.closest('[data-sale-method-toggle]');
+    if (toggleButton) {
+      const methodId = toggleButton.getAttribute('data-sale-method-toggle');
+      toggleFinalizeOptions(methodId);
+      return;
+    }
+    const installmentButton = event.target.closest('[data-sale-installment]');
+    if (installmentButton) {
+      const value = installmentButton.getAttribute('data-sale-installment');
+      if (!value) return;
+      const [methodId, parcelasStr] = value.split(':');
+      const parcelas = Math.max(1, Number(parcelasStr) || 1);
+      const method = vendaPaymentCatalog.find((item) => item.id === methodId);
+      if (!method) return;
+      if (!state.itens.length) {
+        notify('Adicione itens para lançar pagamentos.', 'warning');
+        return;
+      }
+      try {
+        const result = await openPaymentValueModal(method, parcelas);
+        state.vendaPagamentos.push({
+          uid: createUid(),
+          id: method.id,
+          label: method.label,
+          parcelas,
+          valor: safeNumber(result.valor),
+        });
+        renderSalePaymentsPreview();
+      } catch (_) {
+        /* cancelado */
+      }
+      return;
+    }
+    const methodButton = event.target.closest('[data-sale-method]');
+    if (!methodButton) return;
+    const methodId = methodButton.getAttribute('data-sale-method');
+    const method = vendaPaymentCatalog.find((item) => item.id === methodId);
+    if (!method) return;
+    if (!state.itens.length) {
+      notify('Adicione itens para lançar pagamentos.', 'warning');
+      return;
+    }
+    try {
+      const result = await openPaymentValueModal(method, 1);
+      state.vendaPagamentos.push({
+        uid: createUid(),
+        id: method.id,
+        label: method.label,
+        parcelas: 1,
+        valor: safeNumber(result.valor),
+      });
+      renderSalePaymentsPreview();
+    } catch (_) {
+      /* cancelado */
+    }
+  };
+
+  const handleSalePaymentsListClick = (event) => {
+    const button = event.target.closest('[data-sale-remove]');
+    if (!button) return;
+    const uid = button.getAttribute('data-sale-remove');
+    state.vendaPagamentos = state.vendaPagamentos.filter((payment) => payment.uid !== uid);
+    renderSalePaymentsPreview();
+  };
+
+  const handleFinalizeButtonClick = () => {
+    if (elements.finalizeButton?.disabled) return;
+    openFinalizeModal();
+  };
+
+  const handleFinalizeConfirm = () => {
+    const total = getSaleTotalLiquido();
+    const pago = getSalePagoTotal();
+    if (!state.itens.length) {
+      notify('Adicione itens para finalizar a venda.', 'warning');
+      closeFinalizeModal();
+      return;
+    }
+    if (Math.abs(total - pago) >= 0.01) {
+      notify('O valor pago deve ser igual ao total da venda.', 'warning');
+      return;
+    }
+    notify('Venda finalizada com sucesso.', 'success');
+    state.itens = [];
+    state.vendaPagamentos = [];
+    state.vendaDesconto = 0;
+    state.vendaAcrescimo = 0;
+    clearSelectedProduct();
+    renderItemsList();
+    renderSalePaymentsPreview();
+    updateFinalizeButton();
+    updateSaleSummary();
+    closeFinalizeModal();
+  };
+
+  const handleSaleAdjust = () => {
+    notify('Funcionalidade de acréscimo/desconto em desenvolvimento.', 'info');
+  };
+
+  const handleSaleItemAdjust = () => {
+    notify('Funcionalidade de ajuste por item em desenvolvimento.', 'info');
+  };
+
+  const updateSaleSummary = () => {
+    const totalLiquido = getSaleTotalLiquido();
+    const pago = getSalePagoTotal();
+    const desconto = state.vendaDesconto > 0 ? state.vendaDesconto : 0;
+    if (elements.saleTotal) {
+      elements.saleTotal.textContent = formatCurrency(totalLiquido);
+    }
+    if (elements.saleDiscount) {
+      elements.saleDiscount.textContent = formatCurrency(desconto);
+    }
+    if (elements.salePaid) {
+      elements.salePaid.textContent = formatCurrency(pago);
+    }
+    if (elements.finalizeConfirm) {
+      const difference = Math.abs(totalLiquido - pago);
+      const canFinalize = totalLiquido > 0 && difference < 0.01;
+      elements.finalizeConfirm.disabled = !canFinalize;
+      elements.finalizeConfirm.classList.toggle('opacity-60', !canFinalize);
+      if (elements.finalizeDifference) {
+        if (totalLiquido === 0) {
+          elements.finalizeDifference.textContent = 'Adicione itens para finalizar a venda.';
+        } else if (difference >= 0.01) {
+          const remaining = totalLiquido - pago;
+          const label = remaining > 0 ? `Faltam ${formatCurrency(remaining)}` : `Pago a maior ${formatCurrency(Math.abs(remaining))}`;
+          elements.finalizeDifference.textContent = label;
+        } else {
+          elements.finalizeDifference.textContent = '';
+        }
+      }
+    }
   };
 
   const populatePaymentSelect = () => {
@@ -680,6 +1061,9 @@
     state.history = [];
     state.lastMovement = null;
     state.pagamentos = pagamentosCatalog.map((payment) => ({ ...payment, valor: 0 }));
+    state.vendaPagamentos = [];
+    state.vendaDesconto = 0;
+    state.vendaAcrescimo = 0;
     if (elements.searchInput) {
       elements.searchInput.value = '';
     }
@@ -690,6 +1074,7 @@
     clearSelectedProduct();
     renderItemsList();
     renderPayments();
+    renderSalePaymentsPreview();
     renderHistory();
     setLastMovement(null);
     populatePaymentSelect();
@@ -698,6 +1083,7 @@
     updateSummary();
     updateStatusBadge();
     updateTabAvailability();
+    updateFinalizeButton();
     setActiveTab('caixa-tab');
   };
 
@@ -1050,6 +1436,19 @@
     if (!Number.isInteger(index) || index < 0 || index >= state.itens.length) return;
     state.itens.splice(index, 1);
     renderItemsList();
+    if (!state.itens.length) {
+      state.vendaPagamentos = [];
+      renderSalePaymentsPreview();
+    } else {
+      const total = getSaleTotalLiquido();
+      const pago = getSalePagoTotal();
+      if (pago > total) {
+        state.vendaPagamentos = [];
+        renderSalePaymentsPreview();
+      } else {
+        updateSaleSummary();
+      }
+    }
   };
 
   const changeQuantity = (delta) => {
@@ -1227,6 +1626,18 @@
     elements.clearHistory?.addEventListener('click', handleClearHistory);
     elements.caixaActions?.addEventListener('click', handleActionClick);
     elements.actionConfirm?.addEventListener('click', handleActionConfirm);
+    elements.finalizeButton?.addEventListener('click', handleFinalizeButtonClick);
+    elements.finalizeClose?.addEventListener('click', closeFinalizeModal);
+    elements.finalizeBack?.addEventListener('click', closeFinalizeModal);
+    elements.finalizeBackdrop?.addEventListener('click', closeFinalizeModal);
+    elements.finalizeConfirm?.addEventListener('click', handleFinalizeConfirm);
+    elements.saleMethods?.addEventListener('click', handleSaleMethodsClick);
+    elements.salePaymentsList?.addEventListener('click', handleSalePaymentsListClick);
+    elements.saleAdjust?.addEventListener('click', handleSaleAdjust);
+    elements.saleItemAdjust?.addEventListener('click', handleSaleItemAdjust);
+    elements.paymentValueConfirm?.addEventListener('click', handlePaymentValueConfirm);
+    elements.paymentValueCancel?.addEventListener('click', handlePaymentValueCancel);
+    elements.paymentValueBackdrop?.addEventListener('click', handlePaymentValueCancel);
     elements.tabTriggers?.forEach((trigger) => {
       trigger.addEventListener('click', (event) => {
         const target = trigger.getAttribute('data-tab-target');
@@ -1247,6 +1658,7 @@
     resetWorkspace();
     updateWorkspaceVisibility(false);
     bindEvents();
+    renderSalePaymentMethods();
     updateTabAvailability();
     try {
       await fetchStores();
