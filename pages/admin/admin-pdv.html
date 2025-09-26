@@ -68,12 +68,12 @@
                         </div>
 
                         <nav class="flex flex-wrap gap-2 border-b border-gray-200 pb-1" aria-label="Seções do PDV">
-                            <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-primary text-primary rounded-t" data-tab-target="pdv-tab">PDV</button>
-                            <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary" data-tab-target="caixa-tab">Caixa</button>
+                            <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="pdv-tab" aria-disabled="true">PDV</button>
+                            <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-primary text-primary rounded-t" data-tab-target="caixa-tab">Caixa</button>
                         </nav>
 
                         <div class="space-y-6">
-                            <div data-tab-panel="pdv-tab" class="space-y-6">
+                            <div data-tab-panel="pdv-tab" class="hidden space-y-6">
                                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
                                     <div class="xl:col-span-2 space-y-6">
                                         <div class="rounded-xl border border-gray-200 p-6 space-y-4">
@@ -156,7 +156,7 @@
                                 </div>
                             </div>
 
-                            <div data-tab-panel="caixa-tab" class="hidden space-y-6">
+                            <div data-tab-panel="caixa-tab" class="space-y-6">
                                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
                                     <div class="space-y-6">
                                         <div class="rounded-xl border border-gray-200 p-6 space-y-4">

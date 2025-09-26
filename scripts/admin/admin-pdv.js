@@ -272,6 +272,9 @@
   };
 
   const setActiveTab = (targetId) => {
+    if (targetId === 'pdv-tab' && !state.caixaAberto) {
+      targetId = 'caixa-tab';
+    }
     if (!elements.tabTriggers || !elements.tabPanels) return;
     elements.tabTriggers.forEach((trigger) => {
       const target = trigger.getAttribute('data-tab-target');
@@ -284,6 +287,20 @@
     elements.tabPanels.forEach((panel) => {
       const panelId = panel.getAttribute('data-tab-panel');
       panel.classList.toggle('hidden', panelId !== targetId);
+    });
+  };
+
+  const updateTabAvailability = () => {
+    if (!elements.tabTriggers) return;
+    elements.tabTriggers.forEach((trigger) => {
+      const target = trigger.getAttribute('data-tab-target');
+      if (target !== 'pdv-tab') return;
+      const disabled = !state.caixaAberto;
+      trigger.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      trigger.tabIndex = disabled ? -1 : 0;
+      trigger.classList.toggle('cursor-not-allowed', disabled);
+      trigger.classList.toggle('opacity-60', disabled);
+      trigger.classList.toggle('hover:text-primary', !disabled);
     });
   };
 
@@ -680,6 +697,7 @@
     updateActionDetails();
     updateSummary();
     updateStatusBadge();
+    updateTabAvailability();
     setActiveTab('caixa-tab');
   };
 
@@ -793,6 +811,7 @@
     updateActionDetails();
     updateSummary();
     updateStatusBadge();
+    updateTabAvailability();
     setActiveTab(state.caixaAberto ? 'pdv-tab' : 'caixa-tab');
   };
 
@@ -1084,6 +1103,8 @@
       state.summary.abertura = 0;
       state.pagamentos = state.pagamentos.map((item) => ({ ...item, valor: 0 }));
       notify(action.successMessage, 'success');
+      updateTabAvailability();
+      setActiveTab('caixa-tab');
     } else {
       if (!state.caixaAberto) {
         notify('Abra o caixa antes de registrar movimentações.', 'warning');
@@ -1106,6 +1127,7 @@
     renderPayments();
     updateSummary();
     updateStatusBadge();
+    updateTabAvailability();
     state.selectedAction = null;
     renderCaixaActions();
     updateActionDetails();
@@ -1185,9 +1207,16 @@
     elements.caixaActions?.addEventListener('click', handleActionClick);
     elements.actionConfirm?.addEventListener('click', handleActionConfirm);
     elements.tabTriggers?.forEach((trigger) => {
-      trigger.addEventListener('click', () => {
+      trigger.addEventListener('click', (event) => {
         const target = trigger.getAttribute('data-tab-target');
-        if (target) setActiveTab(target);
+        if (!target) return;
+        if (target === 'pdv-tab' && !state.caixaAberto) {
+          event.preventDefault();
+          notify('Abra o caixa para acessar a aba de vendas.', 'warning');
+          setActiveTab('caixa-tab');
+          return;
+        }
+        setActiveTab(target);
       });
     });
   };
@@ -1197,6 +1226,7 @@
     resetWorkspace();
     updateWorkspaceVisibility(false);
     bindEvents();
+    updateTabAvailability();
     try {
       await fetchStores();
       updateSelectionHint('Escolha a empresa para carregar os PDVs disponíveis.');
