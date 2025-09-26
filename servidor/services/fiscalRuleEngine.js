@@ -20,6 +20,18 @@ const toStringSafe = (value, fallback = '') => {
 
 const toLower = (value) => toStringSafe(value).toLowerCase();
 
+const toObjectIdString = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    if (typeof value.toHexString === 'function') return value.toHexString();
+    if (value._id) return toObjectIdString(value._id);
+    if (value.id) return toObjectIdString(value.id);
+    if (typeof value.toString === 'function') return value.toString();
+  }
+  return '';
+};
+
 const clone = (value) => JSON.parse(JSON.stringify(value || {}));
 
 const deepMerge = (target = {}, source = {}) => {
@@ -294,8 +306,26 @@ const buildSuggestion = (product, store = {}, context = {}) => {
   return { suggestion, missing };
 };
 
+const getFiscalDataForStore = (product, store) => {
+  if (!product) return {};
+  const storeId = toObjectIdString(store?._id || store);
+  if (storeId) {
+    const fiscalPerStore = product.fiscalPorEmpresa;
+    if (fiscalPerStore) {
+      if (typeof fiscalPerStore.get === 'function') {
+        const value = fiscalPerStore.get(storeId);
+        if (value) return value;
+      } else if (typeof fiscalPerStore === 'object') {
+        const value = fiscalPerStore[storeId];
+        if (value) return value;
+      }
+    }
+  }
+  return product.fiscal || {};
+};
+
 const generateProductFiscalReport = (product, store, context = {}) => {
-  const currentFiscal = normalizeFiscalData(product?.fiscal || {});
+  const currentFiscal = normalizeFiscalData(getFiscalDataForStore(product, store));
   const { suggestion, missing } = buildSuggestion(product, store, context);
   const suggestionFiscal = normalizeFiscalData(suggestion);
   const missingCurrent = computeMissingFields(currentFiscal, { regime: toLower(store?.regimeTributario) });
@@ -325,4 +355,5 @@ module.exports = {
   buildSuggestion,
   generateProductFiscalReport,
   mergeFiscalData,
+  getFiscalDataForStore,
 };

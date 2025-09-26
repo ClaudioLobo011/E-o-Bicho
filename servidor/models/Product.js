@@ -143,7 +143,12 @@ const productSchema = new mongoose.Schema({
         porteRaca: { type: [String], default: [] }, // ex.: Mini, Pequeno, Médio, Grande, Gigante
         apresentacao: { type: String, default: '' }
     },
-    fiscal: { type: fiscalSchema, default: () => ({}) }
+    fiscal: { type: fiscalSchema, default: () => ({}) },
+    fiscalPorEmpresa: {
+        type: Map,
+        of: fiscalSchema,
+        default: () => ({}),
+    }
 
 }, {
     timestamps: true
