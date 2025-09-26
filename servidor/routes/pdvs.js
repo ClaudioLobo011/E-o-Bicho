@@ -1,12 +1,20 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Pdv = require('../models/Pdv');
 const Store = require('../models/Store');
+const Deposit = require('../models/Deposit');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
 const ambientesPermitidos = ['homologacao', 'producao'];
 const ambientesSet = new Set(ambientesPermitidos);
+const opcoesImpressao = ['sim', 'nao', 'perguntar'];
+const opcoesImpressaoSet = new Set(opcoesImpressao);
+const perfisDesconto = ['funcionario', 'gerente', 'admin'];
+const perfisDescontoSet = new Set(perfisDesconto);
+const tiposEmissao = ['matricial', 'fiscal', 'ambos'];
+const tiposEmissaoSet = new Set(tiposEmissao);
 
 const normalizeString = (value) => {
   if (value === undefined || value === null) return '';
@@ -73,6 +81,78 @@ const storeSupportsEnvironment = (store, env) => {
     return Boolean(store.cscIdHomologacao && store.cscTokenHomologacaoArmazenado);
   }
   return false;
+};
+
+const createValidationError = (message) => {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+};
+
+const parseSempreImprimir = (value) => {
+  const normalized = normalizeString(value).toLowerCase();
+  if (!normalized) return 'perguntar';
+  if (!opcoesImpressaoSet.has(normalized)) {
+    throw createValidationError('Selecione uma opção válida para "Sempre imprimir".');
+  }
+  return normalized;
+};
+
+const parseCopias = (value, { allowNull = true } = {}) => {
+  if (value === undefined || value === null || value === '') {
+    return allowNull ? null : 1;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw createValidationError('Informe um número válido de vias para a impressora selecionada.');
+  }
+  const inteiro = Math.trunc(parsed);
+  if (inteiro < 1 || inteiro > 10) {
+    throw createValidationError('O número de vias deve estar entre 1 e 10.');
+  }
+  return inteiro;
+};
+
+const buildPrinterPayload = (payload) => {
+  if (!payload) return null;
+
+  const nome = normalizeString(payload.nome || payload.printer || payload.nomeImpressora);
+  const vias = parseCopias(payload.vias ?? payload.copias ?? payload.copiasImpressao ?? '', {
+    allowNull: !nome,
+  });
+
+  if (!nome) {
+    return null;
+  }
+
+  return {
+    nome,
+    vias: vias ?? 1,
+  };
+};
+
+const normalizePerfisDesconto = (value) => {
+  let itens = [];
+  if (Array.isArray(value)) {
+    itens = value;
+  } else if (typeof value === 'string') {
+    itens = value.split(',');
+  }
+
+  const filtrados = itens
+    .map((item) => normalizeString(item).toLowerCase())
+    .filter((item) => perfisDescontoSet.has(item));
+
+  return Array.from(new Set(filtrados));
+};
+
+const parseTipoEmissao = (value) => {
+  const normalized = normalizeString(value).toLowerCase();
+  if (!normalized) return 'fiscal';
+  if (!tiposEmissaoSet.has(normalized)) {
+    throw createValidationError('Selecione um tipo de emissão padrão válido.');
+  }
+  return normalized;
 };
 
 const buildPdvPayload = ({ body, store }) => {
@@ -159,6 +239,24 @@ router.get('/next-code', async (req, res) => {
   } catch (error) {
     console.error('Erro ao gerar próximo código de PDV:', error);
     res.status(500).json({ message: 'Erro ao gerar próximo código.' });
+  }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const pdv = await Pdv.findById(req.params.id)
+      .populate('empresa')
+      .populate('configuracoesEstoque.depositoPadrao')
+      .lean();
+
+    if (!pdv) {
+      return res.status(404).json({ message: 'PDV não encontrado.' });
+    }
+
+    res.json(pdv);
+  } catch (error) {
+    console.error('Erro ao obter PDV:', error);
+    res.status(500).json({ message: 'Erro ao obter PDV.' });
   }
 });
 
@@ -270,6 +368,83 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
   } catch (error) {
     console.error('Erro ao atualizar PDV:', error);
     res.status(500).json({ message: 'Erro ao atualizar PDV.' });
+  }
+});
+
+router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+  try {
+    const pdvId = req.params.id;
+    const pdv = await Pdv.findById(pdvId);
+
+    if (!pdv) {
+      return res.status(404).json({ message: 'PDV não encontrado.' });
+    }
+
+    const impressaoPayload = req.body?.impressao || {};
+    const vendaPayload = req.body?.venda || {};
+    const fiscalPayload = req.body?.fiscal || {};
+    const estoquePayload = req.body?.estoque || {};
+
+    const sempreImprimir = parseSempreImprimir(impressaoPayload.sempreImprimir);
+    const impressoraVenda = buildPrinterPayload(impressaoPayload.impressoraVenda);
+    const impressoraOrcamento = buildPrinterPayload(impressaoPayload.impressoraOrcamento);
+    const impressoraContas = buildPrinterPayload(impressaoPayload.impressoraContasReceber);
+    const impressoraCaixa = buildPrinterPayload(impressaoPayload.impressoraCaixa);
+
+    const perfis = normalizePerfisDesconto(vendaPayload.permitirDesconto);
+    const tipoEmissaoPadrao = parseTipoEmissao(fiscalPayload.tipoEmissaoPadrao);
+
+    let depositoPadraoId = null;
+    if (estoquePayload.depositoPadrao) {
+      depositoPadraoId = normalizeString(estoquePayload.depositoPadrao);
+      if (depositoPadraoId) {
+        if (!mongoose.Types.ObjectId.isValid(depositoPadraoId)) {
+          throw createValidationError('Depósito selecionado é inválido.');
+        }
+        const deposito = await Deposit.findOne({ _id: depositoPadraoId, empresa: pdv.empresa });
+        if (!deposito) {
+          throw createValidationError('Depósito selecionado não pertence à mesma empresa do PDV.');
+        }
+      }
+    }
+
+    pdv.configuracoesImpressao = {
+      sempreImprimir,
+      impressoraVenda: impressoraVenda || undefined,
+      impressoraOrcamento: impressoraOrcamento || undefined,
+      impressoraContasReceber: impressoraContas || undefined,
+      impressoraCaixa: impressoraCaixa || undefined,
+    };
+
+    pdv.configuracoesVenda = {
+      permitirDesconto: perfis,
+    };
+
+    pdv.configuracoesFiscal = {
+      tipoEmissaoPadrao,
+    };
+
+    pdv.configuracoesEstoque = {
+      depositoPadrao: depositoPadraoId || null,
+    };
+
+    pdv.atualizadoPor = req.user?.email || req.user?.id || 'Sistema';
+
+    await pdv.save();
+
+    const populated = await pdv
+      .populate('empresa')
+      .populate('configuracoesEstoque.depositoPadrao');
+
+    res.json(populated);
+  } catch (error) {
+    const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+    const message =
+      error?.message && typeof error.message === 'string'
+        ? error.message
+        : 'Erro ao salvar configurações do PDV.';
+    console.error('Erro ao salvar configurações do PDV:', error);
+    res.status(statusCode).json({ message });
   }
 });
 
