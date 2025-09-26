@@ -57,6 +57,36 @@ async function loadComponents() {
         console.error("Erro ao carregar os componentes:", error);
     }
 }
+
+function updateActiveAccountLink() {
+  const wrapper = document.getElementById('account-sidebar-placeholder');
+  if (!wrapper) return;
+
+  const navLinks = wrapper.querySelectorAll('nav a[href]');
+  if (!navLinks.length) return;
+
+  const inactiveClasses = ['text-gray-600', 'hover:bg-gray-100'];
+  const activeClasses   = ['bg-primary/10', 'text-primary', 'font-semibold'];
+
+  navLinks.forEach(link => {
+    const href = link.getAttribute('href');
+    if (!href || href === '#') return;
+
+    const url = new URL(href, window.location.origin);
+    const isActive = window.location.pathname.endsWith(url.pathname);
+
+    if (isActive) {
+      link.classList.remove(...inactiveClasses);
+      link.classList.add(...activeClasses);
+      link.classList.remove('hover:bg-gray-100');
+      link.setAttribute('aria-current', 'page');
+    } else {
+      link.classList.remove(...activeClasses);
+      link.classList.add(...inactiveClasses);
+      link.removeAttribute('aria-current');
+    }
+  });
+}
 window.loadComponents = loadComponents;
 
 function updateActiveAdminLink() {
