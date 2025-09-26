@@ -60,10 +60,31 @@
         </div>
       </div>
 
-      <a href="#" class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
-        <i class="fas fa-wallet text-primary"></i>
-        Financeiro
-      </a>
+      <div>
+        <button type="button" class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-gray-700 rounded-lg hover:bg-gray-50 transition" data-accordion-button>
+          <span class="inline-flex items-center gap-2">
+            <i class="fas fa-wallet text-primary"></i>
+            Financeiro
+          </span>
+          <i class="fas fa-chevron-down text-xs text-gray-500 transition-transform" data-chevron></i>
+        </button>
+        <div class="mt-2 space-y-3 pl-4 hidden" data-accordion-content>
+          <div>
+            <button type="button" class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition" data-accordion-button>
+              <span class="inline-flex items-center gap-2">
+                <i class="fas fa-receipt text-primary"></i>
+                Pagamentos
+              </span>
+              <i class="fas fa-chevron-down text-xs text-gray-500 transition-transform" data-chevron></i>
+            </button>
+            <div class="mt-2 space-y-2 pl-4 hidden" data-accordion-content>
+              <a href="/pages/admin/admin-financeiro-meios-pagamento.html" class="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 transition">
+                <span class="inline-flex items-center gap-2"><i class="fas fa-credit-card text-gray-400"></i>Meios de Pagamento</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div>
         <button type="button" class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-gray-700 rounded-lg hover:bg-gray-50 transition" data-accordion-button data-default-open="true">
