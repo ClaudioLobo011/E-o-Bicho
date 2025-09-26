@@ -158,4 +158,116 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
   }
 });
 
+router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Identificador inválido do meio de pagamento.' });
+    }
+
+    const existing = await PaymentMethod.findById(id);
+    if (!existing) {
+      return res.status(404).json({ message: 'Meio de pagamento não encontrado.' });
+    }
+
+    const name = normalizeString(req.body.name);
+    if (!name) {
+      return res.status(400).json({ message: 'Informe o nome do meio de pagamento.' });
+    }
+
+    const company = normalizeString(req.body.company) || String(existing.company);
+    if (!company) {
+      return res.status(400).json({ message: 'Selecione a empresa vinculada ao meio de pagamento.' });
+    }
+
+    const storeExists = await Store.exists({ _id: company });
+    if (!storeExists) {
+      return res.status(404).json({ message: 'Empresa informada não foi encontrada.' });
+    }
+
+    let type = normalizeString(req.body.type).toLowerCase();
+    if (!['avista', 'debito', 'credito'].includes(type)) {
+      type = existing.type;
+    }
+
+    let code = normalizeString(req.body.code) || existing.code || '';
+    if (!code || code.toLowerCase() === 'gerado automaticamente') {
+      code = existing.code || (await generateNextCode(company));
+    }
+
+    let attempts = 0;
+    let candidateCode = code;
+    while (
+      await PaymentMethod.exists({ company, code: candidateCode, _id: { $ne: existing._id } }) &&
+      attempts < 5
+    ) {
+      const next = extractNumericValue(candidateCode) + 1;
+      candidateCode = `MP-${String(next).padStart(3, '0')}`;
+      attempts += 1;
+    }
+
+    if (await PaymentMethod.exists({ company, code: candidateCode, _id: { $ne: existing._id } })) {
+      return res
+        .status(409)
+        .json({ message: 'Já existe um meio de pagamento com este código para a empresa selecionada.' });
+    }
+
+    const days = Math.max(0, parseNumber(req.body.days, existing.days || 0));
+    let discount = Math.max(0, parseNumber(req.body.discount, existing.discount || 0));
+
+    existing.company = company;
+    existing.code = candidateCode;
+    existing.name = name;
+    existing.type = type;
+    existing.days = days;
+    existing.discount = discount;
+
+    if (type === 'credito') {
+      const installments = Math.max(1, Math.min(12, parseNumber(req.body.installments, existing.installments || 1)));
+      const installmentConfigurations = normalizeInstallmentConfigurations(
+        req.body.installmentConfigurations,
+        installments,
+        days
+      );
+      existing.installments = installments;
+      existing.installmentConfigurations = installmentConfigurations;
+      if (installmentConfigurations.length) {
+        discount = installmentConfigurations[0].discount;
+        existing.discount = discount;
+      }
+      existing.markModified('installmentConfigurations');
+    } else {
+      existing.installments = 1;
+      existing.installmentConfigurations = undefined;
+      existing.markModified('installmentConfigurations');
+    }
+
+    const saved = await existing.save();
+    const populated = await saved.populate('company', 'nome nomeFantasia razaoSocial cnpj cpf');
+    res.json(populated);
+  } catch (error) {
+    console.error('Erro ao atualizar meio de pagamento:', error);
+    res.status(500).json({ message: 'Erro ao atualizar meio de pagamento.' });
+  }
+});
+
+router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Identificador inválido do meio de pagamento.' });
+    }
+
+    const deleted = await PaymentMethod.findByIdAndDelete(id);
+    if (!deleted) {
+      return res.status(404).json({ message: 'Meio de pagamento não encontrado.' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao remover meio de pagamento:', error);
+    res.status(500).json({ message: 'Erro ao remover meio de pagamento.' });
+  }
+});
+
 module.exports = router;

@@ -1193,7 +1193,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function optionsForActor(actorRole) {
     if (actorRole === 'admin_master') return ['funcionario', 'admin', 'admin_master'];
-    if (actorRole === 'admin')        return ['funcionario'];
+    if (actorRole === 'admin')        return ['funcionario', 'admin'];
     return [];
   }
 

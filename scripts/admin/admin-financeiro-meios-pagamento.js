@@ -8,6 +8,7 @@
     cancelButton: '#payment-method-cancel',
     submitLabel: '#payment-submit-label',
     submitButton: '#payment-method-form button[type="submit"]',
+    idInput: '#payment-method-id',
     companySelect: '#payment-company',
     companySummary: '#payment-company-summary',
     codeInput: '#payment-code',
@@ -25,7 +26,6 @@
     creditoInstallments: '#credito-installments',
     creditoDays: '#credito-days',
     creditoDiscount: '#credito-discount',
-    creditoDiscountsContainer: '#credito-discounts-per-installment',
     creditoPreviewList: '#credito-preview-list',
     overview: '#payment-overview',
     methodsList: '#payment-methods-list',
@@ -42,6 +42,9 @@
     saving: false,
     loadingMethods: false,
     defaultEmptyStateHtml: '',
+    editingId: '',
+    editingCode: '',
+    editingCompanyId: '',
   };
 
   const elements = {};
@@ -120,6 +123,10 @@
 
   const updateCodeField = () => {
     if (!elements.codeInput) return;
+    if (state.editingCode) {
+      elements.codeInput.value = state.editingCode;
+      return;
+    }
     elements.codeInput.value = 'Gerado automaticamente';
   };
 
@@ -192,46 +199,6 @@
     }
   };
 
-  const renderCreditDiscountInputs = () => {
-    if (!elements.creditoDiscountsContainer) return;
-    updateCreditDiscountsStructure();
-
-    const total = Math.max(1, parseNumber(elements.creditoInstallments?.value, 1));
-    const rows = [];
-
-    for (let installment = 1; installment <= total; installment += 1) {
-      const value = getCreditDiscountValue(installment);
-      rows.push(`
-        <label class="flex items-center justify-between gap-3 rounded-lg border border-indigo-100 bg-white px-3 py-2 text-sm text-indigo-700">
-          <span class="font-semibold">Crédito ${installment}x</span>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            data-installment="${installment}"
-            value="${value}"
-            class="w-24 rounded-md border border-indigo-200 px-2 py-1 text-right text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
-          />
-        </label>
-      `);
-    }
-
-    elements.creditoDiscountsContainer.innerHTML = rows.join('');
-
-    const inputs = elements.creditoDiscountsContainer.querySelectorAll('input[data-installment]');
-    inputs.forEach((input) => {
-      input.addEventListener('input', (event) => {
-        const installment = Number(event.target.dataset.installment);
-        const value = Math.max(0, parseNumber(event.target.value, 0));
-        if (Number.isFinite(installment) && installment >= 1) {
-          state.creditDiscounts[installment] = value;
-        }
-        updateCreditoPreview();
-        updateOverview();
-      });
-    });
-  };
-
   const updateOverview = () => {
     if (!elements.overview) return;
 
@@ -273,6 +240,7 @@
       return;
     }
 
+    updateCreditDiscountsStructure();
     const installments = Math.max(1, parseNumber(elements.creditoInstallments?.value, 1));
     const days = formatDays(elements.creditoDays?.value);
 
@@ -315,21 +283,52 @@
 
   const updateCreditoPreview = () => {
     if (!elements.creditoPreviewList) return;
+    updateCreditDiscountsStructure();
     const installments = Math.max(1, parseNumber(elements.creditoInstallments?.value, 1));
     const days = formatDays(elements.creditoDays?.value);
 
     const items = [];
     for (let installment = 1; installment <= installments; installment += 1) {
-      const discount = formatDiscount(getCreditDiscountValue(installment));
+      const discountValue = Math.max(0, getCreditDiscountValue(installment));
       items.push(`
-        <div class="flex items-center justify-between rounded-lg border border-indigo-100 bg-white/70 px-3 py-2">
-          <span class="text-sm font-semibold text-indigo-700">Crédito ${installment}x</span>
-          <span class="text-xs text-indigo-600">${days} • ${discount}</span>
+        <div class="flex items-center justify-between gap-3 rounded-lg border border-indigo-100 bg-white px-3 py-2" data-installment-row="${installment}">
+          <div>
+            <p class="text-sm font-semibold text-indigo-700">Crédito ${installment}x</p>
+            <p class="text-xs text-indigo-500">${days}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              data-installment="${installment}"
+              value="${discountValue}"
+              class="w-20 rounded-md border border-indigo-200 px-2 py-1 text-right text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+            <span class="text-xs font-medium text-indigo-600" data-discount-label>${formatPercentage(discountValue)}</span>
+          </div>
         </div>
       `);
     }
 
     elements.creditoPreviewList.innerHTML = items.join('');
+
+    const inputs = elements.creditoPreviewList.querySelectorAll('input[data-installment]');
+    inputs.forEach((input) => {
+      input.addEventListener('input', (event) => {
+        const installment = Number(event.target.dataset.installment);
+        const value = Math.max(0, parseNumber(event.target.value, 0));
+        if (Number.isFinite(installment) && installment >= 1) {
+          state.creditDiscounts[installment] = value;
+        }
+        const row = event.target.closest('[data-installment-row]');
+        const badge = row?.querySelector('[data-discount-label]');
+        if (badge) {
+          badge.textContent = formatPercentage(value);
+        }
+        updateOverview();
+      });
+    });
   };
 
   const toggleSections = () => {
@@ -418,6 +417,9 @@
 
   const handleCompanyChange = async (event) => {
     state.selectedCompanyId = event.target.value || '';
+    if (state.editingId && state.editingCompanyId && state.editingCompanyId !== state.selectedCompanyId) {
+      resetForm({ preserveCompany: true });
+    }
     updateCompanySummary();
     updateOverview();
     await fetchPaymentMethods(state.selectedCompanyId);
@@ -426,9 +428,6 @@
   const handleTypeChange = (event) => {
     state.currentType = event.target.value;
     toggleSections();
-    if (state.currentType === 'credito') {
-      renderCreditDiscountInputs();
-    }
     updateAvistaPreview();
     updateDebitoPreview();
     updateCreditoPreview();
@@ -439,10 +438,17 @@
     const selectedCompanyId = preserveCompany ? state.selectedCompanyId : '';
     state.currentType = 'avista';
     state.creditDiscounts = {};
+    state.editingId = '';
+    state.editingCode = '';
+    state.editingCompanyId = '';
 
     if (elements.form) {
       elements.form.reset();
     }
+
+    if (elements.idInput) elements.idInput.value = '';
+    if (elements.cancelButton) elements.cancelButton.classList.add('hidden');
+    if (elements.submitLabel) elements.submitLabel.textContent = 'Salvar meio';
 
     state.selectedCompanyId = selectedCompanyId;
     if (elements.companySelect) {
@@ -464,7 +470,6 @@
 
     updateCodeField();
     toggleSections();
-    renderCreditDiscountInputs();
     updateAvistaPreview();
     updateDebitoPreview();
     updateCreditoPreview();
@@ -526,14 +531,49 @@
         details.push(`<p class="text-xs text-gray-500">${days} • ${discount}</p>`);
       }
 
+      const isEditing = state.editingId && String(state.editingId) === String(method._id);
+      const cardClasses = ['rounded-lg', 'border', 'px-4', 'py-3', 'bg-white', 'transition'];
+      if (isEditing) {
+        cardClasses.push('border-primary/40', 'ring-2', 'ring-primary/30');
+      } else {
+        cardClasses.push('border-gray-200');
+      }
+
+      const code = method.code || '—';
+      const codeClasses = isEditing
+        ? 'text-xs font-semibold text-primary'
+        : 'text-xs font-semibold text-gray-400';
+
       return `
-        <article class="rounded-lg border border-gray-200 px-4 py-3">
-          <div class="flex items-center justify-between gap-4">
+        <article class="${cardClasses.join(' ')}" data-method-id="${method._id}">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 class="text-sm font-semibold text-gray-800">${method.name}</h3>
               <p class="text-xs text-gray-500">${typeLabel}</p>
             </div>
-            <span class="text-xs font-semibold text-gray-400">${method.code || '—'}</span>
+            <div class="flex flex-col items-end gap-2">
+              <span class="${codeClasses}">${code}</span>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-md border border-indigo-200 px-2 py-1 text-xs font-medium text-indigo-600 hover:border-indigo-300 hover:text-indigo-700"
+                  data-action="edit"
+                  data-id="${method._id}"
+                >
+                  <i class="fas fa-pen-to-square"></i>
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-1 text-xs font-medium text-rose-600 hover:border-rose-300 hover:text-rose-700"
+                  data-action="delete"
+                  data-id="${method._id}"
+                >
+                  <i class="fas fa-trash"></i>
+                  Excluir
+                </button>
+              </div>
+            </div>
           </div>
           <div class="mt-3 space-y-1">
             ${details.join('')}
@@ -543,6 +583,163 @@
     });
 
     elements.methodsList.innerHTML = cards.join('');
+  };
+
+  const confirmDestructiveAction = async (message) => {
+    if (typeof window.showModal === 'function') {
+      return new Promise((resolve) => {
+        window.showModal({
+          title: 'Confirmar exclusão',
+          message,
+          confirmText: 'Excluir',
+          cancelText: 'Cancelar',
+          onConfirm: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+    }
+    return window.confirm(message);
+  };
+
+  const startEditingMethod = (method) => {
+    if (!method) return;
+
+    state.editingId = String(method._id || method.id || '');
+    state.editingCode = method.code || '';
+    state.editingCompanyId =
+      (typeof method.company === 'object' && method.company
+        ? method.company._id || method.company.id || method.company.value
+        : method.company) || state.selectedCompanyId || '';
+
+    if (elements.idInput) elements.idInput.value = state.editingId;
+    if (elements.cancelButton) elements.cancelButton.classList.remove('hidden');
+    if (elements.submitLabel) elements.submitLabel.textContent = 'Atualizar meio';
+
+    state.selectedCompanyId = state.editingCompanyId || state.selectedCompanyId || '';
+    if (elements.companySelect) {
+      elements.companySelect.value = state.selectedCompanyId || '';
+    }
+
+    if (elements.nameInput) {
+      elements.nameInput.value = method.name || '';
+    }
+
+    state.currentType = method.type || 'avista';
+    const radios = Array.from(document.querySelectorAll(selectors.typeRadios));
+    radios.forEach((radio) => {
+      radio.checked = radio.value === state.currentType;
+    });
+
+    state.creditDiscounts = {};
+
+    if (state.currentType === 'avista') {
+      if (elements.avistaDays) elements.avistaDays.value = Math.max(0, parseNumber(method.days, 0));
+      if (elements.avistaDiscount) elements.avistaDiscount.value = Math.max(0, parseNumber(method.discount, 0));
+      if (elements.debitoDays) elements.debitoDays.value = Math.max(0, parseNumber(method.days, 1));
+      if (elements.debitoDiscount) elements.debitoDiscount.value = Math.max(0, parseNumber(method.discount, 0));
+    } else if (state.currentType === 'debito') {
+      if (elements.debitoDays) elements.debitoDays.value = Math.max(0, parseNumber(method.days, 1));
+      if (elements.debitoDiscount) elements.debitoDiscount.value = Math.max(0, parseNumber(method.discount, 0));
+      if (elements.avistaDays) elements.avistaDays.value = Math.max(0, parseNumber(method.days, 0));
+      if (elements.avistaDiscount) elements.avistaDiscount.value = Math.max(0, parseNumber(method.discount, 0));
+    } else {
+      const configs = Array.isArray(method.installmentConfigurations)
+        ? method.installmentConfigurations
+        : [];
+      const installments = Math.max(
+        1,
+        parseNumber(
+          method.installments || configs.length || elements.creditoInstallments?.value || 1,
+          1
+        )
+      );
+      const creditDays = Math.max(0, parseNumber(method.days ?? configs[0]?.days, 30));
+      const baseDiscount = Math.max(0, parseNumber(configs[0]?.discount ?? method.discount, 0));
+
+      if (elements.creditoInstallments) elements.creditoInstallments.value = installments;
+      if (elements.creditoDays) elements.creditoDays.value = creditDays;
+      if (elements.creditoDiscount) elements.creditoDiscount.value = baseDiscount;
+
+      configs.forEach((config) => {
+        const installmentNumber = parseNumber(config.number ?? config.installment, null);
+        if (Number.isFinite(installmentNumber) && installmentNumber >= 1) {
+          state.creditDiscounts[installmentNumber] = Math.max(0, parseNumber(config.discount, 0));
+        }
+      });
+
+      updateCreditDiscountsStructure();
+    }
+
+    updateCodeField();
+    toggleSections();
+    updateCompanySummary();
+    updateAvistaPreview();
+    updateDebitoPreview();
+    updateCreditoPreview();
+    updateOverview();
+    renderMethods();
+  };
+
+  const handleDeleteMethod = async (method) => {
+    if (!method || !method._id) return;
+
+    const confirmed = await confirmDestructiveAction(
+      `Tem certeza que deseja excluir o meio "${method.name}"? Esta ação não poderá ser desfeita.`
+    );
+    if (!confirmed) return;
+
+    const token = getToken();
+    if (!token) {
+      notify('Sua sessão expirou. Faça login novamente para continuar.', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/payment-methods/${method._id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const message = await parseErrorResponse(response, 'Não foi possível remover o meio de pagamento.');
+        throw new Error(message);
+      }
+
+      notify('Meio de pagamento removido com sucesso.', 'success');
+
+      if (state.editingId && String(state.editingId) === String(method._id)) {
+        resetForm({ preserveCompany: true });
+      }
+
+      await fetchPaymentMethods(state.selectedCompanyId);
+    } catch (error) {
+      console.error('Erro ao remover meio de pagamento:', error);
+      notify(error.message || 'Erro ao remover meio de pagamento.', 'error');
+    }
+  };
+
+  const handleMethodsListClick = (event) => {
+    const actionButton = event.target.closest('[data-action]');
+    if (!actionButton) return;
+
+    event.preventDefault();
+
+    const { action, id } = actionButton.dataset;
+    if (!id) return;
+
+    const method = state.methods.find((item) => String(item._id) === String(id));
+    if (!method) {
+      notify('Não foi possível localizar o meio de pagamento selecionado.', 'error');
+      return;
+    }
+
+    if (action === 'edit') {
+      startEditingMethod(method);
+    } else if (action === 'delete') {
+      handleDeleteMethod(method);
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -569,6 +766,8 @@
       return;
     }
 
+    const isEditing = Boolean(state.editingId);
+
     const baseCode = (elements.codeInput?.value || '').trim();
     const payload = {
       company: company._id,
@@ -587,6 +786,7 @@
       payload.days = Math.max(0, parseNumber(elements.debitoDays?.value, 1));
       payload.discount = Math.max(0, parseNumber(elements.debitoDiscount?.value, 0));
     } else {
+      updateCreditDiscountsStructure();
       const installments = Math.max(1, parseNumber(elements.creditoInstallments?.value, 1));
       const days = Math.max(0, parseNumber(elements.creditoDays?.value, 30));
       payload.days = days;
@@ -607,8 +807,11 @@
     setSavingState(true);
 
     try {
-      const response = await fetch(`${API_BASE}/payment-methods`, {
-        method: 'POST',
+      const endpoint = isEditing
+        ? `${API_BASE}/payment-methods/${state.editingId}`
+        : `${API_BASE}/payment-methods`;
+      const response = await fetch(endpoint, {
+        method: isEditing ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -622,9 +825,12 @@
       }
 
       await response.json();
-      notify('Meio de pagamento salvo com sucesso.', 'success');
-      await fetchPaymentMethods(state.selectedCompanyId);
+      notify(
+        isEditing ? 'Meio de pagamento atualizado com sucesso.' : 'Meio de pagamento salvo com sucesso.',
+        'success'
+      );
       resetForm({ preserveCompany: true });
+      await fetchPaymentMethods(state.selectedCompanyId);
     } catch (error) {
       console.error('Erro ao salvar meio de pagamento:', error);
       notify(error.message || 'Erro ao salvar meio de pagamento.', 'error');
@@ -660,7 +866,7 @@
     });
 
     elements.creditoInstallments?.addEventListener('input', () => {
-      renderCreditDiscountInputs();
+      updateCreditDiscountsStructure();
       updateCreditoPreview();
       updateOverview();
     });
@@ -674,7 +880,6 @@
       for (let installment = 1; installment <= total; installment += 1) {
         state.creditDiscounts[installment] = base;
       }
-      renderCreditDiscountInputs();
       updateCreditoPreview();
       updateOverview();
     });
@@ -682,9 +887,17 @@
     elements.resetButton?.addEventListener('click', (event) => {
       event.preventDefault();
       resetForm({ preserveCompany: true });
+      renderMethods();
+    });
+
+    elements.cancelButton?.addEventListener('click', (event) => {
+      event.preventDefault();
+      resetForm({ preserveCompany: true });
+      renderMethods();
     });
 
     elements.form?.addEventListener('submit', handleSubmit);
+    elements.methodsList?.addEventListener('click', handleMethodsListClick);
   };
 
   const initialize = () => {
@@ -698,7 +911,7 @@
     }
 
     updateCodeField();
-    renderCreditDiscountInputs();
+    updateCreditDiscountsStructure();
     toggleSections();
     updateAvistaPreview();
     updateDebitoPreview();
