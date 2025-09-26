@@ -4,23 +4,11 @@
   const SERVER_URL =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.SERVER_URL) || '';
 
-  const pagamentosCatalog = [
-    { id: 'dinheiro', label: 'Dinheiro' },
-    { id: 'credito', label: 'Cartão de crédito' },
-    { id: 'debito', label: 'Cartão de débito' },
-    { id: 'pix', label: 'Pix' },
-  ];
-
-  const vendaPaymentCatalog = [
-    { id: 'dinheiro', label: 'Dinheiro' },
-    { id: 'debito', label: 'Cartão de débito' },
-    {
-      id: 'credito',
-      label: 'Cartão de crédito',
-      installments: Array.from({ length: 12 }, (_, index) => index + 1),
-    },
-    { id: 'pix', label: 'Pix' },
-  ];
+  const paymentTypeOrder = {
+    avista: 0,
+    debito: 1,
+    credito: 2,
+  };
 
   const caixaActions = [
     {
@@ -92,7 +80,10 @@
     selectedProduct: null,
     quantidade: 1,
     itens: [],
-    pagamentos: pagamentosCatalog.map((payment) => ({ ...payment, valor: 0 })),
+    paymentMethods: [],
+    paymentMethodsLoading: false,
+    pendingPagamentosData: null,
+    pagamentos: [],
     vendaPagamentos: [],
     vendaDesconto: 0,
     vendaAcrescimo: 0,
@@ -157,6 +148,207 @@
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const normalizePaymentMethod = (method) => {
+    if (!method) {
+      return null;
+    }
+    const idSource =
+      method._id || method.id || method.code || method.nome || method.name || method.label;
+    const id = idSource ? String(idSource) : createUid();
+    const label =
+      method.name || method.nome || method.label || method.code || 'Meio de pagamento';
+    const type = (method.type || 'avista').toLowerCase();
+    const code = method.code ? String(method.code) : '';
+    const rawInstallments = Array.isArray(method.installmentConfigurations)
+      ? method.installmentConfigurations
+      : [];
+    const installmentConfigurations = rawInstallments
+      .map((config) => ({
+        number:
+          Number(
+            config?.number ?? config?.installment ?? config?.parcelas ?? config?.parcela ?? 0
+          ) || 0,
+        discount: safeNumber(config?.discount ?? config?.desconto ?? 0),
+        days: safeNumber(config?.days ?? config?.prazo ?? config?.dias ?? method?.days ?? 0),
+      }))
+      .filter((config) => Number.isFinite(config.number) && config.number >= 1)
+      .sort((a, b) => a.number - b.number);
+    let installments = installmentConfigurations.map((config) => config.number);
+    if (!installments.length) {
+      const total = Number(method.installments) || 0;
+      if (total > 0) {
+        installments = Array.from({ length: total }, (_, index) => index + 1);
+      } else {
+        installments = [1];
+      }
+    }
+    const uniqueInstallments = Array.from(
+      new Set(
+        installments
+          .map((value) => Number(value) || 0)
+          .filter((value) => Number.isFinite(value) && value >= 1)
+      )
+    ).sort((a, b) => a - b);
+    const aliases = Array.from(
+      new Set(
+        [
+          id,
+          code,
+          label,
+          method.nome,
+          method.name,
+          method.label,
+          method.codigo,
+          method.slug,
+          method.tipo,
+          method.type,
+        ]
+          .filter(Boolean)
+          .map((value) => String(value))
+      )
+    );
+    return {
+      id,
+      label,
+      type,
+      code,
+      installments: uniqueInstallments,
+      installmentConfigurations,
+      aliases,
+      raw: method,
+    };
+  };
+
+  const extractPaymentAmount = (value) => {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === 'number' || typeof value === 'string') {
+      return safeNumber(value);
+    }
+    if (typeof value === 'object') {
+      if ('valor' in value) return extractPaymentAmount(value.valor);
+      if ('value' in value) return extractPaymentAmount(value.value);
+      if ('amount' in value) return extractPaymentAmount(value.amount);
+      if ('total' in value) return extractPaymentAmount(value.total);
+      if ('saldo' in value) return extractPaymentAmount(value.saldo);
+    }
+    return 0;
+  };
+
+  const buildPaymentValuesMap = (data) => {
+    const map = new Map();
+    const register = (key, amount) => {
+      if (key === undefined || key === null) return;
+      const normalizedKey = String(key).trim();
+      if (!normalizedKey) return;
+      const value = safeNumber(amount);
+      map.set(normalizedKey, value);
+      map.set(normalizedKey.toLowerCase(), value);
+    };
+    if (Array.isArray(data)) {
+      data.forEach((item) => {
+        const value = extractPaymentAmount(
+          item?.valor ?? item?.value ?? item?.amount ?? item?.total ?? item?.saldo ?? item
+        );
+        [
+          item?.id,
+          item?._id,
+          item?.code,
+          item?.codigo,
+          item?.label,
+          item?.nome,
+          item?.name,
+          item?.tipo,
+          item?.type,
+          item?.payment,
+          item?.forma,
+        ].forEach((key) => register(key, value));
+      });
+    } else if (data && typeof data === 'object') {
+      Object.entries(data).forEach(([key, rawValue]) => {
+        const value = extractPaymentAmount(rawValue);
+        register(key, value);
+        if (rawValue && typeof rawValue === 'object') {
+          [
+            rawValue?.id,
+            rawValue?._id,
+            rawValue?.code,
+            rawValue?.codigo,
+            rawValue?.label,
+            rawValue?.nome,
+            rawValue?.name,
+            rawValue?.tipo,
+            rawValue?.type,
+          ].forEach((nested) => register(nested, value));
+        }
+      });
+    }
+    return map;
+  };
+
+  const updatePaymentMethods = (methods) => {
+    const normalized = Array.isArray(methods)
+      ? methods
+          .map((method) => normalizePaymentMethod(method))
+          .filter(Boolean)
+          .sort((a, b) => {
+            const typeDiff =
+              (paymentTypeOrder[a.type] ?? Number.MAX_SAFE_INTEGER) -
+              (paymentTypeOrder[b.type] ?? Number.MAX_SAFE_INTEGER);
+            if (typeDiff !== 0) return typeDiff;
+            return a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' });
+          })
+      : [];
+    const previousValues = new Map(
+      state.pagamentos.map((item) => [item.id, safeNumber(item.valor)])
+    );
+    state.paymentMethods = normalized;
+    state.pagamentos = normalized.map((method) => ({
+      ...method,
+      valor: previousValues.has(method.id) ? previousValues.get(method.id) : 0,
+    }));
+    renderSalePaymentMethods();
+    if (state.pendingPagamentosData) {
+      const pending = state.pendingPagamentosData;
+      state.pendingPagamentosData = null;
+      applyPagamentosData(pending);
+      return;
+    }
+    renderPayments();
+    updateSummary();
+    populatePaymentSelect();
+  };
+
+  const applyPagamentosData = (data) => {
+    if (!state.paymentMethods.length) {
+      state.pendingPagamentosData = data;
+      return;
+    }
+    const valuesMap = buildPaymentValuesMap(data);
+    const updated = state.paymentMethods.map((method) => {
+      const candidates = [method.id, method.code, method.label, ...(method.aliases || [])];
+      let valor = 0;
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+        const key = String(candidate);
+        if (valuesMap.has(key)) {
+          valor = safeNumber(valuesMap.get(key));
+          break;
+        }
+        const lower = key.toLowerCase();
+        if (valuesMap.has(lower)) {
+          valor = safeNumber(valuesMap.get(lower));
+          break;
+        }
+      }
+      return { ...method, valor };
+    });
+    state.pagamentos = updated;
+    state.pendingPagamentosData = null;
+    renderPayments();
+    updateSummary();
+    populatePaymentSelect();
   };
 
   const getProductCode = (product) => {
@@ -572,10 +764,26 @@
 
   const renderSalePaymentMethods = () => {
     if (!elements.saleMethods) return;
-    const html = vendaPaymentCatalog
+    if (state.paymentMethodsLoading) {
+      elements.saleMethods.innerHTML =
+        '<li class="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Carregando meios de pagamento...</li>';
+      return;
+    }
+    if (!state.paymentMethods.length) {
+      const message = state.selectedStore
+        ? 'Cadastre meios de pagamento para finalizar vendas neste PDV.'
+        : 'Selecione uma empresa para carregar os meios de pagamento disponíveis.';
+      elements.saleMethods.innerHTML = `<li class="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">${message}</li>`;
+      return;
+    }
+    const html = state.paymentMethods
       .map((method) => {
-        if (Array.isArray(method.installments) && method.installments.length) {
-          const installments = method.installments
+        const installments = Array.isArray(method.installments)
+          ? method.installments.filter((value) => Number.isFinite(value) && value >= 1)
+          : [1];
+        const uniqueInstallments = Array.from(new Set(installments)).sort((a, b) => a - b);
+        if (method.type === 'credito' && uniqueInstallments.length > 1) {
+          const buttons = uniqueInstallments
             .map((installment) => {
               const label = installment === 1 ? 'À vista' : `${installment}x`;
               return `<button type="button" class="rounded border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-installment="${method.id}:${installment}">${label}</button>`;
@@ -588,15 +796,17 @@
                 <i class="fas fa-chevron-down text-xs" aria-hidden="true"></i>
               </button>
               <div class="mt-3 hidden flex flex-wrap gap-2" data-sale-options="${method.id}">
-                ${installments}
+                ${buttons}
               </div>
             </li>
           `;
         }
+        const parcelas = method.type === 'credito' ? uniqueInstallments[0] || 1 : 1;
+        const parcelasLabel = parcelas > 1 ? ` (${parcelas}x)` : '';
         return `
           <li>
-            <button type="button" class="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-primary hover:text-primary" data-sale-method="${method.id}">
-              <span>${method.label}</span>
+            <button type="button" class="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-primary hover:text-primary" data-sale-method="${method.id}" data-sale-parcelas="${parcelas}">
+              <span>${method.label}${parcelasLabel}</span>
               <i class="fas fa-arrow-right text-xs"></i>
             </button>
           </li>
@@ -613,6 +823,14 @@
     }
     if (!state.itens.length) {
       notify('Adicione itens para finalizar a venda.', 'warning');
+      return;
+    }
+    if (state.paymentMethodsLoading) {
+      notify('Aguarde o carregamento dos meios de pagamento para finalizar a venda.', 'info');
+      return;
+    }
+    if (!state.paymentMethods.length) {
+      notify('Cadastre meios de pagamento para concluir a venda.', 'warning');
       return;
     }
     renderSalePaymentMethods();
@@ -733,7 +951,7 @@
       if (!value) return;
       const [methodId, parcelasStr] = value.split(':');
       const parcelas = Math.max(1, Number(parcelasStr) || 1);
-      const method = vendaPaymentCatalog.find((item) => item.id === methodId);
+      const method = state.paymentMethods.find((item) => item.id === methodId);
       if (!method) return;
       if (!state.itens.length) {
         notify('Adicione itens para lançar pagamentos.', 'warning');
@@ -757,19 +975,21 @@
     const methodButton = event.target.closest('[data-sale-method]');
     if (!methodButton) return;
     const methodId = methodButton.getAttribute('data-sale-method');
-    const method = vendaPaymentCatalog.find((item) => item.id === methodId);
+    const method = state.paymentMethods.find((item) => item.id === methodId);
     if (!method) return;
+    const parcelasAttr = methodButton.getAttribute('data-sale-parcelas');
+    const parcelas = Math.max(1, Number(parcelasAttr) || 1);
     if (!state.itens.length) {
       notify('Adicione itens para lançar pagamentos.', 'warning');
       return;
     }
     try {
-      const result = await openPaymentValueModal(method, 1);
+      const result = await openPaymentValueModal(method, parcelas);
       state.vendaPagamentos.push({
         uid: createUid(),
         id: method.id,
         label: method.label,
-        parcelas: 1,
+        parcelas,
         valor: safeNumber(result.valor),
       });
       renderSalePaymentsPreview();
@@ -858,6 +1078,20 @@
 
   const populatePaymentSelect = () => {
     if (!elements.paymentSelect) return;
+    if (state.paymentMethodsLoading) {
+      elements.paymentSelect.innerHTML =
+        '<option value="">Carregando meios de pagamento...</option>';
+      elements.paymentSelect.disabled = true;
+      return;
+    }
+    if (!state.pagamentos.length) {
+      const label = state.selectedStore
+        ? 'Nenhum meio de pagamento disponível'
+        : 'Selecione uma empresa para carregar os meios de pagamento';
+      elements.paymentSelect.innerHTML = `<option value="">${label}</option>`;
+      elements.paymentSelect.disabled = true;
+      return;
+    }
     const previous = elements.paymentSelect.value;
     const options = state.pagamentos.map(
       (payment) => `<option value="${payment.id}">${payment.label}</option>`
@@ -865,10 +1099,10 @@
     elements.paymentSelect.innerHTML = options.join('');
     if (previous && state.pagamentos.some((payment) => payment.id === previous)) {
       elements.paymentSelect.value = previous;
-    } else if (state.pagamentos.length) {
+    } else {
       elements.paymentSelect.value = state.pagamentos[0].id;
     }
-    elements.paymentSelect.disabled = state.pagamentos.length === 0;
+    elements.paymentSelect.disabled = false;
   };
 
   const updateSummary = () => {
@@ -986,9 +1220,16 @@
       elements.actionAmount.disabled = !action.requiresAmount;
     }
     if (elements.paymentSelect) {
-      elements.paymentSelect.disabled = !action.affectsPayments;
+      const shouldDisable =
+        !action.affectsPayments || state.paymentMethodsLoading || !state.pagamentos.length;
+      elements.paymentSelect.disabled = shouldDisable;
       if (!action.affectsPayments && state.pagamentos.length) {
         elements.paymentSelect.value = state.pagamentos[0].id;
+      }
+      if (shouldDisable && action.affectsPayments && elements.actionHint) {
+        elements.actionHint.textContent = state.paymentMethodsLoading
+          ? 'Aguarde o carregamento dos meios de pagamento.'
+          : 'Cadastre ou habilite meios de pagamento para registrar esta operação.';
       }
     }
     if (elements.motivoWrapper && elements.motivoInput) {
@@ -1030,19 +1271,6 @@
     setLastMovement(entry);
   };
 
-  const setPagamentosFromData = (data) => {
-    const normalized = Array.isArray(data)
-      ? data
-      : pagamentosCatalog.map((payment) => ({
-          ...payment,
-          valor: safeNumber(data?.[payment.id]) || 0,
-        }));
-    state.pagamentos = pagamentosCatalog.map((payment) => {
-      const match = normalized.find((item) => item.id === payment.id) || {};
-      return { ...payment, valor: safeNumber(match.valor) };
-    });
-  };
-
   const resetPagamentos = () => {
     state.pagamentos = state.pagamentos.map((payment) => ({ ...payment, valor: 0 }));
     state.summary.abertura = 0;
@@ -1060,7 +1288,8 @@
     state.summary = { abertura: 0, recebido: 0, saldo: 0 };
     state.history = [];
     state.lastMovement = null;
-    state.pagamentos = pagamentosCatalog.map((payment) => ({ ...payment, valor: 0 }));
+    state.pendingPagamentosData = null;
+    state.pagamentos = state.paymentMethods.map((method) => ({ ...method, valor: 0 }));
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
@@ -1074,6 +1303,7 @@
     clearSelectedProduct();
     renderItemsList();
     renderPayments();
+    renderSalePaymentMethods();
     renderSalePaymentsPreview();
     renderHistory();
     setLastMovement(null);
@@ -1132,6 +1362,41 @@
     populateCompanySelect();
   };
 
+  const fetchPaymentMethods = async (storeId) => {
+    state.paymentMethods = [];
+    state.pagamentos = [];
+    state.paymentMethodsLoading = true;
+    renderPayments();
+    renderSalePaymentMethods();
+    populatePaymentSelect();
+    if (!storeId) {
+      state.paymentMethodsLoading = false;
+      updatePaymentMethods([]);
+      return;
+    }
+    try {
+      const response = await fetch(
+        `${API_BASE}/payment-methods?company=${encodeURIComponent(storeId)}`
+      );
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar os meios de pagamento cadastrados.');
+      }
+      const payload = await response.json();
+      const methods = Array.isArray(payload?.paymentMethods)
+        ? payload.paymentMethods
+        : Array.isArray(payload)
+        ? payload
+        : [];
+      state.paymentMethodsLoading = false;
+      updatePaymentMethods(methods);
+    } catch (error) {
+      state.paymentMethodsLoading = false;
+      updatePaymentMethods([]);
+      console.error('Erro ao carregar meios de pagamento para o PDV:', error);
+      notify(error.message || 'Não foi possível carregar os meios de pagamento.', 'error');
+    }
+  };
+
   const fetchPdvs = async (storeId) => {
     const query = storeId ? `?empresa=${encodeURIComponent(storeId)}` : '';
     const response = await fetch(`${API_BASE}/pdvs${query}`);
@@ -1169,7 +1434,7 @@
       pdv?.caixa?.abertura || pdv?.caixa?.valorAbertura || pdv?.valorAbertura || 0
     );
     const pagamentosData = pdv?.caixa?.pagamentos || pdv?.pagamentos || {};
-    setPagamentosFromData(pagamentosData);
+    applyPagamentosData(pagamentosData);
     if (state.summary.abertura > 0 && !state.pagamentos.some((payment) => payment.valor > 0)) {
       state.pagamentos = state.pagamentos.map((payment, index) =>
         index === 0 ? { ...payment, valor: state.summary.abertura } : payment
@@ -1333,37 +1598,50 @@
 
   const renderPayments = () => {
     if (!elements.paymentList) return;
-    const fragment = document.createDocumentFragment();
-    const inputsLocked = state.caixaAberto;
-    state.pagamentos.forEach((payment) => {
-      const li = document.createElement('li');
-      li.className = 'flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3';
-      const inputClasses = [
-        'w-24 rounded-lg border border-gray-200 px-2 py-1 text-sm text-right focus:border-primary focus:ring-2 focus:ring-primary/20',
-        inputsLocked ? 'cursor-not-allowed bg-gray-100 text-gray-500' : '',
-      ]
-        .filter(Boolean)
-        .join(' ');
-      const disabledAttr = inputsLocked ? 'disabled' : '';
-      li.innerHTML = `
-        <div>
-          <p class="text-sm font-semibold text-gray-700">${payment.label}</p>
-          <p class="text-xs text-gray-500">Saldo registrado</p>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-gray-500">R$</span>
-          <input type="number" min="0" step="0.01" value="${payment.valor.toFixed(2)}" data-payment-input="${payment.id}" class="${inputClasses}" aria-label="Atualizar ${payment.label}" ${disabledAttr}>
-          <span class="text-sm font-semibold text-gray-800" data-payment-display="${payment.id}">${formatCurrency(payment.valor)}</span>
-        </div>
-      `;
-      fragment.appendChild(li);
-    });
     elements.paymentList.innerHTML = '';
-    elements.paymentList.appendChild(fragment);
+    const inputsLocked = state.caixaAberto;
+    if (state.paymentMethodsLoading) {
+      elements.paymentList.innerHTML =
+        '<li class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Carregando meios de pagamento...</li>';
+    } else if (!state.pagamentos.length) {
+      const message = state.selectedStore
+        ? 'Nenhum meio de pagamento cadastrado para esta empresa.'
+        : 'Selecione uma empresa para visualizar os meios de pagamento disponíveis.';
+      elements.paymentList.innerHTML = `<li class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">${message}</li>`;
+    } else {
+      const fragment = document.createDocumentFragment();
+      state.pagamentos.forEach((payment) => {
+        const li = document.createElement('li');
+        li.className =
+          'flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3';
+        const inputClasses = [
+          'w-24 rounded-lg border border-gray-200 px-2 py-1 text-sm text-right focus:border-primary focus:ring-2 focus:ring-primary/20',
+          inputsLocked ? 'cursor-not-allowed bg-gray-100 text-gray-500' : '',
+        ]
+          .filter(Boolean)
+          .join(' ');
+        const disabledAttr = inputsLocked ? 'disabled' : '';
+        li.innerHTML = `
+          <div>
+            <p class="text-sm font-semibold text-gray-700">${payment.label}</p>
+            <p class="text-xs text-gray-500">Saldo registrado</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-500">R$</span>
+            <input type="number" min="0" step="0.01" value="${payment.valor.toFixed(2)}" data-payment-input="${payment.id}" class="${inputClasses}" aria-label="Atualizar ${payment.label}" ${disabledAttr}>
+            <span class="text-sm font-semibold text-gray-800" data-payment-display="${payment.id}">${formatCurrency(payment.valor)}</span>
+          </div>
+        `;
+        fragment.appendChild(li);
+      });
+      elements.paymentList.appendChild(fragment);
+    }
     if (elements.resetPayments) {
-      elements.resetPayments.disabled = inputsLocked;
-      elements.resetPayments.classList.toggle('opacity-50', inputsLocked);
-      elements.resetPayments.classList.toggle('cursor-not-allowed', inputsLocked);
+      const disableReset =
+        inputsLocked || state.paymentMethodsLoading || !state.pagamentos.length;
+      elements.resetPayments.disabled = disableReset;
+      elements.resetPayments.classList.toggle('opacity-50', disableReset);
+      elements.resetPayments.classList.toggle('cursor-not-allowed', disableReset);
     }
     populatePaymentSelect();
     updateSummary();
@@ -1531,7 +1809,12 @@
         return;
       }
       if (!payment) {
-        notify('Selecione um meio de pagamento válido.', 'warning');
+        notify(
+          state.pagamentos.length
+            ? 'Selecione um meio de pagamento válido.'
+            : 'Cadastre meios de pagamento antes de registrar esta movimentação.',
+          'warning'
+        );
         return;
       }
       if (action.id === 'entrada') {
@@ -1559,17 +1842,20 @@
     const value = elements.companySelect?.value || '';
     state.selectedStore = value;
     state.selectedPdv = '';
+    state.paymentMethods = [];
+    state.paymentMethodsLoading = false;
     resetWorkspace();
     updateWorkspaceVisibility(false);
     populatePdvSelect();
     if (!value) {
+      await fetchPaymentMethods('');
       updateSelectionHint('Escolha a empresa para carregar os PDVs disponíveis.');
       return;
     }
     updateSelectionHint('Carregando PDVs disponíveis...');
     elements.pdvSelect.disabled = true;
     try {
-      await fetchPdvs(value);
+      await Promise.all([fetchPdvs(value), fetchPaymentMethods(value)]);
       if (!state.pdvs.length) {
         updateSelectionHint('Nenhum PDV encontrado para a empresa selecionada.');
       } else {
