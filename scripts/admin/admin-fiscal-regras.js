@@ -10,6 +10,9 @@
   const alertBox = document.getElementById('fiscal-regras-alert');
   const listContainer = document.getElementById('fiscal-regras-list');
   const emptyState = document.getElementById('fiscal-regras-empty');
+  const pageSizeSelect = document.getElementById('fiscal-regras-page-size');
+  const paginationContainer = document.getElementById('fiscal-regras-pagination');
+  const applyAllButton = document.getElementById('fiscal-regras-apply-all');
   const icmsSection = document.getElementById('fiscal-regras-icms');
   const icmsBody = document.getElementById('fiscal-regras-icms-body');
 
@@ -18,6 +21,11 @@
   let searchTimer = null;
   let currentStoreId = '';
   let currentReports = [];
+  let currentPage = 1;
+  let pageSize = 20;
+  let totalItems = 0;
+  let totalPages = 1;
+  let isLoading = false;
 
   const origemOptions = [
     { value: '0', label: '0 - Nacional' },
@@ -108,8 +116,105 @@
     }).join('');
   };
 
+  const countPendencias = (pendencias = {}) => {
+    if (!pendencias || typeof pendencias !== 'object') return 0;
+    const grupos = ['comum', 'nfe', 'nfce'];
+    return grupos.reduce((total, grupo) => {
+      const lista = pendencias[grupo];
+      if (Array.isArray(lista)) {
+        return total + lista.length;
+      }
+      return total;
+    }, 0);
+  };
+
+  const buildSummaryChip = (text) => `
+    <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-600">${text}</span>
+  `;
+
+  const updateCounterLabel = () => {
+    if (!counterLabel) return;
+    if (!currentStoreId) {
+      counterLabel.textContent = 'Selecione uma empresa para carregar os produtos.';
+      return;
+    }
+    if (isLoading) {
+      counterLabel.textContent = 'Carregando sugestões fiscais...';
+      return;
+    }
+    if (!totalItems) {
+      counterLabel.textContent = 'Nenhum produto encontrado.';
+      return;
+    }
+    const start = (currentPage - 1) * pageSize + 1;
+    const end = Math.min(totalItems, currentPage * pageSize);
+    counterLabel.textContent = `Exibindo ${start}–${end} de ${totalItems} produto${totalItems > 1 ? 's' : ''}`;
+  };
+
+  const updateApplyAllButtonState = () => {
+    if (!applyAllButton) return;
+    const disabled = !currentStoreId || !totalItems || isLoading;
+    applyAllButton.disabled = disabled;
+  };
+
+  const renderPagination = () => {
+    if (!paginationContainer) return;
+    if (!currentStoreId || !totalItems) {
+      paginationContainer.innerHTML = '';
+      paginationContainer.classList.add('hidden');
+      return;
+    }
+
+    const start = (currentPage - 1) * pageSize + 1;
+    const end = Math.min(totalItems, currentPage * pageSize);
+    const prevDisabled = currentPage <= 1 || isLoading;
+    const nextDisabled = currentPage >= totalPages || isLoading;
+
+    paginationContainer.innerHTML = `
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div class="text-sm text-gray-600">
+          Exibindo ${start}–${end} de ${totalItems} produto${totalItems > 1 ? 's' : ''}
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" class="fiscal-page-btn inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60" data-page="${currentPage - 1}" ${prevDisabled ? 'disabled' : ''}>
+            <i class="fas fa-chevron-left text-xs"></i>
+            Anterior
+          </button>
+          <span class="text-sm text-gray-500">Página ${currentPage} de ${totalPages}</span>
+          <button type="button" class="fiscal-page-btn inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60" data-page="${currentPage + 1}" ${nextDisabled ? 'disabled' : ''}>
+            Próxima
+            <i class="fas fa-chevron-right text-xs"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    paginationContainer.classList.remove('hidden');
+
+    paginationContainer.querySelectorAll('.fiscal-page-btn').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        if (isLoading) return;
+        const targetPage = Number.parseInt(event.currentTarget.dataset.page, 10);
+        if (!Number.isFinite(targetPage)) return;
+        if (targetPage < 1 || targetPage > totalPages || targetPage === currentPage) return;
+        currentPage = targetPage;
+        loadSuggestions();
+      });
+    });
+  };
+
+  const setLoadingState = (loading) => {
+    isLoading = loading;
+    if (loading && listContainer && emptyState) {
+      emptyState.classList.add('hidden');
+      listContainer.innerHTML = '<div class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-sm text-gray-500">Carregando sugestões fiscais...</div>';
+    }
+    updateCounterLabel();
+    updateApplyAllButtonState();
+    renderPagination();
+  };
+
   const buildList = (items = []) => {
-    if (!alertBox || !counterLabel || !listContainer || !emptyState) return;
+    if (!alertBox || !listContainer || !emptyState) return;
 
     currentReports = items;
     listContainer.innerHTML = '';
@@ -117,13 +222,10 @@
     if (!Array.isArray(items) || !items.length) {
       emptyState.classList.remove('hidden');
       alertBox.classList.add('hidden');
-      counterLabel.textContent = 'Nenhum produto encontrado.';
       return;
     }
 
     emptyState.classList.add('hidden');
-    const total = items.length;
-    counterLabel.textContent = `${total} produto${total > 1 ? 's' : ''} encontrado${total > 1 ? 's' : ''}`;
 
     const modalKey = currentModalidade === 'nfce' ? 'nfce' : 'nfe';
     const pendentes = items.filter((item) => (item?.fiscalAtual?.status?.[modalKey] || 'pendente') !== 'aprovado').length;
@@ -312,7 +414,7 @@
 
   const createProductCard = (report) => {
     const card = document.createElement('article');
-    card.className = 'rounded-xl border border-gray-200 bg-white p-5 shadow-sm';
+    card.className = 'overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition';
     card.dataset.productId = report.productId;
 
     const fiscalAtual = report.fiscalAtual || {};
@@ -320,152 +422,165 @@
     const statusAtualNfe = fiscalAtual?.status?.nfe || 'pendente';
     const statusAtualNfce = fiscalAtual?.status?.nfce || 'pendente';
 
+    const pendenciasAtuaisTotal = countPendencias(report.pendenciasAtuais);
+    const pendenciasSugestaoTotal = countPendencias(report.pendenciasSugestao);
+    const divergenciasTotal = Array.isArray(report.divergencias) ? report.divergencias.length : 0;
+
+    const resumoPendenciasAtuais = pendenciasAtuaisTotal > 0
+      ? `${pendenciasAtuaisTotal} pendência${pendenciasAtuaisTotal > 1 ? 's' : ''} atual${pendenciasAtuaisTotal > 1 ? 's' : ''}`
+      : 'Sem pendências atuais';
+    const resumoPendenciasSugestao = pendenciasSugestaoTotal > 0
+      ? `${pendenciasSugestaoTotal} pendência${pendenciasSugestaoTotal > 1 ? 's' : ''} na sugestão`
+      : 'Sugestão completa';
+    const resumoDivergencias = divergenciasTotal > 0
+      ? `${divergenciasTotal} diferença${divergenciasTotal > 1 ? 's' : ''} detectada${divergenciasTotal > 1 ? 's' : ''}`
+      : 'Sem diferenças detectadas';
+
     card.innerHTML = `
-      <header class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h3 class="text-lg font-semibold text-gray-800">${escapeValue(report.nome)}</h3>
-          <p class="text-sm text-gray-500">SKU ${escapeValue(report.productId)} • NCM ${escapeValue(report.ncm) || '—'}</p>
-          <p class="mt-1 text-sm text-gray-500">Tipo de produto: ${escapeValue(report.tipoProduto) || '—'}</p>
-        </div>
-        <div class="flex flex-col items-start gap-2 text-sm md:items-end">
-          <div class="flex items-center gap-2">
-            <span class="text-xs uppercase tracking-wide text-gray-500">NF-e</span>
-            ${buildStatusBadge(statusAtualNfe)}
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-xs uppercase tracking-wide text-gray-500">NFC-e</span>
-            ${buildStatusBadge(statusAtualNfce)}
-          </div>
-        </div>
-      </header>
-
-      <section class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
-          <h4 class="text-sm font-semibold text-gray-700">Pendências atuais</h4>
-          <div class="mt-3">${buildPendenciasList(report.pendenciasAtuais)}</div>
-        </div>
-        <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
-          <h4 class="text-sm font-semibold text-gray-700">Diferenças detectadas</h4>
-          <div class="mt-3">${buildDifferencesList(report.divergencias)}</div>
-        </div>
-      </section>
-
-      <section class="mt-6 space-y-6">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label class="block text-sm font-medium text-gray-700">
-            Origem da mercadoria
-            <select data-field="origem" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
-              ${buildOptions(origemOptions, sugestao.origem || '0')}
-            </select>
-          </label>
-          <label class="block text-sm font-medium text-gray-700">
-            CSOSN
-            <input type="text" data-field="csosn" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 102">
-          </label>
-          <label class="block text-sm font-medium text-gray-700">
-            CST
-            <input type="text" data-field="cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 060">
-          </label>
-          <label class="block text-sm font-medium text-gray-700">
-            CEST
-            <input type="text" data-field="cest" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
-          </label>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label class="block text-sm font-medium text-gray-700">
-            Status NF-e
-            <select data-field="status.nfe" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
-              ${buildOptions(statusOptions, sugestao?.status?.nfe || 'pendente')}
-            </select>
-          </label>
-          <label class="block text-sm font-medium text-gray-700">
-            Status NFC-e
-            <select data-field="status.nfce" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
-              ${buildOptions(statusOptions, sugestao?.status?.nfce || 'pendente')}
-            </select>
-          </label>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="rounded-lg border border-gray-100 p-4">
-            <h4 class="text-sm font-semibold text-gray-700">CFOP NF-e</h4>
-            <div class="mt-3 space-y-3">
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Dentro do estado<input type="text" data-field="cfop.nfe.dentro" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5102"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Fora do estado<input type="text" data-field="cfop.nfe.fora" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="6102"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Transferência<input type="text" data-field="cfop.nfe.transferencia" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5152"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Devolução<input type="text" data-field="cfop.nfe.devolucao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5202"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Industrialização<input type="text" data-field="cfop.nfe.industrializacao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5101"></label>
+      <button type="button" class="fiscal-card-toggle flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/40">
+        <div class="flex min-w-0 flex-1 flex-col gap-2">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="truncate text-sm font-semibold text-gray-800">${escapeValue(report.nome)}</p>
+              <p class="truncate text-xs text-gray-500">SKU ${escapeValue(report.productId)} • NCM ${escapeValue(report.ncm) || '—'}</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <div class="flex items-center gap-2 text-xs text-gray-500">
+                <span class="text-[10px] uppercase tracking-wide text-gray-500">NF-e</span>
+                ${buildStatusBadge(statusAtualNfe)}
+              </div>
+              <div class="flex items-center gap-2 text-xs text-gray-500">
+                <span class="text-[10px] uppercase tracking-wide text-gray-500">NFC-e</span>
+                ${buildStatusBadge(statusAtualNfce)}
+              </div>
             </div>
           </div>
-          <div class="rounded-lg border border-gray-100 p-4">
-            <h4 class="text-sm font-semibold text-gray-700">CFOP NFC-e</h4>
-            <div class="mt-3 space-y-3">
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Dentro do estado<input type="text" data-field="cfop.nfce.dentro" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5102"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Fora do estado<input type="text" data-field="cfop.nfce.fora" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="6108"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Transferência<input type="text" data-field="cfop.nfce.transferencia" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5656"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Devolução<input type="text" data-field="cfop.nfce.devolucao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5202"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Industrialização<input type="text" data-field="cfop.nfce.industrializacao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5101"></label>
-            </div>
+          <div class="flex flex-wrap items-center gap-2 text-[11px] font-medium text-gray-600">
+            ${buildSummaryChip(resumoPendenciasAtuais)}
+            ${buildSummaryChip(resumoDivergencias)}
+            ${buildSummaryChip(resumoPendenciasSugestao)}
           </div>
         </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="rounded-lg border border-gray-100 p-4">
-            <h4 class="text-sm font-semibold text-gray-700">PIS</h4>
-            <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Código<input type="text" data-field="pis.codigo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">CST<input type="text" data-field="pis.cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Alíquota (%)<input type="number" step="0.01" data-field="pis.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Tipo de cálculo<select data-field="pis.tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">${buildOptions(tipoCalculoOptions, sugestao?.pis?.tipoCalculo || 'percentual')}</select></label>
+        <span class="chevron shrink-0 text-gray-400 transition-transform duration-200" aria-hidden="true"><i class="fas fa-chevron-down"></i></span>
+      </button>
+      <div class="fiscal-card-details hidden border-t border-gray-100 bg-gray-50/60">
+        <div class="space-y-6 px-4 py-4 text-sm text-gray-700">
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-700">Pendências atuais</h4>
+              <div class="mt-3">${buildPendenciasList(report.pendenciasAtuais)}</div>
+            </div>
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-700">Diferenças detectadas</h4>
+              <div class="mt-3">${buildDifferencesList(report.divergencias)}</div>
             </div>
           </div>
-          <div class="rounded-lg border border-gray-100 p-4">
-            <h4 class="text-sm font-semibold text-gray-700">COFINS</h4>
-            <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Código<input type="text" data-field="cofins.codigo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">CST<input type="text" data-field="cofins.cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Alíquota (%)<input type="number" step="0.01" data-field="cofins.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Tipo de cálculo<select data-field="cofins.tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">${buildOptions(tipoCalculoOptions, sugestao?.cofins?.tipoCalculo || 'percentual')}</select></label>
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-700">Origem e status</h4>
+              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label class="block text-xs font-semibold uppercase text-gray-500">Origem da mercadoria<select data-field="origem" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">${buildOptions(origemOptions, sugestao.origem || '0')}</select></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">CEST<input type="text" data-field="cest" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="00.000.00"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">CSOSN<input type="text" data-field="csosn" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="102"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">CST<input type="text" data-field="cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="060"></label>
+              </div>
+              <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label class="block text-xs font-semibold uppercase text-gray-500">Status NF-e<select data-field="status.nfe" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">${buildOptions(statusOptions, sugestao?.status?.nfe || 'pendente')}</select></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Status NFC-e<select data-field="status.nfce" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">${buildOptions(statusOptions, sugestao?.status?.nfce || 'pendente')}</select></label>
+              </div>
+            </div>
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-700">CFOP NF-e</h4>
+              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label class="block text-xs font-semibold uppercase text-gray-500">Dentro do estado<input type="text" data-field="cfop.nfe.dentro" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5101"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Fora do estado<input type="text" data-field="cfop.nfe.fora" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="6108"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Transferência<input type="text" data-field="cfop.nfe.transferencia" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5152"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Devolução<input type="text" data-field="cfop.nfe.devolucao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5202"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Industrialização<input type="text" data-field="cfop.nfe.industrializacao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5101"></label>
+              </div>
             </div>
           </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="rounded-lg border border-gray-100 p-4">
-            <h4 class="text-sm font-semibold text-gray-700">IPI</h4>
-            <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <label class="block text-xs font-semibold text-gray-500 uppercase">CST<input type="text" data-field="ipi.cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Enquadramento<input type="text" data-field="ipi.enquadramento" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Alíquota (%)<input type="number" step="0.01" data-field="ipi.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Tipo de cálculo<select data-field="ipi.tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">${buildOptions(tipoCalculoOptions, sugestao?.ipi?.tipoCalculo || 'percentual')}</select></label>
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-700">CFOP NFC-e</h4>
+              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label class="block text-xs font-semibold uppercase text-gray-500">Dentro do estado<input type="text" data-field="cfop.nfce.dentro" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5102"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Fora do estado<input type="text" data-field="cfop.nfce.fora" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="6108"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Transferência<input type="text" data-field="cfop.nfce.transferencia" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5656"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Devolução<input type="text" data-field="cfop.nfce.devolucao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5202"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Industrialização<input type="text" data-field="cfop.nfce.industrializacao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="5101"></label>
+              </div>
+            </div>
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-700">PIS</h4>
+              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label class="block text-xs font-semibold uppercase text-gray-500">Código<input type="text" data-field="pis.codigo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">CST<input type="text" data-field="pis.cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Alíquota (%)<input type="number" step="0.01" data-field="pis.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Tipo de cálculo<select data-field="pis.tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">${buildOptions(tipoCalculoOptions, sugestao?.pis?.tipoCalculo || 'percentual')}</select></label>
+              </div>
             </div>
           </div>
-          <div class="rounded-lg border border-gray-100 p-4">
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-700">COFINS</h4>
+              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label class="block text-xs font-semibold uppercase text-gray-500">Código<input type="text" data-field="cofins.codigo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">CST<input type="text" data-field="cofins.cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Alíquota (%)<input type="number" step="0.01" data-field="cofins.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Tipo de cálculo<select data-field="cofins.tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">${buildOptions(tipoCalculoOptions, sugestao?.cofins?.tipoCalculo || 'percentual')}</select></label>
+              </div>
+            </div>
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
+              <h4 class="text-sm font-semibold text-gray-700">IPI</h4>
+              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label class="block text-xs font-semibold uppercase text-gray-500">CST<input type="text" data-field="ipi.cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Enquadramento<input type="text" data-field="ipi.enquadramento" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Alíquota (%)<input type="number" step="0.01" data-field="ipi.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
+                <label class="block text-xs font-semibold uppercase text-gray-500">Tipo de cálculo<select data-field="ipi.tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">${buildOptions(tipoCalculoOptions, sugestao?.ipi?.tipoCalculo || 'percentual')}</select></label>
+              </div>
+            </div>
+          </div>
+          <div class="rounded-lg border border-gray-200 bg-white p-4">
             <h4 class="text-sm font-semibold text-gray-700">FCP</h4>
-            <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Indicador<select data-field="fcp.indicador" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">${buildOptions(fcpIndicadores, sugestao?.fcp?.indicador || '0')}</select></label>
-              <label class="block text-xs font-semibold text-gray-500 uppercase">Alíquota (%)<input type="number" step="0.01" data-field="fcp.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
-              <label class="flex items-center gap-2 text-xs font-semibold uppercase text-gray-500 md:col-span-2">
+            <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label class="block text-xs font-semibold uppercase text-gray-500">Indicador<select data-field="fcp.indicador" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">${buildOptions(fcpIndicadores, sugestao?.fcp?.indicador || '0')}</select></label>
+              <label class="block text-xs font-semibold uppercase text-gray-500">Alíquota (%)<input type="number" step="0.01" data-field="fcp.aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary"></label>
+              <label class="flex items-center gap-2 text-xs font-semibold uppercase text-gray-500 sm:col-span-2">
                 <input type="checkbox" data-field="fcp.aplica" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary">
                 Aplicar FCP
               </label>
             </div>
           </div>
+          <footer class="flex flex-col gap-3 border-t border-gray-200 pt-4 text-sm md:flex-row md:items-center md:justify-end">
+            <button type="button" data-action="reset" class="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 font-semibold text-gray-600 transition hover:bg-gray-50">
+              <i class="fas fa-undo"></i>
+              Recarregar sugestão
+            </button>
+            <button type="button" data-action="apply" class="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white shadow transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+              <i class="fas fa-save"></i>
+              Salvar regras fiscais
+            </button>
+          </footer>
         </div>
-      </section>
-
-      <footer class="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
-        <button type="button" data-action="reset" class="inline-flex items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50">
-          <i class="fas fa-undo mr-2"></i>Recarregar sugestão
-        </button>
-        <button type="button" data-action="apply" class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
-          <i class="fas fa-save mr-2"></i>Salvar regras fiscais
-        </button>
-      </footer>
+      </div>
     `;
 
     fillCardInputs(card, sugestao);
+
+    const toggleButton = card.querySelector('.fiscal-card-toggle');
+    const details = card.querySelector('.fiscal-card-details');
+    const chevron = toggleButton?.querySelector('.chevron');
+    if (toggleButton && details) {
+      toggleButton.addEventListener('click', () => {
+        const willOpen = details.classList.contains('hidden');
+        details.classList.toggle('hidden');
+        toggleButton.classList.toggle('bg-gray-50', willOpen);
+        if (chevron) {
+          chevron.classList.toggle('rotate-180', willOpen);
+        }
+      });
+    }
 
     const resetButton = card.querySelector('[data-action="reset"]');
     if (resetButton) {
@@ -488,7 +603,7 @@
 
         const fiscalPayload = collectFiscalFromCard(card);
         applyButton.disabled = true;
-        applyButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Salvando...';
+        applyButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span> Salvando...</span>';
 
         try {
           const token = getToken();
@@ -536,13 +651,14 @@
           });
         } finally {
           applyButton.disabled = false;
-          applyButton.innerHTML = '<i class="fas fa-save mr-2"></i>Salvar regras fiscais';
+          applyButton.innerHTML = '<i class="fas fa-save"></i><span> Salvar regras fiscais</span>';
         }
       });
     }
 
     return card;
   };
+
 
   const fetchStores = async () => {
     try {
@@ -563,16 +679,29 @@
 
   const loadSuggestions = async () => {
     if (!currentStoreId) {
-      buildList([]);
+      currentPage = 1;
+      totalItems = 0;
+      totalPages = 1;
       renderIcmsEntries([]);
+      setLoadingState(false);
+      buildList([]);
+      updateCounterLabel();
+      renderPagination();
+      updateApplyAllButtonState();
       return;
     }
+
+    setLoadingState(true);
+    let items = [];
+    let shouldReload = false;
 
     try {
       const token = getToken();
       const params = new URLSearchParams({
         storeId: currentStoreId,
         modalidade: currentModalidade,
+        limit: String(pageSize),
+        page: String(currentPage),
       });
       const statusValue = statusSelect?.value;
       const searchValue = searchInput?.value?.trim();
@@ -587,19 +716,152 @@
       if (!response.ok) throw new Error('Não foi possível carregar as sugestões fiscais.');
       const payload = await response.json();
       renderIcmsEntries(payload?.icmsSimples);
-      buildList(Array.isArray(payload?.produtos) ? payload.produtos : []);
+
+      items = Array.isArray(payload?.produtos) ? payload.produtos : [];
+      totalItems = Number(payload?.total) || 0;
+
+      const responseLimit = Number(payload?.limit);
+      if (Number.isFinite(responseLimit) && responseLimit > 0) {
+        pageSize = responseLimit;
+        if (pageSizeSelect) {
+          pageSizeSelect.value = String(pageSize);
+        }
+      }
+
+      const responsePage = Number(payload?.page);
+      if (Number.isFinite(responsePage) && responsePage > 0) {
+        currentPage = responsePage;
+      }
+
+      totalPages = Number(payload?.pages) || Math.ceil(totalItems / (pageSize || 1)) || 1;
+      if (totalPages < 1) totalPages = 1;
+
+      if (totalItems > 0 && currentPage > totalPages) {
+        currentPage = totalPages;
+        shouldReload = true;
+      }
     } catch (error) {
       console.error('Erro ao carregar sugestões fiscais:', error);
+      renderIcmsEntries([]);
       showModal({
         title: 'Erro ao carregar',
         message: error.message || 'Não foi possível gerar as sugestões fiscais.',
         confirmText: 'Tentar novamente',
       });
+      items = [];
+      totalItems = 0;
+      totalPages = 1;
     }
+
+    if (shouldReload) {
+      setLoadingState(false);
+      renderPagination();
+      updateCounterLabel();
+      updateApplyAllButtonState();
+      loadSuggestions();
+      return;
+    }
+
+    setLoadingState(false);
+    buildList(items);
+    updateCounterLabel();
+    renderPagination();
+    updateApplyAllButtonState();
+  };
+
+  const executeApplyAll = async () => {
+    if (!applyAllButton || !currentStoreId) return;
+    const originalLabel = applyAllButton.innerHTML;
+    applyAllButton.disabled = true;
+    applyAllButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span> Aplicando...</span>';
+
+    try {
+      const token = getToken();
+      const body = {
+        storeId: currentStoreId,
+        modalidade: currentModalidade,
+      };
+      const statusValue = statusSelect?.value;
+      const searchValue = searchInput?.value?.trim();
+      if (statusValue) body.status = statusValue;
+      if (searchValue) body.search = searchValue;
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}/fiscal/rules/apply-suggestions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) throw new Error('Não foi possível aplicar as regras sugeridas.');
+
+      const payload = await response.json();
+      const rawUpdated = payload?.updatedCount ?? payload?.updated;
+      const updatedCount = Array.isArray(rawUpdated) ? rawUpdated.length : Number(rawUpdated ?? 0);
+      const failuresCount = Array.isArray(payload?.failures) ? payload.failures.length : Number(payload?.failuresCount ?? 0);
+
+      let message = `Regras sugeridas aplicadas em ${updatedCount} produto${updatedCount === 1 ? '' : 's'}.`;
+      if (failuresCount > 0) {
+        message += ` ${failuresCount} produto${failuresCount === 1 ? '' : 's'} não pôde ser atualizado.`;
+      }
+
+      showModal({
+        title: 'Operação concluída',
+        message,
+        confirmText: 'Continuar',
+      });
+
+      await loadSuggestions();
+    } catch (error) {
+      console.error('Erro ao aplicar regras sugeridas em massa:', error);
+      showModal({
+        title: 'Erro ao aplicar regras',
+        message: error.message || 'Não foi possível aplicar as regras sugeridas para todos os produtos.',
+        confirmText: 'Tentar novamente',
+      });
+    } finally {
+      applyAllButton.innerHTML = originalLabel;
+      applyAllButton.disabled = false;
+      updateApplyAllButtonState();
+    }
+  };
+
+  const handleApplyAll = () => {
+    if (!currentStoreId || !totalItems) {
+      showModal({
+        title: 'Selecione uma empresa',
+        message: 'Carregue os produtos de uma empresa para aplicar as regras em massa.',
+        confirmText: 'Entendi',
+      });
+      return;
+    }
+
+    const message = `Aplicar as regras sugeridas para ${totalItems} produto${totalItems === 1 ? '' : 's'} considerando os filtros atuais? Esta ação substituirá as regras fiscais existentes.`;
+    showModal({
+      title: 'Aplicar regras sugeridas',
+      message,
+      confirmText: 'Aplicar tudo',
+      cancelText: 'Cancelar',
+      onConfirm: executeApplyAll,
+    });
   };
 
   const handleStoreChange = () => {
     currentStoreId = storeSelect?.value || '';
+    currentPage = 1;
+    totalItems = 0;
+    totalPages = 1;
+    if (pageSizeSelect) {
+      const parsed = Number.parseInt(pageSizeSelect.value, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        pageSize = parsed;
+      } else {
+        pageSize = 20;
+        pageSizeSelect.value = '20';
+      }
+    }
     loadSuggestions();
   };
 
@@ -607,21 +869,40 @@
     const { modalidade } = event.currentTarget.dataset;
     if (!modalidade || modalidade === currentModalidade) return;
     currentModalidade = modalidade;
+    currentPage = 1;
     setModalidadeButtonState();
     loadSuggestions();
   };
 
   const initEvents = () => {
     storeSelect?.addEventListener('change', handleStoreChange);
-    statusSelect?.addEventListener('change', loadSuggestions);
+    statusSelect?.addEventListener('change', () => {
+      currentPage = 1;
+      loadSuggestions();
+    });
     refreshButton?.addEventListener('click', loadSuggestions);
 
     modalidadeButtons.forEach((button) => {
       button.addEventListener('click', handleModalidadeChange);
     });
 
+    pageSizeSelect?.addEventListener('change', () => {
+      const parsed = Number.parseInt(pageSizeSelect.value, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        pageSize = parsed;
+      } else {
+        pageSize = 20;
+        pageSizeSelect.value = '20';
+      }
+      currentPage = 1;
+      loadSuggestions();
+    });
+
+    applyAllButton?.addEventListener('click', handleApplyAll);
+
     if (searchInput) {
       searchInput.addEventListener('input', () => {
+        currentPage = 1;
         if (searchTimer) clearTimeout(searchTimer);
         searchTimer = setTimeout(loadSuggestions, 400);
       });

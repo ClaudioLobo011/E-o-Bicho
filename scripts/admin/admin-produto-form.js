@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const depositTableWrapper = document.getElementById('deposit-table-wrapper');
     const depositTotalDisplay = document.getElementById('deposit-total-display');
     const unitSelect = document.getElementById('unidade');
+    const inactiveCheckbox = document.getElementById('inativo');
 
     const fiscalInputs = {
         origem: document.getElementById('fiscal-origem'),
@@ -520,6 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('#cod').value = product.cod || '';
         form.querySelector('#codbarras').value = product.codbarras || '';
         form.querySelector('#descricao').value = product.descricao || '';
+        setInputValue(inactiveCheckbox, product.inativo);
         if (unitSelect) {
             unitSelect.value = product.unidade || '';
             lastSelectedProductUnit = getSelectedProductUnit();
@@ -812,6 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
             estoques: depositPayload,
             stock: totalStock,
             fiscal: collectFiscalData(),
+            inativo: Boolean(inactiveCheckbox?.checked),
         };
 
         const dataCadastroValue = formData.get('data-cadastro');

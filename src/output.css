@@ -725,8 +725,8 @@
   .h-64 {
     height: calc(var(--spacing) * 64);
   }
-  .h-80 {
-    height: calc(var(--spacing) * 80);
+  .h-72 {
+    height: calc(var(--spacing) * 72);
   }
   .h-96 {
     height: calc(var(--spacing) * 96);
@@ -1584,6 +1584,12 @@
   .bg-gray-50 {
     background-color: var(--color-gray-50);
   }
+  .bg-gray-50\/60 {
+    background-color: color-mix(in srgb, oklch(98.5% 0.002 247.839) 60%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-gray-50) 60%, transparent);
+    }
+  }
   .bg-gray-50\/80 {
     background-color: color-mix(in srgb, oklch(98.5% 0.002 247.839) 80%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
@@ -2073,6 +2079,9 @@
   }
   .whitespace-pre-wrap {
     white-space: pre-wrap;
+  }
+  .text-amber-500 {
+    color: var(--color-amber-500);
   }
   .text-amber-600 {
     color: var(--color-amber-600);
@@ -2756,6 +2765,13 @@
       }
     }
   }
+  .hover\:bg-emerald-500 {
+    &:hover {
+      @media (hover: hover) {
+        background-color: var(--color-emerald-500);
+      }
+    }
+  }
   .hover\:bg-emerald-600 {
     &:hover {
       @media (hover: hover) {
@@ -3241,6 +3257,14 @@
       --tw-ring-color: var(--color-amber-500);
     }
   }
+  .focus\:ring-amber-500\/50 {
+    &:focus {
+      --tw-ring-color: color-mix(in srgb, oklch(76.9% 0.188 70.08) 50%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        --tw-ring-color: color-mix(in oklab, var(--color-amber-500) 50%, transparent);
+      }
+    }
+  }
   .focus\:ring-emerald-200 {
     &:focus {
       --tw-ring-color: var(--color-emerald-200);
@@ -3380,6 +3404,11 @@
   .disabled\:opacity-50 {
     &:disabled {
       opacity: 50%;
+    }
+  }
+  .disabled\:opacity-60 {
+    &:disabled {
+      opacity: 60%;
     }
   }
   .disabled\:opacity-75 {
@@ -3642,11 +3671,6 @@
   .md\:items-end {
     @media (width >= 48rem) {
       align-items: flex-end;
-    }
-  }
-  .md\:items-start {
-    @media (width >= 48rem) {
-      align-items: flex-start;
     }
   }
   .md\:justify-between {

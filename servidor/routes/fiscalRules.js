@@ -8,6 +8,7 @@ const IcmsSimples = require('../models/IcmsSimples');
 const {
   generateProductFiscalReport,
   mergeFiscalData,
+  getFiscalDataForStore,
 } = require('../services/fiscalRuleEngine');
 
 const parsePositiveInt = (value, fallback) => {
@@ -26,6 +27,14 @@ const buildSearchQuery = (searchTerm = '') => {
       { codbarras: regex },
     ],
   };
+};
+
+const normalizeStoreKey = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value.toHexString === 'function') return value.toHexString();
+  if (typeof value.toString === 'function') return value.toString();
+  return String(value);
 };
 
 router.get('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
@@ -48,18 +57,42 @@ router.get('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
       return res.status(404).json({ message: 'Empresa não encontrada.' });
     }
 
-    const query = {};
-    const searchQuery = buildSearchQuery(search);
-    if (searchQuery) {
-      Object.assign(query, searchQuery);
-    }
-
     const normalizedModalidade = (modalidade || '').toLowerCase();
     const normalizedStatus = (status || '').toLowerCase();
     const allowedStatus = new Set(['pendente', 'parcial', 'aprovado']);
-    if (allowedStatus.has(normalizedStatus)) {
-      query[`fiscal.status.${normalizedModalidade === 'nfce' ? 'nfce' : 'nfe'}`] = normalizedStatus;
+    const modalKey = normalizedModalidade === 'nfce' ? 'nfce' : 'nfe';
+    const storeKey = normalizeStoreKey(store?._id) || normalizeStoreKey(storeId);
+
+    if (!storeKey) {
+      return res.status(500).json({ message: 'Não foi possível determinar a empresa selecionada.' });
     }
+
+    const filters = [];
+    const searchQuery = buildSearchQuery(search);
+    if (searchQuery) {
+      filters.push(searchQuery);
+    }
+
+    if (allowedStatus.has(normalizedStatus) && storeKey) {
+      filters.push({
+        $or: [
+          { [`fiscalPorEmpresa.${storeKey}.status.${modalKey}`]: normalizedStatus },
+          {
+            $and: [
+              {
+                $or: [
+                  { [`fiscalPorEmpresa.${storeKey}`]: { $exists: false } },
+                  { [`fiscalPorEmpresa.${storeKey}.status.${modalKey}`]: { $exists: false } },
+                ],
+              },
+              { [`fiscal.status.${modalKey}`]: normalizedStatus },
+            ],
+          },
+        ],
+      });
+    }
+
+    const query = filters.length ? { $and: filters } : {};
 
     const total = await Product.countDocuments(query);
     const pageSize = parsePositiveInt(limit, 20);
@@ -116,6 +149,16 @@ router.post('/apply', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
 
     const updated = [];
     const failures = [];
+    const storeCache = new Map();
+
+    const resolveStore = async (id) => {
+      const key = normalizeStoreKey(id);
+      if (!key) return null;
+      if (storeCache.has(key)) return storeCache.get(key);
+      const storeDoc = await Store.findById(id).lean();
+      storeCache.set(key, storeDoc || null);
+      return storeDoc || null;
+    };
 
     for (const item of items) {
       if (!item || !item.productId || !item.fiscal) {
@@ -132,13 +175,26 @@ router.post('/apply', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
           continue;
         }
 
-        const mergedFiscal = mergeFiscalData(product.fiscal || {}, item.fiscal || {});
+        const storeIdRaw = item.storeId;
+        const storeId = normalizeStoreKey(storeIdRaw);
+        const store = await resolveStore(storeIdRaw || storeId);
+        if (storeId && !store) {
+          failures.push({ productId: item.productId, reason: 'Empresa não encontrada.' });
+          // eslint-disable-next-line no-continue
+          continue;
+        }
+
+        const baseFiscal = storeId ? getFiscalDataForStore(product, storeId) : (product.fiscal || {});
+        const mergedFiscal = mergeFiscalData(baseFiscal, item.fiscal || {});
         mergedFiscal.atualizadoEm = new Date();
         mergedFiscal.atualizadoPor = req.user?.id || '';
-        product.fiscal = mergedFiscal;
+        if (storeId) {
+          product.set(`fiscalPorEmpresa.${storeId}`, mergedFiscal);
+        } else {
+          product.fiscal = mergedFiscal;
+        }
         await product.save();
 
-        const store = item.storeId ? await Store.findById(item.storeId).lean() : null;
         const contextStore = store || {};
         const report = generateProductFiscalReport(product.toObject(), contextStore, {});
         updated.push(report);
@@ -152,6 +208,110 @@ router.post('/apply', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
   } catch (error) {
     console.error('Erro ao aplicar regras fiscais:', error);
     res.status(500).json({ message: 'Erro ao aplicar regras fiscais.' });
+  }
+});
+
+router.post('/apply-suggestions', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+  try {
+    const {
+      storeId,
+      modalidade = 'nfe',
+      status,
+      search = '',
+    } = req.body || {};
+
+    if (!storeId) {
+      return res.status(400).json({ message: 'Informe a empresa (storeId).' });
+    }
+
+    const store = await Store.findById(storeId).lean();
+    if (!store) {
+      return res.status(404).json({ message: 'Empresa não encontrada.' });
+    }
+
+    const normalizedModalidade = (modalidade || '').toLowerCase();
+    const normalizedStatus = (status || '').toLowerCase();
+    const allowedStatus = new Set(['pendente', 'parcial', 'aprovado']);
+    const modalKey = normalizedModalidade === 'nfce' ? 'nfce' : 'nfe';
+    const storeKey = normalizeStoreKey(store?._id) || normalizeStoreKey(storeId);
+
+    if (!storeKey) {
+      return res.status(500).json({ message: 'Não foi possível determinar a empresa para aplicar as regras fiscais sugeridas.' });
+    }
+
+    const filters = [];
+    const searchQuery = buildSearchQuery(search);
+    if (searchQuery) filters.push(searchQuery);
+    if (allowedStatus.has(normalizedStatus) && storeKey) {
+      filters.push({
+        $or: [
+          { [`fiscalPorEmpresa.${storeKey}.status.${modalKey}`]: normalizedStatus },
+          {
+            $and: [
+              {
+                $or: [
+                  { [`fiscalPorEmpresa.${storeKey}`]: { $exists: false } },
+                  { [`fiscalPorEmpresa.${storeKey}.status.${modalKey}`]: { $exists: false } },
+                ],
+              },
+              { [`fiscal.status.${modalKey}`]: normalizedStatus },
+            ],
+          },
+        ],
+      });
+    }
+
+    const query = filters.length ? { $and: filters } : {};
+
+    const icmsEntries = await IcmsSimples.find({ empresa: storeId }).lean();
+    const icmsSimplesMap = {};
+    icmsEntries.forEach((entry) => {
+      if (entry && entry.codigo !== undefined && entry.valor !== undefined) {
+        icmsSimplesMap[entry.codigo] = entry.valor;
+      }
+    });
+
+    const cursor = Product.find(query).cursor();
+    let processed = 0;
+    let updatedCount = 0;
+    const failures = [];
+
+    // eslint-disable-next-line no-restricted-syntax
+    for await (const product of cursor) {
+      processed += 1;
+      try {
+        const report = generateProductFiscalReport(product.toObject(), store, {
+          modalidade: normalizedModalidade,
+          icmsSimplesMap,
+        });
+        const suggestion = report?.sugestao;
+        if (!suggestion) {
+          failures.push({ productId: product?._id, reason: 'Sugestão indisponível.' });
+          // eslint-disable-next-line no-continue
+          continue;
+        }
+
+        const mergedFiscal = mergeFiscalData(getFiscalDataForStore(product, storeKey), suggestion || {});
+        mergedFiscal.atualizadoEm = new Date();
+        mergedFiscal.atualizadoPor = req.user?.id || '';
+        product.set(`fiscalPorEmpresa.${storeKey}`, mergedFiscal);
+        await product.save();
+        updatedCount += 1;
+      } catch (error) {
+        console.error('Erro ao aplicar sugestão fiscal em massa:', error);
+        failures.push({ productId: product?._id, reason: 'Erro ao atualizar.' });
+      }
+    }
+
+    res.json({
+      processed,
+      updatedCount,
+      failuresCount: failures.length,
+      failures,
+    });
+  } catch (error) {
+    console.error('Erro ao aplicar regras fiscais sugeridas em massa:', error);
+    res.status(500).json({ message: 'Erro ao aplicar regras fiscais sugeridas.' });
   }
 });
 
