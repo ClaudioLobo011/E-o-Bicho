@@ -155,6 +155,86 @@ router.post('/apply', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
   }
 });
 
+router.post('/apply-suggestions', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+  try {
+    const {
+      storeId,
+      modalidade = 'nfe',
+      status,
+      search = '',
+    } = req.body || {};
+
+    if (!storeId) {
+      return res.status(400).json({ message: 'Informe a empresa (storeId).' });
+    }
+
+    const store = await Store.findById(storeId).lean();
+    if (!store) {
+      return res.status(404).json({ message: 'Empresa não encontrada.' });
+    }
+
+    const normalizedModalidade = (modalidade || '').toLowerCase();
+    const normalizedStatus = (status || '').toLowerCase();
+    const allowedStatus = new Set(['pendente', 'parcial', 'aprovado']);
+
+    const query = {};
+    const searchQuery = buildSearchQuery(search);
+    if (searchQuery) Object.assign(query, searchQuery);
+    if (allowedStatus.has(normalizedStatus)) {
+      query[`fiscal.status.${normalizedModalidade === 'nfce' ? 'nfce' : 'nfe'}`] = normalizedStatus;
+    }
+
+    const icmsEntries = await IcmsSimples.find({ empresa: storeId }).lean();
+    const icmsSimplesMap = {};
+    icmsEntries.forEach((entry) => {
+      if (entry && entry.codigo !== undefined && entry.valor !== undefined) {
+        icmsSimplesMap[entry.codigo] = entry.valor;
+      }
+    });
+
+    const cursor = Product.find(query).cursor();
+    let processed = 0;
+    let updatedCount = 0;
+    const failures = [];
+
+    // eslint-disable-next-line no-restricted-syntax
+    for await (const product of cursor) {
+      processed += 1;
+      try {
+        const report = generateProductFiscalReport(product.toObject(), store, {
+          modalidade: normalizedModalidade,
+          icmsSimplesMap,
+        });
+        const suggestion = report?.sugestao;
+        if (!suggestion) {
+          failures.push({ productId: product?._id, reason: 'Sugestão indisponível.' });
+          // eslint-disable-next-line no-continue
+          continue;
+        }
+
+        const mergedFiscal = mergeFiscalData(product.fiscal || {}, suggestion || {});
+        mergedFiscal.atualizadoEm = new Date();
+        mergedFiscal.atualizadoPor = req.user?.id || '';
+        await Product.updateOne({ _id: product._id }, { $set: { fiscal: mergedFiscal } });
+        updatedCount += 1;
+      } catch (error) {
+        console.error('Erro ao aplicar sugestão fiscal em massa:', error);
+        failures.push({ productId: product?._id, reason: 'Erro ao atualizar.' });
+      }
+    }
+
+    res.json({
+      processed,
+      updatedCount,
+      failuresCount: failures.length,
+      failures,
+    });
+  } catch (error) {
+    console.error('Erro ao aplicar regras fiscais sugeridas em massa:', error);
+    res.status(500).json({ message: 'Erro ao aplicar regras fiscais sugeridas.' });
+  }
+});
+
 router.get('/:productId', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
   try {
     const { storeId } = req.query;
