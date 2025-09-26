@@ -1,13 +1,20 @@
 (function () {
-  const STORAGE_KEY = 'adminPdvs';
+  const API_BASE =
+    (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
+
+  const ambientesPermitidos = ['homologacao', 'producao'];
+  const ambientesLabels = {
+    homologacao: 'Homologação',
+    producao: 'Produção',
+  };
 
   const state = {
     pdvs: [],
     stores: [],
     editingId: null,
+    nextCode: '',
+    saving: false,
   };
-
-  const elements = {};
 
   const selectors = {
     form: '#pdv-form',
@@ -20,7 +27,6 @@
     company: '#pdv-company',
     nfeSeries: '#pdv-nfe-series',
     nfceSeries: '#pdv-nfce-series',
-    csc: '#pdv-csc',
     envHomologacao: '#pdv-env-homologacao',
     envProducao: '#pdv-env-producao',
     envDefaultHomologacao: '#pdv-env-default-homologacao',
@@ -33,6 +39,7 @@
     cancelEdit: '#pdv-cancel-edit',
     resetForm: '#pdv-reset-form',
     submitLabel: '#pdv-submit-label',
+    submitButton: '#pdv-form button[type="submit"]',
     companySummary: '#pdv-company-summary',
     pdvList: '#pdv-list',
     pdvCount: '#pdv-count',
@@ -42,6 +49,8 @@
     createdBy: '#pdv-created-by',
     updatedBy: '#pdv-updated-by',
   };
+
+  const elements = {};
 
   const formatDateTime = (isoString) => {
     if (!isoString) return '—';
@@ -56,45 +65,31 @@
     });
   };
 
-  const getLoggedUser = () => {
-    try {
-      const raw = localStorage.getItem('loggedInUser');
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch (error) {
-      console.warn('Não foi possível ler o usuário logado.', error);
-      return null;
-    }
-  };
-
   const notify = (message, type = 'info') => {
     if (typeof window?.showToast === 'function') {
       window.showToast(message, type);
       return;
     }
     if (typeof window?.showModal === 'function') {
-      window.showModal({ title: type === 'error' ? 'Erro' : 'Aviso', message, confirmText: 'OK' });
+      window.showModal({
+        title: type === 'error' ? 'Erro' : 'Aviso',
+        message,
+        confirmText: 'OK',
+      });
       return;
     }
     window.alert(message);
   };
 
-  const loadPdvs = () => {
+  const getToken = () => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      state.pdvs = Array.isArray(parsed) ? parsed : [];
+      const raw = localStorage.getItem('loggedInUser');
+      if (!raw) return '';
+      const parsed = JSON.parse(raw);
+      return parsed?.token || '';
     } catch (error) {
-      console.error('Erro ao carregar PDVs do armazenamento local.', error);
-      state.pdvs = [];
-    }
-  };
-
-  const persistPdvs = () => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.pdvs));
-    } catch (error) {
-      console.error('Erro ao salvar PDVs no armazenamento local.', error);
+      console.warn('Não foi possível obter o token do usuário logado.', error);
+      return '';
     }
   };
 
@@ -112,7 +107,7 @@
     }, 0);
   };
 
-  const computeNextCodeValue = () => {
+  const computeNextCodeFromState = () => {
     if (!state.pdvs.length) {
       return 'PDV-001';
     }
@@ -123,9 +118,23 @@
     return `PDV-${String(highest + 1).padStart(3, '0')}`;
   };
 
-  const fillNextCode = () => {
-    if (!elements.code || state.editingId) return;
-    elements.code.value = computeNextCodeValue();
+  const updateSubmitLabel = () => {
+    if (!elements.submitLabel) return;
+    if (state.saving) {
+      elements.submitLabel.textContent = 'Salvando...';
+      return;
+    }
+    elements.submitLabel.textContent = state.editingId ? 'Salvar alterações' : 'Salvar PDV';
+  };
+
+  const setSavingState = (saving) => {
+    state.saving = saving;
+    if (elements.submitButton) {
+      elements.submitButton.disabled = saving;
+      elements.submitButton.classList.toggle('opacity-60', saving);
+      elements.submitButton.classList.toggle('pointer-events-none', saving);
+    }
+    updateSubmitLabel();
   };
 
   const updateActiveToggleLabel = () => {
@@ -147,6 +156,111 @@
     }
   };
 
+  const storeSupportsEnvironment = (store, env) => {
+    if (!store) return false;
+    if (env === 'producao') {
+      return Boolean(store.cscIdProducao && store.cscTokenProducaoArmazenado);
+    }
+    if (env === 'homologacao') {
+      return Boolean(store.cscIdHomologacao && store.cscTokenHomologacaoArmazenado);
+    }
+    return false;
+  };
+
+  const getSelectedStore = () => {
+    const companyId = elements.company?.value || '';
+    if (!companyId) return null;
+    return state.stores.find((store) => store._id === companyId) || null;
+  };
+
+  const buildCscCard = (store, env) => {
+    const label = ambientesLabels[env] || env;
+    const idKey = env === 'producao' ? 'cscIdProducao' : 'cscIdHomologacao';
+    const tokenKey = env === 'producao' ? 'cscTokenProducaoArmazenado' : 'cscTokenHomologacaoArmazenado';
+    const idValue = store?.[idKey] || '—';
+    const tokenStored = Boolean(store?.[tokenKey]);
+    const badgeClass = tokenStored
+      ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+      : 'bg-amber-50 text-amber-700 border border-amber-100';
+    const badgeLabel = tokenStored ? 'Token armazenado' : 'Token pendente';
+    const hint = tokenStored
+      ? ''
+      : '<p class="text-xs text-amber-700 mt-2">Cadastre o token correspondente na empresa para habilitar este ambiente.</p>';
+    return `
+      <div class="rounded-lg border border-gray-200 p-3 bg-gray-50">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <p class="text-xs uppercase tracking-wide text-gray-500">${label}</p>
+            <p class="text-sm font-medium text-gray-800">ID: ${idValue || '—'}</p>
+          </div>
+          <span class="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ${badgeClass}">${badgeLabel}</span>
+        </div>
+        ${hint}
+      </div>
+    `;
+  };
+
+  const updateCompanySummary = () => {
+    if (!elements.companySummary) return;
+    const store = getSelectedStore();
+    if (!store) {
+      elements.companySummary.innerHTML = '<p class="text-gray-500">Selecione uma empresa para visualizar seus dados.</p>';
+      return;
+    }
+
+    const regime = store.regimeTributario
+      ? store.regimeTributario.charAt(0).toUpperCase() + store.regimeTributario.slice(1)
+      : '—';
+    const availability = ambientesPermitidos.map((env) => ({
+      env,
+      available: storeSupportsEnvironment(store, env),
+    }));
+    const unavailable = availability.filter((item) => !item.available);
+    let availabilityMessage = '';
+    if (unavailable.length) {
+      const names = unavailable.map((item) => ambientesLabels[item.env]).join(' e ');
+      availabilityMessage = `
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+          Configure o CSC de ${names} na empresa para liberar este ambiente para o PDV.
+        </div>
+      `;
+    }
+
+    const homologacaoCard = buildCscCard(store, 'homologacao');
+    const producaoCard = buildCscCard(store, 'producao');
+
+    elements.companySummary.innerHTML = `
+      <div class="space-y-4">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-500">Nome</p>
+          <p class="text-sm font-semibold text-gray-800">${store.nome || store.nomeFantasia || '—'}</p>
+        </div>
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-500">Razão social</p>
+          <p class="text-sm text-gray-700">${store.razaoSocial || '—'}</p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <p class="text-xs uppercase tracking-wide text-gray-500">CNPJ</p>
+            <p class="text-sm text-gray-700">${store.cnpj || '—'}</p>
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-wide text-gray-500">Regime</p>
+            <p class="text-sm text-gray-700">${regime}</p>
+          </div>
+        </div>
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-500">Contato fiscal</p>
+          <p class="text-sm text-gray-700">${store.emailFiscal || '—'}</p>
+        </div>
+        <div class="space-y-3">
+          ${homologacaoCard}
+          ${producaoCard}
+        </div>
+        ${availabilityMessage}
+      </div>
+    `;
+  };
   const getEnvironmentCheckboxes = () => ({
     homologacao: elements.envHomologacao,
     producao: elements.envProducao,
@@ -154,11 +268,23 @@
 
   const getEnvironmentRadios = () => [elements.envDefaultHomologacao, elements.envDefaultProducao].filter(Boolean);
 
+  const getEnabledEnvironments = () => {
+    const checkboxes = getEnvironmentCheckboxes();
+    return Object.entries(checkboxes)
+      .filter(([, checkbox]) => checkbox && checkbox.checked && !checkbox.disabled)
+      .map(([key]) => key);
+  };
+
+  const getSelectedDefaultEnvironment = () => {
+    const radio = getEnvironmentRadios().find((item) => item && item.checked);
+    return radio ? radio.value : '';
+  };
+
   const syncDefaultEnvironment = (preferred) => {
     const checkboxes = getEnvironmentCheckboxes();
     const radios = getEnvironmentRadios();
     const enabled = Object.entries(checkboxes)
-      .filter(([, checkbox]) => checkbox?.checked)
+      .filter(([, checkbox]) => checkbox && checkbox.checked && !checkbox.disabled)
       .map(([key]) => key);
 
     radios.forEach((radio) => {
@@ -187,117 +313,150 @@
     }
   };
 
-  const getSelectedDefaultEnvironment = () => {
-    const radio = getEnvironmentRadios().find((item) => item?.checked);
-    return radio ? radio.value : '';
-  };
+  const syncEnvironmentAvailability = ({ preserveSelection = false, preferredDefault = '' } = {}) => {
+    const store = getSelectedStore();
+    const availability = {
+      homologacao: storeSupportsEnvironment(store, 'homologacao'),
+      producao: storeSupportsEnvironment(store, 'producao'),
+    };
 
-  const getEnabledEnvironments = () => {
     const checkboxes = getEnvironmentCheckboxes();
-    return Object.entries(checkboxes)
-      .filter(([, checkbox]) => checkbox?.checked)
-      .map(([key]) => key);
-  };
-
-  const populateCompanySelect = () => {
-    if (!elements.company) return;
-    if (!state.stores.length) {
-      elements.company.innerHTML = '<option value="">Nenhuma empresa cadastrada</option>';
-      updateCompanySummary();
-      return;
-    }
-
-    const options = ['<option value="">Selecione uma empresa</option>'];
-    state.stores.forEach((store) => {
-      options.push(`<option value="${store._id}">${store.nome || store.nomeFantasia || 'Empresa sem nome'}</option>`);
+    Object.entries(checkboxes).forEach(([env, checkbox]) => {
+      if (!checkbox) return;
+      if (!store) {
+        checkbox.checked = false;
+        checkbox.disabled = true;
+        return;
+      }
+      const available = availability[env];
+      checkbox.disabled = !available;
+      if (!available) {
+        checkbox.checked = false;
+      } else if (!preserveSelection) {
+        if (env === 'homologacao') {
+          checkbox.checked = true;
+        }
+        if (env === 'producao') {
+          checkbox.checked = false;
+        }
+      }
     });
-    elements.company.innerHTML = options.join('');
-    updateCompanySummary();
-  };
 
-  const updateCompanySummary = () => {
-    if (!elements.companySummary) return;
-    const companyId = elements.company?.value || '';
-    if (!companyId) {
-      elements.companySummary.innerHTML = '<p class="text-gray-500">Selecione uma empresa para visualizar seus dados.</p>';
-      return;
+    const radios = getEnvironmentRadios();
+    radios.forEach((radio) => {
+      if (!radio) return;
+      if (!store) {
+        radio.disabled = true;
+        radio.checked = false;
+        return;
+      }
+      const available = availability[radio.value];
+      radio.disabled = !available;
+      if (!available) {
+        radio.checked = false;
+      }
+    });
+
+    if (store) {
+      const enabled = getEnabledEnvironments();
+      const anyAvailable = Object.values(availability).some(Boolean);
+      if (!enabled.length && anyAvailable) {
+        const fallback = availability.homologacao ? 'homologacao' : availability.producao ? 'producao' : '';
+        if (fallback) {
+          const checkbox = checkboxes[fallback];
+          if (checkbox && !checkbox.disabled) {
+            checkbox.checked = true;
+          }
+        }
+      }
     }
 
-    const store = state.stores.find((item) => item._id === companyId);
-    if (!store) {
-      elements.companySummary.innerHTML = '<p class="text-gray-500">Não foi possível localizar os dados da empresa selecionada.</p>';
-      return;
-    }
-
-    const cnpj = store.cnpj || '—';
-    const regime = store.regimeTributario
-      ? store.regimeTributario.charAt(0).toUpperCase() + store.regimeTributario.slice(1)
-      : '—';
-
-    elements.companySummary.innerHTML = `
-      <div class="space-y-3">
-        <div>
-          <p class="text-xs uppercase tracking-wide text-gray-500">Nome</p>
-          <p class="text-sm font-semibold text-gray-800">${store.nome || store.nomeFantasia || '—'}</p>
-        </div>
-        <div>
-          <p class="text-xs uppercase tracking-wide text-gray-500">Razão social</p>
-          <p class="text-sm text-gray-700">${store.razaoSocial || '—'}</p>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <p class="text-xs uppercase tracking-wide text-gray-500">CNPJ</p>
-            <p class="text-sm text-gray-700">${cnpj}</p>
-          </div>
-          <div>
-            <p class="text-xs uppercase tracking-wide text-gray-500">Regime</p>
-            <p class="text-sm text-gray-700">${regime}</p>
-          </div>
-        </div>
-        <div>
-          <p class="text-xs uppercase tracking-wide text-gray-500">Contato fiscal</p>
-          <p class="text-sm text-gray-700">${store.emailFiscal || '—'}</p>
-        </div>
-      </div>
-    `;
+    syncDefaultEnvironment(preferredDefault);
   };
 
-  const formatEnvironmentLabel = (value) => {
-    if (value === 'producao') return 'Produção';
-    if (value === 'homologacao') return 'Homologação';
-    return '—';
+  const updateOfflineLimitState = () => {
+    if (!elements.offline || !elements.offlineLimit) return;
+    if (elements.offline.checked) {
+      elements.offlineLimit.disabled = false;
+      if (!elements.offlineLimit.value) {
+        elements.offlineLimit.value = '10';
+      }
+    } else {
+      elements.offlineLimit.disabled = true;
+      elements.offlineLimit.value = '';
+    }
+  };
+
+  const resetAuditInfo = () => {
+    if (elements.createdInfo) elements.createdInfo.textContent = 'Será preenchido após o cadastro';
+    if (elements.updatedInfo) elements.updatedInfo.textContent = 'Será preenchido após alterações';
+    if (elements.createdBy) elements.createdBy.textContent = '—';
+    if (elements.updatedBy) elements.updatedBy.textContent = '—';
+  };
+
+  const updateAuditInfo = (pdv) => {
+    if (!pdv) {
+      resetAuditInfo();
+      return;
+    }
+    if (elements.createdInfo) elements.createdInfo.textContent = formatDateTime(pdv.createdAt);
+    if (elements.updatedInfo) elements.updatedInfo.textContent = formatDateTime(pdv.updatedAt);
+    if (elements.createdBy) elements.createdBy.textContent = pdv.criadoPor || '—';
+    if (elements.updatedBy) elements.updatedBy.textContent = pdv.atualizadoPor || '—';
+  };
+
+  const formatEnvironmentLabel = (value) => ambientesLabels[value] || '—';
+
+  const getEnabledEnvironmentBadges = (pdv) => {
+    if (!pdv || !Array.isArray(pdv.ambientesHabilitados)) return '';
+    return pdv.ambientesHabilitados
+      .map((env) => {
+        const label = formatEnvironmentLabel(env);
+        const isDefault = pdv.ambientePadrao === env;
+        const classes = isDefault
+          ? 'bg-primary/10 text-primary border-primary/30'
+          : 'bg-gray-100 text-gray-600 border-gray-200';
+        return `<span class="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold ${classes}">
+          <i class="fas fa-circle text-[7px]"></i>
+          ${label}
+        </span>`;
+      })
+      .join('');
   };
 
   const renderPdvs = () => {
     if (!elements.pdvList) return;
     if (!state.pdvs.length) {
       elements.pdvList.innerHTML = '';
-      if (elements.pdvEmptyState) elements.pdvEmptyState.classList.remove('hidden');
+      elements.pdvEmptyState?.classList.remove('hidden');
       if (elements.pdvCount) elements.pdvCount.textContent = '0';
       return;
     }
 
-    if (elements.pdvEmptyState) elements.pdvEmptyState.classList.add('hidden');
+    elements.pdvEmptyState?.classList.add('hidden');
     if (elements.pdvCount) elements.pdvCount.textContent = String(state.pdvs.length);
 
     const rows = state.pdvs
       .slice()
-      .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
+      .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }))
       .map((pdv) => {
+        const empresa = typeof pdv.empresa === 'object' && pdv.empresa ? pdv.empresa : null;
+        const empresaNome = empresa?.nome || empresa?.nomeFantasia || '—';
         const ambientes = getEnabledEnvironmentBadges(pdv);
         const ambientePadrao = formatEnvironmentLabel(pdv.ambientePadrao);
-        const ultimaSync = pdv.ultimaSincronizacao ? formatDateTime(pdv.ultimaSincronizacao) : 'Nunca sincronizado';
-        const empresaNome = pdv.empresaNome || '—';
+        const ultimaSync = pdv.ultimaSincronizacao
+          ? formatDateTime(pdv.ultimaSincronizacao)
+          : 'Nunca sincronizado';
         const statusClass = pdv.ativo
           ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
           : 'bg-gray-100 text-gray-600 border border-gray-200';
         const statusLabel = pdv.ativo ? 'Ativo' : 'Inativo';
 
         return `
-          <article class="rounded-xl border border-gray-200 p-4 shadow-sm hover:border-primary/40 transition" data-id="${pdv.id}">
+          <article class="rounded-xl border border-gray-200 p-4 shadow-sm hover:border-primary/40 transition" data-id="${pdv._id}">
             <div class="flex items-start justify-between gap-3">
               <div>
-                <h3 class="text-base font-semibold text-gray-800">${pdv.nome}</h3>
+                <h3 class="text-base font-semibold text-gray-800">${pdv.nome || '—'}</h3>
                 <p class="text-xs text-gray-500">${pdv.codigo || '—'} • ${empresaNome}</p>
               </div>
               <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusClass}">${statusLabel}</span>
@@ -318,88 +477,56 @@
             </dl>
             <div class="mt-3 flex flex-wrap gap-2">${ambientes}</div>
             <div class="mt-4 flex items-center justify-end gap-2">
-              <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-primary hover:text-primary transition" data-action="edit" data-id="${pdv.id}">
+              <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-primary hover:text-primary transition" data-action="edit" data-id="${pdv._id}">
                 <i class="fas fa-pen"></i>
                 Editar
               </button>
-              <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:border-red-400 hover:text-red-700 transition" data-action="delete" data-id="${pdv.id}">
+              <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:border-red-400 hover:text-red-700 transition" data-action="delete" data-id="${pdv._id}">
                 <i class="fas fa-trash"></i>
                 Excluir
               </button>
             </div>
           </article>
         `;
-      });
-
-    elements.pdvList.innerHTML = rows.join('');
-  };
-
-  const getEnabledEnvironmentBadges = (pdv) => {
-    if (!pdv || !Array.isArray(pdv.ambientesHabilitados)) return '';
-    return pdv.ambientesHabilitados
-      .map((env) => {
-        const label = formatEnvironmentLabel(env);
-        const isDefault = pdv.ambientePadrao === env;
-        const classes = isDefault
-          ? 'bg-primary/10 text-primary border-primary/30'
-          : 'bg-gray-100 text-gray-600 border-gray-200';
-        return `<span class="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold ${classes}">
-          <i class="fas fa-circle text-[7px]"></i>
-          ${label}
-        </span>`;
       })
       .join('');
-  };
 
-  const resetAuditInfo = () => {
-    if (elements.createdInfo) elements.createdInfo.textContent = 'Será preenchido após o cadastro';
-    if (elements.updatedInfo) elements.updatedInfo.textContent = 'Será preenchido após alterações';
-    if (elements.createdBy) elements.createdBy.textContent = '—';
-    if (elements.updatedBy) elements.updatedBy.textContent = '—';
+    elements.pdvList.innerHTML = rows;
   };
-
-  const updateAuditInfo = (pdv) => {
-    if (!pdv) {
-      resetAuditInfo();
-      return;
-    }
-    if (elements.createdInfo) elements.createdInfo.textContent = pdv.createdAt ? formatDateTime(pdv.createdAt) : '—';
-    if (elements.updatedInfo) elements.updatedInfo.textContent = pdv.updatedAt ? formatDateTime(pdv.updatedAt) : '—';
-    if (elements.createdBy) elements.createdBy.textContent = pdv.createdBy || '—';
-    if (elements.updatedBy) elements.updatedBy.textContent = pdv.updatedBy || '—';
+  const updateCodeField = () => {
+    if (!elements.code || state.editingId) return;
+    const next = state.nextCode || computeNextCodeFromState();
+    elements.code.value = next || '';
   };
 
   const startCreateFlow = () => {
     state.editingId = null;
     if (elements.idInput) elements.idInput.value = '';
     if (elements.form) elements.form.reset();
-    if (elements.submitLabel) elements.submitLabel.textContent = 'Salvar PDV';
+    setSavingState(false);
     if (elements.cancelEdit) elements.cancelEdit.classList.add('hidden');
     if (elements.lastSync) elements.lastSync.textContent = 'Nunca sincronizado';
-    resetAuditInfo();
-
     if (elements.active) {
       elements.active.checked = true;
       updateActiveToggleLabel();
     }
-
     if (elements.syncAuto) elements.syncAuto.checked = true;
     if (elements.offline) elements.offline.checked = false;
     if (elements.offlineLimit) {
       elements.offlineLimit.value = '';
       elements.offlineLimit.disabled = true;
     }
-
-    if (elements.envHomologacao) elements.envHomologacao.checked = true;
-    if (elements.envProducao) elements.envProducao.checked = false;
-    syncDefaultEnvironment('homologacao');
-    fillNextCode();
+    if (elements.notes) elements.notes.value = '';
+    resetAuditInfo();
     updateCompanySummary();
+    syncEnvironmentAvailability({ preserveSelection: false, preferredDefault: 'homologacao' });
+    updateCodeField();
   };
 
   const startEditFlow = (pdv) => {
-    state.editingId = pdv.id;
-    if (elements.idInput) elements.idInput.value = pdv.id;
+    if (!pdv) return;
+    state.editingId = pdv._id;
+    if (elements.idInput) elements.idInput.value = pdv._id || '';
     if (elements.code) elements.code.value = pdv.codigo || '';
     if (elements.name) elements.name.value = pdv.nome || '';
     if (elements.alias) elements.alias.value = pdv.apelido || '';
@@ -407,37 +534,47 @@
       elements.active.checked = Boolean(pdv.ativo);
       updateActiveToggleLabel();
     }
+    const empresaId =
+      typeof pdv.empresa === 'object' && pdv.empresa ? pdv.empresa._id : pdv.empresa;
     if (elements.company) {
-      elements.company.value = pdv.empresaId || '';
+      elements.company.value = empresaId || '';
     }
+    updateCompanySummary();
     if (elements.nfeSeries) elements.nfeSeries.value = pdv.serieNfe || '';
     if (elements.nfceSeries) elements.nfceSeries.value = pdv.serieNfce || '';
-    if (elements.csc) elements.csc.value = pdv.csc || '';
-    if (elements.syncAuto) elements.syncAuto.checked = Boolean(pdv.sincronizacaoAutomatica);
+    if (elements.syncAuto) elements.syncAuto.checked = pdv.sincronizacaoAutomatica !== false;
     if (elements.offline) elements.offline.checked = Boolean(pdv.permitirModoOffline);
     if (elements.offlineLimit) {
-      elements.offlineLimit.disabled = !pdv.permitirModoOffline;
-      elements.offlineLimit.value = pdv.permitirModoOffline ? pdv.limiteOffline ?? '' : '';
+      if (pdv.permitirModoOffline) {
+        elements.offlineLimit.disabled = false;
+        elements.offlineLimit.value =
+          pdv.limiteOffline !== null && pdv.limiteOffline !== undefined
+            ? String(pdv.limiteOffline)
+            : '';
+      } else {
+        elements.offlineLimit.disabled = true;
+        elements.offlineLimit.value = '';
+      }
     }
     if (elements.notes) elements.notes.value = pdv.observacoes || '';
     if (elements.lastSync) {
-      elements.lastSync.textContent = pdv.ultimaSincronizacao ? formatDateTime(pdv.ultimaSincronizacao) : 'Nunca sincronizado';
+      elements.lastSync.textContent = pdv.ultimaSincronizacao
+        ? formatDateTime(pdv.ultimaSincronizacao)
+        : 'Nunca sincronizado';
     }
 
-    if (elements.envHomologacao) elements.envHomologacao.checked = pdv.ambientesHabilitados?.includes('homologacao');
-    if (elements.envProducao) elements.envProducao.checked = pdv.ambientesHabilitados?.includes('producao');
-    syncDefaultEnvironment(pdv.ambientePadrao);
+    const checkboxes = getEnvironmentCheckboxes();
+    Object.values(checkboxes).forEach((checkbox) => {
+      if (checkbox) checkbox.checked = false;
+    });
+    (Array.isArray(pdv.ambientesHabilitados) ? pdv.ambientesHabilitados : []).forEach((env) => {
+      const checkbox = checkboxes[env];
+      if (checkbox) checkbox.checked = true;
+    });
+    syncEnvironmentAvailability({ preserveSelection: true, preferredDefault: pdv.ambientePadrao });
 
-    if (elements.envDefaultHomologacao) {
-      elements.envDefaultHomologacao.checked = pdv.ambientePadrao === 'homologacao';
-    }
-    if (elements.envDefaultProducao) {
-      elements.envDefaultProducao.checked = pdv.ambientePadrao === 'producao';
-    }
-
-    if (elements.submitLabel) elements.submitLabel.textContent = 'Salvar alterações';
     if (elements.cancelEdit) elements.cancelEdit.classList.remove('hidden');
-    updateCompanySummary();
+    setSavingState(false);
     updateAuditInfo(pdv);
   };
 
@@ -457,32 +594,68 @@
     return window.confirm(`Deseja realmente remover o PDV ${pdv.nome}?`);
   };
 
+  const parseErrorResponse = async (response, fallback) => {
+    try {
+      const data = await response.json();
+      if (data?.message) return data.message;
+    } catch (error) {
+      // ignore
+    }
+    return fallback;
+  };
+
+  const deletePdv = async (pdvId) => {
+    const token = getToken();
+    if (!token) throw new Error('Faça login novamente para continuar.');
+    const response = await fetch(`${API_BASE}/pdvs/${pdvId}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) {
+      const message = await parseErrorResponse(response, 'Não foi possível remover o PDV.');
+      throw new Error(message);
+    }
+  };
   const handleDelete = async (pdvId) => {
-    const pdv = state.pdvs.find((item) => item.id === pdvId);
+    const pdv = state.pdvs.find((item) => item._id === pdvId);
     if (!pdv) return;
     const confirmed = await confirmDeletion(pdv);
     if (!confirmed) return;
 
-    state.pdvs = state.pdvs.filter((item) => item.id !== pdvId);
-    persistPdvs();
-    renderPdvs();
-    if (state.editingId === pdvId) {
-      startCreateFlow();
+    try {
+      await deletePdv(pdvId);
+      await fetchPdvs();
+      await fetchNextCode();
+      if (state.editingId === pdvId) {
+        startCreateFlow();
+      }
+      notify('PDV removido com sucesso.', 'success');
+    } catch (error) {
+      console.error('Erro ao remover PDV:', error);
+      notify(error.message || 'Erro ao remover PDV.', 'error');
     }
-    notify('PDV removido com sucesso.', 'success');
   };
 
   const buildPayloadFromForm = () => {
-    const empresaId = elements.company?.value || '';
     const nome = elements.name?.value.trim();
     if (!nome) {
       notify('Informe o nome do PDV.', 'warning');
       elements.name?.focus();
       return null;
     }
+
+    const empresaId = elements.company?.value.trim();
     if (!empresaId) {
       notify('Selecione a empresa responsável pelo PDV.', 'warning');
       elements.company?.focus();
+      return null;
+    }
+
+    const store = state.stores.find((item) => item._id === empresaId);
+    if (!store) {
+      notify('Não foi possível localizar a empresa selecionada.', 'error');
       return null;
     }
 
@@ -498,92 +671,184 @@
       return null;
     }
 
-    const empresa = state.stores.find((item) => item._id === empresaId);
+    for (const env of ambientesHabilitados) {
+      if (!storeSupportsEnvironment(store, env)) {
+        notify(`Configure o CSC de ${ambientesLabels[env]} na empresa para utilizar este ambiente.`, 'warning');
+        return null;
+      }
+    }
 
-    const payload = {
-      id: state.editingId || `pdv-${Date.now()}`,
-      codigo: elements.code?.value.trim() || computeNextCodeValue(),
+    if (!storeSupportsEnvironment(store, ambientePadrao)) {
+      notify('O ambiente padrão selecionado não está disponível para a empresa.', 'warning');
+      return null;
+    }
+
+    const permitirModoOffline = Boolean(elements.offline?.checked);
+    let limiteOffline = null;
+    if (permitirModoOffline) {
+      const rawLimit = elements.offlineLimit?.value.trim() ?? '';
+      limiteOffline = rawLimit ? Number(rawLimit) : 0;
+      if (!Number.isFinite(limiteOffline) || limiteOffline < 0) {
+        notify('Informe um limite de emissões offline válido (maior ou igual a zero).', 'warning');
+        elements.offlineLimit?.focus();
+        return null;
+      }
+    }
+
+    const codigo = elements.code?.value.trim();
+    if (state.editingId && !codigo) {
+      notify('O código do PDV não foi carregado. Recarregue a página e tente novamente.', 'error');
+      return null;
+    }
+
+    return {
+      codigo: codigo || undefined,
       nome,
       apelido: elements.alias?.value.trim() || '',
       ativo: Boolean(elements.active?.checked),
-      empresaId,
-      empresaNome: empresa?.nome || empresa?.nomeFantasia || '',
+      empresa: empresaId,
       serieNfe: elements.nfeSeries?.value.trim() || '',
       serieNfce: elements.nfceSeries?.value.trim() || '',
-      csc: elements.csc?.value.trim() || '',
       ambientesHabilitados,
       ambientePadrao,
       sincronizacaoAutomatica: Boolean(elements.syncAuto?.checked),
-      permitirModoOffline: Boolean(elements.offline?.checked),
-      limiteOffline: elements.offline?.checked ? Number(elements.offlineLimit?.value || 0) : null,
+      permitirModoOffline,
+      limiteOffline: permitirModoOffline ? limiteOffline : null,
       observacoes: elements.notes?.value.trim() || '',
     };
-
-    if (Number.isNaN(payload.limiteOffline)) {
-      payload.limiteOffline = null;
-    }
-
-    return payload;
   };
 
-  const upsertPdv = (payload) => {
-    const now = new Date().toISOString();
-    const user = getLoggedUser();
-    const userName = user?.nome || user?.name || user?.email || 'Usuário';
+  const populateCompanySelect = () => {
+    if (!elements.company) return;
+    const previous = elements.company.value;
 
-    const existingIndex = state.pdvs.findIndex((item) => item.id === payload.id);
-    if (existingIndex >= 0) {
-      const current = state.pdvs[existingIndex];
-      state.pdvs[existingIndex] = {
-        ...current,
-        ...payload,
-        codigo: payload.codigo || current.codigo,
-        limiteOffline: payload.permitirModoOffline ? payload.limiteOffline : null,
-        updatedAt: now,
-        updatedBy: userName,
-        createdAt: current.createdAt || now,
-        createdBy: current.createdBy || userName,
-        ultimaSincronizacao: current.ultimaSincronizacao || null,
-      };
-      return state.pdvs[existingIndex];
+    if (!state.stores.length) {
+      elements.company.innerHTML = '<option value="">Nenhuma empresa cadastrada</option>';
+    } else {
+      const options = ['<option value="">Selecione uma empresa</option>'];
+      state.stores.forEach((store) => {
+        options.push(
+          `<option value="${store._id}">${store.nome || store.nomeFantasia || 'Empresa sem nome'}</option>`
+        );
+      });
+      elements.company.innerHTML = options.join('');
     }
 
-    const created = {
-      ...payload,
-      limiteOffline: payload.permitirModoOffline ? payload.limiteOffline : null,
-      createdAt: now,
-      updatedAt: now,
-      createdBy: userName,
-      updatedBy: userName,
-      ultimaSincronizacao: null,
-    };
-    state.pdvs.push(created);
-    return created;
+    if (previous && state.stores.some((store) => store._id === previous)) {
+      elements.company.value = previous;
+    }
+
+    updateCompanySummary();
   };
 
-  const handleSubmit = (event) => {
+  const fetchStores = async () => {
+    const response = await fetch(`${API_BASE}/stores`);
+    if (!response.ok) {
+      throw new Error('Não foi possível carregar as empresas cadastradas.');
+    }
+    const payload = await response.json();
+    state.stores = Array.isArray(payload) ? payload : [];
+    populateCompanySelect();
+    if (!state.editingId) {
+      syncEnvironmentAvailability({ preserveSelection: false, preferredDefault: 'homologacao' });
+    }
+  };
+
+  const fetchPdvs = async () => {
+    const response = await fetch(`${API_BASE}/pdvs`);
+    if (!response.ok) {
+      throw new Error('Não foi possível carregar os PDVs cadastrados.');
+    }
+    const payload = await response.json();
+    state.pdvs = Array.isArray(payload?.pdvs)
+      ? payload.pdvs
+      : Array.isArray(payload)
+      ? payload
+      : [];
+    renderPdvs();
+    updateCodeField();
+  };
+
+  const fetchNextCode = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/pdvs/next-code`);
+      if (!response.ok) {
+        throw new Error('Falha ao obter o próximo código de PDV.');
+      }
+      const payload = await response.json();
+      state.nextCode = payload?.codigo || computeNextCodeFromState();
+    } catch (error) {
+      console.error('Erro ao calcular próximo código de PDV:', error);
+      state.nextCode = computeNextCodeFromState();
+    }
+    updateCodeField();
+  };
+
+  const createPdv = async (payload) => {
+    const token = getToken();
+    if (!token) throw new Error('Faça login novamente para continuar.');
+    const response = await fetch(`${API_BASE}/pdvs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const message = await parseErrorResponse(response, 'Não foi possível criar o PDV.');
+      throw new Error(message);
+    }
+    return response.json();
+  };
+
+  const updatePdv = async (pdvId, payload) => {
+    const token = getToken();
+    if (!token) throw new Error('Faça login novamente para continuar.');
+    const response = await fetch(`${API_BASE}/pdvs/${pdvId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const message = await parseErrorResponse(response, 'Não foi possível atualizar o PDV.');
+      throw new Error(message);
+    }
+    return response.json();
+  };
+  const handleSubmit = async (event) => {
     event.preventDefault();
     const payload = buildPayloadFromForm();
     if (!payload) return;
 
-    const record = upsertPdv(payload);
-    persistPdvs();
-    renderPdvs();
-    updateAuditInfo(record);
-    if (!state.editingId) {
-      notify('PDV cadastrado com sucesso.', 'success');
-      startCreateFlow();
-    } else {
-      notify('Alterações salvas com sucesso.', 'success');
-      state.editingId = record.id;
-      if (elements.idInput) elements.idInput.value = record.id;
-      if (elements.submitLabel) elements.submitLabel.textContent = 'Salvar alterações';
-      if (elements.cancelEdit) elements.cancelEdit.classList.remove('hidden');
-      if (elements.lastSync) {
-        elements.lastSync.textContent = record.ultimaSincronizacao
-          ? formatDateTime(record.ultimaSincronizacao)
-          : 'Nunca sincronizado';
+    try {
+      setSavingState(true);
+      if (state.editingId) {
+        await updatePdv(state.editingId, payload);
+        await fetchPdvs();
+        await fetchNextCode();
+        const updatedRecord = state.pdvs.find((item) => item._id === state.editingId);
+        if (updatedRecord) {
+          startEditFlow(updatedRecord);
+        } else {
+          startCreateFlow();
+        }
+        notify('Alterações salvas com sucesso.', 'success');
+      } else {
+        await createPdv(payload);
+        await fetchPdvs();
+        await fetchNextCode();
+        startCreateFlow();
+        notify('PDV cadastrado com sucesso.', 'success');
       }
+    } catch (error) {
+      console.error('Erro ao salvar PDV:', error);
+      notify(error.message || 'Não foi possível salvar o PDV.', 'error');
+    } finally {
+      setSavingState(false);
     }
   };
 
@@ -611,6 +876,17 @@
 
     [elements.envHomologacao, elements.envProducao].forEach((checkbox) => {
       checkbox?.addEventListener('change', () => {
+        const env = checkbox === elements.envHomologacao ? 'homologacao' : 'producao';
+        const store = getSelectedStore();
+        if (!store) {
+          checkbox.checked = false;
+          notify('Selecione uma empresa antes de definir os ambientes fiscais.', 'warning');
+          return;
+        }
+        if (checkbox.checked && !storeSupportsEnvironment(store, env)) {
+          checkbox.checked = false;
+          notify(`Configure o CSC de ${ambientesLabels[env]} na empresa antes de habilitar este ambiente.`, 'warning');
+        }
         syncDefaultEnvironment();
       });
     });
@@ -621,22 +897,16 @@
       });
     });
 
-    if (elements.offline && elements.offlineLimit) {
-      elements.offline.addEventListener('change', () => {
-        if (elements.offline.checked) {
-          elements.offlineLimit.disabled = false;
-          if (!elements.offlineLimit.value) {
-            elements.offlineLimit.value = '10';
-          }
-        } else {
-          elements.offlineLimit.disabled = true;
-          elements.offlineLimit.value = '';
-        }
-      });
+    if (elements.offline) {
+      elements.offline.addEventListener('change', updateOfflineLimitState);
+      updateOfflineLimitState();
     }
 
     if (elements.company) {
-      elements.company.addEventListener('change', updateCompanySummary);
+      elements.company.addEventListener('change', () => {
+        updateCompanySummary();
+        syncEnvironmentAvailability({ preserveSelection: false, preferredDefault: 'homologacao' });
+      });
     }
 
     if (elements.pdvList) {
@@ -645,8 +915,11 @@
         if (!button) return;
         const { action, id } = button.dataset;
         if (action === 'edit') {
-          const pdv = state.pdvs.find((item) => item.id === id);
-          if (pdv) startEditFlow(pdv);
+          const pdv = state.pdvs.find((item) => item._id === id);
+          if (pdv) {
+            startEditFlow(pdv);
+            window.scrollTo({ top: elements.form?.offsetTop || 0, behavior: 'smooth' });
+          }
         } else if (action === 'delete') {
           handleDelete(id);
         }
@@ -654,31 +927,30 @@
     }
   };
 
-  const fetchStores = async () => {
-    try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/stores`);
-      if (!response.ok) throw new Error('Não foi possível carregar as empresas cadastradas.');
-      const payload = await response.json();
-      state.stores = Array.isArray(payload) ? payload : [];
-      populateCompanySelect();
-    } catch (error) {
-      console.error('Erro ao carregar empresas:', error);
-      state.stores = [];
-      populateCompanySelect();
-      notify(error.message || 'Não foi possível carregar as empresas cadastradas.', 'error');
-    }
-  };
-
-  const initialize = () => {
+  const initialize = async () => {
     Object.entries(selectors).forEach(([key, selector]) => {
       elements[key] = document.querySelector(selector);
     });
 
-    loadPdvs();
-    renderPdvs();
     bindEvents();
-    fetchStores();
+    renderPdvs();
     startCreateFlow();
+
+    try {
+      await fetchStores();
+    } catch (error) {
+      console.error('Erro ao carregar empresas:', error);
+      notify(error.message || 'Não foi possível carregar as empresas cadastradas.', 'error');
+    }
+
+    try {
+      await fetchPdvs();
+    } catch (error) {
+      console.error('Erro ao carregar PDVs:', error);
+      notify(error.message || 'Não foi possível carregar os PDVs cadastrados.', 'error');
+    }
+
+    await fetchNextCode();
   };
 
   document.addEventListener('DOMContentLoaded', initialize);
