@@ -16,10 +16,10 @@
       label: 'Abertura de Caixa',
       icon: 'fa-door-open',
       requiresMotivo: false,
-      requiresAmount: true,
-      affectsPayments: true,
+      requiresAmount: false,
+      affectsPayments: false,
       hint:
-        'Informe o valor inicial e selecione o meio de pagamento que receberá o valor de abertura.',
+        'Informe os valores iniciais nos meios de pagamento abaixo e abra o caixa.',
       isAvailable: (state) => !state.caixaAberto,
       successMessage: 'Caixa aberto com sucesso.',
     },
@@ -75,6 +75,7 @@
     selectedStore: '',
     selectedPdv: '',
     caixaAberto: false,
+    allowApuradoEdit: false,
     selectedAction: null,
     searchResults: [],
     selectedProduct: null,
@@ -93,6 +94,8 @@
       fechamentoData: null,
       fechamentoPrevisto: 0,
       fechamentoApurado: 0,
+      previstoPagamentos: [],
+      apuradoPagamentos: [],
     },
     history: [],
     lastMovement: null,
@@ -174,6 +177,20 @@
     const filler = '-'.repeat(space);
     return `${left} ${filler} ${right}`;
   };
+
+  const clonePayments = (payments) =>
+    Array.isArray(payments) ? payments.map((item) => ({ ...item })) : [];
+
+  const sumPayments = (payments) =>
+    Array.isArray(payments)
+      ? payments.reduce((total, payment) => total + safeNumber(payment?.valor), 0)
+      : 0;
+
+  const describePaymentValues = (payments) =>
+    (Array.isArray(payments) ? payments : [])
+      .filter((payment) => safeNumber(payment?.valor) > 0)
+      .map((payment) => `${payment.label || 'Pagamento'} ${formatCurrency(payment.valor)}`)
+      .join(' | ');
 
   const toDateLabel = (isoString) => {
     if (!isoString) return '—';
@@ -1192,8 +1209,10 @@
     }
     const aberturaLabel = toDateLabel(state.caixaInfo.aberturaData);
     const fechamentoLabel = toDateLabel(state.caixaInfo.fechamentoData);
-    const header = `Empresa: ${getStoreLabel()} | PDV: ${getPdvLabel()} | Abertura: ${aberturaLabel} | Fechamento: ${fechamentoLabel}`;
-    const lines = [header];
+    const lines = [];
+    lines.push(`Empresa: ${getStoreLabel()} | PDV: ${getPdvLabel()}`);
+    lines.push(`Abertura: ${aberturaLabel} | Fechamento: ${fechamentoLabel}`);
+    lines.push('');
     lines.push(formatPrintLine('Abertura', formatCurrency(state.summary.abertura)));
     lines.push('---------------------Recebimentos---------------------');
     lines.push('Meios de pagamento');
@@ -1205,20 +1224,90 @@
       lines.push('Nenhum meio de pagamento configurado.');
     }
     lines.push('------------- Fechamento Previsto ---------------------');
-    lines.push(formatPrintLine('Previsto', formatCurrency(state.caixaInfo.fechamentoPrevisto || 0)));
+    const previstoPagamentos =
+      state.allowApuradoEdit && state.caixaInfo.previstoPagamentos?.length
+        ? state.caixaInfo.previstoPagamentos
+        : state.caixaInfo.previstoPagamentos?.length
+        ? state.caixaInfo.previstoPagamentos
+        : state.pagamentos;
+    if (previstoPagamentos?.length) {
+      previstoPagamentos.forEach((payment) => {
+        lines.push(formatPrintLine(payment.label, formatCurrency(payment.valor)));
+      });
+      const previstoTotal = state.caixaInfo.fechamentoPrevisto || sumPayments(previstoPagamentos);
+      lines.push(formatPrintLine('Total previsto', formatCurrency(previstoTotal)));
+    } else {
+      lines.push('Nenhum valor previsto.');
+    }
     lines.push('------------- Fechamento Apurado -------------------');
-    lines.push(formatPrintLine('Apurado', formatCurrency(state.caixaInfo.fechamentoApurado || 0)));
+    const apuradoPagamentos = state.allowApuradoEdit
+      ? state.pagamentos
+      : state.caixaInfo.apuradoPagamentos || [];
+    if (apuradoPagamentos.length) {
+      apuradoPagamentos.forEach((payment) => {
+        lines.push(formatPrintLine(payment.label, formatCurrency(payment.valor)));
+      });
+      const apuradoTotal = state.caixaInfo.fechamentoApurado || sumPayments(apuradoPagamentos);
+      lines.push(formatPrintLine('Total apurado', formatCurrency(apuradoTotal)));
+    } else {
+      lines.push('Aguardando fechamento.');
+    }
     return lines.join('\n');
   };
 
+  const openMatricialPreview = () => {
+    if (typeof window === 'undefined') return;
+    const content = buildSummaryPrint();
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=800,height=600');
+    if (!printWindow) {
+      console.warn('Não foi possível abrir a janela de impressão.');
+      return;
+    }
+    printWindow.document.write(`<!DOCTYPE html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <title>Fechamento do caixa</title>
+          <style>
+            body { font-family: 'Courier New', Courier, monospace; font-size: 12px; padding: 16px; }
+            pre { white-space: pre-wrap; }
+          </style>
+        </head>
+        <body>
+          <pre>${content}</pre>
+        </body>
+      </html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    try {
+      printWindow.print();
+    } catch (error) {
+      console.warn('Falha ao acionar impressão automática do fechamento.', error);
+    }
+  };
+
+  const promptPrintFechamento = () => {
+    if (typeof window === 'undefined') return;
+    const shouldPrint = window.confirm('Deseja imprimir o fechamento?');
+    if (shouldPrint) {
+      openMatricialPreview();
+    }
+  };
+
   const updateSummary = () => {
-    const total = state.pagamentos.reduce((sum, payment) => sum + payment.valor, 0);
+    const total = sumPayments(state.pagamentos);
     state.summary.saldo = total;
     state.summary.recebido = Math.max(total - state.summary.abertura, 0);
-    if (state.caixaAberto) {
+    if (state.caixaAberto && !state.allowApuradoEdit) {
+      state.caixaInfo.previstoPagamentos = clonePayments(state.pagamentos);
       state.caixaInfo.fechamentoPrevisto = total;
-    } else if (!state.caixaInfo.fechamentoPrevisto) {
-      state.caixaInfo.fechamentoPrevisto = total;
+    }
+    if (!state.caixaAberto && !state.allowApuradoEdit) {
+      state.caixaInfo.apuradoPagamentos = clonePayments(state.pagamentos);
+      state.caixaInfo.fechamentoApurado = sumPayments(state.caixaInfo.apuradoPagamentos);
+      if (!state.caixaInfo.fechamentoPrevisto) {
+        state.caixaInfo.fechamentoPrevisto = sumPayments(state.caixaInfo.previstoPagamentos || []);
+      }
     }
     if (elements.summaryPrint) {
       elements.summaryPrint.textContent = buildSummaryPrint();
@@ -1379,12 +1468,18 @@
   const resetPagamentos = () => {
     state.pagamentos = state.pagamentos.map((payment) => ({ ...payment, valor: 0 }));
     state.summary.abertura = 0;
+    state.allowApuradoEdit = false;
+    state.caixaInfo.previstoPagamentos = [];
+    state.caixaInfo.apuradoPagamentos = [];
+    state.caixaInfo.fechamentoPrevisto = 0;
+    state.caixaInfo.fechamentoApurado = 0;
     updateSummary();
     renderPayments();
   };
 
   const resetWorkspace = () => {
     state.caixaAberto = false;
+    state.allowApuradoEdit = false;
     state.selectedAction = null;
     state.searchResults = [];
     state.selectedProduct = null;
@@ -1396,6 +1491,8 @@
       fechamentoData: null,
       fechamentoPrevisto: 0,
       fechamentoApurado: 0,
+      previstoPagamentos: [],
+      apuradoPagamentos: [],
     };
     state.history = [];
     state.lastMovement = null;
@@ -1578,6 +1675,8 @@
           pdv?.fechamentoApurado ||
           0
       ),
+      previstoPagamentos: [],
+      apuradoPagamentos: [],
     };
     const pagamentosData = pdv?.caixa?.pagamentos || pdv?.pagamentos || {};
     applyPagamentosData(pagamentosData);
@@ -1745,7 +1844,12 @@
   const renderPayments = () => {
     if (!elements.paymentList) return;
     elements.paymentList.innerHTML = '';
-    const inputsLocked = state.caixaAberto;
+    const inputsLocked = state.caixaAberto && !state.allowApuradoEdit;
+    const helperText = state.allowApuradoEdit
+      ? 'Informe o valor apurado'
+      : state.caixaAberto
+      ? 'Saldo previsto'
+      : 'Valor inicial / apurado';
     if (state.paymentMethodsLoading) {
       elements.paymentList.innerHTML =
         '<li class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Carregando meios de pagamento...</li>';
@@ -1763,6 +1867,7 @@
         const inputClasses = [
           'w-24 rounded-lg border border-gray-200 px-2 py-1 text-sm text-right focus:border-primary focus:ring-2 focus:ring-primary/20',
           inputsLocked ? 'cursor-not-allowed bg-gray-100 text-gray-500' : '',
+          state.allowApuradoEdit ? 'bg-white text-gray-800' : '',
         ]
           .filter(Boolean)
           .join(' ');
@@ -1770,7 +1875,7 @@
         li.innerHTML = `
           <div>
             <p class="text-sm font-semibold text-gray-700">${payment.label}</p>
-            <p class="text-xs text-gray-500">Saldo registrado</p>
+            <p class="text-xs text-gray-500">${helperText}</p>
           </div>
           <div class="flex items-center gap-2">
             <span class="text-xs text-gray-500">R$</span>
@@ -1800,7 +1905,7 @@
     const value = safeNumber(input.value);
     const payment = state.pagamentos.find((item) => item.id === id);
     if (!payment) return;
-    if (state.caixaAberto) {
+    if (state.caixaAberto && !state.allowApuradoEdit) {
       input.value = payment.valor.toFixed(2);
       return;
     }
@@ -1896,8 +2001,21 @@
   const handleActionClick = (event) => {
     const button = event.target.closest('button[data-action]');
     if (!button) return;
-    state.selectedAction = button.getAttribute('data-action');
+    const actionId = button.getAttribute('data-action');
+    if (state.allowApuradoEdit && actionId !== 'fechamento' && state.caixaAberto) {
+      state.pagamentos = clonePayments(state.caixaInfo.previstoPagamentos || state.pagamentos);
+      state.allowApuradoEdit = false;
+    }
+    state.selectedAction = actionId;
+    if (actionId === 'fechamento' && state.caixaAberto) {
+      state.caixaInfo.previstoPagamentos = clonePayments(state.pagamentos);
+      state.caixaInfo.fechamentoPrevisto = sumPayments(state.caixaInfo.previstoPagamentos);
+      state.allowApuradoEdit = true;
+    } else if (actionId !== 'fechamento') {
+      state.allowApuradoEdit = false;
+    }
     renderCaixaActions();
+    renderPayments();
     updateActionDetails();
   };
 
@@ -1928,16 +2046,17 @@
         notify('O caixa já está aberto.', 'warning');
         return;
       }
+      const aberturaTotal = sumPayments(state.pagamentos);
       state.caixaAberto = true;
-      state.summary.abertura = amountValue;
+      state.allowApuradoEdit = false;
+      state.summary.abertura = aberturaTotal;
       state.caixaInfo.aberturaData = new Date().toISOString();
       state.caixaInfo.fechamentoData = null;
       state.caixaInfo.fechamentoApurado = 0;
-      state.caixaInfo.fechamentoPrevisto = amountValue;
-      state.pagamentos = state.pagamentos.map((item) =>
-        item.id === (payment?.id || '') ? { ...item, valor: amountValue } : item
-      );
-      addHistoryEntry(action, amountValue, motivo, payment?.label);
+      state.caixaInfo.previstoPagamentos = clonePayments(state.pagamentos);
+      state.caixaInfo.apuradoPagamentos = [];
+      state.caixaInfo.fechamentoPrevisto = aberturaTotal;
+      addHistoryEntry(action, aberturaTotal, motivo, describePaymentValues(state.pagamentos));
       notify(action.successMessage, 'success');
       setActiveTab('pdv-tab');
     } else if (action.id === 'fechamento') {
@@ -1945,17 +2064,31 @@
         notify('Abra o caixa antes de realizar o fechamento.', 'warning');
         return;
       }
-      const saldo = state.summary.saldo;
-      addHistoryEntry(action, saldo, motivo, '', -Math.abs(saldo));
+      const previstoPagamentos =
+        state.caixaInfo.previstoPagamentos?.length
+          ? state.caixaInfo.previstoPagamentos
+          : clonePayments(state.pagamentos);
+      const apuradoPagamentos = clonePayments(state.pagamentos);
+      const previstoTotal = sumPayments(previstoPagamentos);
+      const apuradoTotal = sumPayments(apuradoPagamentos);
+      addHistoryEntry(
+        action,
+        apuradoTotal,
+        motivo,
+        describePaymentValues(apuradoPagamentos),
+        -Math.abs(apuradoTotal)
+      );
       state.caixaInfo.fechamentoData = new Date().toISOString();
-      state.caixaInfo.fechamentoPrevisto = saldo;
-      state.caixaInfo.fechamentoApurado = saldo;
+      state.caixaInfo.previstoPagamentos = clonePayments(previstoPagamentos);
+      state.caixaInfo.apuradoPagamentos = clonePayments(apuradoPagamentos);
+      state.caixaInfo.fechamentoPrevisto = previstoTotal;
+      state.caixaInfo.fechamentoApurado = apuradoTotal;
       state.caixaAberto = false;
-      state.summary.abertura = 0;
-      state.pagamentos = state.pagamentos.map((item) => ({ ...item, valor: 0 }));
+      state.allowApuradoEdit = false;
       notify(action.successMessage, 'success');
       updateTabAvailability();
       setActiveTab('caixa-tab');
+      promptPrintFechamento();
     } else {
       if (!state.caixaAberto) {
         notify('Abra o caixa antes de registrar movimentações.', 'warning');
@@ -1985,6 +2118,7 @@
     updateStatusBadge();
     updateTabAvailability();
     state.selectedAction = null;
+    state.allowApuradoEdit = false;
     renderCaixaActions();
     updateActionDetails();
     elements.actionAmount && (elements.actionAmount.value = '');
