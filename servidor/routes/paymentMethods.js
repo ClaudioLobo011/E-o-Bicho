@@ -1,0 +1,161 @@
+const express = require('express');
+const router = express.Router();
+
+const PaymentMethod = require('../models/PaymentMethod');
+const Store = require('../models/Store');
+const requireAuth = require('../middlewares/requireAuth');
+const authorizeRoles = require('../middlewares/authorizeRoles');
+
+const normalizeString = (value) => {
+  if (value === undefined || value === null) return '';
+  return String(value).trim();
+};
+
+const parseNumber = (value, fallback = 0) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const extractNumericValue = (value) => {
+  const normalized = normalizeString(value);
+  if (!normalized) return 0;
+  const matches = normalized.match(/\d+/g);
+  if (!matches) {
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return matches.reduce((max, part) => {
+    const parsed = Number(part);
+    return Number.isFinite(parsed) && parsed > max ? parsed : max;
+  }, 0);
+};
+
+const generateNextCode = async (companyId) => {
+  const query = companyId ? { company: companyId } : {};
+  const methods = await PaymentMethod.find(query, 'code').lean();
+  const highest = methods.reduce((max, method) => {
+    const current = extractNumericValue(method?.code);
+    return current > max ? current : max;
+  }, 0);
+  return `MP-${String(highest + 1).padStart(3, '0')}`;
+};
+
+const normalizeInstallmentConfigurations = (raw, totalInstallments, defaultDays) => {
+  const map = new Map();
+  if (Array.isArray(raw)) {
+    raw.forEach((item) => {
+      const number = parseNumber(item?.number ?? item?.installment, null);
+      if (!number) return;
+      if (number < 1 || number > totalInstallments) return;
+      const discount = Math.max(0, parseNumber(item?.discount, 0));
+      const days = Math.max(0, parseNumber(item?.days, defaultDays));
+      map.set(number, { number, discount, days });
+    });
+  }
+
+  for (let installment = 1; installment <= totalInstallments; installment += 1) {
+    if (!map.has(installment)) {
+      map.set(installment, {
+        number: installment,
+        discount: 0,
+        days: defaultDays,
+      });
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.number - b.number);
+};
+
+router.get('/', async (req, res) => {
+  try {
+    const { company } = req.query;
+    const query = {};
+    if (company) {
+      query.company = company;
+    }
+
+    const methods = await PaymentMethod.find(query)
+      .sort({ createdAt: -1 })
+      .populate('company', 'nome nomeFantasia razaoSocial cnpj cpf');
+
+    res.json({ paymentMethods: methods });
+  } catch (error) {
+    console.error('Erro ao listar meios de pagamento:', error);
+    res.status(500).json({ message: 'Erro ao listar meios de pagamento.' });
+  }
+});
+
+router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+  try {
+    const name = normalizeString(req.body.name);
+    const company = normalizeString(req.body.company);
+    const type = normalizeString(req.body.type).toLowerCase();
+
+    if (!name) {
+      return res.status(400).json({ message: 'Informe o nome do meio de pagamento.' });
+    }
+
+    if (!company) {
+      return res.status(400).json({ message: 'Selecione a empresa vinculada ao meio de pagamento.' });
+    }
+
+    const storeExists = await Store.exists({ _id: company });
+    if (!storeExists) {
+      return res.status(404).json({ message: 'Empresa informada não foi encontrada.' });
+    }
+
+    if (!['avista', 'debito', 'credito'].includes(type)) {
+      return res.status(400).json({ message: 'Tipo de recebimento inválido.' });
+    }
+
+    const rawCode = normalizeString(req.body.code);
+    let code = rawCode && rawCode.toLowerCase() !== 'gerado automaticamente' ? rawCode : await generateNextCode(company);
+
+    let attempts = 0;
+    while (await PaymentMethod.exists({ company, code }) && attempts < 5) {
+      const next = extractNumericValue(code) + 1;
+      code = `MP-${String(next).padStart(3, '0')}`;
+      attempts += 1;
+    }
+
+    if (await PaymentMethod.exists({ company, code })) {
+      return res.status(409).json({ message: 'Já existe um meio de pagamento com este código para a empresa selecionada.' });
+    }
+
+    const days = Math.max(0, parseNumber(req.body.days, 0));
+    const discount = Math.max(0, parseNumber(req.body.discount, 0));
+
+    const payload = {
+      company,
+      code,
+      name,
+      type,
+      days,
+      discount,
+    };
+
+    if (type === 'credito') {
+      const installments = Math.max(1, Math.min(12, parseNumber(req.body.installments, 1)));
+      const installmentConfigurations = normalizeInstallmentConfigurations(
+        req.body.installmentConfigurations,
+        installments,
+        days
+      );
+      payload.installments = installments;
+      payload.installmentConfigurations = installmentConfigurations;
+      if (installmentConfigurations.length) {
+        payload.discount = installmentConfigurations[0].discount;
+      }
+    }
+
+    const created = await PaymentMethod.create(payload);
+    const populated = await created.populate('company', 'nome nomeFantasia razaoSocial cnpj cpf');
+    res.status(201).json(populated);
+  } catch (error) {
+    console.error('Erro ao criar meio de pagamento:', error);
+    res.status(500).json({ message: 'Erro ao criar meio de pagamento.' });
+  }
+});
+
+module.exports = router;
