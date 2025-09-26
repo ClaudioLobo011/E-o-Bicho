@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Meios de Pagamento - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 py-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-800">Meios de Pagamento</h1>
+            <p class="text-sm text-gray-600">Configure formas de recebimento e visualize o impacto financeiro de cada modalidade.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center gap-2 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1">
+              <i class="fas fa-lock"></i>
+              Dados restritos ao financeiro
+            </span>
+          </div>
+        </header>
+
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <section class="xl:col-span-2 space-y-6">
+            <form id="payment-method-form" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-8">
+              <input type="hidden" id="payment-method-id">
+
+              <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                  <h2 class="text-lg font-semibold text-gray-800">Empresa e identificação</h2>
+                  <button type="button" id="payment-method-reset" class="text-sm text-primary hover:underline">Novo meio</button>
+                </div>
+                <p class="text-sm text-gray-600">Selecione a empresa que receberá os valores e personalize a identificação do meio de pagamento.</p>
+
+                <div class="space-y-4">
+                  <div>
+                    <label for="payment-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa vinculada <span class="text-red-500">*</span></label>
+                    <select id="payment-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="">Carregando empresas...</option>
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">Os parâmetros fiscais e contábeis herdam da empresa selecionada.</p>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div class="md:col-span-4">
+                      <label for="payment-code" class="block text-sm font-medium text-gray-700 mb-1">Código</label>
+                      <div class="relative">
+                        <input type="text" id="payment-code" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700" readonly>
+                        <span class="absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">Automático</span>
+                      </div>
+                    </div>
+                    <div class="md:col-span-8">
+                      <label for="payment-name" class="block text-sm font-medium text-gray-700 mb-1">Nome do meio de pagamento <span class="text-red-500">*</span></label>
+                      <input type="text" id="payment-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Cartão de Crédito" required>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-4">
+                <h2 class="text-lg font-semibold text-gray-800">Tipo de recebimento</h2>
+                <p class="text-sm text-gray-600">Defina como o pagamento será processado para ajustar repasses e prazos.</p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <label class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 has-[:checked]:border-primary has-[:checked]:text-primary">
+                    <span>À vista</span>
+                    <input type="radio" name="payment-type" value="avista" class="text-primary focus:ring-primary" checked>
+                  </label>
+                  <label class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 has-[:checked]:border-primary has-[:checked]:text-primary">
+                    <span>Débito</span>
+                    <input type="radio" name="payment-type" value="debito" class="text-primary focus:ring-primary">
+                  </label>
+                  <label class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 has-[:checked]:border-primary has-[:checked]:text-primary">
+                    <span>Crédito</span>
+                    <input type="radio" name="payment-type" value="credito" class="text-primary focus:ring-primary">
+                  </label>
+                </div>
+
+                <div id="avista-section" class="space-y-4">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label for="avista-days" class="block text-sm font-medium text-gray-700 mb-1">Prazo de recebimento (dias)</label>
+                      <input type="number" id="avista-days" min="0" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0">
+                    </div>
+                    <div>
+                      <label for="avista-discount" class="block text-sm font-medium text-gray-700 mb-1">Desconto aplicado (%)</label>
+                      <input type="number" id="avista-discount" min="0" step="0.01" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0">
+                    </div>
+                  </div>
+                  <div class="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3">
+                    <div class="flex items-center gap-3 text-emerald-700">
+                      <i class="fas fa-money-bill-wave text-lg"></i>
+                      <div>
+                        <p class="text-sm font-semibold">Pré-visualização do repasse à vista</p>
+                        <p id="avista-preview" class="text-sm text-emerald-800">Recebimento no mesmo dia (D+0) sem desconto.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="debito-section" class="space-y-4 hidden">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label for="debito-days" class="block text-sm font-medium text-gray-700 mb-1">Prazo de recebimento (dias)</label>
+                      <input type="number" id="debito-days" min="0" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="1">
+                    </div>
+                    <div>
+                      <label for="debito-discount" class="block text-sm font-medium text-gray-700 mb-1">Desconto aplicado (%)</label>
+                      <input type="number" id="debito-discount" min="0" step="0.01" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0">
+                    </div>
+                  </div>
+                  <div class="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3">
+                    <div class="flex items-center gap-3 text-cyan-700">
+                      <i class="fas fa-credit-card text-lg"></i>
+                      <div>
+                        <p class="text-sm font-semibold">Pré-visualização do repasse no débito</p>
+                        <p id="debito-preview" class="text-sm text-cyan-800">Recebimento em D+1 com 0% de desconto.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="credito-section" class="space-y-4 hidden">
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="md:col-span-1">
+                      <label for="credito-installments" class="block text-sm font-medium text-gray-700 mb-1">Parcelas aceitas</label>
+                      <input type="number" id="credito-installments" min="1" max="12" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="3">
+                    </div>
+                    <div class="md:col-span-1">
+                      <label for="credito-days" class="block text-sm font-medium text-gray-700 mb-1">Prazo de recebimento (dias)</label>
+                      <input type="number" id="credito-days" min="0" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="30">
+                    </div>
+                    <div class="md:col-span-1">
+                      <label for="credito-discount" class="block text-sm font-medium text-gray-700 mb-1">Desconto padrão (%)</label>
+                      <input type="number" id="credito-discount" min="0" step="0.01" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="2.49">
+                    </div>
+                  </div>
+                  <div class="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 space-y-3">
+                    <div class="flex items-center gap-3 text-indigo-700">
+                      <i class="fas fa-layer-group text-lg"></i>
+                      <div>
+                        <p class="text-sm font-semibold">Pré-visualização por parcela</p>
+                        <p class="text-sm text-indigo-800">Ajuste o desconto diretamente em cada parcela para ver o impacto no repasse.</p>
+                      </div>
+                    </div>
+                    <div class="rounded-lg border border-indigo-200 bg-white/70 px-3 py-2 text-xs text-indigo-600">
+                      Os campos abaixo atualizam o desconto de cada parcela instantaneamente.
+                    </div>
+                    <div id="credito-preview-list" class="space-y-2"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between border-t border-gray-100 pt-4">
+                <p class="text-xs text-gray-500">Campos marcados com <span class="text-red-500">*</span> são obrigatórios.</p>
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <button type="button" id="payment-method-cancel" class="hidden rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:border-gray-300">Cancelar edição</button>
+                  <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white hover:bg-secondary transition">
+                    <i class="fas fa-save"></i>
+                    <span id="payment-submit-label">Salvar meio</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-gray-800">Meios cadastrados</h2>
+                <span id="payment-method-count" class="text-xs font-semibold text-gray-500">0</span>
+              </div>
+              <p class="text-sm text-gray-600 mb-4">Visualize e organize os meios de pagamento já configurados.</p>
+              <div id="payment-methods-list" class="space-y-3"></div>
+              <div id="payment-methods-empty" class="text-sm text-gray-500 text-center py-6 border border-dashed border-gray-200 rounded-lg">
+                Nenhum meio de pagamento cadastrado até o momento.
+              </div>
+            </section>
+          </section>
+
+          <aside class="xl:col-span-1 space-y-6">
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h2 class="text-lg font-semibold text-gray-800">Resumo da empresa</h2>
+              <p class="text-sm text-gray-600 mb-4">Confira os principais dados da empresa vinculada.</p>
+              <div id="payment-company-summary" class="space-y-3 text-sm text-gray-700">
+                <p class="text-gray-500">Selecione uma empresa para visualizar detalhes.</p>
+              </div>
+            </section>
+
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h2 class="text-lg font-semibold text-gray-800">Pré-visualização consolidada</h2>
+              <p class="text-sm text-gray-600 mb-4">Entenda rapidamente prazos e descontos aplicados.</p>
+              <div id="payment-overview" class="space-y-3 text-sm text-gray-700">
+                <p class="text-gray-500">Escolha um tipo de recebimento para ver o resumo.</p>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-financeiro-meios-pagamento.js"></script>
+</body>
+</html>
