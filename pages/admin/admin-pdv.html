@@ -209,25 +209,14 @@
 
                                     <div class="space-y-6">
                                         <div class="rounded-xl border border-gray-200 bg-gray-50 p-6 space-y-4">
-                                            <h3 class="text-base font-semibold text-gray-800">Resumo financeiro</h3>
-                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                                                <div class="rounded-lg border border-gray-200 bg-white p-4">
-                                                    <p class="text-xs font-semibold uppercase text-gray-500">Início de caixa</p>
-                                                    <p id="pdv-summary-opening" class="mt-1 text-xl font-semibold text-gray-800">R$ 0,00</p>
-                                                </div>
-                                                <div class="rounded-lg border border-gray-200 bg-white p-4">
-                                                    <p class="text-xs font-semibold uppercase text-gray-500">Recebido no período</p>
-                                                    <p id="pdv-summary-received" class="mt-1 text-xl font-semibold text-gray-800">R$ 0,00</p>
-                                                </div>
-                                                <div class="rounded-lg border border-gray-200 bg-white p-4">
-                                                    <p class="text-xs font-semibold uppercase text-gray-500">Saldo em caixa</p>
-                                                    <p id="pdv-summary-balance" class="mt-1 text-xl font-semibold text-gray-800">R$ 0,00</p>
-                                                </div>
-                                                <div class="rounded-lg border border-gray-200 bg-white p-4">
-                                                    <p class="text-xs font-semibold uppercase text-gray-500">Última movimentação</p>
-                                                    <p id="pdv-summary-last-move" class="mt-1 text-sm font-medium text-gray-700">Nenhuma movimentação registrada.</p>
-                                                </div>
+                                            <div class="flex items-center justify-between gap-3">
+                                                <h3 class="text-base font-semibold text-gray-800">Resumo financeiro</h3>
+                                                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Pré-visualização matricial</span>
                                             </div>
+                                            <div class="rounded-lg border border-dashed border-gray-300 bg-white p-4">
+                                                <pre id="pdv-summary-print" class="whitespace-pre-wrap font-mono text-[11px] leading-6 text-gray-700">Selecione uma empresa e um PDV para visualizar os dados do caixa.</pre>
+                                            </div>
+                                            <p id="pdv-summary-last-move" class="text-xs text-gray-500">Nenhuma movimentação registrada.</p>
                                         </div>
 
                                         <div class="rounded-xl border border-gray-200 p-6 space-y-4">

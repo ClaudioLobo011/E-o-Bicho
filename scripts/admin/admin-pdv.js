@@ -88,6 +88,12 @@
     vendaDesconto: 0,
     vendaAcrescimo: 0,
     summary: { abertura: 0, recebido: 0, saldo: 0 },
+    caixaInfo: {
+      aberturaData: null,
+      fechamentoData: null,
+      fechamentoPrevisto: 0,
+      fechamentoApurado: 0,
+    },
     history: [],
     lastMovement: null,
     searchController: null,
@@ -135,6 +141,38 @@
   const safeNumber = (value) => {
     const number = Number(value);
     return Number.isFinite(number) ? number : 0;
+  };
+
+  const parseDateValue = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString();
+  };
+
+  const getStoreLabel = () => {
+    const store = state.stores.find((item) => item._id === state.selectedStore);
+    return (
+      store?.nome ||
+      store?.nomeFantasia ||
+      store?.razaoSocial ||
+      store?.razao ||
+      store?.fantasia ||
+      '—'
+    );
+  };
+
+  const getPdvLabel = () => {
+    const pdv = state.pdvs.find((item) => item._id === state.selectedPdv);
+    return pdv?.nome || pdv?.codigo || pdv?.identificador || pdv?._id || '—';
+  };
+
+  const formatPrintLine = (label, value, width = 58) => {
+    const left = String(label ?? '').trim();
+    const right = String(value ?? '').trim();
+    const space = Math.max(width - left.length - right.length - 2, 2);
+    const filler = '-'.repeat(space);
+    return `${left} ${filler} ${right}`;
   };
 
   const toDateLabel = (isoString) => {
@@ -463,9 +501,7 @@
     elements.paymentList = document.getElementById('pdv-payment-list');
     elements.resetPayments = document.getElementById('pdv-reset-payments');
 
-    elements.summaryOpening = document.getElementById('pdv-summary-opening');
-    elements.summaryReceived = document.getElementById('pdv-summary-received');
-    elements.summaryBalance = document.getElementById('pdv-summary-balance');
+    elements.summaryPrint = document.getElementById('pdv-summary-print');
     elements.summaryLastMove = document.getElementById('pdv-summary-last-move');
 
     elements.historyList = document.getElementById('pdv-history-list');
@@ -569,14 +605,13 @@
   };
 
   const updateWorkspaceInfo = () => {
-    const store = state.stores.find((item) => item._id === state.selectedStore);
-    const pdv = state.pdvs.find((item) => item._id === state.selectedPdv);
     if (elements.companyLabel) {
-      elements.companyLabel.textContent =
-        store?.nome || store?.nomeFantasia || store?.razaoSocial || 'Empresa não identificada';
+      const label = getStoreLabel();
+      elements.companyLabel.textContent = label === '—' ? '—' : label;
     }
     if (elements.pdvLabel) {
-      elements.pdvLabel.textContent = pdv?.nome || pdv?.codigo || pdv?._id || 'PDV não identificado';
+      const label = getPdvLabel();
+      elements.pdvLabel.textContent = label === '—' ? '—' : label;
     }
   };
 
@@ -1011,6 +1046,45 @@
     openFinalizeModal();
   };
 
+  const describeSalePayments = (payments) => {
+    if (!payments.length) return '';
+    return payments
+      .map((payment) => {
+        const parcelas = payment.parcelas && payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
+        return `${payment.label || 'Pagamento'}${parcelas}`;
+      })
+      .join(' + ');
+  };
+
+  const registerSaleOnCaixa = (payments, total) => {
+    if (!state.caixaAberto || !payments.length) {
+      return;
+    }
+    payments.forEach((payment) => {
+      const method = state.pagamentos.find((item) => item.id === payment.id);
+      if (method) {
+        method.valor += safeNumber(payment.valor);
+        return;
+      }
+      const fallback =
+        state.paymentMethods.find((item) => item.id === payment.id) ||
+        state.paymentMethods.find((item) => item.label === payment.label);
+      const base = fallback
+        ? { ...fallback }
+        : {
+            id: payment.id || createUid(),
+            label: payment.label || 'Pagamento',
+            type: 'avista',
+            aliases: [],
+          };
+      state.pagamentos.push({ ...base, valor: safeNumber(payment.valor) });
+    });
+    renderPayments();
+    const historyLabel = describeSalePayments(payments);
+    addHistoryEntry({ id: 'venda', label: 'Venda finalizada' }, total, '', historyLabel);
+    updateStatusBadge();
+  };
+
   const handleFinalizeConfirm = () => {
     const total = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
@@ -1019,10 +1093,17 @@
       closeFinalizeModal();
       return;
     }
+    if (!state.caixaAberto) {
+      notify('Abra o caixa para finalizar a venda.', 'warning');
+      closeFinalizeModal();
+      return;
+    }
     if (Math.abs(total - pago) >= 0.01) {
       notify('O valor pago deve ser igual ao total da venda.', 'warning');
       return;
     }
+    const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
+    registerSaleOnCaixa(pagamentosVenda, total);
     notify('Venda finalizada com sucesso.', 'success');
     state.itens = [];
     state.vendaPagamentos = [];
@@ -1105,18 +1186,42 @@
     elements.paymentSelect.disabled = false;
   };
 
+  const buildSummaryPrint = () => {
+    if (!state.selectedStore || !state.selectedPdv) {
+      return 'Selecione uma empresa e um PDV para visualizar os dados do caixa.';
+    }
+    const aberturaLabel = toDateLabel(state.caixaInfo.aberturaData);
+    const fechamentoLabel = toDateLabel(state.caixaInfo.fechamentoData);
+    const header = `Empresa: ${getStoreLabel()} | PDV: ${getPdvLabel()} | Abertura: ${aberturaLabel} | Fechamento: ${fechamentoLabel}`;
+    const lines = [header];
+    lines.push(formatPrintLine('Abertura', formatCurrency(state.summary.abertura)));
+    lines.push('---------------------Recebimentos---------------------');
+    lines.push('Meios de pagamento');
+    if (state.pagamentos.length) {
+      state.pagamentos.forEach((payment) => {
+        lines.push(formatPrintLine(payment.label, formatCurrency(payment.valor)));
+      });
+    } else {
+      lines.push('Nenhum meio de pagamento configurado.');
+    }
+    lines.push('------------- Fechamento Previsto ---------------------');
+    lines.push(formatPrintLine('Previsto', formatCurrency(state.caixaInfo.fechamentoPrevisto || 0)));
+    lines.push('------------- Fechamento Apurado -------------------');
+    lines.push(formatPrintLine('Apurado', formatCurrency(state.caixaInfo.fechamentoApurado || 0)));
+    return lines.join('\n');
+  };
+
   const updateSummary = () => {
     const total = state.pagamentos.reduce((sum, payment) => sum + payment.valor, 0);
     state.summary.saldo = total;
     state.summary.recebido = Math.max(total - state.summary.abertura, 0);
-    if (elements.summaryOpening) {
-      elements.summaryOpening.textContent = formatCurrency(state.summary.abertura);
+    if (state.caixaAberto) {
+      state.caixaInfo.fechamentoPrevisto = total;
+    } else if (!state.caixaInfo.fechamentoPrevisto) {
+      state.caixaInfo.fechamentoPrevisto = total;
     }
-    if (elements.summaryReceived) {
-      elements.summaryReceived.textContent = formatCurrency(state.summary.recebido);
-    }
-    if (elements.summaryBalance) {
-      elements.summaryBalance.textContent = formatCurrency(state.summary.saldo);
+    if (elements.summaryPrint) {
+      elements.summaryPrint.textContent = buildSummaryPrint();
     }
   };
 
@@ -1286,6 +1391,12 @@
     state.quantidade = 1;
     state.itens = [];
     state.summary = { abertura: 0, recebido: 0, saldo: 0 };
+    state.caixaInfo = {
+      aberturaData: null,
+      fechamentoData: null,
+      fechamentoPrevisto: 0,
+      fechamentoApurado: 0,
+    };
     state.history = [];
     state.lastMovement = null;
     state.pendingPagamentosData = null;
@@ -1433,6 +1544,41 @@
     state.summary.abertura = safeNumber(
       pdv?.caixa?.abertura || pdv?.caixa?.valorAbertura || pdv?.valorAbertura || 0
     );
+    const aberturaData =
+      pdv?.caixa?.dataAbertura ||
+      pdv?.caixa?.aberturaData ||
+      pdv?.caixa?.abertura ||
+      pdv?.caixa?.abertoEm ||
+      pdv?.caixa?.inicio ||
+      pdv?.caixa?.openedAt ||
+      pdv?.dataAbertura ||
+      pdv?.abertura;
+    const fechamentoData =
+      pdv?.caixa?.dataFechamento ||
+      pdv?.caixa?.fechamentoData ||
+      pdv?.caixa?.fechamento ||
+      pdv?.caixa?.fechadoEm ||
+      pdv?.caixa?.fim ||
+      pdv?.caixa?.closedAt ||
+      pdv?.dataFechamento ||
+      pdv?.fechamento;
+    state.caixaInfo = {
+      aberturaData: parseDateValue(aberturaData),
+      fechamentoData: parseDateValue(fechamentoData),
+      fechamentoPrevisto: safeNumber(
+        pdv?.caixa?.fechamentoPrevisto ||
+          pdv?.caixa?.valorPrevisto ||
+          pdv?.caixa?.saldoPrevisto ||
+          pdv?.fechamentoPrevisto ||
+          0
+      ),
+      fechamentoApurado: safeNumber(
+        pdv?.caixa?.fechamentoApurado ||
+          pdv?.caixa?.valorApurado ||
+          pdv?.fechamentoApurado ||
+          0
+      ),
+    };
     const pagamentosData = pdv?.caixa?.pagamentos || pdv?.pagamentos || {};
     applyPagamentosData(pagamentosData);
     if (state.summary.abertura > 0 && !state.pagamentos.some((payment) => payment.valor > 0)) {
@@ -1784,6 +1930,10 @@
       }
       state.caixaAberto = true;
       state.summary.abertura = amountValue;
+      state.caixaInfo.aberturaData = new Date().toISOString();
+      state.caixaInfo.fechamentoData = null;
+      state.caixaInfo.fechamentoApurado = 0;
+      state.caixaInfo.fechamentoPrevisto = amountValue;
       state.pagamentos = state.pagamentos.map((item) =>
         item.id === (payment?.id || '') ? { ...item, valor: amountValue } : item
       );
@@ -1797,6 +1947,9 @@
       }
       const saldo = state.summary.saldo;
       addHistoryEntry(action, saldo, motivo, '', -Math.abs(saldo));
+      state.caixaInfo.fechamentoData = new Date().toISOString();
+      state.caixaInfo.fechamentoPrevisto = saldo;
+      state.caixaInfo.fechamentoApurado = saldo;
       state.caixaAberto = false;
       state.summary.abertura = 0;
       state.pagamentos = state.pagamentos.map((item) => ({ ...item, valor: 0 }));
