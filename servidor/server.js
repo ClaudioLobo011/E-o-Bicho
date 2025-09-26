@@ -42,6 +42,7 @@ const routes = [
   { path: '/api/promocoes', file: './routes/promocoes' },
   { path: '/api/banners', file: './routes/banners' },
   { path: '/api/pets', file: './routes/pets' },
+  { path: '/api/pdvs', file: './routes/pdvs' },
   { path: '/api/deposits', file: './routes/deposits' },
   { path: '/api/jobs', file: './routes/jobs' },
   { path: '/api/addresses', file: './routes/addresses' },
