@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { importProducts, parseProductsFromBuffer } = require('../utils/productImporter');
+const Deposit = require('../models/Deposit');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
@@ -43,11 +44,32 @@ router.post(
   requireAuth,
   authorizeRoles('admin', 'admin_master'),
   upload.single('file'),
-  (req, res) => {
+  async (req, res) => {
     const io = req.app.get('socketio');
 
     if (!req.file) {
       return res.status(400).json({ message: 'Nenhum arquivo foi enviado.' });
+    }
+
+    const { depositId, storeId } = req.body || {};
+
+    if (!depositId) {
+      return res.status(400).json({ message: 'Selecione um depósito válido para iniciar a importação.' });
+    }
+
+    let deposit;
+    try {
+      deposit = await Deposit.findById(depositId).populate('empresa').lean();
+    } catch (error) {
+      return res.status(400).json({ message: 'Depósito selecionado é inválido.' });
+    }
+
+    if (!deposit) {
+      return res.status(404).json({ message: 'Depósito selecionado não foi encontrado.' });
+    }
+
+    if (storeId && deposit?.empresa?._id && deposit.empresa._id.toString() !== storeId.toString()) {
+      return res.status(400).json({ message: 'O depósito selecionado não pertence à empresa informada.' });
     }
 
     let productsFromExcel;
@@ -68,7 +90,7 @@ router.post(
       .json({ message: 'Processo de importação iniciado. Acompanhe o progresso em tempo real.' });
 
     // Inicia a importação em segundo plano, passando o socket para feedback
-    importProducts(io, productsFromExcel);
+    importProducts(io, productsFromExcel, { deposit });
   }
 );
 

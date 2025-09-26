@@ -725,8 +725,8 @@
   .h-64 {
     height: calc(var(--spacing) * 64);
   }
-  .h-80 {
-    height: calc(var(--spacing) * 80);
+  .h-72 {
+    height: calc(var(--spacing) * 72);
   }
   .h-96 {
     height: calc(var(--spacing) * 96);
@@ -2074,6 +2074,9 @@
   .whitespace-pre-wrap {
     white-space: pre-wrap;
   }
+  .text-amber-500 {
+    color: var(--color-amber-500);
+  }
   .text-amber-600 {
     color: var(--color-amber-600);
   }
@@ -3239,6 +3242,14 @@
   .focus\:ring-amber-500 {
     &:focus {
       --tw-ring-color: var(--color-amber-500);
+    }
+  }
+  .focus\:ring-amber-500\/50 {
+    &:focus {
+      --tw-ring-color: color-mix(in srgb, oklch(76.9% 0.188 70.08) 50%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        --tw-ring-color: color-mix(in oklab, var(--color-amber-500) 50%, transparent);
+      }
     }
   }
   .focus\:ring-emerald-200 {

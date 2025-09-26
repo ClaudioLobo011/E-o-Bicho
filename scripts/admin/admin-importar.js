@@ -7,8 +7,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const paginationControls = document.getElementById('pagination-controls');
     const startBtn = document.getElementById('start-import-btn');
     const logContainer = document.getElementById('log-container');
+    const companySelect = document.getElementById('company-select');
+    const depositSelect = document.getElementById('deposit-select');
+    const depositHelper = document.getElementById('deposit-helper');
 
-    if (!startBtn || !logContainer || !fileInput || !previewTable) {
+    if (!startBtn || !logContainer || !fileInput || !previewTable || !companySelect || !depositSelect) {
         return;
     }
 
@@ -16,9 +19,22 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedFile = null;
     let previewData = [];
     let currentPage = 1;
+    let isPreviewLoading = false;
+    let currentWarnings = [];
+    let companies = [];
+    let availableDeposits = [];
+    let selectedCompany = '';
+    let selectedDeposit = '';
 
     // Conecta ao servidor WebSocket (Socket.IO)
     const socket = io(API_CONFIG.SERVER_URL);
+
+    const updateStartButtonState = () => {
+        const hasData = previewData.length > 0;
+        const hasDeposit = Boolean(selectedDeposit);
+        const canStart = Boolean(selectedFile) && hasData && hasDeposit && !isPreviewLoading;
+        startBtn.disabled = !canStart;
+    };
 
     const addLog = (message) => {
         logContainer.innerHTML += `> ${message}\n`;
@@ -34,6 +50,199 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const formatNumber = (value) => {
         return Number(value || 0).toLocaleString('pt-BR');
+    };
+
+    const resetDepositSelect = (message, disabled = true) => {
+        if (!depositSelect) {
+            return;
+        }
+        depositSelect.innerHTML = `<option value="">${message}</option>`;
+        depositSelect.disabled = disabled;
+        selectedDeposit = '';
+        availableDeposits = [];
+        updateStartButtonState();
+    };
+
+    const populateCompanySelect = () => {
+        if (!companySelect) {
+            return;
+        }
+
+        companySelect.innerHTML = '';
+
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = companies.length ? 'Selecione uma empresa' : 'Nenhuma empresa encontrada';
+        companySelect.appendChild(placeholder);
+
+        companies.forEach((company) => {
+            const option = document.createElement('option');
+            option.value = company._id;
+            option.textContent = company.nome || company.razaoSocial || 'Empresa sem nome';
+            companySelect.appendChild(option);
+        });
+
+        companySelect.disabled = companies.length === 0;
+        if (!companies.length) {
+            resetDepositSelect('Cadastre um depósito para continuar', true);
+        }
+    };
+
+    const populateDepositSelect = () => {
+        if (!depositSelect) {
+            return;
+        }
+
+        depositSelect.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = availableDeposits.length ? 'Selecione um depósito' : 'Nenhum depósito disponível';
+        depositSelect.appendChild(placeholder);
+
+        availableDeposits.forEach((deposit) => {
+            const option = document.createElement('option');
+            option.value = deposit._id;
+            const companyName = deposit?.empresa?.nome || deposit?.empresa?.razaoSocial;
+            option.textContent = companyName
+                ? `${deposit.nome} • ${companyName}`
+                : deposit.nome;
+            depositSelect.appendChild(option);
+        });
+
+        depositSelect.disabled = availableDeposits.length === 0;
+    };
+
+    const fetchCompanies = async () => {
+        try {
+            companySelect.disabled = true;
+            companySelect.innerHTML = '<option value="">Carregando empresas...</option>';
+
+            const response = await fetch(`${API_CONFIG.BASE_URL}/stores`);
+            if (!response.ok) {
+                throw new Error('Falha ao carregar empresas');
+            }
+
+            const data = await response.json();
+            companies = Array.isArray(data) ? data : [];
+
+            if (!companies.length) {
+                depositHelper?.classList.remove('text-gray-500');
+                depositHelper?.classList.add('text-red-600');
+                if (depositHelper) {
+                    depositHelper.textContent = 'Nenhuma empresa encontrada. Cadastre uma empresa antes de importar produtos.';
+                }
+                fileInput.disabled = true;
+                resetDepositSelect('Nenhum depósito disponível', true);
+                selectedCompany = '';
+                selectedDeposit = '';
+                availableDeposits = [];
+                updateStartButtonState();
+                companySelect.innerHTML = '<option value="">Nenhuma empresa encontrada</option>';
+                return;
+            }
+
+            fileInput.disabled = false;
+            depositHelper?.classList.remove('text-red-600');
+            depositHelper?.classList.add('text-gray-500');
+            if (depositHelper) {
+                depositHelper.textContent = 'Selecione a empresa e o depósito que receberão o estoque importado.';
+            }
+
+            populateCompanySelect();
+            resetDepositSelect('Selecione uma empresa primeiro', true);
+            selectedCompany = '';
+            selectedDeposit = '';
+            availableDeposits = [];
+            updateStartButtonState();
+
+            if (companies.length === 1) {
+                selectedCompany = companies[0]._id;
+                companySelect.value = selectedCompany;
+                fetchDepositsByCompany(selectedCompany);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar empresas:', error);
+            companySelect.innerHTML = '<option value="">Erro ao carregar empresas</option>';
+            companySelect.disabled = true;
+            resetDepositSelect('Erro ao carregar depósitos', true);
+            if (depositHelper) {
+                depositHelper.textContent = 'Não foi possível carregar as empresas. Atualize a página e tente novamente.';
+                depositHelper.classList.remove('text-gray-500');
+                depositHelper.classList.add('text-red-600');
+            }
+            fileInput.disabled = true;
+            selectedCompany = '';
+            selectedDeposit = '';
+            availableDeposits = [];
+            updateStartButtonState();
+        }
+    };
+
+    const fetchDepositsByCompany = async (companyId) => {
+        if (!companyId) {
+            availableDeposits = [];
+            resetDepositSelect('Selecione uma empresa primeiro', true);
+            if (depositHelper) {
+                depositHelper.textContent = 'Escolha uma empresa para listar os depósitos disponíveis.';
+                depositHelper.classList.remove('text-red-600');
+                depositHelper.classList.add('text-gray-500');
+            }
+            return;
+        }
+
+        resetDepositSelect('Carregando depósitos...', true);
+
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/deposits?empresa=${companyId}`);
+            if (!response.ok) {
+                throw new Error('Falha ao carregar depósitos');
+            }
+
+            const payload = await response.json();
+            availableDeposits = Array.isArray(payload?.deposits)
+                ? payload.deposits
+                : Array.isArray(payload)
+                    ? payload
+                    : [];
+
+            if (!availableDeposits.length) {
+                if (depositHelper) {
+                    depositHelper.textContent = 'Nenhum depósito cadastrado para esta empresa. Cadastre um depósito antes de importar.';
+                    depositHelper.classList.remove('text-gray-500');
+                    depositHelper.classList.add('text-red-600');
+                }
+                depositSelect.disabled = true;
+                updateStartButtonState();
+                return;
+            }
+
+            depositHelper?.classList.remove('text-red-600');
+            depositHelper?.classList.add('text-gray-500');
+            if (depositHelper) {
+                depositHelper.textContent = 'Selecione o depósito que receberá o estoque da planilha.';
+            }
+
+            populateDepositSelect();
+
+            const matching = availableDeposits.find((deposit) => String(deposit._id) === String(selectedDeposit));
+            if (matching) {
+                depositSelect.value = matching._id;
+            } else if (availableDeposits.length === 1) {
+                selectedDeposit = availableDeposits[0]._id;
+                depositSelect.value = selectedDeposit;
+            }
+
+            depositSelect.disabled = false;
+            updateStartButtonState();
+        } catch (error) {
+            console.error('Erro ao carregar depósitos:', error);
+            resetDepositSelect('Erro ao carregar depósitos', true);
+            if (depositHelper) {
+                depositHelper.textContent = 'Não foi possível carregar os depósitos. Tente novamente em instantes.';
+                depositHelper.classList.remove('text-gray-500');
+                depositHelper.classList.add('text-red-600');
+            }
+        }
     };
 
     const renderPagination = () => {
@@ -91,6 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
             previewTable.appendChild(emptyRow);
             previewCount.textContent = '0 produtos carregados';
             paginationControls.innerHTML = '';
+            updateStartButtonState();
             return;
         }
 
@@ -121,24 +331,60 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         renderPagination();
+        updateStartButtonState();
+    };
+
+    const openWarningsModal = () => {
+        if (!currentWarnings.length) {
+            return;
+        }
+        const message = currentWarnings
+            .map((warning, index) => `${index + 1}. ${warning}`)
+            .join('\n\n');
+
+        if (typeof window.showModal === 'function') {
+            window.showModal({
+                title: 'Avisos encontrados',
+                message,
+                confirmText: 'Fechar'
+            });
+        } else {
+            alert(message);
+        }
     };
 
     const updateWarnings = (warnings = []) => {
-        if (!warnings.length) {
+        currentWarnings = Array.isArray(warnings) ? warnings : [];
+
+        if (!currentWarnings.length) {
             previewWarning.classList.add('hidden');
-            previewWarning.textContent = '';
+            previewWarning.innerHTML = '';
             return;
         }
 
-        previewWarning.classList.remove('hidden');
-        previewWarning.innerHTML = warnings
-            .slice(0, 3)
+        const previewItems = currentWarnings
+            .slice(0, 2)
             .map((warning) => `<div>• ${warning}</div>`)
             .join('');
+        const remaining = Math.max(0, currentWarnings.length - 2);
 
-        if (warnings.length > 3) {
-            const remaining = warnings.length - 3;
-            previewWarning.innerHTML += `<div class="mt-1 text-[10px] text-amber-500">+ ${remaining} aviso(s) adicional(is)</div>`;
+        previewWarning.classList.remove('hidden');
+        previewWarning.innerHTML = `
+            <div class="flex items-start justify-between gap-3">
+                <div class="space-y-1 text-left">
+                    ${previewItems || '<div>• Avisos disponíveis</div>'}
+                    ${remaining > 0 ? `<div class="text-[10px] text-amber-500">+ ${remaining} aviso(s) adicional(is)</div>` : ''}
+                </div>
+                <button type="button" class="inline-flex items-center gap-1 rounded border border-amber-200 bg-white px-2 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500/50" id="open-warnings-modal-btn">
+                    <i class="fas fa-list"></i>
+                    <span>Ver todos</span>
+                </button>
+            </div>
+        `;
+
+        const openBtn = document.getElementById('open-warnings-modal-btn');
+        if (openBtn) {
+            openBtn.addEventListener('click', openWarningsModal);
         }
     };
 
@@ -147,7 +393,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        startBtn.disabled = true;
+        isPreviewLoading = true;
+        updateStartButtonState();
+
         previewTable.innerHTML = '<tr><td colspan="8" class="px-2 py-4 text-center text-xs text-gray-500">Carregando pré-visualização...</td></tr>';
         paginationControls.innerHTML = '';
         previewCount.textContent = 'Carregando...';
@@ -158,6 +406,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const token = loggedInUser?.token;
             const formData = new FormData();
             formData.append('file', file);
+
+            if (selectedCompany) {
+                formData.append('storeId', selectedCompany);
+            }
+            if (selectedDeposit) {
+                formData.append('depositId', selectedDeposit);
+            }
 
             const response = await fetch(`${API_CONFIG.BASE_URL}/jobs/import-products/preview`, {
                 method: 'POST',
@@ -181,18 +436,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 previewTable.innerHTML = '<tr><td colspan="8" class="px-2 py-4 text-center text-xs text-gray-500">Nenhum produto válido encontrado na planilha.</td></tr>';
                 previewCount.textContent = '0 produtos carregados';
                 paginationControls.innerHTML = '';
-                startBtn.disabled = true;
                 return;
             }
 
             renderPreview();
-            startBtn.disabled = false;
         } catch (error) {
-            previewTable.innerHTML = '<tr><td colspan="8" class="px-2 py-4 text-center text-xs text-red-500">' + error.message + '</td></tr>';
+            previewData = [];
+            currentPage = 1;
+            previewTable.innerHTML = `<tr><td colspan="8" class="px-2 py-4 text-center text-xs text-red-500">${error.message}</td></tr>`;
             previewCount.textContent = '0 produtos carregados';
             paginationControls.innerHTML = '';
-            startBtn.disabled = true;
             updateWarnings([]);
+        } finally {
+            isPreviewLoading = false;
+            updateStartButtonState();
         }
     };
 
@@ -205,13 +462,26 @@ document.addEventListener('DOMContentLoaded', () => {
             previewData = [];
             currentPage = 1;
             renderPreview();
-            startBtn.disabled = true;
             updateWarnings([]);
+            updateStartButtonState();
             return;
         }
 
         fileNameLabel.textContent = selectedFile.name;
         loadPreview(selectedFile);
+    });
+
+    companySelect.addEventListener('change', (event) => {
+        selectedCompany = event.target.value;
+        selectedDeposit = '';
+        availableDeposits = [];
+        fetchDepositsByCompany(selectedCompany);
+        updateStartButtonState();
+    });
+
+    depositSelect.addEventListener('change', (event) => {
+        selectedDeposit = event.target.value;
+        updateStartButtonState();
     });
 
     // --- Eventos do Socket.IO ---
@@ -225,12 +495,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('import-finished', () => {
         addLog('✅ Importação finalizada com sucesso!');
-        startBtn.disabled = false;
+        updateStartButtonState();
     });
 
     socket.on('import-error', () => {
         addLog('❌ ERRO: A importação falhou. Verifique a consola do servidor para mais detalhes.');
-        startBtn.disabled = false;
+        updateStartButtonState();
     });
 
     // --- Evento do Botão ---
@@ -239,8 +509,25 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        if (!selectedCompany || !selectedDeposit) {
+            const message = 'Selecione a empresa e o depósito que receberão o estoque antes de iniciar a importação.';
+            if (typeof window.showToast === 'function') {
+                window.showToast(message, 'warning', 4000);
+            } else {
+                alert(message);
+            }
+            updateStartButtonState();
+            return;
+        }
+
         startBtn.disabled = true;
         logContainer.innerHTML = '';
+
+        const selectedDepositInfo = availableDeposits.find((deposit) => String(deposit._id) === String(selectedDeposit));
+        if (selectedDepositInfo) {
+            const storeName = selectedDepositInfo?.empresa?.nome || selectedDepositInfo?.empresa?.razaoSocial || '';
+            addLog(`Depósito selecionado: ${selectedDepositInfo.nome}${storeName ? ` (${storeName})` : ''}.`);
+        }
         addLog('A enviar pedido de importação para o servidor...');
 
         try {
@@ -248,6 +535,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const token = loggedInUser?.token;
             const formData = new FormData();
             formData.append('file', selectedFile);
+            formData.append('depositId', selectedDeposit);
+            formData.append('storeId', selectedCompany);
 
             const response = await fetch(`${API_CONFIG.BASE_URL}/jobs/import-products`, {
                 method: 'POST',
@@ -266,9 +555,11 @@ document.addEventListener('DOMContentLoaded', () => {
             addLog(`Servidor respondeu: ${data.message}`);
         } catch (error) {
             addLog(`❌ ERRO: Não foi possível iniciar o processo. ${error.message}`);
-            startBtn.disabled = false;
+            updateStartButtonState();
         }
     });
+
+    fetchCompanies();
 
     // Render inicial vazio
     renderPreview();

@@ -65,9 +65,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const rowsHtml = products.map(product => {
             const precoVenda = product.venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             const isChecked = selectedProductIds.has(product._id) ? 'checked' : '';
+            const totalStockFromDeposits = Array.isArray(product.estoques)
+                ? product.estoques.reduce((sum, entry) => {
+                    const quantity = Number(entry?.quantidade);
+                    return sum + (Number.isFinite(quantity) ? quantity : 0);
+                }, 0)
+                : Number(product.stock) || 0;
+            const stockDisplay = Number.isFinite(totalStockFromDeposits)
+                ? totalStockFromDeposits.toLocaleString('pt-BR', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 3,
+                })
+                : '0';
 
             const categoryTagsHtml = product.categorias && product.categorias.length > 0
-                ? product.categorias.map(cat => 
+                ? product.categorias.map(cat =>
                     `<span class="inline-flex items-center bg-gray-200 text-gray-700 text-xs font-medium px-2 py-0.5 rounded-full mr-1 mb-1">
                         ${cat.nome}
                         <button type="button" class="remove-category-btn flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-gray-400 hover:bg-gray-300 hover:text-gray-500 focus:outline-none" data-product-id="${product._id}" data-category-id="${cat._id}">
@@ -90,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="mt-1 flex flex-wrap items-center">${categoryTagsHtml}</div>
                     </th>
                     <td class="px-6 py-4">${precoVenda}</td>
-                    <td class="px-6 py-4">${product.stock}</td>
+                    <td class="px-6 py-4">${stockDisplay}</td>
                     <td class="px-6 py-4 text-center">
                         <a href="admin-produto-editar.html?id=${product._id}" class="font-medium text-blue-600 hover:underline mr-3">Editar</a>
                         <a href="#" class="font-medium text-red-600 hover:underline">Apagar</a>

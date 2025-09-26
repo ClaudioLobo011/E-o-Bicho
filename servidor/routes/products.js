@@ -96,6 +96,16 @@ router.get('/', async (req, res) => {
             if (!p.imagemPrincipal) {
                 p.imagemPrincipal = '/image/placeholder.png';
             }
+            if (Array.isArray(p.estoques) && p.estoques.length > 0) {
+                const total = p.estoques.reduce((sum, entry) => {
+                    const quantity = Number(entry?.quantidade);
+                    return sum + (Number.isFinite(quantity) ? quantity : 0);
+                }, 0);
+                p.stock = total;
+            } else {
+                const parsedStock = Number(p.stock);
+                p.stock = Number.isFinite(parsedStock) ? parsedStock : 0;
+            }
         });
 
         res.json({

@@ -21,7 +21,7 @@
             <div class="md:col-span-4">
                 <div class="bg-white p-6 rounded-lg shadow">
                     <h1 class="text-2xl font-bold text-gray-800">Importar Produtos da Planilha</h1>
-                    <p class="text-gray-600 mt-1">Importe um arquivo <code class="bg-gray-200 text-sm p-1 rounded">.xlsx</code> com as colunas <strong>Código</strong>, <strong>Código de Barras</strong>, <strong>Descrição</strong>, <strong>NCM</strong>, <strong>Custo</strong>, <strong>Venda</strong>, <strong>Estoque</strong> e <strong>Inativo (Sim, Não)</strong>.</p>
+                    <p class="text-gray-600 mt-1">Importe um arquivo <code class="bg-gray-200 text-sm p-1 rounded">.xlsx</code> com as colunas <strong>Código</strong>, <strong>Código de Barras</strong>, <strong>Descrição</strong>, <strong>NCM</strong>, <strong>Custo</strong>, <strong>Venda</strong>, <strong>Estoque</strong> e <strong>Inativo (Sim, Não)</strong>. Antes de iniciar a importação, selecione a empresa e o depósito que receberão as movimentações de estoque.</p>
 
                     <div class="mt-6 space-y-6">
                         <div class="bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4">
@@ -31,6 +31,22 @@
                                 <span id="file-name" class="text-xs text-gray-500 truncate">Nenhum arquivo selecionado.</span>
                             </div>
                             <p class="mt-2 text-xs text-gray-500">Após escolher o arquivo uma pré-visualização dos produtos será carregada automaticamente.</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="company-select" class="block text-sm font-medium text-gray-700">Empresa</label>
+                                <select id="company-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary text-sm">
+                                    <option value="">Carregando empresas...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="deposit-select" class="block text-sm font-medium text-gray-700">Depósito</label>
+                                <select id="deposit-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary text-sm" disabled>
+                                    <option value="">Selecione uma empresa primeiro</option>
+                                </select>
+                                <p id="deposit-helper" class="mt-1 text-[11px] text-gray-500">Escolha uma empresa para listar os depósitos disponíveis.</p>
+                            </div>
                         </div>
 
                         <div>

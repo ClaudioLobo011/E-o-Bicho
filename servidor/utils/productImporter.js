@@ -72,6 +72,26 @@ const findValueInRow = (row, keys) => {
     return undefined;
 };
 
+const normalizeDepositEntry = (entry) => {
+    if (!entry) {
+        return null;
+    }
+
+    const deposito = entry?.deposito?._id || entry?.deposito;
+    if (!deposito) {
+        return null;
+    }
+
+    const quantidadeNumber = Number(entry?.quantidade);
+    const unidade = typeof entry?.unidade === 'string' ? entry.unidade.trim() : '';
+
+    return {
+        deposito,
+        quantidade: Number.isFinite(quantidadeNumber) ? quantidadeNumber : 0,
+        unidade
+    };
+};
+
 const parseProductsFromBuffer = (buffer) => {
     const workbook = xlsx.read(buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
@@ -134,9 +154,25 @@ const parseProductsFromBuffer = (buffer) => {
     return { products, warnings };
 };
 
-const importProducts = async (socket, productsFromExcel) => {
+const importProducts = async (socket, productsFromExcel, options = {}) => {
     try {
         socket.emit('import-log', 'Iniciando processo de importação...');
+
+        const deposit = options?.deposit || null;
+        const depositIdValue = deposit?._id || options?.depositId || null;
+
+        if (!depositIdValue) {
+            socket.emit('import-log', '❌ Depósito não informado. Importação cancelada.');
+            socket.emit('import-error');
+            return;
+        }
+
+        const depositName = deposit?.nome || 'Depósito';
+        const storeName = deposit?.empresa?.nome || deposit?.empresa?.razaoSocial || '';
+        socket.emit(
+            'import-log',
+            `Estoques serão atualizados no depósito ${depositName}${storeName ? ` (${storeName})` : ''}.`
+        );
 
         const uploadsDir = path.join(__dirname, '..', 'public', 'uploads', 'products');
         const allImageFiles = fs.existsSync(uploadsDir) ? fs.readdirSync(uploadsDir) : [];
@@ -154,11 +190,47 @@ const importProducts = async (socket, productsFromExcel) => {
                 continue;
             }
 
-            const filter = { cod: product.cod };
+            const existingProductDoc = await Product.findOne({ cod: product.cod });
+            const existingProduct = existingProductDoc ? existingProductDoc.toObject() : null;
 
             const productBarcode = product.codbarras ? product.codbarras.toString() : '';
             const matchingImages = allImageFiles.filter(file => file.startsWith(productBarcode));
             const imagePathsForDB = matchingImages.map(file => `/uploads/products/${file}`);
+
+            const depositIdString = depositIdValue.toString();
+
+            let normalizedStocks = Array.isArray(existingProduct?.estoques)
+                ? existingProduct.estoques
+                    .map(normalizeDepositEntry)
+                    .filter(Boolean)
+                : [];
+
+            const depositIndex = normalizedStocks.findIndex(
+                (entry) => String(entry.deposito) === depositIdString
+            );
+
+            const normalizedQuantity = Number(product.stock);
+            const depositQuantity = Number.isFinite(normalizedQuantity) ? normalizedQuantity : 0;
+            const fallbackUnit = depositIndex >= 0
+                ? normalizedStocks[depositIndex]?.unidade || ''
+                : (typeof existingProduct?.unidade === 'string' ? existingProduct.unidade.trim() : '');
+
+            const depositEntry = {
+                deposito: depositIdValue,
+                quantidade: depositQuantity,
+                unidade: fallbackUnit || ''
+            };
+
+            if (depositIndex >= 0) {
+                normalizedStocks[depositIndex] = depositEntry;
+            } else {
+                normalizedStocks.push(depositEntry);
+            }
+
+            const totalStock = normalizedStocks.reduce((sum, entry) => {
+                const quantity = Number(entry?.quantidade);
+                return sum + (Number.isFinite(quantity) ? quantity : 0);
+            }, 0);
 
             const updateData = {
                 nome: product.nome,
@@ -166,32 +238,37 @@ const importProducts = async (socket, productsFromExcel) => {
                 descricao: product.descricao,
                 custo: product.custo,
                 venda: product.venda,
-                stock: product.stock,
                 marca: product.marca || '',
                 ncm: product.ncm || '',
                 inativo: Boolean(product.inativo),
                 searchableString: normalizeText(`${product.nome} ${product.cod} ${product.marca || ''} ${product.codbarras}`),
                 imagens: imagePathsForDB,
-                imagemPrincipal: imagePathsForDB.length > 0 ? imagePathsForDB[0] : '/image/placeholder.png'
+                imagemPrincipal: imagePathsForDB.length > 0 ? imagePathsForDB[0] : '/image/placeholder.png',
+                estoques: normalizedStocks,
+                stock: totalStock
             };
 
             if (imagePathsForDB.length > 0) {
                 productsWithImagesCount++;
             }
 
-            const result = await Product.findOneAndUpdate(
-                filter,
-                { $set: updateData },
-                { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
-            );
-
-            if (result.createdAt.getTime() === result.updatedAt.getTime()) {
-                createdCount++;
-            } else {
+            if (existingProductDoc) {
+                await Product.findByIdAndUpdate(
+                    existingProductDoc._id,
+                    { $set: updateData },
+                    { new: true, runValidators: true }
+                );
                 updatedCount++;
+            } else {
+                const newProduct = new Product({
+                    cod: product.cod,
+                    ...updateData
+                });
+                await newProduct.save();
+                createdCount++;
             }
         }
-        
+
         socket.emit('import-log', '---------------------------------------------');
         socket.emit('import-log', 'PROCESSO CONCLUÍDO!');
         socket.emit('import-log', `- Produtos Novos Criados: ${createdCount}`);
