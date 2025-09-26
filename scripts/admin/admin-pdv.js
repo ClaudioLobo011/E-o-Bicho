@@ -948,9 +948,17 @@
   const renderPayments = () => {
     if (!elements.paymentList) return;
     const fragment = document.createDocumentFragment();
+    const inputsLocked = state.caixaAberto;
     state.pagamentos.forEach((payment) => {
       const li = document.createElement('li');
       li.className = 'flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3';
+      const inputClasses = [
+        'w-24 rounded-lg border border-gray-200 px-2 py-1 text-sm text-right focus:border-primary focus:ring-2 focus:ring-primary/20',
+        inputsLocked ? 'cursor-not-allowed bg-gray-100 text-gray-500' : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+      const disabledAttr = inputsLocked ? 'disabled' : '';
       li.innerHTML = `
         <div>
           <p class="text-sm font-semibold text-gray-700">${payment.label}</p>
@@ -958,7 +966,7 @@
         </div>
         <div class="flex items-center gap-2">
           <span class="text-xs text-gray-500">R$</span>
-          <input type="number" min="0" step="0.01" value="${payment.valor.toFixed(2)}" data-payment-input="${payment.id}" class="w-24 rounded-lg border border-gray-200 px-2 py-1 text-sm text-right focus:border-primary focus:ring-2 focus:ring-primary/20" aria-label="Atualizar ${payment.label}">
+          <input type="number" min="0" step="0.01" value="${payment.valor.toFixed(2)}" data-payment-input="${payment.id}" class="${inputClasses}" aria-label="Atualizar ${payment.label}" ${disabledAttr}>
           <span class="text-sm font-semibold text-gray-800" data-payment-display="${payment.id}">${formatCurrency(payment.valor)}</span>
         </div>
       `;
@@ -966,6 +974,11 @@
     });
     elements.paymentList.innerHTML = '';
     elements.paymentList.appendChild(fragment);
+    if (elements.resetPayments) {
+      elements.resetPayments.disabled = inputsLocked;
+      elements.resetPayments.classList.toggle('opacity-50', inputsLocked);
+      elements.resetPayments.classList.toggle('cursor-not-allowed', inputsLocked);
+    }
     populatePaymentSelect();
     updateSummary();
   };
@@ -977,6 +990,10 @@
     const value = safeNumber(input.value);
     const payment = state.pagamentos.find((item) => item.id === id);
     if (!payment) return;
+    if (state.caixaAberto) {
+      input.value = payment.valor.toFixed(2);
+      return;
+    }
     payment.valor = value < 0 ? 0 : value;
     input.value = payment.valor.toFixed(2);
     updatePaymentRow(id);
@@ -984,6 +1001,10 @@
   };
 
   const handleResetPayments = () => {
+    if (state.caixaAberto) {
+      notify('Não é possível zerar os valores com o caixa aberto.', 'warning');
+      return;
+    }
     resetPagamentos();
     notify('Valores dos meios de pagamento zerados.', 'info');
   };
