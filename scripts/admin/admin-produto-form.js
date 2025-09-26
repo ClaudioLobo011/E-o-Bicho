@@ -25,6 +25,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const depositTotalDisplay = document.getElementById('deposit-total-display');
     const unitSelect = document.getElementById('unidade');
     const inactiveCheckbox = document.getElementById('inativo');
+    const fiscalCompanySelect = document.getElementById('fiscal-company-select');
+    const fiscalCompanySummary = document.getElementById('fiscal-company-summary');
+
+    const FISCAL_GENERAL_KEY = '__general__';
+    const fiscalStatusLabels = {
+        pendente: 'Pendente',
+        parcial: 'Parcial',
+        aprovado: 'Aprovado',
+    };
+    const fiscalStatusStyles = {
+        pendente: 'bg-amber-100 text-amber-800 border border-amber-200',
+        parcial: 'bg-sky-100 text-sky-800 border border-sky-200',
+        aprovado: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+    };
+
+    let storesList = [];
+    let storeNameMap = new Map();
+    let fiscalByCompany = new Map([[FISCAL_GENERAL_KEY, {}]]);
+    let activeFiscalCompanyKey = FISCAL_GENERAL_KEY;
 
     const fiscalInputs = {
         origem: document.getElementById('fiscal-origem'),
@@ -187,6 +206,192 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const getSelectedProductUnit = () => (unitSelect?.value || '').trim();
+
+    const cloneFiscalObject = (fiscal = {}) => JSON.parse(JSON.stringify(fiscal || {}));
+
+    const getDefaultFiscalSnapshot = () => ({
+        origem: '0',
+        csosn: '',
+        cst: '',
+        cest: '',
+        status: { nfe: 'pendente', nfce: 'pendente' },
+        cfop: {
+            nfe: {
+                dentroEstado: '',
+                foraEstado: '',
+                transferencia: '',
+                devolucao: '',
+                industrializacao: '',
+            },
+            nfce: {
+                dentroEstado: '',
+                foraEstado: '',
+                transferencia: '',
+                devolucao: '',
+                industrializacao: '',
+            },
+        },
+        pis: { codigo: '', cst: '', aliquota: null, tipoCalculo: 'percentual' },
+        cofins: { codigo: '', cst: '', aliquota: null, tipoCalculo: 'percentual' },
+        ipi: { cst: '', codigoEnquadramento: '', aliquota: null, tipoCalculo: 'percentual' },
+        fcp: { indicador: '0', aliquota: null, aplica: false },
+    });
+
+    const isEmptyString = (value) => {
+        if (value === null || value === undefined) return true;
+        return String(value).trim() === '';
+    };
+
+    const isFiscalSnapshotDefault = (snapshot = {}) => {
+        if (!snapshot || typeof snapshot !== 'object') return true;
+
+        const {
+            origem = '0',
+            csosn = '',
+            cst = '',
+            cest = '',
+            status = {},
+            cfop = {},
+            pis = {},
+            cofins = {},
+            ipi = {},
+            fcp = {},
+        } = snapshot;
+
+        if (origem !== '0') return false;
+        if (!isEmptyString(csosn)) return false;
+        if (!isEmptyString(cst)) return false;
+        if (!isEmptyString(cest)) return false;
+
+        const statusNfe = status.nfe || 'pendente';
+        const statusNfce = status.nfce || 'pendente';
+        if (statusNfe !== 'pendente' || statusNfce !== 'pendente') return false;
+
+        const cfopFields = ['dentroEstado', 'foraEstado', 'transferencia', 'devolucao', 'industrializacao'];
+        const cfopNfe = cfop.nfe || {};
+        const cfopNfce = cfop.nfce || {};
+        if (cfopFields.some((field) => !isEmptyString(cfopNfe[field] || ''))) return false;
+        if (cfopFields.some((field) => !isEmptyString(cfopNfce[field] || ''))) return false;
+
+        const checkTax = (tax = {}) => {
+            const codigo = tax.codigo || '';
+            const cstValue = tax.cst || '';
+            const aliquota = tax.aliquota;
+            const tipo = tax.tipoCalculo || 'percentual';
+            if (!isEmptyString(codigo)) return false;
+            if (!isEmptyString(cstValue)) return false;
+            if (Number.isFinite(aliquota)) return false;
+            if (tipo !== 'percentual') return false;
+            return true;
+        };
+
+        if (!checkTax(pis)) return false;
+        if (!checkTax(cofins)) return false;
+
+        const ipiCst = ipi.cst || '';
+        const ipiEnquadramento = ipi.codigoEnquadramento || '';
+        const ipiAliquota = ipi.aliquota;
+        const ipiTipo = ipi.tipoCalculo || 'percentual';
+        if (!isEmptyString(ipiCst)) return false;
+        if (!isEmptyString(ipiEnquadramento)) return false;
+        if (Number.isFinite(ipiAliquota)) return false;
+        if (ipiTipo !== 'percentual') return false;
+
+        const fcpIndicador = fcp.indicador || '0';
+        const fcpAliquota = fcp.aliquota;
+        const fcpAplica = Boolean(fcp.aplica);
+        if (fcpIndicador !== '0') return false;
+        if (Number.isFinite(fcpAliquota)) return false;
+        if (fcpAplica) return false;
+
+        return true;
+    };
+
+    const getStoreDisplayName = (store = {}) => store.nome || store.nomeFantasia || store.razaoSocial || 'Empresa sem nome';
+
+    const isKnownCompanyKey = (key) => {
+        if (!key) return false;
+        if (key === FISCAL_GENERAL_KEY) return true;
+        if (storeNameMap.has(key)) return true;
+        return fiscalByCompany.has(key);
+    };
+
+    const getCompanyNameByKey = (key) => {
+        if (key === FISCAL_GENERAL_KEY) return 'Configuração geral do produto';
+        return storeNameMap.get(key) || `Empresa não encontrada (${key})`;
+    };
+
+    const buildStatusBadge = (label, statusValue) => {
+        const normalizedStatus = fiscalStatusLabels[statusValue] ? statusValue : 'pendente';
+        const text = fiscalStatusLabels[normalizedStatus];
+        const classes = fiscalStatusStyles[normalizedStatus] || fiscalStatusStyles.pendente;
+        return `<span class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium ${classes}">${label}: ${text}</span>`;
+    };
+
+    const updateFiscalCompanySummary = () => {
+        if (!fiscalCompanySummary) return;
+        const currentData = fiscalByCompany.get(activeFiscalCompanyKey) || getDefaultFiscalSnapshot();
+        const statusNfe = currentData?.status?.nfe || 'pendente';
+        const statusNfce = currentData?.status?.nfce || 'pendente';
+        const companyName = getCompanyNameByKey(activeFiscalCompanyKey);
+        const note = activeFiscalCompanyKey === FISCAL_GENERAL_KEY
+            ? 'Aplica-se como padrão para empresas sem configuração específica.'
+            : 'Configuração exclusiva para a empresa selecionada.';
+
+        fiscalCompanySummary.innerHTML = `
+            <div class="flex flex-col gap-2 text-sm text-gray-600 md:items-end">
+                <span class="font-medium text-gray-700">${companyName}</span>
+                <div class="flex flex-wrap gap-2">
+                    ${buildStatusBadge('NF-e', statusNfe)}
+                    ${buildStatusBadge('NFC-e', statusNfce)}
+                </div>
+                <p class="text-xs text-gray-500 md:text-right">${note}</p>
+            </div>
+        `;
+    };
+
+    const populateFiscalCompanySelect = (preferredKey = FISCAL_GENERAL_KEY) => {
+        if (!fiscalCompanySelect) return;
+        const knownStoreIds = new Set(storesList.map((store) => store._id));
+        const options = [
+            `<option value="${FISCAL_GENERAL_KEY}">Configuração geral</option>`,
+        ];
+
+        storesList.forEach((store) => {
+            const label = getStoreDisplayName(store);
+            options.push(`<option value="${store._id}">${label}</option>`);
+            storeNameMap.set(store._id, label);
+        });
+
+        const extraKeys = Array.from(fiscalByCompany.keys())
+            .filter((key) => key !== FISCAL_GENERAL_KEY && !knownStoreIds.has(key));
+
+        extraKeys.forEach((key) => {
+            if (!storeNameMap.has(key)) {
+                storeNameMap.set(key, `Empresa não encontrada (${key})`);
+            }
+            options.push(`<option value="${key}">${storeNameMap.get(key)}</option>`);
+        });
+
+        fiscalCompanySelect.innerHTML = options.join('');
+        const normalizedPreferred = isKnownCompanyKey(preferredKey) ? preferredKey : FISCAL_GENERAL_KEY;
+        fiscalCompanySelect.value = normalizedPreferred;
+        activeFiscalCompanyKey = normalizedPreferred;
+    };
+
+    const persistActiveFiscalData = () => {
+        if (!activeFiscalCompanyKey) return;
+        const snapshot = collectFiscalData();
+        if (activeFiscalCompanyKey === FISCAL_GENERAL_KEY) {
+            fiscalByCompany.set(FISCAL_GENERAL_KEY, snapshot);
+            return;
+        }
+        if (isFiscalSnapshotDefault(snapshot)) {
+            fiscalByCompany.delete(activeFiscalCompanyKey);
+        } else {
+            fiscalByCompany.set(activeFiscalCompanyKey, snapshot);
+        }
+    };
 
     // --- LÓGICA DAS ABAS (Geral / Especificações) ---
     const productTabLinks = document.querySelectorAll('#product-tabs .tab-link');
@@ -564,7 +769,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ncmInput) {
             ncmInput.value = product.ncm || '';
         }
-        populateFiscalFields(product.fiscal || {});
+
+        const preferredCompanyKey = fiscalCompanySelect?.value || activeFiscalCompanyKey || FISCAL_GENERAL_KEY;
+        fiscalByCompany = new Map();
+        fiscalByCompany.set(FISCAL_GENERAL_KEY, cloneFiscalObject(product.fiscal || {}));
+        if (product.fiscalPorEmpresa && typeof product.fiscalPorEmpresa === 'object') {
+            Object.entries(product.fiscalPorEmpresa).forEach(([storeId, fiscalData]) => {
+                fiscalByCompany.set(storeId, cloneFiscalObject(fiscalData || {}));
+                if (!storeNameMap.has(storeId)) {
+                    storeNameMap.set(storeId, `Empresa não encontrada (${storeId})`);
+                }
+            });
+        }
+
+        populateFiscalCompanySelect(preferredCompanyKey);
+        const activeFiscalData = fiscalByCompany.get(activeFiscalCompanyKey) || getDefaultFiscalSnapshot();
+        populateFiscalFields(activeFiscalData);
+        updateFiscalCompanySummary();
         supplierEntries = Array.isArray(product.fornecedores)
             ? product.fornecedores.map((item) => ({
                 fornecedor: item.fornecedor || '',
@@ -652,14 +873,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const initializePage = async () => {
         try {
             // Usa Promise.all para buscar dados do produto, depósitos e categorias em paralelo
-            const [productRes, hierarchicalRes, flatRes, depositsRes] = await Promise.all([
+            const [productRes, hierarchicalRes, flatRes, depositsRes, storesRes] = await Promise.all([
                 fetch(`${API_CONFIG.BASE_URL}/products/${productId}`),
                 fetch(`${API_CONFIG.BASE_URL}/categories/hierarchical`),
                 fetch(`${API_CONFIG.BASE_URL}/categories`),
-                fetch(`${API_CONFIG.BASE_URL}/deposits`)
+                fetch(`${API_CONFIG.BASE_URL}/deposits`),
+                fetch(`${API_CONFIG.BASE_URL}/stores`)
             ]);
 
-            if (!productRes.ok || !hierarchicalRes.ok || !flatRes.ok || !depositsRes.ok) {
+            if (!productRes.ok || !hierarchicalRes.ok || !flatRes.ok || !depositsRes.ok || !storesRes.ok) {
                 throw new Error('Falha ao carregar os dados iniciais da página.');
             }
 
@@ -672,6 +894,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 : Array.isArray(depositsPayload)
                     ? depositsPayload
                     : [];
+            const storesPayload = await storesRes.json();
+            storesList = Array.isArray(storesPayload) ? storesPayload : [];
+            storeNameMap = new Map(storesList.map((store) => [store._id, getStoreDisplayName(store)]));
 
             populateForm(product);
             populateCategoryTree(allHierarchicalCategories, productCategories);
@@ -684,6 +909,25 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     // --- EVENT LISTENERS ---
+    fiscalCompanySelect?.addEventListener('change', () => {
+        persistActiveFiscalData();
+        const selectedKey = fiscalCompanySelect.value || FISCAL_GENERAL_KEY;
+        activeFiscalCompanyKey = isKnownCompanyKey(selectedKey) ? selectedKey : FISCAL_GENERAL_KEY;
+        if (!storeNameMap.has(activeFiscalCompanyKey) && activeFiscalCompanyKey !== FISCAL_GENERAL_KEY) {
+            storeNameMap.set(activeFiscalCompanyKey, `Empresa não encontrada (${activeFiscalCompanyKey})`);
+        }
+        const nextFiscalData = fiscalByCompany.get(activeFiscalCompanyKey) || getDefaultFiscalSnapshot();
+        populateFiscalFields(nextFiscalData);
+        updateFiscalCompanySummary();
+    });
+
+    [fiscalInputs.statusNfe, fiscalInputs.statusNfce].forEach((statusInput) => {
+        statusInput?.addEventListener('change', () => {
+            persistActiveFiscalData();
+            updateFiscalCompanySummary();
+        });
+    });
+
     addCategoryBtn.addEventListener('click', () => {
         populateCategoryTree(allHierarchicalCategories, productCategories);
         categoryModal.classList.remove('hidden');
@@ -789,6 +1033,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const totalStock = depositPayload.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
 
+        persistActiveFiscalData();
+        const generalFiscal = cloneFiscalObject(fiscalByCompany.get(FISCAL_GENERAL_KEY) || collectFiscalData());
+        const fiscalPerCompanyPayload = {};
+        fiscalByCompany.forEach((value, key) => {
+            if (key === FISCAL_GENERAL_KEY) return;
+            fiscalPerCompanyPayload[key] = cloneFiscalObject(value);
+        });
+
         const updateData = {
             descricao: formData.get('descricao'),
             marca: formData.get('marca'),
@@ -813,7 +1065,8 @@ document.addEventListener('DOMContentLoaded', () => {
             codigosComplementares: additionalBarcodesRaw,
             estoques: depositPayload,
             stock: totalStock,
-            fiscal: collectFiscalData(),
+            fiscal: generalFiscal,
+            fiscalPorEmpresa: fiscalPerCompanyPayload,
             inativo: Boolean(inactiveCheckbox?.checked),
         };
 
