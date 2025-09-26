@@ -20,7 +20,8 @@ const COLUMN_KEYS = {
     cost: ['Custo', 'custo', 'Preço de Custo'],
     price: ['Venda', 'venda', 'Preço de Venda'],
     stock: ['Estoque', 'estoque', 'Qtd'],
-    inactive: ['Inativo (Sim, Não)', 'Inativo', 'inativo']
+    inactive: ['Inativo (Sim, Não)', 'Inativo', 'inativo'],
+    ncm: ['NCM', 'ncm']
 };
 
 const sanitizeString = (value) => {
@@ -100,6 +101,7 @@ const parseProductsFromBuffer = (buffer) => {
         const rawPrice = findValueInRow(row, COLUMN_KEYS.price);
         const rawStock = findValueInRow(row, COLUMN_KEYS.stock);
         const rawInactive = findValueInRow(row, COLUMN_KEYS.inactive);
+        const rawNcm = sanitizeString(findValueInRow(row, COLUMN_KEYS.ncm));
 
         if (!rawCode) {
             warnings.push(`Linha ${rowNumber}: Código obrigatório não informado. Registro ignorado.`);
@@ -124,7 +126,8 @@ const parseProductsFromBuffer = (buffer) => {
             custo: parseNumber(rawCost, 0),
             venda: parseNumber(rawPrice, 0),
             stock: parseNumber(rawStock, 0),
-            inativo: parseBoolean(rawInactive)
+            inativo: parseBoolean(rawInactive),
+            ncm: rawNcm
         });
     });
 
@@ -165,6 +168,7 @@ const importProducts = async (socket, productsFromExcel) => {
                 venda: product.venda,
                 stock: product.stock,
                 marca: product.marca || '',
+                ncm: product.ncm || '',
                 inativo: Boolean(product.inativo),
                 searchableString: normalizeText(`${product.nome} ${product.cod} ${product.marca || ''} ${product.codbarras}`),
                 imagens: imagePathsForDB,

@@ -87,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (previewData.length === 0) {
             const emptyRow = document.createElement('tr');
-            emptyRow.innerHTML = '<td colspan="7" class="px-2 py-4 text-center text-xs text-gray-500">Selecione um arquivo para visualizar os produtos.</td>';
+            emptyRow.innerHTML = '<td colspan="8" class="px-2 py-4 text-center text-xs text-gray-500">Selecione um arquivo para visualizar os produtos.</td>';
             previewTable.appendChild(emptyRow);
             previewCount.textContent = '0 produtos carregados';
             paginationControls.innerHTML = '';
@@ -107,6 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="px-2 py-2 font-medium text-gray-700">${item.cod}</td>
                 <td class="px-2 py-2 text-gray-600">${item.codbarras}</td>
                 <td class="px-2 py-2 text-gray-600">${item.nome}</td>
+                <td class="px-2 py-2 text-gray-600">${item.ncm || '-'}</td>
                 <td class="px-2 py-2 text-right text-gray-700">${formatCurrency(item.custo)}</td>
                 <td class="px-2 py-2 text-right text-gray-700">${formatCurrency(item.venda)}</td>
                 <td class="px-2 py-2 text-right text-gray-700">${formatNumber(item.stock)}</td>
@@ -147,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         startBtn.disabled = true;
-        previewTable.innerHTML = '<tr><td colspan="7" class="px-2 py-4 text-center text-xs text-gray-500">Carregando pré-visualização...</td></tr>';
+        previewTable.innerHTML = '<tr><td colspan="8" class="px-2 py-4 text-center text-xs text-gray-500">Carregando pré-visualização...</td></tr>';
         paginationControls.innerHTML = '';
         previewCount.textContent = 'Carregando...';
         updateWarnings([]);
@@ -177,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateWarnings(Array.isArray(data.warnings) ? data.warnings : []);
 
             if (previewData.length === 0) {
-                previewTable.innerHTML = '<tr><td colspan="7" class="px-2 py-4 text-center text-xs text-gray-500">Nenhum produto válido encontrado na planilha.</td></tr>';
+                previewTable.innerHTML = '<tr><td colspan="8" class="px-2 py-4 text-center text-xs text-gray-500">Nenhum produto válido encontrado na planilha.</td></tr>';
                 previewCount.textContent = '0 produtos carregados';
                 paginationControls.innerHTML = '';
                 startBtn.disabled = true;
@@ -187,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPreview();
             startBtn.disabled = false;
         } catch (error) {
-            previewTable.innerHTML = '<tr><td colspan="7" class="px-2 py-4 text-center text-xs text-red-500">' + error.message + '</td></tr>';
+            previewTable.innerHTML = '<tr><td colspan="8" class="px-2 py-4 text-center text-xs text-red-500">' + error.message + '</td></tr>';
             previewCount.textContent = '0 produtos carregados';
             paginationControls.innerHTML = '';
             startBtn.disabled = true;
