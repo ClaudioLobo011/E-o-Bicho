@@ -123,14 +123,18 @@ const productSchema = new mongoose.Schema({
     promocaoCondicional: {
         ativa: { type: Boolean, default: false },
         tipo: { type: String, enum: ['leve_pague', 'acima_de', null], default: null },
-        
+
         // Campos para a promoção 'Leve e Pague'
         leve: { type: Number, default: 0 },
         pague: { type: Number, default: 0 },
-        
+
         // Campos para a promoção 'Acima de'
         quantidadeMinima: { type: Number, default: 0 },
         descontoPorcentagem: { type: Number, default: 0 }
+    },
+    inativo: {
+        type: Boolean,
+        default: false
     },
     // Especificações adicionais do produto (opcional)
     especificacoes: {

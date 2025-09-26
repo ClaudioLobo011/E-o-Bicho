@@ -21,18 +21,55 @@
             <div class="md:col-span-4">
                 <div class="bg-white p-6 rounded-lg shadow">
                     <h1 class="text-2xl font-bold text-gray-800">Importar Produtos da Planilha</h1>
-                    <p class="text-gray-600 mt-1">Execute o processo de atualização do banco de dados a partir do arquivo <code class="bg-gray-200 text-sm p-1 rounded">servidor/data/produtos.xlsx</code>.</p>
-                    
-                    <div class="mt-6">
-                        <button id="start-import-btn" class="bg-primary hover:bg-secondary text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-wait">
-                            <i class="fas fa-play"></i>
-                            <span>Iniciar Importação</span>
-                        </button>
-                    </div>
+                    <p class="text-gray-600 mt-1">Importe um arquivo <code class="bg-gray-200 text-sm p-1 rounded">.xlsx</code> com as colunas <strong>Código</strong>, <strong>Código de Barras</strong>, <strong>Descrição</strong>, <strong>Custo</strong>, <strong>Venda</strong>, <strong>Estoque</strong> e <strong>Inativo (Sim, Não)</strong>.</p>
 
-                    <div class="mt-6">
-                        <h3 class="font-semibold text-gray-700 mb-2">Progresso da Importação:</h3>
-                        <pre id="log-container" class="bg-dark text-white text-sm p-4 rounded-lg h-80 overflow-y-auto font-mono"></pre>
+                    <div class="mt-6 space-y-6">
+                        <div class="bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4">
+                            <label for="file-input" class="block text-sm font-medium text-gray-700">Selecionar planilha</label>
+                            <div class="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <input type="file" id="file-input" accept=".xlsx" class="text-sm text-gray-600">
+                                <span id="file-name" class="text-xs text-gray-500 truncate">Nenhum arquivo selecionado.</span>
+                            </div>
+                            <p class="mt-2 text-xs text-gray-500">Após escolher o arquivo uma pré-visualização dos produtos será carregada automaticamente.</p>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <h3 class="font-semibold text-gray-700 text-sm uppercase tracking-wide">Pré-visualização dos Produtos</h3>
+                                <span id="preview-count" class="text-xs text-gray-500">0 produtos carregados</span>
+                            </div>
+                            <div id="preview-warning" class="hidden mb-3 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2"></div>
+                            <div class="border border-gray-200 rounded-lg overflow-hidden">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr class="text-[11px] uppercase tracking-wider text-gray-500">
+                                            <th class="px-2 py-2 text-left font-semibold">Código</th>
+                                            <th class="px-2 py-2 text-left font-semibold">Código de Barras</th>
+                                            <th class="px-2 py-2 text-left font-semibold">Descrição</th>
+                                            <th class="px-2 py-2 text-right font-semibold">Custo</th>
+                                            <th class="px-2 py-2 text-right font-semibold">Venda</th>
+                                            <th class="px-2 py-2 text-right font-semibold">Estoque</th>
+                                            <th class="px-2 py-2 text-center font-semibold">Inativo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="preview-table" class="divide-y divide-gray-200 bg-white text-[12px]"></tbody>
+                                </table>
+                            </div>
+                            <div id="pagination-controls" class="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-600"></div>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <p class="text-xs text-gray-500">Ao iniciar, os produtos existentes serão atualizados e novos serão criados automaticamente.</p>
+                            <button id="start-import-btn" class="bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                <i class="fas fa-play"></i>
+                                <span>Iniciar Importação</span>
+                            </button>
+                        </div>
+
+                        <div>
+                            <h3 class="font-semibold text-gray-700 mb-2">Progresso da Importação:</h3>
+                            <pre id="log-container" class="bg-dark text-white text-xs p-4 rounded-lg h-72 overflow-y-auto font-mono"></pre>
+                        </div>
                     </div>
                 </div>
             </div>
