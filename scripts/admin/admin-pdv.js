@@ -76,7 +76,7 @@
     selectedPdv: '',
     caixaAberto: false,
     allowApuradoEdit: false,
-    printPreferences: { fechamento: 'PM', venda: 'M' },
+    printPreferences: { fechamento: 'PM', venda: 'PM' },
     selectedAction: null,
     searchResults: [],
     selectedProduct: null,
@@ -319,11 +319,26 @@
   const resolvePrintVariant = (mode) =>
     mode === 'F' || mode === 'PF' ? 'fiscal' : 'matricial';
 
-  const PRINT_MODE_SEQUENCE = ['M', 'F', 'PM', 'PF', 'NONE'];
-  const PRINT_MODE_CYCLES = {
-    default: PRINT_MODE_SEQUENCE,
-    venda: ['M', 'F'],
+  const getPrintBaseMode = (mode) => {
+    const normalized = normalizePrintMode(mode, 'M');
+    if (normalized === 'PF' || normalized === 'F') {
+      return 'F';
+    }
+    return 'M';
   };
+
+  const isPrintPromptEnabled = (mode) => {
+    const normalized = normalizePrintMode(mode, 'PM');
+    return normalized === 'PF' || normalized === 'PM';
+  };
+
+  const buildPrintMode = (baseMode, promptEnabled) => {
+    if (promptEnabled) {
+      return baseMode === 'F' ? 'PF' : 'PM';
+    }
+    return baseMode === 'F' ? 'F' : 'M';
+  };
+
   const PRINT_MODE_LABELS = {
     M: 'Matricial',
     F: 'Fiscal',
@@ -331,26 +346,24 @@
     PF: 'Perguntar Fiscal',
     NONE: 'Sem impressão',
   };
-
-  const getNextPrintMode = (mode, type = 'default') => {
-    const normalized = normalizePrintMode(mode, 'M');
-    const cycle = PRINT_MODE_CYCLES[type] || PRINT_MODE_CYCLES.default;
-    let current = normalized;
-    if (!cycle.includes(current)) {
-      if (current === 'PF' && cycle.includes('F')) {
-        current = 'F';
-      } else if (current === 'PM' && cycle.includes('M')) {
-        current = 'M';
-      } else {
-        current = cycle[0];
-      }
-    }
-    const currentIndex = cycle.indexOf(current);
-    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % cycle.length;
-    return cycle[nextIndex];
+  const PRINT_PROMPT_LABELS = {
+    ask: 'Perguntar',
+    skip: 'Não perguntar',
   };
 
   const getPrintTypeLabel = (type) => (type === 'fechamento' ? 'fechamento' : 'venda');
+
+  const getPrintPromptDescription = (type, promptEnabled, baseMode) => {
+    const label = getPrintTypeLabel(type);
+    if (promptEnabled) {
+      return `Perguntar antes de imprimir ${label} no modo ${
+        baseMode === 'F' ? 'Fiscal' : 'Matricial'
+      }.`;
+    }
+    return `Imprimir ${label} imediatamente no modo ${
+      baseMode === 'F' ? 'Fiscal' : 'Matricial'
+    }.`;
+  };
 
   const getPrintModeDescription = (type, mode) => {
     const label = getPrintTypeLabel(type);
@@ -1133,39 +1146,81 @@
 
   const updatePrintControls = () => {
     if (!elements.printControls) return;
-    const buttons = elements.printControls.querySelectorAll('[data-print-type]');
-    buttons.forEach((button) => {
+    const preferences = state.printPreferences || {};
+    elements.printControls.querySelectorAll('[data-print-type]').forEach((button) => {
       const type = button.getAttribute('data-print-type');
+      if (!type) return;
       const labelElement = button.querySelector('[data-print-mode-label]');
-      const mode = normalizePrintMode(state.printPreferences?.[type], 'M');
-      const label = PRINT_MODE_LABELS[mode] || PRINT_MODE_LABELS.M;
+      const mode = preferences[type];
+      const baseMode = getPrintBaseMode(mode);
+      const promptEnabled = isPrintPromptEnabled(mode);
+      const label = PRINT_MODE_LABELS[baseMode] || PRINT_MODE_LABELS.M;
       if (labelElement) {
         labelElement.textContent = label;
       }
-      button.dataset.printMode = mode;
-      button.setAttribute('aria-pressed', mode === 'NONE' ? 'false' : 'true');
-      button.setAttribute('title', getPrintModeDescription(type, mode));
+      button.dataset.printMode = baseMode;
+      button.dataset.printPrompt = promptEnabled ? 'ask' : 'skip';
+      button.setAttribute('aria-pressed', 'true');
+      button.setAttribute('title', getPrintModeDescription(type, baseMode));
+    });
+    elements.printControls.querySelectorAll('[data-print-confirmation]').forEach((button) => {
+      const type = button.getAttribute('data-print-confirmation');
+      if (!type) return;
+      const labelElement = button.querySelector('[data-print-confirmation-label]');
+      const mode = preferences[type];
+      const baseMode = getPrintBaseMode(mode);
+      const promptEnabled = isPrintPromptEnabled(mode);
+      if (labelElement) {
+        labelElement.textContent = PRINT_PROMPT_LABELS[promptEnabled ? 'ask' : 'skip'];
+      }
+      button.dataset.printMode = baseMode;
+      button.dataset.printPrompt = promptEnabled ? 'ask' : 'skip';
+      button.setAttribute('aria-pressed', promptEnabled ? 'true' : 'false');
+      button.setAttribute('title', getPrintPromptDescription(type, promptEnabled, baseMode));
     });
   };
 
   const handlePrintToggleClick = (event) => {
-    const button = event.target.closest('[data-print-type]');
-    if (!button || !elements.printControls?.contains(button)) {
+    if (!elements.printControls) return;
+    const typeButton = event.target.closest('[data-print-type]');
+    const confirmationButton = event.target.closest('[data-print-confirmation]');
+    if (typeButton && elements.printControls.contains(typeButton)) {
+      event.preventDefault();
+      const type = typeButton.getAttribute('data-print-type');
+      if (!type) return;
+      const currentMode = state.printPreferences?.[type];
+      const currentBase = getPrintBaseMode(currentMode);
+      const promptEnabled = isPrintPromptEnabled(currentMode);
+      const nextBase = currentBase === 'F' ? 'M' : 'F';
+      const nextMode = buildPrintMode(nextBase, promptEnabled);
+      if (!state.printPreferences || typeof state.printPreferences !== 'object') {
+        state.printPreferences = {};
+      }
+      state.printPreferences = { ...state.printPreferences, [type]: nextMode };
+      updatePrintControls();
+      const modeLabel = PRINT_MODE_LABELS[nextMode] || PRINT_MODE_LABELS[nextBase] || PRINT_MODE_LABELS.M;
+      const typeLabel = getPrintTypeLabel(type);
+      notify(`Impressão de ${typeLabel} definida para ${modeLabel}.`, 'info');
       return;
     }
-    event.preventDefault();
-    const type = button.getAttribute('data-print-type');
-    if (!type) return;
-    const currentMode = button.dataset.printMode || state.printPreferences?.[type];
-    const nextMode = getNextPrintMode(currentMode, type);
-    if (!state.printPreferences || typeof state.printPreferences !== 'object') {
-      state.printPreferences = {};
+    if (confirmationButton && elements.printControls.contains(confirmationButton)) {
+      event.preventDefault();
+      const type = confirmationButton.getAttribute('data-print-confirmation');
+      if (!type) return;
+      const currentMode = state.printPreferences?.[type];
+      const baseMode = getPrintBaseMode(currentMode);
+      const promptEnabled = isPrintPromptEnabled(currentMode);
+      const nextPrompt = !promptEnabled;
+      const nextMode = buildPrintMode(baseMode, nextPrompt);
+      if (!state.printPreferences || typeof state.printPreferences !== 'object') {
+        state.printPreferences = {};
+      }
+      state.printPreferences = { ...state.printPreferences, [type]: nextMode };
+      updatePrintControls();
+      const typeLabel = getPrintTypeLabel(type);
+      const promptLabel = PRINT_PROMPT_LABELS[nextPrompt ? 'ask' : 'skip'];
+      notify(`Confirmação de impressão para ${typeLabel} definida para ${promptLabel.toLowerCase()}.`, 'info');
     }
-    state.printPreferences = { ...state.printPreferences, [type]: nextMode };
-    updatePrintControls();
-    const modeLabel = PRINT_MODE_LABELS[nextMode] || PRINT_MODE_LABELS.M;
-    const typeLabel = getPrintTypeLabel(type);
-    notify(`Impressão de ${typeLabel} definida para ${modeLabel}.`, 'info');
   };
 
   const updateWorkspaceInfo = () => {
@@ -3213,7 +3268,7 @@
     state.modalSelectedCliente = null;
     state.modalSelectedPet = null;
     state.modalActiveTab = 'cliente';
-    state.printPreferences = { fechamento: 'PM', venda: 'M' };
+    state.printPreferences = { fechamento: 'PM', venda: 'PM' };
     updatePrintControls();
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
