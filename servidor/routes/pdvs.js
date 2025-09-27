@@ -4,6 +4,7 @@ const router = express.Router();
 const Pdv = require('../models/Pdv');
 const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
+const PdvState = require('../models/PdvState');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
@@ -155,6 +156,308 @@ const parseTipoEmissao = (value) => {
   return normalized;
 };
 
+const safeNumber = (value, fallback = 0) => {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const safeDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const normalizePaymentSnapshotPayload = (snapshot) => {
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  const idSource =
+    snapshot.id ||
+    snapshot._id ||
+    snapshot.code ||
+    snapshot.codigo ||
+    snapshot.label ||
+    snapshot.nome ||
+    snapshot.name;
+  const id = normalizeString(idSource);
+  const labelSource =
+    snapshot.label ||
+    snapshot.nome ||
+    snapshot.name ||
+    snapshot.descricao ||
+    snapshot.description ||
+    id ||
+    'Meio de pagamento';
+  const label = normalizeString(labelSource) || 'Meio de pagamento';
+  const type = normalizeString(snapshot.type || snapshot.tipo).toLowerCase();
+  const aliases = Array.isArray(snapshot.aliases)
+    ? snapshot.aliases.map((alias) => normalizeString(alias)).filter(Boolean)
+    : [];
+  const valor = safeNumber(snapshot.valor ?? snapshot.value ?? snapshot.total ?? 0, 0);
+  const parcelasRaw = snapshot.parcelas ?? snapshot.installments ?? 1;
+  const parcelas = Math.max(1, Number.parseInt(parcelasRaw, 10) || 1);
+  return {
+    id: id || label,
+    label,
+    type: type || 'avista',
+    aliases,
+    valor,
+    parcelas,
+  };
+};
+
+const normalizeHistoryEntryPayload = (entry) => {
+  if (!entry || typeof entry !== 'object') return null;
+  const id = normalizeString(entry.id || entry._id);
+  const label = normalizeString(entry.label || entry.descricao || entry.tipo) || 'Movimentação';
+  const amount = safeNumber(entry.amount ?? entry.valor ?? entry.delta ?? 0, 0);
+  const delta = safeNumber(entry.delta ?? entry.valor ?? amount, 0);
+  const motivo = normalizeString(entry.motivo || entry.observacao);
+  const paymentLabel = normalizeString(entry.paymentLabel || entry.meioPagamento || entry.formaPagamento);
+  const paymentId = normalizeString(entry.paymentId || entry.formaPagamentoId || entry.payment || entry.paymentMethodId);
+  const timestamp = safeDate(entry.timestamp || entry.data || entry.createdAt || entry.atualizadoEm) || new Date();
+  return {
+    id: id || undefined,
+    label,
+    amount,
+    delta,
+    motivo,
+    paymentLabel,
+    paymentId,
+    timestamp,
+  };
+};
+
+const normalizeSaleRecordPayload = (record) => {
+  if (!record || typeof record !== 'object') return null;
+  const id = normalizeString(record.id || record._id) || `sale-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  const type = normalizeString(record.type) || 'venda';
+  const typeLabel = normalizeString(record.typeLabel) || (type === 'delivery' ? 'Delivery' : 'Venda');
+  const saleCode = normalizeString(record.saleCode);
+  const saleCodeLabel = normalizeString(record.saleCodeLabel) || saleCode || 'Sem código';
+  const customerName =
+    normalizeString(record.customerName) || normalizeString(record.cliente) || 'Cliente não informado';
+  const customerDocument = normalizeString(record.customerDocument);
+  const paymentTags = Array.isArray(record.paymentTags)
+    ? record.paymentTags.map((tag) => normalizeString(tag)).filter(Boolean)
+    : [];
+  const items = Array.isArray(record.items)
+    ? record.items.map((item) => (item && typeof item === 'object' ? { ...item } : item))
+    : [];
+  const discountValue = safeNumber(record.discountValue ?? record.desconto ?? 0, 0);
+  const discountLabel = normalizeString(record.discountLabel);
+  const additionValue = safeNumber(record.additionValue ?? record.acrescimo ?? 0, 0);
+  const createdAt = safeDate(record.createdAt) || new Date();
+  const createdAtLabel = normalizeString(record.createdAtLabel);
+  const fiscalStatus = normalizeString(record.fiscalStatus);
+  const fiscalEmittedAt = safeDate(record.fiscalEmittedAt);
+  const status = normalizeString(record.status) || 'completed';
+  const cancellationReason = normalizeString(record.cancellationReason);
+  const cancellationAt = safeDate(record.cancellationAt);
+  const cancellationAtLabel = normalizeString(record.cancellationAtLabel);
+  return {
+    id,
+    type,
+    typeLabel,
+    saleCode,
+    saleCodeLabel,
+    customerName,
+    customerDocument,
+    paymentTags,
+    items,
+    discountValue,
+    discountLabel,
+    additionValue,
+    createdAt,
+    createdAtLabel,
+    receiptSnapshot: record.receiptSnapshot || null,
+    fiscalStatus,
+    fiscalEmittedAt,
+    expanded: Boolean(record.expanded),
+    status,
+    cancellationReason,
+    cancellationAt,
+    cancellationAtLabel,
+  };
+};
+
+const normalizePrintPreference = (value, fallback = 'PM') => {
+  const normalized = normalizeString(value).toUpperCase();
+  if (!normalized) return fallback;
+  const allowed = new Set(['M', 'F', 'PM', 'PF', 'FM', 'FF', 'NONE']);
+  return allowed.has(normalized) ? normalized : fallback;
+};
+
+const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) => {
+  const caixaAberto = Boolean(
+    body.caixaAberto ?? body.caixa?.aberto ?? body.statusCaixa === 'aberto' ?? existingState.caixaAberto
+  );
+  const summarySource = body.summary || body.caixa?.resumo || {};
+  const caixaSource = body.caixaInfo || body.caixa || {};
+  const pagamentosSource = Array.isArray(body.pagamentos) ? body.pagamentos : body.caixa?.pagamentos;
+  const historicoSource = Array.isArray(body.history) ? body.history : body.caixa?.historico;
+  const vendasSource = Array.isArray(body.completedSales) ? body.completedSales : body.caixa?.vendas;
+  const previstoSource = caixaSource.previstoPagamentos || caixaSource.pagamentosPrevistos;
+  const apuradoSource = caixaSource.apuradoPagamentos || caixaSource.pagamentosApurados;
+  const lastMovementSource = body.lastMovement || body.caixa?.ultimoLancamento;
+  const saleCodeIdentifier =
+    normalizeString(body.saleCodeIdentifier || body.saleCode?.identifier || caixaSource.saleCodeIdentifier) ||
+    existingState.saleCodeIdentifier ||
+    '';
+  const saleCodeSequenceRaw =
+    body.saleCodeSequence ?? body.saleCode?.sequence ?? caixaSource.saleCodeSequence ?? existingState.saleCodeSequence;
+  const saleCodeSequence = Number.parseInt(saleCodeSequenceRaw, 10);
+  const printPreferencesSource =
+    (body.printPreferences && typeof body.printPreferences === 'object' && body.printPreferences) ||
+    existingState.printPreferences ||
+    {};
+
+  return {
+    empresa: empresaId,
+    caixaAberto,
+    summary: {
+      abertura: safeNumber(
+        summarySource.abertura ?? summarySource.valorAbertura ?? body.abertura ?? existingState.summary?.abertura ?? 0,
+        0
+      ),
+      recebido: safeNumber(summarySource.recebido ?? existingState.summary?.recebido ?? 0, 0),
+      saldo: safeNumber(summarySource.saldo ?? existingState.summary?.saldo ?? 0, 0),
+    },
+    caixaInfo: {
+      aberturaData:
+        safeDate(caixaSource.aberturaData || caixaSource.dataAbertura || caixaSource.abertura || existingState.caixaInfo?.aberturaData) ||
+        null,
+      fechamentoData:
+        safeDate(caixaSource.fechamentoData || caixaSource.dataFechamento || caixaSource.fechamento || existingState.caixaInfo?.fechamentoData) ||
+        null,
+      fechamentoPrevisto: safeNumber(caixaSource.fechamentoPrevisto ?? caixaSource.valorPrevisto ?? existingState.caixaInfo?.fechamentoPrevisto ?? 0, 0),
+      fechamentoApurado: safeNumber(caixaSource.fechamentoApurado ?? caixaSource.valorApurado ?? existingState.caixaInfo?.fechamentoApurado ?? 0, 0),
+      previstoPagamentos: (Array.isArray(previstoSource) ? previstoSource : [])
+        .map(normalizePaymentSnapshotPayload)
+        .filter(Boolean),
+      apuradoPagamentos: (Array.isArray(apuradoSource) ? apuradoSource : [])
+        .map(normalizePaymentSnapshotPayload)
+        .filter(Boolean),
+    },
+    pagamentos: (Array.isArray(pagamentosSource) ? pagamentosSource : [])
+      .map(normalizePaymentSnapshotPayload)
+      .filter(Boolean),
+    history: (Array.isArray(historicoSource) ? historicoSource : [])
+      .map(normalizeHistoryEntryPayload)
+      .filter(Boolean),
+    completedSales: (Array.isArray(vendasSource) ? vendasSource : [])
+      .map(normalizeSaleRecordPayload)
+      .filter(Boolean),
+    lastMovement: normalizeHistoryEntryPayload(lastMovementSource) || null,
+    saleCodeIdentifier,
+    saleCodeSequence: Number.isFinite(saleCodeSequence) && saleCodeSequence > 0
+      ? saleCodeSequence
+      : existingState.saleCodeSequence || 1,
+    printPreferences: {
+      fechamento: normalizePrintPreference(printPreferencesSource.fechamento || 'PM'),
+      venda: normalizePrintPreference(printPreferencesSource.venda || 'PM'),
+    },
+  };
+};
+
+const serializeStateForResponse = (stateDoc) => {
+  if (!stateDoc) {
+    return {
+      caixa: {
+        aberto: false,
+        status: 'fechado',
+        valorAbertura: 0,
+        valorPrevisto: 0,
+        valorApurado: 0,
+        resumo: { abertura: 0, recebido: 0, saldo: 0 },
+        pagamentos: [],
+        historico: [],
+        previstoPagamentos: [],
+        apuradoPagamentos: [],
+        aberturaData: null,
+        fechamentoData: null,
+        fechamentoPrevisto: 0,
+        fechamentoApurado: 0,
+        ultimoLancamento: null,
+        saleCodeIdentifier: '',
+        saleCodeSequence: 1,
+      },
+      pagamentos: [],
+      summary: { abertura: 0, recebido: 0, saldo: 0 },
+      caixaInfo: {
+        aberturaData: null,
+        fechamentoData: null,
+        fechamentoPrevisto: 0,
+        fechamentoApurado: 0,
+        previstoPagamentos: [],
+        apuradoPagamentos: [],
+      },
+      history: [],
+      completedSales: [],
+      lastMovement: null,
+      saleCodeIdentifier: '',
+      saleCodeSequence: 1,
+      printPreferences: { fechamento: 'PM', venda: 'PM' },
+      updatedAt: null,
+    };
+  }
+
+  const plain = stateDoc.toObject ? stateDoc.toObject() : stateDoc;
+  const summary = plain.summary || {};
+  const caixaInfo = plain.caixaInfo || {};
+  const pagamentos = Array.isArray(plain.pagamentos) ? plain.pagamentos : [];
+  const history = Array.isArray(plain.history) ? plain.history : [];
+  const completedSales = Array.isArray(plain.completedSales) ? plain.completedSales : [];
+
+  return {
+    caixa: {
+      aberto: Boolean(plain.caixaAberto),
+      status: plain.caixaAberto ? 'aberto' : 'fechado',
+      valorAbertura: summary.abertura || 0,
+      valorPrevisto: caixaInfo.fechamentoPrevisto || 0,
+      valorApurado: caixaInfo.fechamentoApurado || 0,
+      resumo: {
+        abertura: summary.abertura || 0,
+        recebido: summary.recebido || 0,
+        saldo: summary.saldo || 0,
+      },
+      pagamentos,
+      historico: history,
+      previstoPagamentos: caixaInfo.previstoPagamentos || [],
+      apuradoPagamentos: caixaInfo.apuradoPagamentos || [],
+      aberturaData: caixaInfo.aberturaData || null,
+      fechamentoData: caixaInfo.fechamentoData || null,
+      fechamentoPrevisto: caixaInfo.fechamentoPrevisto || 0,
+      fechamentoApurado: caixaInfo.fechamentoApurado || 0,
+      ultimoLancamento: plain.lastMovement || null,
+      saleCodeIdentifier: plain.saleCodeIdentifier || '',
+      saleCodeSequence: plain.saleCodeSequence || 1,
+    },
+    pagamentos,
+    summary: {
+      abertura: summary.abertura || 0,
+      recebido: summary.recebido || 0,
+      saldo: summary.saldo || 0,
+    },
+    caixaInfo: {
+      aberturaData: caixaInfo.aberturaData || null,
+      fechamentoData: caixaInfo.fechamentoData || null,
+      fechamentoPrevisto: caixaInfo.fechamentoPrevisto || 0,
+      fechamentoApurado: caixaInfo.fechamentoApurado || 0,
+      previstoPagamentos: caixaInfo.previstoPagamentos || [],
+      apuradoPagamentos: caixaInfo.apuradoPagamentos || [],
+    },
+    history,
+    completedSales,
+    lastMovement: plain.lastMovement || null,
+    saleCodeIdentifier: plain.saleCodeIdentifier || '',
+    saleCodeSequence: plain.saleCodeSequence || 1,
+    printPreferences: plain.printPreferences || { fechamento: 'PM', venda: 'PM' },
+    updatedAt: plain.updatedAt || null,
+  };
+};
+
 const buildPdvPayload = ({ body, store }) => {
   const nome = normalizeString(body.nome);
   const apelido = normalizeString(body.apelido);
@@ -253,7 +556,28 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ message: 'PDV não encontrado.' });
     }
 
-    res.json(pdv);
+    const state = await PdvState.findOne({ pdv: pdv._id });
+    const serializedState = serializeStateForResponse(state);
+
+    const response = {
+      ...pdv,
+      caixa: {
+        ...(pdv.caixa || {}),
+        ...serializedState.caixa,
+      },
+      pagamentos: serializedState.pagamentos,
+      summary: serializedState.summary,
+      caixaInfo: serializedState.caixaInfo,
+      history: serializedState.history,
+      completedSales: serializedState.completedSales,
+      lastMovement: serializedState.lastMovement,
+      saleCodeIdentifier: serializedState.saleCodeIdentifier,
+      saleCodeSequence: serializedState.saleCodeSequence,
+      printPreferences: serializedState.printPreferences,
+      caixaAtualizadoEm: serializedState.updatedAt,
+    };
+
+    res.json(response);
   } catch (error) {
     console.error('Erro ao obter PDV:', error);
     res.status(500).json({ message: 'Erro ao obter PDV.' });
@@ -446,6 +770,47 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
         : 'Erro ao salvar configurações do PDV.';
     console.error('Erro ao salvar configurações do PDV:', error);
     res.status(statusCode).json({ message });
+  }
+});
+
+router.put('/:id/state', requireAuth, async (req, res) => {
+  try {
+    const pdvId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(pdvId)) {
+      return res.status(400).json({ message: 'Identificador de PDV inválido.' });
+    }
+
+    const pdv = await Pdv.findById(pdvId).lean();
+
+    if (!pdv) {
+      return res.status(404).json({ message: 'PDV não encontrado.' });
+    }
+
+    const existingState = await PdvState.findOne({ pdv: pdvId });
+
+    const updatePayload = buildStateUpdatePayload({
+      body: req.body || {},
+      existingState: existingState || {},
+      empresaId: pdv.empresa,
+    });
+
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        ...updatePayload,
+        pdv: pdvId,
+        empresa: updatePayload.empresa || pdv.empresa,
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    const serialized = serializeStateForResponse(updatedState);
+
+    res.json(serialized);
+  } catch (error) {
+    console.error('Erro ao salvar estado do PDV:', error);
+    res.status(500).json({ message: 'Erro ao salvar estado do PDV.' });
   }
 });
 

@@ -142,6 +142,10 @@
   const deliveryStatusOrder = deliveryStatusSteps.map((step) => step.id);
   let finalizeModalDefaults = { title: '', subtitle: '', confirm: '' };
   let deliveryAddressesController = null;
+  let statePersistTimeout = null;
+  let statePersistInFlight = false;
+  let statePersistPending = false;
+  let lastPersistSignature = '';
   const normalizeId = (value) => (value == null ? '' : String(value));
   const normalizeStoreRecord = (store) => {
     if (!store || typeof store !== 'object') return store;
@@ -242,6 +246,8 @@
       return;
     }
     const identifierSource =
+      pdv?.saleCodeIdentifier ||
+      pdv?.caixa?.saleCodeIdentifier ||
       pdv?.codigo ||
       pdv?.identificador ||
       pdv?.apelido ||
@@ -249,7 +255,12 @@
       pdv?.nome ||
       pdvId;
     state.saleCodeIdentifier = sanitizeSaleCodeIdentifier(identifierSource);
-    state.saleCodeSequence = readSaleSequenceFromStorage(pdvId);
+    const sequenceSource =
+      pdv?.saleCodeSequence ?? pdv?.caixa?.saleCodeSequence ?? readSaleSequenceFromStorage(pdvId);
+    const parsedSequence = Number.parseInt(sequenceSource, 10);
+    state.saleCodeSequence = Number.isFinite(parsedSequence) && parsedSequence >= 1
+      ? parsedSequence
+      : readSaleSequenceFromStorage(pdvId);
     refreshCurrentSaleCode();
     persistSaleSequence(pdvId, state.saleCodeSequence);
     updateSaleCodeDisplay();
@@ -265,6 +276,7 @@
     refreshCurrentSaleCode();
     persistSaleSequence(pdvId, state.saleCodeSequence);
     updateSaleCodeDisplay();
+    scheduleStatePersist();
   };
   const getPdvCompanyId = (pdv) => {
     if (!pdv) return '';
@@ -1183,6 +1195,171 @@
     populatePaymentSelect();
   };
 
+  const normalizePaymentSnapshotForPersist = (payment) => {
+    if (!payment || typeof payment !== 'object') return null;
+    const id = payment.id ? String(payment.id) : createUid();
+    const label = payment.label ? String(payment.label) : 'Pagamento';
+    const type = payment.type ? String(payment.type) : 'avista';
+    const aliases = Array.isArray(payment.aliases)
+      ? payment.aliases.map((alias) => String(alias)).filter(Boolean)
+      : [];
+    const valor = safeNumber(payment.valor ?? payment.value ?? 0);
+    const parcelasRaw = payment.parcelas ?? payment.installments ?? 1;
+    const parcelas = Math.max(1, Number.parseInt(parcelasRaw, 10) || 1);
+    return { id, label, type, aliases, valor, parcelas };
+  };
+
+  const normalizeHistoryEntryForPersist = (entry) => {
+    if (!entry || typeof entry !== 'object') return null;
+    const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
+    return {
+      id: entry.id ? String(entry.id) : createUid(),
+      label: entry.label ? String(entry.label) : 'Movimentação',
+      amount: safeNumber(entry.amount ?? entry.valor ?? 0),
+      delta: safeNumber(entry.delta ?? entry.valor ?? 0),
+      motivo: entry.motivo ? String(entry.motivo) : '',
+      paymentLabel: entry.paymentLabel ? String(entry.paymentLabel) : '',
+      paymentId: entry.paymentId ? String(entry.paymentId) : '',
+      timestamp: timestamp.toISOString(),
+    };
+  };
+
+  const normalizeSaleRecordForPersist = (record) => {
+    if (!record || typeof record !== 'object') return null;
+    const createdAt = record.createdAt ? new Date(record.createdAt) : new Date();
+    return {
+      id: record.id ? String(record.id) : createUid(),
+      type: record.type ? String(record.type) : 'venda',
+      typeLabel: record.typeLabel ? String(record.typeLabel) : '',
+      saleCode: record.saleCode ? String(record.saleCode) : '',
+      saleCodeLabel: record.saleCodeLabel ? String(record.saleCodeLabel) : '',
+      customerName: record.customerName ? String(record.customerName) : 'Cliente não informado',
+      customerDocument: record.customerDocument ? String(record.customerDocument) : '',
+      paymentTags: Array.isArray(record.paymentTags)
+        ? record.paymentTags.map((tag) => String(tag)).filter(Boolean)
+        : [],
+      items: Array.isArray(record.items) ? record.items.map((item) => ({ ...item })) : [],
+      discountValue: safeNumber(record.discountValue ?? 0),
+      discountLabel: record.discountLabel ? String(record.discountLabel) : '',
+      additionValue: safeNumber(record.additionValue ?? 0),
+      createdAt: createdAt.toISOString(),
+      createdAtLabel: record.createdAtLabel ? String(record.createdAtLabel) : '',
+      receiptSnapshot: record.receiptSnapshot || null,
+      fiscalStatus: record.fiscalStatus ? String(record.fiscalStatus) : '',
+      fiscalEmittedAt: record.fiscalEmittedAt ? new Date(record.fiscalEmittedAt).toISOString() : null,
+      expanded: Boolean(record.expanded),
+      status: record.status ? String(record.status) : 'completed',
+      cancellationReason: record.cancellationReason ? String(record.cancellationReason) : '',
+      cancellationAt: record.cancellationAt ? new Date(record.cancellationAt).toISOString() : null,
+      cancellationAtLabel: record.cancellationAtLabel ? String(record.cancellationAtLabel) : '',
+    };
+  };
+
+  const buildStatePersistPayload = () => {
+    const pagamentos = (Array.isArray(state.pagamentos) ? state.pagamentos : [])
+      .map((payment) => normalizePaymentSnapshotForPersist(payment))
+      .filter(Boolean);
+    const previstoPagamentos = (Array.isArray(state.caixaInfo.previstoPagamentos)
+      ? state.caixaInfo.previstoPagamentos
+      : [])
+      .map((payment) => normalizePaymentSnapshotForPersist(payment))
+      .filter(Boolean);
+    const apuradoPagamentos = (Array.isArray(state.caixaInfo.apuradoPagamentos)
+      ? state.caixaInfo.apuradoPagamentos
+      : [])
+      .map((payment) => normalizePaymentSnapshotForPersist(payment))
+      .filter(Boolean);
+    const history = (Array.isArray(state.history) ? state.history : [])
+      .map((entry) => normalizeHistoryEntryForPersist(entry))
+      .filter(Boolean);
+    const completedSales = (Array.isArray(state.completedSales) ? state.completedSales : [])
+      .map((sale) => normalizeSaleRecordForPersist(sale))
+      .filter(Boolean);
+
+    return {
+      caixaAberto: Boolean(state.caixaAberto),
+      summary: {
+        abertura: safeNumber(state.summary.abertura),
+        recebido: safeNumber(state.summary.recebido),
+        saldo: safeNumber(state.summary.saldo),
+      },
+      caixaInfo: {
+        aberturaData: state.caixaInfo.aberturaData || null,
+        fechamentoData: state.caixaInfo.fechamentoData || null,
+        fechamentoPrevisto: safeNumber(state.caixaInfo.fechamentoPrevisto),
+        fechamentoApurado: safeNumber(state.caixaInfo.fechamentoApurado),
+        previstoPagamentos,
+        apuradoPagamentos,
+      },
+      pagamentos,
+      history,
+      completedSales,
+      lastMovement: state.lastMovement ? normalizeHistoryEntryForPersist(state.lastMovement) : null,
+      saleCodeIdentifier: state.saleCodeIdentifier || '',
+      saleCodeSequence: Math.max(1, Number.parseInt(state.saleCodeSequence, 10) || 1),
+      printPreferences:
+        state.printPreferences && typeof state.printPreferences === 'object'
+          ? { ...state.printPreferences }
+          : { fechamento: 'PM', venda: 'PM' },
+    };
+  };
+
+  const sendStatePersistRequest = async (payload) => {
+    const pdvId = normalizeId(state.selectedPdv);
+    if (!pdvId) return;
+    const token = getToken();
+    await fetchWithOptionalAuth(`${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/state`, {
+      method: 'PUT',
+      token,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      errorMessage: 'Não foi possível salvar o estado do PDV.',
+    });
+  };
+
+  const flushStatePersist = async () => {
+    const pdvId = normalizeId(state.selectedPdv);
+    if (!pdvId) return;
+    const payload = buildStatePersistPayload();
+    const signature = JSON.stringify(payload);
+    if (signature === lastPersistSignature) {
+      return;
+    }
+    try {
+      await sendStatePersistRequest(payload);
+      lastPersistSignature = signature;
+    } catch (error) {
+      console.error('Erro ao salvar estado do PDV:', error);
+    }
+  };
+
+  const scheduleStatePersist = ({ immediate = false } = {}) => {
+    if (!state.selectedPdv) return;
+    if (typeof window === 'undefined') return;
+    if (statePersistTimeout) {
+      window.clearTimeout(statePersistTimeout);
+      statePersistTimeout = null;
+    }
+    const delay = immediate ? 0 : 400;
+    statePersistTimeout = window.setTimeout(async () => {
+      statePersistTimeout = null;
+      if (statePersistInFlight) {
+        statePersistPending = true;
+        return;
+      }
+      statePersistInFlight = true;
+      try {
+        await flushStatePersist();
+      } finally {
+        statePersistInFlight = false;
+        if (statePersistPending) {
+          statePersistPending = false;
+          scheduleStatePersist({ immediate: true });
+        }
+      }
+    }, delay);
+  };
+
   const getProductCode = (product) => {
     return (
       product?.codigoInterno ||
@@ -1558,6 +1735,7 @@
       const modeLabel = PRINT_MODE_LABELS[nextMode] || PRINT_MODE_LABELS[nextBase] || PRINT_MODE_LABELS.M;
       const typeLabel = getPrintTypeLabel(type);
       notify(`Impressão de ${typeLabel} definida para ${modeLabel}.`, 'info');
+      scheduleStatePersist();
       return;
     }
     if (confirmationButton && elements.printControls.contains(confirmationButton)) {
@@ -1577,6 +1755,7 @@
       const typeLabel = getPrintTypeLabel(type);
       const promptLabel = PRINT_PROMPT_LABELS[nextPrompt ? 'ask' : 'skip'];
       notify(`Confirmação de impressão para ${typeLabel} definida para ${promptLabel.toLowerCase()}.`, 'info');
+      scheduleStatePersist();
     }
   };
 
@@ -4662,6 +4841,7 @@
     if (!record) return null;
     state.completedSales.unshift(record);
     renderSalesList();
+    scheduleStatePersist();
     return record;
   };
 
@@ -4763,6 +4943,7 @@
       sale.cancellationAtLabel = cancellationAt ? toDateLabel(cancellationAt) : '';
     }
     renderSalesList();
+    scheduleStatePersist();
     return sale;
   };
 
@@ -4801,6 +4982,7 @@
     sale.fiscalEmittedAt = new Date().toISOString();
     renderSalesList();
     notify('XML da venda emitida com sucesso.', 'success');
+    scheduleStatePersist();
   };
 
   const isModalActive = (modal) => Boolean(modal && !modal.classList.contains('hidden'));
@@ -4883,6 +5065,7 @@
     renderSalesList();
     closeSaleCancelModal();
     notify('Venda cancelada com sucesso.', 'success');
+    scheduleStatePersist({ immediate: true });
   };
 
   const handleSaleCancelModalKeydown = (event) => {
@@ -5059,6 +5242,7 @@
     state.history.unshift(entry);
     renderHistory();
     setLastMovement(entry);
+    scheduleStatePersist();
   };
 
   const resetPagamentos = () => {
@@ -5194,6 +5378,7 @@
     renderCustomerPets();
     setActiveTab('caixa-tab');
     updateSaleCodeDisplay();
+    lastPersistSignature = '';
   };
 
   const updateSelectionHint = (message) => {
@@ -5341,9 +5526,17 @@
         pdv?.status === 'aberto'
     );
     state.caixaAberto = caixaAberto;
+    const summarySource = pdv?.summary || pdv?.caixa?.resumo || {};
     state.summary.abertura = safeNumber(
-      pdv?.caixa?.abertura || pdv?.caixa?.valorAbertura || pdv?.valorAbertura || 0
+      summarySource.abertura ||
+        summarySource.valorAbertura ||
+        pdv?.caixa?.abertura ||
+        pdv?.caixa?.valorAbertura ||
+        pdv?.valorAbertura ||
+        0
     );
+    state.summary.recebido = safeNumber(summarySource.recebido ?? state.summary.recebido ?? 0);
+    state.summary.saldo = safeNumber(summarySource.saldo ?? state.summary.saldo ?? 0);
     const aberturaData =
       pdv?.caixa?.dataAbertura ||
       pdv?.caixa?.aberturaData ||
@@ -5362,6 +5555,20 @@
       pdv?.caixa?.closedAt ||
       pdv?.dataFechamento ||
       pdv?.fechamento;
+    const previstoPagamentosData = Array.isArray(pdv?.caixa?.previstoPagamentos)
+      ? pdv.caixa.previstoPagamentos
+      : Array.isArray(pdv?.caixa?.pagamentosPrevistos)
+      ? pdv.caixa.pagamentosPrevistos
+      : Array.isArray(pdv?.previstoPagamentos)
+      ? pdv.previstoPagamentos
+      : [];
+    const apuradoPagamentosData = Array.isArray(pdv?.caixa?.apuradoPagamentos)
+      ? pdv.caixa.apuradoPagamentos
+      : Array.isArray(pdv?.caixa?.pagamentosApurados)
+      ? pdv.caixa.pagamentosApurados
+      : Array.isArray(pdv?.apuradoPagamentos)
+      ? pdv.apuradoPagamentos
+      : [];
     state.caixaInfo = {
       aberturaData: parseDateValue(aberturaData),
       fechamentoData: parseDateValue(fechamentoData),
@@ -5370,16 +5577,22 @@
           pdv?.caixa?.valorPrevisto ||
           pdv?.caixa?.saldoPrevisto ||
           pdv?.fechamentoPrevisto ||
+          summarySource.fechamentoPrevisto ||
           0
       ),
       fechamentoApurado: safeNumber(
         pdv?.caixa?.fechamentoApurado ||
           pdv?.caixa?.valorApurado ||
           pdv?.fechamentoApurado ||
+          summarySource.fechamentoApurado ||
           0
       ),
-      previstoPagamentos: [],
-      apuradoPagamentos: [],
+      previstoPagamentos: previstoPagamentosData
+        .map((payment) => normalizePaymentSnapshotForPersist(payment))
+        .filter(Boolean),
+      apuradoPagamentos: apuradoPagamentosData
+        .map((payment) => normalizePaymentSnapshotForPersist(payment))
+        .filter(Boolean),
     };
     const impressaoConfig = pdv?.configuracoesImpressao || {};
     const fechamentoMode = normalizePrintMode(
@@ -5399,9 +5612,11 @@
         impressaoConfig.sempreImprimir ||
         impressaoConfig.impressaoVenda
     );
+    const storedPreferences =
+      pdv?.printPreferences && typeof pdv.printPreferences === 'object' ? pdv.printPreferences : null;
     state.printPreferences = {
-      fechamento: fechamentoMode,
-      venda: vendaMode,
+      fechamento: normalizePrintMode(storedPreferences?.fechamento, fechamentoMode),
+      venda: normalizePrintMode(storedPreferences?.venda, vendaMode),
     };
     updatePrintControls();
     const pagamentosData = pdv?.caixa?.pagamentos || pdv?.pagamentos || {};
@@ -5411,21 +5626,30 @@
         index === 0 ? { ...payment, valor: state.summary.abertura } : payment
       );
     }
-    const historico = Array.isArray(pdv?.caixa?.historico) ? pdv.caixa.historico : [];
-    state.history = historico
-      .map((entry) => ({
-        id: entry?.id || entry?._id || 'movimentacao',
-        label: entry?.descricao || entry?.tipo || 'Movimentação',
-        amount: safeNumber(entry?.valor),
-        delta: safeNumber(entry?.delta ?? entry?.valor ?? 0),
-        motivo: entry?.motivo || entry?.observacao || '',
-        paymentLabel: entry?.meioPagamento || entry?.formaPagamento || '',
-        timestamp: entry?.data || entry?.createdAt || entry?.atualizadoEm || new Date().toISOString(),
-      }))
-      .reverse();
+    const historicoFonte = Array.isArray(pdv?.history)
+      ? pdv.history
+      : Array.isArray(pdv?.caixa?.historico)
+      ? pdv.caixa.historico
+      : [];
+    state.history = historicoFonte
+      .map((entry) => normalizeHistoryEntryForPersist(entry))
+      .filter(Boolean);
+    const vendasFonte = Array.isArray(pdv?.completedSales)
+      ? pdv.completedSales
+      : Array.isArray(pdv?.caixa?.vendas)
+      ? pdv.caixa.vendas
+      : [];
+    state.completedSales = vendasFonte
+      .map((sale) => normalizeSaleRecordForPersist(sale))
+      .filter(Boolean)
+      .map((sale) => ({
+        ...sale,
+        paymentTags: Array.isArray(sale.paymentTags) ? sale.paymentTags : [],
+        items: Array.isArray(sale.items) ? sale.items : [],
+      }));
     renderPayments();
     renderHistory();
-    setLastMovement(state.history[state.history.length - 1] || null);
+    setLastMovement(state.history[0] || null);
     renderItemsList();
     renderSalesList();
     clearSelectedProduct();
@@ -5437,6 +5661,7 @@
     updateTabAvailability();
     initializeSaleCodeForPdv(pdv);
     setActiveTab(state.caixaAberto ? 'pdv-tab' : 'caixa-tab');
+    lastPersistSignature = JSON.stringify(buildStatePersistPayload());
   };
 
   const renderSearchResults = (results, term) => {
@@ -5815,6 +6040,7 @@
     input.value = payment.valor.toFixed(2);
     updatePaymentRow(id);
     updateSummary();
+    scheduleStatePersist();
   };
 
   const handleResetPayments = () => {
@@ -5824,6 +6050,7 @@
     }
     resetPagamentos();
     notify('Valores dos meios de pagamento zerados.', 'info');
+    scheduleStatePersist();
   };
 
   const handleClearHistory = () => {
@@ -5831,6 +6058,7 @@
     setLastMovement(null);
     renderHistory();
     notify('Histórico de movimentações limpo.', 'info');
+    scheduleStatePersist();
   };
 
   const handleSearchInput = (event) => {
@@ -6025,6 +6253,7 @@
     updateActionDetails();
     elements.actionAmount && (elements.actionAmount.value = '');
     elements.motivoInput && (elements.motivoInput.value = '');
+    scheduleStatePersist({ immediate: action.id === 'fechamento' });
   };
 
   const handleCompanyChange = async () => {
