@@ -888,8 +888,7 @@
       const value = safeNumber(caixa.paymentTotals?.[method.id]);
       lines.push(formatLine(`• ${method.label}`, formatCurrency(value)));
     });
-    elements.summaryPrint.textContent = lines.join('
-');
+    elements.summaryPrint.textContent = lines.join(String.fromCharCode(10));
   };
 
   const updateSummaryLastMove = () => {
@@ -1055,11 +1054,11 @@
     }
     let chosen = defaultMethod.id;
     if (methods.length > 1) {
-      const hint = methods.map((method) => `${method.id} - ${method.label}`).join('
-');
+      const hint = methods
+        .map((method) => `${method.id} - ${method.label}`)
+        .join(String.fromCharCode(10));
       const input = window.prompt(
-        `Informe o identificador do meio de pagamento utilizado:
-${hint}`,
+        `Informe o identificador do meio de pagamento utilizado:\n${hint}`,
         defaultMethod.id
       );
       if (input && findPaymentMethod(input.trim())) {
