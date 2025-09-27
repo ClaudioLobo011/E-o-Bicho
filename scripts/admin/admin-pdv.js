@@ -3200,7 +3200,20 @@
     const selectedValue = normalizeId(state.selectedStore || previous);
     if (selectedValue && findStoreById(selectedValue)) {
       elements.companySelect.value = selectedValue;
+    } else if (state.selectedStore && !findStoreById(state.selectedStore)) {
+      state.selectedStore = '';
     }
+    elements.companySelect.disabled = state.stores.length === 0;
+  };
+
+  const extractStoresPayload = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.stores)) return payload.stores;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.data?.stores)) return payload.data.stores;
+    if (Array.isArray(payload?.docs)) return payload.docs;
+    if (Array.isArray(payload?.results)) return payload.results;
+    return [];
   };
 
   const populatePdvSelect = () => {
@@ -3222,16 +3235,17 @@
 
   const fetchStores = async () => {
     const token = getToken();
-    const payload = await fetchWithOptionalAuth(`${API_BASE}/stores`, {
-      token,
-      errorMessage: 'Não foi possível carregar as empresas cadastradas.',
-    });
-    state.stores = Array.isArray(payload)
-      ? payload
-      : Array.isArray(payload?.stores)
-      ? payload.stores
-      : [];
-    state.stores = state.stores.map((store) => normalizeStoreRecord(store));
+    let payload;
+    try {
+      payload = await fetchWithOptionalAuth(`${API_BASE}/stores`, {
+        token,
+        errorMessage: 'Não foi possível carregar as empresas cadastradas.',
+      });
+    } catch (error) {
+      console.error('Erro ao carregar empresas para o PDV:', error);
+      throw error;
+    }
+    state.stores = extractStoresPayload(payload).map((store) => normalizeStoreRecord(store));
     populateCompanySelect();
   };
 
@@ -4118,7 +4132,11 @@
     updateTabAvailability();
     try {
       await fetchStores();
-      updateSelectionHint('Escolha a empresa para carregar os PDVs disponíveis.');
+      if (state.stores.length > 0) {
+        updateSelectionHint('Escolha a empresa para carregar os PDVs disponíveis.');
+      } else {
+        updateSelectionHint('Cadastre uma empresa para habilitar o PDV.');
+      }
     } catch (error) {
       console.error('Erro ao carregar empresas para o PDV:', error);
       notify(error.message || 'Erro ao carregar a lista de empresas.', 'error');
