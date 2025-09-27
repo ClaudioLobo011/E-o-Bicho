@@ -120,12 +120,17 @@
     deliverySelectedAddress: null,
     activeFinalizeContext: null,
     saleStateBackup: null,
+    saleCodeIdentifier: '',
+    saleCodeSequence: 1,
+    currentSaleCode: '',
     deliveryFinalizingOrderId: '',
   };
 
   const elements = {};
   const customerPetsCache = new Map();
   const customerAddressesCache = new Map();
+  const SALE_CODE_STORAGE_PREFIX = 'pdvSaleSequence:';
+  const SALE_CODE_PADDING = 6;
   const deliveryStatusSteps = [
     { id: 'registrado', label: 'Registrado' },
     { id: 'emSeparacao', label: 'Em separação' },
@@ -168,6 +173,96 @@
       normalized.company = normalizeId(pdv.company);
     }
     return normalized;
+  };
+  const getSaleSequenceStorageKey = (pdvId) =>
+    pdvId ? `${SALE_CODE_STORAGE_PREFIX}${pdvId}` : '';
+  const readSaleSequenceFromStorage = (pdvId) => {
+    if (typeof window === 'undefined') return 1;
+    const key = getSaleSequenceStorageKey(pdvId);
+    if (!key) return 1;
+    try {
+      const raw = window.localStorage?.getItem(key);
+      const parsed = Number.parseInt(raw, 10);
+      return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    } catch (_) {
+      return 1;
+    }
+  };
+  const persistSaleSequence = (pdvId, sequence) => {
+    if (typeof window === 'undefined') return;
+    const key = getSaleSequenceStorageKey(pdvId);
+    if (!key) return;
+    try {
+      window.localStorage?.setItem(key, String(Math.max(1, Number.parseInt(sequence, 10) || 1)));
+    } catch (_) {
+      /* storage indisponível */
+    }
+  };
+  const sanitizeSaleCodeIdentifier = (value) => {
+    const raw = String(value ?? '');
+    const normalized = typeof raw.normalize === 'function' ? raw.normalize('NFD') : raw;
+    const base = normalized
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toUpperCase();
+    if (base) {
+      return base.slice(0, 12);
+    }
+    return 'PDV';
+  };
+  const buildSaleCodeValue = (identifier, sequence) => {
+    const safeIdentifier = identifier || 'PDV';
+    const safeSequence = Math.max(1, Number.parseInt(sequence, 10) || 1);
+    return `${safeIdentifier}-${String(safeSequence).padStart(SALE_CODE_PADDING, '0')}`;
+  };
+  const refreshCurrentSaleCode = () => {
+    if (!state.saleCodeIdentifier || !state.saleCodeSequence) {
+      state.currentSaleCode = '';
+      return;
+    }
+    state.currentSaleCode = buildSaleCodeValue(state.saleCodeIdentifier, state.saleCodeSequence);
+  };
+  const updateSaleCodeDisplay = () => {
+    if (!elements.saleCodeWrapper) return;
+    const show = Boolean(state.caixaAberto && state.currentSaleCode);
+    elements.saleCodeWrapper.classList.toggle('hidden', !show);
+    if (elements.saleCodeValue) {
+      elements.saleCodeValue.textContent = show ? state.currentSaleCode : '—';
+    }
+  };
+  const initializeSaleCodeForPdv = (pdv) => {
+    const pdvId = normalizeId(state.selectedPdv || pdv?._id);
+    if (!pdvId) {
+      state.saleCodeIdentifier = '';
+      state.saleCodeSequence = 1;
+      state.currentSaleCode = '';
+      updateSaleCodeDisplay();
+      return;
+    }
+    const identifierSource =
+      pdv?.codigo ||
+      pdv?.identificador ||
+      pdv?.apelido ||
+      pdv?.slug ||
+      pdv?.nome ||
+      pdvId;
+    state.saleCodeIdentifier = sanitizeSaleCodeIdentifier(identifierSource);
+    state.saleCodeSequence = readSaleSequenceFromStorage(pdvId);
+    refreshCurrentSaleCode();
+    persistSaleSequence(pdvId, state.saleCodeSequence);
+    updateSaleCodeDisplay();
+  };
+  const advanceSaleCode = () => {
+    const pdvId = normalizeId(state.selectedPdv);
+    if (!pdvId || !state.saleCodeIdentifier) {
+      return;
+    }
+    const current = Number.parseInt(state.saleCodeSequence, 10);
+    const next = Number.isFinite(current) ? current + 1 : 2;
+    state.saleCodeSequence = Math.max(1, next);
+    refreshCurrentSaleCode();
+    persistSaleSequence(pdvId, state.saleCodeSequence);
+    updateSaleCodeDisplay();
   };
   const getPdvCompanyId = (pdv) => {
     if (!pdv) return '';
@@ -675,6 +770,7 @@
 
     const nowLabel = toDateLabel(new Date().toISOString());
     const operatorName = getLoggedUserName();
+    const saleCode = options.saleCode || state.currentSaleCode || '';
 
     const normalizeQuantity = (value) => {
       const number = safeNumber(value);
@@ -762,6 +858,7 @@
         pdv: getPdvLabel(),
         data: nowLabel,
         operador: operatorName,
+        saleCode,
       },
       cliente,
       delivery: deliveryAddress,
@@ -1073,6 +1170,8 @@
     elements.emptyState = document.getElementById('pdv-empty-state');
     elements.workspace = document.getElementById('pdv-workspace');
     elements.statusBadge = document.getElementById('pdv-status-badge');
+    elements.saleCodeWrapper = document.getElementById('pdv-sale-code-wrapper');
+    elements.saleCodeValue = document.getElementById('pdv-sale-code');
     elements.printControls = document.getElementById('pdv-print-controls');
     elements.companyLabel = document.getElementById('pdv-company-label');
     elements.pdvLabel = document.getElementById('pdv-name-label');
@@ -1299,6 +1398,7 @@
         ? 'Caixa aberto e pronto para registrar vendas.'
         : 'Abra o caixa para iniciar as vendas.';
     }
+    updateSaleCodeDisplay();
     updateFinalizeButton();
   };
 
@@ -2528,7 +2628,8 @@
     total,
     items = [],
     desconto = 0,
-    acrescimo = 0
+    acrescimo = 0,
+    saleCode = ''
   ) => {
     const nowIso = new Date().toISOString();
     const clienteBase = snapshot?.cliente || {};
@@ -2570,6 +2671,7 @@
         formatted: address.formatted || buildDeliveryAddressLine(address),
       },
       receiptSnapshot: snapshot,
+      saleCode: saleCode || snapshot?.meta?.saleCode || '',
     };
     return order;
   };
@@ -3106,7 +3208,7 @@
       .join(' + ');
   };
 
-  const registerSaleOnCaixa = (payments, total) => {
+  const registerSaleOnCaixa = (payments, total, saleCode = '') => {
     if (!state.caixaAberto || !payments.length) {
       return;
     }
@@ -3130,8 +3232,10 @@
       state.pagamentos.push({ ...base, valor: safeNumber(payment.valor) });
     });
     renderPayments();
-    const historyLabel = describeSalePayments(payments);
-    addHistoryEntry({ id: 'venda', label: 'Venda finalizada' }, total, '', historyLabel);
+    const paymentsSummary = describeSalePayments(payments);
+    const historyPaymentLabel = [saleCode, paymentsSummary].filter(Boolean).join(' • ');
+    const historyTitle = saleCode ? `Venda ${saleCode} finalizada` : 'Venda finalizada';
+    addHistoryEntry({ id: 'venda', label: historyTitle }, total, '', historyPaymentLabel);
     updateStatusBadge();
   };
 
@@ -3152,11 +3256,15 @@
       notify('O valor pago deve ser igual ao total da venda.', 'warning');
       return;
     }
+    const saleCode = state.currentSaleCode || '';
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
-    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda);
-    registerSaleOnCaixa(pagamentosVenda, total);
-    notify('Venda finalizada com sucesso.', 'success');
+    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, { saleCode });
+    registerSaleOnCaixa(pagamentosVenda, total, saleCode);
+    const successMessage = saleCode
+      ? `Venda ${saleCode} finalizada com sucesso.`
+      : 'Venda finalizada com sucesso.';
+    notify(successMessage, 'success');
     state.itens = [];
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
@@ -3169,6 +3277,7 @@
     updateFinalizeButton();
     updateSaleSummary();
     closeFinalizeModal();
+    advanceSaleCode();
     handleConfiguredPrint('venda', { snapshot: saleSnapshot });
   };
 
@@ -3195,10 +3304,12 @@
       notify('O valor pago deve ser igual ao total da entrega.', 'warning');
       return;
     }
+    const saleCode = state.currentSaleCode || '';
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
       deliveryAddress: state.deliverySelectedAddress,
+      saleCode,
     });
     const orderRecord = createDeliveryOrderRecord(
       saleSnapshot,
@@ -3207,11 +3318,16 @@
       total,
       itensSnapshot,
       state.vendaDesconto,
-      state.vendaAcrescimo
+      state.vendaAcrescimo,
+      saleCode
     );
     state.deliveryOrders.unshift(orderRecord);
     renderDeliveryOrders();
-    notify('Delivery registrado com sucesso.', 'success');
+    registerSaleOnCaixa(pagamentosVenda, total, saleCode);
+    const successMessage = saleCode
+      ? `Delivery ${saleCode} registrado com sucesso.`
+      : 'Delivery registrado com sucesso.';
+    notify(successMessage, 'success');
     state.itens = [];
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
@@ -3224,6 +3340,7 @@
     updateFinalizeButton();
     updateSaleSummary();
     closeFinalizeModal();
+    advanceSaleCode();
     promptDeliveryPrint(saleSnapshot);
     state.deliverySelectedAddress = null;
     state.deliverySelectedAddressId = '';
@@ -3253,16 +3370,18 @@
       notify('O valor pago deve ser igual ao total da entrega.', 'warning');
       return;
     }
+    const saleCode = state.currentSaleCode || '';
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
       deliveryAddress: order.address,
+      saleCode,
     });
     if (!saleSnapshot) {
       notify('Não foi possível gerar o comprovante do delivery.', 'error');
       return;
     }
-    registerSaleOnCaixa(pagamentosVenda, total);
+    registerSaleOnCaixa(pagamentosVenda, total, saleCode);
     order.payments = pagamentosVenda;
     order.paymentsLabel = summarizeDeliveryPayments(pagamentosVenda);
     order.total = total;
@@ -3270,16 +3389,21 @@
     order.discount = state.vendaDesconto;
     order.addition = state.vendaAcrescimo;
     order.receiptSnapshot = saleSnapshot;
+    order.saleCode = saleCode || order.saleCode;
     order.status = 'finalizado';
     const nowIso = new Date().toISOString();
     order.statusUpdatedAt = nowIso;
     order.updatedAt = nowIso;
     order.finalizedAt = nowIso;
     renderDeliveryOrders();
-    notify('Delivery finalizado e registrado no caixa.', 'success');
+    const successMessage = saleCode
+      ? `Delivery ${saleCode} finalizado e registrado no caixa.`
+      : 'Delivery finalizado e registrado no caixa.';
+    notify(successMessage, 'success');
     setSaleCustomer(null, null);
     clearSaleSearchAreas();
     closeFinalizeModal();
+    advanceSaleCode();
     promptDeliveryPrint(saleSnapshot);
   };
 
@@ -3757,6 +3881,7 @@
     const metaLines = [
       snapshot.meta.store,
       `PDV: ${snapshot.meta.pdv}`,
+      snapshot.meta.saleCode ? `Venda: ${snapshot.meta.saleCode}` : '',
       snapshot.meta.operador ? `Operador: ${snapshot.meta.operador}` : '',
       snapshot.meta.data,
     ]
@@ -4313,6 +4438,9 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    state.saleCodeIdentifier = '';
+    state.saleCodeSequence = 1;
+    state.currentSaleCode = '';
     state.customerSearchResults = [];
     state.customerSearchLoading = false;
     state.customerSearchQuery = '';
@@ -4401,6 +4529,7 @@
     renderCustomerSearchResults();
     renderCustomerPets();
     setActiveTab('caixa-tab');
+    updateSaleCodeDisplay();
   };
 
   const updateSelectionHint = (message) => {
@@ -4641,6 +4770,7 @@
     updateSummary();
     updateStatusBadge();
     updateTabAvailability();
+    initializeSaleCodeForPdv(pdv);
     setActiveTab(state.caixaAberto ? 'pdv-tab' : 'caixa-tab');
   };
 
