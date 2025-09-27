@@ -350,11 +350,96 @@
     );
   };
 
+  const onlyDigits = (value) => String(value || '').replace(/\D+/g, '');
+
+  const sanitizeCepDigits = (value) => onlyDigits(value).slice(0, 8);
+
   const formatCep = (value) => {
-    const digits = String(value || '').replace(/\D+/g, '');
+    const digits = sanitizeCepDigits(value);
     if (!digits) return '';
     if (digits.length <= 5) return digits;
     return `${digits.slice(0, 5)}-${digits.slice(5, 8)}`;
+  };
+
+  let deliveryCepLookupController = null;
+  let deliveryCepLastDigits = '';
+  let deliveryCepLastResult = null;
+  let deliveryCepLastNotifiedDigits = '';
+
+  const fetchDeliveryCepData = async (cepDigits, signal) => {
+    if (!cepDigits || cepDigits.length !== 8) {
+      throw new Error('Informe um CEP com 8 dígitos.');
+    }
+    const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`, { signal });
+    if (!response.ok) {
+      throw new Error('Não foi possível consultar o CEP informado.');
+    }
+    const data = await response.json();
+    if (data?.erro) {
+      throw new Error('CEP não encontrado.');
+    }
+    return {
+      cep: formatCep(cepDigits),
+      logradouro: data.logradouro || '',
+      bairro: data.bairro || '',
+      cidade: data.localidade || '',
+      uf: (data.uf || '').toUpperCase(),
+      complemento: data.complemento || '',
+    };
+  };
+
+  const applyDeliveryAddressFromCep = (data) => {
+    if (!data) return;
+    const fields = elements.deliveryAddressFields || {};
+    if (fields.cep) fields.cep.value = data.cep || '';
+    if (fields.logradouro) fields.logradouro.value = data.logradouro || '';
+    if (fields.bairro) fields.bairro.value = data.bairro || '';
+    if (fields.cidade) fields.cidade.value = data.cidade || '';
+    if (fields.uf) fields.uf.value = data.uf || '';
+    if (fields.complemento && data.complemento) {
+      fields.complemento.value = data.complemento;
+    }
+  };
+
+  const handleDeliveryCepLookup = async ({ force = false } = {}) => {
+    const fields = elements.deliveryAddressFields || {};
+    const input = fields.cep;
+    if (!input) return null;
+    const digits = sanitizeCepDigits(input.value || '');
+    input.value = formatCep(digits);
+    if (digits.length !== 8) return null;
+
+    if (deliveryCepLastDigits === digits && deliveryCepLastResult) {
+      applyDeliveryAddressFromCep(deliveryCepLastResult);
+      if (!force) {
+        return deliveryCepLastResult;
+      }
+    }
+
+    if (deliveryCepLookupController) {
+      deliveryCepLookupController.abort();
+    }
+    deliveryCepLookupController = new AbortController();
+    try {
+      const result = await fetchDeliveryCepData(digits, deliveryCepLookupController.signal);
+      deliveryCepLastDigits = digits;
+      deliveryCepLastResult = result;
+      applyDeliveryAddressFromCep(result);
+      if (deliveryCepLastNotifiedDigits !== digits) {
+        notify('Endereço preenchido automaticamente pelo CEP.', 'success');
+        deliveryCepLastNotifiedDigits = digits;
+      }
+      return result;
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        return null;
+      }
+      console.error('Erro ao consultar CEP para o delivery:', error);
+      notify(error.message || 'Não foi possível buscar o CEP informado.', 'error');
+      return null;
+    } finally {
+      deliveryCepLookupController = null;
+    }
   };
 
   const buildDeliveryAddressLine = (address) => {
@@ -2315,6 +2400,9 @@
     if (fields.uf) fields.uf.value = '';
     if (fields.complemento) fields.complemento.value = '';
     if (fields.isDefault) fields.isDefault.checked = !state.deliveryAddresses.length;
+    deliveryCepLastDigits = '';
+    deliveryCepLastResult = null;
+    deliveryCepLastNotifiedDigits = '';
   };
 
   const setDeliveryAddressFormVisible = (visible) => {
@@ -5963,11 +6051,19 @@
     elements.saleCancelModal?.addEventListener('keydown', handleSaleCancelModalKeydown);
     elements.saleCancelReason?.addEventListener('input', clearSaleCancelError);
     if (elements.deliveryAddressFields?.cep) {
-      elements.deliveryAddressFields.cep.addEventListener('blur', () => {
-        const input = elements.deliveryAddressFields?.cep;
-        if (input) {
-          input.value = formatCep(input.value);
+      const cepInput = elements.deliveryAddressFields.cep;
+      cepInput.addEventListener('input', () => {
+        const digits = sanitizeCepDigits(cepInput.value || '');
+        const formatted = formatCep(digits);
+        if (cepInput.value !== formatted) {
+          cepInput.value = formatted;
         }
+        if (digits.length === 8) {
+          handleDeliveryCepLookup();
+        }
+      });
+      cepInput.addEventListener('blur', () => {
+        handleDeliveryCepLookup({ force: true });
       });
     }
     if (elements.deliveryAddressFields?.uf) {
