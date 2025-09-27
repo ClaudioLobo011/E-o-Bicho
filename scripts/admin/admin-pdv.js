@@ -1860,54 +1860,203 @@
     return lines.join('\n');
   };
 
+  const escapeHtml = (value) => {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
   const openMatricialPreview = () => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return false;
+
     const content = buildSummaryPrint();
-    const printWindow = window.open('', '_blank', 'noopener=yes,width=800,height=600');
-    if (!printWindow) {
-      console.warn('Não foi possível abrir a janela de impressão.');
-      return;
-    }
-    const markup = `<!DOCTYPE html>
+    const safeContent = content && content.trim().length
+      ? `<pre>${escapeHtml(content)}</pre>`
+      : '<p style="font-size:14px;color:#475569;">Fechamento sem conteúdo para impressão.</p>';
+
+    const documentHtml = `<!DOCTYPE html>
       <html lang="pt-BR">
         <head>
-          <meta charset="utf-8">
+          <meta charset="utf-8" />
           <title>Fechamento do caixa</title>
           <style>
-            body { font-family: 'Courier New', Courier, monospace; font-size: 12px; padding: 16px; }
-            pre { white-space: pre-wrap; }
+            :root { color-scheme: light; }
+            *, *::before, *::after { box-sizing: border-box; }
+            body {
+              margin: 0;
+              padding: 24px;
+              background: #f8fafc;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 12px;
+              color: #0f172a;
+              line-height: 1.6;
+            }
+            pre {
+              white-space: pre-wrap;
+              margin: 0;
+            }
           </style>
         </head>
-        <body>
-          <pre>${content}</pre>
-        </body>
+        <body>${safeContent}</body>
       </html>`;
-    printWindow.document.open();
-    printWindow.document.write(markup);
-    printWindow.document.close();
 
-    let hasPrinted = false;
-    const triggerPrint = () => {
-      if (hasPrinted) return;
-      hasPrinted = true;
-      printWindow.focus();
-      try {
-        printWindow.print();
-      } catch (error) {
-        console.warn('Falha ao acionar impressão automática do fechamento.', error);
+    const urlFactory = typeof window !== 'undefined' ? window.URL || window.webkitURL : null;
+    const supportsBlobUrl =
+      typeof Blob !== 'undefined' &&
+      !!urlFactory &&
+      typeof urlFactory.createObjectURL === 'function';
+
+    let printWindow = null;
+    let blobUrl = '';
+    let fallbackTimer = null;
+    let readinessTimer = null;
+    let readyAttempts = 0;
+    let printed = false;
+
+    const clearTimers = () => {
+      if (fallbackTimer) {
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+      if (readinessTimer) {
+        window.clearTimeout(readinessTimer);
+        readinessTimer = null;
       }
     };
 
-    if (typeof printWindow.addEventListener === 'function') {
-      printWindow.addEventListener('load', triggerPrint, { once: true });
-    } else {
-      printWindow.onload = triggerPrint;
-    }
+    const releaseBlob = () => {
+      if (blobUrl && urlFactory && typeof urlFactory.revokeObjectURL === 'function') {
+        try {
+          urlFactory.revokeObjectURL(blobUrl);
+        } catch (_) {
+          /* ignore */
+        }
+        blobUrl = '';
+      }
+    };
 
-    if (printWindow.document?.readyState === 'complete') {
-      triggerPrint();
-    } else {
-      setTimeout(triggerPrint, 500);
+    const cleanup = () => {
+      clearTimers();
+      releaseBlob();
+    };
+
+    const triggerPrint = () => {
+      if (printed || !printWindow) return;
+      printed = true;
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (error) {
+        console.warn('Falha ao acionar impressão automática do fechamento.', error);
+      } finally {
+        window.setTimeout(releaseBlob, 1500);
+      }
+    };
+
+    const waitForReady = () => {
+      if (!printWindow) return;
+
+      let isReady = true;
+      try {
+        const doc = printWindow.document;
+        isReady = !!doc && doc.readyState === 'complete';
+      } catch (error) {
+        isReady = true;
+      }
+
+      if (!isReady && readyAttempts < 15) {
+        readyAttempts += 1;
+        readinessTimer = window.setTimeout(waitForReady, 120);
+        return;
+      }
+
+      clearTimers();
+      window.setTimeout(triggerPrint, 120);
+    };
+
+    try {
+      if (supportsBlobUrl) {
+        const blob = new Blob([documentHtml], { type: 'text/html' });
+        blobUrl = urlFactory.createObjectURL(blob);
+        printWindow = window.open(blobUrl, '_blank', 'noopener');
+      } else {
+        printWindow = window.open('', '_blank', 'noopener');
+      }
+
+      if (!printWindow) {
+        cleanup();
+        console.warn('Não foi possível abrir a janela de impressão.');
+        return false;
+      }
+
+      const handleLoad = () => {
+        readyAttempts = 0;
+        waitForReady();
+      };
+
+      if (!blobUrl) {
+        const printDocument = printWindow.document;
+        if (!printDocument) {
+          if (typeof printWindow.close === 'function') {
+            try {
+              printWindow.close();
+            } catch (_) {
+              /* ignore */
+            }
+          }
+          cleanup();
+          return false;
+        }
+
+        printDocument.open();
+        printDocument.write(documentHtml);
+        printDocument.close();
+
+        if (printWindow.addEventListener) {
+          printWindow.addEventListener('load', handleLoad, { once: true });
+        }
+
+        if (printDocument.readyState === 'complete') {
+          handleLoad();
+        } else if (printDocument.addEventListener) {
+          const readyListener = () => {
+            if (printDocument.readyState === 'complete') {
+              printDocument.removeEventListener('readystatechange', readyListener);
+              handleLoad();
+            }
+          };
+          printDocument.addEventListener('readystatechange', readyListener);
+        }
+      } else if (printWindow.addEventListener) {
+        printWindow.addEventListener('load', handleLoad, { once: true });
+      }
+
+      if (printWindow.addEventListener) {
+        printWindow.addEventListener('afterprint', cleanup);
+        printWindow.addEventListener('beforeunload', cleanup);
+      }
+
+      fallbackTimer = window.setTimeout(() => {
+        readyAttempts = 0;
+        waitForReady();
+      }, blobUrl ? 900 : 600);
+
+      return true;
+    } catch (error) {
+      console.warn('Falha ao preparar a impressão do fechamento.', error);
+      if (printWindow && typeof printWindow.close === 'function') {
+        try {
+          printWindow.close();
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      cleanup();
+      return false;
     }
   };
 
