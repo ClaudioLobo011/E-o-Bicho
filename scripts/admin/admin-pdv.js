@@ -1870,13 +1870,52 @@
       .replace(/'/g, '&#39;');
   };
 
+  const buildThermalMarkup = (rawContent) => {
+    if (!rawContent || !rawContent.trim()) {
+      return '<p class="receipt-empty">Fechamento sem conteúdo para impressão.</p>';
+    }
+
+    const lines = rawContent.split(/\r?\n/);
+    const htmlLines = lines
+      .map((line) => {
+        const trimmedLine = line.replace(/\s+$/g, '');
+        if (!trimmedLine.length) {
+          return '<span class="receipt-line receipt-line--spacer">&nbsp;</span>';
+        }
+
+        const classes = ['receipt-line'];
+        if (/^-{3,}/.test(trimmedLine)) {
+          classes.push('receipt-line--divider');
+        }
+        if (/^Total/i.test(trimmedLine)) {
+          classes.push('receipt-line--strong');
+        }
+        if (/^(Empresa|PDV|Abertura|Fechamento)/i.test(trimmedLine)) {
+          classes.push('receipt-line--meta');
+        }
+
+        return `<span class="${classes.join(' ')}">${escapeHtml(trimmedLine)}</span>`;
+      })
+      .join('');
+
+    return `
+      <main class="receipt">
+        <header class="receipt__header">
+          <h1 class="receipt__title">Fechamento do Caixa</h1>
+          <p class="receipt__subtitle">Impressora MP-4200 TH</p>
+        </header>
+        <section class="receipt__content">
+          ${htmlLines}
+        </section>
+      </main>
+    `;
+  };
+
   const openMatricialPreview = () => {
     if (typeof window === 'undefined') return false;
 
     const content = buildSummaryPrint();
-    const safeContent = content && content.trim().length
-      ? `<pre>${escapeHtml(content)}</pre>`
-      : '<p style="font-size:14px;color:#475569;">Fechamento sem conteúdo para impressão.</p>';
+    const safeContent = buildThermalMarkup(content);
 
     const documentHtml = `<!DOCTYPE html>
       <html lang="pt-BR">
@@ -1886,18 +1925,84 @@
           <style>
             :root { color-scheme: light; }
             *, *::before, *::after { box-sizing: border-box; }
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
             body {
               margin: 0;
-              padding: 24px;
-              background: #f8fafc;
-              font-family: 'Courier New', Courier, monospace;
+              padding: 0;
+              background: #fff;
+              font-family: 'Roboto Mono', 'Courier New', Courier, monospace;
               font-size: 12px;
               color: #0f172a;
-              line-height: 1.6;
             }
-            pre {
-              white-space: pre-wrap;
+            main.receipt {
+              width: 76mm;
+              margin: 0 auto;
+              padding: 4mm 3mm 6mm;
+            }
+            .receipt__header {
+              text-align: center;
+              margin-bottom: 3mm;
+            }
+            .receipt__title {
               margin: 0;
+              font-size: 14px;
+              font-weight: 700;
+              letter-spacing: 0.8px;
+              text-transform: uppercase;
+            }
+            .receipt__subtitle {
+              margin: 1mm 0 0;
+              font-size: 11px;
+              color: #64748b;
+              letter-spacing: 0.4px;
+            }
+            .receipt__content {
+              display: flex;
+              flex-direction: column;
+              gap: 1mm;
+            }
+            .receipt-line {
+              display: block;
+              white-space: pre;
+              font-size: 12px;
+              line-height: 1.35;
+              letter-spacing: 0.3px;
+              color: #0f172a;
+            }
+            .receipt-line--meta {
+              font-size: 11px;
+              letter-spacing: 0.2px;
+            }
+            .receipt-line--divider {
+              letter-spacing: 0.6px;
+            }
+            .receipt-line--strong {
+              font-weight: 600;
+            }
+            .receipt-line--spacer {
+              height: 1.1em;
+            }
+            .receipt-empty {
+              margin: 0;
+              padding: 6mm 4mm;
+              font-size: 13px;
+              color: #475569;
+              text-align: center;
+            }
+            @media print {
+              body {
+                margin: 0;
+              }
+              main.receipt {
+                width: 100%;
+                padding: 3mm 2mm 4mm;
+              }
+              .receipt__content {
+                gap: 0.5mm;
+              }
             }
           </style>
         </head>
