@@ -7,6 +7,7 @@ const Deposit = require('../models/Deposit');
 const PdvState = require('../models/PdvState');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const { isDriveConfigured, uploadBufferToDrive } = require('../utils/googleDrive');
 
 const ambientesPermitidos = ['homologacao', 'producao'];
 const ambientesSet = new Set(ambientesPermitidos);
@@ -170,6 +171,141 @@ const safeDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const escapeXml = (value) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+};
+
+const sanitizeFileName = (value, fallback = 'documento.xml') => {
+  const base = value === undefined || value === null ? '' : String(value);
+  const normalized = base
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9-_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .trim();
+  const trimmed = normalized || fallback;
+  return trimmed.length > 120 ? trimmed.slice(0, 120) : trimmed;
+};
+
+const buildDrivePathSegments = (date) => {
+  const reference = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date();
+  const year = String(reference.getFullYear());
+  const month = String(reference.getMonth() + 1).padStart(2, '0');
+  const day = String(reference.getDate()).padStart(2, '0');
+  return ['Fiscal', 'XMLs', year, month, day];
+};
+
+const buildSaleFiscalXml = ({ sale, pdv, store, emissionDate }) => {
+  const snapshot = sale?.receiptSnapshot || {};
+  const meta = snapshot.meta || {};
+  const cliente = snapshot.cliente || {};
+  const delivery = snapshot.delivery || null;
+  const itens = Array.isArray(snapshot.itens) ? snapshot.itens : [];
+  const totais = snapshot.totais || {};
+  const pagamentos = Array.isArray(snapshot.pagamentos?.items) ? snapshot.pagamentos.items : [];
+  const pagamentosTotal = snapshot.pagamentos?.formattedTotal || snapshot.pagamentos?.total || '';
+  const ambiente = pdv?.ambientePadrao || '';
+  const emissionIso = emissionDate instanceof Date && !Number.isNaN(emissionDate.getTime())
+    ? emissionDate.toISOString()
+    : new Date().toISOString();
+
+  const lines = [];
+  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+  lines.push('<NFCe xmlns="https://schemas.eobicho.app/pdv/fiscal">');
+  lines.push('  <Identificacao>');
+  lines.push(`    <Ambiente>${escapeXml(ambiente)}</Ambiente>`);
+  lines.push(`    <PdvCodigo>${escapeXml(pdv?.codigo || '')}</PdvCodigo>`);
+  lines.push(`    <PdvNome>${escapeXml(pdv?.nome || '')}</PdvNome>`);
+  lines.push(`    <VendaId>${escapeXml(sale?.id || '')}</VendaId>`);
+  lines.push(`    <VendaCodigo>${escapeXml(sale?.saleCode || meta.saleCode || '')}</VendaCodigo>`);
+  lines.push(`    <DataRegistro>${escapeXml(meta.data || '')}</DataRegistro>`);
+  lines.push(`    <DataEmissao>${escapeXml(emissionIso)}</DataEmissao>`);
+  lines.push(`    <Operador>${escapeXml(meta.operador || '')}</Operador>`);
+  lines.push('  </Identificacao>');
+  lines.push('  <Emitente>');
+  lines.push(`    <RazaoSocial>${escapeXml(store?.razaoSocial || store?.nomeFantasia || store?.nome || '')}</RazaoSocial>`);
+  lines.push(`    <NomeFantasia>${escapeXml(store?.nomeFantasia || '')}</NomeFantasia>`);
+  lines.push(`    <CNPJ>${escapeXml(store?.cnpj || '')}</CNPJ>`);
+  lines.push(`    <InscricaoEstadual>${escapeXml(store?.inscricaoEstadual || '')}</InscricaoEstadual>`);
+  lines.push('  </Emitente>');
+  if (cliente && (cliente.nome || cliente.documento || cliente.contato || cliente.pet)) {
+    lines.push('  <Destinatario>');
+    lines.push(`    <Nome>${escapeXml(cliente.nome || '')}</Nome>`);
+    lines.push(`    <Documento>${escapeXml(cliente.documento || '')}</Documento>`);
+    lines.push(`    <Contato>${escapeXml(cliente.contato || '')}</Contato>`);
+    lines.push(`    <Pet>${escapeXml(cliente.pet || '')}</Pet>`);
+    lines.push('  </Destinatario>');
+  }
+  if (delivery) {
+    lines.push('  <Entrega>');
+    lines.push(`    <Apelido>${escapeXml(delivery.apelido || '')}</Apelido>`);
+    lines.push(`    <Endereco>${escapeXml(delivery.formatted || '')}</Endereco>`);
+    lines.push(`    <CEP>${escapeXml(delivery.cep || '')}</CEP>`);
+    lines.push(`    <Logradouro>${escapeXml(delivery.logradouro || '')}</Logradouro>`);
+    lines.push(`    <Numero>${escapeXml(delivery.numero || '')}</Numero>`);
+    lines.push(`    <Complemento>${escapeXml(delivery.complemento || '')}</Complemento>`);
+    lines.push(`    <Bairro>${escapeXml(delivery.bairro || '')}</Bairro>`);
+    lines.push(`    <Municipio>${escapeXml(delivery.cidade || '')}</Municipio>`);
+    lines.push(`    <UF>${escapeXml(delivery.uf || '')}</UF>`);
+    lines.push('  </Entrega>');
+  }
+  lines.push('  <Itens>');
+  itens.forEach((item, index) => {
+    lines.push('    <Item>');
+    lines.push(`      <Numero>${escapeXml(item?.index || String(index + 1))}</Numero>`);
+    lines.push(`      <Descricao>${escapeXml(item?.nome || '')}</Descricao>`);
+    lines.push(`      <Codigos>${escapeXml(item?.codigo || '')}</Codigos>`);
+    lines.push(`      <Quantidade>${escapeXml(item?.quantidade || '')}</Quantidade>`);
+    lines.push(`      <ValorUnitario>${escapeXml(item?.unitario || '')}</ValorUnitario>`);
+    lines.push(`      <ValorTotal>${escapeXml(item?.subtotal || '')}</ValorTotal>`);
+    lines.push('    </Item>');
+  });
+  lines.push('  </Itens>');
+  lines.push('  <Totais>');
+  lines.push(`    <Bruto>${escapeXml(totais.bruto || '')}</Bruto>`);
+  lines.push(`    <Desconto valor="${escapeXml(totais.descontoValor ?? '')}">${escapeXml(totais.desconto || '')}</Desconto>`);
+  lines.push(`    <Acrescimo valor="${escapeXml(totais.acrescimoValor ?? '')}">${escapeXml(totais.acrescimo || '')}</Acrescimo>`);
+  lines.push(`    <Liquido>${escapeXml(totais.liquido || '')}</Liquido>`);
+  lines.push(`    <Pago>${escapeXml(totais.pago || '')}</Pago>`);
+  lines.push(`    <Troco valor="${escapeXml(totais.trocoValor ?? '')}">${escapeXml(totais.troco || '')}</Troco>`);
+  lines.push('  </Totais>');
+  if (pagamentos.length) {
+    lines.push('  <Pagamentos>');
+    pagamentos.forEach((payment) => {
+      lines.push('    <Pagamento>');
+      lines.push(`      <Descricao>${escapeXml(payment?.label || '')}</Descricao>`);
+      lines.push(`      <Valor>${escapeXml(payment?.formatted || payment?.valor || '')}</Valor>`);
+      lines.push('    </Pagamento>');
+    });
+    lines.push(`    <Total>${escapeXml(pagamentosTotal || '')}</Total>`);
+    lines.push('  </Pagamentos>');
+  }
+  lines.push('</NFCe>');
+  return lines.join('\n');
+};
+
+const formatDateTimeLabel = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 const normalizePaymentSnapshotPayload = (snapshot) => {
   if (!snapshot || typeof snapshot !== 'object') return null;
   const idSource =
@@ -252,6 +388,11 @@ const normalizeSaleRecordPayload = (record) => {
   const createdAtLabel = normalizeString(record.createdAtLabel);
   const fiscalStatus = normalizeString(record.fiscalStatus);
   const fiscalEmittedAt = safeDate(record.fiscalEmittedAt);
+  const fiscalEmittedAtLabel = normalizeString(record.fiscalEmittedAtLabel);
+  const fiscalDriveFileId = normalizeString(record.fiscalDriveFileId);
+  const fiscalXmlUrl = normalizeString(record.fiscalXmlUrl);
+  const fiscalXmlName = normalizeString(record.fiscalXmlName);
+  const fiscalEnvironment = normalizeString(record.fiscalEnvironment);
   const status = normalizeString(record.status) || 'completed';
   const cancellationReason = normalizeString(record.cancellationReason);
   const cancellationAt = safeDate(record.cancellationAt);
@@ -274,6 +415,11 @@ const normalizeSaleRecordPayload = (record) => {
     receiptSnapshot: record.receiptSnapshot || null,
     fiscalStatus,
     fiscalEmittedAt,
+    fiscalEmittedAtLabel,
+    fiscalDriveFileId,
+    fiscalXmlUrl,
+    fiscalXmlName,
+    fiscalEnvironment,
     expanded: Boolean(record.expanded),
     status,
     cancellationReason,
@@ -692,6 +838,120 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
   } catch (error) {
     console.error('Erro ao atualizar PDV:', error);
     res.status(500).json({ message: 'Erro ao atualizar PDV.' });
+  }
+});
+
+router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
+  try {
+    const pdvId = req.params.id;
+    const saleId = normalizeString(req.params.saleId);
+
+    if (!mongoose.Types.ObjectId.isValid(pdvId)) {
+      return res.status(400).json({ message: 'Identificador de PDV inválido.' });
+    }
+
+    if (!saleId) {
+      return res.status(400).json({ message: 'Identificador da venda é obrigatório.' });
+    }
+
+    if (!isDriveConfigured()) {
+      return res.status(500).json({ message: 'Integração com o Google Drive não está configurada.' });
+    }
+
+    const pdv = await Pdv.findById(pdvId).populate('empresa');
+
+    if (!pdv) {
+      return res.status(404).json({ message: 'PDV não encontrado.' });
+    }
+
+    const state = await PdvState.findOne({ pdv: pdvId });
+
+    if (!state) {
+      return res
+        .status(404)
+        .json({ message: 'Nenhuma venda registrada foi encontrada para este PDV.' });
+    }
+
+    const sale = Array.isArray(state.completedSales)
+      ? state.completedSales.find((entry) => entry && entry.id === saleId)
+      : null;
+
+    if (!sale) {
+      return res.status(404).json({ message: 'Venda informada não foi encontrada.' });
+    }
+
+    if (sale.status === 'cancelled') {
+      return res
+        .status(400)
+        .json({ message: 'Não é possível emitir nota fiscal para uma venda cancelada.' });
+    }
+
+    if (sale.fiscalStatus === 'emitted' && sale.fiscalDriveFileId) {
+      return res.status(409).json({ message: 'Esta venda já possui XML emitido.' });
+    }
+
+    const snapshotFromRequest = req.body?.snapshot;
+    if (!sale.receiptSnapshot && snapshotFromRequest) {
+      sale.receiptSnapshot = snapshotFromRequest;
+    }
+
+    if (!sale.saleCode && req.body?.saleCode) {
+      sale.saleCode = normalizeString(req.body.saleCode);
+      sale.saleCodeLabel = sale.saleCode || 'Sem código';
+    }
+
+    if (!sale.receiptSnapshot) {
+      return res
+        .status(400)
+        .json({ message: 'Snapshot da venda indisponível para emissão fiscal.' });
+    }
+
+    const emissionDate = new Date();
+    const xmlContent = buildSaleFiscalXml({
+      sale,
+      pdv,
+      store: pdv.empresa || {},
+      emissionDate,
+    });
+
+    const saleCodeForName = sale.saleCode || saleId;
+    const baseName = sanitizeFileName(`NFCe-${saleCodeForName || emissionDate.getTime()}`);
+    const fileName = baseName.toLowerCase().endsWith('.xml') ? baseName : `${baseName}.xml`;
+
+    const uploadResult = await uploadBufferToDrive(Buffer.from(xmlContent, 'utf8'), {
+      name: fileName,
+      mimeType: 'application/xml',
+      folderPath: buildDrivePathSegments(emissionDate),
+    });
+
+    sale.fiscalStatus = 'emitted';
+    sale.fiscalEmittedAt = emissionDate;
+    sale.fiscalEmittedAtLabel = formatDateTimeLabel(emissionDate);
+    sale.fiscalDriveFileId = uploadResult?.id || '';
+    sale.fiscalXmlUrl = uploadResult?.webViewLink || uploadResult?.webContentLink || '';
+    sale.fiscalXmlName = uploadResult?.name || fileName;
+    sale.fiscalEnvironment = pdv.ambientePadrao || '';
+
+    state.markModified('completedSales');
+    await state.save();
+
+    res.json({
+      id: sale.id,
+      fiscalStatus: sale.fiscalStatus,
+      fiscalEmittedAt: sale.fiscalEmittedAt,
+      fiscalEmittedAtLabel: sale.fiscalEmittedAtLabel,
+      fiscalDriveFileId: sale.fiscalDriveFileId,
+      fiscalXmlUrl: sale.fiscalXmlUrl,
+      fiscalXmlName: sale.fiscalXmlName,
+      fiscalEnvironment: sale.fiscalEnvironment,
+    });
+  } catch (error) {
+    console.error('Erro ao emitir nota fiscal do PDV:', error);
+    const message =
+      error?.message && typeof error.message === 'string'
+        ? error.message
+        : 'Erro ao emitir nota fiscal.';
+    res.status(500).json({ message });
   }
 });
 

@@ -1247,6 +1247,11 @@
       receiptSnapshot: record.receiptSnapshot || null,
       fiscalStatus: record.fiscalStatus ? String(record.fiscalStatus) : '',
       fiscalEmittedAt: record.fiscalEmittedAt ? new Date(record.fiscalEmittedAt).toISOString() : null,
+      fiscalEmittedAtLabel: record.fiscalEmittedAtLabel ? String(record.fiscalEmittedAtLabel) : '',
+      fiscalDriveFileId: record.fiscalDriveFileId ? String(record.fiscalDriveFileId) : '',
+      fiscalXmlUrl: record.fiscalXmlUrl ? String(record.fiscalXmlUrl) : '',
+      fiscalXmlName: record.fiscalXmlName ? String(record.fiscalXmlName) : '',
+      fiscalEnvironment: record.fiscalEnvironment ? String(record.fiscalEnvironment) : '',
       expanded: Boolean(record.expanded),
       status: record.status ? String(record.status) : 'completed',
       cancellationReason: record.cancellationReason ? String(record.cancellationReason) : '',
@@ -4685,6 +4690,11 @@
       receiptSnapshot: snapshot,
       fiscalStatus: 'pending',
       fiscalEmittedAt: null,
+      fiscalEmittedAtLabel: '',
+      fiscalDriveFileId: '',
+      fiscalXmlUrl: '',
+      fiscalXmlName: '',
+      fiscalEnvironment: '',
       expanded: false,
       status: 'completed',
       cancellationReason: '',
@@ -4757,10 +4767,27 @@
             <span>Imprimir</span>
           </button>`;
       let fiscalControl = '';
-      if (isCancelled) {
+      if (isCancelled || !sale.receiptSnapshot) {
         fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-500"><i class="fas fa-ban text-[11px]"></i><span>Fiscal indisponível</span></span>`;
+      } else if (sale.fiscalStatus === 'emitting') {
+        fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"><i class="fas fa-circle-notch fa-spin text-[11px]"></i><span>Emitindo...</span></span>`;
       } else if (sale.fiscalStatus === 'emitted') {
-        fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"><i class="fas fa-file-circle-check text-[11px]"></i><span>XML Emitida</span></span>`;
+        const fiscalTooltip = [sale.fiscalEmittedAtLabel, sale.fiscalXmlName]
+          .filter(Boolean)
+          .join(' • ');
+        const baseClass =
+          'inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700';
+        if (sale.fiscalXmlUrl) {
+          fiscalControl = `<a class="${baseClass}" href="${escapeHtml(
+            sale.fiscalXmlUrl
+          )}" target="_blank" rel="noopener" ${
+            fiscalTooltip ? `title="${escapeHtml(fiscalTooltip)}"` : ''
+          }><i class="fas fa-file-circle-check text-[11px]"></i><span>XML emitida</span></a>`;
+        } else {
+          fiscalControl = `<span class="${baseClass}" ${
+            fiscalTooltip ? `title="${escapeHtml(fiscalTooltip)}"` : ''
+          }><i class="fas fa-file-circle-check text-[11px]"></i><span>XML emitida</span></span>`;
+        }
       } else {
         fiscalControl = `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-fiscal data-sale-id="${escapeHtml(
           saleId
@@ -4859,6 +4886,13 @@
       status,
       cancellationReason,
       cancellationAt,
+      fiscalStatus,
+      fiscalEmittedAt,
+      fiscalDriveFileId,
+      fiscalXmlUrl,
+      fiscalXmlName,
+      fiscalEnvironment,
+      fiscalEmittedAtLabel,
     } = updates;
     if (saleCode !== undefined) {
       sale.saleCode = saleCode || '';
@@ -4866,6 +4900,30 @@
     }
     if (snapshot !== undefined) {
       sale.receiptSnapshot = snapshot || null;
+    }
+    if (fiscalStatus !== undefined) {
+      sale.fiscalStatus = fiscalStatus || 'pending';
+    }
+    if (fiscalEmittedAt !== undefined) {
+      sale.fiscalEmittedAt = fiscalEmittedAt ? new Date(fiscalEmittedAt).toISOString() : null;
+      sale.fiscalEmittedAtLabel = sale.fiscalEmittedAt
+        ? toDateLabel(sale.fiscalEmittedAt)
+        : '';
+    }
+    if (fiscalEmittedAtLabel !== undefined) {
+      sale.fiscalEmittedAtLabel = fiscalEmittedAtLabel || sale.fiscalEmittedAtLabel || '';
+    }
+    if (fiscalDriveFileId !== undefined) {
+      sale.fiscalDriveFileId = fiscalDriveFileId || '';
+    }
+    if (fiscalXmlUrl !== undefined) {
+      sale.fiscalXmlUrl = fiscalXmlUrl || '';
+    }
+    if (fiscalXmlName !== undefined) {
+      sale.fiscalXmlName = fiscalXmlName || '';
+    }
+    if (fiscalEnvironment !== undefined) {
+      sale.fiscalEnvironment = fiscalEnvironment || '';
     }
     const resolvedPayments = Array.isArray(payments) ? payments : null;
     if (resolvedPayments) {
@@ -4968,21 +5026,68 @@
       notify('Não foi possível localizar o comprovante desta venda para impressão.', 'warning');
       return;
     }
+    if (sale.fiscalStatus === 'emitted') {
+      printReceipt('venda', 'fiscal', { snapshot: sale.receiptSnapshot });
+      return;
+    }
     handleConfiguredPrint('venda', { snapshot: sale.receiptSnapshot });
   };
 
-  const handleSaleEmitFiscal = (saleId) => {
+  const handleSaleEmitFiscal = async (saleId) => {
     const sale = findCompletedSaleById(saleId);
-    if (!sale || sale.fiscalStatus === 'emitted') return;
+    if (!sale || sale.fiscalStatus === 'emitted' || sale.fiscalStatus === 'emitting') {
+      return;
+    }
     if (sale.status === 'cancelled') {
       notify('Não é possível emitir fiscal para uma venda cancelada.', 'info');
       return;
     }
-    sale.fiscalStatus = 'emitted';
-    sale.fiscalEmittedAt = new Date().toISOString();
+    if (!sale.receiptSnapshot) {
+      notify('Não há dados suficientes para gerar o XML fiscal desta venda.', 'warning');
+      return;
+    }
+    if (!state.selectedPdv) {
+      notify('Selecione um PDV para emitir a nota fiscal.', 'warning');
+      return;
+    }
+    sale.fiscalStatus = 'emitting';
     renderSalesList();
-    notify('XML da venda emitida com sucesso.', 'success');
-    scheduleStatePersist();
+    try {
+      const response = await fetch(
+        `${API_BASE}/pdvs/${encodeURIComponent(state.selectedPdv)}/sales/${encodeURIComponent(
+          saleId
+        )}/fiscal`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            snapshot: sale.receiptSnapshot || null,
+            saleCode: sale.saleCode || '',
+          }),
+        }
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = data?.message || 'Não foi possível emitir a nota fiscal.';
+        throw new Error(message);
+      }
+      updateCompletedSaleRecord(saleId, {
+        fiscalStatus: data?.fiscalStatus || 'emitted',
+        fiscalEmittedAt: data?.fiscalEmittedAt || new Date().toISOString(),
+        fiscalEmittedAtLabel: data?.fiscalEmittedAtLabel || '',
+        fiscalDriveFileId: data?.fiscalDriveFileId || '',
+        fiscalXmlUrl: data?.fiscalXmlUrl || '',
+        fiscalXmlName: data?.fiscalXmlName || '',
+        fiscalEnvironment: data?.fiscalEnvironment || '',
+      });
+      notify('Nota fiscal emitida e salva no Drive.', 'success');
+      scheduleStatePersist({ immediate: true });
+    } catch (error) {
+      console.error('Erro ao emitir fiscal', error);
+      sale.fiscalStatus = 'pending';
+      renderSalesList();
+      notify(error?.message || 'Não foi possível emitir a nota fiscal.', 'error');
+    }
   };
 
   const isModalActive = (modal) => Boolean(modal && !modal.classList.contains('hidden'));
