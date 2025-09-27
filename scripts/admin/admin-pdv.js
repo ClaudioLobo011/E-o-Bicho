@@ -988,6 +988,7 @@
     elements.itemsCount = document.getElementById('pdv-items-count');
     elements.itemsTotal = document.getElementById('pdv-items-total');
     elements.finalizeButton = document.getElementById('pdv-finalize-sale');
+    elements.saleActionButtons = document.querySelectorAll('[data-sale-action]');
 
     elements.customerOpenButton = document.getElementById('pdv-open-customer');
     elements.customerOpenButtonLabel = document.getElementById('pdv-open-customer-label');
@@ -4262,7 +4263,17 @@
         setActiveTab(target);
       });
     });
-    elements.customerOpenButton?.addEventListener('click', openCustomerModal);
+    Array.from(elements.saleActionButtons || []).forEach((button) => {
+      const action = button.getAttribute('data-sale-action');
+      if (!action) return;
+      if (action === 'customer') {
+        button.addEventListener('click', openCustomerModal);
+        return;
+      }
+      button.addEventListener('click', () => {
+        notify('Funcionalidade em desenvolvimento.', 'info');
+      });
+    });
     elements.customerRemove?.addEventListener('click', handleCustomerRemove);
     elements.customerModalClose?.addEventListener('click', closeCustomerModal);
     elements.customerModalBackdrop?.addEventListener('click', closeCustomerModal);
