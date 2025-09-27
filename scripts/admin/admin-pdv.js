@@ -3433,10 +3433,7 @@
       state.vendaAcrescimo,
       saleCode
     );
-    state.deliveryOrders.unshift(orderRecord);
-    renderDeliveryOrders();
-    registerSaleOnCaixa(pagamentosVenda, total, saleCode);
-    registerCompletedSaleRecord({
+    const saleRecord = registerCompletedSaleRecord({
       type: 'delivery',
       saleCode,
       snapshot: saleSnapshot,
@@ -3445,7 +3442,14 @@
       discount: state.vendaDesconto,
       addition: state.vendaAcrescimo,
       customer: state.vendaCliente,
+      createdAt: orderRecord.createdAt,
     });
+    if (saleRecord) {
+      orderRecord.saleRecordId = saleRecord.id;
+    }
+    state.deliveryOrders.unshift(orderRecord);
+    renderDeliveryOrders();
+    registerSaleOnCaixa(pagamentosVenda, total, saleCode);
     const successMessage = saleCode
       ? `Delivery ${saleCode} registrado com sucesso.`
       : 'Delivery registrado com sucesso.';
@@ -3518,20 +3522,37 @@
     order.updatedAt = nowIso;
     order.finalizedAt = nowIso;
     renderDeliveryOrders();
+    const saleRecordId = order.saleRecordId;
+    if (saleRecordId) {
+      updateCompletedSaleRecord(saleRecordId, {
+        saleCode: order.saleCode,
+        snapshot: saleSnapshot,
+        payments: pagamentosVenda,
+        items: itensSnapshot,
+        discount: state.vendaDesconto,
+        addition: state.vendaAcrescimo,
+        customer: state.vendaCliente,
+      });
+    } else {
+      const saleRecord = registerCompletedSaleRecord({
+        type: 'delivery',
+        saleCode,
+        snapshot: saleSnapshot,
+        payments: pagamentosVenda,
+        items: itensSnapshot,
+        discount: state.vendaDesconto,
+        addition: state.vendaAcrescimo,
+        customer: state.vendaCliente,
+        createdAt: order.createdAt,
+      });
+      if (saleRecord) {
+        order.saleRecordId = saleRecord.id;
+      }
+    }
     const successMessage = saleCode
       ? `Delivery ${saleCode} finalizado e registrado no caixa.`
       : 'Delivery finalizado e registrado no caixa.';
     notify(successMessage, 'success');
-    registerCompletedSaleRecord({
-      type: 'delivery',
-      saleCode,
-      snapshot: saleSnapshot,
-      payments: pagamentosVenda,
-      items: itensSnapshot,
-      discount: state.vendaDesconto,
-      addition: state.vendaAcrescimo,
-      customer: state.vendaCliente,
-    });
     setSaleCustomer(null, null);
     clearSaleSearchAreas();
     closeFinalizeModal();
@@ -4642,6 +4663,107 @@
     state.completedSales.unshift(record);
     renderSalesList();
     return record;
+  };
+
+  const updateCompletedSaleRecord = (saleId, updates = {}) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale) return null;
+    const {
+      saleCode,
+      snapshot,
+      payments,
+      items,
+      discount,
+      addition,
+      customer,
+      status,
+      cancellationReason,
+      cancellationAt,
+    } = updates;
+    if (saleCode !== undefined) {
+      sale.saleCode = saleCode || '';
+      sale.saleCodeLabel = sale.saleCode || 'Sem código';
+    }
+    if (snapshot !== undefined) {
+      sale.receiptSnapshot = snapshot || null;
+    }
+    const resolvedPayments = Array.isArray(payments) ? payments : null;
+    if (resolvedPayments) {
+      sale.paymentTags = Array.from(
+        new Set(
+          resolvedPayments
+            .map((payment) => {
+              const label = payment?.label || 'Pagamento';
+              const parcelas = payment?.parcelas && payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
+              return `${label}${parcelas}`;
+            })
+            .filter(Boolean)
+        )
+      );
+    }
+    if (Array.isArray(items)) {
+      sale.items = items.map((item, index) => {
+        const barcode = item?.codigoBarras || item?.codigo || item?.barcode || '—';
+        const productName = item?.nome || item?.descricao || item?.produto || `Item ${index + 1}`;
+        const quantityValue = safeNumber(item?.quantidade ?? item?.qtd ?? 0);
+        const quantityLabel = quantityValue.toLocaleString('pt-BR', {
+          minimumFractionDigits: Number.isInteger(quantityValue) ? 0 : 2,
+          maximumFractionDigits: 3,
+        });
+        const unitValue = safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0);
+        const subtotalValue = safeNumber(item?.subtotal ?? item?.total ?? unitValue * quantityValue);
+        return {
+          id: item?.id || `${Date.now()}-${index}`,
+          barcode: barcode || '—',
+          product: productName,
+          quantityLabel,
+          unitLabel: formatCurrency(unitValue),
+          totalLabel: formatCurrency(subtotalValue),
+        };
+      });
+    }
+    const discountSource =
+      discount !== undefined
+        ? discount
+        : snapshot?.totais?.descontoValor ?? snapshot?.totais?.desconto ?? sale.discountValue;
+    const additionSource =
+      addition !== undefined
+        ? addition
+        : snapshot?.totais?.acrescimoValor ?? snapshot?.totais?.acrescimo ?? sale.additionValue;
+    sale.discountValue = Math.max(0, safeNumber(discountSource));
+    sale.discountLabel = formatCurrency(sale.discountValue);
+    sale.additionValue = Math.max(0, safeNumber(additionSource));
+    if (customer || snapshot?.cliente) {
+      const customerSource = customer || {};
+      const snapshotCustomer = snapshot?.cliente || {};
+      sale.customerName =
+        snapshotCustomer?.nome ||
+        snapshotCustomer?.razaoSocial ||
+        customerSource?.nome ||
+        customerSource?.razaoSocial ||
+        customerSource?.fantasia ||
+        sale.customerName;
+      sale.customerDocument =
+        snapshotCustomer?.documento ||
+        snapshotCustomer?.cpf ||
+        snapshotCustomer?.cnpj ||
+        customerSource?.cpf ||
+        customerSource?.cnpj ||
+        customerSource?.documento ||
+        sale.customerDocument;
+    }
+    if (status) {
+      sale.status = status;
+    }
+    if (cancellationReason !== undefined) {
+      sale.cancellationReason = cancellationReason;
+    }
+    if (cancellationAt !== undefined) {
+      sale.cancellationAt = cancellationAt;
+      sale.cancellationAtLabel = cancellationAt ? toDateLabel(cancellationAt) : '';
+    }
+    renderSalesList();
+    return sale;
   };
 
   const findCompletedSaleById = (saleId) =>
