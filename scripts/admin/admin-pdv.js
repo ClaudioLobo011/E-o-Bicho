@@ -119,6 +119,8 @@
     deliverySelectedAddressId: '',
     deliverySelectedAddress: null,
     activeFinalizeContext: null,
+    saleStateBackup: null,
+    deliveryFinalizingOrderId: '',
   };
 
   const elements = {};
@@ -2477,7 +2479,15 @@
       .join(' • ');
   };
 
-  const createDeliveryOrderRecord = (snapshot, address, pagamentos, total) => {
+  const createDeliveryOrderRecord = (
+    snapshot,
+    address,
+    pagamentos,
+    total,
+    items = [],
+    desconto = 0,
+    acrescimo = 0
+  ) => {
     const nowIso = new Date().toISOString();
     const clienteBase = snapshot?.cliente || {};
     const order = {
@@ -2489,6 +2499,10 @@
       total,
       payments: pagamentos.map((payment) => ({ ...payment })),
       paymentsLabel: summarizeDeliveryPayments(pagamentos),
+      discount: safeNumber(desconto),
+      addition: safeNumber(acrescimo),
+      items: Array.isArray(items) ? items.map((item) => ({ ...item })) : [],
+      finalizedAt: null,
       customer: {
         nome:
           clienteBase.nome ||
@@ -2646,9 +2660,18 @@
     if (!orderId || !nextStatus) return;
     const order = state.deliveryOrders.find((item) => item.id === orderId);
     if (!order || order.status === nextStatus) return;
+    if (order.finalizedAt) {
+      notify('Este delivery já foi finalizado e não pode ter o status alterado.', 'info');
+      return;
+    }
+    if (nextStatus === 'finalizado') {
+      openDeliveryFinalizeModalForOrder(order);
+      return;
+    }
     order.status = nextStatus;
-    order.statusUpdatedAt = new Date().toISOString();
-    order.updatedAt = order.statusUpdatedAt;
+    const nowIso = new Date().toISOString();
+    order.statusUpdatedAt = nowIso;
+    order.updatedAt = nowIso;
     renderDeliveryOrders();
     notify(`Status do delivery atualizado para ${getDeliveryStatusLabel(nextStatus)}.`, 'success');
   };
@@ -2697,8 +2720,90 @@
     }
   };
 
-  const getFinalizeContextActionLabel = (context) =>
-    context === 'delivery' ? 'registrar o delivery' : 'finalizar a venda';
+  const captureSaleStateSnapshot = () => ({
+    itens: state.itens.map((item) => ({ ...item })),
+    vendaPagamentos: state.vendaPagamentos.map((payment) => ({ ...payment })),
+    vendaDesconto: state.vendaDesconto,
+    vendaAcrescimo: state.vendaAcrescimo,
+    selectedProduct: state.selectedProduct ? { ...state.selectedProduct } : null,
+    quantidade: state.quantidade,
+  });
+
+  const applySaleStateSnapshot = (snapshot = {}) => {
+    const itens = Array.isArray(snapshot.itens) ? snapshot.itens : [];
+    const pagamentos = Array.isArray(snapshot.vendaPagamentos)
+      ? snapshot.vendaPagamentos
+      : [];
+    state.itens = itens.map((item) => ({ ...item }));
+    state.vendaPagamentos = pagamentos.map((payment) => ({ ...payment }));
+    state.vendaDesconto = safeNumber(snapshot.vendaDesconto);
+    state.vendaAcrescimo = safeNumber(snapshot.vendaAcrescimo);
+    state.selectedProduct = snapshot.selectedProduct
+      ? { ...snapshot.selectedProduct }
+      : null;
+    state.quantidade = snapshot.quantidade && snapshot.quantidade > 0 ? snapshot.quantidade : 1;
+    updateSelectedProductView();
+  };
+
+  const restoreSaleStateFromBackup = () => {
+    if (!state.saleStateBackup) return;
+    applySaleStateSnapshot(state.saleStateBackup);
+    state.saleStateBackup = null;
+    renderItemsList();
+    renderSalePaymentsPreview();
+    updateFinalizeButton();
+    updateSaleSummary();
+  };
+
+  const openDeliveryFinalizeModalForOrder = (order) => {
+    if (!order) return;
+    if (order.finalizedAt) {
+      notify('Este delivery já foi finalizado e registrado no caixa.', 'info');
+      return;
+    }
+    if (order.status === 'finalizado') {
+      notify('Este delivery já está finalizado.', 'info');
+      return;
+    }
+    if (!state.caixaAberto) {
+      notify('Abra o caixa para finalizar o delivery.', 'warning');
+      return;
+    }
+    if (state.paymentMethodsLoading) {
+      notify('Aguarde o carregamento dos meios de pagamento.', 'info');
+      return;
+    }
+    if (!state.paymentMethods.length) {
+      notify('Cadastre meios de pagamento para concluir a operação.', 'warning');
+      return;
+    }
+    const hasItems = Array.isArray(order.items) && order.items.length > 0;
+    if (!hasItems) {
+      notify('Itens do delivery indisponíveis para finalização.', 'error');
+      return;
+    }
+    state.saleStateBackup = captureSaleStateSnapshot();
+    state.deliveryFinalizingOrderId = order.id;
+    applySaleStateSnapshot({
+      itens: order.items,
+      vendaPagamentos: order.payments,
+      vendaDesconto: order.discount,
+      vendaAcrescimo: order.addition,
+      selectedProduct: null,
+      quantidade: 1,
+    });
+    renderItemsList();
+    renderSalePaymentsPreview();
+    updateFinalizeButton();
+    updateSaleSummary();
+    openFinalizeModal('delivery-complete');
+  };
+
+  const getFinalizeContextActionLabel = (context) => {
+    if (context === 'delivery') return 'registrar o delivery';
+    if (context === 'delivery-complete') return 'finalizar o delivery';
+    return 'finalizar a venda';
+  };
 
   const applyFinalizeModalContext = (context) => {
     if (context === 'delivery') {
@@ -2711,6 +2816,17 @@
       }
       if (elements.finalizeConfirm) {
         elements.finalizeConfirm.textContent = 'Concluir delivery';
+      }
+    } else if (context === 'delivery-complete') {
+      if (elements.finalizeTitle) {
+        elements.finalizeTitle.textContent = 'Finalizar delivery';
+      }
+      if (elements.finalizeSubtitle) {
+        elements.finalizeSubtitle.textContent =
+          'Confirme os pagamentos recebidos antes de registrar no caixa.';
+      }
+      if (elements.finalizeConfirm) {
+        elements.finalizeConfirm.textContent = 'Finalizar delivery';
       }
     } else {
       if (elements.finalizeTitle) {
@@ -2790,10 +2906,15 @@
 
   const closeFinalizeModal = () => {
     if (!elements.finalizeModal) return;
+    const context = state.activeFinalizeContext;
     elements.finalizeModal.classList.add('hidden');
     closePaymentValueModal(true);
     if (!elements.deliveryAddressModal || elements.deliveryAddressModal.classList.contains('hidden')) {
       document.body.classList.remove('overflow-hidden');
+    }
+    if (context === 'delivery-complete') {
+      state.deliveryFinalizingOrderId = '';
+      restoreSaleStateFromBackup();
     }
     applyFinalizeModalContext('sale');
     state.activeFinalizeContext = null;
@@ -3035,12 +3156,14 @@
     const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
       deliveryAddress: state.deliverySelectedAddress,
     });
-    registerSaleOnCaixa(pagamentosVenda, total);
     const orderRecord = createDeliveryOrderRecord(
       saleSnapshot,
       state.deliverySelectedAddress,
       pagamentosVenda,
-      total
+      total,
+      itensSnapshot,
+      state.vendaDesconto,
+      state.vendaAcrescimo
     );
     state.deliveryOrders.unshift(orderRecord);
     renderDeliveryOrders();
@@ -3060,9 +3183,65 @@
     state.deliverySelectedAddressId = '';
   };
 
+  const finalizeRegisteredDeliveryOrder = () => {
+    const orderId = state.deliveryFinalizingOrderId;
+    if (!orderId) {
+      notify('Nenhum delivery selecionado para finalização.', 'warning');
+      closeFinalizeModal();
+      return;
+    }
+    const order = state.deliveryOrders.find((item) => item.id === orderId);
+    if (!order) {
+      notify('Não foi possível localizar o delivery para finalizar.', 'error');
+      closeFinalizeModal();
+      return;
+    }
+    if (!state.caixaAberto) {
+      notify('Abra o caixa para finalizar o delivery.', 'warning');
+      closeFinalizeModal();
+      return;
+    }
+    const total = getSaleTotalLiquido();
+    const pago = getSalePagoTotal();
+    if (Math.abs(total - pago) >= 0.01) {
+      notify('O valor pago deve ser igual ao total da entrega.', 'warning');
+      return;
+    }
+    const itensSnapshot = state.itens.map((item) => ({ ...item }));
+    const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
+    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
+      deliveryAddress: order.address,
+    });
+    if (!saleSnapshot) {
+      notify('Não foi possível gerar o comprovante do delivery.', 'error');
+      return;
+    }
+    registerSaleOnCaixa(pagamentosVenda, total);
+    order.payments = pagamentosVenda;
+    order.paymentsLabel = summarizeDeliveryPayments(pagamentosVenda);
+    order.total = total;
+    order.items = itensSnapshot;
+    order.discount = state.vendaDesconto;
+    order.addition = state.vendaAcrescimo;
+    order.receiptSnapshot = saleSnapshot;
+    order.status = 'finalizado';
+    const nowIso = new Date().toISOString();
+    order.statusUpdatedAt = nowIso;
+    order.updatedAt = nowIso;
+    order.finalizedAt = nowIso;
+    renderDeliveryOrders();
+    notify('Delivery finalizado e registrado no caixa.', 'success');
+    closeFinalizeModal();
+    promptDeliveryPrint(saleSnapshot);
+  };
+
   const handleFinalizeConfirm = () => {
     if (state.activeFinalizeContext === 'delivery') {
       finalizeDeliveryFlow();
+      return;
+    }
+    if (state.activeFinalizeContext === 'delivery-complete') {
+      finalizeRegisteredDeliveryOrder();
       return;
     }
     finalizeSaleFlow();
