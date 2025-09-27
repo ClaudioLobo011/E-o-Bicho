@@ -120,12 +120,19 @@
     deliverySelectedAddress: null,
     activeFinalizeContext: null,
     saleStateBackup: null,
+    saleCodeIdentifier: '',
+    saleCodeSequence: 1,
+    currentSaleCode: '',
     deliveryFinalizingOrderId: '',
+    completedSales: [],
+    activeSaleCancellationId: '',
   };
 
   const elements = {};
   const customerPetsCache = new Map();
   const customerAddressesCache = new Map();
+  const SALE_CODE_STORAGE_PREFIX = 'pdvSaleSequence:';
+  const SALE_CODE_PADDING = 6;
   const deliveryStatusSteps = [
     { id: 'registrado', label: 'Registrado' },
     { id: 'emSeparacao', label: 'Em separação' },
@@ -168,6 +175,96 @@
       normalized.company = normalizeId(pdv.company);
     }
     return normalized;
+  };
+  const getSaleSequenceStorageKey = (pdvId) =>
+    pdvId ? `${SALE_CODE_STORAGE_PREFIX}${pdvId}` : '';
+  const readSaleSequenceFromStorage = (pdvId) => {
+    if (typeof window === 'undefined') return 1;
+    const key = getSaleSequenceStorageKey(pdvId);
+    if (!key) return 1;
+    try {
+      const raw = window.localStorage?.getItem(key);
+      const parsed = Number.parseInt(raw, 10);
+      return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    } catch (_) {
+      return 1;
+    }
+  };
+  const persistSaleSequence = (pdvId, sequence) => {
+    if (typeof window === 'undefined') return;
+    const key = getSaleSequenceStorageKey(pdvId);
+    if (!key) return;
+    try {
+      window.localStorage?.setItem(key, String(Math.max(1, Number.parseInt(sequence, 10) || 1)));
+    } catch (_) {
+      /* storage indisponível */
+    }
+  };
+  const sanitizeSaleCodeIdentifier = (value) => {
+    const raw = String(value ?? '');
+    const normalized = typeof raw.normalize === 'function' ? raw.normalize('NFD') : raw;
+    const base = normalized
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toUpperCase();
+    if (base) {
+      return base.slice(0, 12);
+    }
+    return 'PDV';
+  };
+  const buildSaleCodeValue = (identifier, sequence) => {
+    const safeIdentifier = identifier || 'PDV';
+    const safeSequence = Math.max(1, Number.parseInt(sequence, 10) || 1);
+    return `${safeIdentifier}-${String(safeSequence).padStart(SALE_CODE_PADDING, '0')}`;
+  };
+  const refreshCurrentSaleCode = () => {
+    if (!state.saleCodeIdentifier || !state.saleCodeSequence) {
+      state.currentSaleCode = '';
+      return;
+    }
+    state.currentSaleCode = buildSaleCodeValue(state.saleCodeIdentifier, state.saleCodeSequence);
+  };
+  const updateSaleCodeDisplay = () => {
+    if (!elements.saleCodeWrapper) return;
+    const show = Boolean(state.caixaAberto && state.currentSaleCode);
+    elements.saleCodeWrapper.classList.toggle('hidden', !show);
+    if (elements.saleCodeValue) {
+      elements.saleCodeValue.textContent = show ? state.currentSaleCode : '—';
+    }
+  };
+  const initializeSaleCodeForPdv = (pdv) => {
+    const pdvId = normalizeId(state.selectedPdv || pdv?._id);
+    if (!pdvId) {
+      state.saleCodeIdentifier = '';
+      state.saleCodeSequence = 1;
+      state.currentSaleCode = '';
+      updateSaleCodeDisplay();
+      return;
+    }
+    const identifierSource =
+      pdv?.codigo ||
+      pdv?.identificador ||
+      pdv?.apelido ||
+      pdv?.slug ||
+      pdv?.nome ||
+      pdvId;
+    state.saleCodeIdentifier = sanitizeSaleCodeIdentifier(identifierSource);
+    state.saleCodeSequence = readSaleSequenceFromStorage(pdvId);
+    refreshCurrentSaleCode();
+    persistSaleSequence(pdvId, state.saleCodeSequence);
+    updateSaleCodeDisplay();
+  };
+  const advanceSaleCode = () => {
+    const pdvId = normalizeId(state.selectedPdv);
+    if (!pdvId || !state.saleCodeIdentifier) {
+      return;
+    }
+    const current = Number.parseInt(state.saleCodeSequence, 10);
+    const next = Number.isFinite(current) ? current + 1 : 2;
+    state.saleCodeSequence = Math.max(1, next);
+    refreshCurrentSaleCode();
+    persistSaleSequence(pdvId, state.saleCodeSequence);
+    updateSaleCodeDisplay();
   };
   const getPdvCompanyId = (pdv) => {
     if (!pdv) return '';
@@ -253,11 +350,96 @@
     );
   };
 
+  const onlyDigits = (value) => String(value || '').replace(/\D+/g, '');
+
+  const sanitizeCepDigits = (value) => onlyDigits(value).slice(0, 8);
+
   const formatCep = (value) => {
-    const digits = String(value || '').replace(/\D+/g, '');
+    const digits = sanitizeCepDigits(value);
     if (!digits) return '';
     if (digits.length <= 5) return digits;
     return `${digits.slice(0, 5)}-${digits.slice(5, 8)}`;
+  };
+
+  let deliveryCepLookupController = null;
+  let deliveryCepLastDigits = '';
+  let deliveryCepLastResult = null;
+  let deliveryCepLastNotifiedDigits = '';
+
+  const fetchDeliveryCepData = async (cepDigits, signal) => {
+    if (!cepDigits || cepDigits.length !== 8) {
+      throw new Error('Informe um CEP com 8 dígitos.');
+    }
+    const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`, { signal });
+    if (!response.ok) {
+      throw new Error('Não foi possível consultar o CEP informado.');
+    }
+    const data = await response.json();
+    if (data?.erro) {
+      throw new Error('CEP não encontrado.');
+    }
+    return {
+      cep: formatCep(cepDigits),
+      logradouro: data.logradouro || '',
+      bairro: data.bairro || '',
+      cidade: data.localidade || '',
+      uf: (data.uf || '').toUpperCase(),
+      complemento: data.complemento || '',
+    };
+  };
+
+  const applyDeliveryAddressFromCep = (data) => {
+    if (!data) return;
+    const fields = elements.deliveryAddressFields || {};
+    if (fields.cep) fields.cep.value = data.cep || '';
+    if (fields.logradouro) fields.logradouro.value = data.logradouro || '';
+    if (fields.bairro) fields.bairro.value = data.bairro || '';
+    if (fields.cidade) fields.cidade.value = data.cidade || '';
+    if (fields.uf) fields.uf.value = data.uf || '';
+    if (fields.complemento && data.complemento) {
+      fields.complemento.value = data.complemento;
+    }
+  };
+
+  const handleDeliveryCepLookup = async ({ force = false } = {}) => {
+    const fields = elements.deliveryAddressFields || {};
+    const input = fields.cep;
+    if (!input) return null;
+    const digits = sanitizeCepDigits(input.value || '');
+    input.value = formatCep(digits);
+    if (digits.length !== 8) return null;
+
+    if (deliveryCepLastDigits === digits && deliveryCepLastResult) {
+      applyDeliveryAddressFromCep(deliveryCepLastResult);
+      if (!force) {
+        return deliveryCepLastResult;
+      }
+    }
+
+    if (deliveryCepLookupController) {
+      deliveryCepLookupController.abort();
+    }
+    deliveryCepLookupController = new AbortController();
+    try {
+      const result = await fetchDeliveryCepData(digits, deliveryCepLookupController.signal);
+      deliveryCepLastDigits = digits;
+      deliveryCepLastResult = result;
+      applyDeliveryAddressFromCep(result);
+      if (deliveryCepLastNotifiedDigits !== digits) {
+        notify('Endereço preenchido automaticamente pelo CEP.', 'success');
+        deliveryCepLastNotifiedDigits = digits;
+      }
+      return result;
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        return null;
+      }
+      console.error('Erro ao consultar CEP para o delivery:', error);
+      notify(error.message || 'Não foi possível buscar o CEP informado.', 'error');
+      return null;
+    } finally {
+      deliveryCepLookupController = null;
+    }
   };
 
   const buildDeliveryAddressLine = (address) => {
@@ -675,6 +857,7 @@
 
     const nowLabel = toDateLabel(new Date().toISOString());
     const operatorName = getLoggedUserName();
+    const saleCode = options.saleCode || state.currentSaleCode || '';
 
     const normalizeQuantity = (value) => {
       const number = safeNumber(value);
@@ -762,6 +945,7 @@
         pdv: getPdvLabel(),
         data: nowLabel,
         operador: operatorName,
+        saleCode,
       },
       cliente,
       delivery: deliveryAddress,
@@ -1073,6 +1257,8 @@
     elements.emptyState = document.getElementById('pdv-empty-state');
     elements.workspace = document.getElementById('pdv-workspace');
     elements.statusBadge = document.getElementById('pdv-status-badge');
+    elements.saleCodeWrapper = document.getElementById('pdv-sale-code-wrapper');
+    elements.saleCodeValue = document.getElementById('pdv-sale-code');
     elements.printControls = document.getElementById('pdv-print-controls');
     elements.companyLabel = document.getElementById('pdv-company-label');
     elements.pdvLabel = document.getElementById('pdv-name-label');
@@ -1155,6 +1341,18 @@
     elements.historyList = document.getElementById('pdv-history-list');
     elements.historyEmpty = document.getElementById('pdv-history-empty');
     elements.clearHistory = document.getElementById('pdv-clear-history');
+
+    elements.salesList = document.getElementById('pdv-sales-list');
+    elements.salesEmpty = document.getElementById('pdv-sales-empty');
+
+    elements.saleCancelModal = document.getElementById('pdv-sale-cancel-modal');
+    elements.saleCancelClose = document.getElementById('pdv-sale-cancel-close');
+    elements.saleCancelCancel = document.getElementById('pdv-sale-cancel-cancel');
+    elements.saleCancelConfirm = document.getElementById('pdv-sale-cancel-confirm');
+    elements.saleCancelReason = document.getElementById('pdv-sale-cancel-reason');
+    elements.saleCancelError = document.getElementById('pdv-sale-cancel-error');
+    elements.saleCancelBackdrop =
+      elements.saleCancelModal?.querySelector('[data-sale-cancel-dismiss="backdrop"]') || null;
 
     elements.finalizeModal = document.getElementById('pdv-finalize-modal');
     elements.finalizeClose = document.getElementById('pdv-finalize-close');
@@ -1299,6 +1497,7 @@
         ? 'Caixa aberto e pronto para registrar vendas.'
         : 'Abra o caixa para iniciar as vendas.';
     }
+    updateSaleCodeDisplay();
     updateFinalizeButton();
   };
 
@@ -2201,6 +2400,9 @@
     if (fields.uf) fields.uf.value = '';
     if (fields.complemento) fields.complemento.value = '';
     if (fields.isDefault) fields.isDefault.checked = !state.deliveryAddresses.length;
+    deliveryCepLastDigits = '';
+    deliveryCepLastResult = null;
+    deliveryCepLastNotifiedDigits = '';
   };
 
   const setDeliveryAddressFormVisible = (visible) => {
@@ -2528,7 +2730,8 @@
     total,
     items = [],
     desconto = 0,
-    acrescimo = 0
+    acrescimo = 0,
+    saleCode = ''
   ) => {
     const nowIso = new Date().toISOString();
     const clienteBase = snapshot?.cliente || {};
@@ -2570,6 +2773,7 @@
         formatted: address.formatted || buildDeliveryAddressLine(address),
       },
       receiptSnapshot: snapshot,
+      saleCode: saleCode || snapshot?.meta?.saleCode || '',
     };
     return order;
   };
@@ -3106,7 +3310,7 @@
       .join(' + ');
   };
 
-  const registerSaleOnCaixa = (payments, total) => {
+  const registerSaleOnCaixa = (payments, total, saleCode = '') => {
     if (!state.caixaAberto || !payments.length) {
       return;
     }
@@ -3130,8 +3334,10 @@
       state.pagamentos.push({ ...base, valor: safeNumber(payment.valor) });
     });
     renderPayments();
-    const historyLabel = describeSalePayments(payments);
-    addHistoryEntry({ id: 'venda', label: 'Venda finalizada' }, total, '', historyLabel);
+    const paymentsSummary = describeSalePayments(payments);
+    const historyPaymentLabel = [saleCode, paymentsSummary].filter(Boolean).join(' • ');
+    const historyTitle = saleCode ? `Venda ${saleCode} finalizada` : 'Venda finalizada';
+    addHistoryEntry({ id: 'venda', label: historyTitle }, total, '', historyPaymentLabel);
     updateStatusBadge();
   };
 
@@ -3152,15 +3358,30 @@
       notify('O valor pago deve ser igual ao total da venda.', 'warning');
       return;
     }
+    const saleCode = state.currentSaleCode || '';
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
-    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda);
-    registerSaleOnCaixa(pagamentosVenda, total);
-    notify('Venda finalizada com sucesso.', 'success');
+    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, { saleCode });
+    registerSaleOnCaixa(pagamentosVenda, total, saleCode);
+    registerCompletedSaleRecord({
+      type: 'venda',
+      saleCode,
+      snapshot: saleSnapshot,
+      payments: pagamentosVenda,
+      items: itensSnapshot,
+      discount: state.vendaDesconto,
+      addition: state.vendaAcrescimo,
+      customer: state.vendaCliente,
+    });
+    const successMessage = saleCode
+      ? `Venda ${saleCode} finalizada com sucesso.`
+      : 'Venda finalizada com sucesso.';
+    notify(successMessage, 'success');
     state.itens = [];
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    setSaleCustomer(null, null);
     clearSelectedProduct();
     clearSaleSearchAreas();
     renderItemsList();
@@ -3168,6 +3389,7 @@
     updateFinalizeButton();
     updateSaleSummary();
     closeFinalizeModal();
+    advanceSaleCode();
     handleConfiguredPrint('venda', { snapshot: saleSnapshot });
   };
 
@@ -3194,10 +3416,12 @@
       notify('O valor pago deve ser igual ao total da entrega.', 'warning');
       return;
     }
+    const saleCode = state.currentSaleCode || '';
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
       deliveryAddress: state.deliverySelectedAddress,
+      saleCode,
     });
     const orderRecord = createDeliveryOrderRecord(
       saleSnapshot,
@@ -3206,15 +3430,35 @@
       total,
       itensSnapshot,
       state.vendaDesconto,
-      state.vendaAcrescimo
+      state.vendaAcrescimo,
+      saleCode
     );
+    const saleRecord = registerCompletedSaleRecord({
+      type: 'delivery',
+      saleCode,
+      snapshot: saleSnapshot,
+      payments: pagamentosVenda,
+      items: itensSnapshot,
+      discount: state.vendaDesconto,
+      addition: state.vendaAcrescimo,
+      customer: state.vendaCliente,
+      createdAt: orderRecord.createdAt,
+    });
+    if (saleRecord) {
+      orderRecord.saleRecordId = saleRecord.id;
+    }
     state.deliveryOrders.unshift(orderRecord);
     renderDeliveryOrders();
-    notify('Delivery registrado com sucesso.', 'success');
+    registerSaleOnCaixa(pagamentosVenda, total, saleCode);
+    const successMessage = saleCode
+      ? `Delivery ${saleCode} registrado com sucesso.`
+      : 'Delivery registrado com sucesso.';
+    notify(successMessage, 'success');
     state.itens = [];
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    setSaleCustomer(null, null);
     clearSelectedProduct();
     clearSaleSearchAreas();
     renderItemsList();
@@ -3222,6 +3466,7 @@
     updateFinalizeButton();
     updateSaleSummary();
     closeFinalizeModal();
+    advanceSaleCode();
     promptDeliveryPrint(saleSnapshot);
     state.deliverySelectedAddress = null;
     state.deliverySelectedAddressId = '';
@@ -3251,16 +3496,18 @@
       notify('O valor pago deve ser igual ao total da entrega.', 'warning');
       return;
     }
+    const saleCode = state.currentSaleCode || '';
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
       deliveryAddress: order.address,
+      saleCode,
     });
     if (!saleSnapshot) {
       notify('Não foi possível gerar o comprovante do delivery.', 'error');
       return;
     }
-    registerSaleOnCaixa(pagamentosVenda, total);
+    registerSaleOnCaixa(pagamentosVenda, total, saleCode);
     order.payments = pagamentosVenda;
     order.paymentsLabel = summarizeDeliveryPayments(pagamentosVenda);
     order.total = total;
@@ -3268,15 +3515,48 @@
     order.discount = state.vendaDesconto;
     order.addition = state.vendaAcrescimo;
     order.receiptSnapshot = saleSnapshot;
+    order.saleCode = saleCode || order.saleCode;
     order.status = 'finalizado';
     const nowIso = new Date().toISOString();
     order.statusUpdatedAt = nowIso;
     order.updatedAt = nowIso;
     order.finalizedAt = nowIso;
     renderDeliveryOrders();
-    notify('Delivery finalizado e registrado no caixa.', 'success');
+    const saleRecordId = order.saleRecordId;
+    if (saleRecordId) {
+      updateCompletedSaleRecord(saleRecordId, {
+        saleCode: order.saleCode,
+        snapshot: saleSnapshot,
+        payments: pagamentosVenda,
+        items: itensSnapshot,
+        discount: state.vendaDesconto,
+        addition: state.vendaAcrescimo,
+        customer: state.vendaCliente,
+      });
+    } else {
+      const saleRecord = registerCompletedSaleRecord({
+        type: 'delivery',
+        saleCode,
+        snapshot: saleSnapshot,
+        payments: pagamentosVenda,
+        items: itensSnapshot,
+        discount: state.vendaDesconto,
+        addition: state.vendaAcrescimo,
+        customer: state.vendaCliente,
+        createdAt: order.createdAt,
+      });
+      if (saleRecord) {
+        order.saleRecordId = saleRecord.id;
+      }
+    }
+    const successMessage = saleCode
+      ? `Delivery ${saleCode} finalizado e registrado no caixa.`
+      : 'Delivery finalizado e registrado no caixa.';
+    notify(successMessage, 'success');
+    setSaleCustomer(null, null);
     clearSaleSearchAreas();
     closeFinalizeModal();
+    advanceSaleCode();
     promptDeliveryPrint(saleSnapshot);
   };
 
@@ -3754,6 +4034,7 @@
     const metaLines = [
       snapshot.meta.store,
       `PDV: ${snapshot.meta.pdv}`,
+      snapshot.meta.saleCode ? `Venda: ${snapshot.meta.saleCode}` : '',
       snapshot.meta.operador ? `Operador: ${snapshot.meta.operador}` : '',
       snapshot.meta.data,
     ]
@@ -4137,6 +4418,514 @@
     )}`;
   };
 
+  const createCompletedSaleRecord = ({
+    type = 'venda',
+    saleCode = '',
+    snapshot = null,
+    payments = [],
+    items = [],
+    discount = 0,
+    addition = 0,
+    customer = null,
+    createdAt = null,
+  } = {}) => {
+    const normalizedType = type === 'delivery' ? 'delivery' : 'venda';
+    const typeLabel = normalizedType === 'delivery' ? 'Delivery' : 'Venda';
+    const saleItems = Array.isArray(items) ? items : [];
+    const paymentTags = Array.from(
+      new Set(
+        (Array.isArray(payments) ? payments : [])
+          .map((payment) => {
+            const label = payment?.label || 'Pagamento';
+            const parcelas = payment?.parcelas && payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
+            return `${label}${parcelas}`;
+          })
+          .filter(Boolean)
+      )
+    );
+    const snapshotCustomer = snapshot?.cliente || {};
+    const customerSource = customer || {};
+    const customerName =
+      snapshotCustomer?.nome ||
+      snapshotCustomer?.razaoSocial ||
+      customerSource?.nome ||
+      customerSource?.razaoSocial ||
+      customerSource?.fantasia ||
+      'Cliente não informado';
+    const customerDocument =
+      snapshotCustomer?.documento ||
+      snapshotCustomer?.cpf ||
+      snapshotCustomer?.cnpj ||
+      customerSource?.cpf ||
+      customerSource?.cnpj ||
+      customerSource?.documento ||
+      '';
+    const createdIso = createdAt || new Date().toISOString();
+    const discountValue = Math.max(
+      0,
+      safeNumber(snapshot?.totais?.descontoValor ?? snapshot?.totais?.desconto ?? discount ?? 0)
+    );
+    const additionValue = Math.max(
+      0,
+      safeNumber(snapshot?.totais?.acrescimoValor ?? snapshot?.totais?.acrescimo ?? addition ?? 0)
+    );
+    const itemDisplays = saleItems.map((item, index) => {
+      const barcode = item?.codigoBarras || item?.codigo || item?.barcode || '—';
+      const productName = item?.nome || item?.descricao || item?.produto || `Item ${index + 1}`;
+      const quantityValue = safeNumber(item?.quantidade ?? item?.qtd ?? 0);
+      const quantityLabel = quantityValue.toLocaleString('pt-BR', {
+        minimumFractionDigits: Number.isInteger(quantityValue) ? 0 : 2,
+        maximumFractionDigits: 3,
+      });
+      const unitValue = safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0);
+      const subtotalValue = safeNumber(item?.subtotal ?? item?.total ?? unitValue * quantityValue);
+      return {
+        id: item?.id || `${Date.now()}-${index}`,
+        barcode: barcode || '—',
+        product: productName,
+        quantityLabel,
+        unitLabel: formatCurrency(unitValue),
+        totalLabel: formatCurrency(subtotalValue),
+      };
+    });
+    return {
+      id: createUid(),
+      type: normalizedType,
+      typeLabel,
+      saleCode: saleCode || '',
+      saleCodeLabel: saleCode || 'Sem código',
+      customerName,
+      customerDocument,
+      paymentTags,
+      items: itemDisplays,
+      discountValue,
+      discountLabel: formatCurrency(discountValue),
+      additionValue,
+      createdAt: createdIso,
+      createdAtLabel: toDateLabel(createdIso),
+      receiptSnapshot: snapshot,
+      fiscalStatus: 'pending',
+      fiscalEmittedAt: null,
+      expanded: false,
+      status: 'completed',
+      cancellationReason: '',
+      cancellationAt: null,
+      cancellationAtLabel: '',
+    };
+  };
+
+  const renderSalesList = () => {
+    if (!elements.salesList || !elements.salesEmpty) return;
+    elements.salesList.innerHTML = '';
+    const hasSales = state.completedSales.length > 0;
+    elements.salesEmpty.classList.toggle('hidden', hasSales);
+    elements.salesList.classList.toggle('hidden', !hasSales);
+    if (!hasSales) {
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    state.completedSales.forEach((sale) => {
+      const saleId = sale.id;
+      const chevronIcon = sale.expanded ? 'fa-chevron-up' : 'fa-chevron-down';
+      const paymentTagsHtml = sale.paymentTags
+        .map(
+          (tag) =>
+            `<span class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-600">${escapeHtml(
+              tag
+            )}</span>`
+        )
+        .join('');
+      const isCancelled = sale.status === 'cancelled';
+      const cancellationDateLabel =
+        sale.cancellationAtLabel || (sale.cancellationAt ? toDateLabel(sale.cancellationAt) : '');
+      const cancellationInfo = isCancelled
+        ? `<div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            <p class="font-semibold">Venda cancelada</p>
+            ${
+              sale.cancellationReason
+                ? `<p class="mt-1 text-rose-600">${escapeHtml(sale.cancellationReason)}</p>`
+                : ''
+            }
+            ${
+              cancellationDateLabel
+                ? `<p class="mt-1 text-[11px] uppercase tracking-wide text-rose-500">${escapeHtml(
+                    cancellationDateLabel
+                  )}</p>`
+                : ''
+            }
+          </div>`
+        : '';
+      const itemsRows = sale.items.length
+        ? sale.items
+            .map(
+              (item) => `
+                  <tr>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.barcode || '—')}</td>
+                    <td class="px-3 py-2 text-gray-700">${escapeHtml(item.product)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.quantityLabel)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.unitLabel)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.totalLabel)}</td>
+                  </tr>`
+            )
+            .join('')
+        : '<tr><td colspan="5" class="px-3 py-4 text-center text-xs text-gray-500">Nenhum produto registrado nesta venda.</td></tr>';
+      const printControl = isCancelled
+        ? ''
+        : `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-print data-sale-id="${escapeHtml(
+            saleId
+          )}">
+            <i class="fas fa-print text-[11px]"></i>
+            <span>Imprimir</span>
+          </button>`;
+      let fiscalControl = '';
+      if (isCancelled) {
+        fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-500"><i class="fas fa-ban text-[11px]"></i><span>Fiscal indisponível</span></span>`;
+      } else if (sale.fiscalStatus === 'emitted') {
+        fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"><i class="fas fa-file-circle-check text-[11px]"></i><span>XML Emitida</span></span>`;
+      } else {
+        fiscalControl = `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-fiscal data-sale-id="${escapeHtml(
+          saleId
+        )}"><i class="fas fa-file-invoice text-[11px]"></i><span>Emitir Fiscal</span></button>`;
+      }
+      const cancelControl = isCancelled
+        ? `<span class="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700"><i class="fas fa-ban text-[11px]"></i><span>Cancelada</span></span>`
+        : `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700" data-sale-cancel data-sale-id="${escapeHtml(
+            saleId
+          )}"><i class="fas fa-ban text-[11px]"></i><span>Cancelar</span></button>`;
+      const li = document.createElement('li');
+      li.dataset.saleId = saleId;
+      li.innerHTML = `
+        <article class="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div class="space-y-4 p-4 sm:p-5">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <button type="button" class="flex-1 text-left" data-sale-toggle data-sale-id="${escapeHtml(
+                saleId
+              )}" aria-expanded="${sale.expanded ? 'true' : 'false'}">
+                <div class="flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-800">
+                  <span>${escapeHtml(sale.saleCodeLabel)}</span>
+                  <span class="text-gray-300">|</span>
+                  <span class="truncate text-gray-700">${escapeHtml(sale.customerName)}</span>
+                </div>
+                <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-gray-400">
+                  <span>${escapeHtml(sale.createdAtLabel)}</span>
+                  ${sale.customerDocument ? `<span>${escapeHtml(sale.customerDocument)}</span>` : ''}
+                </div>
+                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                  <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 font-semibold text-primary">${escapeHtml(
+                    sale.typeLabel
+                  )}</span>
+                  ${paymentTagsHtml}
+                </div>
+                <div class="mt-3 inline-flex items-center gap-2 text-xs text-gray-400">
+                  <span>${sale.expanded ? 'Ocultar produtos' : 'Ver produtos'}</span>
+                  <i class="fas ${chevronIcon}"></i>
+                </div>
+              </button>
+              <div class="flex items-center gap-2">
+                ${printControl}
+                ${fiscalControl}
+                ${cancelControl}
+              </div>
+            </div>
+            <div class="${sale.expanded ? '' : 'hidden'} border-t border-gray-100 pt-4" data-sale-details>
+              ${cancellationInfo}
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-xs text-gray-600">
+                  <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th scope="col" class="px-3 py-2 text-left font-semibold">Código de barras</th>
+                      <th scope="col" class="px-3 py-2 text-left font-semibold">Produto</th>
+                      <th scope="col" class="px-3 py-2 text-left font-semibold">Qtd</th>
+                      <th scope="col" class="px-3 py-2 text-left font-semibold">Valor un.</th>
+                      <th scope="col" class="px-3 py-2 text-left font-semibold">Valor total</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100">
+                    ${itemsRows}
+                  </tbody>
+                </table>
+              </div>
+              <p class="mt-4 text-xs text-gray-500"><span class="font-semibold text-gray-700">Desconto aplicado:</span> ${
+                sale.discountValue > 0 ? escapeHtml(sale.discountLabel) : 'Nenhum'
+              }</p>
+            </div>
+          </div>
+        </article>
+      `;
+      fragment.appendChild(li);
+    });
+    elements.salesList.appendChild(fragment);
+  };
+
+  const registerCompletedSaleRecord = (options = {}) => {
+    const record = createCompletedSaleRecord(options);
+    if (!record) return null;
+    state.completedSales.unshift(record);
+    renderSalesList();
+    return record;
+  };
+
+  const updateCompletedSaleRecord = (saleId, updates = {}) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale) return null;
+    const {
+      saleCode,
+      snapshot,
+      payments,
+      items,
+      discount,
+      addition,
+      customer,
+      status,
+      cancellationReason,
+      cancellationAt,
+    } = updates;
+    if (saleCode !== undefined) {
+      sale.saleCode = saleCode || '';
+      sale.saleCodeLabel = sale.saleCode || 'Sem código';
+    }
+    if (snapshot !== undefined) {
+      sale.receiptSnapshot = snapshot || null;
+    }
+    const resolvedPayments = Array.isArray(payments) ? payments : null;
+    if (resolvedPayments) {
+      sale.paymentTags = Array.from(
+        new Set(
+          resolvedPayments
+            .map((payment) => {
+              const label = payment?.label || 'Pagamento';
+              const parcelas = payment?.parcelas && payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
+              return `${label}${parcelas}`;
+            })
+            .filter(Boolean)
+        )
+      );
+    }
+    if (Array.isArray(items)) {
+      sale.items = items.map((item, index) => {
+        const barcode = item?.codigoBarras || item?.codigo || item?.barcode || '—';
+        const productName = item?.nome || item?.descricao || item?.produto || `Item ${index + 1}`;
+        const quantityValue = safeNumber(item?.quantidade ?? item?.qtd ?? 0);
+        const quantityLabel = quantityValue.toLocaleString('pt-BR', {
+          minimumFractionDigits: Number.isInteger(quantityValue) ? 0 : 2,
+          maximumFractionDigits: 3,
+        });
+        const unitValue = safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0);
+        const subtotalValue = safeNumber(item?.subtotal ?? item?.total ?? unitValue * quantityValue);
+        return {
+          id: item?.id || `${Date.now()}-${index}`,
+          barcode: barcode || '—',
+          product: productName,
+          quantityLabel,
+          unitLabel: formatCurrency(unitValue),
+          totalLabel: formatCurrency(subtotalValue),
+        };
+      });
+    }
+    const discountSource =
+      discount !== undefined
+        ? discount
+        : snapshot?.totais?.descontoValor ?? snapshot?.totais?.desconto ?? sale.discountValue;
+    const additionSource =
+      addition !== undefined
+        ? addition
+        : snapshot?.totais?.acrescimoValor ?? snapshot?.totais?.acrescimo ?? sale.additionValue;
+    sale.discountValue = Math.max(0, safeNumber(discountSource));
+    sale.discountLabel = formatCurrency(sale.discountValue);
+    sale.additionValue = Math.max(0, safeNumber(additionSource));
+    if (customer || snapshot?.cliente) {
+      const customerSource = customer || {};
+      const snapshotCustomer = snapshot?.cliente || {};
+      sale.customerName =
+        snapshotCustomer?.nome ||
+        snapshotCustomer?.razaoSocial ||
+        customerSource?.nome ||
+        customerSource?.razaoSocial ||
+        customerSource?.fantasia ||
+        sale.customerName;
+      sale.customerDocument =
+        snapshotCustomer?.documento ||
+        snapshotCustomer?.cpf ||
+        snapshotCustomer?.cnpj ||
+        customerSource?.cpf ||
+        customerSource?.cnpj ||
+        customerSource?.documento ||
+        sale.customerDocument;
+    }
+    if (status) {
+      sale.status = status;
+    }
+    if (cancellationReason !== undefined) {
+      sale.cancellationReason = cancellationReason;
+    }
+    if (cancellationAt !== undefined) {
+      sale.cancellationAt = cancellationAt;
+      sale.cancellationAtLabel = cancellationAt ? toDateLabel(cancellationAt) : '';
+    }
+    renderSalesList();
+    return sale;
+  };
+
+  const findCompletedSaleById = (saleId) =>
+    state.completedSales.find((sale) => sale.id === saleId);
+
+  const handleSaleCardToggle = (saleId) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale) return;
+    sale.expanded = !sale.expanded;
+    renderSalesList();
+  };
+
+  const handleSalePrint = (saleId) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale) return;
+    if (sale.status === 'cancelled') {
+      notify('Esta venda foi cancelada e não pode ser impressa.', 'info');
+      return;
+    }
+    if (!sale.receiptSnapshot) {
+      notify('Não foi possível localizar o comprovante desta venda para impressão.', 'warning');
+      return;
+    }
+    handleConfiguredPrint('venda', { snapshot: sale.receiptSnapshot });
+  };
+
+  const handleSaleEmitFiscal = (saleId) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale || sale.fiscalStatus === 'emitted') return;
+    if (sale.status === 'cancelled') {
+      notify('Não é possível emitir fiscal para uma venda cancelada.', 'info');
+      return;
+    }
+    sale.fiscalStatus = 'emitted';
+    sale.fiscalEmittedAt = new Date().toISOString();
+    renderSalesList();
+    notify('XML da venda emitida com sucesso.', 'success');
+  };
+
+  const isModalActive = (modal) => Boolean(modal && !modal.classList.contains('hidden'));
+
+  const clearSaleCancelError = () => {
+    if (elements.saleCancelReason) {
+      elements.saleCancelReason.classList.remove('border-rose-400', 'focus:border-rose-400', 'focus:ring-rose-200');
+    }
+    if (elements.saleCancelError) {
+      elements.saleCancelError.classList.add('hidden');
+      elements.saleCancelError.textContent = 'Informe o motivo para cancelar a venda.';
+    }
+  };
+
+  const showSaleCancelError = (message) => {
+    if (elements.saleCancelError) {
+      elements.saleCancelError.textContent = message;
+      elements.saleCancelError.classList.remove('hidden');
+    }
+    if (elements.saleCancelReason) {
+      elements.saleCancelReason.classList.add('border-rose-400', 'focus:border-rose-400', 'focus:ring-rose-200');
+    }
+  };
+
+  const openSaleCancelModal = (saleId) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale || sale.status === 'cancelled' || !elements.saleCancelModal) return;
+    state.activeSaleCancellationId = saleId;
+    if (elements.saleCancelReason) {
+      elements.saleCancelReason.value = '';
+    }
+    clearSaleCancelError();
+    elements.saleCancelModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    window.setTimeout(() => {
+      elements.saleCancelReason?.focus();
+    }, 50);
+  };
+
+  const closeSaleCancelModal = () => {
+    if (elements.saleCancelModal) {
+      elements.saleCancelModal.classList.add('hidden');
+    }
+    state.activeSaleCancellationId = '';
+    if (elements.saleCancelReason) {
+      elements.saleCancelReason.value = '';
+    }
+    clearSaleCancelError();
+    if (
+      !isModalActive(elements.finalizeModal) &&
+      !isModalActive(elements.paymentValueModal) &&
+      !isModalActive(elements.deliveryAddressModal) &&
+      !isModalActive(elements.customerModal)
+    ) {
+      document.body.classList.remove('overflow-hidden');
+    }
+  };
+
+  const handleSaleCancelConfirm = () => {
+    const saleId = state.activeSaleCancellationId;
+    const reason = elements.saleCancelReason?.value?.trim() || '';
+    if (!saleId) {
+      closeSaleCancelModal();
+      return;
+    }
+    if (!reason) {
+      showSaleCancelError('Informe o motivo para cancelar a venda.');
+      elements.saleCancelReason?.focus();
+      return;
+    }
+    const sale = findCompletedSaleById(saleId);
+    if (!sale) {
+      closeSaleCancelModal();
+      return;
+    }
+    sale.status = 'cancelled';
+    sale.cancellationReason = reason;
+    sale.cancellationAt = new Date().toISOString();
+    sale.cancellationAtLabel = toDateLabel(sale.cancellationAt);
+    renderSalesList();
+    closeSaleCancelModal();
+    notify('Venda cancelada com sucesso.', 'success');
+  };
+
+  const handleSaleCancelModalKeydown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeSaleCancelModal();
+    }
+  };
+
+  const handleSalesListClick = (event) => {
+    const toggleButton = event.target.closest('[data-sale-toggle]');
+    if (toggleButton) {
+      const saleId = toggleButton.getAttribute('data-sale-id');
+      if (saleId) {
+        handleSaleCardToggle(saleId);
+      }
+      return;
+    }
+    const cancelButton = event.target.closest('[data-sale-cancel]');
+    if (cancelButton) {
+      const saleId = cancelButton.getAttribute('data-sale-id');
+      if (saleId) {
+        openSaleCancelModal(saleId);
+      }
+      return;
+    }
+    const printButton = event.target.closest('[data-sale-print]');
+    if (printButton) {
+      const saleId = printButton.getAttribute('data-sale-id');
+      if (saleId) {
+        handleSalePrint(saleId);
+      }
+      return;
+    }
+    const fiscalButton = event.target.closest('[data-sale-fiscal]');
+    if (fiscalButton) {
+      const saleId = fiscalButton.getAttribute('data-sale-id');
+      if (saleId) {
+        handleSaleEmitFiscal(saleId);
+      }
+    }
+  };
+
   const renderHistory = () => {
     if (!elements.historyList || !elements.historyEmpty) return;
     elements.historyList.querySelectorAll('li[data-history-entry]').forEach((node) => node.remove());
@@ -4310,6 +5099,9 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    state.saleCodeIdentifier = '';
+    state.saleCodeSequence = 1;
+    state.currentSaleCode = '';
     state.customerSearchResults = [];
     state.customerSearchLoading = false;
     state.customerSearchQuery = '';
@@ -4320,6 +5112,8 @@
     state.modalActiveTab = 'cliente';
     state.printPreferences = { fechamento: 'PM', venda: 'PM' };
     state.deliveryOrders = [];
+    state.completedSales = [];
+    state.activeSaleCancellationId = '';
     state.deliveryAddresses = [];
     state.deliveryAddressesLoading = false;
     state.deliveryAddressSaving = false;
@@ -4381,6 +5175,7 @@
     updateDeliveryAddressConfirmState();
     renderDeliveryAddresses();
     renderDeliveryOrders();
+    renderSalesList();
     if (elements.deliveryAddressModal) {
       elements.deliveryAddressModal.classList.add('hidden');
     }
@@ -4398,6 +5193,7 @@
     renderCustomerSearchResults();
     renderCustomerPets();
     setActiveTab('caixa-tab');
+    updateSaleCodeDisplay();
   };
 
   const updateSelectionHint = (message) => {
@@ -4631,6 +5427,7 @@
     renderHistory();
     setLastMovement(state.history[state.history.length - 1] || null);
     renderItemsList();
+    renderSalesList();
     clearSelectedProduct();
     updateWorkspaceInfo();
     renderCaixaActions();
@@ -4638,6 +5435,7 @@
     updateSummary();
     updateStatusBadge();
     updateTabAvailability();
+    initializeSaleCodeForPdv(pdv);
     setActiveTab(state.caixaAberto ? 'pdv-tab' : 'caixa-tab');
   };
 
@@ -5367,12 +6165,27 @@
     elements.deliveryAddressCancelForm?.addEventListener('click', handleDeliveryAddressCancelForm);
     elements.deliveryAddressForm?.addEventListener('submit', handleDeliveryAddressFormSubmit);
     elements.deliveryList?.addEventListener('click', handleDeliveryListClick);
+    elements.salesList?.addEventListener('click', handleSalesListClick);
+    elements.saleCancelConfirm?.addEventListener('click', handleSaleCancelConfirm);
+    elements.saleCancelCancel?.addEventListener('click', closeSaleCancelModal);
+    elements.saleCancelClose?.addEventListener('click', closeSaleCancelModal);
+    elements.saleCancelBackdrop?.addEventListener('click', closeSaleCancelModal);
+    elements.saleCancelModal?.addEventListener('keydown', handleSaleCancelModalKeydown);
+    elements.saleCancelReason?.addEventListener('input', clearSaleCancelError);
     if (elements.deliveryAddressFields?.cep) {
-      elements.deliveryAddressFields.cep.addEventListener('blur', () => {
-        const input = elements.deliveryAddressFields?.cep;
-        if (input) {
-          input.value = formatCep(input.value);
+      const cepInput = elements.deliveryAddressFields.cep;
+      cepInput.addEventListener('input', () => {
+        const digits = sanitizeCepDigits(cepInput.value || '');
+        const formatted = formatCep(digits);
+        if (cepInput.value !== formatted) {
+          cepInput.value = formatted;
         }
+        if (digits.length === 8) {
+          handleDeliveryCepLookup();
+        }
+      });
+      cepInput.addEventListener('blur', () => {
+        handleDeliveryCepLookup({ force: true });
       });
     }
     if (elements.deliveryAddressFields?.uf) {
