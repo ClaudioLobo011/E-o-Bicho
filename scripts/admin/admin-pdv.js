@@ -76,7 +76,7 @@
     selectedPdv: '',
     caixaAberto: false,
     allowApuradoEdit: false,
-    printPreferences: { fechamento: 'PM', venda: 'PM' },
+    printPreferences: { fechamento: 'PM', venda: 'M' },
     selectedAction: null,
     searchResults: [],
     selectedProduct: null,
@@ -320,6 +320,10 @@
     mode === 'F' || mode === 'PF' ? 'fiscal' : 'matricial';
 
   const PRINT_MODE_SEQUENCE = ['M', 'F', 'PM', 'PF', 'NONE'];
+  const PRINT_MODE_CYCLES = {
+    default: PRINT_MODE_SEQUENCE,
+    venda: ['M', 'F'],
+  };
   const PRINT_MODE_LABELS = {
     M: 'Matricial',
     F: 'Fiscal',
@@ -328,20 +332,35 @@
     NONE: 'Sem impressão',
   };
 
-  const getNextPrintMode = (mode) => {
+  const getNextPrintMode = (mode, type = 'default') => {
     const normalized = normalizePrintMode(mode, 'M');
-    const currentIndex = PRINT_MODE_SEQUENCE.indexOf(normalized);
-    if (currentIndex === -1) {
-      return PRINT_MODE_SEQUENCE[0];
+    const cycle = PRINT_MODE_CYCLES[type] || PRINT_MODE_CYCLES.default;
+    let current = normalized;
+    if (!cycle.includes(current)) {
+      if (current === 'PF' && cycle.includes('F')) {
+        current = 'F';
+      } else if (current === 'PM' && cycle.includes('M')) {
+        current = 'M';
+      } else {
+        current = cycle[0];
+      }
     }
-    return PRINT_MODE_SEQUENCE[(currentIndex + 1) % PRINT_MODE_SEQUENCE.length];
+    const currentIndex = cycle.indexOf(current);
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % cycle.length;
+    return cycle[nextIndex];
   };
 
   const getPrintTypeLabel = (type) => (type === 'fechamento' ? 'fechamento' : 'venda');
 
   const getPrintModeDescription = (type, mode) => {
     const label = getPrintTypeLabel(type);
-    switch (mode) {
+    const normalized =
+      type === 'venda' && (mode === 'PF' || mode === 'PM')
+        ? mode === 'PF'
+          ? 'F'
+          : 'M'
+        : mode;
+    switch (normalized) {
       case 'F':
         return `Imprimir ${label} no modo Fiscal.`;
       case 'M':
@@ -1138,7 +1157,7 @@
     const type = button.getAttribute('data-print-type');
     if (!type) return;
     const currentMode = button.dataset.printMode || state.printPreferences?.[type];
-    const nextMode = getNextPrintMode(currentMode);
+    const nextMode = getNextPrintMode(currentMode, type);
     if (!state.printPreferences || typeof state.printPreferences !== 'object') {
       state.printPreferences = {};
     }
@@ -3194,7 +3213,7 @@
     state.modalSelectedCliente = null;
     state.modalSelectedPet = null;
     state.modalActiveTab = 'cliente';
-    state.printPreferences = { fechamento: 'PM', venda: 'PM' };
+    state.printPreferences = { fechamento: 'PM', venda: 'M' };
     updatePrintControls();
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
