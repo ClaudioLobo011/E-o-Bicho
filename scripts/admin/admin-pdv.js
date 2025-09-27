@@ -3123,7 +3123,9 @@
   };
 
   const fetchStores = async () => {
-    const response = await fetch(`${API_BASE}/stores`);
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await fetch(`${API_BASE}/stores`, { headers });
     if (!response.ok) {
       throw new Error('Não foi possível carregar as empresas cadastradas.');
     }
@@ -3149,8 +3151,11 @@
       return;
     }
     try {
+      const token = getToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await fetch(
-        `${API_BASE}/payment-methods?company=${encodeURIComponent(storeId)}`
+        `${API_BASE}/payment-methods?company=${encodeURIComponent(storeId)}`,
+        { headers }
       );
       if (!response.ok) {
         throw new Error('Não foi possível carregar os meios de pagamento cadastrados.');
@@ -3173,7 +3178,9 @@
 
   const fetchPdvs = async (storeId) => {
     const query = storeId ? `?empresa=${encodeURIComponent(storeId)}` : '';
-    const response = await fetch(`${API_BASE}/pdvs${query}`);
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await fetch(`${API_BASE}/pdvs${query}`, { headers });
     if (!response.ok) {
       throw new Error('Não foi possível carregar os PDVs da empresa.');
     }
