@@ -492,6 +492,8 @@
       },
     };
 
+  };
+
   const getSaleReceiptSnapshot = (
     items = state.itens,
     payments = state.vendaPagamentos
