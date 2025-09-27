@@ -76,6 +76,7 @@
     selectedPdv: '',
     caixaAberto: false,
     allowApuradoEdit: false,
+    printPreferences: { fechamento: 'PM', venda: 'PM' },
     selectedAction: null,
     searchResults: [],
     selectedProduct: null,
@@ -150,6 +151,81 @@
     }
   };
 
+  const getLoggedUserPayload = () => {
+    try {
+      const raw = localStorage.getItem('loggedInUser');
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.user && typeof parsed.user === 'object') {
+          return parsed.user;
+        }
+        if (parsed.usuario && typeof parsed.usuario === 'object') {
+          return parsed.usuario;
+        }
+      }
+      return parsed || {};
+    } catch (error) {
+      console.warn('Não foi possível obter os dados do usuário logado.', error);
+      return {};
+    }
+  };
+
+  const getLoggedUserName = () => {
+    const payload = getLoggedUserPayload();
+    return (
+      payload?.nome ||
+      payload?.name ||
+      payload?.usuario?.nome ||
+      payload?.usuario?.name ||
+      payload?.user?.nome ||
+      payload?.user?.name ||
+      payload?.login ||
+      ''
+    );
+  };
+
+  const shouldRetryWithoutAuth = (error) =>
+    error instanceof TypeError || error?.status === 401 || error?.status === 403;
+
+  const fetchJson = async (url, { errorMessage, ...options } = {}) => {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      let details = null;
+      try {
+        details = await response.json();
+      } catch (parseError) {
+        details = null;
+      }
+      const message = details?.message || errorMessage || 'Não foi possível carregar os dados solicitados.';
+      const requestError = new Error(message);
+      requestError.status = response.status;
+      requestError.details = details;
+      throw requestError;
+    }
+    return response.json();
+  };
+
+  const fetchWithOptionalAuth = async (url, { token, errorMessage, ...options } = {}) => {
+    const baseHeaders = { ...(options.headers || {}) };
+    if (token) {
+      try {
+        return await fetchJson(url, {
+          ...options,
+          headers: { ...baseHeaders, Authorization: `Bearer ${token}` },
+          errorMessage,
+        });
+      } catch (error) {
+        if (shouldRetryWithoutAuth(error)) {
+          console.warn('Requisição autenticada falhou, tentando novamente sem token:', url, error);
+          return fetchJson(url, { ...options, headers: baseHeaders, errorMessage });
+        }
+        throw error;
+      }
+    }
+    return fetchJson(url, { ...options, headers: baseHeaders, errorMessage });
+  };
+
   const formatCurrency = (value) => {
     const number = Number(value || 0);
     return `R$ ${number.toFixed(2).replace('.', ',')}`;
@@ -159,6 +235,41 @@
     const number = Number(value);
     return Number.isFinite(number) ? number : 0;
   };
+
+  const normalizePrintMode = (value, fallback = 'PM') => {
+    const normalized = (value || '').toString().trim().toUpperCase();
+    if (!normalized) return fallback;
+    const aliasMap = {
+      SIM: 'M',
+      MATRICIAL: 'M',
+      CUPOM: 'M',
+      FISCAL: 'F',
+      FIS: 'F',
+      PERGUNTAR: 'PM',
+      'PERGUNTAR_MATRICIAL': 'PM',
+      'PERGUNTAR-FISCAL': 'PF',
+      'PERGUNTAR_FISCAL': 'PF',
+      PM: 'PM',
+      PF: 'PF',
+      M: 'M',
+      F: 'F',
+      NAO: 'NONE',
+      'NÃO': 'NONE',
+      N: 'NONE',
+      NENHUM: 'NONE',
+      DESATIVADO: 'NONE',
+    };
+    if (aliasMap[normalized]) {
+      return aliasMap[normalized];
+    }
+    if (['F', 'M', 'PF', 'PM'].includes(normalized)) {
+      return normalized;
+    }
+    return fallback;
+  };
+
+  const resolvePrintVariant = (mode) =>
+    mode === 'F' || mode === 'PF' ? 'fiscal' : 'matricial';
 
   const canApplyGeneralPromotion = () => Boolean(state.vendaCliente);
 
@@ -240,6 +351,203 @@
       .filter((payment) => safeNumber(payment?.valor) > 0)
       .map((payment) => `${payment.label || 'Pagamento'} ${formatCurrency(payment.valor)}`)
       .join(' | ');
+
+  const createPaymentItems = (payments, { hideZero = true } = {}) => {
+    const items = (Array.isArray(payments) ? payments : []).map((payment) => {
+      const label =
+        payment?.label ||
+        payment?.nome ||
+        payment?.name ||
+        payment?.descricao ||
+        'Meio de pagamento';
+      const value = safeNumber(payment?.valor);
+      return {
+        label,
+        value,
+        formattedValue: formatCurrency(value),
+      };
+    });
+
+    if (!hideZero) {
+      return items;
+    }
+
+    const filtered = items.filter((item) => Math.abs(item.value) > 0.009);
+    return filtered.length ? filtered : items;
+  };
+
+  const getFechamentoSnapshot = () => {
+    if (!state.selectedStore || !state.selectedPdv) {
+      return null;
+    }
+
+    const aberturaLabel = toDateLabel(state.caixaInfo.aberturaData);
+    const fechamentoLabel = toDateLabel(state.caixaInfo.fechamentoData);
+
+    const aberturaValor = safeNumber(state.summary.abertura);
+    const recebidoValor = safeNumber(state.summary.recebido);
+    const saldoValor = safeNumber(state.summary.saldo);
+
+    const recebimentosItems = createPaymentItems(state.pagamentos);
+    const recebimentosTotal = sumPayments(state.pagamentos);
+
+    const hasPrevistoPagamentos = Array.isArray(state.caixaInfo.previstoPagamentos)
+      ? state.caixaInfo.previstoPagamentos.length > 0
+      : false;
+    const previstoFonte = hasPrevistoPagamentos
+      ? state.caixaInfo.previstoPagamentos
+      : state.pagamentos;
+    const previstoItems = createPaymentItems(previstoFonte);
+    const previstoTotal = state.caixaInfo.fechamentoPrevisto || sumPayments(previstoFonte);
+
+    const apuradoFonte = state.allowApuradoEdit
+      ? state.pagamentos
+      : state.caixaInfo.apuradoPagamentos || [];
+    const apuradoItems = createPaymentItems(apuradoFonte);
+    const apuradoTotal = state.caixaInfo.fechamentoApurado || sumPayments(apuradoFonte);
+
+    return {
+      meta: {
+        store: getStoreLabel(),
+        pdv: getPdvLabel(),
+        abertura: aberturaLabel,
+        fechamento: fechamentoLabel === '—' ? 'Em aberto' : fechamentoLabel,
+      },
+      resumo: {
+        abertura: {
+          value: aberturaValor,
+          formatted: formatCurrency(aberturaValor),
+        },
+        recebido: {
+          value: recebidoValor,
+          formatted: formatCurrency(recebidoValor),
+        },
+        saldo: {
+          value: saldoValor,
+          formatted: formatCurrency(saldoValor),
+        },
+      },
+      recebimentos: {
+        items: recebimentosItems,
+        total: recebimentosTotal,
+        formattedTotal: formatCurrency(recebimentosTotal),
+      },
+      previsto: {
+        items: previstoItems,
+        total: previstoTotal,
+        formattedTotal: formatCurrency(previstoTotal),
+      },
+      apurado: {
+        items: apuradoItems,
+        total: apuradoTotal,
+        formattedTotal: formatCurrency(apuradoTotal),
+      },
+    };
+
+  const getSaleReceiptSnapshot = (
+    items = state.itens,
+    payments = state.vendaPagamentos
+  ) => {
+    const saleItems = Array.isArray(items) ? items : [];
+    if (!state.selectedStore || !state.selectedPdv || !saleItems.length) {
+      return null;
+    }
+
+    const nowLabel = toDateLabel(new Date().toISOString());
+    const operatorName = getLoggedUserName();
+
+    const normalizeQuantity = (value) => {
+      const number = safeNumber(value);
+      return number.toLocaleString('pt-BR', {
+        minimumFractionDigits: Number.isInteger(number) ? 0 : 2,
+        maximumFractionDigits: 3,
+      });
+    };
+
+    const itens = saleItems.map((item, index) => {
+      const codes = [];
+      if (item.codigoInterno) {
+        codes.push(`Int.: ${item.codigoInterno}`);
+      }
+      if (item.codigoBarras) {
+        codes.push(`Barras: ${item.codigoBarras}`);
+      }
+      if (!codes.length && item.codigo) {
+        codes.push(`Cód.: ${item.codigo}`);
+      }
+      return {
+        index: String(index + 1).padStart(2, '0'),
+        nome: item.nome || 'Item da venda',
+        codigo: codes.join(' • '),
+        quantidade: normalizeQuantity(item.quantidade || 0),
+        unitario: formatCurrency(item.valor || item.preco || 0),
+        subtotal: formatCurrency(item.subtotal || 0),
+      };
+    });
+
+    const descontoValor = Math.max(0, safeNumber(state.vendaDesconto));
+    const acrescimoValor = Math.max(0, safeNumber(state.vendaAcrescimo));
+    const bruto = saleItems.reduce((sum, item) => sum + safeNumber(item.subtotal), 0);
+    const liquidoValor = Math.max(0, bruto + acrescimoValor - descontoValor);
+    const pagamentoItems = (Array.isArray(payments) ? payments : []).map((payment) => {
+      const parcelasLabel = payment.parcelas && payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
+      return {
+        label: `${payment.label || 'Pagamento'}${parcelasLabel}`,
+        formatted: formatCurrency(payment.valor || 0),
+        valor: safeNumber(payment.valor),
+      };
+    });
+    const pagoValor = pagamentoItems.reduce((sum, item) => sum + safeNumber(item.valor), 0);
+    const trocoValor = Math.max(0, pagoValor - liquidoValor);
+
+    const cliente = state.vendaCliente
+      ? {
+          nome:
+            state.vendaCliente.nome ||
+            state.vendaCliente.razaoSocial ||
+            state.vendaCliente.fantasia ||
+            'Cliente',
+          documento:
+            state.vendaCliente.cpf ||
+            state.vendaCliente.cnpj ||
+            state.vendaCliente.documento ||
+            '',
+          contato:
+            state.vendaCliente.telefone ||
+            state.vendaCliente.celular ||
+            state.vendaCliente.email ||
+            '',
+          pet: state.vendaPet?.nome || '',
+        }
+      : null;
+
+    return {
+      meta: {
+        store: getStoreLabel(),
+        pdv: getPdvLabel(),
+        data: nowLabel,
+        operador: operatorName,
+      },
+      cliente,
+      itens,
+      totais: {
+        bruto: formatCurrency(bruto),
+        desconto: formatCurrency(descontoValor),
+        descontoValor,
+        acrescimo: formatCurrency(acrescimoValor),
+        acrescimoValor,
+        liquido: formatCurrency(liquidoValor),
+        pago: formatCurrency(pagoValor),
+        troco: formatCurrency(trocoValor),
+        trocoValor,
+      },
+      pagamentos: {
+        items: pagamentoItems,
+        total: pagoValor,
+        formattedTotal: formatCurrency(pagoValor),
+      },
+    };
+  };
 
   const toDateLabel = (isoString) => {
     if (!isoString) return '—';
@@ -687,14 +995,23 @@
       'bg-emerald-50',
       'text-emerald-700'
     );
-    const icon = state.caixaAberto ? 'fa-unlock' : 'fa-lock';
+    const icon = state.caixaAberto ? 'fa-circle-check' : 'fa-lock';
     const text = state.caixaAberto ? 'Caixa aberto' : 'Caixa fechado';
     if (state.caixaAberto) {
       badge.classList.add('border-emerald-200', 'bg-emerald-50', 'text-emerald-700');
     } else {
       badge.classList.add('border-gray-200', 'bg-gray-100', 'text-gray-600');
     }
-    badge.innerHTML = `<i class="fas ${icon}"></i> ${text}`;
+    const indicatorClass = state.caixaAberto
+      ? 'h-2.5 w-2.5 rounded-full border border-emerald-200 bg-emerald-500'
+      : 'h-2.5 w-2.5 rounded-full border border-gray-300 bg-gray-400';
+    badge.innerHTML = `
+      <span class="${indicatorClass}"></span>
+      <span class="flex items-center gap-1.5">
+        <i class="fas ${icon} text-[10px]"></i>
+        ${text}
+      </span>
+    `;
     if (elements.caixaStateLabel) {
       elements.caixaStateLabel.textContent = text;
     }
@@ -1724,7 +2041,9 @@
       notify('O valor pago deve ser igual ao total da venda.', 'warning');
       return;
     }
+    const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
+    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda);
     registerSaleOnCaixa(pagamentosVenda, total);
     notify('Venda finalizada com sucesso.', 'success');
     state.itens = [];
@@ -1737,6 +2056,7 @@
     updateFinalizeButton();
     updateSaleSummary();
     closeFinalizeModal();
+    handleConfiguredPrint('venda', { snapshot: saleSnapshot });
   };
 
   const handleSaleAdjust = () => {
@@ -1808,115 +2128,727 @@
     elements.paymentSelect.disabled = false;
   };
 
-  const buildSummaryPrint = () => {
-    if (!state.selectedStore || !state.selectedPdv) {
+  const buildSummaryPrint = (snapshot = getFechamentoSnapshot()) => {
+    if (!snapshot) {
       return 'Selecione uma empresa e um PDV para visualizar os dados do caixa.';
     }
-    const aberturaLabel = toDateLabel(state.caixaInfo.aberturaData);
-    const fechamentoLabel = toDateLabel(state.caixaInfo.fechamentoData);
+
     const lines = [];
-    lines.push(`Empresa: ${getStoreLabel()} | PDV: ${getPdvLabel()}`);
-    lines.push(`Abertura: ${aberturaLabel} | Fechamento: ${fechamentoLabel}`);
+    lines.push(`Empresa: ${snapshot.meta.store} | PDV: ${snapshot.meta.pdv}`);
+    lines.push(`Período: ${snapshot.meta.abertura} → ${snapshot.meta.fechamento}`);
     lines.push('');
-    lines.push(formatPrintLine('Abertura', formatCurrency(state.summary.abertura)));
-    lines.push('---------------------Recebimentos---------------------');
-    lines.push('Meios de pagamento');
-    if (state.pagamentos.length) {
-      state.pagamentos.forEach((payment) => {
-        lines.push(formatPrintLine(payment.label, formatCurrency(payment.valor)));
+    lines.push('Resumo financeiro');
+    lines.push(formatPrintLine('Abertura', snapshot.resumo.abertura.formatted));
+    lines.push(formatPrintLine('Recebido', snapshot.resumo.recebido.formatted));
+    lines.push(formatPrintLine('Saldo', snapshot.resumo.saldo.formatted));
+    lines.push('');
+    lines.push('Recebimentos por meio');
+    if (snapshot.recebimentos.items.length) {
+      snapshot.recebimentos.items.forEach((item) => {
+        lines.push(formatPrintLine(item.label, item.formattedValue));
       });
+      lines.push(formatPrintLine('Total recebido', snapshot.recebimentos.formattedTotal));
     } else {
       lines.push('Nenhum meio de pagamento configurado.');
     }
-    lines.push('------------- Fechamento Previsto ---------------------');
-    const previstoPagamentos =
-      state.allowApuradoEdit && state.caixaInfo.previstoPagamentos?.length
-        ? state.caixaInfo.previstoPagamentos
-        : state.caixaInfo.previstoPagamentos?.length
-        ? state.caixaInfo.previstoPagamentos
-        : state.pagamentos;
-    if (previstoPagamentos?.length) {
-      previstoPagamentos.forEach((payment) => {
-        lines.push(formatPrintLine(payment.label, formatCurrency(payment.valor)));
+    lines.push('');
+    lines.push('Fechamento previsto');
+    if (snapshot.previsto.items.length) {
+      snapshot.previsto.items.forEach((item) => {
+        lines.push(formatPrintLine(item.label, item.formattedValue));
       });
-      const previstoTotal = state.caixaInfo.fechamentoPrevisto || sumPayments(previstoPagamentos);
-      lines.push(formatPrintLine('Total previsto', formatCurrency(previstoTotal)));
+      lines.push(formatPrintLine('Total previsto', snapshot.previsto.formattedTotal));
     } else {
       lines.push('Nenhum valor previsto.');
     }
-    lines.push('------------- Fechamento Apurado -------------------');
-    const apuradoPagamentos = state.allowApuradoEdit
-      ? state.pagamentos
-      : state.caixaInfo.apuradoPagamentos || [];
-    if (apuradoPagamentos.length) {
-      apuradoPagamentos.forEach((payment) => {
-        lines.push(formatPrintLine(payment.label, formatCurrency(payment.valor)));
+    lines.push('');
+    lines.push('Fechamento apurado');
+    if (snapshot.apurado.items.length) {
+      snapshot.apurado.items.forEach((item) => {
+        lines.push(formatPrintLine(item.label, item.formattedValue));
       });
-      const apuradoTotal = state.caixaInfo.fechamentoApurado || sumPayments(apuradoPagamentos);
-      lines.push(formatPrintLine('Total apurado', formatCurrency(apuradoTotal)));
+      lines.push(formatPrintLine('Total apurado', snapshot.apurado.formattedTotal));
     } else {
       lines.push('Aguardando fechamento.');
     }
+
     return lines.join('\n');
   };
 
-  const openMatricialPreview = () => {
-    if (typeof window === 'undefined') return;
-    const content = buildSummaryPrint();
-    const printWindow = window.open('', '_blank', 'noopener=yes,width=800,height=600');
-    if (!printWindow) {
-      console.warn('Não foi possível abrir a janela de impressão.');
-      return;
-    }
-    const markup = `<!DOCTYPE html>
+  const escapeHtml = (value) => {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  const getReceiptStyles = (variant = 'matricial') => {
+    const accent = variant === 'fiscal' ? '#0b3d91' : '#111111';
+    return `
+      :root { color-scheme: light; }
+      *, *::before, *::after { box-sizing: border-box; }
+      @page { size: 80mm auto; margin: 0; }
+      body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        font-size: 11px;
+        color: #111;
+        font-weight: 500;
+        -webkit-font-smoothing: antialiased;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        --receipt-accent: ${accent};
+      }
+      main.receipt {
+        width: 74mm;
+        margin: 0 auto;
+        padding: 3mm 2mm 5mm;
+        display: flex;
+        flex-direction: column;
+        gap: 2.2mm;
+      }
+      .receipt__header { text-align: center; }
+      .receipt__title {
+        margin: 0;
+        font-size: 12.4px;
+        font-weight: 800;
+        letter-spacing: 0.55px;
+        text-transform: uppercase;
+      }
+      .receipt__badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1.4mm;
+        margin-top: 1.2mm;
+        padding: 0.6mm 2.2mm;
+        font-size: 9.6px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.45px;
+        border: 1px solid var(--receipt-accent);
+        border-radius: 999px;
+        color: var(--receipt-accent);
+      }
+      .receipt__meta {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.7mm;
+        font-size: 10.3px;
+        line-height: 1.35;
+        color: #222;
+      }
+      .receipt__meta-item {
+        display: block;
+        text-align: center;
+        max-width: 64mm;
+      }
+      .receipt__section {
+        border-top: 1px solid rgba(17, 17, 17, 0.85);
+        padding-top: 2mm;
+        display: flex;
+        flex-direction: column;
+        gap: 1.6mm;
+      }
+      .receipt__section:first-of-type {
+        border-top: none;
+        padding-top: 0;
+      }
+      .receipt__section-title {
+        margin: 0;
+        font-size: 10.7px;
+        font-weight: 700;
+        letter-spacing: 0.45px;
+        text-transform: uppercase;
+        color: #111;
+      }
+      .receipt__cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.6mm;
+      }
+      .receipt-card {
+        border: 1px solid rgba(17, 17, 17, 0.85);
+        border-radius: 1.6mm;
+        padding: 1.6mm 1.8mm;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4mm;
+        background: rgba(17, 17, 17, 0.05);
+      }
+      .receipt-card__label {
+        font-size: 9.8px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: #333;
+      }
+      .receipt-card__value {
+        font-size: 11.3px;
+        font-weight: 700;
+        color: #000;
+      }
+      .receipt-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1.05mm;
+      }
+      .receipt-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.2mm;
+        font-size: 10.4px;
+      }
+      .receipt-row__label {
+        flex: 1;
+        color: #333;
+      }
+      .receipt-row__value {
+        font-weight: 700;
+        color: #000;
+      }
+      .receipt-row--total .receipt-row__label {
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+        font-weight: 700;
+      }
+      .receipt-row--total .receipt-row__value {
+        font-size: 11.1px;
+      }
+      .receipt-list__empty {
+        font-size: 10px;
+        text-align: center;
+        color: #666;
+        padding: 1.6mm 0;
+        border: 1px dashed rgba(102, 102, 102, 0.4);
+        border-radius: 1.6mm;
+        background: rgba(0, 0, 0, 0.03);
+      }
+      .receipt-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10.1px;
+      }
+      .receipt-table thead th {
+        text-align: left;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+        padding-bottom: 0.8mm;
+        border-bottom: 1px solid rgba(17, 17, 17, 0.85);
+      }
+      .receipt-table tbody td {
+        padding: 0.6mm 0;
+        border-bottom: 1px dashed rgba(17, 17, 17, 0.25);
+        vertical-align: top;
+      }
+      .receipt-table tbody td:last-child {
+        text-align: right;
+        font-weight: 600;
+      }
+      .receipt-table__muted {
+        display: block;
+        font-size: 9.4px;
+        color: #555;
+      }
+      .receipt__footer {
+        margin-top: 2mm;
+        text-align: center;
+        font-size: 9.4px;
+        color: #555;
+        line-height: 1.45;
+      }
+      .receipt__footer-strong {
+        font-weight: 600;
+        color: #222;
+      }
+      .receipt__divider {
+        width: 100%;
+        border: none;
+        border-top: 1px dashed rgba(17, 17, 17, 0.3);
+        margin: 1.8mm 0 0;
+      }
+      .receipt-empty {
+        margin: 0;
+        padding: 7mm 0;
+        text-align: center;
+        font-size: 11px;
+        color: #666;
+        font-weight: 600;
+      }
+      .receipt-fallback {
+        margin: 0;
+        font-size: 9.8px;
+        color: #666;
+        line-height: 1.45;
+        text-align: center;
+        white-space: pre-wrap;
+      }
+      @media print {
+        body { margin: 0; }
+      }
+    `;
+  };
+
+  const createReceiptDocument = ({ title, variant = 'matricial', body }) => {
+    const safeTitle = escapeHtml(title || 'Documento para impressão');
+    const styles = getReceiptStyles(variant);
+    return `<!DOCTYPE html>
       <html lang="pt-BR">
         <head>
-          <meta charset="utf-8">
-          <title>Fechamento do caixa</title>
-          <style>
-            body { font-family: 'Courier New', Courier, monospace; font-size: 12px; padding: 16px; }
-            pre { white-space: pre-wrap; }
-          </style>
+          <meta charset="utf-8" />
+          <title>${safeTitle}</title>
+          <style>${styles}</style>
         </head>
-        <body>
-          <pre>${content}</pre>
-        </body>
+        <body data-variant="${escapeHtml(variant)}">${body}</body>
       </html>`;
-    printWindow.document.open();
-    printWindow.document.write(markup);
-    printWindow.document.close();
+  };
 
-    let hasPrinted = false;
-    const triggerPrint = () => {
-      if (hasPrinted) return;
-      hasPrinted = true;
-      printWindow.focus();
-      try {
-        printWindow.print();
-      } catch (error) {
-        console.warn('Falha ao acionar impressão automática do fechamento.', error);
+  const buildFechamentoReceiptMarkup = (snapshot, variant, fallbackText) => {
+    if (!snapshot) {
+      const fallback = fallbackText && fallbackText.trim()
+        ? `<pre class="receipt-fallback">${escapeHtml(fallbackText)}</pre>`
+        : '';
+      return `<main class="receipt"><p class="receipt-empty">Fechamento sem conteúdo para impressão.</p>${fallback}</main>`;
+    }
+
+    const badgeLabel = variant === 'fiscal' ? 'Fiscal' : 'Matricial';
+    const metaLines = [
+      snapshot.meta.store,
+      `PDV: ${snapshot.meta.pdv}`,
+      `Período: ${snapshot.meta.abertura} → ${snapshot.meta.fechamento}`,
+    ]
+      .filter(Boolean)
+      .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
+      .join('');
+
+    const resumoCards = `
+      <div class="receipt__cards">
+        <div class="receipt-card">
+          <span class="receipt-card__label">Abertura</span>
+          <span class="receipt-card__value">${escapeHtml(snapshot.resumo.abertura.formatted)}</span>
+        </div>
+        <div class="receipt-card">
+          <span class="receipt-card__label">Recebido</span>
+          <span class="receipt-card__value">${escapeHtml(snapshot.resumo.recebido.formatted)}</span>
+        </div>
+        <div class="receipt-card">
+          <span class="receipt-card__label">Saldo</span>
+          <span class="receipt-card__value">${escapeHtml(snapshot.resumo.saldo.formatted)}</span>
+        </div>
+      </div>`;
+
+    const renderRows = (items, { totalLabel, totalValue, emptyLabel }) => {
+      if (!items.length) {
+        return `<li class="receipt-list__empty">${escapeHtml(emptyLabel)}</li>`;
+      }
+      const rows = items
+        .map(
+          (item) => `
+            <li class="receipt-row">
+              <span class="receipt-row__label">${escapeHtml(item.label)}</span>
+              <span class="receipt-row__value">${escapeHtml(item.formattedValue)}</span>
+            </li>`
+        )
+        .join('');
+      const totalRow = totalLabel && totalValue
+        ? `
+            <li class="receipt-row receipt-row--total">
+              <span class="receipt-row__label">${escapeHtml(totalLabel)}</span>
+              <span class="receipt-row__value">${escapeHtml(totalValue)}</span>
+            </li>`
+        : '';
+      return `${rows}${totalRow}`;
+    };
+
+    const recebimentosList = renderRows(snapshot.recebimentos.items, {
+      totalLabel: 'Total recebido',
+      totalValue: snapshot.recebimentos.formattedTotal,
+      emptyLabel: 'Nenhum meio de pagamento configurado.',
+    });
+    const previstoList = renderRows(snapshot.previsto.items, {
+      totalLabel: 'Total previsto',
+      totalValue: snapshot.previsto.formattedTotal,
+      emptyLabel: 'Nenhum valor previsto.',
+    });
+    const apuradoList = renderRows(snapshot.apurado.items, {
+      totalLabel: 'Total apurado',
+      totalValue: snapshot.apurado.formattedTotal,
+      emptyLabel: 'Aguardando fechamento.',
+    });
+
+    return `
+      <main class="receipt">
+        <header class="receipt__header">
+          <h1 class="receipt__title">Fechamento de Caixa</h1>
+          <span class="receipt__badge">${escapeHtml(badgeLabel)}</span>
+        </header>
+        <section class="receipt__meta">${metaLines}</section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Resumo</h2>
+          ${resumoCards}
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Recebimentos</h2>
+          <ul class="receipt-list">${recebimentosList}</ul>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Fechamento previsto</h2>
+          <ul class="receipt-list">${previstoList}</ul>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Fechamento apurado</h2>
+          <ul class="receipt-list">${apuradoList}</ul>
+        </section>
+      </main>`;
+  };
+
+  const buildSaleReceiptMarkup = (snapshot, variant) => {
+    if (!snapshot) {
+      return '<main class="receipt"><p class="receipt-empty">Nenhuma venda disponível para impressão.</p></main>';
+    }
+
+    const badgeLabel = variant === 'fiscal' ? 'Fiscal' : 'Matricial';
+    const metaLines = [
+      snapshot.meta.store,
+      `PDV: ${snapshot.meta.pdv}`,
+      snapshot.meta.operador ? `Operador: ${snapshot.meta.operador}` : '',
+      snapshot.meta.data,
+    ]
+      .filter(Boolean)
+      .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
+      .join('');
+
+    const itemsRows = snapshot.itens
+      .map(
+        (item) => `
+          <tr>
+            <td>${escapeHtml(item.index)}</td>
+            <td>
+              <strong>${escapeHtml(item.nome)}</strong>
+              ${item.codigo ? `<span class="receipt-table__muted">${escapeHtml(item.codigo)}</span>` : ''}
+            </td>
+            <td>${escapeHtml(item.quantidade)} × ${escapeHtml(item.unitario)}</td>
+            <td>${escapeHtml(item.subtotal)}</td>
+          </tr>`
+      )
+      .join('');
+
+    const totalsRows = [
+      { label: 'Subtotal', value: snapshot.totais.bruto },
+      snapshot.totais.descontoValor > 0
+        ? { label: 'Descontos', value: `- ${snapshot.totais.desconto}` }
+        : null,
+      snapshot.totais.acrescimoValor > 0
+        ? { label: 'Acréscimos', value: snapshot.totais.acrescimo }
+        : null,
+      { label: 'Total da venda', value: snapshot.totais.liquido, isTotal: true },
+      { label: 'Pago', value: snapshot.totais.pago },
+      snapshot.totais.trocoValor > 0
+        ? { label: 'Troco', value: snapshot.totais.troco }
+        : null,
+    ]
+      .filter(Boolean)
+      .map((row) => `
+        <li class="receipt-row${row.isTotal ? ' receipt-row--total' : ''}">
+          <span class="receipt-row__label">${escapeHtml(row.label)}</span>
+          <span class="receipt-row__value">${escapeHtml(row.value)}</span>
+        </li>`)
+      .join('');
+
+    const pagamentosRows = snapshot.pagamentos.items.length
+      ? snapshot.pagamentos.items
+          .map(
+            (payment) => `
+              <li class="receipt-row">
+                <span class="receipt-row__label">${escapeHtml(payment.label)}</span>
+                <span class="receipt-row__value">${escapeHtml(payment.formatted)}</span>
+              </li>`
+          )
+          .join('')
+      : '<li class="receipt-list__empty">Nenhum pagamento registrado.</li>';
+
+    const clienteSection = snapshot.cliente
+      ? `
+          <section class="receipt__section">
+            <h2 class="receipt__section-title">Cliente</h2>
+            <ul class="receipt-list">
+              <li class="receipt-row">
+                <span class="receipt-row__label">Nome</span>
+                <span class="receipt-row__value">${escapeHtml(snapshot.cliente.nome)}</span>
+              </li>
+              ${snapshot.cliente.documento
+                ? `<li class="receipt-row"><span class="receipt-row__label">Documento</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.documento)}</span></li>`
+                : ''}
+              ${snapshot.cliente.contato
+                ? `<li class="receipt-row"><span class="receipt-row__label">Contato</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.contato)}</span></li>`
+                : ''}
+              ${snapshot.cliente.pet
+                ? `<li class="receipt-row"><span class="receipt-row__label">Pet</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.pet)}</span></li>`
+                : ''}
+            </ul>
+          </section>`
+      : '';
+
+    return `
+      <main class="receipt">
+        <header class="receipt__header">
+          <h1 class="receipt__title">Comprovante de venda</h1>
+          <span class="receipt__badge">${escapeHtml(badgeLabel)}</span>
+        </header>
+        <section class="receipt__meta">${metaLines}</section>
+        ${clienteSection}
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Itens</h2>
+          <table class="receipt-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Descrição</th>
+                <th>Qtde × Valor</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>${itemsRows}</tbody>
+          </table>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Totais</h2>
+          <ul class="receipt-list">${totalsRows}</ul>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Pagamentos</h2>
+          <ul class="receipt-list">${pagamentosRows}</ul>
+        </section>
+        <footer class="receipt__footer">
+          <p class="receipt__footer-strong">Obrigado pela preferência!</p>
+          <p>Volte sempre.</p>
+        </footer>
+      </main>`;
+  };
+
+  const printHtmlDocument = (documentHtml, { logPrefix = 'documento' } = {}) => {
+    if (typeof window === 'undefined') return false;
+
+    const urlFactory = window.URL || window.webkitURL || null;
+    const supportsBlobUrl =
+      typeof Blob !== 'undefined' &&
+      !!urlFactory &&
+      typeof urlFactory.createObjectURL === 'function';
+
+    let printWindow = null;
+    let blobUrl = '';
+    let fallbackTimer = null;
+    let readinessTimer = null;
+    let readyAttempts = 0;
+    let printed = false;
+
+    const clearTimers = () => {
+      if (fallbackTimer) {
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+      if (readinessTimer) {
+        window.clearTimeout(readinessTimer);
+        readinessTimer = null;
       }
     };
 
-    if (typeof printWindow.addEventListener === 'function') {
-      printWindow.addEventListener('load', triggerPrint, { once: true });
-    } else {
-      printWindow.onload = triggerPrint;
-    }
+    const releaseBlob = () => {
+      if (blobUrl && urlFactory && typeof urlFactory.revokeObjectURL === 'function') {
+        try {
+          urlFactory.revokeObjectURL(blobUrl);
+        } catch (_) {
+          /* ignore */
+        }
+        blobUrl = '';
+      }
+    };
 
-    if (printWindow.document?.readyState === 'complete') {
-      triggerPrint();
-    } else {
-      setTimeout(triggerPrint, 500);
+    const cleanup = () => {
+      clearTimers();
+      releaseBlob();
+    };
+
+    const triggerPrint = () => {
+      if (printed || !printWindow) return;
+      printed = true;
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (error) {
+        console.warn(`Falha ao acionar impressão automática do ${logPrefix}.`, error);
+      } finally {
+        window.setTimeout(releaseBlob, 1500);
+      }
+    };
+
+    const waitForReady = () => {
+      if (!printWindow) return;
+
+      let isReady = true;
+      try {
+        const doc = printWindow.document;
+        isReady = !!doc && doc.readyState === 'complete';
+      } catch (error) {
+        isReady = true;
+      }
+
+      if (!isReady && readyAttempts < 15) {
+        readyAttempts += 1;
+        readinessTimer = window.setTimeout(waitForReady, 120);
+        return;
+      }
+
+      clearTimers();
+      window.setTimeout(triggerPrint, 120);
+    };
+
+    try {
+      if (supportsBlobUrl) {
+        const blob = new Blob([documentHtml], { type: 'text/html' });
+        blobUrl = urlFactory.createObjectURL(blob);
+        printWindow = window.open(blobUrl, '_blank', 'noopener');
+      } else {
+        printWindow = window.open('', '_blank', 'noopener');
+      }
+
+      if (!printWindow) {
+        cleanup();
+        console.warn(`Não foi possível abrir a janela de impressão do ${logPrefix}.`);
+        return false;
+      }
+
+      const handleLoad = () => {
+        readyAttempts = 0;
+        waitForReady();
+      };
+
+      if (!blobUrl) {
+        const printDocument = printWindow.document;
+        if (!printDocument) {
+          if (typeof printWindow.close === 'function') {
+            try {
+              printWindow.close();
+            } catch (_) {
+              /* ignore */
+            }
+          }
+          cleanup();
+          return false;
+        }
+
+        printDocument.open();
+        printDocument.write(documentHtml);
+        printDocument.close();
+
+        if (printWindow.addEventListener) {
+          printWindow.addEventListener('load', handleLoad, { once: true });
+        }
+
+        if (printDocument.readyState === 'complete') {
+          handleLoad();
+        } else if (printDocument.addEventListener) {
+          const readyListener = () => {
+            if (printDocument.readyState === 'complete') {
+              printDocument.removeEventListener('readystatechange', readyListener);
+              handleLoad();
+            }
+          };
+          printDocument.addEventListener('readystatechange', readyListener);
+        }
+      } else if (printWindow.addEventListener) {
+        printWindow.addEventListener('load', handleLoad, { once: true });
+      }
+
+      if (printWindow.addEventListener) {
+        printWindow.addEventListener('afterprint', cleanup);
+        printWindow.addEventListener('beforeunload', cleanup);
+      }
+
+      fallbackTimer = window.setTimeout(() => {
+        readyAttempts = 0;
+        waitForReady();
+      }, blobUrl ? 900 : 600);
+
+      return true;
+    } catch (error) {
+      console.warn(`Falha ao preparar a impressão do ${logPrefix}.`, error);
+      if (printWindow && typeof printWindow.close === 'function') {
+        try {
+          printWindow.close();
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      cleanup();
+      return false;
     }
   };
 
-  const promptPrintFechamento = () => {
-    if (typeof window === 'undefined') return;
-    const shouldPrint = window.confirm('Deseja imprimir o fechamento?');
-    if (shouldPrint) {
-      openMatricialPreview();
+  const printReceipt = (type, variant, { snapshot, fallbackText } = {}) => {
+    const resolvedVariant = variant || 'matricial';
+    let bodyHtml = '';
+    let title = '';
+
+    if (type === 'fechamento') {
+      const effectiveSnapshot = snapshot || getFechamentoSnapshot();
+      if (!effectiveSnapshot) {
+        notify('Nenhum dado disponível para imprimir o fechamento.', 'warning');
+        return false;
+      }
+      bodyHtml = buildFechamentoReceiptMarkup(effectiveSnapshot, resolvedVariant, fallbackText || buildSummaryPrint(effectiveSnapshot));
+      title = 'Fechamento do caixa';
+    } else if (type === 'venda') {
+      const effectiveSnapshot = snapshot || getSaleReceiptSnapshot();
+      if (!effectiveSnapshot) {
+        notify('Nenhum dado disponível para imprimir a venda.', 'warning');
+        return false;
+      }
+      bodyHtml = buildSaleReceiptMarkup(effectiveSnapshot, resolvedVariant);
+      title = 'Comprovante de venda';
+    } else {
+      return false;
     }
+
+    const documentHtml = createReceiptDocument({ title, variant: resolvedVariant, body: bodyHtml });
+    return printHtmlDocument(documentHtml, { logPrefix: title.toLowerCase() });
+  };
+
+  const executePrintMode = (type, mode, options = {}) => {
+    if (!mode || mode === 'NONE') {
+      return false;
+    }
+    const variant = resolvePrintVariant(mode);
+    const requiresConfirmation = mode === 'PF' || mode === 'PM';
+    if (requiresConfirmation) {
+      const question = variant === 'fiscal'
+        ? 'Deseja imprimir em Fiscal?'
+        : 'Deseja imprimir em Matricial?';
+      const confirmed = window.confirm(question);
+      if (!confirmed) {
+        return false;
+      }
+    }
+    return printReceipt(type, variant, options);
+  };
+
+  const handleConfiguredPrint = (type, options = {}) => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    const preferences = state.printPreferences || {};
+    const mode = normalizePrintMode(preferences[type], 'PM');
+    return executePrintMode(type, mode, options);
   };
 
   const updateSummary = () => {
@@ -2136,6 +3068,7 @@
     state.modalSelectedCliente = null;
     state.modalSelectedPet = null;
     state.modalActiveTab = 'cliente';
+    state.printPreferences = { fechamento: 'PM', venda: 'PM' };
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
       customerSearchTimeout = null;
@@ -2231,11 +3164,11 @@
   };
 
   const fetchStores = async () => {
-    const response = await fetch(`${API_BASE}/stores`);
-    if (!response.ok) {
-      throw new Error('Não foi possível carregar as empresas cadastradas.');
-    }
-    const payload = await response.json();
+    const token = getToken();
+    const payload = await fetchWithOptionalAuth(`${API_BASE}/stores`, {
+      token,
+      errorMessage: 'Não foi possível carregar as empresas cadastradas.',
+    });
     state.stores = Array.isArray(payload)
       ? payload
       : Array.isArray(payload?.stores)
@@ -2257,13 +3190,14 @@
       return;
     }
     try {
-      const response = await fetch(
-        `${API_BASE}/payment-methods?company=${encodeURIComponent(storeId)}`
+      const token = getToken();
+      const payload = await fetchWithOptionalAuth(
+        `${API_BASE}/payment-methods?company=${encodeURIComponent(storeId)}`,
+        {
+          token,
+          errorMessage: 'Não foi possível carregar os meios de pagamento cadastrados.',
+        }
       );
-      if (!response.ok) {
-        throw new Error('Não foi possível carregar os meios de pagamento cadastrados.');
-      }
-      const payload = await response.json();
       const methods = Array.isArray(payload?.paymentMethods)
         ? payload.paymentMethods
         : Array.isArray(payload)
@@ -2281,11 +3215,11 @@
 
   const fetchPdvs = async (storeId) => {
     const query = storeId ? `?empresa=${encodeURIComponent(storeId)}` : '';
-    const response = await fetch(`${API_BASE}/pdvs${query}`);
-    if (!response.ok) {
-      throw new Error('Não foi possível carregar os PDVs da empresa.');
-    }
-    const payload = await response.json();
+    const token = getToken();
+    const payload = await fetchWithOptionalAuth(`${API_BASE}/pdvs${query}`, {
+      token,
+      errorMessage: 'Não foi possível carregar os PDVs da empresa.',
+    });
     state.pdvs = Array.isArray(payload?.pdvs)
       ? payload.pdvs
       : Array.isArray(payload)
@@ -2296,13 +3230,10 @@
 
   const fetchPdvDetails = async (pdvId) => {
     const token = getToken();
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const response = await fetch(`${API_BASE}/pdvs/${pdvId}`, { headers });
-    if (!response.ok) {
-      const message = await response.json().catch(() => null);
-      throw new Error(message?.message || 'Não foi possível carregar os dados do PDV selecionado.');
-    }
-    return response.json();
+    return fetchWithOptionalAuth(`${API_BASE}/pdvs/${pdvId}`, {
+      token,
+      errorMessage: 'Não foi possível carregar os dados do PDV selecionado.',
+    });
   };
   const applyPdvData = (pdv) => {
     const caixaAberto = Boolean(
@@ -2351,6 +3282,28 @@
       ),
       previstoPagamentos: [],
       apuradoPagamentos: [],
+    };
+    const impressaoConfig = pdv?.configuracoesImpressao || {};
+    const fechamentoMode = normalizePrintMode(
+      impressaoConfig.fechamento ||
+        impressaoConfig.modoFechamento ||
+        impressaoConfig.imprimirFechamento ||
+        impressaoConfig.comprovanteFechamento ||
+        impressaoConfig.fechamentoAutomatico ||
+        impressaoConfig.impressaoFechamento
+    );
+    const vendaMode = normalizePrintMode(
+      impressaoConfig.venda ||
+        impressaoConfig.modoVenda ||
+        impressaoConfig.imprimirVenda ||
+        impressaoConfig.comprovanteVenda ||
+        impressaoConfig.vendaAutomatica ||
+        impressaoConfig.sempreImprimir ||
+        impressaoConfig.impressaoVenda
+    );
+    state.printPreferences = {
+      fechamento: fechamentoMode,
+      venda: vendaMode,
     };
     const pagamentosData = pdv?.caixa?.pagamentos || pdv?.pagamentos || {};
     applyPagamentosData(pagamentosData);
@@ -2935,7 +3888,7 @@
       notify(action.successMessage, 'success');
       updateTabAvailability();
       setActiveTab('caixa-tab');
-      promptPrintFechamento();
+      handleConfiguredPrint('fechamento');
     } else {
       if (!state.caixaAberto) {
         notify('Abra o caixa antes de registrar movimentações.', 'warning');
@@ -3106,4 +4059,5 @@
   };
 
   document.addEventListener('DOMContentLoaded', init);
+}
 })();
