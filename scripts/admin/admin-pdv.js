@@ -2090,8 +2090,11 @@
               background: #fff;
               font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
               font-size: 11px;
-              color: #0f172a;
+              color: #000;
+              font-weight: 500;
               -webkit-font-smoothing: antialiased;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             main.receipt {
               width: 74mm;
@@ -2105,7 +2108,7 @@
             .receipt__title {
               margin: 0;
               font-size: 13px;
-              font-weight: 700;
+              font-weight: 800;
               letter-spacing: 0.6px;
               text-transform: uppercase;
             }
@@ -2115,8 +2118,8 @@
               padding: 0.6mm 1.6mm;
               font-size: 9.5px;
               letter-spacing: 0.4px;
-              color: #475569;
-              border: 1px solid #cbd5f5;
+              color: #000;
+              border: 1px solid #000;
               border-radius: 999px;
             }
             .receipt__meta {
@@ -2126,7 +2129,7 @@
               align-items: center;
               margin-bottom: 2.2mm;
               font-size: 10.4px;
-              color: #475569;
+              color: #000;
             }
             .receipt__meta-item {
               display: block;
@@ -2136,7 +2139,7 @@
             .receipt__section {
               margin-top: 2.4mm;
               padding-top: 2mm;
-              border-top: 1px solid #e2e8f0;
+              border-top: 1px solid #000;
             }
             .receipt__section:first-of-type {
               margin-top: 0;
@@ -2146,10 +2149,10 @@
             .receipt__section-title {
               margin: 0 0 1.4mm;
               font-size: 10.8px;
-              font-weight: 600;
+              font-weight: 700;
               letter-spacing: 0.45px;
               text-transform: uppercase;
-              color: #1e293b;
+              color: #000;
             }
             .receipt__cards {
               display: flex;
@@ -2160,9 +2163,9 @@
               flex: 1 1 calc(50% - 1.5mm);
               min-width: 28mm;
               padding: 1.4mm 1.8mm;
-              border: 1px solid #e2e8f0;
+              border: 1px solid #000;
               border-radius: 1.6mm;
-              background: #f8fafc;
+              background: none;
               display: flex;
               flex-direction: column;
               gap: 0.6mm;
@@ -2171,12 +2174,13 @@
               font-size: 9.8px;
               text-transform: uppercase;
               letter-spacing: 0.35px;
-              color: #64748b;
+              color: #000;
+              font-weight: 600;
             }
             .receipt-card__value {
               font-size: 11.5px;
-              font-weight: 600;
-              color: #0f172a;
+              font-weight: 700;
+              color: #000;
               font-variant-numeric: tabular-nums;
             }
             .receipt-list {
@@ -2196,43 +2200,47 @@
             }
             .receipt-row__label {
               flex: 1 1 auto;
-              color: #334155;
+              color: #000;
+              font-weight: 600;
             }
             .receipt-row__value {
               flex: 0 0 auto;
-              font-weight: 600;
-              color: #0f172a;
+              font-weight: 700;
+              color: #000;
               font-variant-numeric: tabular-nums;
             }
             .receipt-row--total {
               margin-top: 0.8mm;
               padding-top: 0.8mm;
-              border-top: 1px dashed #cbd5f5;
+              border-top: 1px dashed #000;
             }
             .receipt-row--total .receipt-row__label {
               text-transform: uppercase;
               letter-spacing: 0.4px;
-              color: #1e293b;
+              color: #000;
+              font-weight: 700;
             }
             .receipt-row--total .receipt-row__value {
               font-size: 11.4px;
             }
             .receipt-list__empty {
               font-size: 10.4px;
-              color: #64748b;
+              color: #000;
             }
             .receipt-empty {
               margin: 0;
               padding: 6mm 4mm;
               font-size: 12px;
               text-align: center;
-              color: #475569;
+              color: #000;
+              font-weight: 600;
             }
             .receipt-fallback {
               margin: 0;
               font-size: 10px;
               line-height: 1.4;
-              color: #475569;
+              color: #000;
+              font-weight: 600;
               white-space: pre-wrap;
             }
             @media print {
