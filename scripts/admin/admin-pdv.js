@@ -76,11 +76,14 @@
     selectedPdv: '',
     caixaAberto: false,
     allowApuradoEdit: false,
+    printPreferences: { fechamento: 'PM', venda: 'PM' },
     selectedAction: null,
     searchResults: [],
     selectedProduct: null,
     quantidade: 1,
     itens: [],
+    vendaCliente: null,
+    vendaPet: null,
     paymentMethods: [],
     paymentMethodsLoading: false,
     pendingPagamentosData: null,
@@ -88,6 +91,14 @@
     vendaPagamentos: [],
     vendaDesconto: 0,
     vendaAcrescimo: 0,
+    customerSearchResults: [],
+    customerSearchLoading: false,
+    customerSearchQuery: '',
+    customerPets: [],
+    customerPetsLoading: false,
+    modalSelectedCliente: null,
+    modalSelectedPet: null,
+    modalActiveTab: 'cliente',
     summary: { abertura: 0, recebido: 0, saldo: 0 },
     caixaInfo: {
       aberturaData: null,
@@ -103,6 +114,7 @@
   };
 
   const elements = {};
+  const customerPetsCache = new Map();
   const normalizeId = (value) => (value == null ? '' : String(value));
   const normalizeStoreRecord = (store) => {
     if (!store || typeof store !== 'object') return store;
@@ -152,6 +164,9 @@
   const findPdvById = (pdvId) =>
     state.pdvs.find((item) => normalizeId(item._id) === normalizeId(pdvId));
   let searchTimeout = null;
+  let customerSearchTimeout = null;
+  let customerSearchController = null;
+  let customerPetsController = null;
   let paymentModalState = null;
 
   const createUid = () => `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -184,6 +199,81 @@
     }
   };
 
+  const getLoggedUserPayload = () => {
+    try {
+      const raw = localStorage.getItem('loggedInUser');
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.user && typeof parsed.user === 'object') {
+          return parsed.user;
+        }
+        if (parsed.usuario && typeof parsed.usuario === 'object') {
+          return parsed.usuario;
+        }
+      }
+      return parsed || {};
+    } catch (error) {
+      console.warn('Não foi possível obter os dados do usuário logado.', error);
+      return {};
+    }
+  };
+
+  const getLoggedUserName = () => {
+    const payload = getLoggedUserPayload();
+    return (
+      payload?.nome ||
+      payload?.name ||
+      payload?.usuario?.nome ||
+      payload?.usuario?.name ||
+      payload?.user?.nome ||
+      payload?.user?.name ||
+      payload?.login ||
+      ''
+    );
+  };
+
+  const shouldRetryWithoutAuth = (error) =>
+    error instanceof TypeError || error?.status === 401 || error?.status === 403;
+
+  const fetchJson = async (url, { errorMessage, ...options } = {}) => {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      let details = null;
+      try {
+        details = await response.json();
+      } catch (parseError) {
+        details = null;
+      }
+      const message = details?.message || errorMessage || 'Não foi possível carregar os dados solicitados.';
+      const requestError = new Error(message);
+      requestError.status = response.status;
+      requestError.details = details;
+      throw requestError;
+    }
+    return response.json();
+  };
+
+  const fetchWithOptionalAuth = async (url, { token, errorMessage, ...options } = {}) => {
+    const baseHeaders = { ...(options.headers || {}) };
+    if (token) {
+      try {
+        return await fetchJson(url, {
+          ...options,
+          headers: { ...baseHeaders, Authorization: `Bearer ${token}` },
+          errorMessage,
+        });
+      } catch (error) {
+        if (shouldRetryWithoutAuth(error)) {
+          console.warn('Requisição autenticada falhou, tentando novamente sem token:', url, error);
+          return fetchJson(url, { ...options, headers: baseHeaders, errorMessage });
+        }
+        throw error;
+      }
+    }
+    return fetchJson(url, { ...options, headers: baseHeaders, errorMessage });
+  };
+
   const formatCurrency = (value) => {
     const number = Number(value || 0);
     return `R$ ${number.toFixed(2).replace('.', ',')}`;
@@ -192,6 +282,76 @@
   const safeNumber = (value) => {
     const number = Number(value);
     return Number.isFinite(number) ? number : 0;
+  };
+
+  const normalizePrintMode = (value, fallback = 'PM') => {
+    const normalized = (value || '').toString().trim().toUpperCase();
+    if (!normalized) return fallback;
+    const aliasMap = {
+      SIM: 'M',
+      MATRICIAL: 'M',
+      CUPOM: 'M',
+      FISCAL: 'F',
+      FIS: 'F',
+      PERGUNTAR: 'PM',
+      'PERGUNTAR_MATRICIAL': 'PM',
+      'PERGUNTAR-FISCAL': 'PF',
+      'PERGUNTAR_FISCAL': 'PF',
+      PM: 'PM',
+      PF: 'PF',
+      M: 'M',
+      F: 'F',
+      NAO: 'NONE',
+      'NÃO': 'NONE',
+      N: 'NONE',
+      NENHUM: 'NONE',
+      DESATIVADO: 'NONE',
+    };
+    if (aliasMap[normalized]) {
+      return aliasMap[normalized];
+    }
+    if (['F', 'M', 'PF', 'PM'].includes(normalized)) {
+      return normalized;
+    }
+    return fallback;
+  };
+
+  const resolvePrintVariant = (mode) =>
+    mode === 'F' || mode === 'PF' ? 'fiscal' : 'matricial';
+
+  const canApplyGeneralPromotion = () => Boolean(state.vendaCliente);
+
+  const hasGeneralPromotion = (product) =>
+    Boolean(product?.promocao?.ativa && safeNumber(product.promocao.porcentagem) > 0);
+
+  const buildProductSnapshot = (product) => {
+    if (!product || typeof product !== 'object') return {};
+    return {
+      _id: product._id || product.id || '',
+      nome: product.nome || product.descricao || '',
+      codigoInterno: product.codigoInterno || product.codInterno || '',
+      codigo:
+        product.codigo ||
+        product.codigoReferencia ||
+        product.sku ||
+        product.codigoInterno ||
+        product.codInterno ||
+        '',
+      codigoBarras:
+        product.codigoBarras ||
+        product.codigoDeBarras ||
+        product.barras ||
+        product.ean ||
+        product.codbarras ||
+        '',
+      promocao: product.promocao ? { ...product.promocao } : null,
+      precoClube: product.precoClube || null,
+      venda: product.venda,
+      precoVenda: product.precoVenda,
+      preco: product.preco,
+      valor: product.valor,
+      price: product.price,
+    };
   };
 
   const parseDateValue = (value) => {
@@ -239,6 +399,203 @@
       .filter((payment) => safeNumber(payment?.valor) > 0)
       .map((payment) => `${payment.label || 'Pagamento'} ${formatCurrency(payment.valor)}`)
       .join(' | ');
+
+  const createPaymentItems = (payments, { hideZero = true } = {}) => {
+    const items = (Array.isArray(payments) ? payments : []).map((payment) => {
+      const label =
+        payment?.label ||
+        payment?.nome ||
+        payment?.name ||
+        payment?.descricao ||
+        'Meio de pagamento';
+      const value = safeNumber(payment?.valor);
+      return {
+        label,
+        value,
+        formattedValue: formatCurrency(value),
+      };
+    });
+
+    if (!hideZero) {
+      return items;
+    }
+
+    const filtered = items.filter((item) => Math.abs(item.value) > 0.009);
+    return filtered.length ? filtered : items;
+  };
+
+  const getFechamentoSnapshot = () => {
+    if (!state.selectedStore || !state.selectedPdv) {
+      return null;
+    }
+
+    const aberturaLabel = toDateLabel(state.caixaInfo.aberturaData);
+    const fechamentoLabel = toDateLabel(state.caixaInfo.fechamentoData);
+
+    const aberturaValor = safeNumber(state.summary.abertura);
+    const recebidoValor = safeNumber(state.summary.recebido);
+    const saldoValor = safeNumber(state.summary.saldo);
+
+    const recebimentosItems = createPaymentItems(state.pagamentos);
+    const recebimentosTotal = sumPayments(state.pagamentos);
+
+    const hasPrevistoPagamentos = Array.isArray(state.caixaInfo.previstoPagamentos)
+      ? state.caixaInfo.previstoPagamentos.length > 0
+      : false;
+    const previstoFonte = hasPrevistoPagamentos
+      ? state.caixaInfo.previstoPagamentos
+      : state.pagamentos;
+    const previstoItems = createPaymentItems(previstoFonte);
+    const previstoTotal = state.caixaInfo.fechamentoPrevisto || sumPayments(previstoFonte);
+
+    const apuradoFonte = state.allowApuradoEdit
+      ? state.pagamentos
+      : state.caixaInfo.apuradoPagamentos || [];
+    const apuradoItems = createPaymentItems(apuradoFonte);
+    const apuradoTotal = state.caixaInfo.fechamentoApurado || sumPayments(apuradoFonte);
+
+    return {
+      meta: {
+        store: getStoreLabel(),
+        pdv: getPdvLabel(),
+        abertura: aberturaLabel,
+        fechamento: fechamentoLabel === '—' ? 'Em aberto' : fechamentoLabel,
+      },
+      resumo: {
+        abertura: {
+          value: aberturaValor,
+          formatted: formatCurrency(aberturaValor),
+        },
+        recebido: {
+          value: recebidoValor,
+          formatted: formatCurrency(recebidoValor),
+        },
+        saldo: {
+          value: saldoValor,
+          formatted: formatCurrency(saldoValor),
+        },
+      },
+      recebimentos: {
+        items: recebimentosItems,
+        total: recebimentosTotal,
+        formattedTotal: formatCurrency(recebimentosTotal),
+      },
+      previsto: {
+        items: previstoItems,
+        total: previstoTotal,
+        formattedTotal: formatCurrency(previstoTotal),
+      },
+      apurado: {
+        items: apuradoItems,
+        total: apuradoTotal,
+        formattedTotal: formatCurrency(apuradoTotal),
+      },
+    };
+
+  const getSaleReceiptSnapshot = (
+    items = state.itens,
+    payments = state.vendaPagamentos
+  ) => {
+    const saleItems = Array.isArray(items) ? items : [];
+    if (!state.selectedStore || !state.selectedPdv || !saleItems.length) {
+      return null;
+    }
+
+    const nowLabel = toDateLabel(new Date().toISOString());
+    const operatorName = getLoggedUserName();
+
+    const normalizeQuantity = (value) => {
+      const number = safeNumber(value);
+      return number.toLocaleString('pt-BR', {
+        minimumFractionDigits: Number.isInteger(number) ? 0 : 2,
+        maximumFractionDigits: 3,
+      });
+    };
+
+    const itens = saleItems.map((item, index) => {
+      const codes = [];
+      if (item.codigoInterno) {
+        codes.push(`Int.: ${item.codigoInterno}`);
+      }
+      if (item.codigoBarras) {
+        codes.push(`Barras: ${item.codigoBarras}`);
+      }
+      if (!codes.length && item.codigo) {
+        codes.push(`Cód.: ${item.codigo}`);
+      }
+      return {
+        index: String(index + 1).padStart(2, '0'),
+        nome: item.nome || 'Item da venda',
+        codigo: codes.join(' • '),
+        quantidade: normalizeQuantity(item.quantidade || 0),
+        unitario: formatCurrency(item.valor || item.preco || 0),
+        subtotal: formatCurrency(item.subtotal || 0),
+      };
+    });
+
+    const descontoValor = Math.max(0, safeNumber(state.vendaDesconto));
+    const acrescimoValor = Math.max(0, safeNumber(state.vendaAcrescimo));
+    const bruto = saleItems.reduce((sum, item) => sum + safeNumber(item.subtotal), 0);
+    const liquidoValor = Math.max(0, bruto + acrescimoValor - descontoValor);
+    const pagamentoItems = (Array.isArray(payments) ? payments : []).map((payment) => {
+      const parcelasLabel = payment.parcelas && payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
+      return {
+        label: `${payment.label || 'Pagamento'}${parcelasLabel}`,
+        formatted: formatCurrency(payment.valor || 0),
+        valor: safeNumber(payment.valor),
+      };
+    });
+    const pagoValor = pagamentoItems.reduce((sum, item) => sum + safeNumber(item.valor), 0);
+    const trocoValor = Math.max(0, pagoValor - liquidoValor);
+
+    const cliente = state.vendaCliente
+      ? {
+          nome:
+            state.vendaCliente.nome ||
+            state.vendaCliente.razaoSocial ||
+            state.vendaCliente.fantasia ||
+            'Cliente',
+          documento:
+            state.vendaCliente.cpf ||
+            state.vendaCliente.cnpj ||
+            state.vendaCliente.documento ||
+            '',
+          contato:
+            state.vendaCliente.telefone ||
+            state.vendaCliente.celular ||
+            state.vendaCliente.email ||
+            '',
+          pet: state.vendaPet?.nome || '',
+        }
+      : null;
+
+    return {
+      meta: {
+        store: getStoreLabel(),
+        pdv: getPdvLabel(),
+        data: nowLabel,
+        operador: operatorName,
+      },
+      cliente,
+      itens,
+      totais: {
+        bruto: formatCurrency(bruto),
+        desconto: formatCurrency(descontoValor),
+        descontoValor,
+        acrescimo: formatCurrency(acrescimoValor),
+        acrescimoValor,
+        liquido: formatCurrency(liquidoValor),
+        pago: formatCurrency(pagoValor),
+        troco: formatCurrency(trocoValor),
+        trocoValor,
+      },
+      pagamentos: {
+        items: pagamentoItems,
+        total: pagoValor,
+        formattedTotal: formatCurrency(pagoValor),
+      },
+    };
+  };
 
   const toDateLabel = (isoString) => {
     if (!isoString) return '—';
@@ -473,9 +830,12 @@
       product?.codigoDeBarras ||
       product?.barras ||
       product?.ean ||
+      product?.codbarras ||
       ''
     );
   };
+
+  const normalizeBarcodeValue = (value) => String(value ?? '').replace(/\s+/g, '');
 
   const getImageUrl = (product) => {
     const path =
@@ -504,7 +864,10 @@
   const getFinalPrice = (product) => {
     const base = getBasePrice(product);
     if (!product) return base;
-    if (product?.promocao?.ativa && safeNumber(product.promocao.porcentagem) > 0) {
+    if (hasGeneralPromotion(product)) {
+      if (!canApplyGeneralPromotion()) {
+        return base;
+      }
       const desconto = base * (safeNumber(product.promocao.porcentagem) / 100);
       return Math.max(base - desconto, 0);
     }
@@ -539,6 +902,7 @@
     elements.selectedPrice = document.getElementById('pdv-selected-price');
     elements.selectedOriginalPrice = document.getElementById('pdv-selected-original-price');
     elements.selectedPromoBadge = document.getElementById('pdv-selected-promo');
+    elements.selectedGeneralWarning = document.getElementById('pdv-selected-general-warning');
 
     elements.itemValue = document.getElementById('pdv-item-value');
     elements.itemQuantity = document.getElementById('pdv-item-quantity');
@@ -551,6 +915,35 @@
     elements.itemsCount = document.getElementById('pdv-items-count');
     elements.itemsTotal = document.getElementById('pdv-items-total');
     elements.finalizeButton = document.getElementById('pdv-finalize-sale');
+
+    elements.customerOpenButton = document.getElementById('pdv-open-customer');
+    elements.customerOpenButtonLabel = document.getElementById('pdv-open-customer-label');
+    elements.customerSummaryEmpty = document.getElementById('pdv-customer-summary-empty');
+    elements.customerSummaryInfo = document.getElementById('pdv-customer-summary-info');
+    elements.customerName = document.getElementById('pdv-customer-name');
+    elements.customerDoc = document.getElementById('pdv-customer-doc');
+    elements.customerContact = document.getElementById('pdv-customer-contact');
+    elements.customerPet = document.getElementById('pdv-customer-pet');
+    elements.customerRemove = document.getElementById('pdv-customer-remove');
+
+    elements.customerModal = document.getElementById('pdv-customer-modal');
+    elements.customerModalClose = document.getElementById('pdv-customer-close');
+    elements.customerModalBackdrop =
+      elements.customerModal?.querySelector('[data-pdv-customer-dismiss]') || null;
+    elements.customerTabButtons =
+      elements.customerModal?.querySelectorAll('[data-pdv-customer-tab]') || [];
+    elements.customerModalPanels =
+      elements.customerModal?.querySelectorAll('[data-pdv-customer-panel]') || [];
+    elements.customerSearchInput = document.getElementById('pdv-customer-search');
+    elements.customerResultsList = document.getElementById('pdv-customer-results');
+    elements.customerResultsEmpty = document.getElementById('pdv-customer-results-empty');
+    elements.customerResultsLoading = document.getElementById('pdv-customer-results-loading');
+    elements.customerPetsList = document.getElementById('pdv-customer-pets');
+    elements.customerPetsEmpty = document.getElementById('pdv-customer-pets-empty');
+    elements.customerPetsLoading = document.getElementById('pdv-customer-pets-loading');
+    elements.customerConfirm = document.getElementById('pdv-customer-confirm');
+    elements.customerClear = document.getElementById('pdv-customer-clear');
+    elements.customerCancel = document.getElementById('pdv-customer-cancel');
 
     elements.caixaActions = document.getElementById('pdv-caixa-actions');
     elements.caixaStateLabel = document.getElementById('pdv-caixa-state-label');
@@ -650,14 +1043,23 @@
       'bg-emerald-50',
       'text-emerald-700'
     );
-    const icon = state.caixaAberto ? 'fa-unlock' : 'fa-lock';
+    const icon = state.caixaAberto ? 'fa-circle-check' : 'fa-lock';
     const text = state.caixaAberto ? 'Caixa aberto' : 'Caixa fechado';
     if (state.caixaAberto) {
       badge.classList.add('border-emerald-200', 'bg-emerald-50', 'text-emerald-700');
     } else {
       badge.classList.add('border-gray-200', 'bg-gray-100', 'text-gray-600');
     }
-    badge.innerHTML = `<i class="fas ${icon}"></i> ${text}`;
+    const indicatorClass = state.caixaAberto
+      ? 'h-2.5 w-2.5 rounded-full border border-emerald-200 bg-emerald-500'
+      : 'h-2.5 w-2.5 rounded-full border border-gray-300 bg-gray-400';
+    badge.innerHTML = `
+      <span class="${indicatorClass}"></span>
+      <span class="flex items-center gap-1.5">
+        <i class="fas ${icon} text-[10px]"></i>
+        ${text}
+      </span>
+    `;
     if (elements.caixaStateLabel) {
       elements.caixaStateLabel.textContent = text;
     }
@@ -705,6 +1107,9 @@
     if (elements.selectedPromoBadge) {
       elements.selectedPromoBadge.classList.add('hidden');
     }
+    if (elements.selectedGeneralWarning) {
+      elements.selectedGeneralWarning.classList.add('hidden');
+    }
     if (elements.itemQuantity) {
       elements.itemQuantity.value = 1;
     }
@@ -731,6 +1136,8 @@
     const barcode = getProductBarcode(product);
     const basePrice = getBasePrice(product);
     const finalPrice = getFinalPrice(product);
+    const generalPromo = hasGeneralPromotion(product);
+    const showGeneralWarning = generalPromo && !canApplyGeneralPromotion();
     if (elements.selectedName) {
       elements.selectedName.textContent = name;
     }
@@ -752,7 +1159,15 @@
       }
     }
     if (elements.selectedPromoBadge) {
+      if (generalPromo) {
+        elements.selectedPromoBadge.textContent = 'Promoção geral';
+      } else {
+        elements.selectedPromoBadge.textContent = 'Promoção ativa';
+      }
       elements.selectedPromoBadge.classList.toggle('hidden', !(finalPrice < basePrice));
+    }
+    if (elements.selectedGeneralWarning) {
+      elements.selectedGeneralWarning.classList.toggle('hidden', !showGeneralWarning);
     }
     if (elements.itemQuantity) {
       elements.itemQuantity.value = state.quantidade;
@@ -773,6 +1188,501 @@
     }
   };
 
+  const updateSaleCustomerSummary = () => {
+    if (elements.customerOpenButtonLabel) {
+      elements.customerOpenButtonLabel.textContent = state.vendaCliente
+        ? 'Trocar cliente'
+        : 'Adicionar cliente';
+    }
+    const hasCustomer = Boolean(state.vendaCliente);
+    if (elements.customerSummaryEmpty) {
+      elements.customerSummaryEmpty.classList.toggle('hidden', hasCustomer);
+    }
+    if (elements.customerSummaryInfo) {
+      elements.customerSummaryInfo.classList.toggle('hidden', !hasCustomer);
+    }
+    if (!hasCustomer) {
+      if (elements.customerPet) {
+        elements.customerPet.classList.add('hidden');
+      }
+      return;
+    }
+    const cliente = state.vendaCliente;
+    if (elements.customerName) {
+      elements.customerName.textContent = cliente.nome || 'Cliente sem nome';
+    }
+    if (elements.customerDoc) {
+      const doc = cliente.doc || cliente.cpf || cliente.cnpj || cliente.inscricaoEstadual || '';
+      elements.customerDoc.textContent = doc ? `Documento: ${doc}` : 'Documento não informado';
+    }
+    if (elements.customerContact) {
+      const contacts = [cliente.email, cliente.celular].filter(Boolean);
+      elements.customerContact.textContent = contacts.length
+        ? `Contato: ${contacts.join(' • ')}`
+        : 'Contato não informado';
+    }
+    if (elements.customerPet) {
+      if (state.vendaPet) {
+        const details = [state.vendaPet.tipo, state.vendaPet.raca].filter(Boolean).join(' • ');
+        const detailText = details ? ` (${details})` : '';
+        elements.customerPet.textContent = `Pet: ${state.vendaPet.nome || 'Pet sem nome'}${detailText}`;
+        elements.customerPet.classList.remove('hidden');
+      } else {
+        elements.customerPet.classList.add('hidden');
+      }
+    }
+  };
+
+  const recalculateItemsForCustomerChange = () => {
+    if (!state.itens.length) {
+      updateFinalizeButton();
+      updateSaleSummary();
+      return;
+    }
+    state.itens = state.itens.map((item) => {
+      if (!item.productSnapshot) {
+        return {
+          ...item,
+          generalPromo: Boolean(item.generalPromo && state.vendaCliente),
+        };
+      }
+      const snapshot = item.productSnapshot;
+      const valor = getFinalPrice(snapshot);
+      return {
+        ...item,
+        valor,
+        subtotal: valor * item.quantidade,
+        generalPromo: hasGeneralPromotion(snapshot),
+        codigoInterno:
+          item.codigoInterno ||
+          snapshot.codigoInterno ||
+          snapshot.codigo ||
+          item.codigo ||
+          '',
+        codigoBarras: item.codigoBarras || snapshot.codigoBarras || '',
+        productSnapshot: snapshot,
+      };
+    });
+    renderItemsList();
+  };
+
+  const setSaleCustomer = (cliente, pet = null) => {
+    state.vendaCliente = cliente ? { ...cliente } : null;
+    state.vendaPet = cliente && pet ? { ...pet } : null;
+    if (!cliente) {
+      state.vendaPet = null;
+    }
+    updateSaleCustomerSummary();
+    recalculateItemsForCustomerChange();
+    if (state.selectedProduct) {
+      updateSelectedProductView();
+    }
+    if (
+      elements.searchResults &&
+      !elements.searchResults.classList.contains('hidden') &&
+      state.searchResults.length &&
+      elements.searchInput &&
+      elements.searchInput.value.trim()
+    ) {
+      renderSearchResults(state.searchResults, elements.searchInput.value.trim());
+    }
+  };
+
+  const updateCustomerModalTabs = () => {
+    const buttons = Array.from(elements.customerTabButtons || []);
+    const panels = Array.from(elements.customerModalPanels || []);
+    buttons.forEach((button) => {
+      const tab = button.getAttribute('data-pdv-customer-tab');
+      const isActive = tab === state.modalActiveTab;
+      const isPetTab = tab === 'pet';
+      const disabled = isPetTab && !state.modalSelectedCliente;
+      button.classList.toggle('text-primary', isActive);
+      button.classList.toggle('border-primary', isActive);
+      button.classList.toggle('text-gray-500', !isActive);
+      button.classList.toggle('border-transparent', !isActive);
+      button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      button.disabled = disabled;
+      button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      button.classList.toggle('opacity-60', disabled);
+      button.classList.toggle('cursor-not-allowed', disabled);
+    });
+    panels.forEach((panel) => {
+      const tab = panel.getAttribute('data-pdv-customer-panel');
+      panel.classList.toggle('hidden', tab !== state.modalActiveTab);
+    });
+  };
+
+  const updateCustomerModalActions = () => {
+    const hasSelection = Boolean(state.modalSelectedCliente);
+    if (elements.customerConfirm) {
+      elements.customerConfirm.disabled = !hasSelection;
+      elements.customerConfirm.classList.toggle('opacity-60', !hasSelection);
+      elements.customerConfirm.textContent = state.vendaCliente
+        ? 'Atualizar vínculo'
+        : 'Vincular cliente';
+    }
+    if (elements.customerClear) {
+      elements.customerClear.disabled = !hasSelection;
+      elements.customerClear.classList.toggle('opacity-60', !hasSelection);
+    }
+  };
+
+  const renderCustomerSearchResults = () => {
+    if (!elements.customerResultsList || !elements.customerResultsEmpty || !elements.customerResultsLoading) {
+      return;
+    }
+    elements.customerResultsList.innerHTML = '';
+    if (state.customerSearchLoading) {
+      elements.customerResultsLoading.classList.remove('hidden');
+      elements.customerResultsEmpty.classList.add('hidden');
+      return;
+    }
+    elements.customerResultsLoading.classList.add('hidden');
+    const query = state.customerSearchQuery.trim();
+    if (!query) {
+      elements.customerResultsEmpty.textContent = 'Digite para buscar clientes.';
+      elements.customerResultsEmpty.classList.remove('hidden');
+      return;
+    }
+    if (!state.customerSearchResults.length) {
+      elements.customerResultsEmpty.textContent = 'Nenhum cliente encontrado para a busca informada.';
+      elements.customerResultsEmpty.classList.remove('hidden');
+      return;
+    }
+    elements.customerResultsEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    state.customerSearchResults.forEach((cliente) => {
+      const isSelected = Boolean(state.modalSelectedCliente && state.modalSelectedCliente._id === cliente._id);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('data-customer-id', cliente._id);
+      button.className = [
+        'w-full text-left rounded-lg border px-4 py-3 transition flex flex-col gap-1',
+        isSelected
+          ? 'border-primary bg-primary/5 text-primary'
+          : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/5',
+      ].join(' ');
+      const documento = cliente.doc || cliente.cpf || cliente.cnpj || '';
+      const contato = [cliente.email, cliente.celular].filter(Boolean).join(' • ');
+      button.innerHTML = `
+        <span class="text-sm font-semibold">${cliente.nome || 'Cliente sem nome'}</span>
+        <span class="text-xs text-gray-500">${documento ? `Documento: ${documento}` : 'Documento não informado'}</span>
+        <span class="text-xs text-gray-500">${contato || 'Contato não informado'}</span>
+      `;
+      fragment.appendChild(button);
+    });
+    elements.customerResultsList.appendChild(fragment);
+  };
+
+  const renderCustomerPets = () => {
+    if (!elements.customerPetsList || !elements.customerPetsEmpty || !elements.customerPetsLoading) {
+      return;
+    }
+    elements.customerPetsList.innerHTML = '';
+    if (!state.modalSelectedCliente) {
+      elements.customerPetsLoading.classList.add('hidden');
+      elements.customerPetsEmpty.textContent = 'Selecione um cliente para visualizar os pets vinculados.';
+      elements.customerPetsEmpty.classList.remove('hidden');
+      return;
+    }
+    if (state.customerPetsLoading) {
+      elements.customerPetsLoading.classList.remove('hidden');
+      elements.customerPetsEmpty.classList.add('hidden');
+      return;
+    }
+    elements.customerPetsLoading.classList.add('hidden');
+    if (!state.customerPets.length) {
+      elements.customerPetsEmpty.textContent = 'Nenhum pet cadastrado para este cliente.';
+      elements.customerPetsEmpty.classList.remove('hidden');
+      return;
+    }
+    elements.customerPetsEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    state.customerPets.forEach((pet) => {
+      const isSelected = Boolean(state.modalSelectedPet && state.modalSelectedPet._id === pet._id);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('data-pet-id', pet._id);
+      button.className = [
+        'w-full text-left rounded-lg border px-4 py-3 transition flex flex-col gap-1',
+        isSelected
+          ? 'border-primary bg-primary/5 text-primary'
+          : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/5',
+      ].join(' ');
+      const details = [pet.tipo, pet.raca].filter(Boolean).join(' • ');
+      button.innerHTML = `
+        <span class="text-sm font-semibold">${pet.nome || 'Pet sem nome'}</span>
+        <span class="text-xs text-gray-500">${details || 'Detalhes não informados'}</span>
+      `;
+      fragment.appendChild(button);
+    });
+    elements.customerPetsList.appendChild(fragment);
+  };
+
+  const performCustomerSearch = async (term) => {
+    const query = term.trim();
+    state.customerSearchQuery = term;
+    if (customerSearchController) {
+      customerSearchController.abort();
+      customerSearchController = null;
+    }
+    if (!query) {
+      state.customerSearchResults = [];
+      state.customerSearchLoading = false;
+      renderCustomerSearchResults();
+      return;
+    }
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    state.customerSearchLoading = true;
+    renderCustomerSearchResults();
+    customerSearchController = new AbortController();
+    try {
+      const response = await fetch(
+        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=8`,
+        { headers, signal: customerSearchController.signal }
+      );
+      if (!response.ok) {
+        throw new Error('Não foi possível buscar clientes.');
+      }
+      const payload = await response.json();
+      state.customerSearchResults = Array.isArray(payload) ? payload : [];
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      console.error('Erro ao buscar clientes:', error);
+      notify(error.message || 'Não foi possível buscar clientes.', 'error');
+      state.customerSearchResults = [];
+    } finally {
+      state.customerSearchLoading = false;
+      customerSearchController = null;
+      renderCustomerSearchResults();
+    }
+  };
+
+  const fetchCustomerPets = async (clienteId) => {
+    if (!clienteId) return;
+    const cached = customerPetsCache.get(clienteId);
+    if (cached) {
+      state.customerPets = cached;
+      state.customerPetsLoading = false;
+      renderCustomerPets();
+      updateCustomerModalActions();
+      return;
+    }
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    state.customerPetsLoading = true;
+    renderCustomerPets();
+    if (customerPetsController) {
+      customerPetsController.abort();
+    }
+    customerPetsController = new AbortController();
+    try {
+      const response = await fetch(`${API_BASE}/func/clientes/${clienteId}/pets`, {
+        headers,
+        signal: customerPetsController.signal,
+      });
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar os pets do cliente.');
+      }
+      const payload = await response.json();
+      const pets = Array.isArray(payload) ? payload : [];
+      customerPetsCache.set(clienteId, pets);
+      if (state.modalSelectedCliente && state.modalSelectedCliente._id === clienteId) {
+        state.customerPets = pets;
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      console.error('Erro ao carregar pets do cliente:', error);
+      notify(error.message || 'Não foi possível carregar os pets do cliente selecionado.', 'error');
+      if (state.modalSelectedCliente && state.modalSelectedCliente._id === clienteId) {
+        state.customerPets = [];
+      }
+    } finally {
+      if (state.modalSelectedCliente && state.modalSelectedCliente._id === clienteId) {
+        state.customerPetsLoading = false;
+        renderCustomerPets();
+        updateCustomerModalActions();
+      }
+      customerPetsController = null;
+    }
+  };
+
+  const setModalSelectedCliente = (cliente) => {
+    state.modalSelectedCliente = cliente ? { ...cliente } : null;
+    state.modalSelectedPet = null;
+    if (state.modalSelectedCliente && state.modalSelectedCliente._id) {
+      const cached = customerPetsCache.get(state.modalSelectedCliente._id);
+      if (cached) {
+        state.customerPets = cached;
+        state.customerPetsLoading = false;
+      } else {
+        state.customerPets = [];
+        state.customerPetsLoading = true;
+        fetchCustomerPets(state.modalSelectedCliente._id);
+      }
+    } else {
+      state.customerPets = [];
+      state.customerPetsLoading = false;
+    }
+    renderCustomerSearchResults();
+    renderCustomerPets();
+    updateCustomerModalTabs();
+    updateCustomerModalActions();
+  };
+
+  const openCustomerModal = () => {
+    if (!elements.customerModal) return;
+    state.modalActiveTab = 'cliente';
+    state.customerSearchQuery = '';
+    state.customerSearchResults = [];
+    state.customerSearchLoading = false;
+    state.customerPetsLoading = false;
+    if (elements.customerSearchInput) {
+      elements.customerSearchInput.value = '';
+    }
+    setModalSelectedCliente(state.vendaCliente ? { ...state.vendaCliente } : null);
+    if (
+      state.vendaPet &&
+      state.modalSelectedCliente &&
+      state.modalSelectedCliente._id &&
+      state.vendaCliente &&
+      state.vendaCliente._id === state.modalSelectedCliente._id
+    ) {
+      state.modalSelectedPet = { ...state.vendaPet };
+      renderCustomerPets();
+      updateCustomerModalActions();
+    }
+    elements.customerModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    updateCustomerModalTabs();
+    renderCustomerSearchResults();
+    renderCustomerPets();
+    updateCustomerModalActions();
+    setTimeout(() => {
+      elements.customerSearchInput?.focus();
+    }, 150);
+  };
+
+  const closeCustomerModal = () => {
+    if (!elements.customerModal) return;
+    elements.customerModal.classList.add('hidden');
+    if (
+      (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) &&
+      (!elements.paymentValueModal || elements.paymentValueModal.classList.contains('hidden'))
+    ) {
+      document.body.classList.remove('overflow-hidden');
+    }
+    if (customerSearchTimeout) {
+      clearTimeout(customerSearchTimeout);
+      customerSearchTimeout = null;
+    }
+    if (customerSearchController) {
+      customerSearchController.abort();
+      customerSearchController = null;
+    }
+    if (customerPetsController) {
+      customerPetsController.abort();
+      customerPetsController = null;
+    }
+    state.customerSearchLoading = false;
+    state.customerPetsLoading = false;
+  };
+
+  const handleCustomerSearchInput = (event) => {
+    const value = event.target.value || '';
+    state.customerSearchQuery = value;
+    if (customerSearchTimeout) {
+      clearTimeout(customerSearchTimeout);
+    }
+    customerSearchTimeout = setTimeout(() => performCustomerSearch(value), 300);
+    if (!value.trim()) {
+      state.customerSearchResults = [];
+      state.customerSearchLoading = false;
+      renderCustomerSearchResults();
+    }
+  };
+
+  const handleCustomerResultsClick = (event) => {
+    const button = event.target.closest('[data-customer-id]');
+    if (!button) return;
+    const id = button.getAttribute('data-customer-id');
+    const cliente = state.customerSearchResults.find((item) => item._id === id);
+    if (!cliente) return;
+    setModalSelectedCliente(cliente);
+  };
+
+  const handleCustomerPetsClick = (event) => {
+    const button = event.target.closest('[data-pet-id]');
+    if (!button) return;
+    const id = button.getAttribute('data-pet-id');
+    const pet = state.customerPets.find((item) => item._id === id);
+    if (!pet) return;
+    if (state.modalSelectedPet && state.modalSelectedPet._id === id) {
+      state.modalSelectedPet = null;
+    } else {
+      state.modalSelectedPet = { ...pet };
+    }
+    renderCustomerPets();
+    updateCustomerModalActions();
+  };
+
+  const handleCustomerTabClick = (event) => {
+    const tab = event.currentTarget.getAttribute('data-pdv-customer-tab');
+    if (!tab) return;
+    if (tab === 'pet' && !state.modalSelectedCliente) {
+      event.preventDefault();
+      notify('Selecione um cliente para visualizar os pets.', 'info');
+      return;
+    }
+    state.modalActiveTab = tab;
+    updateCustomerModalTabs();
+    if (tab === 'pet' && state.modalSelectedCliente && state.modalSelectedCliente._id) {
+      if (!customerPetsCache.has(state.modalSelectedCliente._id) && !state.customerPetsLoading) {
+        fetchCustomerPets(state.modalSelectedCliente._id);
+      }
+    }
+  };
+
+  const handleCustomerConfirm = () => {
+    if (!state.modalSelectedCliente) {
+      notify('Selecione um cliente para vincular à venda.', 'warning');
+      return;
+    }
+    setSaleCustomer(state.modalSelectedCliente, state.modalSelectedPet);
+    closeCustomerModal();
+  };
+
+  const handleCustomerClearSelection = () => {
+    state.modalSelectedCliente = null;
+    state.modalSelectedPet = null;
+    state.customerPets = [];
+    state.customerPetsLoading = false;
+    state.customerSearchQuery = '';
+    state.customerSearchResults = [];
+    state.customerSearchLoading = false;
+    state.modalActiveTab = 'cliente';
+    if (elements.customerSearchInput) {
+      elements.customerSearchInput.value = '';
+    }
+    renderCustomerSearchResults();
+    renderCustomerPets();
+    updateCustomerModalTabs();
+    updateCustomerModalActions();
+  };
+
+  const handleCustomerRemove = () => {
+    if (!state.vendaCliente) return;
+    setSaleCustomer(null, null);
+  };
+
+  const handleCustomerModalKeydown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeCustomerModal();
+    }
+  };
+
   const renderItemsList = () => {
     if (!elements.itemsList || !elements.itemsEmpty || !elements.itemsCount || !elements.itemsTotal)
       return;
@@ -790,16 +1700,28 @@
     state.itens.forEach((item, index) => {
       const li = document.createElement('li');
       li.dataset.index = String(index);
-      li.className = 'flex items-center gap-3 py-3';
+      li.className = 'flex items-start gap-3 py-3';
+      const codigoInterno = item.codigoInterno || item.codigo || '—';
+      const codigoBarras = item.codigoBarras || '—';
+      const generalNotice = !state.vendaCliente && item.generalPromo
+        ? '<p class="text-[11px] text-amber-600">Vincule um cliente para aplicar a promoção geral.</p>'
+        : '';
       li.innerHTML = `
-        <div class="flex-1 min-w-0">
-          <p class="text-sm font-semibold text-gray-800 truncate">${item.nome}</p>
-          <p class="text-xs text-gray-500">Cód: ${item.codigo || '—'} • Qtde: ${item.quantidade}</p>
+        <div class="flex-1 min-w-0 space-y-1">
+          <p class="text-sm font-semibold text-gray-800 leading-snug">${item.nome}</p>
+          <p class="text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-1">
+            <span>Cód. Interno: ${codigoInterno}</span>
+            <span>Barras: ${codigoBarras}</span>
+          </p>
+          <p class="text-xs text-gray-500">Qtde: ${item.quantidade} • Valor: ${formatCurrency(item.valor)}</p>
+          ${generalNotice}
         </div>
-        <div class="text-sm font-semibold text-gray-700">${formatCurrency(item.subtotal)}</div>
-        <button type="button" class="text-xs text-red-500 hover:text-red-600" data-remove-index="${index}" aria-label="Remover item">
-          <i class="fas fa-times"></i>
-        </button>
+        <div class="flex flex-col items-end gap-2 text-right">
+          <span class="text-sm font-semibold text-gray-700">${formatCurrency(item.subtotal)}</span>
+          <button type="button" class="text-xs text-red-500 transition hover:text-red-600" data-remove-index="${index}" aria-label="Remover item">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
       `;
       fragment.appendChild(li);
     });
@@ -1167,7 +2089,9 @@
       notify('O valor pago deve ser igual ao total da venda.', 'warning');
       return;
     }
+    const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
+    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda);
     registerSaleOnCaixa(pagamentosVenda, total);
     notify('Venda finalizada com sucesso.', 'success');
     state.itens = [];
@@ -1180,6 +2104,7 @@
     updateFinalizeButton();
     updateSaleSummary();
     closeFinalizeModal();
+    handleConfiguredPrint('venda', { snapshot: saleSnapshot });
   };
 
   const handleSaleAdjust = () => {
@@ -1251,99 +2176,727 @@
     elements.paymentSelect.disabled = false;
   };
 
-  const buildSummaryPrint = () => {
-    if (!state.selectedStore || !state.selectedPdv) {
+  const buildSummaryPrint = (snapshot = getFechamentoSnapshot()) => {
+    if (!snapshot) {
       return 'Selecione uma empresa e um PDV para visualizar os dados do caixa.';
     }
-    const aberturaLabel = toDateLabel(state.caixaInfo.aberturaData);
-    const fechamentoLabel = toDateLabel(state.caixaInfo.fechamentoData);
+
     const lines = [];
-    lines.push(`Empresa: ${getStoreLabel()} | PDV: ${getPdvLabel()}`);
-    lines.push(`Abertura: ${aberturaLabel} | Fechamento: ${fechamentoLabel}`);
+    lines.push(`Empresa: ${snapshot.meta.store} | PDV: ${snapshot.meta.pdv}`);
+    lines.push(`Período: ${snapshot.meta.abertura} → ${snapshot.meta.fechamento}`);
     lines.push('');
-    lines.push(formatPrintLine('Abertura', formatCurrency(state.summary.abertura)));
-    lines.push('---------------------Recebimentos---------------------');
-    lines.push('Meios de pagamento');
-    if (state.pagamentos.length) {
-      state.pagamentos.forEach((payment) => {
-        lines.push(formatPrintLine(payment.label, formatCurrency(payment.valor)));
+    lines.push('Resumo financeiro');
+    lines.push(formatPrintLine('Abertura', snapshot.resumo.abertura.formatted));
+    lines.push(formatPrintLine('Recebido', snapshot.resumo.recebido.formatted));
+    lines.push(formatPrintLine('Saldo', snapshot.resumo.saldo.formatted));
+    lines.push('');
+    lines.push('Recebimentos por meio');
+    if (snapshot.recebimentos.items.length) {
+      snapshot.recebimentos.items.forEach((item) => {
+        lines.push(formatPrintLine(item.label, item.formattedValue));
       });
+      lines.push(formatPrintLine('Total recebido', snapshot.recebimentos.formattedTotal));
     } else {
       lines.push('Nenhum meio de pagamento configurado.');
     }
-    lines.push('------------- Fechamento Previsto ---------------------');
-    const previstoPagamentos =
-      state.allowApuradoEdit && state.caixaInfo.previstoPagamentos?.length
-        ? state.caixaInfo.previstoPagamentos
-        : state.caixaInfo.previstoPagamentos?.length
-        ? state.caixaInfo.previstoPagamentos
-        : state.pagamentos;
-    if (previstoPagamentos?.length) {
-      previstoPagamentos.forEach((payment) => {
-        lines.push(formatPrintLine(payment.label, formatCurrency(payment.valor)));
+    lines.push('');
+    lines.push('Fechamento previsto');
+    if (snapshot.previsto.items.length) {
+      snapshot.previsto.items.forEach((item) => {
+        lines.push(formatPrintLine(item.label, item.formattedValue));
       });
-      const previstoTotal = state.caixaInfo.fechamentoPrevisto || sumPayments(previstoPagamentos);
-      lines.push(formatPrintLine('Total previsto', formatCurrency(previstoTotal)));
+      lines.push(formatPrintLine('Total previsto', snapshot.previsto.formattedTotal));
     } else {
       lines.push('Nenhum valor previsto.');
     }
-    lines.push('------------- Fechamento Apurado -------------------');
-    const apuradoPagamentos = state.allowApuradoEdit
-      ? state.pagamentos
-      : state.caixaInfo.apuradoPagamentos || [];
-    if (apuradoPagamentos.length) {
-      apuradoPagamentos.forEach((payment) => {
-        lines.push(formatPrintLine(payment.label, formatCurrency(payment.valor)));
+    lines.push('');
+    lines.push('Fechamento apurado');
+    if (snapshot.apurado.items.length) {
+      snapshot.apurado.items.forEach((item) => {
+        lines.push(formatPrintLine(item.label, item.formattedValue));
       });
-      const apuradoTotal = state.caixaInfo.fechamentoApurado || sumPayments(apuradoPagamentos);
-      lines.push(formatPrintLine('Total apurado', formatCurrency(apuradoTotal)));
+      lines.push(formatPrintLine('Total apurado', snapshot.apurado.formattedTotal));
     } else {
       lines.push('Aguardando fechamento.');
     }
+
     return lines.join('\n');
   };
 
-  const openMatricialPreview = () => {
-    if (typeof window === 'undefined') return;
-    const content = buildSummaryPrint();
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=800,height=600');
-    if (!printWindow) {
-      console.warn('Não foi possível abrir a janela de impressão.');
-      return;
-    }
-    const markup = `<!DOCTYPE html>
-      <html lang="pt-BR">
-        <head>
-          <meta charset="utf-8">
-          <title>Fechamento do caixa</title>
-          <style>
-            body { font-family: 'Courier New', Courier, monospace; font-size: 12px; padding: 16px; }
-            pre { white-space: pre-wrap; }
-          </style>
-        </head>
-        <body>
-          <pre>${content}</pre>
-        </body>
-      </html>`;
-    printWindow.document.open();
-    printWindow.document.write(markup);
-    printWindow.document.close();
-    printWindow.onload = () => {
-      printWindow.focus();
-      try {
-        printWindow.print();
-      } catch (error) {
-        console.warn('Falha ao acionar impressão automática do fechamento.', error);
-      }
-    };
+  const escapeHtml = (value) => {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   };
 
-  const promptPrintFechamento = () => {
-    if (typeof window === 'undefined') return;
-    const shouldPrint = window.confirm('Deseja imprimir o fechamento?');
-    if (shouldPrint) {
-      openMatricialPreview();
+  const getReceiptStyles = (variant = 'matricial') => {
+    const accent = variant === 'fiscal' ? '#0b3d91' : '#111111';
+    return `
+      :root { color-scheme: light; }
+      *, *::before, *::after { box-sizing: border-box; }
+      @page { size: 80mm auto; margin: 0; }
+      body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        font-size: 11px;
+        color: #111;
+        font-weight: 500;
+        -webkit-font-smoothing: antialiased;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        --receipt-accent: ${accent};
+      }
+      main.receipt {
+        width: 74mm;
+        margin: 0 auto;
+        padding: 3mm 2mm 5mm;
+        display: flex;
+        flex-direction: column;
+        gap: 2.2mm;
+      }
+      .receipt__header { text-align: center; }
+      .receipt__title {
+        margin: 0;
+        font-size: 12.4px;
+        font-weight: 800;
+        letter-spacing: 0.55px;
+        text-transform: uppercase;
+      }
+      .receipt__badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1.4mm;
+        margin-top: 1.2mm;
+        padding: 0.6mm 2.2mm;
+        font-size: 9.6px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.45px;
+        border: 1px solid var(--receipt-accent);
+        border-radius: 999px;
+        color: var(--receipt-accent);
+      }
+      .receipt__meta {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.7mm;
+        font-size: 10.3px;
+        line-height: 1.35;
+        color: #222;
+      }
+      .receipt__meta-item {
+        display: block;
+        text-align: center;
+        max-width: 64mm;
+      }
+      .receipt__section {
+        border-top: 1px solid rgba(17, 17, 17, 0.85);
+        padding-top: 2mm;
+        display: flex;
+        flex-direction: column;
+        gap: 1.6mm;
+      }
+      .receipt__section:first-of-type {
+        border-top: none;
+        padding-top: 0;
+      }
+      .receipt__section-title {
+        margin: 0;
+        font-size: 10.7px;
+        font-weight: 700;
+        letter-spacing: 0.45px;
+        text-transform: uppercase;
+        color: #111;
+      }
+      .receipt__cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.6mm;
+      }
+      .receipt-card {
+        border: 1px solid rgba(17, 17, 17, 0.85);
+        border-radius: 1.6mm;
+        padding: 1.6mm 1.8mm;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4mm;
+        background: rgba(17, 17, 17, 0.05);
+      }
+      .receipt-card__label {
+        font-size: 9.8px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: #333;
+      }
+      .receipt-card__value {
+        font-size: 11.3px;
+        font-weight: 700;
+        color: #000;
+      }
+      .receipt-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1.05mm;
+      }
+      .receipt-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.2mm;
+        font-size: 10.4px;
+      }
+      .receipt-row__label {
+        flex: 1;
+        color: #333;
+      }
+      .receipt-row__value {
+        font-weight: 700;
+        color: #000;
+      }
+      .receipt-row--total .receipt-row__label {
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+        font-weight: 700;
+      }
+      .receipt-row--total .receipt-row__value {
+        font-size: 11.1px;
+      }
+      .receipt-list__empty {
+        font-size: 10px;
+        text-align: center;
+        color: #666;
+        padding: 1.6mm 0;
+        border: 1px dashed rgba(102, 102, 102, 0.4);
+        border-radius: 1.6mm;
+        background: rgba(0, 0, 0, 0.03);
+      }
+      .receipt-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10.1px;
+      }
+      .receipt-table thead th {
+        text-align: left;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+        padding-bottom: 0.8mm;
+        border-bottom: 1px solid rgba(17, 17, 17, 0.85);
+      }
+      .receipt-table tbody td {
+        padding: 0.6mm 0;
+        border-bottom: 1px dashed rgba(17, 17, 17, 0.25);
+        vertical-align: top;
+      }
+      .receipt-table tbody td:last-child {
+        text-align: right;
+        font-weight: 600;
+      }
+      .receipt-table__muted {
+        display: block;
+        font-size: 9.4px;
+        color: #555;
+      }
+      .receipt__footer {
+        margin-top: 2mm;
+        text-align: center;
+        font-size: 9.4px;
+        color: #555;
+        line-height: 1.45;
+      }
+      .receipt__footer-strong {
+        font-weight: 600;
+        color: #222;
+      }
+      .receipt__divider {
+        width: 100%;
+        border: none;
+        border-top: 1px dashed rgba(17, 17, 17, 0.3);
+        margin: 1.8mm 0 0;
+      }
+      .receipt-empty {
+        margin: 0;
+        padding: 7mm 0;
+        text-align: center;
+        font-size: 11px;
+        color: #666;
+        font-weight: 600;
+      }
+      .receipt-fallback {
+        margin: 0;
+        font-size: 9.8px;
+        color: #666;
+        line-height: 1.45;
+        text-align: center;
+        white-space: pre-wrap;
+      }
+      @media print {
+        body { margin: 0; }
+      }
+    `;
+  };
+
+  const createReceiptDocument = ({ title, variant = 'matricial', body }) => {
+    const safeTitle = escapeHtml(title || 'Documento para impressão');
+    const styles = getReceiptStyles(variant);
+    return `<!DOCTYPE html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <title>${safeTitle}</title>
+          <style>${styles}</style>
+        </head>
+        <body data-variant="${escapeHtml(variant)}">${body}</body>
+      </html>`;
+  };
+
+  const buildFechamentoReceiptMarkup = (snapshot, variant, fallbackText) => {
+    if (!snapshot) {
+      const fallback = fallbackText && fallbackText.trim()
+        ? `<pre class="receipt-fallback">${escapeHtml(fallbackText)}</pre>`
+        : '';
+      return `<main class="receipt"><p class="receipt-empty">Fechamento sem conteúdo para impressão.</p>${fallback}</main>`;
     }
+
+    const badgeLabel = variant === 'fiscal' ? 'Fiscal' : 'Matricial';
+    const metaLines = [
+      snapshot.meta.store,
+      `PDV: ${snapshot.meta.pdv}`,
+      `Período: ${snapshot.meta.abertura} → ${snapshot.meta.fechamento}`,
+    ]
+      .filter(Boolean)
+      .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
+      .join('');
+
+    const resumoCards = `
+      <div class="receipt__cards">
+        <div class="receipt-card">
+          <span class="receipt-card__label">Abertura</span>
+          <span class="receipt-card__value">${escapeHtml(snapshot.resumo.abertura.formatted)}</span>
+        </div>
+        <div class="receipt-card">
+          <span class="receipt-card__label">Recebido</span>
+          <span class="receipt-card__value">${escapeHtml(snapshot.resumo.recebido.formatted)}</span>
+        </div>
+        <div class="receipt-card">
+          <span class="receipt-card__label">Saldo</span>
+          <span class="receipt-card__value">${escapeHtml(snapshot.resumo.saldo.formatted)}</span>
+        </div>
+      </div>`;
+
+    const renderRows = (items, { totalLabel, totalValue, emptyLabel }) => {
+      if (!items.length) {
+        return `<li class="receipt-list__empty">${escapeHtml(emptyLabel)}</li>`;
+      }
+      const rows = items
+        .map(
+          (item) => `
+            <li class="receipt-row">
+              <span class="receipt-row__label">${escapeHtml(item.label)}</span>
+              <span class="receipt-row__value">${escapeHtml(item.formattedValue)}</span>
+            </li>`
+        )
+        .join('');
+      const totalRow = totalLabel && totalValue
+        ? `
+            <li class="receipt-row receipt-row--total">
+              <span class="receipt-row__label">${escapeHtml(totalLabel)}</span>
+              <span class="receipt-row__value">${escapeHtml(totalValue)}</span>
+            </li>`
+        : '';
+      return `${rows}${totalRow}`;
+    };
+
+    const recebimentosList = renderRows(snapshot.recebimentos.items, {
+      totalLabel: 'Total recebido',
+      totalValue: snapshot.recebimentos.formattedTotal,
+      emptyLabel: 'Nenhum meio de pagamento configurado.',
+    });
+    const previstoList = renderRows(snapshot.previsto.items, {
+      totalLabel: 'Total previsto',
+      totalValue: snapshot.previsto.formattedTotal,
+      emptyLabel: 'Nenhum valor previsto.',
+    });
+    const apuradoList = renderRows(snapshot.apurado.items, {
+      totalLabel: 'Total apurado',
+      totalValue: snapshot.apurado.formattedTotal,
+      emptyLabel: 'Aguardando fechamento.',
+    });
+
+    return `
+      <main class="receipt">
+        <header class="receipt__header">
+          <h1 class="receipt__title">Fechamento de Caixa</h1>
+          <span class="receipt__badge">${escapeHtml(badgeLabel)}</span>
+        </header>
+        <section class="receipt__meta">${metaLines}</section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Resumo</h2>
+          ${resumoCards}
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Recebimentos</h2>
+          <ul class="receipt-list">${recebimentosList}</ul>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Fechamento previsto</h2>
+          <ul class="receipt-list">${previstoList}</ul>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Fechamento apurado</h2>
+          <ul class="receipt-list">${apuradoList}</ul>
+        </section>
+      </main>`;
+  };
+
+  const buildSaleReceiptMarkup = (snapshot, variant) => {
+    if (!snapshot) {
+      return '<main class="receipt"><p class="receipt-empty">Nenhuma venda disponível para impressão.</p></main>';
+    }
+
+    const badgeLabel = variant === 'fiscal' ? 'Fiscal' : 'Matricial';
+    const metaLines = [
+      snapshot.meta.store,
+      `PDV: ${snapshot.meta.pdv}`,
+      snapshot.meta.operador ? `Operador: ${snapshot.meta.operador}` : '',
+      snapshot.meta.data,
+    ]
+      .filter(Boolean)
+      .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
+      .join('');
+
+    const itemsRows = snapshot.itens
+      .map(
+        (item) => `
+          <tr>
+            <td>${escapeHtml(item.index)}</td>
+            <td>
+              <strong>${escapeHtml(item.nome)}</strong>
+              ${item.codigo ? `<span class="receipt-table__muted">${escapeHtml(item.codigo)}</span>` : ''}
+            </td>
+            <td>${escapeHtml(item.quantidade)} × ${escapeHtml(item.unitario)}</td>
+            <td>${escapeHtml(item.subtotal)}</td>
+          </tr>`
+      )
+      .join('');
+
+    const totalsRows = [
+      { label: 'Subtotal', value: snapshot.totais.bruto },
+      snapshot.totais.descontoValor > 0
+        ? { label: 'Descontos', value: `- ${snapshot.totais.desconto}` }
+        : null,
+      snapshot.totais.acrescimoValor > 0
+        ? { label: 'Acréscimos', value: snapshot.totais.acrescimo }
+        : null,
+      { label: 'Total da venda', value: snapshot.totais.liquido, isTotal: true },
+      { label: 'Pago', value: snapshot.totais.pago },
+      snapshot.totais.trocoValor > 0
+        ? { label: 'Troco', value: snapshot.totais.troco }
+        : null,
+    ]
+      .filter(Boolean)
+      .map((row) => `
+        <li class="receipt-row${row.isTotal ? ' receipt-row--total' : ''}">
+          <span class="receipt-row__label">${escapeHtml(row.label)}</span>
+          <span class="receipt-row__value">${escapeHtml(row.value)}</span>
+        </li>`)
+      .join('');
+
+    const pagamentosRows = snapshot.pagamentos.items.length
+      ? snapshot.pagamentos.items
+          .map(
+            (payment) => `
+              <li class="receipt-row">
+                <span class="receipt-row__label">${escapeHtml(payment.label)}</span>
+                <span class="receipt-row__value">${escapeHtml(payment.formatted)}</span>
+              </li>`
+          )
+          .join('')
+      : '<li class="receipt-list__empty">Nenhum pagamento registrado.</li>';
+
+    const clienteSection = snapshot.cliente
+      ? `
+          <section class="receipt__section">
+            <h2 class="receipt__section-title">Cliente</h2>
+            <ul class="receipt-list">
+              <li class="receipt-row">
+                <span class="receipt-row__label">Nome</span>
+                <span class="receipt-row__value">${escapeHtml(snapshot.cliente.nome)}</span>
+              </li>
+              ${snapshot.cliente.documento
+                ? `<li class="receipt-row"><span class="receipt-row__label">Documento</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.documento)}</span></li>`
+                : ''}
+              ${snapshot.cliente.contato
+                ? `<li class="receipt-row"><span class="receipt-row__label">Contato</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.contato)}</span></li>`
+                : ''}
+              ${snapshot.cliente.pet
+                ? `<li class="receipt-row"><span class="receipt-row__label">Pet</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.pet)}</span></li>`
+                : ''}
+            </ul>
+          </section>`
+      : '';
+
+    return `
+      <main class="receipt">
+        <header class="receipt__header">
+          <h1 class="receipt__title">Comprovante de venda</h1>
+          <span class="receipt__badge">${escapeHtml(badgeLabel)}</span>
+        </header>
+        <section class="receipt__meta">${metaLines}</section>
+        ${clienteSection}
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Itens</h2>
+          <table class="receipt-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Descrição</th>
+                <th>Qtde × Valor</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>${itemsRows}</tbody>
+          </table>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Totais</h2>
+          <ul class="receipt-list">${totalsRows}</ul>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Pagamentos</h2>
+          <ul class="receipt-list">${pagamentosRows}</ul>
+        </section>
+        <footer class="receipt__footer">
+          <p class="receipt__footer-strong">Obrigado pela preferência!</p>
+          <p>Volte sempre.</p>
+        </footer>
+      </main>`;
+  };
+
+  const printHtmlDocument = (documentHtml, { logPrefix = 'documento' } = {}) => {
+    if (typeof window === 'undefined') return false;
+
+    const urlFactory = window.URL || window.webkitURL || null;
+    const supportsBlobUrl =
+      typeof Blob !== 'undefined' &&
+      !!urlFactory &&
+      typeof urlFactory.createObjectURL === 'function';
+
+    let printWindow = null;
+    let blobUrl = '';
+    let fallbackTimer = null;
+    let readinessTimer = null;
+    let readyAttempts = 0;
+    let printed = false;
+
+    const clearTimers = () => {
+      if (fallbackTimer) {
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+      if (readinessTimer) {
+        window.clearTimeout(readinessTimer);
+        readinessTimer = null;
+      }
+    };
+
+    const releaseBlob = () => {
+      if (blobUrl && urlFactory && typeof urlFactory.revokeObjectURL === 'function') {
+        try {
+          urlFactory.revokeObjectURL(blobUrl);
+        } catch (_) {
+          /* ignore */
+        }
+        blobUrl = '';
+      }
+    };
+
+    const cleanup = () => {
+      clearTimers();
+      releaseBlob();
+    };
+
+    const triggerPrint = () => {
+      if (printed || !printWindow) return;
+      printed = true;
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (error) {
+        console.warn(`Falha ao acionar impressão automática do ${logPrefix}.`, error);
+      } finally {
+        window.setTimeout(releaseBlob, 1500);
+      }
+    };
+
+    const waitForReady = () => {
+      if (!printWindow) return;
+
+      let isReady = true;
+      try {
+        const doc = printWindow.document;
+        isReady = !!doc && doc.readyState === 'complete';
+      } catch (error) {
+        isReady = true;
+      }
+
+      if (!isReady && readyAttempts < 15) {
+        readyAttempts += 1;
+        readinessTimer = window.setTimeout(waitForReady, 120);
+        return;
+      }
+
+      clearTimers();
+      window.setTimeout(triggerPrint, 120);
+    };
+
+    try {
+      if (supportsBlobUrl) {
+        const blob = new Blob([documentHtml], { type: 'text/html' });
+        blobUrl = urlFactory.createObjectURL(blob);
+        printWindow = window.open(blobUrl, '_blank', 'noopener');
+      } else {
+        printWindow = window.open('', '_blank', 'noopener');
+      }
+
+      if (!printWindow) {
+        cleanup();
+        console.warn(`Não foi possível abrir a janela de impressão do ${logPrefix}.`);
+        return false;
+      }
+
+      const handleLoad = () => {
+        readyAttempts = 0;
+        waitForReady();
+      };
+
+      if (!blobUrl) {
+        const printDocument = printWindow.document;
+        if (!printDocument) {
+          if (typeof printWindow.close === 'function') {
+            try {
+              printWindow.close();
+            } catch (_) {
+              /* ignore */
+            }
+          }
+          cleanup();
+          return false;
+        }
+
+        printDocument.open();
+        printDocument.write(documentHtml);
+        printDocument.close();
+
+        if (printWindow.addEventListener) {
+          printWindow.addEventListener('load', handleLoad, { once: true });
+        }
+
+        if (printDocument.readyState === 'complete') {
+          handleLoad();
+        } else if (printDocument.addEventListener) {
+          const readyListener = () => {
+            if (printDocument.readyState === 'complete') {
+              printDocument.removeEventListener('readystatechange', readyListener);
+              handleLoad();
+            }
+          };
+          printDocument.addEventListener('readystatechange', readyListener);
+        }
+      } else if (printWindow.addEventListener) {
+        printWindow.addEventListener('load', handleLoad, { once: true });
+      }
+
+      if (printWindow.addEventListener) {
+        printWindow.addEventListener('afterprint', cleanup);
+        printWindow.addEventListener('beforeunload', cleanup);
+      }
+
+      fallbackTimer = window.setTimeout(() => {
+        readyAttempts = 0;
+        waitForReady();
+      }, blobUrl ? 900 : 600);
+
+      return true;
+    } catch (error) {
+      console.warn(`Falha ao preparar a impressão do ${logPrefix}.`, error);
+      if (printWindow && typeof printWindow.close === 'function') {
+        try {
+          printWindow.close();
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      cleanup();
+      return false;
+    }
+  };
+
+  const printReceipt = (type, variant, { snapshot, fallbackText } = {}) => {
+    const resolvedVariant = variant || 'matricial';
+    let bodyHtml = '';
+    let title = '';
+
+    if (type === 'fechamento') {
+      const effectiveSnapshot = snapshot || getFechamentoSnapshot();
+      if (!effectiveSnapshot) {
+        notify('Nenhum dado disponível para imprimir o fechamento.', 'warning');
+        return false;
+      }
+      bodyHtml = buildFechamentoReceiptMarkup(effectiveSnapshot, resolvedVariant, fallbackText || buildSummaryPrint(effectiveSnapshot));
+      title = 'Fechamento do caixa';
+    } else if (type === 'venda') {
+      const effectiveSnapshot = snapshot || getSaleReceiptSnapshot();
+      if (!effectiveSnapshot) {
+        notify('Nenhum dado disponível para imprimir a venda.', 'warning');
+        return false;
+      }
+      bodyHtml = buildSaleReceiptMarkup(effectiveSnapshot, resolvedVariant);
+      title = 'Comprovante de venda';
+    } else {
+      return false;
+    }
+
+    const documentHtml = createReceiptDocument({ title, variant: resolvedVariant, body: bodyHtml });
+    return printHtmlDocument(documentHtml, { logPrefix: title.toLowerCase() });
+  };
+
+  const executePrintMode = (type, mode, options = {}) => {
+    if (!mode || mode === 'NONE') {
+      return false;
+    }
+    const variant = resolvePrintVariant(mode);
+    const requiresConfirmation = mode === 'PF' || mode === 'PM';
+    if (requiresConfirmation) {
+      const question = variant === 'fiscal'
+        ? 'Deseja imprimir em Fiscal?'
+        : 'Deseja imprimir em Matricial?';
+      const confirmed = window.confirm(question);
+      if (!confirmed) {
+        return false;
+      }
+    }
+    return printReceipt(type, variant, options);
+  };
+
+  const handleConfiguredPrint = (type, options = {}) => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    const preferences = state.printPreferences || {};
+    const mode = normalizePrintMode(preferences[type], 'PM');
+    return executePrintMode(type, mode, options);
   };
 
   const updateSummary = () => {
@@ -1537,6 +3090,8 @@
     state.selectedProduct = null;
     state.quantidade = 1;
     state.itens = [];
+    state.vendaCliente = null;
+    state.vendaPet = null;
     state.summary = { abertura: 0, recebido: 0, saldo: 0 };
     state.caixaInfo = {
       aberturaData: null,
@@ -1553,6 +3108,49 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    state.customerSearchResults = [];
+    state.customerSearchLoading = false;
+    state.customerSearchQuery = '';
+    state.customerPets = [];
+    state.customerPetsLoading = false;
+    state.modalSelectedCliente = null;
+    state.modalSelectedPet = null;
+    state.modalActiveTab = 'cliente';
+    state.printPreferences = { fechamento: 'PM', venda: 'PM' };
+    if (customerSearchTimeout) {
+      clearTimeout(customerSearchTimeout);
+      customerSearchTimeout = null;
+    }
+    if (customerSearchController) {
+      customerSearchController.abort();
+      customerSearchController = null;
+    }
+    if (customerPetsController) {
+      customerPetsController.abort();
+      customerPetsController = null;
+    }
+    if (elements.customerSearchInput) {
+      elements.customerSearchInput.value = '';
+    }
+    if (elements.customerResultsList) {
+      elements.customerResultsList.innerHTML = '';
+    }
+    if (elements.customerResultsLoading) {
+      elements.customerResultsLoading.classList.add('hidden');
+    }
+    if (elements.customerResultsEmpty) {
+      elements.customerResultsEmpty.textContent = 'Digite para buscar clientes.';
+      elements.customerResultsEmpty.classList.remove('hidden');
+    }
+    if (elements.customerPetsList) {
+      elements.customerPetsList.innerHTML = '';
+    }
+    if (elements.customerPetsLoading) {
+      elements.customerPetsLoading.classList.add('hidden');
+    }
+    if (elements.customerPetsEmpty) {
+      elements.customerPetsEmpty.textContent = 'Nenhum pet disponível.';
+    }
     if (elements.searchInput) {
       elements.searchInput.value = '';
     }
@@ -1561,6 +3159,7 @@
       elements.searchResults.innerHTML = '';
     }
     clearSelectedProduct();
+    updateSaleCustomerSummary();
     renderItemsList();
     renderPayments();
     renderSalePaymentMethods();
@@ -1574,6 +3173,10 @@
     updateStatusBadge();
     updateTabAvailability();
     updateFinalizeButton();
+    updateCustomerModalTabs();
+    updateCustomerModalActions();
+    renderCustomerSearchResults();
+    renderCustomerPets();
     setActiveTab('caixa-tab');
   };
 
@@ -1585,56 +3188,50 @@
 
   const populateCompanySelect = () => {
     if (!elements.companySelect) return;
-    const previous = normalizeId(elements.companySelect.value);
-    const target = state.selectedStore ? normalizeId(state.selectedStore) : previous;
+    const previous = elements.companySelect.value;
     const options = ['<option value="">Selecione uma empresa</option>'];
     state.stores.forEach((store) => {
-      const storeId = normalizeId(store._id);
+      const storeId = normalizeId(store?._id);
       options.push(
-        `<option value="${storeId}">${store.nome || store.nomeFantasia || 'Empresa sem nome'}</option>`
+        `<option value="${storeId}">${store?.nome || store?.nomeFantasia || 'Empresa sem nome'}</option>`
       );
     });
     elements.companySelect.innerHTML = options.join('');
-    if (target && state.stores.some((store) => normalizeId(store._id) === target)) {
-      elements.companySelect.value = target;
-    } else {
-      elements.companySelect.value = '';
+    const selectedValue = normalizeId(state.selectedStore || previous);
+    if (selectedValue && findStoreById(selectedValue)) {
+      elements.companySelect.value = selectedValue;
     }
   };
 
   const populatePdvSelect = () => {
     if (!elements.pdvSelect) return;
-    const previous = normalizeId(elements.pdvSelect.value);
-    const target = state.selectedPdv ? normalizeId(state.selectedPdv) : previous;
     const options = ['<option value="">Selecione um PDV</option>'];
     state.pdvs.forEach((pdv) => {
-      const pdvId = normalizeId(pdv._id);
-      options.push(`<option value="${pdvId}">${pdv.nome || pdv.codigo || pdvId}</option>`);
+      const pdvId = normalizeId(pdv?._id);
+      options.push(
+        `<option value="${pdvId}">${pdv?.nome || pdv?.codigo || pdvId}</option>`
+      );
     });
     elements.pdvSelect.innerHTML = options.join('');
-    if (target && state.pdvs.some((pdv) => normalizeId(pdv._id) === target)) {
-      elements.pdvSelect.value = target;
-    } else {
-      elements.pdvSelect.value = '';
+    const selectedValue = normalizeId(state.selectedPdv);
+    if (selectedValue && findPdvById(selectedValue)) {
+      elements.pdvSelect.value = selectedValue;
     }
     elements.pdvSelect.disabled = state.pdvs.length === 0;
   };
 
   const fetchStores = async () => {
-    const response = await fetch(`${API_BASE}/stores`);
-    if (!response.ok) {
-      throw new Error('Não foi possível carregar as empresas cadastradas.');
-    }
-    const payload = await response.json();
-    const stores = Array.isArray(payload?.stores)
-      ? payload.stores
-      : Array.isArray(payload)
+    const token = getToken();
+    const payload = await fetchWithOptionalAuth(`${API_BASE}/stores`, {
+      token,
+      errorMessage: 'Não foi possível carregar as empresas cadastradas.',
+    });
+    state.stores = Array.isArray(payload)
       ? payload
+      : Array.isArray(payload?.stores)
+      ? payload.stores
       : [];
-    state.stores = stores.map((store) => normalizeStoreRecord(store));
-    if (state.selectedStore) {
-      state.selectedStore = normalizeId(state.selectedStore);
-    }
+    state.stores = state.stores.map((store) => normalizeStoreRecord(store));
     populateCompanySelect();
   };
 
@@ -1651,13 +3248,14 @@
       return;
     }
     try {
-      const response = await fetch(
-        `${API_BASE}/payment-methods?company=${encodeURIComponent(storeId)}`
+      const token = getToken();
+      const payload = await fetchWithOptionalAuth(
+        `${API_BASE}/payment-methods?company=${encodeURIComponent(storeId)}`,
+        {
+          token,
+          errorMessage: 'Não foi possível carregar os meios de pagamento cadastrados.',
+        }
       );
-      if (!response.ok) {
-        throw new Error('Não foi possível carregar os meios de pagamento cadastrados.');
-      }
-      const payload = await response.json();
       const methods = Array.isArray(payload?.paymentMethods)
         ? payload.paymentMethods
         : Array.isArray(payload)
@@ -1675,48 +3273,36 @@
 
   const fetchPdvs = async (storeId) => {
     const query = storeId ? `?empresa=${encodeURIComponent(storeId)}` : '';
-    const response = await fetch(`${API_BASE}/pdvs${query}`);
-    if (!response.ok) {
-      throw new Error('Não foi possível carregar os PDVs da empresa.');
-    }
-    const payload = await response.json();
-    const pdvs = Array.isArray(payload?.pdvs)
+    const token = getToken();
+    const payload = await fetchWithOptionalAuth(`${API_BASE}/pdvs${query}`, {
+      token,
+      errorMessage: 'Não foi possível carregar os PDVs da empresa.',
+    });
+    state.pdvs = Array.isArray(payload?.pdvs)
       ? payload.pdvs
       : Array.isArray(payload)
       ? payload
       : [];
-    state.pdvs = pdvs.map((item) => normalizePdvRecord(item));
-    if (state.selectedPdv) {
-      state.selectedPdv = normalizeId(state.selectedPdv);
-    }
+    state.pdvs = state.pdvs.map((pdv) => normalizePdvRecord(pdv));
     populatePdvSelect();
   };
 
   const fetchPdvDetails = async (pdvId) => {
     const token = getToken();
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const response = await fetch(`${API_BASE}/pdvs/${pdvId}`, { headers });
-    if (!response.ok) {
-      const message = await response.json().catch(() => null);
-      throw new Error(message?.message || 'Não foi possível carregar os dados do PDV selecionado.');
-    }
-    const payload = await response.json();
+    const payload = await fetchWithOptionalAuth(`${API_BASE}/pdvs/${pdvId}`, {
+      token,
+      errorMessage: 'Não foi possível carregar os dados do PDV selecionado.',
+    });
     return normalizePdvRecord(payload);
   };
   const applyPdvData = (pdv) => {
-    const pdvId = normalizeId(pdv?._id || pdv?.id);
-    if (pdvId) {
-      state.selectedPdv = pdvId;
-      if (elements.pdvSelect) {
-        elements.pdvSelect.value = pdvId;
-      }
-    }
     const companyId = getPdvCompanyId(pdv);
-    if (companyId) {
+    if (companyId && companyId !== state.selectedStore) {
       state.selectedStore = companyId;
       if (elements.companySelect) {
         elements.companySelect.value = companyId;
       }
+      populateCompanySelect();
     }
     const caixaAberto = Boolean(
       pdv?.caixa?.aberto ||
@@ -1765,6 +3351,28 @@
       previstoPagamentos: [],
       apuradoPagamentos: [],
     };
+    const impressaoConfig = pdv?.configuracoesImpressao || {};
+    const fechamentoMode = normalizePrintMode(
+      impressaoConfig.fechamento ||
+        impressaoConfig.modoFechamento ||
+        impressaoConfig.imprimirFechamento ||
+        impressaoConfig.comprovanteFechamento ||
+        impressaoConfig.fechamentoAutomatico ||
+        impressaoConfig.impressaoFechamento
+    );
+    const vendaMode = normalizePrintMode(
+      impressaoConfig.venda ||
+        impressaoConfig.modoVenda ||
+        impressaoConfig.imprimirVenda ||
+        impressaoConfig.comprovanteVenda ||
+        impressaoConfig.vendaAutomatica ||
+        impressaoConfig.sempreImprimir ||
+        impressaoConfig.impressaoVenda
+    );
+    state.printPreferences = {
+      fechamento: fechamentoMode,
+      venda: vendaMode,
+    };
     const pagamentosData = pdv?.caixa?.pagamentos || pdv?.pagamentos || {};
     applyPagamentosData(pagamentosData);
     if (state.summary.abertura > 0 && !state.pagamentos.some((payment) => payment.valor > 0)) {
@@ -1809,11 +3417,22 @@
       .map((product, index) => {
         const finalPrice = getFinalPrice(product);
         const basePrice = getBasePrice(product);
-        const badge = finalPrice < basePrice ? '<span class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Promo</span>' : '';
+        const generalPromo = hasGeneralPromotion(product);
+        const showGeneralWarning = generalPromo && !canApplyGeneralPromotion();
+        const badge = finalPrice < basePrice
+          ? '<span class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Promo</span>'
+          : '';
+        const generalBadge = showGeneralWarning
+          ? '<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Cliente necessário</span>'
+          : '';
+        const badges = [badge, generalBadge].filter(Boolean).join('');
         const priceLine = finalPrice < basePrice
           ? `<span class="text-sm font-semibold text-primary">R$ ${toReais(finalPrice)}</span><span class="text-xs text-gray-400 line-through">R$ ${toReais(basePrice)}</span>`
           : `<span class="text-sm font-semibold text-gray-800">R$ ${toReais(finalPrice)}</span>`;
         const image = getImageUrl(product);
+        const extraNotice = showGeneralWarning
+          ? '<span class="block text-[11px] text-amber-600 mt-1">Vincule um cliente para aplicar a promoção geral.</span>'
+          : '';
         return `
           <button type="button" class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-primary/5" data-result-index="${index}">
             <span class="h-14 w-14 flex items-center justify-center rounded border border-gray-200 bg-white overflow-hidden">
@@ -1823,8 +3442,9 @@
               <span class="block text-sm font-semibold text-gray-800 truncate">${product.nome || 'Produto sem nome'}</span>
               <span class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                 ${priceLine}
-                ${badge}
+                ${badges}
               </span>
+              ${extraNotice}
               <span class="block text-[11px] text-gray-400 mt-1">Cód: ${getProductCode(product) || '—'} • Barras: ${getProductBarcode(product) || '—'}</span>
             </span>
           </button>
@@ -1873,6 +3493,51 @@
     }
   };
 
+  const findProductByLookupValue = (products, lookupValue) => {
+    const normalized = normalizeBarcodeValue(lookupValue);
+    if (!normalized) return null;
+    const barcodeMatch = products.find(
+      (product) => normalizeBarcodeValue(getProductBarcode(product)) === normalized
+    );
+    if (barcodeMatch) return barcodeMatch;
+    return (
+      products.find((product) => {
+        const identifiers = [
+          product?.codigoInterno,
+          product?.codInterno,
+          product?.codigo,
+          product?.codigoReferencia,
+          product?.sku,
+        ];
+        return identifiers.some((value) => normalizeBarcodeValue(value) === normalized);
+      }) || null
+    );
+  };
+
+  const fetchProductByBarcode = async (barcode) => {
+    const normalized = normalizeBarcodeValue(barcode);
+    if (!normalized) return null;
+    try {
+      const response = await fetch(
+        `${API_BASE}/products?search=${encodeURIComponent(normalized)}&limit=6`
+      );
+      if (!response.ok) {
+        throw new Error('Não foi possível buscar o produto pelo código informado.');
+      }
+      const payload = await response.json();
+      const products = Array.isArray(payload?.products)
+        ? payload.products
+        : Array.isArray(payload)
+        ? payload
+        : [];
+      if (!products.length) return null;
+      return findProductByLookupValue(products, normalized) || products[0] || null;
+    } catch (error) {
+      console.error('Erro ao buscar produto por código de barras no PDV:', error);
+      throw error;
+    }
+  };
+
   const selectProduct = (index) => {
     const product = state.searchResults[index];
     if (!product) return;
@@ -1888,35 +3553,151 @@
     }
   };
 
+  const appendProductToSale = (product, quantidade = 1) => {
+    if (!product) return false;
+    const quantidadeFinal = Math.max(1, Math.trunc(Number(quantidade) || 1));
+    const unitPrice = getFinalPrice(product);
+    const subtotal = unitPrice * quantidadeFinal;
+    const codigo = getProductCode(product);
+    const codigoInterno = product?.codigoInterno || product?.codInterno || codigo;
+    const codigoBarras = getProductBarcode(product);
+    const nome = product?.nome || 'Produto sem nome';
+    const generalPromo = hasGeneralPromotion(product);
+    const snapshot = buildProductSnapshot(product);
+    const existingIndex = state.itens.findIndex(
+      (item) =>
+        item.id === product._id ||
+        item.codigo === codigo ||
+        (!!codigoInterno && item.codigoInterno === codigoInterno)
+    );
+    if (existingIndex >= 0) {
+      const current = state.itens[existingIndex];
+      current.quantidade += quantidadeFinal;
+      current.valor = unitPrice;
+      current.subtotal = current.quantidade * current.valor;
+      current.codigoInterno = codigoInterno || current.codigoInterno;
+      current.codigoBarras = codigoBarras || current.codigoBarras;
+      current.generalPromo = generalPromo;
+      current.productSnapshot = snapshot;
+    } else {
+      state.itens.push({
+        id: product._id || product.id || codigo || String(Date.now()),
+        codigo,
+        codigoInterno,
+        codigoBarras,
+        nome,
+        quantidade: quantidadeFinal,
+        valor: unitPrice,
+        subtotal,
+        generalPromo,
+        productSnapshot: snapshot,
+      });
+    }
+    renderItemsList();
+    notify('Item adicionado à pré-visualização.', 'success');
+    return true;
+  };
+
   const addItemToList = () => {
     if (!state.selectedProduct) {
       notify('Selecione um produto para adicionar à venda.', 'warning');
       return;
     }
-    const quantidade = Math.max(1, Math.trunc(Number(elements.itemQuantity?.value || state.quantidade || 1)));
+    const quantidade = Math.max(
+      1,
+      Math.trunc(Number(elements.itemQuantity?.value || state.quantidade || 1))
+    );
     state.quantidade = quantidade;
     const product = state.selectedProduct;
-    const unitPrice = getFinalPrice(product);
-    const subtotal = unitPrice * quantidade;
-    const codigo = getProductCode(product);
-    const nome = product?.nome || 'Produto sem nome';
-    const existingIndex = state.itens.findIndex((item) => item.id === product._id || item.codigo === codigo);
-    if (existingIndex >= 0) {
-      const current = state.itens[existingIndex];
-      current.quantidade += quantidade;
-      current.subtotal = current.quantidade * current.valor;
-    } else {
-      state.itens.push({
-        id: product._id || product.id || codigo || String(Date.now()),
-        codigo,
-        nome,
-        quantidade,
-        valor: unitPrice,
-        subtotal,
-      });
+    appendProductToSale(product, quantidade);
+  };
+
+  const handleSearchKeydown = async (event) => {
+    if (event.key !== 'Enter') return;
+    const input = event.currentTarget;
+    if (!input) return;
+    const rawValue = typeof input.value === 'string' ? input.value : '';
+    const term = rawValue.trim();
+    if (!term) return;
+
+    event.preventDefault();
+
+    const normalized = normalizeBarcodeValue(term);
+    const lowerTerm = term.toLowerCase();
+
+    const matchesProduct = (product) => {
+      if (!product) return false;
+      const code = normalizeBarcodeValue(getProductCode(product));
+      const barcode = normalizeBarcodeValue(getProductBarcode(product));
+      const name = (product.nome || product.descricao || '').toLowerCase();
+      return (
+        (!!code && code === normalized) ||
+        (!!barcode && barcode === normalized) ||
+        (!!name && name === lowerTerm)
+      );
+    };
+
+    const clearSearchOverlay = () => {
+      if (elements.searchResults) {
+        elements.searchResults.classList.add('hidden');
+        elements.searchResults.innerHTML = '';
+      }
+      if (state.searchController) {
+        state.searchController.abort();
+        state.searchController = null;
+      }
+      state.searchResults = [];
+    };
+
+    const applySelectionAndAppend = (product) => {
+      state.selectedProduct = product;
+      state.quantidade = 1;
+      if (elements.itemQuantity) {
+        elements.itemQuantity.value = 1;
+      }
+      updateSelectedProductView();
+      appendProductToSale(product, 1);
+      clearSearchOverlay();
+      if (elements.searchInput) {
+        elements.searchInput.value = '';
+        elements.searchInput.focus();
+      }
+    };
+
+    if (matchesProduct(state.selectedProduct)) {
+      applySelectionAndAppend(state.selectedProduct);
+      return;
     }
-    renderItemsList();
-    notify('Item adicionado à pré-visualização.', 'success');
+
+    if (state.searchResults.length) {
+      const fromResults =
+        findProductByLookupValue(state.searchResults, term) ||
+        state.searchResults.find((item) => (item?.nome || '').toLowerCase() === lowerTerm) ||
+        null;
+      if (fromResults) {
+        applySelectionAndAppend(fromResults);
+        return;
+      }
+    }
+
+    input.disabled = true;
+
+    try {
+      const product = await fetchProductByBarcode(term);
+      if (!product) {
+        notify('Nenhum produto encontrado para o código informado.', 'warning');
+        return;
+      }
+      applySelectionAndAppend(product);
+    } catch (error) {
+      console.error('Falha ao adicionar produto pela busca no PDV:', error);
+      notify('Falha ao buscar o produto informado.', 'error');
+    } finally {
+      input.disabled = false;
+      if (elements.searchInput) {
+        elements.searchInput.focus();
+      }
+    }
   };
 
   const updatePaymentRow = (paymentId) => {
@@ -2175,7 +3956,7 @@
       notify(action.successMessage, 'success');
       updateTabAvailability();
       setActiveTab('caixa-tab');
-      promptPrintFechamento();
+      handleConfiguredPrint('fechamento');
     } else {
       if (!state.caixaAberto) {
         notify('Abra o caixa antes de registrar movimentações.', 'warning');
@@ -2272,6 +4053,7 @@
     elements.companySelect?.addEventListener('change', handleCompanyChange);
     elements.pdvSelect?.addEventListener('change', handlePdvChange);
     elements.searchInput?.addEventListener('input', handleSearchInput);
+    elements.searchInput?.addEventListener('keydown', handleSearchKeydown);
     elements.searchResults?.addEventListener('click', handleSearchResultsClick);
     document.addEventListener('click', handleDocumentClick);
     elements.addItem?.addEventListener('click', addItemToList);
@@ -2311,6 +4093,20 @@
         setActiveTab(target);
       });
     });
+    elements.customerOpenButton?.addEventListener('click', openCustomerModal);
+    elements.customerRemove?.addEventListener('click', handleCustomerRemove);
+    elements.customerModalClose?.addEventListener('click', closeCustomerModal);
+    elements.customerModalBackdrop?.addEventListener('click', closeCustomerModal);
+    elements.customerCancel?.addEventListener('click', closeCustomerModal);
+    elements.customerConfirm?.addEventListener('click', handleCustomerConfirm);
+    elements.customerClear?.addEventListener('click', handleCustomerClearSelection);
+    elements.customerSearchInput?.addEventListener('input', handleCustomerSearchInput);
+    elements.customerResultsList?.addEventListener('click', handleCustomerResultsClick);
+    elements.customerPetsList?.addEventListener('click', handleCustomerPetsClick);
+    Array.from(elements.customerTabButtons || []).forEach((button) => {
+      button.addEventListener('click', handleCustomerTabClick);
+    });
+    elements.customerModal?.addEventListener('keydown', handleCustomerModalKeydown);
   };
 
   const init = async () => {
@@ -2331,4 +4127,5 @@
   };
 
   document.addEventListener('DOMContentLoaded', init);
+}
 })();
