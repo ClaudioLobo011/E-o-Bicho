@@ -236,6 +236,21 @@
     return Number.isFinite(number) ? number : 0;
   };
 
+  const normalizeId = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object') {
+      if (typeof value.toHexString === 'function') {
+        return value.toHexString();
+      }
+      if (typeof value.toString === 'function') {
+        const str = value.toString();
+        return str === '[object Object]' ? '' : str;
+      }
+    }
+    return String(value);
+  };
+
   const normalizePrintMode = (value, fallback = 'PM') => {
     const normalized = (value || '').toString().trim().toUpperCase();
     if (!normalized) return fallback;
@@ -3169,11 +3184,15 @@
       token,
       errorMessage: 'Não foi possível carregar as empresas cadastradas.',
     });
-    state.stores = Array.isArray(payload)
+    const stores = Array.isArray(payload)
       ? payload
       : Array.isArray(payload?.stores)
       ? payload.stores
       : [];
+    state.stores = stores.map((store) => ({
+      ...store,
+      _id: normalizeId(store?._id || store?.id),
+    }));
     populateCompanySelect();
   };
 
@@ -3220,11 +3239,26 @@
       token,
       errorMessage: 'Não foi possível carregar os PDVs da empresa.',
     });
-    state.pdvs = Array.isArray(payload?.pdvs)
+    const pdvs = Array.isArray(payload?.pdvs)
       ? payload.pdvs
       : Array.isArray(payload)
       ? payload
       : [];
+    state.pdvs = pdvs.map((pdv) => {
+      const normalized = {
+        ...pdv,
+        _id: normalizeId(pdv?._id || pdv?.id),
+      };
+      if (pdv?.empresa) {
+        const empresa = pdv.empresa;
+        const normalizedEmpresa =
+          typeof empresa === 'object'
+            ? { ...empresa, _id: normalizeId(empresa?._id || empresa?.id) }
+            : { _id: normalizeId(empresa) };
+        normalized.empresa = normalizedEmpresa;
+      }
+      return normalized;
+    });
     populatePdvSelect();
   };
 
@@ -3236,6 +3270,22 @@
     });
   };
   const applyPdvData = (pdv) => {
+    const empresaId = normalizeId(
+      pdv?.empresa?._id || pdv?.empresa?.id || (typeof pdv?.empresa === 'string' ? pdv.empresa : null)
+    );
+    if (empresaId) {
+      state.selectedStore = empresaId;
+      if (pdv?.empresa && typeof pdv.empresa === 'object') {
+        const hasStore = state.stores.some((store) => store._id === empresaId);
+        if (!hasStore) {
+          state.stores.push({ ...pdv.empresa, _id: empresaId });
+          populateCompanySelect();
+        }
+      }
+      if (elements.companySelect) {
+        elements.companySelect.value = empresaId;
+      }
+    }
     const caixaAberto = Boolean(
       pdv?.caixa?.aberto ||
         pdv?.caixaAberto ||
