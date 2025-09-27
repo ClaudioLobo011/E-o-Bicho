@@ -477,6 +477,8 @@
     );
   };
 
+  const normalizeBarcodeValue = (value) => String(value ?? '').replace(/\s+/g, '');
+
   const getImageUrl = (product) => {
     const path =
       product?.imagemPrincipal ||
@@ -534,6 +536,7 @@
 
     elements.searchInput = document.getElementById('pdv-product-search');
     elements.searchResults = document.getElementById('pdv-product-results');
+    elements.barcodeInput = document.getElementById('pdv-barcode-input');
 
     elements.selectedImage = document.getElementById('pdv-selected-image');
     elements.selectedPlaceholder = document.getElementById('pdv-selected-placeholder');
@@ -1859,7 +1862,7 @@
   const openMatricialPreview = () => {
     if (typeof window === 'undefined') return;
     const content = buildSummaryPrint();
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=800,height=600');
+    const printWindow = window.open('', '_blank', 'noopener=yes,width=800,height=600');
     if (!printWindow) {
       console.warn('Não foi possível abrir a janela de impressão.');
       return;
@@ -1881,7 +1884,11 @@
     printWindow.document.open();
     printWindow.document.write(markup);
     printWindow.document.close();
-    printWindow.onload = () => {
+
+    let hasPrinted = false;
+    const triggerPrint = () => {
+      if (hasPrinted) return;
+      hasPrinted = true;
       printWindow.focus();
       try {
         printWindow.print();
@@ -1889,6 +1896,18 @@
         console.warn('Falha ao acionar impressão automática do fechamento.', error);
       }
     };
+
+    if (typeof printWindow.addEventListener === 'function') {
+      printWindow.addEventListener('load', triggerPrint, { once: true });
+    } else {
+      printWindow.onload = triggerPrint;
+    }
+
+    if (printWindow.document?.readyState === 'complete') {
+      triggerPrint();
+    } else {
+      setTimeout(triggerPrint, 500);
+    }
   };
 
   const promptPrintFechamento = () => {
@@ -2452,6 +2471,51 @@
     }
   };
 
+  const findProductByLookupValue = (products, lookupValue) => {
+    const normalized = normalizeBarcodeValue(lookupValue);
+    if (!normalized) return null;
+    const barcodeMatch = products.find(
+      (product) => normalizeBarcodeValue(getProductBarcode(product)) === normalized
+    );
+    if (barcodeMatch) return barcodeMatch;
+    return (
+      products.find((product) => {
+        const identifiers = [
+          product?.codigoInterno,
+          product?.codInterno,
+          product?.codigo,
+          product?.codigoReferencia,
+          product?.sku,
+        ];
+        return identifiers.some((value) => normalizeBarcodeValue(value) === normalized);
+      }) || null
+    );
+  };
+
+  const fetchProductByBarcode = async (barcode) => {
+    const normalized = normalizeBarcodeValue(barcode);
+    if (!normalized) return null;
+    try {
+      const response = await fetch(
+        `${API_BASE}/products?search=${encodeURIComponent(normalized)}&limit=6`
+      );
+      if (!response.ok) {
+        throw new Error('Não foi possível buscar o produto pelo código informado.');
+      }
+      const payload = await response.json();
+      const products = Array.isArray(payload?.products)
+        ? payload.products
+        : Array.isArray(payload)
+        ? payload
+        : [];
+      if (!products.length) return null;
+      return findProductByLookupValue(products, normalized) || products[0] || null;
+    } catch (error) {
+      console.error('Erro ao buscar produto por código de barras no PDV:', error);
+      throw error;
+    }
+  };
+
   const selectProduct = (index) => {
     const product = state.searchResults[index];
     if (!product) return;
@@ -2467,16 +2531,11 @@
     }
   };
 
-  const addItemToList = () => {
-    if (!state.selectedProduct) {
-      notify('Selecione um produto para adicionar à venda.', 'warning');
-      return;
-    }
-    const quantidade = Math.max(1, Math.trunc(Number(elements.itemQuantity?.value || state.quantidade || 1)));
-    state.quantidade = quantidade;
-    const product = state.selectedProduct;
+  const appendProductToSale = (product, quantidade = 1) => {
+    if (!product) return false;
+    const quantidadeFinal = Math.max(1, Math.trunc(Number(quantidade) || 1));
     const unitPrice = getFinalPrice(product);
-    const subtotal = unitPrice * quantidade;
+    const subtotal = unitPrice * quantidadeFinal;
     const codigo = getProductCode(product);
     const codigoInterno = product?.codigoInterno || product?.codInterno || codigo;
     const codigoBarras = getProductBarcode(product);
@@ -2491,7 +2550,7 @@
     );
     if (existingIndex >= 0) {
       const current = state.itens[existingIndex];
-      current.quantidade += quantidade;
+      current.quantidade += quantidadeFinal;
       current.valor = unitPrice;
       current.subtotal = current.quantidade * current.valor;
       current.codigoInterno = codigoInterno || current.codigoInterno;
@@ -2505,7 +2564,7 @@
         codigoInterno,
         codigoBarras,
         nome,
-        quantidade,
+        quantidade: quantidadeFinal,
         valor: unitPrice,
         subtotal,
         generalPromo,
@@ -2514,6 +2573,64 @@
     }
     renderItemsList();
     notify('Item adicionado à pré-visualização.', 'success');
+    return true;
+  };
+
+  const addItemToList = () => {
+    if (!state.selectedProduct) {
+      notify('Selecione um produto para adicionar à venda.', 'warning');
+      return;
+    }
+    const quantidade = Math.max(
+      1,
+      Math.trunc(Number(elements.itemQuantity?.value || state.quantidade || 1))
+    );
+    state.quantidade = quantidade;
+    const product = state.selectedProduct;
+    appendProductToSale(product, quantidade);
+  };
+
+  const handleBarcodeKeydown = async (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const input = event.currentTarget;
+    if (!input) return;
+    const rawValue = typeof input.value === 'string' ? input.value : '';
+    const code = rawValue.trim();
+    if (!code) return;
+
+    input.disabled = true;
+
+    try {
+      const product = await fetchProductByBarcode(code);
+      if (!product) {
+        notify('Nenhum produto encontrado para o código informado.', 'warning');
+        return;
+      }
+      state.selectedProduct = product;
+      state.quantidade = 1;
+      if (elements.itemQuantity) {
+        elements.itemQuantity.value = 1;
+      }
+      if (elements.searchResults) {
+        elements.searchResults.classList.add('hidden');
+        elements.searchResults.innerHTML = '';
+      }
+      if (state.searchController) {
+        state.searchController.abort();
+        state.searchController = null;
+      }
+      state.searchResults = [];
+      updateSelectedProductView();
+      appendProductToSale(product, 1);
+    } catch (error) {
+      console.error('Falha ao adicionar produto por código de barras no PDV:', error);
+      notify('Falha ao buscar o produto pelo código informado.', 'error');
+    } finally {
+      input.disabled = false;
+      input.value = '';
+      input.focus();
+    }
   };
 
   const updatePaymentRow = (paymentId) => {
@@ -2869,6 +2986,7 @@
     elements.companySelect?.addEventListener('change', handleCompanyChange);
     elements.pdvSelect?.addEventListener('change', handlePdvChange);
     elements.searchInput?.addEventListener('input', handleSearchInput);
+    elements.barcodeInput?.addEventListener('keydown', handleBarcodeKeydown);
     elements.searchResults?.addEventListener('click', handleSearchResultsClick);
     document.addEventListener('click', handleDocumentClick);
     elements.addItem?.addEventListener('click', addItemToList);
