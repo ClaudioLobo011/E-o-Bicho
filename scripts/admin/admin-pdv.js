@@ -3161,6 +3161,7 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    setSaleCustomer(null, null);
     clearSelectedProduct();
     clearSaleSearchAreas();
     renderItemsList();
@@ -3215,6 +3216,7 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    setSaleCustomer(null, null);
     clearSelectedProduct();
     clearSaleSearchAreas();
     renderItemsList();
@@ -3275,6 +3277,7 @@
     order.finalizedAt = nowIso;
     renderDeliveryOrders();
     notify('Delivery finalizado e registrado no caixa.', 'success');
+    setSaleCustomer(null, null);
     clearSaleSearchAreas();
     closeFinalizeModal();
     promptDeliveryPrint(saleSnapshot);
