@@ -1729,6 +1729,48 @@
     elements.customerPetsList.appendChild(fragment);
   };
 
+  const clearProductSearchArea = () => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+      searchTimeout = null;
+    }
+    if (state.searchController) {
+      state.searchController.abort();
+      state.searchController = null;
+    }
+    state.searchResults = [];
+    if (elements.searchInput) {
+      elements.searchInput.value = '';
+    }
+    if (elements.searchResults) {
+      elements.searchResults.classList.add('hidden');
+      elements.searchResults.innerHTML = '';
+    }
+  };
+
+  const clearCustomerSearchArea = () => {
+    if (customerSearchTimeout) {
+      clearTimeout(customerSearchTimeout);
+      customerSearchTimeout = null;
+    }
+    if (customerSearchController) {
+      customerSearchController.abort();
+      customerSearchController = null;
+    }
+    state.customerSearchQuery = '';
+    state.customerSearchResults = [];
+    state.customerSearchLoading = false;
+    if (elements.customerSearchInput) {
+      elements.customerSearchInput.value = '';
+    }
+    renderCustomerSearchResults();
+  };
+
+  const clearSaleSearchAreas = () => {
+    clearProductSearchArea();
+    clearCustomerSearchArea();
+  };
+
   const performCustomerSearch = async (term) => {
     const query = term.trim();
     state.customerSearchQuery = term;
@@ -3120,6 +3162,7 @@
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
     clearSelectedProduct();
+    clearSaleSearchAreas();
     renderItemsList();
     renderSalePaymentsPreview();
     updateFinalizeButton();
@@ -3173,6 +3216,7 @@
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
     clearSelectedProduct();
+    clearSaleSearchAreas();
     renderItemsList();
     renderSalePaymentsPreview();
     updateFinalizeButton();
@@ -3231,6 +3275,7 @@
     order.finalizedAt = nowIso;
     renderDeliveryOrders();
     notify('Delivery finalizado e registrado no caixa.', 'success');
+    clearSaleSearchAreas();
     closeFinalizeModal();
     promptDeliveryPrint(saleSnapshot);
   };
@@ -4785,6 +4830,7 @@
     }
     renderItemsList();
     notify('Item adicionado à pré-visualização.', 'success');
+    clearSaleSearchAreas();
     return true;
   };
 
