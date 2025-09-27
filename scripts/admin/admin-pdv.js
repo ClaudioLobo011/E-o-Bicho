@@ -111,10 +111,28 @@
     history: [],
     lastMovement: null,
     searchController: null,
+    deliveryOrders: [],
+    deliveryAddresses: [],
+    deliveryAddressesLoading: false,
+    deliveryAddressSaving: false,
+    deliveryAddressFormVisible: false,
+    deliverySelectedAddressId: '',
+    deliverySelectedAddress: null,
+    activeFinalizeContext: null,
   };
 
   const elements = {};
   const customerPetsCache = new Map();
+  const customerAddressesCache = new Map();
+  const deliveryStatusSteps = [
+    { id: 'registrado', label: 'Registrado' },
+    { id: 'emSeparacao', label: 'Em separação' },
+    { id: 'emRota', label: 'Em rota' },
+    { id: 'finalizado', label: 'Finalizado' },
+  ];
+  const deliveryStatusOrder = deliveryStatusSteps.map((step) => step.id);
+  let finalizeModalDefaults = { title: '', subtitle: '', confirm: '' };
+  let deliveryAddressesController = null;
   const normalizeId = (value) => (value == null ? '' : String(value));
   const normalizeStoreRecord = (store) => {
     if (!store || typeof store !== 'object') return store;
@@ -231,6 +249,85 @@
       payload?.login ||
       ''
     );
+  };
+
+  const formatCep = (value) => {
+    const digits = String(value || '').replace(/\D+/g, '');
+    if (!digits) return '';
+    if (digits.length <= 5) return digits;
+    return `${digits.slice(0, 5)}-${digits.slice(5, 8)}`;
+  };
+
+  const buildDeliveryAddressLine = (address) => {
+    if (!address) return '';
+    const firstLine = [address.logradouro, address.numero].filter(Boolean).join(', ');
+    const cityLine = address.cidade && address.uf ? `${address.cidade} - ${address.uf}` : address.cidade || address.uf || '';
+    const parts = [firstLine, address.complemento, address.bairro, cityLine];
+    if (address.cep) {
+      parts.push(`CEP: ${formatCep(address.cep)}`);
+    }
+    return parts.filter(Boolean).join(' • ');
+  };
+
+  const normalizeCustomerAddressRecord = (address, index = 0) => {
+    if (!address || typeof address !== 'object') return null;
+    const idSource =
+      address._id ||
+      address.id ||
+      address.codigo ||
+      address.code ||
+      `${Date.now()}-${index}`;
+    const apelido =
+      address.apelido ||
+      address.label ||
+      address.nome ||
+      address.alias ||
+      address.descricao ||
+      '';
+    const cep = address.cep || address.zip || address.cepFormatado || '';
+    const logradouro = address.logradouro || address.endereco || address.street || '';
+    const numero = address.numero || address.number || '';
+    const complemento = address.complemento || address.complement || '';
+    const bairro = address.bairro || address.neighborhood || '';
+    const cidade = address.cidade || address.city || '';
+    const uf = (address.uf || address.estado || address.state || '').toString().toUpperCase();
+    const isDefault = Boolean(address.isDefault || address.principal || address.default);
+    const normalized = {
+      id: String(idSource),
+      apelido: apelido || 'Principal',
+      cep,
+      logradouro,
+      numero,
+      complemento,
+      bairro,
+      cidade,
+      uf,
+      isDefault,
+    };
+    normalized.formatted = buildDeliveryAddressLine(normalized);
+    return normalized;
+  };
+
+  const extractInlineCustomerAddresses = (cliente) => {
+    if (!cliente || typeof cliente !== 'object') return [];
+    const sources = [];
+    if (Array.isArray(cliente.enderecos)) sources.push(...cliente.enderecos);
+    if (Array.isArray(cliente.addresses)) sources.push(...cliente.addresses);
+    if (cliente.address && typeof cliente.address === 'object') sources.push(cliente.address);
+    if (cliente.endereco && typeof cliente.endereco === 'string') {
+      sources.push({ logradouro: cliente.endereco });
+    }
+    return sources;
+  };
+
+  const getDeliveryStatusIndex = (statusId) => {
+    const index = deliveryStatusOrder.indexOf(statusId);
+    return index >= 0 ? index : 0;
+  };
+
+  const getDeliveryStatusLabel = (statusId) => {
+    const found = deliveryStatusSteps.find((step) => step.id === statusId);
+    return found ? found.label : deliveryStatusSteps[0].label;
   };
 
   const shouldRetryWithoutAuth = (error) =>
@@ -566,7 +663,8 @@
 
   const getSaleReceiptSnapshot = (
     items = state.itens,
-    payments = state.vendaPagamentos
+    payments = state.vendaPagamentos,
+    options = {}
   ) => {
     const saleItems = Array.isArray(items) ? items : [];
     if (!state.selectedStore || !state.selectedPdv || !saleItems.length) {
@@ -641,6 +739,21 @@
         }
       : null;
 
+    const deliverySource = options.deliveryAddress || state.deliverySelectedAddress || null;
+    const deliveryAddress = deliverySource
+      ? {
+          apelido: deliverySource.apelido || 'Entrega',
+          formatted: buildDeliveryAddressLine(deliverySource),
+          cep: deliverySource.cep || '',
+          logradouro: deliverySource.logradouro || '',
+          numero: deliverySource.numero || '',
+          complemento: deliverySource.complemento || '',
+          bairro: deliverySource.bairro || '',
+          cidade: deliverySource.cidade || '',
+          uf: deliverySource.uf || '',
+        }
+      : null;
+
     return {
       meta: {
         store: getStoreLabel(),
@@ -649,6 +762,7 @@
         operador: operatorName,
       },
       cliente,
+      delivery: deliveryAddress,
       itens,
       totais: {
         bruto: formatCurrency(bruto),
@@ -1055,6 +1169,9 @@
     elements.saleAdjust = document.getElementById('pdv-sale-adjust');
     elements.saleItemAdjust = document.getElementById('pdv-sale-item-adjust');
 
+    elements.deliveryList = document.getElementById('pdv-delivery-list');
+    elements.deliveryEmpty = document.getElementById('pdv-delivery-empty');
+
     elements.paymentValueModal = document.getElementById('pdv-payment-value-modal');
     elements.paymentValueTitle = document.getElementById('pdv-payment-value-title');
     elements.paymentValueSubtitle = document.getElementById('pdv-payment-value-subtitle');
@@ -1063,6 +1180,44 @@
     elements.paymentValueConfirm = document.getElementById('pdv-payment-value-confirm');
     elements.paymentValueCancel = document.getElementById('pdv-payment-value-cancel');
     elements.paymentValueBackdrop = elements.paymentValueModal?.querySelector('[data-pdv-payment-dismiss]') || null;
+
+    elements.deliveryAddressModal = document.getElementById('pdv-delivery-address-modal');
+    elements.deliveryAddressBackdrop =
+      elements.deliveryAddressModal?.querySelector('[data-delivery-address-dismiss="backdrop"]') || null;
+    elements.deliveryAddressClose =
+      elements.deliveryAddressModal?.querySelector('[data-delivery-address-dismiss="close"]') || null;
+    elements.deliveryAddressList = document.getElementById('pdv-delivery-address-list');
+    elements.deliveryAddressLoading = document.getElementById('pdv-delivery-address-loading');
+    elements.deliveryAddressEmpty = document.getElementById('pdv-delivery-address-empty');
+    elements.deliveryAddressAdd = document.getElementById('pdv-delivery-address-add');
+    elements.deliveryAddressForm = document.getElementById('pdv-delivery-address-form');
+    elements.deliveryAddressCancelForm = document.getElementById('pdv-delivery-address-cancel-form');
+    elements.deliveryAddressConfirm = document.getElementById('pdv-delivery-address-confirm');
+    elements.deliveryAddressCancel = document.getElementById('pdv-delivery-address-cancel');
+    elements.deliveryAddressFields = {
+      apelido: document.getElementById('pdv-delivery-address-apelido'),
+      cep: document.getElementById('pdv-delivery-address-cep'),
+      logradouro: document.getElementById('pdv-delivery-address-logradouro'),
+      numero: document.getElementById('pdv-delivery-address-numero'),
+      bairro: document.getElementById('pdv-delivery-address-bairro'),
+      cidade: document.getElementById('pdv-delivery-address-cidade'),
+      uf: document.getElementById('pdv-delivery-address-uf'),
+      complemento: document.getElementById('pdv-delivery-address-complemento'),
+      isDefault: document.getElementById('pdv-delivery-address-default'),
+    };
+
+    elements.finalizeTitle = elements.finalizeModal?.querySelector('h2') || null;
+    elements.finalizeSubtitle = elements.finalizeModal?.querySelector('h2 + p') || null;
+    if (elements.finalizeTitle) {
+      finalizeModalDefaults.title = elements.finalizeTitle.textContent?.trim() || finalizeModalDefaults.title;
+    }
+    if (elements.finalizeSubtitle) {
+      finalizeModalDefaults.subtitle =
+        elements.finalizeSubtitle.textContent?.trim() || finalizeModalDefaults.subtitle;
+    }
+    if (elements.finalizeConfirm) {
+      finalizeModalDefaults.confirm = elements.finalizeConfirm.textContent?.trim() || finalizeModalDefaults.confirm;
+    }
   };
   const updateWorkspaceVisibility = (visible) => {
     if (elements.workspace) {
@@ -1991,23 +2146,611 @@
     elements.saleMethods.innerHTML = html;
   };
 
-  const openFinalizeModal = () => {
+  const resetDeliveryAddressForm = () => {
+    const fields = elements.deliveryAddressFields || {};
+    if (fields.apelido) fields.apelido.value = '';
+    if (fields.cep) fields.cep.value = '';
+    if (fields.logradouro) fields.logradouro.value = '';
+    if (fields.numero) fields.numero.value = '';
+    if (fields.bairro) fields.bairro.value = '';
+    if (fields.cidade) fields.cidade.value = '';
+    if (fields.uf) fields.uf.value = '';
+    if (fields.complemento) fields.complemento.value = '';
+    if (fields.isDefault) fields.isDefault.checked = !state.deliveryAddresses.length;
+  };
+
+  const setDeliveryAddressFormVisible = (visible) => {
+    state.deliveryAddressFormVisible = visible;
+    if (elements.deliveryAddressForm) {
+      elements.deliveryAddressForm.classList.toggle('hidden', !visible);
+    }
+    if (elements.deliveryAddressAdd) {
+      const label = elements.deliveryAddressAdd.querySelector('span');
+      if (label) {
+        label.textContent = visible ? 'Cancelar cadastro' : 'Cadastrar novo endereço';
+      }
+    }
+  };
+
+  const updateDeliveryAddressConfirmState = () => {
+    if (!elements.deliveryAddressConfirm) return;
+    const disabled = state.deliveryAddressesLoading || !state.deliverySelectedAddressId;
+    elements.deliveryAddressConfirm.disabled = disabled;
+    elements.deliveryAddressConfirm.classList.toggle('opacity-60', disabled);
+  };
+
+  const setDeliverySelectedAddressId = (addressId) => {
+    const normalizedId = addressId ? String(addressId) : '';
+    state.deliverySelectedAddressId = normalizedId;
+    const selected = state.deliveryAddresses.find((item) => item.id === normalizedId) || null;
+    state.deliverySelectedAddress = selected ? { ...selected } : null;
+    updateDeliveryAddressConfirmState();
+  };
+
+  const applyDefaultDeliveryAddressSelection = () => {
+    if (!state.deliveryAddresses.length) {
+      setDeliverySelectedAddressId('');
+      return;
+    }
+    if (state.deliverySelectedAddressId) {
+      const existing = state.deliveryAddresses.find((item) => item.id === state.deliverySelectedAddressId);
+      if (existing) {
+        state.deliverySelectedAddress = { ...existing };
+        return;
+      }
+    }
+    const preferred = state.deliveryAddresses.find((item) => item.isDefault) || state.deliveryAddresses[0];
+    setDeliverySelectedAddressId(preferred.id);
+  };
+
+  const renderDeliveryAddresses = () => {
+    if (!elements.deliveryAddressList || !elements.deliveryAddressLoading || !elements.deliveryAddressEmpty) {
+      return;
+    }
+    elements.deliveryAddressList.innerHTML = '';
+    if (state.deliveryAddressesLoading) {
+      elements.deliveryAddressLoading.classList.remove('hidden');
+    } else {
+      elements.deliveryAddressLoading.classList.add('hidden');
+    }
+    if (!state.deliveryAddressesLoading && !state.deliveryAddresses.length) {
+      elements.deliveryAddressEmpty.classList.remove('hidden');
+      updateDeliveryAddressConfirmState();
+      return;
+    }
+    elements.deliveryAddressEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    state.deliveryAddresses.forEach((address) => {
+      const isSelected = state.deliverySelectedAddressId === address.id;
+      const label = document.createElement('label');
+      label.className = [
+        'flex items-start gap-3 rounded-xl border px-4 py-3 transition',
+        isSelected
+          ? 'border-primary bg-primary/5 text-primary'
+          : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/5',
+      ].join(' ');
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'pdv-delivery-address';
+      input.value = address.id;
+      input.checked = isSelected;
+      input.className = 'mt-1 h-4 w-4 text-primary focus:ring-primary';
+      const content = document.createElement('div');
+      content.className = 'flex-1 space-y-1';
+      const title = document.createElement('p');
+      title.className = 'text-sm font-semibold';
+      title.textContent = address.apelido || 'Endereço';
+      const detail = document.createElement('p');
+      detail.className = 'text-xs text-gray-500';
+      detail.textContent = address.formatted || 'Endereço não informado';
+      content.append(title, detail);
+      if (address.isDefault) {
+        const badge = document.createElement('span');
+        badge.className =
+          'inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700';
+        badge.textContent = 'Principal';
+        content.appendChild(badge);
+      }
+      label.append(input, content);
+      fragment.appendChild(label);
+    });
+    elements.deliveryAddressList.appendChild(fragment);
+    updateDeliveryAddressConfirmState();
+  };
+
+  const loadDeliveryAddresses = async () => {
+    const cliente = state.vendaCliente;
+    const clienteId = cliente?._id || cliente?.id || cliente?._idCliente || '';
+    const inlineFallback = extractInlineCustomerAddresses(cliente)
+      .map((item, index) => normalizeCustomerAddressRecord(item, index))
+      .filter(Boolean);
+
+    if (!clienteId) {
+      state.deliveryAddresses = inlineFallback.map((item) => ({ ...item }));
+      state.deliveryAddressesLoading = false;
+      applyDefaultDeliveryAddressSelection();
+      renderDeliveryAddresses();
+      return;
+    }
+
+    const cached = customerAddressesCache.get(clienteId);
+    if (cached) {
+      state.deliveryAddresses = cached.map((item) => ({ ...item }));
+      state.deliveryAddressesLoading = false;
+      applyDefaultDeliveryAddressSelection();
+      renderDeliveryAddresses();
+      return;
+    }
+
+    state.deliveryAddressesLoading = true;
+    renderDeliveryAddresses();
+    if (deliveryAddressesController) {
+      deliveryAddressesController.abort();
+    }
+    deliveryAddressesController = new AbortController();
+    try {
+      const token = getToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await fetch(`${API_BASE}/addresses/${clienteId}`, {
+        headers,
+        signal: deliveryAddressesController.signal,
+      });
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar os endereços do cliente.');
+      }
+      const payload = await response.json();
+      const normalized = Array.isArray(payload)
+        ? payload.map((item, index) => normalizeCustomerAddressRecord(item, index)).filter(Boolean)
+        : [];
+      const addresses = normalized.length ? normalized : inlineFallback;
+      state.deliveryAddresses = addresses.map((item) => ({ ...item }));
+      customerAddressesCache.set(
+        clienteId,
+        state.deliveryAddresses.map((item) => ({ ...item }))
+      );
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('Erro ao carregar endereços do cliente:', error);
+        notify(error.message || 'Não foi possível carregar os endereços do cliente.', 'error');
+        state.deliveryAddresses = inlineFallback.map((item) => ({ ...item }));
+      }
+    } finally {
+      state.deliveryAddressesLoading = false;
+      deliveryAddressesController = null;
+      applyDefaultDeliveryAddressSelection();
+      renderDeliveryAddresses();
+    }
+  };
+
+  const openDeliveryAddressModal = async () => {
+    if (!elements.deliveryAddressModal) return;
+    setDeliveryAddressFormVisible(false);
+    resetDeliveryAddressForm();
+    await loadDeliveryAddresses();
+    elements.deliveryAddressModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+  };
+
+  const closeDeliveryAddressModal = () => {
+    if (!elements.deliveryAddressModal) return;
+    elements.deliveryAddressModal.classList.add('hidden');
+    if (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) {
+      document.body.classList.remove('overflow-hidden');
+    }
+  };
+
+  const handleDeliveryAddressConfirm = () => {
+    if (!state.deliverySelectedAddress) {
+      notify('Selecione um endereço para continuar com o delivery.', 'warning');
+      return;
+    }
+    closeDeliveryAddressModal();
+    openFinalizeModal('delivery');
+  };
+
+  const handleDeliveryAddressToggle = () => {
+    const nextVisible = !state.deliveryAddressFormVisible;
+    setDeliveryAddressFormVisible(nextVisible);
+    if (!nextVisible) {
+      resetDeliveryAddressForm();
+    } else if (elements.deliveryAddressFields?.apelido && !elements.deliveryAddressFields.apelido.value) {
+      elements.deliveryAddressFields.apelido.value = state.deliveryAddresses.length ? '' : 'Principal';
+    }
+  };
+
+  const handleDeliveryAddressCancelForm = () => {
+    setDeliveryAddressFormVisible(false);
+    resetDeliveryAddressForm();
+  };
+
+  const handleDeliveryAddressFormSubmit = async (event) => {
+    event.preventDefault();
+    if (!state.vendaCliente || !state.vendaCliente._id) {
+      notify('Selecione um cliente para cadastrar o endereço.', 'warning');
+      return;
+    }
+    if (state.deliveryAddressSaving) return;
+    const fields = elements.deliveryAddressFields || {};
+    const cepValue = fields.cep?.value?.trim() || '';
+    const numeroValue = fields.numero?.value?.trim() || '';
+    const logradouroValue = fields.logradouro?.value?.trim() || '';
+    if (!cepValue || !numeroValue || !logradouroValue) {
+      notify('Informe CEP, número e endereço para salvar.', 'warning');
+      return;
+    }
+    const payload = {
+      userId: state.vendaCliente._id,
+      apelido: fields.apelido?.value?.trim(),
+      cep: cepValue.replace(/\D+/g, ''),
+      logradouro: logradouroValue,
+      numero: numeroValue,
+      complemento: fields.complemento?.value?.trim() || '',
+      bairro: fields.bairro?.value?.trim() || '',
+      cidade: fields.cidade?.value?.trim() || '',
+      uf: (fields.uf?.value || '').trim().toUpperCase(),
+      isDefault: Boolean(fields.isDefault?.checked || !state.deliveryAddresses.length),
+    };
+    state.deliveryAddressSaving = true;
+    const submitButton = elements.deliveryAddressForm?.querySelector('button[type="submit"]');
+    if (elements.deliveryAddressForm) {
+      elements.deliveryAddressForm.classList.add('opacity-60');
+    }
+    if (submitButton) submitButton.disabled = true;
+    try {
+      const token = getToken();
+      if (!token) {
+        throw new Error('É necessário estar autenticado para salvar o endereço.');
+      }
+      const response = await fetch(`${API_BASE}/addresses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        throw new Error('Não foi possível salvar o endereço do cliente.');
+      }
+      const saved = await response.json();
+      const normalized = normalizeCustomerAddressRecord(saved, state.deliveryAddresses.length);
+      if (normalized) {
+        const clienteId = state.vendaCliente._id;
+        state.deliveryAddresses.push({ ...normalized });
+        customerAddressesCache.set(
+          clienteId,
+          state.deliveryAddresses.map((item) => ({ ...item }))
+        );
+        setDeliverySelectedAddressId(normalized.id);
+        renderDeliveryAddresses();
+        setDeliveryAddressFormVisible(false);
+        resetDeliveryAddressForm();
+        notify('Endereço cadastrado com sucesso.', 'success');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar endereço do cliente:', error);
+      notify(error.message || 'Não foi possível salvar o endereço do cliente.', 'error');
+    } finally {
+      state.deliveryAddressSaving = false;
+      if (elements.deliveryAddressForm) {
+        elements.deliveryAddressForm.classList.remove('opacity-60');
+      }
+      if (submitButton) submitButton.disabled = false;
+    }
+  };
+
+  const handleDeliveryAddressSelection = (event) => {
+    const input = event.target.closest('input[type="radio"][name="pdv-delivery-address"]');
+    if (!input) return;
+    setDeliverySelectedAddressId(input.value);
+    renderDeliveryAddresses();
+  };
+
+  const handleDeliveryAction = async () => {
     if (!state.caixaAberto) {
-      notify('Abra o caixa antes de finalizar uma venda.', 'warning');
+      notify('Abra o caixa para registrar um delivery.', 'warning');
+      return;
+    }
+    if (!state.vendaCliente) {
+      notify('Selecione um cliente para iniciar o delivery.', 'warning');
       return;
     }
     if (!state.itens.length) {
-      notify('Adicione itens para finalizar a venda.', 'warning');
+      notify('Adicione itens à venda para iniciar o delivery.', 'warning');
+      return;
+    }
+    try {
+      await openDeliveryAddressModal();
+    } catch (error) {
+      console.error('Erro ao iniciar fluxo de delivery:', error);
+      notify('Não foi possível iniciar o fluxo de delivery.', 'error');
+    }
+  };
+
+  const summarizeDeliveryPayments = (payments) => {
+    if (!Array.isArray(payments) || !payments.length) return '';
+    return payments
+      .map((payment) => {
+        const parcelas = payment.parcelas && payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
+        return `${payment.label || 'Pagamento'}${parcelas}`;
+      })
+      .join(' • ');
+  };
+
+  const createDeliveryOrderRecord = (snapshot, address, pagamentos, total) => {
+    const nowIso = new Date().toISOString();
+    const clienteBase = snapshot?.cliente || {};
+    const order = {
+      id: createUid(),
+      status: 'registrado',
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      statusUpdatedAt: nowIso,
+      total,
+      payments: pagamentos.map((payment) => ({ ...payment })),
+      paymentsLabel: summarizeDeliveryPayments(pagamentos),
+      customer: {
+        nome:
+          clienteBase.nome ||
+          state.vendaCliente?.nome ||
+          state.vendaCliente?.razaoSocial ||
+          state.vendaCliente?.fantasia ||
+          'Cliente',
+        documento:
+          clienteBase.documento ||
+          state.vendaCliente?.cpf ||
+          state.vendaCliente?.cnpj ||
+          state.vendaCliente?.documento ||
+          '',
+        contato:
+          clienteBase.contato ||
+          state.vendaCliente?.telefone ||
+          state.vendaCliente?.celular ||
+          state.vendaCliente?.email ||
+          '',
+      },
+      address: {
+        ...address,
+        formatted: address.formatted || buildDeliveryAddressLine(address),
+      },
+      receiptSnapshot: snapshot,
+    };
+    return order;
+  };
+
+  const renderDeliveryOrders = () => {
+    if (!elements.deliveryList || !elements.deliveryEmpty) return;
+    const hasOrders = state.deliveryOrders.length > 0;
+    elements.deliveryEmpty.classList.toggle('hidden', hasOrders);
+    elements.deliveryList.classList.toggle('hidden', !hasOrders);
+    elements.deliveryList.innerHTML = '';
+    if (!hasOrders) return;
+    const fragment = document.createDocumentFragment();
+    state.deliveryOrders.forEach((order) => {
+      const li = document.createElement('li');
+      li.dataset.deliveryId = order.id;
+      li.className = 'rounded-xl border border-gray-200 bg-white p-5 space-y-4';
+
+      const header = document.createElement('div');
+      header.className = 'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between';
+      const customerBox = document.createElement('div');
+      const nameEl = document.createElement('p');
+      nameEl.className = 'text-sm font-semibold text-gray-800';
+      nameEl.textContent = order.customer.nome;
+      customerBox.appendChild(nameEl);
+      if (order.customer.documento) {
+        const docEl = document.createElement('p');
+        docEl.className = 'text-xs text-gray-500';
+        docEl.textContent = `Documento: ${order.customer.documento}`;
+        customerBox.appendChild(docEl);
+      }
+      if (order.customer.contato) {
+        const contactEl = document.createElement('p');
+        contactEl.className = 'text-xs text-gray-500';
+        contactEl.textContent = order.customer.contato;
+        customerBox.appendChild(contactEl);
+      }
+      header.appendChild(customerBox);
+
+      const statusBadge = document.createElement('span');
+      statusBadge.className = 'inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary';
+      statusBadge.textContent = getDeliveryStatusLabel(order.status);
+      header.appendChild(statusBadge);
+      li.appendChild(header);
+
+      const details = document.createElement('div');
+      details.className = 'space-y-2 text-sm text-gray-600';
+
+      const addressRow = document.createElement('p');
+      addressRow.className = 'flex items-start gap-2';
+      const addressIcon = document.createElement('i');
+      addressIcon.className = 'fas fa-location-dot mt-0.5 text-gray-400';
+      const addressText = document.createElement('span');
+      addressText.textContent = order.address.formatted || 'Endereço não informado';
+      addressRow.append(addressIcon, addressText);
+      details.appendChild(addressRow);
+
+      const totalRow = document.createElement('p');
+      const totalLabel = document.createElement('span');
+      totalLabel.textContent = 'Total: ';
+      const totalValue = document.createElement('span');
+      totalValue.className = 'font-semibold text-gray-800';
+      totalValue.textContent = formatCurrency(order.total);
+      totalRow.append(totalLabel, totalValue);
+      details.appendChild(totalRow);
+
+      if (order.paymentsLabel) {
+        const paymentRow = document.createElement('p');
+        paymentRow.className = 'text-xs text-gray-500';
+        paymentRow.textContent = `Pagamentos: ${order.paymentsLabel}`;
+        details.appendChild(paymentRow);
+      }
+
+      const updatedRow = document.createElement('p');
+      updatedRow.className = 'text-xs text-gray-400';
+      updatedRow.textContent = `Atualizado em ${toDateLabel(order.statusUpdatedAt || order.updatedAt)}`;
+      details.appendChild(updatedRow);
+
+      li.appendChild(details);
+
+      const steps = document.createElement('div');
+      steps.className = 'flex flex-wrap gap-2';
+      const currentIndex = getDeliveryStatusIndex(order.status);
+      deliveryStatusSteps.forEach((step, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.deliveryId = order.id;
+        button.dataset.deliveryStatus = step.id;
+        const baseClass = 'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold transition';
+        let styleClass = 'border-gray-200 text-gray-500 hover:border-primary hover:text-primary';
+        if (index < currentIndex) {
+          styleClass = 'border-emerald-200 bg-emerald-50 text-emerald-700';
+        }
+        if (index === currentIndex) {
+          styleClass = 'border-primary bg-primary/10 text-primary';
+        }
+        button.className = `${baseClass} ${styleClass}`;
+        button.textContent = step.label;
+        steps.appendChild(button);
+      });
+      li.appendChild(steps);
+
+      const actions = document.createElement('div');
+      actions.className = 'flex flex-wrap items-center justify-between gap-2';
+
+      const advanceButton = document.createElement('button');
+      advanceButton.type = 'button';
+      advanceButton.dataset.deliveryAdvance = order.id;
+      advanceButton.className = 'rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary';
+      advanceButton.textContent = 'Avançar status';
+      if (currentIndex >= deliveryStatusSteps.length - 1) {
+        advanceButton.disabled = true;
+        advanceButton.classList.add('opacity-60', 'cursor-not-allowed');
+      }
+      actions.appendChild(advanceButton);
+
+      const printButton = document.createElement('button');
+      printButton.type = 'button';
+      printButton.dataset.deliveryPrint = order.id;
+      printButton.className = 'rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-white transition hover:bg-secondary';
+      printButton.textContent = 'Imprimir comprovante';
+      actions.appendChild(printButton);
+
+      li.appendChild(actions);
+      fragment.appendChild(li);
+    });
+    elements.deliveryList.appendChild(fragment);
+  };
+
+  const updateDeliveryStatus = (orderId, nextStatus) => {
+    if (!orderId || !nextStatus) return;
+    const order = state.deliveryOrders.find((item) => item.id === orderId);
+    if (!order || order.status === nextStatus) return;
+    order.status = nextStatus;
+    order.statusUpdatedAt = new Date().toISOString();
+    order.updatedAt = order.statusUpdatedAt;
+    renderDeliveryOrders();
+    notify(`Status do delivery atualizado para ${getDeliveryStatusLabel(nextStatus)}.`, 'success');
+  };
+
+  const advanceDeliveryStatus = (orderId) => {
+    const order = state.deliveryOrders.find((item) => item.id === orderId);
+    if (!order) return;
+    const currentIndex = getDeliveryStatusIndex(order.status);
+    if (currentIndex >= deliveryStatusSteps.length - 1) {
+      notify('Este delivery já está finalizado.', 'info');
+      return;
+    }
+    const nextStatus = deliveryStatusSteps[currentIndex + 1].id;
+    updateDeliveryStatus(orderId, nextStatus);
+  };
+
+  const handleDeliveryListClick = (event) => {
+    const statusButton = event.target.closest('button[data-delivery-status]');
+    if (statusButton) {
+      const orderId = statusButton.getAttribute('data-delivery-id');
+      const statusId = statusButton.getAttribute('data-delivery-status');
+      updateDeliveryStatus(orderId, statusId);
+      return;
+    }
+    const advanceButton = event.target.closest('button[data-delivery-advance]');
+    if (advanceButton) {
+      const orderId = advanceButton.getAttribute('data-delivery-advance');
+      advanceDeliveryStatus(orderId);
+      return;
+    }
+    const printButton = event.target.closest('button[data-delivery-print]');
+    if (printButton) {
+      const orderId = printButton.getAttribute('data-delivery-print');
+      const order = state.deliveryOrders.find((item) => item.id === orderId);
+      if (order?.receiptSnapshot) {
+        handleConfiguredPrint('venda', { snapshot: order.receiptSnapshot });
+      }
+    }
+  };
+
+  const promptDeliveryPrint = (snapshot) => {
+    if (!snapshot) return;
+    const shouldPrint = window.confirm('Deseja imprimir o comprovante de delivery?');
+    if (shouldPrint) {
+      handleConfiguredPrint('venda', { snapshot });
+    }
+  };
+
+  const getFinalizeContextActionLabel = (context) =>
+    context === 'delivery' ? 'registrar o delivery' : 'finalizar a venda';
+
+  const applyFinalizeModalContext = (context) => {
+    if (context === 'delivery') {
+      if (elements.finalizeTitle) {
+        elements.finalizeTitle.textContent = 'Pagamento do delivery';
+      }
+      if (elements.finalizeSubtitle) {
+        elements.finalizeSubtitle.textContent =
+          'Informe as formas de pagamento e confirme o envio para entrega.';
+      }
+      if (elements.finalizeConfirm) {
+        elements.finalizeConfirm.textContent = 'Concluir delivery';
+      }
+    } else {
+      if (elements.finalizeTitle) {
+        elements.finalizeTitle.textContent = finalizeModalDefaults.title || 'Finalizar venda';
+      }
+      if (elements.finalizeSubtitle) {
+        elements.finalizeSubtitle.textContent =
+          finalizeModalDefaults.subtitle ||
+          'Defina as formas de pagamento e confirme o fechamento da venda.';
+      }
+      if (elements.finalizeConfirm) {
+        elements.finalizeConfirm.textContent =
+          finalizeModalDefaults.confirm || 'Finalizar venda';
+      }
+    }
+  };
+
+  const openFinalizeModal = (context = 'sale') => {
+    if (!state.caixaAberto) {
+      notify(`Abra o caixa para ${getFinalizeContextActionLabel(context)}.`, 'warning');
+      return;
+    }
+    if (!state.itens.length) {
+      notify(`Adicione itens para ${getFinalizeContextActionLabel(context)}.`, 'warning');
       return;
     }
     if (state.paymentMethodsLoading) {
-      notify('Aguarde o carregamento dos meios de pagamento para finalizar a venda.', 'info');
+      notify('Aguarde o carregamento dos meios de pagamento.', 'info');
       return;
     }
     if (!state.paymentMethods.length) {
-      notify('Cadastre meios de pagamento para concluir a venda.', 'warning');
+      notify('Cadastre meios de pagamento para concluir a operação.', 'warning');
       return;
     }
+    if (context === 'delivery' && !state.deliverySelectedAddress) {
+      notify('Selecione um endereço de entrega para continuar.', 'warning');
+      return;
+    }
+    state.activeFinalizeContext = context;
+    applyFinalizeModalContext(context);
     renderSalePaymentMethods();
     renderSalePaymentsPreview();
     updateSaleSummary();
@@ -2049,7 +2792,11 @@
     if (!elements.finalizeModal) return;
     elements.finalizeModal.classList.add('hidden');
     closePaymentValueModal(true);
-    document.body.classList.remove('overflow-hidden');
+    if (!elements.deliveryAddressModal || elements.deliveryAddressModal.classList.contains('hidden')) {
+      document.body.classList.remove('overflow-hidden');
+    }
+    applyFinalizeModalContext('sale');
+    state.activeFinalizeContext = null;
   };
 
   const openPaymentValueModal = (method, parcelas) => {
@@ -2183,7 +2930,7 @@
 
   const handleFinalizeButtonClick = () => {
     if (elements.finalizeButton?.disabled) return;
-    openFinalizeModal();
+    openFinalizeModal('sale');
   };
 
   const describeSalePayments = (payments) => {
@@ -2225,7 +2972,7 @@
     updateStatusBadge();
   };
 
-  const handleFinalizeConfirm = () => {
+  const finalizeSaleFlow = () => {
     const total = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
     if (!state.itens.length) {
@@ -2258,6 +3005,67 @@
     updateSaleSummary();
     closeFinalizeModal();
     handleConfiguredPrint('venda', { snapshot: saleSnapshot });
+  };
+
+  const finalizeDeliveryFlow = () => {
+    const total = getSaleTotalLiquido();
+    const pago = getSalePagoTotal();
+    if (!state.itens.length) {
+      notify('Adicione itens para registrar o delivery.', 'warning');
+      closeFinalizeModal();
+      return;
+    }
+    if (!state.caixaAberto) {
+      notify('Abra o caixa para registrar o delivery.', 'warning');
+      closeFinalizeModal();
+      return;
+    }
+    if (!state.deliverySelectedAddress) {
+      notify('Selecione um endereço de entrega para continuar.', 'warning');
+      closeFinalizeModal();
+      void openDeliveryAddressModal();
+      return;
+    }
+    if (Math.abs(total - pago) >= 0.01) {
+      notify('O valor pago deve ser igual ao total da entrega.', 'warning');
+      return;
+    }
+    const itensSnapshot = state.itens.map((item) => ({ ...item }));
+    const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
+    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
+      deliveryAddress: state.deliverySelectedAddress,
+    });
+    registerSaleOnCaixa(pagamentosVenda, total);
+    const orderRecord = createDeliveryOrderRecord(
+      saleSnapshot,
+      state.deliverySelectedAddress,
+      pagamentosVenda,
+      total
+    );
+    state.deliveryOrders.unshift(orderRecord);
+    renderDeliveryOrders();
+    notify('Delivery registrado com sucesso.', 'success');
+    state.itens = [];
+    state.vendaPagamentos = [];
+    state.vendaDesconto = 0;
+    state.vendaAcrescimo = 0;
+    clearSelectedProduct();
+    renderItemsList();
+    renderSalePaymentsPreview();
+    updateFinalizeButton();
+    updateSaleSummary();
+    closeFinalizeModal();
+    promptDeliveryPrint(saleSnapshot);
+    state.deliverySelectedAddress = null;
+    state.deliverySelectedAddressId = '';
+  };
+
+  const handleFinalizeConfirm = () => {
+    if (state.activeFinalizeContext === 'delivery') {
+      finalizeDeliveryFlow();
+      return;
+    }
+    finalizeSaleFlow();
   };
 
   const handleSaleAdjust = () => {
@@ -2800,6 +3608,22 @@
           </section>`
       : '';
 
+    const deliverySection = snapshot.delivery
+      ? `
+          <section class="receipt__section">
+            <h2 class="receipt__section-title">Entrega</h2>
+            <ul class="receipt-list">
+              <li class="receipt-row">
+                <span class="receipt-row__label">Destino</span>
+                <span class="receipt-row__value">${escapeHtml(snapshot.delivery.apelido || 'Entrega')}</span>
+              </li>
+              ${snapshot.delivery.formatted
+                ? `<li class="receipt-row"><span class="receipt-row__label">Endereço</span><span class="receipt-row__value">${escapeHtml(snapshot.delivery.formatted)}</span></li>`
+                : ''}
+            </ul>
+          </section>`
+      : '';
+
     return `
       <main class="receipt">
         <header class="receipt__header">
@@ -2808,6 +3632,7 @@
         </header>
         <section class="receipt__meta">${metaLines}</section>
         ${clienteSection}
+        ${deliverySection}
         <section class="receipt__section">
           <h2 class="receipt__section-title">Itens</h2>
           <table class="receipt-table">
@@ -3270,6 +4095,15 @@
     state.modalSelectedPet = null;
     state.modalActiveTab = 'cliente';
     state.printPreferences = { fechamento: 'PM', venda: 'PM' };
+    state.deliveryOrders = [];
+    state.deliveryAddresses = [];
+    state.deliveryAddressesLoading = false;
+    state.deliveryAddressSaving = false;
+    state.deliveryAddressFormVisible = false;
+    state.deliverySelectedAddressId = '';
+    state.deliverySelectedAddress = null;
+    state.activeFinalizeContext = null;
+    customerAddressesCache.clear();
     updatePrintControls();
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
@@ -3318,6 +4152,14 @@
     renderPayments();
     renderSalePaymentMethods();
     renderSalePaymentsPreview();
+    setDeliveryAddressFormVisible(false);
+    resetDeliveryAddressForm();
+    updateDeliveryAddressConfirmState();
+    renderDeliveryAddresses();
+    renderDeliveryOrders();
+    if (elements.deliveryAddressModal) {
+      elements.deliveryAddressModal.classList.add('hidden');
+    }
     renderHistory();
     setLastMovement(null);
     populatePaymentSelect();
@@ -4270,6 +5112,10 @@
         button.addEventListener('click', openCustomerModal);
         return;
       }
+      if (action === 'delivery') {
+        button.addEventListener('click', handleDeliveryAction);
+        return;
+      }
       button.addEventListener('click', () => {
         notify('Funcionalidade em desenvolvimento.', 'info');
       });
@@ -4287,6 +5133,31 @@
       button.addEventListener('click', handleCustomerTabClick);
     });
     elements.customerModal?.addEventListener('keydown', handleCustomerModalKeydown);
+    elements.deliveryAddressList?.addEventListener('change', handleDeliveryAddressSelection);
+    elements.deliveryAddressConfirm?.addEventListener('click', handleDeliveryAddressConfirm);
+    elements.deliveryAddressCancel?.addEventListener('click', closeDeliveryAddressModal);
+    elements.deliveryAddressBackdrop?.addEventListener('click', closeDeliveryAddressModal);
+    elements.deliveryAddressClose?.addEventListener('click', closeDeliveryAddressModal);
+    elements.deliveryAddressAdd?.addEventListener('click', handleDeliveryAddressToggle);
+    elements.deliveryAddressCancelForm?.addEventListener('click', handleDeliveryAddressCancelForm);
+    elements.deliveryAddressForm?.addEventListener('submit', handleDeliveryAddressFormSubmit);
+    elements.deliveryList?.addEventListener('click', handleDeliveryListClick);
+    if (elements.deliveryAddressFields?.cep) {
+      elements.deliveryAddressFields.cep.addEventListener('blur', () => {
+        const input = elements.deliveryAddressFields?.cep;
+        if (input) {
+          input.value = formatCep(input.value);
+        }
+      });
+    }
+    if (elements.deliveryAddressFields?.uf) {
+      elements.deliveryAddressFields.uf.addEventListener('input', () => {
+        const input = elements.deliveryAddressFields?.uf;
+        if (input) {
+          input.value = input.value.toUpperCase();
+        }
+      });
+    }
   };
 
   const init = async () => {
