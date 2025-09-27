@@ -76,6 +76,7 @@
     selectedPdv: '',
     caixaAberto: false,
     allowApuradoEdit: false,
+    printPreferences: { fechamento: 'PM', venda: 'PM' },
     selectedAction: null,
     searchResults: [],
     selectedProduct: null,
@@ -150,6 +151,40 @@
     }
   };
 
+  const getLoggedUserPayload = () => {
+    try {
+      const raw = localStorage.getItem('loggedInUser');
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.user && typeof parsed.user === 'object') {
+          return parsed.user;
+        }
+        if (parsed.usuario && typeof parsed.usuario === 'object') {
+          return parsed.usuario;
+        }
+      }
+      return parsed || {};
+    } catch (error) {
+      console.warn('Não foi possível obter os dados do usuário logado.', error);
+      return {};
+    }
+  };
+
+  const getLoggedUserName = () => {
+    const payload = getLoggedUserPayload();
+    return (
+      payload?.nome ||
+      payload?.name ||
+      payload?.usuario?.nome ||
+      payload?.usuario?.name ||
+      payload?.user?.nome ||
+      payload?.user?.name ||
+      payload?.login ||
+      ''
+    );
+  };
+
   const formatCurrency = (value) => {
     const number = Number(value || 0);
     return `R$ ${number.toFixed(2).replace('.', ',')}`;
@@ -159,6 +194,41 @@
     const number = Number(value);
     return Number.isFinite(number) ? number : 0;
   };
+
+  const normalizePrintMode = (value, fallback = 'PM') => {
+    const normalized = (value || '').toString().trim().toUpperCase();
+    if (!normalized) return fallback;
+    const aliasMap = {
+      SIM: 'M',
+      MATRICIAL: 'M',
+      CUPOM: 'M',
+      FISCAL: 'F',
+      FIS: 'F',
+      PERGUNTAR: 'PM',
+      'PERGUNTAR_MATRICIAL': 'PM',
+      'PERGUNTAR-FISCAL': 'PF',
+      'PERGUNTAR_FISCAL': 'PF',
+      PM: 'PM',
+      PF: 'PF',
+      M: 'M',
+      F: 'F',
+      NAO: 'NONE',
+      'NÃO': 'NONE',
+      N: 'NONE',
+      NENHUM: 'NONE',
+      DESATIVADO: 'NONE',
+    };
+    if (aliasMap[normalized]) {
+      return aliasMap[normalized];
+    }
+    if (['F', 'M', 'PF', 'PM'].includes(normalized)) {
+      return normalized;
+    }
+    return fallback;
+  };
+
+  const resolvePrintVariant = (mode) =>
+    mode === 'F' || mode === 'PF' ? 'fiscal' : 'matricial';
 
   const canApplyGeneralPromotion = () => Boolean(state.vendaCliente);
 
@@ -330,6 +400,110 @@
         items: apuradoItems,
         total: apuradoTotal,
         formattedTotal: formatCurrency(apuradoTotal),
+      },
+    };
+
+  const getSaleReceiptSnapshot = (
+    items = state.itens,
+    payments = state.vendaPagamentos
+  ) => {
+    const saleItems = Array.isArray(items) ? items : [];
+    if (!state.selectedStore || !state.selectedPdv || !saleItems.length) {
+      return null;
+    }
+
+    const nowLabel = toDateLabel(new Date().toISOString());
+    const operatorName = getLoggedUserName();
+
+    const normalizeQuantity = (value) => {
+      const number = safeNumber(value);
+      return number.toLocaleString('pt-BR', {
+        minimumFractionDigits: Number.isInteger(number) ? 0 : 2,
+        maximumFractionDigits: 3,
+      });
+    };
+
+    const itens = saleItems.map((item, index) => {
+      const codes = [];
+      if (item.codigoInterno) {
+        codes.push(`Int.: ${item.codigoInterno}`);
+      }
+      if (item.codigoBarras) {
+        codes.push(`Barras: ${item.codigoBarras}`);
+      }
+      if (!codes.length && item.codigo) {
+        codes.push(`Cód.: ${item.codigo}`);
+      }
+      return {
+        index: String(index + 1).padStart(2, '0'),
+        nome: item.nome || 'Item da venda',
+        codigo: codes.join(' • '),
+        quantidade: normalizeQuantity(item.quantidade || 0),
+        unitario: formatCurrency(item.valor || item.preco || 0),
+        subtotal: formatCurrency(item.subtotal || 0),
+      };
+    });
+
+    const descontoValor = Math.max(0, safeNumber(state.vendaDesconto));
+    const acrescimoValor = Math.max(0, safeNumber(state.vendaAcrescimo));
+    const bruto = saleItems.reduce((sum, item) => sum + safeNumber(item.subtotal), 0);
+    const liquidoValor = Math.max(0, bruto + acrescimoValor - descontoValor);
+    const pagamentoItems = (Array.isArray(payments) ? payments : []).map((payment) => {
+      const parcelasLabel = payment.parcelas && payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
+      return {
+        label: `${payment.label || 'Pagamento'}${parcelasLabel}`,
+        formatted: formatCurrency(payment.valor || 0),
+        valor: safeNumber(payment.valor),
+      };
+    });
+    const pagoValor = pagamentoItems.reduce((sum, item) => sum + safeNumber(item.valor), 0);
+    const trocoValor = Math.max(0, pagoValor - liquidoValor);
+
+    const cliente = state.vendaCliente
+      ? {
+          nome:
+            state.vendaCliente.nome ||
+            state.vendaCliente.razaoSocial ||
+            state.vendaCliente.fantasia ||
+            'Cliente',
+          documento:
+            state.vendaCliente.cpf ||
+            state.vendaCliente.cnpj ||
+            state.vendaCliente.documento ||
+            '',
+          contato:
+            state.vendaCliente.telefone ||
+            state.vendaCliente.celular ||
+            state.vendaCliente.email ||
+            '',
+          pet: state.vendaPet?.nome || '',
+        }
+      : null;
+
+    return {
+      meta: {
+        store: getStoreLabel(),
+        pdv: getPdvLabel(),
+        data: nowLabel,
+        operador: operatorName,
+      },
+      cliente,
+      itens,
+      totais: {
+        bruto: formatCurrency(bruto),
+        desconto: formatCurrency(descontoValor),
+        descontoValor,
+        acrescimo: formatCurrency(acrescimoValor),
+        acrescimoValor,
+        liquido: formatCurrency(liquidoValor),
+        pago: formatCurrency(pagoValor),
+        troco: formatCurrency(trocoValor),
+        trocoValor,
+      },
+      pagamentos: {
+        items: pagamentoItems,
+        total: pagoValor,
+        formattedTotal: formatCurrency(pagoValor),
       },
     };
   };
@@ -780,14 +954,23 @@
       'bg-emerald-50',
       'text-emerald-700'
     );
-    const icon = state.caixaAberto ? 'fa-unlock' : 'fa-lock';
+    const icon = state.caixaAberto ? 'fa-circle-check' : 'fa-lock';
     const text = state.caixaAberto ? 'Caixa aberto' : 'Caixa fechado';
     if (state.caixaAberto) {
       badge.classList.add('border-emerald-200', 'bg-emerald-50', 'text-emerald-700');
     } else {
       badge.classList.add('border-gray-200', 'bg-gray-100', 'text-gray-600');
     }
-    badge.innerHTML = `<i class="fas ${icon}"></i> ${text}`;
+    const indicatorClass = state.caixaAberto
+      ? 'h-2.5 w-2.5 rounded-full border border-emerald-200 bg-emerald-500'
+      : 'h-2.5 w-2.5 rounded-full border border-gray-300 bg-gray-400';
+    badge.innerHTML = `
+      <span class="${indicatorClass}"></span>
+      <span class="flex items-center gap-1.5">
+        <i class="fas ${icon} text-[10px]"></i>
+        ${text}
+      </span>
+    `;
     if (elements.caixaStateLabel) {
       elements.caixaStateLabel.textContent = text;
     }
@@ -1817,7 +2000,9 @@
       notify('O valor pago deve ser igual ao total da venda.', 'warning');
       return;
     }
+    const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
+    const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda);
     registerSaleOnCaixa(pagamentosVenda, total);
     notify('Venda finalizada com sucesso.', 'success');
     state.itens = [];
@@ -1830,6 +2015,7 @@
     updateFinalizeButton();
     updateSaleSummary();
     closeFinalizeModal();
+    handleConfiguredPrint('venda', { snapshot: saleSnapshot });
   };
 
   const handleSaleAdjust = () => {
@@ -1958,20 +2144,253 @@
       .replace(/'/g, '&#39;');
   };
 
-  const buildThermalMarkup = (snapshot, fallbackText) => {
+  const getReceiptStyles = (variant = 'matricial') => {
+    const accent = variant === 'fiscal' ? '#0b3d91' : '#111111';
+    return `
+      :root { color-scheme: light; }
+      *, *::before, *::after { box-sizing: border-box; }
+      @page { size: 80mm auto; margin: 0; }
+      body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        font-size: 11px;
+        color: #111;
+        font-weight: 500;
+        -webkit-font-smoothing: antialiased;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        --receipt-accent: ${accent};
+      }
+      main.receipt {
+        width: 74mm;
+        margin: 0 auto;
+        padding: 3mm 2mm 5mm;
+        display: flex;
+        flex-direction: column;
+        gap: 2.2mm;
+      }
+      .receipt__header { text-align: center; }
+      .receipt__title {
+        margin: 0;
+        font-size: 12.4px;
+        font-weight: 800;
+        letter-spacing: 0.55px;
+        text-transform: uppercase;
+      }
+      .receipt__badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1.4mm;
+        margin-top: 1.2mm;
+        padding: 0.6mm 2.2mm;
+        font-size: 9.6px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.45px;
+        border: 1px solid var(--receipt-accent);
+        border-radius: 999px;
+        color: var(--receipt-accent);
+      }
+      .receipt__meta {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.7mm;
+        font-size: 10.3px;
+        line-height: 1.35;
+        color: #222;
+      }
+      .receipt__meta-item {
+        display: block;
+        text-align: center;
+        max-width: 64mm;
+      }
+      .receipt__section {
+        border-top: 1px solid rgba(17, 17, 17, 0.85);
+        padding-top: 2mm;
+        display: flex;
+        flex-direction: column;
+        gap: 1.6mm;
+      }
+      .receipt__section:first-of-type {
+        border-top: none;
+        padding-top: 0;
+      }
+      .receipt__section-title {
+        margin: 0;
+        font-size: 10.7px;
+        font-weight: 700;
+        letter-spacing: 0.45px;
+        text-transform: uppercase;
+        color: #111;
+      }
+      .receipt__cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.6mm;
+      }
+      .receipt-card {
+        border: 1px solid rgba(17, 17, 17, 0.85);
+        border-radius: 1.6mm;
+        padding: 1.6mm 1.8mm;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4mm;
+        background: rgba(17, 17, 17, 0.05);
+      }
+      .receipt-card__label {
+        font-size: 9.8px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: #333;
+      }
+      .receipt-card__value {
+        font-size: 11.3px;
+        font-weight: 700;
+        color: #000;
+      }
+      .receipt-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1.05mm;
+      }
+      .receipt-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.2mm;
+        font-size: 10.4px;
+      }
+      .receipt-row__label {
+        flex: 1;
+        color: #333;
+      }
+      .receipt-row__value {
+        font-weight: 700;
+        color: #000;
+      }
+      .receipt-row--total .receipt-row__label {
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+        font-weight: 700;
+      }
+      .receipt-row--total .receipt-row__value {
+        font-size: 11.1px;
+      }
+      .receipt-list__empty {
+        font-size: 10px;
+        text-align: center;
+        color: #666;
+        padding: 1.6mm 0;
+        border: 1px dashed rgba(102, 102, 102, 0.4);
+        border-radius: 1.6mm;
+        background: rgba(0, 0, 0, 0.03);
+      }
+      .receipt-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10.1px;
+      }
+      .receipt-table thead th {
+        text-align: left;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+        padding-bottom: 0.8mm;
+        border-bottom: 1px solid rgba(17, 17, 17, 0.85);
+      }
+      .receipt-table tbody td {
+        padding: 0.6mm 0;
+        border-bottom: 1px dashed rgba(17, 17, 17, 0.25);
+        vertical-align: top;
+      }
+      .receipt-table tbody td:last-child {
+        text-align: right;
+        font-weight: 600;
+      }
+      .receipt-table__muted {
+        display: block;
+        font-size: 9.4px;
+        color: #555;
+      }
+      .receipt__footer {
+        margin-top: 2mm;
+        text-align: center;
+        font-size: 9.4px;
+        color: #555;
+        line-height: 1.45;
+      }
+      .receipt__footer-strong {
+        font-weight: 600;
+        color: #222;
+      }
+      .receipt__divider {
+        width: 100%;
+        border: none;
+        border-top: 1px dashed rgba(17, 17, 17, 0.3);
+        margin: 1.8mm 0 0;
+      }
+      .receipt-empty {
+        margin: 0;
+        padding: 7mm 0;
+        text-align: center;
+        font-size: 11px;
+        color: #666;
+        font-weight: 600;
+      }
+      .receipt-fallback {
+        margin: 0;
+        font-size: 9.8px;
+        color: #666;
+        line-height: 1.45;
+        text-align: center;
+        white-space: pre-wrap;
+      }
+      @media print {
+        body { margin: 0; }
+      }
+    `;
+  };
+
+  const createReceiptDocument = ({ title, variant = 'matricial', body }) => {
+    const safeTitle = escapeHtml(title || 'Documento para impressão');
+    const styles = getReceiptStyles(variant);
+    return `<!DOCTYPE html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <title>${safeTitle}</title>
+          <style>${styles}</style>
+        </head>
+        <body data-variant="${escapeHtml(variant)}">${body}</body>
+      </html>`;
+  };
+
+  const buildFechamentoReceiptMarkup = (snapshot, variant, fallbackText) => {
     if (!snapshot) {
       const fallback = fallbackText && fallbackText.trim()
         ? `<pre class="receipt-fallback">${escapeHtml(fallbackText)}</pre>`
         : '';
-      return `
-        <main class="receipt">
-          <p class="receipt-empty">Fechamento sem conteúdo para impressão.</p>
-          ${fallback}
-        </main>
-      `;
+      return `<main class="receipt"><p class="receipt-empty">Fechamento sem conteúdo para impressão.</p>${fallback}</main>`;
     }
 
-    const renderCards = () => `
+    const badgeLabel = variant === 'fiscal' ? 'Fiscal' : 'Matricial';
+    const metaLines = [
+      snapshot.meta.store,
+      `PDV: ${snapshot.meta.pdv}`,
+      `Período: ${snapshot.meta.abertura} → ${snapshot.meta.fechamento}`,
+    ]
+      .filter(Boolean)
+      .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
+      .join('');
+
+    const resumoCards = `
       <div class="receipt__cards">
         <div class="receipt-card">
           <span class="receipt-card__label">Abertura</span>
@@ -1985,34 +2404,28 @@
           <span class="receipt-card__label">Saldo</span>
           <span class="receipt-card__value">${escapeHtml(snapshot.resumo.saldo.formatted)}</span>
         </div>
-      </div>
-    `;
+      </div>`;
 
     const renderRows = (items, { totalLabel, totalValue, emptyLabel }) => {
       if (!items.length) {
         return `<li class="receipt-list__empty">${escapeHtml(emptyLabel)}</li>`;
       }
-
       const rows = items
         .map(
           (item) => `
             <li class="receipt-row">
               <span class="receipt-row__label">${escapeHtml(item.label)}</span>
               <span class="receipt-row__value">${escapeHtml(item.formattedValue)}</span>
-            </li>
-          `
+            </li>`
         )
         .join('');
-
       const totalRow = totalLabel && totalValue
         ? `
             <li class="receipt-row receipt-row--total">
               <span class="receipt-row__label">${escapeHtml(totalLabel)}</span>
               <span class="receipt-row__value">${escapeHtml(totalValue)}</span>
-            </li>
-          `
+            </li>`
         : '';
-
       return `${rows}${totalRow}`;
     };
 
@@ -2021,13 +2434,11 @@
       totalValue: snapshot.recebimentos.formattedTotal,
       emptyLabel: 'Nenhum meio de pagamento configurado.',
     });
-
     const previstoList = renderRows(snapshot.previsto.items, {
       totalLabel: 'Total previsto',
       totalValue: snapshot.previsto.formattedTotal,
       emptyLabel: 'Nenhum valor previsto.',
     });
-
     const apuradoList = renderRows(snapshot.apurado.items, {
       totalLabel: 'Total apurado',
       totalValue: snapshot.apurado.formattedTotal,
@@ -2038,229 +2449,156 @@
       <main class="receipt">
         <header class="receipt__header">
           <h1 class="receipt__title">Fechamento de Caixa</h1>
-          <span class="receipt__badge">MP-4200 TH</span>
+          <span class="receipt__badge">${escapeHtml(badgeLabel)}</span>
         </header>
-        <section class="receipt__meta">
-          <span class="receipt__meta-item">${escapeHtml(snapshot.meta.store)}</span>
-          <span class="receipt__meta-item">${escapeHtml(snapshot.meta.pdv)}</span>
-          <span class="receipt__meta-item">${escapeHtml(snapshot.meta.abertura)} → ${escapeHtml(snapshot.meta.fechamento)}</span>
-        </section>
+        <section class="receipt__meta">${metaLines}</section>
         <section class="receipt__section">
           <h2 class="receipt__section-title">Resumo</h2>
-          ${renderCards()}
+          ${resumoCards}
         </section>
         <section class="receipt__section">
           <h2 class="receipt__section-title">Recebimentos</h2>
           <ul class="receipt-list">${recebimentosList}</ul>
         </section>
         <section class="receipt__section">
-          <h2 class="receipt__section-title">Fechamento Previsto</h2>
+          <h2 class="receipt__section-title">Fechamento previsto</h2>
           <ul class="receipt-list">${previstoList}</ul>
         </section>
         <section class="receipt__section">
-          <h2 class="receipt__section-title">Fechamento Apurado</h2>
+          <h2 class="receipt__section-title">Fechamento apurado</h2>
           <ul class="receipt-list">${apuradoList}</ul>
         </section>
-      </main>
-    `;
+      </main>`;
   };
 
-  const openMatricialPreview = () => {
+  const buildSaleReceiptMarkup = (snapshot, variant) => {
+    if (!snapshot) {
+      return '<main class="receipt"><p class="receipt-empty">Nenhuma venda disponível para impressão.</p></main>';
+    }
+
+    const badgeLabel = variant === 'fiscal' ? 'Fiscal' : 'Matricial';
+    const metaLines = [
+      snapshot.meta.store,
+      `PDV: ${snapshot.meta.pdv}`,
+      snapshot.meta.operador ? `Operador: ${snapshot.meta.operador}` : '',
+      snapshot.meta.data,
+    ]
+      .filter(Boolean)
+      .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
+      .join('');
+
+    const itemsRows = snapshot.itens
+      .map(
+        (item) => `
+          <tr>
+            <td>${escapeHtml(item.index)}</td>
+            <td>
+              <strong>${escapeHtml(item.nome)}</strong>
+              ${item.codigo ? `<span class="receipt-table__muted">${escapeHtml(item.codigo)}</span>` : ''}
+            </td>
+            <td>${escapeHtml(item.quantidade)} × ${escapeHtml(item.unitario)}</td>
+            <td>${escapeHtml(item.subtotal)}</td>
+          </tr>`
+      )
+      .join('');
+
+    const totalsRows = [
+      { label: 'Subtotal', value: snapshot.totais.bruto },
+      snapshot.totais.descontoValor > 0
+        ? { label: 'Descontos', value: `- ${snapshot.totais.desconto}` }
+        : null,
+      snapshot.totais.acrescimoValor > 0
+        ? { label: 'Acréscimos', value: snapshot.totais.acrescimo }
+        : null,
+      { label: 'Total da venda', value: snapshot.totais.liquido, isTotal: true },
+      { label: 'Pago', value: snapshot.totais.pago },
+      snapshot.totais.trocoValor > 0
+        ? { label: 'Troco', value: snapshot.totais.troco }
+        : null,
+    ]
+      .filter(Boolean)
+      .map((row) => `
+        <li class="receipt-row${row.isTotal ? ' receipt-row--total' : ''}">
+          <span class="receipt-row__label">${escapeHtml(row.label)}</span>
+          <span class="receipt-row__value">${escapeHtml(row.value)}</span>
+        </li>`)
+      .join('');
+
+    const pagamentosRows = snapshot.pagamentos.items.length
+      ? snapshot.pagamentos.items
+          .map(
+            (payment) => `
+              <li class="receipt-row">
+                <span class="receipt-row__label">${escapeHtml(payment.label)}</span>
+                <span class="receipt-row__value">${escapeHtml(payment.formatted)}</span>
+              </li>`
+          )
+          .join('')
+      : '<li class="receipt-list__empty">Nenhum pagamento registrado.</li>';
+
+    const clienteSection = snapshot.cliente
+      ? `
+          <section class="receipt__section">
+            <h2 class="receipt__section-title">Cliente</h2>
+            <ul class="receipt-list">
+              <li class="receipt-row">
+                <span class="receipt-row__label">Nome</span>
+                <span class="receipt-row__value">${escapeHtml(snapshot.cliente.nome)}</span>
+              </li>
+              ${snapshot.cliente.documento
+                ? `<li class="receipt-row"><span class="receipt-row__label">Documento</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.documento)}</span></li>`
+                : ''}
+              ${snapshot.cliente.contato
+                ? `<li class="receipt-row"><span class="receipt-row__label">Contato</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.contato)}</span></li>`
+                : ''}
+              ${snapshot.cliente.pet
+                ? `<li class="receipt-row"><span class="receipt-row__label">Pet</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.pet)}</span></li>`
+                : ''}
+            </ul>
+          </section>`
+      : '';
+
+    return `
+      <main class="receipt">
+        <header class="receipt__header">
+          <h1 class="receipt__title">Comprovante de venda</h1>
+          <span class="receipt__badge">${escapeHtml(badgeLabel)}</span>
+        </header>
+        <section class="receipt__meta">${metaLines}</section>
+        ${clienteSection}
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Itens</h2>
+          <table class="receipt-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Descrição</th>
+                <th>Qtde × Valor</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>${itemsRows}</tbody>
+          </table>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Totais</h2>
+          <ul class="receipt-list">${totalsRows}</ul>
+        </section>
+        <section class="receipt__section">
+          <h2 class="receipt__section-title">Pagamentos</h2>
+          <ul class="receipt-list">${pagamentosRows}</ul>
+        </section>
+        <footer class="receipt__footer">
+          <p class="receipt__footer-strong">Obrigado pela preferência!</p>
+          <p>Volte sempre.</p>
+        </footer>
+      </main>`;
+  };
+
+  const printHtmlDocument = (documentHtml, { logPrefix = 'documento' } = {}) => {
     if (typeof window === 'undefined') return false;
 
-    const snapshot = getFechamentoSnapshot();
-    const content = buildSummaryPrint(snapshot);
-    const safeContent = buildThermalMarkup(snapshot, content);
-
-    const documentHtml = `<!DOCTYPE html>
-      <html lang="pt-BR">
-        <head>
-          <meta charset="utf-8" />
-          <title>Fechamento do caixa</title>
-          <style>
-            :root { color-scheme: light; }
-            *, *::before, *::after { box-sizing: border-box; }
-            @page {
-              size: 80mm auto;
-              margin: 0;
-            }
-            body {
-              margin: 0;
-              padding: 0;
-              background: #fff;
-              font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-              font-size: 11px;
-              color: #000;
-              font-weight: 500;
-              -webkit-font-smoothing: antialiased;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            main.receipt {
-              width: 74mm;
-              margin: 0 auto;
-              padding: 3.5mm 2.5mm 5mm;
-            }
-            .receipt__header {
-              text-align: center;
-              margin-bottom: 2.5mm;
-            }
-            .receipt__title {
-              margin: 0;
-              font-size: 13px;
-              font-weight: 800;
-              letter-spacing: 0.6px;
-              text-transform: uppercase;
-            }
-            .receipt__badge {
-              display: inline-block;
-              margin-top: 0.6mm;
-              padding: 0.6mm 1.6mm;
-              font-size: 9.5px;
-              letter-spacing: 0.4px;
-              color: #000;
-              border: 1px solid #000;
-              border-radius: 999px;
-            }
-            .receipt__meta {
-              display: flex;
-              flex-direction: column;
-              gap: 0.6mm;
-              align-items: center;
-              margin-bottom: 2.2mm;
-              font-size: 10.4px;
-              color: #000;
-            }
-            .receipt__meta-item {
-              display: block;
-              text-align: center;
-              line-height: 1.2;
-            }
-            .receipt__section {
-              margin-top: 2.4mm;
-              padding-top: 2mm;
-              border-top: 1px solid #000;
-            }
-            .receipt__section:first-of-type {
-              margin-top: 0;
-              padding-top: 0;
-              border-top: none;
-            }
-            .receipt__section-title {
-              margin: 0 0 1.4mm;
-              font-size: 10.8px;
-              font-weight: 700;
-              letter-spacing: 0.45px;
-              text-transform: uppercase;
-              color: #000;
-            }
-            .receipt__cards {
-              display: flex;
-              flex-wrap: wrap;
-              gap: 1.5mm;
-            }
-            .receipt-card {
-              flex: 1 1 calc(50% - 1.5mm);
-              min-width: 28mm;
-              padding: 1.4mm 1.8mm;
-              border: 1px solid #000;
-              border-radius: 1.6mm;
-              background: none;
-              display: flex;
-              flex-direction: column;
-              gap: 0.6mm;
-            }
-            .receipt-card__label {
-              font-size: 9.8px;
-              text-transform: uppercase;
-              letter-spacing: 0.35px;
-              color: #000;
-              font-weight: 600;
-            }
-            .receipt-card__value {
-              font-size: 11.5px;
-              font-weight: 700;
-              color: #000;
-              font-variant-numeric: tabular-nums;
-            }
-            .receipt-list {
-              list-style: none;
-              padding: 0;
-              margin: 0;
-              display: flex;
-              flex-direction: column;
-              gap: 0.8mm;
-            }
-            .receipt-row {
-              display: flex;
-              justify-content: space-between;
-              gap: 3mm;
-              font-size: 11px;
-              line-height: 1.28;
-            }
-            .receipt-row__label {
-              flex: 1 1 auto;
-              color: #000;
-              font-weight: 600;
-            }
-            .receipt-row__value {
-              flex: 0 0 auto;
-              font-weight: 700;
-              color: #000;
-              font-variant-numeric: tabular-nums;
-            }
-            .receipt-row--total {
-              margin-top: 0.8mm;
-              padding-top: 0.8mm;
-              border-top: 1px dashed #000;
-            }
-            .receipt-row--total .receipt-row__label {
-              text-transform: uppercase;
-              letter-spacing: 0.4px;
-              color: #000;
-              font-weight: 700;
-            }
-            .receipt-row--total .receipt-row__value {
-              font-size: 11.4px;
-            }
-            .receipt-list__empty {
-              font-size: 10.4px;
-              color: #000;
-            }
-            .receipt-empty {
-              margin: 0;
-              padding: 6mm 4mm;
-              font-size: 12px;
-              text-align: center;
-              color: #000;
-              font-weight: 600;
-            }
-            .receipt-fallback {
-              margin: 0;
-              font-size: 10px;
-              line-height: 1.4;
-              color: #000;
-              font-weight: 600;
-              white-space: pre-wrap;
-            }
-            @media print {
-              body {
-                margin: 0;
-              }
-              main.receipt {
-                width: 100%;
-                padding: 3mm 2mm 4mm;
-              }
-              .receipt-card {
-                background: none;
-              }
-            }
-          </style>
-        </head>
-        <body>${safeContent}</body>
-      </html>`;
-
-    const urlFactory = typeof window !== 'undefined' ? window.URL || window.webkitURL : null;
+    const urlFactory = window.URL || window.webkitURL || null;
     const supportsBlobUrl =
       typeof Blob !== 'undefined' &&
       !!urlFactory &&
@@ -2307,7 +2645,7 @@
         printWindow.focus();
         printWindow.print();
       } catch (error) {
-        console.warn('Falha ao acionar impressão automática do fechamento.', error);
+        console.warn(`Falha ao acionar impressão automática do ${logPrefix}.`, error);
       } finally {
         window.setTimeout(releaseBlob, 1500);
       }
@@ -2345,7 +2683,7 @@
 
       if (!printWindow) {
         cleanup();
-        console.warn('Não foi possível abrir a janela de impressão.');
+        console.warn(`Não foi possível abrir a janela de impressão do ${logPrefix}.`);
         return false;
       }
 
@@ -2403,7 +2741,7 @@
 
       return true;
     } catch (error) {
-      console.warn('Falha ao preparar a impressão do fechamento.', error);
+      console.warn(`Falha ao preparar a impressão do ${logPrefix}.`, error);
       if (printWindow && typeof printWindow.close === 'function') {
         try {
           printWindow.close();
@@ -2416,12 +2754,60 @@
     }
   };
 
-  const promptPrintFechamento = () => {
-    if (typeof window === 'undefined') return;
-    const shouldPrint = window.confirm('Deseja imprimir o fechamento?');
-    if (shouldPrint) {
-      openMatricialPreview();
+  const printReceipt = (type, variant, { snapshot, fallbackText } = {}) => {
+    const resolvedVariant = variant || 'matricial';
+    let bodyHtml = '';
+    let title = '';
+
+    if (type === 'fechamento') {
+      const effectiveSnapshot = snapshot || getFechamentoSnapshot();
+      if (!effectiveSnapshot) {
+        notify('Nenhum dado disponível para imprimir o fechamento.', 'warning');
+        return false;
+      }
+      bodyHtml = buildFechamentoReceiptMarkup(effectiveSnapshot, resolvedVariant, fallbackText || buildSummaryPrint(effectiveSnapshot));
+      title = 'Fechamento do caixa';
+    } else if (type === 'venda') {
+      const effectiveSnapshot = snapshot || getSaleReceiptSnapshot();
+      if (!effectiveSnapshot) {
+        notify('Nenhum dado disponível para imprimir a venda.', 'warning');
+        return false;
+      }
+      bodyHtml = buildSaleReceiptMarkup(effectiveSnapshot, resolvedVariant);
+      title = 'Comprovante de venda';
+    } else {
+      return false;
     }
+
+    const documentHtml = createReceiptDocument({ title, variant: resolvedVariant, body: bodyHtml });
+    return printHtmlDocument(documentHtml, { logPrefix: title.toLowerCase() });
+  };
+
+  const executePrintMode = (type, mode, options = {}) => {
+    if (!mode || mode === 'NONE') {
+      return false;
+    }
+    const variant = resolvePrintVariant(mode);
+    const requiresConfirmation = mode === 'PF' || mode === 'PM';
+    if (requiresConfirmation) {
+      const question = variant === 'fiscal'
+        ? 'Deseja imprimir em Fiscal?'
+        : 'Deseja imprimir em Matricial?';
+      const confirmed = window.confirm(question);
+      if (!confirmed) {
+        return false;
+      }
+    }
+    return printReceipt(type, variant, options);
+  };
+
+  const handleConfiguredPrint = (type, options = {}) => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    const preferences = state.printPreferences || {};
+    const mode = normalizePrintMode(preferences[type], 'PM');
+    return executePrintMode(type, mode, options);
   };
 
   const updateSummary = () => {
@@ -2641,6 +3027,7 @@
     state.modalSelectedCliente = null;
     state.modalSelectedPet = null;
     state.modalActiveTab = 'cliente';
+    state.printPreferences = { fechamento: 'PM', venda: 'PM' };
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
       customerSearchTimeout = null;
@@ -2856,6 +3243,28 @@
       ),
       previstoPagamentos: [],
       apuradoPagamentos: [],
+    };
+    const impressaoConfig = pdv?.configuracoesImpressao || {};
+    const fechamentoMode = normalizePrintMode(
+      impressaoConfig.fechamento ||
+        impressaoConfig.modoFechamento ||
+        impressaoConfig.imprimirFechamento ||
+        impressaoConfig.comprovanteFechamento ||
+        impressaoConfig.fechamentoAutomatico ||
+        impressaoConfig.impressaoFechamento
+    );
+    const vendaMode = normalizePrintMode(
+      impressaoConfig.venda ||
+        impressaoConfig.modoVenda ||
+        impressaoConfig.imprimirVenda ||
+        impressaoConfig.comprovanteVenda ||
+        impressaoConfig.vendaAutomatica ||
+        impressaoConfig.sempreImprimir ||
+        impressaoConfig.impressaoVenda
+    );
+    state.printPreferences = {
+      fechamento: fechamentoMode,
+      venda: vendaMode,
     };
     const pagamentosData = pdv?.caixa?.pagamentos || pdv?.pagamentos || {};
     applyPagamentosData(pagamentosData);
@@ -3440,7 +3849,7 @@
       notify(action.successMessage, 'success');
       updateTabAvailability();
       setActiveTab('caixa-tab');
-      promptPrintFechamento();
+      handleConfiguredPrint('fechamento');
     } else {
       if (!state.caixaAberto) {
         notify('Abra o caixa antes de registrar movimentações.', 'warning');
