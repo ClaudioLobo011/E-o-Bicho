@@ -115,6 +115,54 @@
 
   const elements = {};
   const customerPetsCache = new Map();
+  const normalizeId = (value) => (value == null ? '' : String(value));
+  const normalizeStoreRecord = (store) => {
+    if (!store || typeof store !== 'object') return store;
+    const normalized = { ...store, _id: normalizeId(store._id) };
+    if (store.empresa && typeof store.empresa === 'object') {
+      normalized.empresa = { ...store.empresa, _id: normalizeId(store.empresa._id) };
+    }
+    if (store.store && typeof store.store === 'object') {
+      normalized.store = { ...store.store, _id: normalizeId(store.store._id) };
+    } else if (store.store != null) {
+      normalized.store = normalizeId(store.store);
+    }
+    return normalized;
+  };
+  const normalizePdvRecord = (pdv) => {
+    if (!pdv || typeof pdv !== 'object') return pdv;
+    const normalized = { ...pdv, _id: normalizeId(pdv._id) };
+    if (pdv.empresa && typeof pdv.empresa === 'object') {
+      normalized.empresa = { ...pdv.empresa, _id: normalizeId(pdv.empresa._id) };
+    } else if (pdv.empresa != null) {
+      normalized.empresa = normalizeId(pdv.empresa);
+    }
+    if (pdv.store && typeof pdv.store === 'object') {
+      normalized.store = { ...pdv.store, _id: normalizeId(pdv.store._id) };
+    } else if (pdv.store != null) {
+      normalized.store = normalizeId(pdv.store);
+    }
+    if (pdv.company && typeof pdv.company === 'object') {
+      normalized.company = { ...pdv.company, _id: normalizeId(pdv.company._id) };
+    } else if (pdv.company != null) {
+      normalized.company = normalizeId(pdv.company);
+    }
+    return normalized;
+  };
+  const getPdvCompanyId = (pdv) => {
+    if (!pdv) return '';
+    if (pdv.empresa && typeof pdv.empresa === 'object') return normalizeId(pdv.empresa._id);
+    if (pdv.empresa != null) return normalizeId(pdv.empresa);
+    if (pdv.company && typeof pdv.company === 'object') return normalizeId(pdv.company._id);
+    if (pdv.company != null) return normalizeId(pdv.company);
+    if (pdv.store && typeof pdv.store === 'object') return normalizeId(pdv.store._id);
+    if (pdv.store != null) return normalizeId(pdv.store);
+    return '';
+  };
+  const findStoreById = (storeId) =>
+    state.stores.find((item) => normalizeId(item._id) === normalizeId(storeId));
+  const findPdvById = (pdvId) =>
+    state.pdvs.find((item) => normalizeId(item._id) === normalizeId(pdvId));
   let searchTimeout = null;
   let customerSearchTimeout = null;
   let customerSearchController = null;
@@ -314,7 +362,7 @@
   };
 
   const getStoreLabel = () => {
-    const store = state.stores.find((item) => item._id === state.selectedStore);
+    const store = findStoreById(state.selectedStore);
     return (
       store?.nome ||
       store?.nomeFantasia ||
@@ -326,7 +374,7 @@
   };
 
   const getPdvLabel = () => {
-    const pdv = state.pdvs.find((item) => item._id === state.selectedPdv);
+    const pdv = findPdvById(state.selectedPdv);
     return pdv?.nome || pdv?.codigo || pdv?.identificador || pdv?._id || '—';
   };
 
@@ -3143,37 +3191,61 @@
     const previous = elements.companySelect.value;
     const options = ['<option value="">Selecione uma empresa</option>'];
     state.stores.forEach((store) => {
+      const storeId = normalizeId(store?._id);
       options.push(
-        `<option value="${store._id}">${store.nome || store.nomeFantasia || 'Empresa sem nome'}</option>`
+        `<option value="${storeId}">${store?.nome || store?.nomeFantasia || 'Empresa sem nome'}</option>`
       );
     });
     elements.companySelect.innerHTML = options.join('');
-    if (previous && state.stores.some((store) => store._id === previous)) {
-      elements.companySelect.value = previous;
+    const selectedValue = normalizeId(state.selectedStore || previous);
+    if (selectedValue && findStoreById(selectedValue)) {
+      elements.companySelect.value = selectedValue;
+    } else if (state.selectedStore && !findStoreById(state.selectedStore)) {
+      state.selectedStore = '';
     }
+    elements.companySelect.disabled = state.stores.length === 0;
+  };
+
+  const extractStoresPayload = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.stores)) return payload.stores;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.data?.stores)) return payload.data.stores;
+    if (Array.isArray(payload?.docs)) return payload.docs;
+    if (Array.isArray(payload?.results)) return payload.results;
+    return [];
   };
 
   const populatePdvSelect = () => {
     if (!elements.pdvSelect) return;
     const options = ['<option value="">Selecione um PDV</option>'];
     state.pdvs.forEach((pdv) => {
-      options.push(`<option value="${pdv._id}">${pdv.nome || pdv.codigo || pdv._id}</option>`);
+      const pdvId = normalizeId(pdv?._id);
+      options.push(
+        `<option value="${pdvId}">${pdv?.nome || pdv?.codigo || pdvId}</option>`
+      );
     });
     elements.pdvSelect.innerHTML = options.join('');
+    const selectedValue = normalizeId(state.selectedPdv);
+    if (selectedValue && findPdvById(selectedValue)) {
+      elements.pdvSelect.value = selectedValue;
+    }
     elements.pdvSelect.disabled = state.pdvs.length === 0;
   };
 
   const fetchStores = async () => {
     const token = getToken();
-    const payload = await fetchWithOptionalAuth(`${API_BASE}/stores`, {
-      token,
-      errorMessage: 'Não foi possível carregar as empresas cadastradas.',
-    });
-    state.stores = Array.isArray(payload)
-      ? payload
-      : Array.isArray(payload?.stores)
-      ? payload.stores
-      : [];
+    let payload;
+    try {
+      payload = await fetchWithOptionalAuth(`${API_BASE}/stores`, {
+        token,
+        errorMessage: 'Não foi possível carregar as empresas cadastradas.',
+      });
+    } catch (error) {
+      console.error('Erro ao carregar empresas para o PDV:', error);
+      throw error;
+    }
+    state.stores = extractStoresPayload(payload).map((store) => normalizeStoreRecord(store));
     populateCompanySelect();
   };
 
@@ -3225,17 +3297,27 @@
       : Array.isArray(payload)
       ? payload
       : [];
+    state.pdvs = state.pdvs.map((pdv) => normalizePdvRecord(pdv));
     populatePdvSelect();
   };
 
   const fetchPdvDetails = async (pdvId) => {
     const token = getToken();
-    return fetchWithOptionalAuth(`${API_BASE}/pdvs/${pdvId}`, {
+    const payload = await fetchWithOptionalAuth(`${API_BASE}/pdvs/${pdvId}`, {
       token,
       errorMessage: 'Não foi possível carregar os dados do PDV selecionado.',
     });
+    return normalizePdvRecord(payload);
   };
   const applyPdvData = (pdv) => {
+    const companyId = getPdvCompanyId(pdv);
+    if (companyId && companyId !== state.selectedStore) {
+      state.selectedStore = companyId;
+      if (elements.companySelect) {
+        elements.companySelect.value = companyId;
+      }
+      populateCompanySelect();
+    }
     const caixaAberto = Boolean(
       pdv?.caixa?.aberto ||
         pdv?.caixaAberto ||
@@ -3926,7 +4008,7 @@
   };
 
   const handleCompanyChange = async () => {
-    const value = elements.companySelect?.value || '';
+    const value = normalizeId(elements.companySelect?.value || '');
     state.selectedStore = value;
     state.selectedPdv = '';
     state.paymentMethods = [];
@@ -3960,7 +4042,7 @@
   };
 
   const handlePdvChange = async () => {
-    const value = elements.pdvSelect?.value || '';
+    const value = normalizeId(elements.pdvSelect?.value || '');
     state.selectedPdv = value;
     resetWorkspace();
     if (!value) {
@@ -4050,7 +4132,11 @@
     updateTabAvailability();
     try {
       await fetchStores();
-      updateSelectionHint('Escolha a empresa para carregar os PDVs disponíveis.');
+      if (state.stores.length > 0) {
+        updateSelectionHint('Escolha a empresa para carregar os PDVs disponíveis.');
+      } else {
+        updateSelectionHint('Cadastre uma empresa para habilitar o PDV.');
+      }
     } catch (error) {
       console.error('Erro ao carregar empresas para o PDV:', error);
       notify(error.message || 'Erro ao carregar a lista de empresas.', 'error');
