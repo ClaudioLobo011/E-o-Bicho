@@ -125,6 +125,7 @@
     currentSaleCode: '',
     deliveryFinalizingOrderId: '',
     completedSales: [],
+    activeSaleCancellationId: '',
   };
 
   const elements = {};
@@ -1258,6 +1259,15 @@
 
     elements.salesList = document.getElementById('pdv-sales-list');
     elements.salesEmpty = document.getElementById('pdv-sales-empty');
+
+    elements.saleCancelModal = document.getElementById('pdv-sale-cancel-modal');
+    elements.saleCancelClose = document.getElementById('pdv-sale-cancel-close');
+    elements.saleCancelCancel = document.getElementById('pdv-sale-cancel-cancel');
+    elements.saleCancelConfirm = document.getElementById('pdv-sale-cancel-confirm');
+    elements.saleCancelReason = document.getElementById('pdv-sale-cancel-reason');
+    elements.saleCancelError = document.getElementById('pdv-sale-cancel-error');
+    elements.saleCancelBackdrop =
+      elements.saleCancelModal?.querySelector('[data-sale-cancel-dismiss="backdrop"]') || null;
 
     elements.finalizeModal = document.getElementById('pdv-finalize-modal');
     elements.finalizeClose = document.getElementById('pdv-finalize-close');
@@ -4388,6 +4398,10 @@
       fiscalStatus: 'pending',
       fiscalEmittedAt: null,
       expanded: false,
+      status: 'completed',
+      cancellationReason: '',
+      cancellationAt: null,
+      cancellationAtLabel: '',
     };
   };
 
@@ -4412,6 +4426,26 @@
             )}</span>`
         )
         .join('');
+      const isCancelled = sale.status === 'cancelled';
+      const cancellationDateLabel =
+        sale.cancellationAtLabel || (sale.cancellationAt ? toDateLabel(sale.cancellationAt) : '');
+      const cancellationInfo = isCancelled
+        ? `<div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            <p class="font-semibold">Venda cancelada</p>
+            ${
+              sale.cancellationReason
+                ? `<p class="mt-1 text-rose-600">${escapeHtml(sale.cancellationReason)}</p>`
+                : ''
+            }
+            ${
+              cancellationDateLabel
+                ? `<p class="mt-1 text-[11px] uppercase tracking-wide text-rose-500">${escapeHtml(
+                    cancellationDateLabel
+                  )}</p>`
+                : ''
+            }
+          </div>`
+        : '';
       const itemsRows = sale.items.length
         ? sale.items
             .map(
@@ -4426,12 +4460,29 @@
             )
             .join('')
         : '<tr><td colspan="5" class="px-3 py-4 text-center text-xs text-gray-500">Nenhum produto registrado nesta venda.</td></tr>';
-      const fiscalBadge =
-        sale.fiscalStatus === 'emitted'
-          ? `<span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"><i class="fas fa-file-circle-check text-[11px]"></i><span>XML Emitida</span></span>`
-          : `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-fiscal data-sale-id="${escapeHtml(
-              saleId
-            )}"><i class="fas fa-file-invoice text-[11px]"></i><span>Emitir Fiscal</span></button>`;
+      const printControl = isCancelled
+        ? ''
+        : `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-print data-sale-id="${escapeHtml(
+            saleId
+          )}">
+            <i class="fas fa-print text-[11px]"></i>
+            <span>Imprimir</span>
+          </button>`;
+      let fiscalControl = '';
+      if (isCancelled) {
+        fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-500"><i class="fas fa-ban text-[11px]"></i><span>Fiscal indisponível</span></span>`;
+      } else if (sale.fiscalStatus === 'emitted') {
+        fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"><i class="fas fa-file-circle-check text-[11px]"></i><span>XML Emitida</span></span>`;
+      } else {
+        fiscalControl = `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-fiscal data-sale-id="${escapeHtml(
+          saleId
+        )}"><i class="fas fa-file-invoice text-[11px]"></i><span>Emitir Fiscal</span></button>`;
+      }
+      const cancelControl = isCancelled
+        ? `<span class="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700"><i class="fas fa-ban text-[11px]"></i><span>Cancelada</span></span>`
+        : `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700" data-sale-cancel data-sale-id="${escapeHtml(
+            saleId
+          )}"><i class="fas fa-ban text-[11px]"></i><span>Cancelar</span></button>`;
       const li = document.createElement('li');
       li.dataset.saleId = saleId;
       li.innerHTML = `
@@ -4462,16 +4513,13 @@
                 </div>
               </button>
               <div class="flex items-center gap-2">
-                <button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-print data-sale-id="${escapeHtml(
-                  saleId
-                )}">
-                  <i class="fas fa-print text-[11px]"></i>
-                  <span>Imprimir</span>
-                </button>
-                ${fiscalBadge}
+                ${printControl}
+                ${fiscalControl}
+                ${cancelControl}
               </div>
             </div>
             <div class="${sale.expanded ? '' : 'hidden'} border-t border-gray-100 pt-4" data-sale-details>
+              ${cancellationInfo}
               <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200 text-xs text-gray-600">
                   <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
@@ -4521,6 +4569,10 @@
   const handleSalePrint = (saleId) => {
     const sale = findCompletedSaleById(saleId);
     if (!sale) return;
+    if (sale.status === 'cancelled') {
+      notify('Esta venda foi cancelada e não pode ser impressa.', 'info');
+      return;
+    }
     if (!sale.receiptSnapshot) {
       notify('Não foi possível localizar o comprovante desta venda para impressão.', 'warning');
       return;
@@ -4531,10 +4583,103 @@
   const handleSaleEmitFiscal = (saleId) => {
     const sale = findCompletedSaleById(saleId);
     if (!sale || sale.fiscalStatus === 'emitted') return;
+    if (sale.status === 'cancelled') {
+      notify('Não é possível emitir fiscal para uma venda cancelada.', 'info');
+      return;
+    }
     sale.fiscalStatus = 'emitted';
     sale.fiscalEmittedAt = new Date().toISOString();
     renderSalesList();
     notify('XML da venda emitida com sucesso.', 'success');
+  };
+
+  const isModalActive = (modal) => Boolean(modal && !modal.classList.contains('hidden'));
+
+  const clearSaleCancelError = () => {
+    if (elements.saleCancelReason) {
+      elements.saleCancelReason.classList.remove('border-rose-400', 'focus:border-rose-400', 'focus:ring-rose-200');
+    }
+    if (elements.saleCancelError) {
+      elements.saleCancelError.classList.add('hidden');
+      elements.saleCancelError.textContent = 'Informe o motivo para cancelar a venda.';
+    }
+  };
+
+  const showSaleCancelError = (message) => {
+    if (elements.saleCancelError) {
+      elements.saleCancelError.textContent = message;
+      elements.saleCancelError.classList.remove('hidden');
+    }
+    if (elements.saleCancelReason) {
+      elements.saleCancelReason.classList.add('border-rose-400', 'focus:border-rose-400', 'focus:ring-rose-200');
+    }
+  };
+
+  const openSaleCancelModal = (saleId) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale || sale.status === 'cancelled' || !elements.saleCancelModal) return;
+    state.activeSaleCancellationId = saleId;
+    if (elements.saleCancelReason) {
+      elements.saleCancelReason.value = '';
+    }
+    clearSaleCancelError();
+    elements.saleCancelModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    window.setTimeout(() => {
+      elements.saleCancelReason?.focus();
+    }, 50);
+  };
+
+  const closeSaleCancelModal = () => {
+    if (elements.saleCancelModal) {
+      elements.saleCancelModal.classList.add('hidden');
+    }
+    state.activeSaleCancellationId = '';
+    if (elements.saleCancelReason) {
+      elements.saleCancelReason.value = '';
+    }
+    clearSaleCancelError();
+    if (
+      !isModalActive(elements.finalizeModal) &&
+      !isModalActive(elements.paymentValueModal) &&
+      !isModalActive(elements.deliveryAddressModal) &&
+      !isModalActive(elements.customerModal)
+    ) {
+      document.body.classList.remove('overflow-hidden');
+    }
+  };
+
+  const handleSaleCancelConfirm = () => {
+    const saleId = state.activeSaleCancellationId;
+    const reason = elements.saleCancelReason?.value?.trim() || '';
+    if (!saleId) {
+      closeSaleCancelModal();
+      return;
+    }
+    if (!reason) {
+      showSaleCancelError('Informe o motivo para cancelar a venda.');
+      elements.saleCancelReason?.focus();
+      return;
+    }
+    const sale = findCompletedSaleById(saleId);
+    if (!sale) {
+      closeSaleCancelModal();
+      return;
+    }
+    sale.status = 'cancelled';
+    sale.cancellationReason = reason;
+    sale.cancellationAt = new Date().toISOString();
+    sale.cancellationAtLabel = toDateLabel(sale.cancellationAt);
+    renderSalesList();
+    closeSaleCancelModal();
+    notify('Venda cancelada com sucesso.', 'success');
+  };
+
+  const handleSaleCancelModalKeydown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeSaleCancelModal();
+    }
   };
 
   const handleSalesListClick = (event) => {
@@ -4543,6 +4688,14 @@
       const saleId = toggleButton.getAttribute('data-sale-id');
       if (saleId) {
         handleSaleCardToggle(saleId);
+      }
+      return;
+    }
+    const cancelButton = event.target.closest('[data-sale-cancel]');
+    if (cancelButton) {
+      const saleId = cancelButton.getAttribute('data-sale-id');
+      if (saleId) {
+        openSaleCancelModal(saleId);
       }
       return;
     }
@@ -4750,6 +4903,7 @@
     state.printPreferences = { fechamento: 'PM', venda: 'PM' };
     state.deliveryOrders = [];
     state.completedSales = [];
+    state.activeSaleCancellationId = '';
     state.deliveryAddresses = [];
     state.deliveryAddressesLoading = false;
     state.deliveryAddressSaving = false;
@@ -5802,6 +5956,12 @@
     elements.deliveryAddressForm?.addEventListener('submit', handleDeliveryAddressFormSubmit);
     elements.deliveryList?.addEventListener('click', handleDeliveryListClick);
     elements.salesList?.addEventListener('click', handleSalesListClick);
+    elements.saleCancelConfirm?.addEventListener('click', handleSaleCancelConfirm);
+    elements.saleCancelCancel?.addEventListener('click', closeSaleCancelModal);
+    elements.saleCancelClose?.addEventListener('click', closeSaleCancelModal);
+    elements.saleCancelBackdrop?.addEventListener('click', closeSaleCancelModal);
+    elements.saleCancelModal?.addEventListener('keydown', handleSaleCancelModalKeydown);
+    elements.saleCancelReason?.addEventListener('input', clearSaleCancelError);
     if (elements.deliveryAddressFields?.cep) {
       elements.deliveryAddressFields.cep.addEventListener('blur', () => {
         const input = elements.deliveryAddressFields?.cep;

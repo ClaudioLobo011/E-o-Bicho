@@ -565,6 +565,9 @@
   .mt-16 {
     margin-top: calc(var(--spacing) * 16);
   }
+  .mt-20 {
+    margin-top: calc(var(--spacing) * 20);
+  }
   .mt-24 {
     margin-top: calc(var(--spacing) * 24);
   }
@@ -1550,6 +1553,9 @@
   }
   .border-rose-300 {
     border-color: var(--color-rose-300);
+  }
+  .border-rose-400 {
+    border-color: var(--color-rose-400);
   }
   .border-rose-500 {
     border-color: var(--color-rose-500);
@@ -3368,6 +3374,11 @@
   .focus\:border-primary {
     &:focus {
       border-color: var(--color-primary);
+    }
+  }
+  .focus\:border-rose-400 {
+    &:focus {
+      border-color: var(--color-rose-400);
     }
   }
   .focus\:border-rose-500 {

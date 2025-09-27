@@ -462,6 +462,32 @@
         </div>
     </div>
 
+    <div id="pdv-sale-cancel-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-slate-900/60" data-sale-cancel-dismiss="backdrop"></div>
+        <div class="relative mx-auto mt-20 w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-800">Cancelar venda</h2>
+                    <p class="text-sm text-gray-500">Informe o motivo do cancelamento para continuar.</p>
+                </div>
+                <button type="button" id="pdv-sale-cancel-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de cancelamento">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="space-y-5 px-6 py-5">
+                <div>
+                    <label for="pdv-sale-cancel-reason" class="block text-sm font-semibold text-gray-700">Motivo do cancelamento</label>
+                    <textarea id="pdv-sale-cancel-reason" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Descreva o motivo do cancelamento"></textarea>
+                    <p id="pdv-sale-cancel-error" class="mt-2 hidden text-xs font-medium text-rose-600">Informe o motivo para cancelar a venda.</p>
+                </div>
+                <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button type="button" id="pdv-sale-cancel-cancel" class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:border-gray-300 hover:text-gray-700">Voltar</button>
+                    <button type="button" id="pdv-sale-cancel-confirm" class="inline-flex items-center justify-center rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-200">Confirmar cancelamento</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="pdv-delivery-address-modal" class="fixed inset-0 z-[55] hidden">
         <div class="absolute inset-0 bg-slate-900/60" data-delivery-address-dismiss="backdrop"></div>
         <div class="relative mx-auto mt-16 w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
