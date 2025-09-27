@@ -81,6 +81,8 @@
     selectedProduct: null,
     quantidade: 1,
     itens: [],
+    vendaCliente: null,
+    vendaPet: null,
     paymentMethods: [],
     paymentMethodsLoading: false,
     pendingPagamentosData: null,
@@ -88,6 +90,14 @@
     vendaPagamentos: [],
     vendaDesconto: 0,
     vendaAcrescimo: 0,
+    customerSearchResults: [],
+    customerSearchLoading: false,
+    customerSearchQuery: '',
+    customerPets: [],
+    customerPetsLoading: false,
+    modalSelectedCliente: null,
+    modalSelectedPet: null,
+    modalActiveTab: 'cliente',
     summary: { abertura: 0, recebido: 0, saldo: 0 },
     caixaInfo: {
       aberturaData: null,
@@ -103,7 +113,11 @@
   };
 
   const elements = {};
+  const customerPetsCache = new Map();
   let searchTimeout = null;
+  let customerSearchTimeout = null;
+  let customerSearchController = null;
+  let customerPetsController = null;
   let paymentModalState = null;
 
   const createUid = () => `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -144,6 +158,41 @@
   const safeNumber = (value) => {
     const number = Number(value);
     return Number.isFinite(number) ? number : 0;
+  };
+
+  const canApplyGeneralPromotion = () => Boolean(state.vendaCliente);
+
+  const hasGeneralPromotion = (product) =>
+    Boolean(product?.promocao?.ativa && safeNumber(product.promocao.porcentagem) > 0);
+
+  const buildProductSnapshot = (product) => {
+    if (!product || typeof product !== 'object') return {};
+    return {
+      _id: product._id || product.id || '',
+      nome: product.nome || product.descricao || '',
+      codigoInterno: product.codigoInterno || product.codInterno || '',
+      codigo:
+        product.codigo ||
+        product.codigoReferencia ||
+        product.sku ||
+        product.codigoInterno ||
+        product.codInterno ||
+        '',
+      codigoBarras:
+        product.codigoBarras ||
+        product.codigoDeBarras ||
+        product.barras ||
+        product.ean ||
+        product.codbarras ||
+        '',
+      promocao: product.promocao ? { ...product.promocao } : null,
+      precoClube: product.precoClube || null,
+      venda: product.venda,
+      precoVenda: product.precoVenda,
+      preco: product.preco,
+      valor: product.valor,
+      price: product.price,
+    };
   };
 
   const parseDateValue = (value) => {
@@ -425,9 +474,12 @@
       product?.codigoDeBarras ||
       product?.barras ||
       product?.ean ||
+      product?.codbarras ||
       ''
     );
   };
+
+  const normalizeBarcodeValue = (value) => String(value ?? '').replace(/\s+/g, '');
 
   const getImageUrl = (product) => {
     const path =
@@ -456,7 +508,10 @@
   const getFinalPrice = (product) => {
     const base = getBasePrice(product);
     if (!product) return base;
-    if (product?.promocao?.ativa && safeNumber(product.promocao.porcentagem) > 0) {
+    if (hasGeneralPromotion(product)) {
+      if (!canApplyGeneralPromotion()) {
+        return base;
+      }
       const desconto = base * (safeNumber(product.promocao.porcentagem) / 100);
       return Math.max(base - desconto, 0);
     }
@@ -491,6 +546,7 @@
     elements.selectedPrice = document.getElementById('pdv-selected-price');
     elements.selectedOriginalPrice = document.getElementById('pdv-selected-original-price');
     elements.selectedPromoBadge = document.getElementById('pdv-selected-promo');
+    elements.selectedGeneralWarning = document.getElementById('pdv-selected-general-warning');
 
     elements.itemValue = document.getElementById('pdv-item-value');
     elements.itemQuantity = document.getElementById('pdv-item-quantity');
@@ -503,6 +559,35 @@
     elements.itemsCount = document.getElementById('pdv-items-count');
     elements.itemsTotal = document.getElementById('pdv-items-total');
     elements.finalizeButton = document.getElementById('pdv-finalize-sale');
+
+    elements.customerOpenButton = document.getElementById('pdv-open-customer');
+    elements.customerOpenButtonLabel = document.getElementById('pdv-open-customer-label');
+    elements.customerSummaryEmpty = document.getElementById('pdv-customer-summary-empty');
+    elements.customerSummaryInfo = document.getElementById('pdv-customer-summary-info');
+    elements.customerName = document.getElementById('pdv-customer-name');
+    elements.customerDoc = document.getElementById('pdv-customer-doc');
+    elements.customerContact = document.getElementById('pdv-customer-contact');
+    elements.customerPet = document.getElementById('pdv-customer-pet');
+    elements.customerRemove = document.getElementById('pdv-customer-remove');
+
+    elements.customerModal = document.getElementById('pdv-customer-modal');
+    elements.customerModalClose = document.getElementById('pdv-customer-close');
+    elements.customerModalBackdrop =
+      elements.customerModal?.querySelector('[data-pdv-customer-dismiss]') || null;
+    elements.customerTabButtons =
+      elements.customerModal?.querySelectorAll('[data-pdv-customer-tab]') || [];
+    elements.customerModalPanels =
+      elements.customerModal?.querySelectorAll('[data-pdv-customer-panel]') || [];
+    elements.customerSearchInput = document.getElementById('pdv-customer-search');
+    elements.customerResultsList = document.getElementById('pdv-customer-results');
+    elements.customerResultsEmpty = document.getElementById('pdv-customer-results-empty');
+    elements.customerResultsLoading = document.getElementById('pdv-customer-results-loading');
+    elements.customerPetsList = document.getElementById('pdv-customer-pets');
+    elements.customerPetsEmpty = document.getElementById('pdv-customer-pets-empty');
+    elements.customerPetsLoading = document.getElementById('pdv-customer-pets-loading');
+    elements.customerConfirm = document.getElementById('pdv-customer-confirm');
+    elements.customerClear = document.getElementById('pdv-customer-clear');
+    elements.customerCancel = document.getElementById('pdv-customer-cancel');
 
     elements.caixaActions = document.getElementById('pdv-caixa-actions');
     elements.caixaStateLabel = document.getElementById('pdv-caixa-state-label');
@@ -657,6 +742,9 @@
     if (elements.selectedPromoBadge) {
       elements.selectedPromoBadge.classList.add('hidden');
     }
+    if (elements.selectedGeneralWarning) {
+      elements.selectedGeneralWarning.classList.add('hidden');
+    }
     if (elements.itemQuantity) {
       elements.itemQuantity.value = 1;
     }
@@ -683,6 +771,8 @@
     const barcode = getProductBarcode(product);
     const basePrice = getBasePrice(product);
     const finalPrice = getFinalPrice(product);
+    const generalPromo = hasGeneralPromotion(product);
+    const showGeneralWarning = generalPromo && !canApplyGeneralPromotion();
     if (elements.selectedName) {
       elements.selectedName.textContent = name;
     }
@@ -704,7 +794,15 @@
       }
     }
     if (elements.selectedPromoBadge) {
+      if (generalPromo) {
+        elements.selectedPromoBadge.textContent = 'Promoção geral';
+      } else {
+        elements.selectedPromoBadge.textContent = 'Promoção ativa';
+      }
       elements.selectedPromoBadge.classList.toggle('hidden', !(finalPrice < basePrice));
+    }
+    if (elements.selectedGeneralWarning) {
+      elements.selectedGeneralWarning.classList.toggle('hidden', !showGeneralWarning);
     }
     if (elements.itemQuantity) {
       elements.itemQuantity.value = state.quantidade;
@@ -725,6 +823,501 @@
     }
   };
 
+  const updateSaleCustomerSummary = () => {
+    if (elements.customerOpenButtonLabel) {
+      elements.customerOpenButtonLabel.textContent = state.vendaCliente
+        ? 'Trocar cliente'
+        : 'Adicionar cliente';
+    }
+    const hasCustomer = Boolean(state.vendaCliente);
+    if (elements.customerSummaryEmpty) {
+      elements.customerSummaryEmpty.classList.toggle('hidden', hasCustomer);
+    }
+    if (elements.customerSummaryInfo) {
+      elements.customerSummaryInfo.classList.toggle('hidden', !hasCustomer);
+    }
+    if (!hasCustomer) {
+      if (elements.customerPet) {
+        elements.customerPet.classList.add('hidden');
+      }
+      return;
+    }
+    const cliente = state.vendaCliente;
+    if (elements.customerName) {
+      elements.customerName.textContent = cliente.nome || 'Cliente sem nome';
+    }
+    if (elements.customerDoc) {
+      const doc = cliente.doc || cliente.cpf || cliente.cnpj || cliente.inscricaoEstadual || '';
+      elements.customerDoc.textContent = doc ? `Documento: ${doc}` : 'Documento não informado';
+    }
+    if (elements.customerContact) {
+      const contacts = [cliente.email, cliente.celular].filter(Boolean);
+      elements.customerContact.textContent = contacts.length
+        ? `Contato: ${contacts.join(' • ')}`
+        : 'Contato não informado';
+    }
+    if (elements.customerPet) {
+      if (state.vendaPet) {
+        const details = [state.vendaPet.tipo, state.vendaPet.raca].filter(Boolean).join(' • ');
+        const detailText = details ? ` (${details})` : '';
+        elements.customerPet.textContent = `Pet: ${state.vendaPet.nome || 'Pet sem nome'}${detailText}`;
+        elements.customerPet.classList.remove('hidden');
+      } else {
+        elements.customerPet.classList.add('hidden');
+      }
+    }
+  };
+
+  const recalculateItemsForCustomerChange = () => {
+    if (!state.itens.length) {
+      updateFinalizeButton();
+      updateSaleSummary();
+      return;
+    }
+    state.itens = state.itens.map((item) => {
+      if (!item.productSnapshot) {
+        return {
+          ...item,
+          generalPromo: Boolean(item.generalPromo && state.vendaCliente),
+        };
+      }
+      const snapshot = item.productSnapshot;
+      const valor = getFinalPrice(snapshot);
+      return {
+        ...item,
+        valor,
+        subtotal: valor * item.quantidade,
+        generalPromo: hasGeneralPromotion(snapshot),
+        codigoInterno:
+          item.codigoInterno ||
+          snapshot.codigoInterno ||
+          snapshot.codigo ||
+          item.codigo ||
+          '',
+        codigoBarras: item.codigoBarras || snapshot.codigoBarras || '',
+        productSnapshot: snapshot,
+      };
+    });
+    renderItemsList();
+  };
+
+  const setSaleCustomer = (cliente, pet = null) => {
+    state.vendaCliente = cliente ? { ...cliente } : null;
+    state.vendaPet = cliente && pet ? { ...pet } : null;
+    if (!cliente) {
+      state.vendaPet = null;
+    }
+    updateSaleCustomerSummary();
+    recalculateItemsForCustomerChange();
+    if (state.selectedProduct) {
+      updateSelectedProductView();
+    }
+    if (
+      elements.searchResults &&
+      !elements.searchResults.classList.contains('hidden') &&
+      state.searchResults.length &&
+      elements.searchInput &&
+      elements.searchInput.value.trim()
+    ) {
+      renderSearchResults(state.searchResults, elements.searchInput.value.trim());
+    }
+  };
+
+  const updateCustomerModalTabs = () => {
+    const buttons = Array.from(elements.customerTabButtons || []);
+    const panels = Array.from(elements.customerModalPanels || []);
+    buttons.forEach((button) => {
+      const tab = button.getAttribute('data-pdv-customer-tab');
+      const isActive = tab === state.modalActiveTab;
+      const isPetTab = tab === 'pet';
+      const disabled = isPetTab && !state.modalSelectedCliente;
+      button.classList.toggle('text-primary', isActive);
+      button.classList.toggle('border-primary', isActive);
+      button.classList.toggle('text-gray-500', !isActive);
+      button.classList.toggle('border-transparent', !isActive);
+      button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      button.disabled = disabled;
+      button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      button.classList.toggle('opacity-60', disabled);
+      button.classList.toggle('cursor-not-allowed', disabled);
+    });
+    panels.forEach((panel) => {
+      const tab = panel.getAttribute('data-pdv-customer-panel');
+      panel.classList.toggle('hidden', tab !== state.modalActiveTab);
+    });
+  };
+
+  const updateCustomerModalActions = () => {
+    const hasSelection = Boolean(state.modalSelectedCliente);
+    if (elements.customerConfirm) {
+      elements.customerConfirm.disabled = !hasSelection;
+      elements.customerConfirm.classList.toggle('opacity-60', !hasSelection);
+      elements.customerConfirm.textContent = state.vendaCliente
+        ? 'Atualizar vínculo'
+        : 'Vincular cliente';
+    }
+    if (elements.customerClear) {
+      elements.customerClear.disabled = !hasSelection;
+      elements.customerClear.classList.toggle('opacity-60', !hasSelection);
+    }
+  };
+
+  const renderCustomerSearchResults = () => {
+    if (!elements.customerResultsList || !elements.customerResultsEmpty || !elements.customerResultsLoading) {
+      return;
+    }
+    elements.customerResultsList.innerHTML = '';
+    if (state.customerSearchLoading) {
+      elements.customerResultsLoading.classList.remove('hidden');
+      elements.customerResultsEmpty.classList.add('hidden');
+      return;
+    }
+    elements.customerResultsLoading.classList.add('hidden');
+    const query = state.customerSearchQuery.trim();
+    if (!query) {
+      elements.customerResultsEmpty.textContent = 'Digite para buscar clientes.';
+      elements.customerResultsEmpty.classList.remove('hidden');
+      return;
+    }
+    if (!state.customerSearchResults.length) {
+      elements.customerResultsEmpty.textContent = 'Nenhum cliente encontrado para a busca informada.';
+      elements.customerResultsEmpty.classList.remove('hidden');
+      return;
+    }
+    elements.customerResultsEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    state.customerSearchResults.forEach((cliente) => {
+      const isSelected = Boolean(state.modalSelectedCliente && state.modalSelectedCliente._id === cliente._id);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('data-customer-id', cliente._id);
+      button.className = [
+        'w-full text-left rounded-lg border px-4 py-3 transition flex flex-col gap-1',
+        isSelected
+          ? 'border-primary bg-primary/5 text-primary'
+          : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/5',
+      ].join(' ');
+      const documento = cliente.doc || cliente.cpf || cliente.cnpj || '';
+      const contato = [cliente.email, cliente.celular].filter(Boolean).join(' • ');
+      button.innerHTML = `
+        <span class="text-sm font-semibold">${cliente.nome || 'Cliente sem nome'}</span>
+        <span class="text-xs text-gray-500">${documento ? `Documento: ${documento}` : 'Documento não informado'}</span>
+        <span class="text-xs text-gray-500">${contato || 'Contato não informado'}</span>
+      `;
+      fragment.appendChild(button);
+    });
+    elements.customerResultsList.appendChild(fragment);
+  };
+
+  const renderCustomerPets = () => {
+    if (!elements.customerPetsList || !elements.customerPetsEmpty || !elements.customerPetsLoading) {
+      return;
+    }
+    elements.customerPetsList.innerHTML = '';
+    if (!state.modalSelectedCliente) {
+      elements.customerPetsLoading.classList.add('hidden');
+      elements.customerPetsEmpty.textContent = 'Selecione um cliente para visualizar os pets vinculados.';
+      elements.customerPetsEmpty.classList.remove('hidden');
+      return;
+    }
+    if (state.customerPetsLoading) {
+      elements.customerPetsLoading.classList.remove('hidden');
+      elements.customerPetsEmpty.classList.add('hidden');
+      return;
+    }
+    elements.customerPetsLoading.classList.add('hidden');
+    if (!state.customerPets.length) {
+      elements.customerPetsEmpty.textContent = 'Nenhum pet cadastrado para este cliente.';
+      elements.customerPetsEmpty.classList.remove('hidden');
+      return;
+    }
+    elements.customerPetsEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    state.customerPets.forEach((pet) => {
+      const isSelected = Boolean(state.modalSelectedPet && state.modalSelectedPet._id === pet._id);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('data-pet-id', pet._id);
+      button.className = [
+        'w-full text-left rounded-lg border px-4 py-3 transition flex flex-col gap-1',
+        isSelected
+          ? 'border-primary bg-primary/5 text-primary'
+          : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/5',
+      ].join(' ');
+      const details = [pet.tipo, pet.raca].filter(Boolean).join(' • ');
+      button.innerHTML = `
+        <span class="text-sm font-semibold">${pet.nome || 'Pet sem nome'}</span>
+        <span class="text-xs text-gray-500">${details || 'Detalhes não informados'}</span>
+      `;
+      fragment.appendChild(button);
+    });
+    elements.customerPetsList.appendChild(fragment);
+  };
+
+  const performCustomerSearch = async (term) => {
+    const query = term.trim();
+    state.customerSearchQuery = term;
+    if (customerSearchController) {
+      customerSearchController.abort();
+      customerSearchController = null;
+    }
+    if (!query) {
+      state.customerSearchResults = [];
+      state.customerSearchLoading = false;
+      renderCustomerSearchResults();
+      return;
+    }
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    state.customerSearchLoading = true;
+    renderCustomerSearchResults();
+    customerSearchController = new AbortController();
+    try {
+      const response = await fetch(
+        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=8`,
+        { headers, signal: customerSearchController.signal }
+      );
+      if (!response.ok) {
+        throw new Error('Não foi possível buscar clientes.');
+      }
+      const payload = await response.json();
+      state.customerSearchResults = Array.isArray(payload) ? payload : [];
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      console.error('Erro ao buscar clientes:', error);
+      notify(error.message || 'Não foi possível buscar clientes.', 'error');
+      state.customerSearchResults = [];
+    } finally {
+      state.customerSearchLoading = false;
+      customerSearchController = null;
+      renderCustomerSearchResults();
+    }
+  };
+
+  const fetchCustomerPets = async (clienteId) => {
+    if (!clienteId) return;
+    const cached = customerPetsCache.get(clienteId);
+    if (cached) {
+      state.customerPets = cached;
+      state.customerPetsLoading = false;
+      renderCustomerPets();
+      updateCustomerModalActions();
+      return;
+    }
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    state.customerPetsLoading = true;
+    renderCustomerPets();
+    if (customerPetsController) {
+      customerPetsController.abort();
+    }
+    customerPetsController = new AbortController();
+    try {
+      const response = await fetch(`${API_BASE}/func/clientes/${clienteId}/pets`, {
+        headers,
+        signal: customerPetsController.signal,
+      });
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar os pets do cliente.');
+      }
+      const payload = await response.json();
+      const pets = Array.isArray(payload) ? payload : [];
+      customerPetsCache.set(clienteId, pets);
+      if (state.modalSelectedCliente && state.modalSelectedCliente._id === clienteId) {
+        state.customerPets = pets;
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      console.error('Erro ao carregar pets do cliente:', error);
+      notify(error.message || 'Não foi possível carregar os pets do cliente selecionado.', 'error');
+      if (state.modalSelectedCliente && state.modalSelectedCliente._id === clienteId) {
+        state.customerPets = [];
+      }
+    } finally {
+      if (state.modalSelectedCliente && state.modalSelectedCliente._id === clienteId) {
+        state.customerPetsLoading = false;
+        renderCustomerPets();
+        updateCustomerModalActions();
+      }
+      customerPetsController = null;
+    }
+  };
+
+  const setModalSelectedCliente = (cliente) => {
+    state.modalSelectedCliente = cliente ? { ...cliente } : null;
+    state.modalSelectedPet = null;
+    if (state.modalSelectedCliente && state.modalSelectedCliente._id) {
+      const cached = customerPetsCache.get(state.modalSelectedCliente._id);
+      if (cached) {
+        state.customerPets = cached;
+        state.customerPetsLoading = false;
+      } else {
+        state.customerPets = [];
+        state.customerPetsLoading = true;
+        fetchCustomerPets(state.modalSelectedCliente._id);
+      }
+    } else {
+      state.customerPets = [];
+      state.customerPetsLoading = false;
+    }
+    renderCustomerSearchResults();
+    renderCustomerPets();
+    updateCustomerModalTabs();
+    updateCustomerModalActions();
+  };
+
+  const openCustomerModal = () => {
+    if (!elements.customerModal) return;
+    state.modalActiveTab = 'cliente';
+    state.customerSearchQuery = '';
+    state.customerSearchResults = [];
+    state.customerSearchLoading = false;
+    state.customerPetsLoading = false;
+    if (elements.customerSearchInput) {
+      elements.customerSearchInput.value = '';
+    }
+    setModalSelectedCliente(state.vendaCliente ? { ...state.vendaCliente } : null);
+    if (
+      state.vendaPet &&
+      state.modalSelectedCliente &&
+      state.modalSelectedCliente._id &&
+      state.vendaCliente &&
+      state.vendaCliente._id === state.modalSelectedCliente._id
+    ) {
+      state.modalSelectedPet = { ...state.vendaPet };
+      renderCustomerPets();
+      updateCustomerModalActions();
+    }
+    elements.customerModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    updateCustomerModalTabs();
+    renderCustomerSearchResults();
+    renderCustomerPets();
+    updateCustomerModalActions();
+    setTimeout(() => {
+      elements.customerSearchInput?.focus();
+    }, 150);
+  };
+
+  const closeCustomerModal = () => {
+    if (!elements.customerModal) return;
+    elements.customerModal.classList.add('hidden');
+    if (
+      (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) &&
+      (!elements.paymentValueModal || elements.paymentValueModal.classList.contains('hidden'))
+    ) {
+      document.body.classList.remove('overflow-hidden');
+    }
+    if (customerSearchTimeout) {
+      clearTimeout(customerSearchTimeout);
+      customerSearchTimeout = null;
+    }
+    if (customerSearchController) {
+      customerSearchController.abort();
+      customerSearchController = null;
+    }
+    if (customerPetsController) {
+      customerPetsController.abort();
+      customerPetsController = null;
+    }
+    state.customerSearchLoading = false;
+    state.customerPetsLoading = false;
+  };
+
+  const handleCustomerSearchInput = (event) => {
+    const value = event.target.value || '';
+    state.customerSearchQuery = value;
+    if (customerSearchTimeout) {
+      clearTimeout(customerSearchTimeout);
+    }
+    customerSearchTimeout = setTimeout(() => performCustomerSearch(value), 300);
+    if (!value.trim()) {
+      state.customerSearchResults = [];
+      state.customerSearchLoading = false;
+      renderCustomerSearchResults();
+    }
+  };
+
+  const handleCustomerResultsClick = (event) => {
+    const button = event.target.closest('[data-customer-id]');
+    if (!button) return;
+    const id = button.getAttribute('data-customer-id');
+    const cliente = state.customerSearchResults.find((item) => item._id === id);
+    if (!cliente) return;
+    setModalSelectedCliente(cliente);
+  };
+
+  const handleCustomerPetsClick = (event) => {
+    const button = event.target.closest('[data-pet-id]');
+    if (!button) return;
+    const id = button.getAttribute('data-pet-id');
+    const pet = state.customerPets.find((item) => item._id === id);
+    if (!pet) return;
+    if (state.modalSelectedPet && state.modalSelectedPet._id === id) {
+      state.modalSelectedPet = null;
+    } else {
+      state.modalSelectedPet = { ...pet };
+    }
+    renderCustomerPets();
+    updateCustomerModalActions();
+  };
+
+  const handleCustomerTabClick = (event) => {
+    const tab = event.currentTarget.getAttribute('data-pdv-customer-tab');
+    if (!tab) return;
+    if (tab === 'pet' && !state.modalSelectedCliente) {
+      event.preventDefault();
+      notify('Selecione um cliente para visualizar os pets.', 'info');
+      return;
+    }
+    state.modalActiveTab = tab;
+    updateCustomerModalTabs();
+    if (tab === 'pet' && state.modalSelectedCliente && state.modalSelectedCliente._id) {
+      if (!customerPetsCache.has(state.modalSelectedCliente._id) && !state.customerPetsLoading) {
+        fetchCustomerPets(state.modalSelectedCliente._id);
+      }
+    }
+  };
+
+  const handleCustomerConfirm = () => {
+    if (!state.modalSelectedCliente) {
+      notify('Selecione um cliente para vincular à venda.', 'warning');
+      return;
+    }
+    setSaleCustomer(state.modalSelectedCliente, state.modalSelectedPet);
+    closeCustomerModal();
+  };
+
+  const handleCustomerClearSelection = () => {
+    state.modalSelectedCliente = null;
+    state.modalSelectedPet = null;
+    state.customerPets = [];
+    state.customerPetsLoading = false;
+    state.customerSearchQuery = '';
+    state.customerSearchResults = [];
+    state.customerSearchLoading = false;
+    state.modalActiveTab = 'cliente';
+    if (elements.customerSearchInput) {
+      elements.customerSearchInput.value = '';
+    }
+    renderCustomerSearchResults();
+    renderCustomerPets();
+    updateCustomerModalTabs();
+    updateCustomerModalActions();
+  };
+
+  const handleCustomerRemove = () => {
+    if (!state.vendaCliente) return;
+    setSaleCustomer(null, null);
+  };
+
+  const handleCustomerModalKeydown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeCustomerModal();
+    }
+  };
+
   const renderItemsList = () => {
     if (!elements.itemsList || !elements.itemsEmpty || !elements.itemsCount || !elements.itemsTotal)
       return;
@@ -742,16 +1335,28 @@
     state.itens.forEach((item, index) => {
       const li = document.createElement('li');
       li.dataset.index = String(index);
-      li.className = 'flex items-center gap-3 py-3';
+      li.className = 'flex items-start gap-3 py-3';
+      const codigoInterno = item.codigoInterno || item.codigo || '—';
+      const codigoBarras = item.codigoBarras || '—';
+      const generalNotice = !state.vendaCliente && item.generalPromo
+        ? '<p class="text-[11px] text-amber-600">Vincule um cliente para aplicar a promoção geral.</p>'
+        : '';
       li.innerHTML = `
-        <div class="flex-1 min-w-0">
-          <p class="text-sm font-semibold text-gray-800 truncate">${item.nome}</p>
-          <p class="text-xs text-gray-500">Cód: ${item.codigo || '—'} • Qtde: ${item.quantidade}</p>
+        <div class="flex-1 min-w-0 space-y-1">
+          <p class="text-sm font-semibold text-gray-800 leading-snug">${item.nome}</p>
+          <p class="text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-1">
+            <span>Cód. Interno: ${codigoInterno}</span>
+            <span>Barras: ${codigoBarras}</span>
+          </p>
+          <p class="text-xs text-gray-500">Qtde: ${item.quantidade} • Valor: ${formatCurrency(item.valor)}</p>
+          ${generalNotice}
         </div>
-        <div class="text-sm font-semibold text-gray-700">${formatCurrency(item.subtotal)}</div>
-        <button type="button" class="text-xs text-red-500 hover:text-red-600" data-remove-index="${index}" aria-label="Remover item">
-          <i class="fas fa-times"></i>
-        </button>
+        <div class="flex flex-col items-end gap-2 text-right">
+          <span class="text-sm font-semibold text-gray-700">${formatCurrency(item.subtotal)}</span>
+          <button type="button" class="text-xs text-red-500 transition hover:text-red-600" data-remove-index="${index}" aria-label="Remover item">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
       `;
       fragment.appendChild(li);
     });
@@ -1258,7 +1863,7 @@
   const openMatricialPreview = () => {
     if (typeof window === 'undefined') return;
     const content = buildSummaryPrint();
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=800,height=600');
+    const printWindow = window.open('', '_blank', 'noopener=yes,width=800,height=600');
     if (!printWindow) {
       console.warn('Não foi possível abrir a janela de impressão.');
       return;
@@ -1280,7 +1885,11 @@
     printWindow.document.open();
     printWindow.document.write(markup);
     printWindow.document.close();
-    printWindow.onload = () => {
+
+    let hasPrinted = false;
+    const triggerPrint = () => {
+      if (hasPrinted) return;
+      hasPrinted = true;
       printWindow.focus();
       try {
         printWindow.print();
@@ -1288,6 +1897,18 @@
         console.warn('Falha ao acionar impressão automática do fechamento.', error);
       }
     };
+
+    if (typeof printWindow.addEventListener === 'function') {
+      printWindow.addEventListener('load', triggerPrint, { once: true });
+    } else {
+      printWindow.onload = triggerPrint;
+    }
+
+    if (printWindow.document?.readyState === 'complete') {
+      triggerPrint();
+    } else {
+      setTimeout(triggerPrint, 500);
+    }
   };
 
   const promptPrintFechamento = () => {
@@ -1489,6 +2110,8 @@
     state.selectedProduct = null;
     state.quantidade = 1;
     state.itens = [];
+    state.vendaCliente = null;
+    state.vendaPet = null;
     state.summary = { abertura: 0, recebido: 0, saldo: 0 };
     state.caixaInfo = {
       aberturaData: null,
@@ -1505,6 +2128,48 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    state.customerSearchResults = [];
+    state.customerSearchLoading = false;
+    state.customerSearchQuery = '';
+    state.customerPets = [];
+    state.customerPetsLoading = false;
+    state.modalSelectedCliente = null;
+    state.modalSelectedPet = null;
+    state.modalActiveTab = 'cliente';
+    if (customerSearchTimeout) {
+      clearTimeout(customerSearchTimeout);
+      customerSearchTimeout = null;
+    }
+    if (customerSearchController) {
+      customerSearchController.abort();
+      customerSearchController = null;
+    }
+    if (customerPetsController) {
+      customerPetsController.abort();
+      customerPetsController = null;
+    }
+    if (elements.customerSearchInput) {
+      elements.customerSearchInput.value = '';
+    }
+    if (elements.customerResultsList) {
+      elements.customerResultsList.innerHTML = '';
+    }
+    if (elements.customerResultsLoading) {
+      elements.customerResultsLoading.classList.add('hidden');
+    }
+    if (elements.customerResultsEmpty) {
+      elements.customerResultsEmpty.textContent = 'Digite para buscar clientes.';
+      elements.customerResultsEmpty.classList.remove('hidden');
+    }
+    if (elements.customerPetsList) {
+      elements.customerPetsList.innerHTML = '';
+    }
+    if (elements.customerPetsLoading) {
+      elements.customerPetsLoading.classList.add('hidden');
+    }
+    if (elements.customerPetsEmpty) {
+      elements.customerPetsEmpty.textContent = 'Nenhum pet disponível.';
+    }
     if (elements.searchInput) {
       elements.searchInput.value = '';
     }
@@ -1513,6 +2178,7 @@
       elements.searchResults.innerHTML = '';
     }
     clearSelectedProduct();
+    updateSaleCustomerSummary();
     renderItemsList();
     renderPayments();
     renderSalePaymentMethods();
@@ -1526,6 +2192,10 @@
     updateStatusBadge();
     updateTabAvailability();
     updateFinalizeButton();
+    updateCustomerModalTabs();
+    updateCustomerModalActions();
+    renderCustomerSearchResults();
+    renderCustomerPets();
     setActiveTab('caixa-tab');
   };
 
@@ -1726,11 +2396,22 @@
       .map((product, index) => {
         const finalPrice = getFinalPrice(product);
         const basePrice = getBasePrice(product);
-        const badge = finalPrice < basePrice ? '<span class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Promo</span>' : '';
+        const generalPromo = hasGeneralPromotion(product);
+        const showGeneralWarning = generalPromo && !canApplyGeneralPromotion();
+        const badge = finalPrice < basePrice
+          ? '<span class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Promo</span>'
+          : '';
+        const generalBadge = showGeneralWarning
+          ? '<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Cliente necessário</span>'
+          : '';
+        const badges = [badge, generalBadge].filter(Boolean).join('');
         const priceLine = finalPrice < basePrice
           ? `<span class="text-sm font-semibold text-primary">R$ ${toReais(finalPrice)}</span><span class="text-xs text-gray-400 line-through">R$ ${toReais(basePrice)}</span>`
           : `<span class="text-sm font-semibold text-gray-800">R$ ${toReais(finalPrice)}</span>`;
         const image = getImageUrl(product);
+        const extraNotice = showGeneralWarning
+          ? '<span class="block text-[11px] text-amber-600 mt-1">Vincule um cliente para aplicar a promoção geral.</span>'
+          : '';
         return `
           <button type="button" class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-primary/5" data-result-index="${index}">
             <span class="h-14 w-14 flex items-center justify-center rounded border border-gray-200 bg-white overflow-hidden">
@@ -1740,8 +2421,9 @@
               <span class="block text-sm font-semibold text-gray-800 truncate">${product.nome || 'Produto sem nome'}</span>
               <span class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                 ${priceLine}
-                ${badge}
+                ${badges}
               </span>
+              ${extraNotice}
               <span class="block text-[11px] text-gray-400 mt-1">Cód: ${getProductCode(product) || '—'} • Barras: ${getProductBarcode(product) || '—'}</span>
             </span>
           </button>
@@ -1790,6 +2472,51 @@
     }
   };
 
+  const findProductByLookupValue = (products, lookupValue) => {
+    const normalized = normalizeBarcodeValue(lookupValue);
+    if (!normalized) return null;
+    const barcodeMatch = products.find(
+      (product) => normalizeBarcodeValue(getProductBarcode(product)) === normalized
+    );
+    if (barcodeMatch) return barcodeMatch;
+    return (
+      products.find((product) => {
+        const identifiers = [
+          product?.codigoInterno,
+          product?.codInterno,
+          product?.codigo,
+          product?.codigoReferencia,
+          product?.sku,
+        ];
+        return identifiers.some((value) => normalizeBarcodeValue(value) === normalized);
+      }) || null
+    );
+  };
+
+  const fetchProductByBarcode = async (barcode) => {
+    const normalized = normalizeBarcodeValue(barcode);
+    if (!normalized) return null;
+    try {
+      const response = await fetch(
+        `${API_BASE}/products?search=${encodeURIComponent(normalized)}&limit=6`
+      );
+      if (!response.ok) {
+        throw new Error('Não foi possível buscar o produto pelo código informado.');
+      }
+      const payload = await response.json();
+      const products = Array.isArray(payload?.products)
+        ? payload.products
+        : Array.isArray(payload)
+        ? payload
+        : [];
+      if (!products.length) return null;
+      return findProductByLookupValue(products, normalized) || products[0] || null;
+    } catch (error) {
+      console.error('Erro ao buscar produto por código de barras no PDV:', error);
+      throw error;
+    }
+  };
+
   const selectProduct = (index) => {
     const product = state.searchResults[index];
     if (!product) return;
@@ -1805,35 +2532,151 @@
     }
   };
 
+  const appendProductToSale = (product, quantidade = 1) => {
+    if (!product) return false;
+    const quantidadeFinal = Math.max(1, Math.trunc(Number(quantidade) || 1));
+    const unitPrice = getFinalPrice(product);
+    const subtotal = unitPrice * quantidadeFinal;
+    const codigo = getProductCode(product);
+    const codigoInterno = product?.codigoInterno || product?.codInterno || codigo;
+    const codigoBarras = getProductBarcode(product);
+    const nome = product?.nome || 'Produto sem nome';
+    const generalPromo = hasGeneralPromotion(product);
+    const snapshot = buildProductSnapshot(product);
+    const existingIndex = state.itens.findIndex(
+      (item) =>
+        item.id === product._id ||
+        item.codigo === codigo ||
+        (!!codigoInterno && item.codigoInterno === codigoInterno)
+    );
+    if (existingIndex >= 0) {
+      const current = state.itens[existingIndex];
+      current.quantidade += quantidadeFinal;
+      current.valor = unitPrice;
+      current.subtotal = current.quantidade * current.valor;
+      current.codigoInterno = codigoInterno || current.codigoInterno;
+      current.codigoBarras = codigoBarras || current.codigoBarras;
+      current.generalPromo = generalPromo;
+      current.productSnapshot = snapshot;
+    } else {
+      state.itens.push({
+        id: product._id || product.id || codigo || String(Date.now()),
+        codigo,
+        codigoInterno,
+        codigoBarras,
+        nome,
+        quantidade: quantidadeFinal,
+        valor: unitPrice,
+        subtotal,
+        generalPromo,
+        productSnapshot: snapshot,
+      });
+    }
+    renderItemsList();
+    notify('Item adicionado à pré-visualização.', 'success');
+    return true;
+  };
+
   const addItemToList = () => {
     if (!state.selectedProduct) {
       notify('Selecione um produto para adicionar à venda.', 'warning');
       return;
     }
-    const quantidade = Math.max(1, Math.trunc(Number(elements.itemQuantity?.value || state.quantidade || 1)));
+    const quantidade = Math.max(
+      1,
+      Math.trunc(Number(elements.itemQuantity?.value || state.quantidade || 1))
+    );
     state.quantidade = quantidade;
     const product = state.selectedProduct;
-    const unitPrice = getFinalPrice(product);
-    const subtotal = unitPrice * quantidade;
-    const codigo = getProductCode(product);
-    const nome = product?.nome || 'Produto sem nome';
-    const existingIndex = state.itens.findIndex((item) => item.id === product._id || item.codigo === codigo);
-    if (existingIndex >= 0) {
-      const current = state.itens[existingIndex];
-      current.quantidade += quantidade;
-      current.subtotal = current.quantidade * current.valor;
-    } else {
-      state.itens.push({
-        id: product._id || product.id || codigo || String(Date.now()),
-        codigo,
-        nome,
-        quantidade,
-        valor: unitPrice,
-        subtotal,
-      });
+    appendProductToSale(product, quantidade);
+  };
+
+  const handleSearchKeydown = async (event) => {
+    if (event.key !== 'Enter') return;
+    const input = event.currentTarget;
+    if (!input) return;
+    const rawValue = typeof input.value === 'string' ? input.value : '';
+    const term = rawValue.trim();
+    if (!term) return;
+
+    event.preventDefault();
+
+    const normalized = normalizeBarcodeValue(term);
+    const lowerTerm = term.toLowerCase();
+
+    const matchesProduct = (product) => {
+      if (!product) return false;
+      const code = normalizeBarcodeValue(getProductCode(product));
+      const barcode = normalizeBarcodeValue(getProductBarcode(product));
+      const name = (product.nome || product.descricao || '').toLowerCase();
+      return (
+        (!!code && code === normalized) ||
+        (!!barcode && barcode === normalized) ||
+        (!!name && name === lowerTerm)
+      );
+    };
+
+    const clearSearchOverlay = () => {
+      if (elements.searchResults) {
+        elements.searchResults.classList.add('hidden');
+        elements.searchResults.innerHTML = '';
+      }
+      if (state.searchController) {
+        state.searchController.abort();
+        state.searchController = null;
+      }
+      state.searchResults = [];
+    };
+
+    const applySelectionAndAppend = (product) => {
+      state.selectedProduct = product;
+      state.quantidade = 1;
+      if (elements.itemQuantity) {
+        elements.itemQuantity.value = 1;
+      }
+      updateSelectedProductView();
+      appendProductToSale(product, 1);
+      clearSearchOverlay();
+      if (elements.searchInput) {
+        elements.searchInput.value = '';
+        elements.searchInput.focus();
+      }
+    };
+
+    if (matchesProduct(state.selectedProduct)) {
+      applySelectionAndAppend(state.selectedProduct);
+      return;
     }
-    renderItemsList();
-    notify('Item adicionado à pré-visualização.', 'success');
+
+    if (state.searchResults.length) {
+      const fromResults =
+        findProductByLookupValue(state.searchResults, term) ||
+        state.searchResults.find((item) => (item?.nome || '').toLowerCase() === lowerTerm) ||
+        null;
+      if (fromResults) {
+        applySelectionAndAppend(fromResults);
+        return;
+      }
+    }
+
+    input.disabled = true;
+
+    try {
+      const product = await fetchProductByBarcode(term);
+      if (!product) {
+        notify('Nenhum produto encontrado para o código informado.', 'warning');
+        return;
+      }
+      applySelectionAndAppend(product);
+    } catch (error) {
+      console.error('Falha ao adicionar produto pela busca no PDV:', error);
+      notify('Falha ao buscar o produto informado.', 'error');
+    } finally {
+      input.disabled = false;
+      if (elements.searchInput) {
+        elements.searchInput.focus();
+      }
+    }
   };
 
   const updatePaymentRow = (paymentId) => {
@@ -2189,6 +3032,7 @@
     elements.companySelect?.addEventListener('change', handleCompanyChange);
     elements.pdvSelect?.addEventListener('change', handlePdvChange);
     elements.searchInput?.addEventListener('input', handleSearchInput);
+    elements.searchInput?.addEventListener('keydown', handleSearchKeydown);
     elements.searchResults?.addEventListener('click', handleSearchResultsClick);
     document.addEventListener('click', handleDocumentClick);
     elements.addItem?.addEventListener('click', addItemToList);
@@ -2228,6 +3072,20 @@
         setActiveTab(target);
       });
     });
+    elements.customerOpenButton?.addEventListener('click', openCustomerModal);
+    elements.customerRemove?.addEventListener('click', handleCustomerRemove);
+    elements.customerModalClose?.addEventListener('click', closeCustomerModal);
+    elements.customerModalBackdrop?.addEventListener('click', closeCustomerModal);
+    elements.customerCancel?.addEventListener('click', closeCustomerModal);
+    elements.customerConfirm?.addEventListener('click', handleCustomerConfirm);
+    elements.customerClear?.addEventListener('click', handleCustomerClearSelection);
+    elements.customerSearchInput?.addEventListener('input', handleCustomerSearchInput);
+    elements.customerResultsList?.addEventListener('click', handleCustomerResultsClick);
+    elements.customerPetsList?.addEventListener('click', handleCustomerPetsClick);
+    Array.from(elements.customerTabButtons || []).forEach((button) => {
+      button.addEventListener('click', handleCustomerTabClick);
+    });
+    elements.customerModal?.addEventListener('keydown', handleCustomerModalKeydown);
   };
 
   const init = async () => {
