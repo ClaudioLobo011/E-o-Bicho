@@ -3701,6 +3701,11 @@
       gap: calc(var(--spacing) * 3);
     }
   }
+  .sm\:p-5 {
+    @media (width >= 40rem) {
+      padding: calc(var(--spacing) * 5);
+    }
+  }
   .sm\:text-sm {
     @media (width >= 40rem) {
       font-size: var(--text-sm);

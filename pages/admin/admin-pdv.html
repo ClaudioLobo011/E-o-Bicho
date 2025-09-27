@@ -96,6 +96,7 @@
                         <nav class="flex flex-wrap gap-2 border-b border-gray-200 pb-1" aria-label="Seções do PDV">
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="pdv-tab" aria-disabled="true">PDV</button>
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-primary text-primary rounded-t" data-tab-target="caixa-tab">Caixa</button>
+                            <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="sales-tab">Vendas</button>
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="delivery-tab">Delivery</button>
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="cliente-tab">Cliente</button>
                         </nav>
@@ -314,6 +315,20 @@
                                         Nenhum delivery registrado até o momento.
                                     </div>
                                     <ul id="pdv-delivery-list" class="hidden space-y-4"></ul>
+                                </div>
+                            </div>
+                            <div data-tab-panel="sales-tab" class="hidden space-y-5">
+                                <div class="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <h3 class="text-base font-semibold text-gray-800">Vendas finalizadas</h3>
+                                            <p class="text-xs text-gray-500">Consulte as vendas encerradas e seus detalhes.</p>
+                                        </div>
+                                    </div>
+                                    <div id="pdv-sales-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+                                        Nenhuma venda finalizada até o momento.
+                                    </div>
+                                    <ul id="pdv-sales-list" class="hidden space-y-4"></ul>
                                 </div>
                             </div>
                             <div data-tab-panel="cliente-tab" class="hidden space-y-5">

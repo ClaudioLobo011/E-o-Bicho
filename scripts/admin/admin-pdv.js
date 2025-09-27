@@ -124,6 +124,7 @@
     saleCodeSequence: 1,
     currentSaleCode: '',
     deliveryFinalizingOrderId: '',
+    completedSales: [],
   };
 
   const elements = {};
@@ -1254,6 +1255,9 @@
     elements.historyList = document.getElementById('pdv-history-list');
     elements.historyEmpty = document.getElementById('pdv-history-empty');
     elements.clearHistory = document.getElementById('pdv-clear-history');
+
+    elements.salesList = document.getElementById('pdv-sales-list');
+    elements.salesEmpty = document.getElementById('pdv-sales-empty');
 
     elements.finalizeModal = document.getElementById('pdv-finalize-modal');
     elements.finalizeClose = document.getElementById('pdv-finalize-close');
@@ -3261,6 +3265,16 @@
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, { saleCode });
     registerSaleOnCaixa(pagamentosVenda, total, saleCode);
+    registerCompletedSaleRecord({
+      type: 'venda',
+      saleCode,
+      snapshot: saleSnapshot,
+      payments: pagamentosVenda,
+      items: itensSnapshot,
+      discount: state.vendaDesconto,
+      addition: state.vendaAcrescimo,
+      customer: state.vendaCliente,
+    });
     const successMessage = saleCode
       ? `Venda ${saleCode} finalizada com sucesso.`
       : 'Venda finalizada com sucesso.';
@@ -3324,6 +3338,16 @@
     state.deliveryOrders.unshift(orderRecord);
     renderDeliveryOrders();
     registerSaleOnCaixa(pagamentosVenda, total, saleCode);
+    registerCompletedSaleRecord({
+      type: 'delivery',
+      saleCode,
+      snapshot: saleSnapshot,
+      payments: pagamentosVenda,
+      items: itensSnapshot,
+      discount: state.vendaDesconto,
+      addition: state.vendaAcrescimo,
+      customer: state.vendaCliente,
+    });
     const successMessage = saleCode
       ? `Delivery ${saleCode} registrado com sucesso.`
       : 'Delivery registrado com sucesso.';
@@ -3400,6 +3424,16 @@
       ? `Delivery ${saleCode} finalizado e registrado no caixa.`
       : 'Delivery finalizado e registrado no caixa.';
     notify(successMessage, 'success');
+    registerCompletedSaleRecord({
+      type: 'delivery',
+      saleCode,
+      snapshot: saleSnapshot,
+      payments: pagamentosVenda,
+      items: itensSnapshot,
+      discount: state.vendaDesconto,
+      addition: state.vendaAcrescimo,
+      customer: state.vendaCliente,
+    });
     setSaleCustomer(null, null);
     clearSaleSearchAreas();
     closeFinalizeModal();
@@ -4265,6 +4299,270 @@
     )}`;
   };
 
+  const createCompletedSaleRecord = ({
+    type = 'venda',
+    saleCode = '',
+    snapshot = null,
+    payments = [],
+    items = [],
+    discount = 0,
+    addition = 0,
+    customer = null,
+    createdAt = null,
+  } = {}) => {
+    const normalizedType = type === 'delivery' ? 'delivery' : 'venda';
+    const typeLabel = normalizedType === 'delivery' ? 'Delivery' : 'Venda';
+    const saleItems = Array.isArray(items) ? items : [];
+    const paymentTags = Array.from(
+      new Set(
+        (Array.isArray(payments) ? payments : [])
+          .map((payment) => {
+            const label = payment?.label || 'Pagamento';
+            const parcelas = payment?.parcelas && payment.parcelas > 1 ? ` (${payment.parcelas}x)` : '';
+            return `${label}${parcelas}`;
+          })
+          .filter(Boolean)
+      )
+    );
+    const snapshotCustomer = snapshot?.cliente || {};
+    const customerSource = customer || {};
+    const customerName =
+      snapshotCustomer?.nome ||
+      snapshotCustomer?.razaoSocial ||
+      customerSource?.nome ||
+      customerSource?.razaoSocial ||
+      customerSource?.fantasia ||
+      'Cliente não informado';
+    const customerDocument =
+      snapshotCustomer?.documento ||
+      snapshotCustomer?.cpf ||
+      snapshotCustomer?.cnpj ||
+      customerSource?.cpf ||
+      customerSource?.cnpj ||
+      customerSource?.documento ||
+      '';
+    const createdIso = createdAt || new Date().toISOString();
+    const discountValue = Math.max(
+      0,
+      safeNumber(snapshot?.totais?.descontoValor ?? snapshot?.totais?.desconto ?? discount ?? 0)
+    );
+    const additionValue = Math.max(
+      0,
+      safeNumber(snapshot?.totais?.acrescimoValor ?? snapshot?.totais?.acrescimo ?? addition ?? 0)
+    );
+    const itemDisplays = saleItems.map((item, index) => {
+      const barcode = item?.codigoBarras || item?.codigo || item?.barcode || '—';
+      const productName = item?.nome || item?.descricao || item?.produto || `Item ${index + 1}`;
+      const quantityValue = safeNumber(item?.quantidade ?? item?.qtd ?? 0);
+      const quantityLabel = quantityValue.toLocaleString('pt-BR', {
+        minimumFractionDigits: Number.isInteger(quantityValue) ? 0 : 2,
+        maximumFractionDigits: 3,
+      });
+      const unitValue = safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0);
+      const subtotalValue = safeNumber(item?.subtotal ?? item?.total ?? unitValue * quantityValue);
+      return {
+        id: item?.id || `${Date.now()}-${index}`,
+        barcode: barcode || '—',
+        product: productName,
+        quantityLabel,
+        unitLabel: formatCurrency(unitValue),
+        totalLabel: formatCurrency(subtotalValue),
+      };
+    });
+    return {
+      id: createUid(),
+      type: normalizedType,
+      typeLabel,
+      saleCode: saleCode || '',
+      saleCodeLabel: saleCode || 'Sem código',
+      customerName,
+      customerDocument,
+      paymentTags,
+      items: itemDisplays,
+      discountValue,
+      discountLabel: formatCurrency(discountValue),
+      additionValue,
+      createdAt: createdIso,
+      createdAtLabel: toDateLabel(createdIso),
+      receiptSnapshot: snapshot,
+      fiscalStatus: 'pending',
+      fiscalEmittedAt: null,
+      expanded: false,
+    };
+  };
+
+  const renderSalesList = () => {
+    if (!elements.salesList || !elements.salesEmpty) return;
+    elements.salesList.innerHTML = '';
+    const hasSales = state.completedSales.length > 0;
+    elements.salesEmpty.classList.toggle('hidden', hasSales);
+    elements.salesList.classList.toggle('hidden', !hasSales);
+    if (!hasSales) {
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    state.completedSales.forEach((sale) => {
+      const saleId = sale.id;
+      const chevronIcon = sale.expanded ? 'fa-chevron-up' : 'fa-chevron-down';
+      const paymentTagsHtml = sale.paymentTags
+        .map(
+          (tag) =>
+            `<span class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-600">${escapeHtml(
+              tag
+            )}</span>`
+        )
+        .join('');
+      const itemsRows = sale.items.length
+        ? sale.items
+            .map(
+              (item) => `
+                  <tr>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.barcode || '—')}</td>
+                    <td class="px-3 py-2 text-gray-700">${escapeHtml(item.product)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.quantityLabel)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.unitLabel)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${escapeHtml(item.totalLabel)}</td>
+                  </tr>`
+            )
+            .join('')
+        : '<tr><td colspan="5" class="px-3 py-4 text-center text-xs text-gray-500">Nenhum produto registrado nesta venda.</td></tr>';
+      const fiscalBadge =
+        sale.fiscalStatus === 'emitted'
+          ? `<span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"><i class="fas fa-file-circle-check text-[11px]"></i><span>XML Emitida</span></span>`
+          : `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-fiscal data-sale-id="${escapeHtml(
+              saleId
+            )}"><i class="fas fa-file-invoice text-[11px]"></i><span>Emitir Fiscal</span></button>`;
+      const li = document.createElement('li');
+      li.dataset.saleId = saleId;
+      li.innerHTML = `
+        <article class="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div class="space-y-4 p-4 sm:p-5">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <button type="button" class="flex-1 text-left" data-sale-toggle data-sale-id="${escapeHtml(
+                saleId
+              )}" aria-expanded="${sale.expanded ? 'true' : 'false'}">
+                <div class="flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-800">
+                  <span>${escapeHtml(sale.saleCodeLabel)}</span>
+                  <span class="text-gray-300">|</span>
+                  <span class="truncate text-gray-700">${escapeHtml(sale.customerName)}</span>
+                </div>
+                <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-gray-400">
+                  <span>${escapeHtml(sale.createdAtLabel)}</span>
+                  ${sale.customerDocument ? `<span>${escapeHtml(sale.customerDocument)}</span>` : ''}
+                </div>
+                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                  <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 font-semibold text-primary">${escapeHtml(
+                    sale.typeLabel
+                  )}</span>
+                  ${paymentTagsHtml}
+                </div>
+                <div class="mt-3 inline-flex items-center gap-2 text-xs text-gray-400">
+                  <span>${sale.expanded ? 'Ocultar produtos' : 'Ver produtos'}</span>
+                  <i class="fas ${chevronIcon}"></i>
+                </div>
+              </button>
+              <div class="flex items-center gap-2">
+                <button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-print data-sale-id="${escapeHtml(
+                  saleId
+                )}">
+                  <i class="fas fa-print text-[11px]"></i>
+                  <span>Imprimir</span>
+                </button>
+                ${fiscalBadge}
+              </div>
+            </div>
+            <div class="${sale.expanded ? '' : 'hidden'} border-t border-gray-100 pt-4" data-sale-details>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-xs text-gray-600">
+                  <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th scope="col" class="px-3 py-2 text-left font-semibold">Código de barras</th>
+                      <th scope="col" class="px-3 py-2 text-left font-semibold">Produto</th>
+                      <th scope="col" class="px-3 py-2 text-left font-semibold">Qtd</th>
+                      <th scope="col" class="px-3 py-2 text-left font-semibold">Valor un.</th>
+                      <th scope="col" class="px-3 py-2 text-left font-semibold">Valor total</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100">
+                    ${itemsRows}
+                  </tbody>
+                </table>
+              </div>
+              <p class="mt-4 text-xs text-gray-500"><span class="font-semibold text-gray-700">Desconto aplicado:</span> ${
+                sale.discountValue > 0 ? escapeHtml(sale.discountLabel) : 'Nenhum'
+              }</p>
+            </div>
+          </div>
+        </article>
+      `;
+      fragment.appendChild(li);
+    });
+    elements.salesList.appendChild(fragment);
+  };
+
+  const registerCompletedSaleRecord = (options = {}) => {
+    const record = createCompletedSaleRecord(options);
+    if (!record) return null;
+    state.completedSales.unshift(record);
+    renderSalesList();
+    return record;
+  };
+
+  const findCompletedSaleById = (saleId) =>
+    state.completedSales.find((sale) => sale.id === saleId);
+
+  const handleSaleCardToggle = (saleId) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale) return;
+    sale.expanded = !sale.expanded;
+    renderSalesList();
+  };
+
+  const handleSalePrint = (saleId) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale) return;
+    if (!sale.receiptSnapshot) {
+      notify('Não foi possível localizar o comprovante desta venda para impressão.', 'warning');
+      return;
+    }
+    handleConfiguredPrint('venda', { snapshot: sale.receiptSnapshot });
+  };
+
+  const handleSaleEmitFiscal = (saleId) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale || sale.fiscalStatus === 'emitted') return;
+    sale.fiscalStatus = 'emitted';
+    sale.fiscalEmittedAt = new Date().toISOString();
+    renderSalesList();
+    notify('XML da venda emitida com sucesso.', 'success');
+  };
+
+  const handleSalesListClick = (event) => {
+    const toggleButton = event.target.closest('[data-sale-toggle]');
+    if (toggleButton) {
+      const saleId = toggleButton.getAttribute('data-sale-id');
+      if (saleId) {
+        handleSaleCardToggle(saleId);
+      }
+      return;
+    }
+    const printButton = event.target.closest('[data-sale-print]');
+    if (printButton) {
+      const saleId = printButton.getAttribute('data-sale-id');
+      if (saleId) {
+        handleSalePrint(saleId);
+      }
+      return;
+    }
+    const fiscalButton = event.target.closest('[data-sale-fiscal]');
+    if (fiscalButton) {
+      const saleId = fiscalButton.getAttribute('data-sale-id');
+      if (saleId) {
+        handleSaleEmitFiscal(saleId);
+      }
+    }
+  };
+
   const renderHistory = () => {
     if (!elements.historyList || !elements.historyEmpty) return;
     elements.historyList.querySelectorAll('li[data-history-entry]').forEach((node) => node.remove());
@@ -4451,6 +4749,7 @@
     state.modalActiveTab = 'cliente';
     state.printPreferences = { fechamento: 'PM', venda: 'PM' };
     state.deliveryOrders = [];
+    state.completedSales = [];
     state.deliveryAddresses = [];
     state.deliveryAddressesLoading = false;
     state.deliveryAddressSaving = false;
@@ -4512,6 +4811,7 @@
     updateDeliveryAddressConfirmState();
     renderDeliveryAddresses();
     renderDeliveryOrders();
+    renderSalesList();
     if (elements.deliveryAddressModal) {
       elements.deliveryAddressModal.classList.add('hidden');
     }
@@ -4763,6 +5063,7 @@
     renderHistory();
     setLastMovement(state.history[state.history.length - 1] || null);
     renderItemsList();
+    renderSalesList();
     clearSelectedProduct();
     updateWorkspaceInfo();
     renderCaixaActions();
@@ -5500,6 +5801,7 @@
     elements.deliveryAddressCancelForm?.addEventListener('click', handleDeliveryAddressCancelForm);
     elements.deliveryAddressForm?.addEventListener('submit', handleDeliveryAddressFormSubmit);
     elements.deliveryList?.addEventListener('click', handleDeliveryListClick);
+    elements.salesList?.addEventListener('click', handleSalesListClick);
     if (elements.deliveryAddressFields?.cep) {
       elements.deliveryAddressFields.cep.addEventListener('blur', () => {
         const input = elements.deliveryAddressFields?.cep;
