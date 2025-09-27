@@ -319,6 +319,44 @@
   const resolvePrintVariant = (mode) =>
     mode === 'F' || mode === 'PF' ? 'fiscal' : 'matricial';
 
+  const PRINT_MODE_SEQUENCE = ['M', 'F', 'PM', 'PF', 'NONE'];
+  const PRINT_MODE_LABELS = {
+    M: 'Matricial',
+    F: 'Fiscal',
+    PM: 'Perguntar Matricial',
+    PF: 'Perguntar Fiscal',
+    NONE: 'Sem impressão',
+  };
+
+  const getNextPrintMode = (mode) => {
+    const normalized = normalizePrintMode(mode, 'M');
+    const currentIndex = PRINT_MODE_SEQUENCE.indexOf(normalized);
+    if (currentIndex === -1) {
+      return PRINT_MODE_SEQUENCE[0];
+    }
+    return PRINT_MODE_SEQUENCE[(currentIndex + 1) % PRINT_MODE_SEQUENCE.length];
+  };
+
+  const getPrintTypeLabel = (type) => (type === 'fechamento' ? 'fechamento' : 'venda');
+
+  const getPrintModeDescription = (type, mode) => {
+    const label = getPrintTypeLabel(type);
+    switch (mode) {
+      case 'F':
+        return `Imprimir ${label} no modo Fiscal.`;
+      case 'M':
+        return `Imprimir ${label} no modo Matricial.`;
+      case 'PF':
+        return `Perguntar antes de imprimir ${label} no modo Fiscal.`;
+      case 'PM':
+        return `Perguntar antes de imprimir ${label} no modo Matricial.`;
+      case 'NONE':
+        return `Não imprimir automaticamente o ${label}.`;
+      default:
+        return `Definir preferência de impressão para ${label}.`;
+    }
+  };
+
   const canApplyGeneralPromotion = () => Boolean(state.vendaCliente);
 
   const hasGeneralPromotion = (product) =>
@@ -887,6 +925,7 @@
     elements.emptyState = document.getElementById('pdv-empty-state');
     elements.workspace = document.getElementById('pdv-workspace');
     elements.statusBadge = document.getElementById('pdv-status-badge');
+    elements.printControls = document.getElementById('pdv-print-controls');
     elements.companyLabel = document.getElementById('pdv-company-label');
     elements.pdvLabel = document.getElementById('pdv-name-label');
     elements.selectedInfo = document.getElementById('pdv-selected-info');
@@ -1071,6 +1110,43 @@
         : 'Abra o caixa para iniciar as vendas.';
     }
     updateFinalizeButton();
+  };
+
+  const updatePrintControls = () => {
+    if (!elements.printControls) return;
+    const buttons = elements.printControls.querySelectorAll('[data-print-type]');
+    buttons.forEach((button) => {
+      const type = button.getAttribute('data-print-type');
+      const labelElement = button.querySelector('[data-print-mode-label]');
+      const mode = normalizePrintMode(state.printPreferences?.[type], 'M');
+      const label = PRINT_MODE_LABELS[mode] || PRINT_MODE_LABELS.M;
+      if (labelElement) {
+        labelElement.textContent = label;
+      }
+      button.dataset.printMode = mode;
+      button.setAttribute('aria-pressed', mode === 'NONE' ? 'false' : 'true');
+      button.setAttribute('title', getPrintModeDescription(type, mode));
+    });
+  };
+
+  const handlePrintToggleClick = (event) => {
+    const button = event.target.closest('[data-print-type]');
+    if (!button || !elements.printControls?.contains(button)) {
+      return;
+    }
+    event.preventDefault();
+    const type = button.getAttribute('data-print-type');
+    if (!type) return;
+    const currentMode = button.dataset.printMode || state.printPreferences?.[type];
+    const nextMode = getNextPrintMode(currentMode);
+    if (!state.printPreferences || typeof state.printPreferences !== 'object') {
+      state.printPreferences = {};
+    }
+    state.printPreferences = { ...state.printPreferences, [type]: nextMode };
+    updatePrintControls();
+    const modeLabel = PRINT_MODE_LABELS[nextMode] || PRINT_MODE_LABELS.M;
+    const typeLabel = getPrintTypeLabel(type);
+    notify(`Impressão de ${typeLabel} definida para ${modeLabel}.`, 'info');
   };
 
   const updateWorkspaceInfo = () => {
@@ -3119,6 +3195,7 @@
     state.modalSelectedPet = null;
     state.modalActiveTab = 'cliente';
     state.printPreferences = { fechamento: 'PM', venda: 'PM' };
+    updatePrintControls();
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
       customerSearchTimeout = null;
@@ -3389,6 +3466,7 @@
       fechamento: fechamentoMode,
       venda: vendaMode,
     };
+    updatePrintControls();
     const pagamentosData = pdv?.caixa?.pagamentos || pdv?.pagamentos || {};
     applyPagamentosData(pagamentosData);
     if (state.summary.abertura > 0 && !state.pagamentos.some((payment) => payment.valor > 0)) {
@@ -4084,6 +4162,7 @@
     elements.clearHistory?.addEventListener('click', handleClearHistory);
     elements.caixaActions?.addEventListener('click', handleActionClick);
     elements.actionConfirm?.addEventListener('click', handleActionConfirm);
+    elements.printControls?.addEventListener('click', handlePrintToggleClick);
     elements.finalizeButton?.addEventListener('click', handleFinalizeButtonClick);
     elements.finalizeClose?.addEventListener('click', closeFinalizeModal);
     elements.finalizeBack?.addEventListener('click', closeFinalizeModal);
