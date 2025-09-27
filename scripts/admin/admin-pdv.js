@@ -4020,4 +4020,5 @@
   };
 
   document.addEventListener('DOMContentLoaded', init);
+}
 })();
