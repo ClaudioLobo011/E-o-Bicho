@@ -183,6 +183,7 @@
         product.codigoDeBarras ||
         product.barras ||
         product.ean ||
+        product.codbarras ||
         '',
       promocao: product.promocao ? { ...product.promocao } : null,
       precoClube: product.precoClube || null,
@@ -473,6 +474,7 @@
       product?.codigoDeBarras ||
       product?.barras ||
       product?.ean ||
+      product?.codbarras ||
       ''
     );
   };
@@ -536,7 +538,6 @@
 
     elements.searchInput = document.getElementById('pdv-product-search');
     elements.searchResults = document.getElementById('pdv-product-results');
-    elements.barcodeInput = document.getElementById('pdv-barcode-input');
 
     elements.selectedImage = document.getElementById('pdv-selected-image');
     elements.selectedPlaceholder = document.getElementById('pdv-selected-placeholder');
@@ -2590,28 +2591,32 @@
     appendProductToSale(product, quantidade);
   };
 
-  const handleBarcodeKeydown = async (event) => {
+  const handleSearchKeydown = async (event) => {
     if (event.key !== 'Enter') return;
-    event.preventDefault();
     const input = event.currentTarget;
     if (!input) return;
     const rawValue = typeof input.value === 'string' ? input.value : '';
-    const code = rawValue.trim();
-    if (!code) return;
+    const term = rawValue.trim();
+    if (!term) return;
 
-    input.disabled = true;
+    event.preventDefault();
 
-    try {
-      const product = await fetchProductByBarcode(code);
-      if (!product) {
-        notify('Nenhum produto encontrado para o código informado.', 'warning');
-        return;
-      }
-      state.selectedProduct = product;
-      state.quantidade = 1;
-      if (elements.itemQuantity) {
-        elements.itemQuantity.value = 1;
-      }
+    const normalized = normalizeBarcodeValue(term);
+    const lowerTerm = term.toLowerCase();
+
+    const matchesProduct = (product) => {
+      if (!product) return false;
+      const code = normalizeBarcodeValue(getProductCode(product));
+      const barcode = normalizeBarcodeValue(getProductBarcode(product));
+      const name = (product.nome || product.descricao || '').toLowerCase();
+      return (
+        (!!code && code === normalized) ||
+        (!!barcode && barcode === normalized) ||
+        (!!name && name === lowerTerm)
+      );
+    };
+
+    const clearSearchOverlay = () => {
       if (elements.searchResults) {
         elements.searchResults.classList.add('hidden');
         elements.searchResults.innerHTML = '';
@@ -2621,15 +2626,56 @@
         state.searchController = null;
       }
       state.searchResults = [];
+    };
+
+    const applySelectionAndAppend = (product) => {
+      state.selectedProduct = product;
+      state.quantidade = 1;
+      if (elements.itemQuantity) {
+        elements.itemQuantity.value = 1;
+      }
       updateSelectedProductView();
       appendProductToSale(product, 1);
+      clearSearchOverlay();
+      if (elements.searchInput) {
+        elements.searchInput.value = '';
+        elements.searchInput.focus();
+      }
+    };
+
+    if (matchesProduct(state.selectedProduct)) {
+      applySelectionAndAppend(state.selectedProduct);
+      return;
+    }
+
+    if (state.searchResults.length) {
+      const fromResults =
+        findProductByLookupValue(state.searchResults, term) ||
+        state.searchResults.find((item) => (item?.nome || '').toLowerCase() === lowerTerm) ||
+        null;
+      if (fromResults) {
+        applySelectionAndAppend(fromResults);
+        return;
+      }
+    }
+
+    input.disabled = true;
+
+    try {
+      const product = await fetchProductByBarcode(term);
+      if (!product) {
+        notify('Nenhum produto encontrado para o código informado.', 'warning');
+        return;
+      }
+      applySelectionAndAppend(product);
     } catch (error) {
-      console.error('Falha ao adicionar produto por código de barras no PDV:', error);
-      notify('Falha ao buscar o produto pelo código informado.', 'error');
+      console.error('Falha ao adicionar produto pela busca no PDV:', error);
+      notify('Falha ao buscar o produto informado.', 'error');
     } finally {
       input.disabled = false;
-      input.value = '';
-      input.focus();
+      if (elements.searchInput) {
+        elements.searchInput.focus();
+      }
     }
   };
 
@@ -2986,7 +3032,7 @@
     elements.companySelect?.addEventListener('change', handleCompanyChange);
     elements.pdvSelect?.addEventListener('change', handlePdvChange);
     elements.searchInput?.addEventListener('input', handleSearchInput);
-    elements.barcodeInput?.addEventListener('keydown', handleBarcodeKeydown);
+    elements.searchInput?.addEventListener('keydown', handleSearchKeydown);
     elements.searchResults?.addEventListener('click', handleSearchResultsClick);
     document.addEventListener('click', handleDocumentClick);
     elements.addItem?.addEventListener('click', addItemToList);
