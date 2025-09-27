@@ -1,4 +1,4 @@
-(function () {
+(() => {
   const API_BASE =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
   const SERVER_URL =
@@ -4147,5 +4147,4 @@
   };
 
   document.addEventListener('DOMContentLoaded', init);
-}
 })();
