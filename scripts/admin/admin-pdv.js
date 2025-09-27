@@ -319,6 +319,76 @@
   const resolvePrintVariant = (mode) =>
     mode === 'F' || mode === 'PF' ? 'fiscal' : 'matricial';
 
+  const getPrintBaseMode = (mode) => {
+    const normalized = normalizePrintMode(mode, 'M');
+    if (normalized === 'PF' || normalized === 'F') {
+      return 'F';
+    }
+    return 'M';
+  };
+
+  const isPrintPromptEnabled = (mode) => {
+    const normalized = normalizePrintMode(mode, 'PM');
+    return normalized === 'PF' || normalized === 'PM';
+  };
+
+  const buildPrintMode = (baseMode, promptEnabled) => {
+    if (promptEnabled) {
+      return baseMode === 'F' ? 'PF' : 'PM';
+    }
+    return baseMode === 'F' ? 'F' : 'M';
+  };
+
+  const PRINT_MODE_LABELS = {
+    M: 'Matricial',
+    F: 'Fiscal',
+    PM: 'Perguntar Matricial',
+    PF: 'Perguntar Fiscal',
+    NONE: 'Sem impressão',
+  };
+  const PRINT_PROMPT_LABELS = {
+    ask: 'Perguntar',
+    skip: 'Não perguntar',
+  };
+
+  const getPrintTypeLabel = (type) => (type === 'fechamento' ? 'fechamento' : 'venda');
+
+  const getPrintPromptDescription = (type, promptEnabled, baseMode) => {
+    const label = getPrintTypeLabel(type);
+    if (promptEnabled) {
+      return `Perguntar antes de imprimir ${label} no modo ${
+        baseMode === 'F' ? 'Fiscal' : 'Matricial'
+      }.`;
+    }
+    return `Imprimir ${label} imediatamente no modo ${
+      baseMode === 'F' ? 'Fiscal' : 'Matricial'
+    }.`;
+  };
+
+  const getPrintModeDescription = (type, mode) => {
+    const label = getPrintTypeLabel(type);
+    const normalized =
+      type === 'venda' && (mode === 'PF' || mode === 'PM')
+        ? mode === 'PF'
+          ? 'F'
+          : 'M'
+        : mode;
+    switch (normalized) {
+      case 'F':
+        return `Imprimir ${label} no modo Fiscal.`;
+      case 'M':
+        return `Imprimir ${label} no modo Matricial.`;
+      case 'PF':
+        return `Perguntar antes de imprimir ${label} no modo Fiscal.`;
+      case 'PM':
+        return `Perguntar antes de imprimir ${label} no modo Matricial.`;
+      case 'NONE':
+        return `Não imprimir automaticamente o ${label}.`;
+      default:
+        return `Definir preferência de impressão para ${label}.`;
+    }
+  };
+
   const canApplyGeneralPromotion = () => Boolean(state.vendaCliente);
 
   const hasGeneralPromotion = (product) =>
@@ -887,6 +957,7 @@
     elements.emptyState = document.getElementById('pdv-empty-state');
     elements.workspace = document.getElementById('pdv-workspace');
     elements.statusBadge = document.getElementById('pdv-status-badge');
+    elements.printControls = document.getElementById('pdv-print-controls');
     elements.companyLabel = document.getElementById('pdv-company-label');
     elements.pdvLabel = document.getElementById('pdv-name-label');
     elements.selectedInfo = document.getElementById('pdv-selected-info');
@@ -1071,6 +1142,85 @@
         : 'Abra o caixa para iniciar as vendas.';
     }
     updateFinalizeButton();
+  };
+
+  const updatePrintControls = () => {
+    if (!elements.printControls) return;
+    const preferences = state.printPreferences || {};
+    elements.printControls.querySelectorAll('[data-print-type]').forEach((button) => {
+      const type = button.getAttribute('data-print-type');
+      if (!type) return;
+      const labelElement = button.querySelector('[data-print-mode-label]');
+      const mode = preferences[type];
+      const baseMode = getPrintBaseMode(mode);
+      const promptEnabled = isPrintPromptEnabled(mode);
+      const label = PRINT_MODE_LABELS[baseMode] || PRINT_MODE_LABELS.M;
+      if (labelElement) {
+        labelElement.textContent = label;
+      }
+      button.dataset.printMode = baseMode;
+      button.dataset.printPrompt = promptEnabled ? 'ask' : 'skip';
+      button.setAttribute('aria-pressed', 'true');
+      button.setAttribute('title', getPrintModeDescription(type, baseMode));
+    });
+    elements.printControls.querySelectorAll('[data-print-confirmation]').forEach((button) => {
+      const type = button.getAttribute('data-print-confirmation');
+      if (!type) return;
+      const labelElement = button.querySelector('[data-print-confirmation-label]');
+      const mode = preferences[type];
+      const baseMode = getPrintBaseMode(mode);
+      const promptEnabled = isPrintPromptEnabled(mode);
+      if (labelElement) {
+        labelElement.textContent = PRINT_PROMPT_LABELS[promptEnabled ? 'ask' : 'skip'];
+      }
+      button.dataset.printMode = baseMode;
+      button.dataset.printPrompt = promptEnabled ? 'ask' : 'skip';
+      button.setAttribute('aria-pressed', promptEnabled ? 'true' : 'false');
+      button.setAttribute('title', getPrintPromptDescription(type, promptEnabled, baseMode));
+    });
+  };
+
+  const handlePrintToggleClick = (event) => {
+    if (!elements.printControls) return;
+    const typeButton = event.target.closest('[data-print-type]');
+    const confirmationButton = event.target.closest('[data-print-confirmation]');
+    if (typeButton && elements.printControls.contains(typeButton)) {
+      event.preventDefault();
+      const type = typeButton.getAttribute('data-print-type');
+      if (!type) return;
+      const currentMode = state.printPreferences?.[type];
+      const currentBase = getPrintBaseMode(currentMode);
+      const promptEnabled = isPrintPromptEnabled(currentMode);
+      const nextBase = currentBase === 'F' ? 'M' : 'F';
+      const nextMode = buildPrintMode(nextBase, promptEnabled);
+      if (!state.printPreferences || typeof state.printPreferences !== 'object') {
+        state.printPreferences = {};
+      }
+      state.printPreferences = { ...state.printPreferences, [type]: nextMode };
+      updatePrintControls();
+      const modeLabel = PRINT_MODE_LABELS[nextMode] || PRINT_MODE_LABELS[nextBase] || PRINT_MODE_LABELS.M;
+      const typeLabel = getPrintTypeLabel(type);
+      notify(`Impressão de ${typeLabel} definida para ${modeLabel}.`, 'info');
+      return;
+    }
+    if (confirmationButton && elements.printControls.contains(confirmationButton)) {
+      event.preventDefault();
+      const type = confirmationButton.getAttribute('data-print-confirmation');
+      if (!type) return;
+      const currentMode = state.printPreferences?.[type];
+      const baseMode = getPrintBaseMode(currentMode);
+      const promptEnabled = isPrintPromptEnabled(currentMode);
+      const nextPrompt = !promptEnabled;
+      const nextMode = buildPrintMode(baseMode, nextPrompt);
+      if (!state.printPreferences || typeof state.printPreferences !== 'object') {
+        state.printPreferences = {};
+      }
+      state.printPreferences = { ...state.printPreferences, [type]: nextMode };
+      updatePrintControls();
+      const typeLabel = getPrintTypeLabel(type);
+      const promptLabel = PRINT_PROMPT_LABELS[nextPrompt ? 'ask' : 'skip'];
+      notify(`Confirmação de impressão para ${typeLabel} definida para ${promptLabel.toLowerCase()}.`, 'info');
+    }
   };
 
   const updateWorkspaceInfo = () => {
@@ -3119,6 +3269,7 @@
     state.modalSelectedPet = null;
     state.modalActiveTab = 'cliente';
     state.printPreferences = { fechamento: 'PM', venda: 'PM' };
+    updatePrintControls();
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
       customerSearchTimeout = null;
@@ -3389,6 +3540,7 @@
       fechamento: fechamentoMode,
       venda: vendaMode,
     };
+    updatePrintControls();
     const pagamentosData = pdv?.caixa?.pagamentos || pdv?.pagamentos || {};
     applyPagamentosData(pagamentosData);
     if (state.summary.abertura > 0 && !state.pagamentos.some((payment) => payment.valor > 0)) {
@@ -4084,6 +4236,7 @@
     elements.clearHistory?.addEventListener('click', handleClearHistory);
     elements.caixaActions?.addEventListener('click', handleActionClick);
     elements.actionConfirm?.addEventListener('click', handleActionConfirm);
+    elements.printControls?.addEventListener('click', handlePrintToggleClick);
     elements.finalizeButton?.addEventListener('click', handleFinalizeButtonClick);
     elements.finalizeClose?.addEventListener('click', closeFinalizeModal);
     elements.finalizeBack?.addEventListener('click', closeFinalizeModal);
