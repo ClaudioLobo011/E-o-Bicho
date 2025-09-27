@@ -185,6 +185,47 @@
     );
   };
 
+  const shouldRetryWithoutAuth = (error) =>
+    error instanceof TypeError || error?.status === 401 || error?.status === 403;
+
+  const fetchJson = async (url, { errorMessage, ...options } = {}) => {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      let details = null;
+      try {
+        details = await response.json();
+      } catch (parseError) {
+        details = null;
+      }
+      const message = details?.message || errorMessage || 'Não foi possível carregar os dados solicitados.';
+      const requestError = new Error(message);
+      requestError.status = response.status;
+      requestError.details = details;
+      throw requestError;
+    }
+    return response.json();
+  };
+
+  const fetchWithOptionalAuth = async (url, { token, errorMessage, ...options } = {}) => {
+    const baseHeaders = { ...(options.headers || {}) };
+    if (token) {
+      try {
+        return await fetchJson(url, {
+          ...options,
+          headers: { ...baseHeaders, Authorization: `Bearer ${token}` },
+          errorMessage,
+        });
+      } catch (error) {
+        if (shouldRetryWithoutAuth(error)) {
+          console.warn('Requisição autenticada falhou, tentando novamente sem token:', url, error);
+          return fetchJson(url, { ...options, headers: baseHeaders, errorMessage });
+        }
+        throw error;
+      }
+    }
+    return fetchJson(url, { ...options, headers: baseHeaders, errorMessage });
+  };
+
   const formatCurrency = (value) => {
     const number = Number(value || 0);
     return `R$ ${number.toFixed(2).replace('.', ',')}`;
@@ -3124,12 +3165,10 @@
 
   const fetchStores = async () => {
     const token = getToken();
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const response = await fetch(`${API_BASE}/stores`, { headers });
-    if (!response.ok) {
-      throw new Error('Não foi possível carregar as empresas cadastradas.');
-    }
-    const payload = await response.json();
+    const payload = await fetchWithOptionalAuth(`${API_BASE}/stores`, {
+      token,
+      errorMessage: 'Não foi possível carregar as empresas cadastradas.',
+    });
     state.stores = Array.isArray(payload)
       ? payload
       : Array.isArray(payload?.stores)
@@ -3152,15 +3191,13 @@
     }
     try {
       const token = getToken();
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await fetch(
+      const payload = await fetchWithOptionalAuth(
         `${API_BASE}/payment-methods?company=${encodeURIComponent(storeId)}`,
-        { headers }
+        {
+          token,
+          errorMessage: 'Não foi possível carregar os meios de pagamento cadastrados.',
+        }
       );
-      if (!response.ok) {
-        throw new Error('Não foi possível carregar os meios de pagamento cadastrados.');
-      }
-      const payload = await response.json();
       const methods = Array.isArray(payload?.paymentMethods)
         ? payload.paymentMethods
         : Array.isArray(payload)
@@ -3179,12 +3216,10 @@
   const fetchPdvs = async (storeId) => {
     const query = storeId ? `?empresa=${encodeURIComponent(storeId)}` : '';
     const token = getToken();
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const response = await fetch(`${API_BASE}/pdvs${query}`, { headers });
-    if (!response.ok) {
-      throw new Error('Não foi possível carregar os PDVs da empresa.');
-    }
-    const payload = await response.json();
+    const payload = await fetchWithOptionalAuth(`${API_BASE}/pdvs${query}`, {
+      token,
+      errorMessage: 'Não foi possível carregar os PDVs da empresa.',
+    });
     state.pdvs = Array.isArray(payload?.pdvs)
       ? payload.pdvs
       : Array.isArray(payload)
@@ -3195,13 +3230,10 @@
 
   const fetchPdvDetails = async (pdvId) => {
     const token = getToken();
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const response = await fetch(`${API_BASE}/pdvs/${pdvId}`, { headers });
-    if (!response.ok) {
-      const message = await response.json().catch(() => null);
-      throw new Error(message?.message || 'Não foi possível carregar os dados do PDV selecionado.');
-    }
-    return response.json();
+    return fetchWithOptionalAuth(`${API_BASE}/pdvs/${pdvId}`, {
+      token,
+      errorMessage: 'Não foi possível carregar os dados do PDV selecionado.',
+    });
   };
   const applyPdvData = (pdv) => {
     const caixaAberto = Boolean(
