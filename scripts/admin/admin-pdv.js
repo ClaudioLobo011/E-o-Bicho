@@ -1,4 +1,4 @@
-(function () {
+(() => {
   const API_BASE =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
   const SERVER_URL =
@@ -491,6 +491,8 @@
         formattedTotal: formatCurrency(apuradoTotal),
       },
     };
+
+  };
 
   const getSaleReceiptSnapshot = (
     items = state.itens,
@@ -4145,5 +4147,4 @@
   };
 
   document.addEventListener('DOMContentLoaded', init);
-}
 })();
