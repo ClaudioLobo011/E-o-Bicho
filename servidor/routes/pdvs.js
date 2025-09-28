@@ -8,6 +8,7 @@ const PdvState = require('../models/PdvState');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const { isDriveConfigured, uploadBufferToDrive } = require('../utils/googleDrive');
+const { emitPdvSaleFiscal } = require('../services/nfceEmitter');
 
 const ambientesPermitidos = ['homologacao', 'producao'];
 const ambientesSet = new Set(ambientesPermitidos);
@@ -244,184 +245,6 @@ const buildDrivePathSegments = (date) => {
   return ['Fiscal', 'XMLs', year, month, day];
 };
 
-const buildNfceQrPayload = ({ sale, pdv, store, emissionDate, environment, serie, numero }) => {
-  const ambiente = normalizeString(environment) || pdv?.ambientePadrao || '';
-  const serieFiscal =
-    normalizeString(serie) || normalizeString(pdv?.serieNfce) || normalizeString(pdv?.serieNfe) || '';
-  const numeroFiscal =
-    numero !== undefined && numero !== null
-      ? String(numero)
-      : sale?.fiscalNumber !== undefined && sale?.fiscalNumber !== null
-      ? String(sale.fiscalNumber)
-      : '';
-  const emissionIso =
-    emissionDate instanceof Date && !Number.isNaN(emissionDate.getTime())
-      ? emissionDate.toISOString()
-      : new Date().toISOString();
-  const cnpj = normalizeString(store?.cnpj);
-  const pdvCodigo = normalizeString(pdv?.codigo);
-  const saleCode = normalizeString(sale?.saleCode || sale?.id);
-  const parts = ['NFCe', ambiente, cnpj, serieFiscal, numeroFiscal, pdvCodigo, saleCode, emissionIso];
-  return parts.map((part) => encodeURIComponent(part || '')).join('|');
-};
-
-const generateQrCodeDataUrl = async (payload) => {
-  if (!payload) {
-    return '';
-  }
-  const qrCodeModule = await loadQrCodeModule();
-  if (!qrCodeModule || typeof qrCodeModule.toDataURL !== 'function') {
-    console.warn('Módulo "qrcode" não disponível; QR Code não será gerado.');
-    return '';
-  }
-  try {
-    return await qrCodeModule.toDataURL(payload, {
-      errorCorrectionLevel: 'M',
-      margin: 0,
-      scale: 5,
-      color: {
-        dark: '#000000',
-        light: '#ffffff',
-      },
-    });
-  } catch (error) {
-    console.error('Falha ao gerar QR Code da NFC-e:', error);
-    return '';
-  }
-};
-
-const buildSaleFiscalXml = ({
-  sale,
-  pdv,
-  store,
-  emissionDate,
-  environment,
-  serie,
-  numero,
-  qrCodePayload,
-  qrCodeImage,
-}) => {
-  const snapshot = sale?.receiptSnapshot || {};
-  const meta = snapshot.meta || {};
-  const cliente = snapshot.cliente || {};
-  const delivery = snapshot.delivery || null;
-  const itens = Array.isArray(snapshot.itens) ? snapshot.itens : [];
-  const totais = snapshot.totais || {};
-  const pagamentos = Array.isArray(snapshot.pagamentos?.items) ? snapshot.pagamentos.items : [];
-  const pagamentosTotal = snapshot.pagamentos?.formattedTotal || snapshot.pagamentos?.total || '';
-  const ambiente = normalizeString(environment) || pdv?.ambientePadrao || '';
-  const serieFiscal =
-    normalizeString(serie) || normalizeString(pdv?.serieNfce) || normalizeString(pdv?.serieNfe);
-  const numeroFiscal =
-    numero !== undefined && numero !== null
-      ? numero
-      : sale?.fiscalNumber !== undefined && sale?.fiscalNumber !== null
-      ? sale.fiscalNumber
-      : '';
-  const emissionIso = emissionDate instanceof Date && !Number.isNaN(emissionDate.getTime())
-    ? emissionDate.toISOString()
-    : new Date().toISOString();
-
-  const lines = [];
-  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
-  lines.push('<NFCe xmlns="https://schemas.eobicho.app/pdv/fiscal">');
-  lines.push('  <Identificacao>');
-  lines.push(`    <Ambiente>${escapeXml(ambiente)}</Ambiente>`);
-  lines.push(`    <PdvCodigo>${escapeXml(pdv?.codigo || '')}</PdvCodigo>`);
-  lines.push(`    <PdvNome>${escapeXml(pdv?.nome || '')}</PdvNome>`);
-  lines.push(`    <VendaId>${escapeXml(sale?.id || '')}</VendaId>`);
-  lines.push(`    <VendaCodigo>${escapeXml(sale?.saleCode || meta.saleCode || '')}</VendaCodigo>`);
-  lines.push(`    <SerieFiscal>${escapeXml(serieFiscal || '')}</SerieFiscal>`);
-  lines.push(`    <NumeroFiscal>${escapeXml(numeroFiscal || '')}</NumeroFiscal>`);
-  lines.push(`    <DataRegistro>${escapeXml(meta.data || '')}</DataRegistro>`);
-  lines.push(`    <DataEmissao>${escapeXml(emissionIso)}</DataEmissao>`);
-  lines.push(`    <Operador>${escapeXml(meta.operador || '')}</Operador>`);
-  lines.push('  </Identificacao>');
-  lines.push('  <Emitente>');
-  lines.push(`    <RazaoSocial>${escapeXml(store?.razaoSocial || store?.nomeFantasia || store?.nome || '')}</RazaoSocial>`);
-  lines.push(`    <NomeFantasia>${escapeXml(store?.nomeFantasia || '')}</NomeFantasia>`);
-  lines.push(`    <CNPJ>${escapeXml(store?.cnpj || '')}</CNPJ>`);
-  lines.push(`    <InscricaoEstadual>${escapeXml(store?.inscricaoEstadual || '')}</InscricaoEstadual>`);
-  lines.push('  </Emitente>');
-  if (cliente && (cliente.nome || cliente.documento || cliente.contato || cliente.pet)) {
-    lines.push('  <Destinatario>');
-    lines.push(`    <Nome>${escapeXml(cliente.nome || '')}</Nome>`);
-    lines.push(`    <Documento>${escapeXml(cliente.documento || '')}</Documento>`);
-    lines.push(`    <Contato>${escapeXml(cliente.contato || '')}</Contato>`);
-    lines.push(`    <Pet>${escapeXml(cliente.pet || '')}</Pet>`);
-    lines.push('  </Destinatario>');
-  }
-  if (delivery) {
-    lines.push('  <Entrega>');
-    lines.push(`    <Apelido>${escapeXml(delivery.apelido || '')}</Apelido>`);
-    lines.push(`    <Endereco>${escapeXml(delivery.formatted || '')}</Endereco>`);
-    lines.push(`    <CEP>${escapeXml(delivery.cep || '')}</CEP>`);
-    lines.push(`    <Logradouro>${escapeXml(delivery.logradouro || '')}</Logradouro>`);
-    lines.push(`    <Numero>${escapeXml(delivery.numero || '')}</Numero>`);
-    lines.push(`    <Complemento>${escapeXml(delivery.complemento || '')}</Complemento>`);
-    lines.push(`    <Bairro>${escapeXml(delivery.bairro || '')}</Bairro>`);
-    lines.push(`    <Municipio>${escapeXml(delivery.cidade || '')}</Municipio>`);
-    lines.push(`    <UF>${escapeXml(delivery.uf || '')}</UF>`);
-    lines.push('  </Entrega>');
-  }
-  lines.push('  <Itens>');
-  itens.forEach((item, index) => {
-    lines.push('    <Item>');
-    lines.push(`      <Numero>${escapeXml(item?.index || String(index + 1))}</Numero>`);
-    lines.push(`      <Descricao>${escapeXml(item?.nome || '')}</Descricao>`);
-    lines.push(`      <Codigos>${escapeXml(item?.codigo || '')}</Codigos>`);
-    lines.push(`      <Quantidade>${escapeXml(item?.quantidade || '')}</Quantidade>`);
-    lines.push(`      <ValorUnitario>${escapeXml(item?.unitario || '')}</ValorUnitario>`);
-    lines.push(`      <ValorTotal>${escapeXml(item?.subtotal || '')}</ValorTotal>`);
-    lines.push('    </Item>');
-  });
-  lines.push('  </Itens>');
-  lines.push('  <Totais>');
-  lines.push(`    <Bruto>${escapeXml(totais.bruto || '')}</Bruto>`);
-  lines.push(`    <Desconto valor="${escapeXml(totais.descontoValor ?? '')}">${escapeXml(totais.desconto || '')}</Desconto>`);
-  lines.push(`    <Acrescimo valor="${escapeXml(totais.acrescimoValor ?? '')}">${escapeXml(totais.acrescimo || '')}</Acrescimo>`);
-  lines.push(`    <Liquido>${escapeXml(totais.liquido || '')}</Liquido>`);
-  lines.push(`    <Pago>${escapeXml(totais.pago || '')}</Pago>`);
-  lines.push(`    <Troco valor="${escapeXml(totais.trocoValor ?? '')}">${escapeXml(totais.troco || '')}</Troco>`);
-  lines.push('  </Totais>');
-  if (pagamentos.length) {
-    lines.push('  <Pagamentos>');
-    pagamentos.forEach((payment) => {
-      lines.push('    <Pagamento>');
-      lines.push(`      <Descricao>${escapeXml(payment?.label || '')}</Descricao>`);
-      lines.push(`      <Valor>${escapeXml(payment?.formatted || payment?.valor || '')}</Valor>`);
-      lines.push('    </Pagamento>');
-    });
-    lines.push(`    <Total>${escapeXml(pagamentosTotal || '')}</Total>`);
-    lines.push('  </Pagamentos>');
-  }
-  if (qrCodePayload) {
-    lines.push(`  <QrCode>${escapeXml(qrCodePayload)}</QrCode>`);
-  }
-  if (qrCodeImage) {
-    lines.push(`  <QrCodeImagem>${escapeXml(qrCodeImage)}</QrCodeImagem>`);
-  }
-  lines.push('</NFCe>');
-  return lines.join('\n');
-};
-
-const buildSaleFiscalDocument = async ({ sale, pdv, store, emissionDate, environment, serie, numero }) => {
-  const qrCodePayload = buildNfceQrPayload({ sale, pdv, store, emissionDate, environment, serie, numero });
-  const qrCodeImage = await generateQrCodeDataUrl(qrCodePayload);
-  const xmlContent = buildSaleFiscalXml({
-    sale,
-    pdv,
-    store,
-    emissionDate,
-    environment,
-    serie,
-    numero,
-    qrCodePayload,
-    qrCodeImage,
-  });
-  return { xmlContent, qrCodePayload, qrCodeImage };
-};
-
 const formatDateTimeLabel = (date) => {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
     return '';
@@ -526,6 +349,15 @@ const normalizeSaleRecordPayload = (record) => {
   const fiscalQrCodeImage = normalizeString(record.fiscalQrCodeImage);
   const fiscalEnvironment = normalizeString(record.fiscalEnvironment);
   const fiscalSerie = normalizeString(record.fiscalSerie);
+  const fiscalAccessKey = normalizeString(record.fiscalAccessKey);
+  const fiscalDigestValue = normalizeString(record.fiscalDigestValue);
+  const fiscalSignature = normalizeString(record.fiscalSignature);
+  const fiscalProtocol = normalizeString(record.fiscalProtocol);
+  const fiscalItemsSnapshot = Array.isArray(record.fiscalItemsSnapshot || record.fiscalItems)
+    ? (record.fiscalItemsSnapshot || record.fiscalItems).map((item) =>
+        item && typeof item === 'object' ? { ...item } : item
+      )
+    : [];
   const fiscalNumberParsed =
     record.fiscalNumber === undefined || record.fiscalNumber === null
       ? null
@@ -564,6 +396,11 @@ const normalizeSaleRecordPayload = (record) => {
     fiscalQrCodeImage,
     fiscalEnvironment,
     fiscalSerie,
+    fiscalAccessKey,
+    fiscalDigestValue,
+    fiscalSignature,
+    fiscalProtocol,
+    fiscalItemsSnapshot,
     fiscalNumber,
     expanded: Boolean(record.expanded),
     status,
@@ -1161,7 +998,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       pdv.empresa && typeof pdv.empresa.toObject === 'function'
         ? pdv.empresa.toObject()
         : pdv.empresa || {};
-    const { xmlContent, qrCodePayload, qrCodeImage } = await buildSaleFiscalDocument({
+    const emissionResult = await emitPdvSaleFiscal({
       sale,
       pdv,
       store: storeForXml,
@@ -1171,11 +1008,13 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       numero: proximoNumeroFiscal,
     });
 
+    const qrCodeImage = await generateQrCodeDataUrl(emissionResult.qrCodePayload);
+
     const saleCodeForName = sale.saleCode || saleId;
     const baseName = sanitizeFileName(`NFCe-${saleCodeForName || emissionDate.getTime()}`);
     const fileName = baseName.toLowerCase().endsWith('.xml') ? baseName : `${baseName}.xml`;
 
-    const uploadResult = await uploadBufferToDrive(Buffer.from(xmlContent, 'utf8'), {
+    const uploadResult = await uploadBufferToDrive(Buffer.from(emissionResult.xml, 'utf8'), {
       name: fileName,
       mimeType: 'application/xml',
       folderPath: buildDrivePathSegments(emissionDate),
@@ -1190,9 +1029,13 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     sale.fiscalEnvironment = ambiente;
     sale.fiscalSerie = serieNfce;
     sale.fiscalNumber = proximoNumeroFiscal;
-    sale.fiscalXmlContent = xmlContent;
-    sale.fiscalQrCodeData = qrCodePayload || '';
+    sale.fiscalXmlContent = emissionResult.xml;
+    sale.fiscalQrCodeData = emissionResult.qrCodePayload || '';
     sale.fiscalQrCodeImage = qrCodeImage || '';
+    sale.fiscalAccessKey = emissionResult.accessKey || '';
+    sale.fiscalDigestValue = emissionResult.digestValue || '';
+    sale.fiscalSignature = emissionResult.signatureValue || '';
+    sale.fiscalProtocol = sale.fiscalProtocol || '';
 
     state.markModified('completedSales');
     await state.save();
@@ -1214,6 +1057,10 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       fiscalXmlContent: sale.fiscalXmlContent,
       fiscalQrCodeData: sale.fiscalQrCodeData,
       fiscalQrCodeImage: sale.fiscalQrCodeImage,
+      fiscalAccessKey: sale.fiscalAccessKey,
+      fiscalDigestValue: sale.fiscalDigestValue,
+      fiscalSignature: sale.fiscalSignature,
+      fiscalProtocol: sale.fiscalProtocol,
     });
   } catch (error) {
     console.error('Erro ao emitir nota fiscal do PDV:', error);

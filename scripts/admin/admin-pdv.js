@@ -1265,6 +1265,13 @@
               return integer >= 0 ? integer : null;
             })()
           : null,
+      fiscalAccessKey: record.fiscalAccessKey ? String(record.fiscalAccessKey) : '',
+      fiscalDigestValue: record.fiscalDigestValue ? String(record.fiscalDigestValue) : '',
+      fiscalSignature: record.fiscalSignature ? String(record.fiscalSignature) : '',
+      fiscalProtocol: record.fiscalProtocol ? String(record.fiscalProtocol) : '',
+      fiscalItemsSnapshot: Array.isArray(record.fiscalItemsSnapshot)
+        ? record.fiscalItemsSnapshot.map((item) => (item && typeof item === 'object' ? { ...item } : item))
+        : [],
       expanded: Boolean(record.expanded),
       status: record.status ? String(record.status) : 'completed',
       cancellationReason: record.cancellationReason ? String(record.cancellationReason) : '',
@@ -4313,7 +4320,12 @@
 
   const formatEnvironmentLabel = (environment) => {
     if (!environment) return '';
-    const normalized = String(environment).toLowerCase();
+    let normalized = String(environment).toLowerCase();
+    if (normalized === '1') {
+      normalized = 'producao';
+    } else if (normalized === '2') {
+      normalized = 'homologacao';
+    }
     if (normalized === 'producao') {
       return 'Ambiente de Produção';
     }
@@ -4355,116 +4367,316 @@
         return null;
       }
       const root = doc.documentElement;
-      if (!root || root.nodeName.toLowerCase() !== 'nfce') {
-        console.warn('Documento fiscal não reconhecido para impressão.');
+      if (!root) {
         return null;
       }
+      const rootName = root.nodeName ? root.nodeName.toLowerCase() : '';
       const getChildText = (parent, tagName) => {
         if (!parent) return '';
         const node = parent.getElementsByTagName(tagName)[0];
         return node && node.textContent ? node.textContent.trim() : '';
       };
-      const identificacaoNode = root.getElementsByTagName('Identificacao')[0];
-      const emitenteNode = root.getElementsByTagName('Emitente')[0];
-      const destinatarioNode = root.getElementsByTagName('Destinatario')[0];
-      const entregaNode = root.getElementsByTagName('Entrega')[0];
-      const itensNode = root.getElementsByTagName('Itens')[0];
-      const totaisNode = root.getElementsByTagName('Totais')[0];
-      const pagamentosNode = root.getElementsByTagName('Pagamentos')[0];
-      const qrCodePayloadNode = root.getElementsByTagName('QrCode')[0];
-      const qrCodeImageNode = root.getElementsByTagName('QrCodeImagem')[0];
 
-      const identificacao = identificacaoNode
-        ? {
-            ambiente: getChildText(identificacaoNode, 'Ambiente'),
-            pdvCodigo: getChildText(identificacaoNode, 'PdvCodigo'),
-            pdvNome: getChildText(identificacaoNode, 'PdvNome'),
-            vendaCodigo: getChildText(identificacaoNode, 'VendaCodigo'),
-            serieFiscal: getChildText(identificacaoNode, 'SerieFiscal'),
-            numeroFiscal: getChildText(identificacaoNode, 'NumeroFiscal'),
-            dataRegistro: getChildText(identificacaoNode, 'DataRegistro'),
-            dataEmissao: getChildText(identificacaoNode, 'DataEmissao'),
-            operador: getChildText(identificacaoNode, 'Operador'),
-          }
-        : {};
+      const parseLegacyLayout = () => {
+        const identificacaoNode = root.getElementsByTagName('Identificacao')[0];
+        const emitenteNode = root.getElementsByTagName('Emitente')[0];
+        const destinatarioNode = root.getElementsByTagName('Destinatario')[0];
+        const entregaNode = root.getElementsByTagName('Entrega')[0];
+        const itensNode = root.getElementsByTagName('Itens')[0];
+        const totaisNode = root.getElementsByTagName('Totais')[0];
+        const pagamentosNode = root.getElementsByTagName('Pagamentos')[0];
+        const qrCodePayloadNode = root.getElementsByTagName('QrCode')[0];
+        const qrCodeImageNode = root.getElementsByTagName('QrCodeImagem')[0];
 
-      const emitente = emitenteNode
-        ? {
-            razaoSocial: getChildText(emitenteNode, 'RazaoSocial'),
-            nomeFantasia: getChildText(emitenteNode, 'NomeFantasia'),
-            cnpj: getChildText(emitenteNode, 'CNPJ'),
-            inscricaoEstadual: getChildText(emitenteNode, 'InscricaoEstadual'),
-          }
-        : {};
+        const identificacao = identificacaoNode
+          ? {
+              ambiente: getChildText(identificacaoNode, 'Ambiente'),
+              pdvCodigo: getChildText(identificacaoNode, 'PdvCodigo'),
+              pdvNome: getChildText(identificacaoNode, 'PdvNome'),
+              vendaCodigo: getChildText(identificacaoNode, 'VendaCodigo'),
+              serieFiscal: getChildText(identificacaoNode, 'SerieFiscal'),
+              numeroFiscal: getChildText(identificacaoNode, 'NumeroFiscal'),
+              dataRegistro: getChildText(identificacaoNode, 'DataRegistro'),
+              dataEmissao: getChildText(identificacaoNode, 'DataEmissao'),
+              operador: getChildText(identificacaoNode, 'Operador'),
+              accessKey: '',
+              digestValue: '',
+              signatureValue: '',
+              protocolo: '',
+            }
+          : {};
 
-      const destinatario = destinatarioNode
-        ? {
-            nome: getChildText(destinatarioNode, 'Nome'),
-            documento: getChildText(destinatarioNode, 'Documento'),
-            contato: getChildText(destinatarioNode, 'Contato'),
-            pet: getChildText(destinatarioNode, 'Pet'),
-          }
-        : null;
+        const emitente = emitenteNode
+          ? {
+              razaoSocial: getChildText(emitenteNode, 'RazaoSocial'),
+              nomeFantasia: getChildText(emitenteNode, 'NomeFantasia'),
+              cnpj: getChildText(emitenteNode, 'CNPJ'),
+              inscricaoEstadual: getChildText(emitenteNode, 'InscricaoEstadual'),
+            }
+          : {};
 
-      const entrega = entregaNode
-        ? {
-            apelido: getChildText(entregaNode, 'Apelido'),
-            endereco: getChildText(entregaNode, 'Endereco'),
-            cep: getChildText(entregaNode, 'CEP'),
-            logradouro: getChildText(entregaNode, 'Logradouro'),
-            numero: getChildText(entregaNode, 'Numero'),
-            complemento: getChildText(entregaNode, 'Complemento'),
-            bairro: getChildText(entregaNode, 'Bairro'),
-            municipio: getChildText(entregaNode, 'Municipio'),
-            uf: getChildText(entregaNode, 'UF'),
-          }
-        : null;
+        const destinatario = destinatarioNode
+          ? {
+              nome: getChildText(destinatarioNode, 'Nome'),
+              documento: getChildText(destinatarioNode, 'Documento'),
+              contato: getChildText(destinatarioNode, 'Contato'),
+              pet: getChildText(destinatarioNode, 'Pet'),
+            }
+          : null;
 
-      const itens = itensNode
-        ? Array.from(itensNode.getElementsByTagName('Item')).map((node, index) => ({
-            numero: getChildText(node, 'Numero') || String(index + 1),
-            descricao: getChildText(node, 'Descricao'),
-            codigos: getChildText(node, 'Codigos'),
-            quantidade: getChildText(node, 'Quantidade'),
-            unitario: getChildText(node, 'ValorUnitario'),
-            total: getChildText(node, 'ValorTotal'),
-          }))
-        : [];
+        const entrega = entregaNode
+          ? {
+              apelido: getChildText(entregaNode, 'Apelido'),
+              endereco: getChildText(entregaNode, 'Endereco'),
+              cep: getChildText(entregaNode, 'CEP'),
+              logradouro: getChildText(entregaNode, 'Logradouro'),
+              numero: getChildText(entregaNode, 'Numero'),
+              complemento: getChildText(entregaNode, 'Complemento'),
+              bairro: getChildText(entregaNode, 'Bairro'),
+              municipio: getChildText(entregaNode, 'Municipio'),
+              uf: getChildText(entregaNode, 'UF'),
+            }
+          : null;
 
-      const descontoNode = totaisNode?.getElementsByTagName('Desconto')[0] || null;
-      const acrescimoNode = totaisNode?.getElementsByTagName('Acrescimo')[0] || null;
-      const trocoNode = totaisNode?.getElementsByTagName('Troco')[0] || null;
-
-      const totais = totaisNode
-        ? {
-            bruto: getChildText(totaisNode, 'Bruto'),
-            desconto: descontoNode && descontoNode.textContent ? descontoNode.textContent.trim() : '',
-            descontoValor: descontoNode?.getAttribute('valor') || '',
-            acrescimo: acrescimoNode && acrescimoNode.textContent ? acrescimoNode.textContent.trim() : '',
-            acrescimoValor: acrescimoNode?.getAttribute('valor') || '',
-            liquido: getChildText(totaisNode, 'Liquido'),
-            pago: getChildText(totaisNode, 'Pago'),
-            troco: trocoNode && trocoNode.textContent ? trocoNode.textContent.trim() : '',
-            trocoValor: trocoNode?.getAttribute('valor') || '',
-          }
-        : {};
-
-      const pagamentos = pagamentosNode
-        ? {
-            total: getChildText(pagamentosNode, 'Total'),
-            items: Array.from(pagamentosNode.getElementsByTagName('Pagamento')).map((node) => ({
+        const itens = itensNode
+          ? Array.from(itensNode.getElementsByTagName('Item')).map((node, index) => ({
+              numero: getChildText(node, 'Numero') || String(index + 1),
               descricao: getChildText(node, 'Descricao'),
-              valor: getChildText(node, 'Valor'),
-            })),
-          }
-        : { total: '', items: [] };
+              codigos: getChildText(node, 'Codigos'),
+              quantidade: getChildText(node, 'Quantidade'),
+              unitario: getChildText(node, 'ValorUnitario'),
+              total: getChildText(node, 'ValorTotal'),
+            }))
+          : [];
 
-      const qrCode = {
-        payload: qrCodePayloadNode && qrCodePayloadNode.textContent ? qrCodePayloadNode.textContent.trim() : '',
-        image: qrCodeImageNode && qrCodeImageNode.textContent ? qrCodeImageNode.textContent.trim() : '',
+        const descontoNode = totaisNode?.getElementsByTagName('Desconto')[0] || null;
+        const acrescimoNode = totaisNode?.getElementsByTagName('Acrescimo')[0] || null;
+        const trocoNode = totaisNode?.getElementsByTagName('Troco')[0] || null;
+
+        const totais = totaisNode
+          ? {
+              bruto: getChildText(totaisNode, 'Bruto'),
+              desconto: descontoNode && descontoNode.textContent ? descontoNode.textContent.trim() : '',
+              descontoValor: descontoNode?.getAttribute('valor') || '',
+              acrescimo: acrescimoNode && acrescimoNode.textContent ? acrescimoNode.textContent.trim() : '',
+              acrescimoValor: acrescimoNode?.getAttribute('valor') || '',
+              liquido: getChildText(totaisNode, 'Liquido'),
+              pago: getChildText(totaisNode, 'Pago'),
+              troco: trocoNode && trocoNode.textContent ? trocoNode.textContent.trim() : '',
+              trocoValor: trocoNode?.getAttribute('valor') || '',
+            }
+          : {};
+
+        const pagamentos = pagamentosNode
+          ? {
+              total: getChildText(pagamentosNode, 'Total'),
+              items: Array.from(pagamentosNode.getElementsByTagName('Pagamento')).map((node) => ({
+                descricao: getChildText(node, 'Descricao'),
+                valor: getChildText(node, 'Valor'),
+              })),
+            }
+          : { total: '', items: [] };
+
+        const qrCode = {
+          payload: qrCodePayloadNode && qrCodePayloadNode.textContent ? qrCodePayloadNode.textContent.trim() : '',
+          image: qrCodeImageNode && qrCodeImageNode.textContent ? qrCodeImageNode.textContent.trim() : '',
+        };
+
+        return { identificacao, emitente, destinatario, entrega, itens, totais, pagamentos, qrCode };
       };
 
-      return { identificacao, emitente, destinatario, entrega, itens, totais, pagamentos, qrCode };
+      const parseOfficialLayout = () => {
+        const infNFe = root.getElementsByTagName('infNFe')[0];
+        if (!infNFe) {
+          return null;
+        }
+        const ide = infNFe.getElementsByTagName('ide')[0];
+        const emit = infNFe.getElementsByTagName('emit')[0];
+        const dest = infNFe.getElementsByTagName('dest')[0];
+        const entregaNode = infNFe.getElementsByTagName('entrega')[0];
+        const totalNode = infNFe.getElementsByTagName('total')[0];
+        const icmsTotNode = totalNode?.getElementsByTagName('ICMSTot')[0] || null;
+        const pagNode = infNFe.getElementsByTagName('pag')[0];
+        const infAdic = infNFe.getElementsByTagName('infAdic')[0];
+        const suplNode = root.getElementsByTagName('infNFeSupl')[0];
+        const signatureNode = root.getElementsByTagName('Signature')[0];
+
+        const obsMap = (() => {
+          const map = {};
+          if (!infAdic) return map;
+          const obsNodes = Array.from(infAdic.getElementsByTagName('obsCont'));
+          obsNodes.forEach((node) => {
+            const campo = node.getAttribute('xCampo');
+            const valueNode = node.getElementsByTagName('xTexto')[0];
+            const value = valueNode && valueNode.textContent ? valueNode.textContent.trim() : '';
+            if (campo && value) {
+              map[campo] = value;
+            }
+          });
+          return map;
+        })();
+
+        const ambienteCodigo = getChildText(ide, 'tpAmb');
+        const ambiente = ambienteCodigo === '1' ? 'producao' : ambienteCodigo === '2' ? 'homologacao' : ambienteCodigo;
+        const accessKeyRaw = infNFe.getAttribute('Id') || '';
+        const accessKey = accessKeyRaw.replace(/^NFe/i, '');
+        const dhEmi = getChildText(ide, 'dhEmi');
+
+        const identificacao = {
+          ambiente,
+          pdvCodigo: obsMap.PDVCodigo || '',
+          pdvNome: obsMap.PDVNome || '',
+          vendaCodigo: obsMap.VendaCodigo || getChildText(ide, 'cNF'),
+          serieFiscal: getChildText(ide, 'serie'),
+          numeroFiscal: getChildText(ide, 'nNF'),
+          dataEmissao: dhEmi,
+          dataRegistro: obsMap.RegistradoEm || '',
+          operador: obsMap.Operador || '',
+          accessKey,
+          digestValue: '',
+          signatureValue: '',
+          protocolo: obsMap.Protocolo || '',
+        };
+
+        if (signatureNode) {
+          const digestNode = signatureNode.getElementsByTagName('DigestValue')[0];
+          const signatureValueNode = signatureNode.getElementsByTagName('SignatureValue')[0];
+          if (digestNode && digestNode.textContent) {
+            identificacao.digestValue = digestNode.textContent.trim();
+          }
+          if (signatureValueNode && signatureValueNode.textContent) {
+            identificacao.signatureValue = signatureValueNode.textContent.trim();
+          }
+        }
+
+        const emitente = emit
+          ? {
+              razaoSocial: getChildText(emit, 'xNome'),
+              nomeFantasia: getChildText(emit, 'xFant'),
+              cnpj: getChildText(emit, 'CNPJ'),
+              inscricaoEstadual: getChildText(emit, 'IE'),
+            }
+          : {};
+
+        const destinatario = dest
+          ? {
+              nome: getChildText(dest, 'xNome'),
+              documento: getChildText(dest, 'CNPJ') || getChildText(dest, 'CPF'),
+              contato: getChildText(dest, 'email') || getChildText(dest, 'fone'),
+              pet: '',
+            }
+          : null;
+
+        const enderecoEntrega = entregaNode || dest?.getElementsByTagName('enderDest')[0] || null;
+        const entrega = enderecoEntrega
+          ? {
+              apelido: '',
+              endereco: `${getChildText(enderecoEntrega, 'xLgr')} ${getChildText(enderecoEntrega, 'nro')}`.trim(),
+              cep: getChildText(enderecoEntrega, 'CEP'),
+              logradouro: getChildText(enderecoEntrega, 'xLgr'),
+              numero: getChildText(enderecoEntrega, 'nro'),
+              complemento: getChildText(enderecoEntrega, 'xCpl'),
+              bairro: getChildText(enderecoEntrega, 'xBairro'),
+              municipio: getChildText(enderecoEntrega, 'xMun'),
+              uf: getChildText(enderecoEntrega, 'UF'),
+            }
+          : null;
+
+        const detNodes = Array.from(infNFe.getElementsByTagName('det'));
+        const itens = detNodes.map((node, index) => {
+          const prod = node.getElementsByTagName('prod')[0];
+          const numero = node.getAttribute('nItem') || String(index + 1);
+          const descricao = prod ? getChildText(prod, 'xProd') : '';
+          const quantidade = prod ? getChildText(prod, 'qCom') : '';
+          const unitario = prod ? getChildText(prod, 'vUnCom') : '';
+          const total = prod ? getChildText(prod, 'vProd') : '';
+          const codigos = prod ? getChildText(prod, 'cEAN') || getChildText(prod, 'cProd') : '';
+          return {
+            numero,
+            descricao,
+            codigos,
+            quantidade,
+            unitario,
+            total,
+          };
+        });
+
+        const bruto = safeNumber(getChildText(icmsTotNode, 'vProd'));
+        const desconto = safeNumber(getChildText(icmsTotNode, 'vDesc'));
+        const acrescimo = safeNumber(getChildText(icmsTotNode, 'vOutro'));
+        const liquido = safeNumber(getChildText(icmsTotNode, 'vNF'));
+        const pagoValores = [];
+        const pagamentosItems = Array.from(pagNode ? pagNode.getElementsByTagName('detPag') : []).map((detPag) => {
+          const code = getChildText(detPag, 'tPag');
+          const valor = safeNumber(getChildText(detPag, 'vPag'));
+          pagoValores.push(valor);
+          const labels = {
+            '01': 'Dinheiro',
+            '02': 'Cheque',
+            '03': 'Cartão de Crédito',
+            '04': 'Cartão de Débito',
+            '05': 'Crédito Loja',
+            '10': 'Vale Alimentação',
+            '11': 'Vale Refeição',
+            '12': 'Vale Presente',
+            '13': 'Vale Combustível',
+            '14': 'Duplicata Mercantil',
+            '15': 'Boleto Bancário',
+            '16': 'Depósito Bancário',
+            '17': 'PIX',
+            '18': 'Transferência Bancária',
+            '19': 'Programa de Fidelidade',
+            '90': 'Sem pagamento',
+            '99': 'Outros',
+          };
+          const descricao = labels[code] || (code ? `Código ${code}` : 'Pagamento');
+          return {
+            descricao,
+            valor: formatCurrency(valor),
+          };
+        });
+        const totalPago = pagoValores.reduce((sum, value) => sum + value, 0);
+        const troco = safeNumber(getChildText(pagNode, 'vTroco'));
+
+        const totais = {
+          bruto: formatCurrency(bruto),
+          desconto: formatCurrency(desconto),
+          descontoValor: desconto.toFixed(2),
+          acrescimo: formatCurrency(acrescimo),
+          acrescimoValor: acrescimo.toFixed(2),
+          liquido: formatCurrency(liquido),
+          pago: formatCurrency(totalPago),
+          troco: formatCurrency(troco),
+          trocoValor: troco.toFixed(2),
+        };
+
+        const pagamentos = {
+          total: formatCurrency(totalPago),
+          items: pagamentosItems,
+        };
+
+        const qrCodeNode = suplNode?.getElementsByTagName('qrCode')[0] || null;
+        const qrCode = {
+          payload: qrCodeNode && qrCodeNode.textContent ? qrCodeNode.textContent.trim() : '',
+          image: '',
+        };
+
+        return { identificacao, emitente, destinatario, entrega, itens, totais, pagamentos, qrCode };
+      };
+
+      if (rootName === 'nfe') {
+        const parsed = parseOfficialLayout();
+        if (parsed) {
+          return parsed;
+        }
+      }
+
+      if (rootName === 'nfce') {
+        return parseLegacyLayout();
+      }
+
+      console.warn('Documento fiscal não reconhecido para impressão.');
+      return null;
     } catch (error) {
       console.error('Erro ao interpretar XML fiscal para impressão:', error);
       return null;
@@ -4500,6 +4712,13 @@
     const identificacaoRows = [
       identificacao.vendaCodigo ? { label: 'Venda', value: identificacao.vendaCodigo } : null,
       numeroFiscalLabel ? { label: 'Documento', value: numeroFiscalLabel } : null,
+      identificacao.accessKey
+        ? {
+            label: 'Chave de acesso',
+            value: identificacao.accessKey.replace(/(\d{4})(?=\d)/g, '$1 ').trim(),
+          }
+        : null,
+      identificacao.protocolo ? { label: 'Protocolo', value: identificacao.protocolo } : null,
       identificacao.operador ? { label: 'Operador', value: identificacao.operador } : null,
       identificacao.dataEmissao
         ? { label: 'Data de emissão', value: formatXmlDateTime(identificacao.dataEmissao) }
@@ -4507,6 +4726,7 @@
       identificacao.dataRegistro
         ? { label: 'Registrado em', value: formatXmlDateTime(identificacao.dataRegistro) }
         : null,
+      identificacao.digestValue ? { label: 'Digest value', value: identificacao.digestValue } : null,
     ]
       .filter(Boolean)
       .map(
@@ -5244,6 +5464,17 @@
         totalLabel: formatCurrency(subtotalValue),
       };
     });
+    const fiscalItemsSnapshot = saleItems.map((item) => ({
+      productId: item?.id || item?.productSnapshot?._id || null,
+      quantity: safeNumber(item?.quantidade ?? item?.qtd ?? 0),
+      unitPrice: safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0),
+      totalPrice: safeNumber(item?.subtotal ?? item?.total ?? 0),
+      name: item?.nome || item?.descricao || item?.produto || '',
+      barcode: item?.codigoBarras || item?.codigo || '',
+      internalCode: item?.codigoInterno || '',
+      unit: item?.unidade || item?.productSnapshot?.unidade || 'UN',
+      productSnapshot: item?.productSnapshot ? { ...item.productSnapshot } : null,
+    }));
     return {
       id: createUid(),
       type: normalizedType,
@@ -5272,6 +5503,11 @@
       fiscalEnvironment: '',
       fiscalSerie: '',
       fiscalNumber: null,
+      fiscalAccessKey: '',
+      fiscalDigestValue: '',
+      fiscalSignature: '',
+      fiscalProtocol: '',
+      fiscalItemsSnapshot,
       expanded: false,
       status: 'completed',
       cancellationReason: '',
@@ -5475,6 +5711,11 @@
       fiscalXmlContent,
       fiscalQrCodeData,
       fiscalQrCodeImage,
+      fiscalAccessKey,
+      fiscalDigestValue,
+      fiscalSignature,
+      fiscalProtocol,
+      fiscalItemsSnapshot,
     } = updates;
     if (saleCode !== undefined) {
       sale.saleCode = saleCode || '';
@@ -5512,6 +5753,18 @@
     }
     if (fiscalQrCodeImage !== undefined) {
       sale.fiscalQrCodeImage = fiscalQrCodeImage || '';
+    }
+    if (fiscalAccessKey !== undefined) {
+      sale.fiscalAccessKey = fiscalAccessKey || '';
+    }
+    if (fiscalDigestValue !== undefined) {
+      sale.fiscalDigestValue = fiscalDigestValue || '';
+    }
+    if (fiscalSignature !== undefined) {
+      sale.fiscalSignature = fiscalSignature || '';
+    }
+    if (fiscalProtocol !== undefined) {
+      sale.fiscalProtocol = fiscalProtocol || '';
     }
     if (fiscalEnvironment !== undefined) {
       sale.fiscalEnvironment = fiscalEnvironment || '';
@@ -5561,6 +5814,11 @@
           totalLabel: formatCurrency(subtotalValue),
         };
       });
+    }
+    if (Array.isArray(fiscalItemsSnapshot)) {
+      sale.fiscalItemsSnapshot = fiscalItemsSnapshot.map((entry) =>
+        entry && typeof entry === 'object' ? { ...entry } : entry
+      );
     }
     const discountSource =
       discount !== undefined
@@ -5707,6 +5965,13 @@
                 return Number.isFinite(numeric) ? numeric : sale.fiscalNumber ?? null;
               })()
             : sale.fiscalNumber ?? null,
+        fiscalAccessKey: data?.fiscalAccessKey || sale.fiscalAccessKey || '',
+        fiscalDigestValue: data?.fiscalDigestValue || sale.fiscalDigestValue || '',
+        fiscalSignature: data?.fiscalSignature || sale.fiscalSignature || '',
+        fiscalProtocol: data?.fiscalProtocol || sale.fiscalProtocol || '',
+        fiscalItemsSnapshot: Array.isArray(data?.fiscalItemsSnapshot)
+          ? data.fiscalItemsSnapshot
+          : sale.fiscalItemsSnapshot,
       });
       notify('Nota fiscal emitida e salva no Drive.', 'success');
       scheduleStatePersist({ immediate: true });

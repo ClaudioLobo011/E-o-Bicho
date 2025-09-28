@@ -9,6 +9,7 @@ const os = require('os');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const tls = require('tls');
+const { encryptBuffer, encryptText } = require('../utils/certificates');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
@@ -33,8 +34,6 @@ const uploadCertificate = multer({
 const execFileAsync = promisify(execFile);
 const fsPromises = fs.promises;
 
-const CERTIFICATE_KEY = (process.env.CERTIFICATE_SECRET_KEY || 'dev-cert-key-por-favor-altere').padEnd(32, '0').slice(0, 32);
-
 const allowedRegimes = new Set(['simples', 'mei', 'normal']);
 const weekDays = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 
@@ -51,16 +50,6 @@ const parseCoordinate = (value) => {
 const hasNativePkcs12Support =
     typeof tls?.createSecureContext === 'function' &&
     typeof crypto?.X509Certificate === 'function';
-
-const encryptBuffer = (buffer) => {
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(CERTIFICATE_KEY), iv);
-    const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    return Buffer.concat([iv, tag, encrypted]).toString('base64');
-};
-
-const encryptText = (value) => encryptBuffer(Buffer.from(String(value || ''), 'utf8'));
 
 const isValidCertificateExtension = (filename = '') => /\.(pfx|p12)$/i.test(filename);
 
