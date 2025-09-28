@@ -91,6 +91,32 @@ const createValidationError = (message) => {
   return error;
 };
 
+const parseFiscalNumber = (value, { label, allowZero = false }) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const normalized = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
+
+  if (!Number.isFinite(normalized)) {
+    const message = allowZero
+      ? `Informe um número atual válido para ${label}.`
+      : `Informe um número inicial válido para ${label}.`;
+    throw createValidationError(message);
+  }
+
+  const integer = Math.trunc(normalized);
+  const min = allowZero ? 0 : 1;
+  if (integer < min) {
+    const message = allowZero
+      ? `O número atual de ${label} deve ser maior ou igual a ${min}.`
+      : `O número inicial de ${label} deve ser maior ou igual a ${min}.`;
+    throw createValidationError(message);
+  }
+
+  return integer;
+};
+
 const parseSempreImprimir = (value) => {
   const normalized = normalizeString(value).toLowerCase();
   if (!normalized) return 'perguntar';
@@ -204,7 +230,7 @@ const buildDrivePathSegments = (date) => {
   return ['Fiscal', 'XMLs', year, month, day];
 };
 
-const buildSaleFiscalXml = ({ sale, pdv, store, emissionDate }) => {
+const buildSaleFiscalXml = ({ sale, pdv, store, emissionDate, environment, serie, numero }) => {
   const snapshot = sale?.receiptSnapshot || {};
   const meta = snapshot.meta || {};
   const cliente = snapshot.cliente || {};
@@ -213,7 +239,15 @@ const buildSaleFiscalXml = ({ sale, pdv, store, emissionDate }) => {
   const totais = snapshot.totais || {};
   const pagamentos = Array.isArray(snapshot.pagamentos?.items) ? snapshot.pagamentos.items : [];
   const pagamentosTotal = snapshot.pagamentos?.formattedTotal || snapshot.pagamentos?.total || '';
-  const ambiente = pdv?.ambientePadrao || '';
+  const ambiente = normalizeString(environment) || pdv?.ambientePadrao || '';
+  const serieFiscal =
+    normalizeString(serie) || normalizeString(pdv?.serieNfce) || normalizeString(pdv?.serieNfe);
+  const numeroFiscal =
+    numero !== undefined && numero !== null
+      ? numero
+      : sale?.fiscalNumber !== undefined && sale?.fiscalNumber !== null
+      ? sale.fiscalNumber
+      : '';
   const emissionIso = emissionDate instanceof Date && !Number.isNaN(emissionDate.getTime())
     ? emissionDate.toISOString()
     : new Date().toISOString();
@@ -227,6 +261,8 @@ const buildSaleFiscalXml = ({ sale, pdv, store, emissionDate }) => {
   lines.push(`    <PdvNome>${escapeXml(pdv?.nome || '')}</PdvNome>`);
   lines.push(`    <VendaId>${escapeXml(sale?.id || '')}</VendaId>`);
   lines.push(`    <VendaCodigo>${escapeXml(sale?.saleCode || meta.saleCode || '')}</VendaCodigo>`);
+  lines.push(`    <SerieFiscal>${escapeXml(serieFiscal || '')}</SerieFiscal>`);
+  lines.push(`    <NumeroFiscal>${escapeXml(numeroFiscal || '')}</NumeroFiscal>`);
   lines.push(`    <DataRegistro>${escapeXml(meta.data || '')}</DataRegistro>`);
   lines.push(`    <DataEmissao>${escapeXml(emissionIso)}</DataEmissao>`);
   lines.push(`    <Operador>${escapeXml(meta.operador || '')}</Operador>`);
@@ -393,6 +429,14 @@ const normalizeSaleRecordPayload = (record) => {
   const fiscalXmlUrl = normalizeString(record.fiscalXmlUrl);
   const fiscalXmlName = normalizeString(record.fiscalXmlName);
   const fiscalEnvironment = normalizeString(record.fiscalEnvironment);
+  const fiscalSerie = normalizeString(record.fiscalSerie);
+  const fiscalNumberParsed =
+    record.fiscalNumber === undefined || record.fiscalNumber === null
+      ? null
+      : Number(record.fiscalNumber);
+  const fiscalNumber = Number.isFinite(fiscalNumberParsed)
+    ? Math.trunc(fiscalNumberParsed)
+    : null;
   const status = normalizeString(record.status) || 'completed';
   const cancellationReason = normalizeString(record.cancellationReason);
   const cancellationAt = safeDate(record.cancellationAt);
@@ -420,6 +464,8 @@ const normalizeSaleRecordPayload = (record) => {
     fiscalXmlUrl,
     fiscalXmlName,
     fiscalEnvironment,
+    fiscalSerie,
+    fiscalNumber,
     expanded: Boolean(record.expanded),
     status,
     cancellationReason,
@@ -609,6 +655,20 @@ const buildPdvPayload = ({ body, store }) => {
   const apelido = normalizeString(body.apelido);
   const serieNfe = normalizeString(body.serieNfe || body.serieNFE);
   const serieNfce = normalizeString(body.serieNfce || body.serieNFCE);
+  const numeroNfeInicial = parseFiscalNumber(body.numeroNfeInicial ?? body.numeroInicialNfe, {
+    label: 'NF-e',
+  });
+  const numeroNfceInicial = parseFiscalNumber(body.numeroNfceInicial ?? body.numeroInicialNfce, {
+    label: 'NFC-e',
+  });
+  const numeroNfeAtual = parseFiscalNumber(body.numeroNfeAtual, {
+    label: 'NF-e',
+    allowZero: true,
+  });
+  const numeroNfceAtual = parseFiscalNumber(body.numeroNfceAtual, {
+    label: 'NFC-e',
+    allowZero: true,
+  });
   const observacoes = normalizeString(body.observacoes);
   const ambientesHabilitados = normalizeAmbientes(body.ambientesHabilitados);
   const ambientePadrao = normalizeString(body.ambientePadrao).toLowerCase();
@@ -648,12 +708,28 @@ const buildPdvPayload = ({ body, store }) => {
     }
   }
 
+  if (numeroNfeInicial !== null && numeroNfeAtual !== null && numeroNfeAtual < numeroNfeInicial - 1) {
+    throw createValidationError(
+      'O número atual da NF-e não pode ser inferior ao número inicial menos um.'
+    );
+  }
+
+  if (numeroNfceInicial !== null && numeroNfceAtual !== null && numeroNfceAtual < numeroNfceInicial - 1) {
+    throw createValidationError(
+      'O número atual da NFC-e não pode ser inferior ao número inicial menos um.'
+    );
+  }
+
   return {
     nome,
     apelido,
     ativo,
     serieNfe,
     serieNfce,
+    numeroNfeInicial,
+    numeroNfeAtual,
+    numeroNfceInicial,
+    numeroNfceAtual,
     ambientesHabilitados,
     ambientePadrao,
     sincronizacaoAutomatica,
@@ -864,6 +940,52 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       return res.status(404).json({ message: 'PDV não encontrado.' });
     }
 
+    const empresaId = pdv.empresa?._id || pdv.empresa;
+    if (!empresaId) {
+      return res.status(400).json({ message: 'Empresa vinculada ao PDV não foi encontrada.' });
+    }
+
+    const empresa = await Store.findById(empresaId).select(
+      '+certificadoArquivoCriptografado +certificadoSenhaCriptografada +cscTokenProducaoCriptografado +cscTokenHomologacaoCriptografado'
+    );
+
+    if (!empresa) {
+      return res.status(400).json({ message: 'Empresa vinculada ao PDV não foi encontrada.' });
+    }
+
+    if (!empresa.certificadoArquivoCriptografado || !empresa.certificadoSenhaCriptografada) {
+      return res.status(400).json({ message: 'A empresa não possui certificado digital configurado.' });
+    }
+
+    const requestedEnvironment = normalizeString(
+      req.body?.environment || req.body?.ambiente || pdv.ambientePadrao
+    ).toLowerCase();
+
+    let ambiente = ambientesSet.has(requestedEnvironment)
+      ? requestedEnvironment
+      : pdv.ambientePadrao || 'homologacao';
+
+    if (!ambientesSet.has(ambiente)) {
+      ambiente = 'homologacao';
+    }
+
+    const habilitados = Array.isArray(pdv.ambientesHabilitados)
+      ? pdv.ambientesHabilitados.map((item) => normalizeString(item).toLowerCase())
+      : [];
+
+    if (!habilitados.includes(ambiente)) {
+      return res
+        .status(400)
+        .json({ message: 'O ambiente selecionado não está habilitado para este PDV.' });
+    }
+
+    if (!storeSupportsEnvironment(empresa, ambiente)) {
+      const ambienteLabel = ambiente === 'producao' ? 'Produção' : 'Homologação';
+      return res
+        .status(400)
+        .json({ message: `A empresa não possui CSC configurado para ${ambienteLabel}.` });
+    }
+
     const state = await PdvState.findOne({ pdv: pdvId });
 
     if (!state) {
@@ -906,12 +1028,48 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
         .json({ message: 'Snapshot da venda indisponível para emissão fiscal.' });
     }
 
+    const serieNfce = normalizeString(pdv.serieNfce || pdv.serieNfe);
+
+    if (!serieNfce) {
+      return res
+        .status(400)
+        .json({ message: 'Configure a série fiscal do PDV antes de emitir a nota.' });
+    }
+
+    const numeroInicialNfce = Number.isInteger(pdv.numeroNfceInicial)
+      ? pdv.numeroNfceInicial
+      : null;
+    const numeroInicialNfe = Number.isInteger(pdv.numeroNfeInicial) ? pdv.numeroNfeInicial : null;
+    const numeroInicial = numeroInicialNfce || numeroInicialNfe || null;
+
+    if (!numeroInicial || numeroInicial < 1) {
+      return res
+        .status(400)
+        .json({ message: 'Configure o número inicial de emissão para o PDV.' });
+    }
+
+    const numeroAtualNfce = Number.isInteger(pdv.numeroNfceAtual) ? pdv.numeroNfceAtual : null;
+    const numeroAtualNfe = Number.isInteger(pdv.numeroNfeAtual) ? pdv.numeroNfeAtual : null;
+    const ultimoNumeroEmitido = numeroAtualNfce ?? numeroAtualNfe;
+    const baseSequencia =
+      ultimoNumeroEmitido !== null && ultimoNumeroEmitido >= numeroInicial - 1
+        ? ultimoNumeroEmitido
+        : numeroInicial - 1;
+    const proximoNumeroFiscal = baseSequencia + 1;
+
     const emissionDate = new Date();
+    const storeForXml =
+      pdv.empresa && typeof pdv.empresa.toObject === 'function'
+        ? pdv.empresa.toObject()
+        : pdv.empresa || {};
     const xmlContent = buildSaleFiscalXml({
       sale,
       pdv,
-      store: pdv.empresa || {},
+      store: storeForXml,
       emissionDate,
+      environment: ambiente,
+      serie: serieNfce,
+      numero: proximoNumeroFiscal,
     });
 
     const saleCodeForName = sale.saleCode || saleId;
@@ -930,10 +1088,15 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     sale.fiscalDriveFileId = uploadResult?.id || '';
     sale.fiscalXmlUrl = uploadResult?.webViewLink || uploadResult?.webContentLink || '';
     sale.fiscalXmlName = uploadResult?.name || fileName;
-    sale.fiscalEnvironment = pdv.ambientePadrao || '';
+    sale.fiscalEnvironment = ambiente;
+    sale.fiscalSerie = serieNfce;
+    sale.fiscalNumber = proximoNumeroFiscal;
 
     state.markModified('completedSales');
     await state.save();
+
+    const numeroField = numeroInicialNfce ? 'numeroNfceAtual' : 'numeroNfeAtual';
+    await Pdv.updateOne({ _id: pdvId }, { $set: { [numeroField]: proximoNumeroFiscal } });
 
     res.json({
       id: sale.id,
@@ -944,6 +1107,8 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       fiscalXmlUrl: sale.fiscalXmlUrl,
       fiscalXmlName: sale.fiscalXmlName,
       fiscalEnvironment: sale.fiscalEnvironment,
+      fiscalSerie: sale.fiscalSerie,
+      fiscalNumber: sale.fiscalNumber,
     });
   } catch (error) {
     console.error('Erro ao emitir nota fiscal do PDV:', error);

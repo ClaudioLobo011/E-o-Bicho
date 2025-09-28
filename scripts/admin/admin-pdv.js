@@ -1252,6 +1252,16 @@
       fiscalXmlUrl: record.fiscalXmlUrl ? String(record.fiscalXmlUrl) : '',
       fiscalXmlName: record.fiscalXmlName ? String(record.fiscalXmlName) : '',
       fiscalEnvironment: record.fiscalEnvironment ? String(record.fiscalEnvironment) : '',
+      fiscalSerie: record.fiscalSerie ? String(record.fiscalSerie) : '',
+      fiscalNumber:
+        record.fiscalNumber !== undefined && record.fiscalNumber !== null
+          ? (() => {
+              const numeric = Number(record.fiscalNumber);
+              if (!Number.isFinite(numeric)) return null;
+              const integer = Math.floor(numeric);
+              return integer >= 0 ? integer : null;
+            })()
+          : null,
       expanded: Boolean(record.expanded),
       status: record.status ? String(record.status) : 'completed',
       cancellationReason: record.cancellationReason ? String(record.cancellationReason) : '',
@@ -4695,6 +4705,8 @@
       fiscalXmlUrl: '',
       fiscalXmlName: '',
       fiscalEnvironment: '',
+      fiscalSerie: '',
+      fiscalNumber: null,
       expanded: false,
       status: 'completed',
       cancellationReason: '',
@@ -4893,6 +4905,8 @@
       fiscalXmlName,
       fiscalEnvironment,
       fiscalEmittedAtLabel,
+      fiscalSerie,
+      fiscalNumber,
     } = updates;
     if (saleCode !== undefined) {
       sale.saleCode = saleCode || '';
@@ -4924,6 +4938,17 @@
     }
     if (fiscalEnvironment !== undefined) {
       sale.fiscalEnvironment = fiscalEnvironment || '';
+    }
+    if (fiscalSerie !== undefined) {
+      sale.fiscalSerie = fiscalSerie || '';
+    }
+    if (fiscalNumber !== undefined) {
+      if (fiscalNumber === null) {
+        sale.fiscalNumber = null;
+      } else {
+        const numeric = Number(fiscalNumber);
+        sale.fiscalNumber = Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : null;
+      }
     }
     const resolvedPayments = Array.isArray(payments) ? payments : null;
     if (resolvedPayments) {
@@ -5053,13 +5078,18 @@
     sale.fiscalStatus = 'emitting';
     renderSalesList();
     try {
+      const token = getToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
       const response = await fetch(
         `${API_BASE}/pdvs/${encodeURIComponent(state.selectedPdv)}/sales/${encodeURIComponent(
           saleId
         )}/fiscal`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             snapshot: sale.receiptSnapshot || null,
             saleCode: sale.saleCode || '',
@@ -5079,6 +5109,14 @@
         fiscalXmlUrl: data?.fiscalXmlUrl || '',
         fiscalXmlName: data?.fiscalXmlName || '',
         fiscalEnvironment: data?.fiscalEnvironment || '',
+        fiscalSerie: data?.fiscalSerie || '',
+        fiscalNumber:
+          data?.fiscalNumber !== undefined && data?.fiscalNumber !== null
+            ? (() => {
+                const numeric = Number(data.fiscalNumber);
+                return Number.isFinite(numeric) ? numeric : sale.fiscalNumber ?? null;
+              })()
+            : sale.fiscalNumber ?? null,
       });
       notify('Nota fiscal emitida e salva no Drive.', 'success');
       scheduleStatePersist({ immediate: true });

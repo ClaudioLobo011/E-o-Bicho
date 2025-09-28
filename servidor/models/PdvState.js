@@ -50,6 +50,8 @@ const saleRecordSchema = new mongoose.Schema(
     fiscalXmlUrl: { type: String, trim: true },
     fiscalXmlName: { type: String, trim: true },
     fiscalEnvironment: { type: String, trim: true },
+    fiscalSerie: { type: String, trim: true },
+    fiscalNumber: { type: Number },
     expanded: { type: Boolean, default: false },
     status: { type: String, trim: true },
     cancellationReason: { type: String, trim: true },
