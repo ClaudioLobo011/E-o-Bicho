@@ -4088,94 +4088,232 @@
         font-weight: 600;
         color: #222;
       }
-      .receipt--nfce .receipt__title {
-        font-size: 12.8px;
+      main.receipt.receipt--nfce {
+        padding: 2mm 1.4mm 3.4mm;
+        gap: 1mm;
+        font-size: 10px;
       }
-      .receipt--nfce .receipt__badge {
-        margin-top: 1mm;
+      .receipt--nfce .nfce-compact__header {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6mm;
+        border-bottom: 1px solid rgba(17, 17, 17, 0.65);
+        padding-bottom: 1.2mm;
       }
-      .nfce__meta {
-        align-items: flex-start;
-        text-align: left;
+      .nfce-compact__company {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3mm;
       }
-      .nfce__meta .receipt__meta-item {
-        text-align: left;
+      .nfce-compact__company-name {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.35px;
+        text-transform: uppercase;
+        color: #111;
+      }
+      .nfce-compact__company-secondary {
+        margin: 0;
+        font-size: 9.3px;
+        color: #333;
+        line-height: 1.3;
+      }
+      .nfce-compact__company-line {
+        margin: 0;
+        font-size: 9px;
+        color: #222;
+        line-height: 1.3;
+      }
+      .nfce-compact__header-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6mm;
+      }
+      .nfce-compact__tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6mm;
+      }
+      .nfce-compact__tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.4mm 1mm;
+        border: 1px solid var(--receipt-accent);
+        border-radius: 1mm;
+        font-size: 8.6px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+        color: var(--receipt-accent);
+        background: rgba(17, 17, 17, 0.04);
+      }
+      .nfce-compact__reference {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.6mm;
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        color: #333;
+      }
+      .nfce-compact__reference-left,
+      .nfce-compact__reference-right {
+        flex: 1 1 auto;
+      }
+      .nfce-compact__reference-divider {
+        flex: 0 0 auto;
+        font-size: 9px;
+        font-weight: 700;
+        color: rgba(17, 17, 17, 0.65);
+      }
+      .nfce-compact__section {
+        border-top: 1px solid rgba(17, 17, 17, 0.65);
+        padding-top: 1.1mm;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6mm;
+      }
+      .nfce-compact__section-title {
+        margin: 0;
+        font-size: 9.2px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+        color: #111;
+      }
+      .nfce-compact__items-table {
         width: 100%;
+        border-collapse: collapse;
+        font-size: 9px;
       }
-      .nfce__section {
-        gap: 1.2mm;
+      .nfce-compact__items-table thead th {
+        text-align: left;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        padding-bottom: 0.4mm;
+        border-bottom: 1px solid rgba(17, 17, 17, 0.65);
       }
-      .nfce__list {
+      .nfce-compact__items-table thead th:nth-child(2) {
+        text-align: center;
+      }
+      .nfce-compact__items-table thead th:last-child {
+        text-align: right;
+      }
+      .nfce-compact__items-table tbody td {
+        padding: 0.45mm 0;
+        border-bottom: 1px dashed rgba(17, 17, 17, 0.25);
+        vertical-align: top;
+      }
+      .nfce-compact__items-table tbody td:nth-child(2) {
+        text-align: center;
+        white-space: nowrap;
+      }
+      .nfce-compact__items-table tbody td:last-child {
+        text-align: right;
+        font-weight: 700;
+      }
+      .nfce-compact__item-name {
+        display: block;
+        font-weight: 700;
+        color: #111;
+      }
+      .nfce-compact__item-code {
+        display: block;
+        font-size: 8px;
+        color: #555;
+      }
+      .nfce-compact__totals-list {
         list-style: none;
         margin: 0;
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 1mm;
+        gap: 0.4mm;
       }
-      .nfce__list-item {
+      .nfce-compact__total {
         display: flex;
-        flex-direction: column;
-        gap: 0.2mm;
+        justify-content: space-between;
+        gap: 0.6mm;
+        font-size: 9.2px;
+        color: #222;
       }
-      .nfce__list-item-label {
-        font-size: 9.5px;
-        letter-spacing: 0.3px;
-        text-transform: uppercase;
-        color: #444;
-        font-weight: 600;
-      }
-      .nfce__list-item-value {
-        font-size: 10.6px;
+      .nfce-compact__total span:last-child {
         font-weight: 700;
-        color: #111;
       }
-      .nfce__env {
-        margin: 1mm 0 0;
-        font-size: 9.6px;
-        font-weight: 700;
-        color: var(--receipt-accent);
+      .nfce-compact__total--highlight span:first-child {
         text-transform: uppercase;
-        letter-spacing: 0.4px;
+        letter-spacing: 0.35px;
       }
-      .nfce__identifier {
-        margin-top: 0.6mm;
-        font-size: 9.4px;
-        color: #555;
+      .nfce-compact__total--highlight span:last-child {
+        font-size: 10px;
       }
-      .nfce__qr {
+      .nfce-compact__text {
+        margin: 0;
+        font-size: 9px;
+        line-height: 1.35;
+        color: #222;
+      }
+      .nfce-compact__qr {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         justify-content: center;
-        gap: 3mm;
+        gap: 2mm;
       }
-      .nfce__qr img {
-        width: 32mm;
-        height: 32mm;
+      .nfce-compact__qr img {
+        width: 30mm;
+        height: 30mm;
         border: 1px solid rgba(17, 17, 17, 0.35);
-        border-radius: 2mm;
-        padding: 1.2mm;
+        border-radius: 1.2mm;
+        padding: 1mm;
         background: #fff;
         image-rendering: pixelated;
       }
-      .nfce__qr-text {
-        flex: 1 1 34mm;
-        font-size: 9.4px;
+      .nfce-compact__qr-payload {
+        flex: 1 1 30mm;
+        margin: 0;
+        font-size: 8.6px;
         color: #333;
-        line-height: 1.5;
+        line-height: 1.4;
         text-align: center;
+        word-break: break-word;
       }
-      .nfce__qr-text strong {
-        display: block;
-        font-size: 10.5px;
-        text-transform: uppercase;
-        letter-spacing: 0.35px;
-        margin-bottom: 1mm;
-        color: #111;
+      .nfce-compact__access-key {
+        margin: 0;
+        font-size: 9.6px;
+        font-weight: 700;
+        letter-spacing: 0.45px;
+        text-align: center;
+        word-break: break-word;
       }
-      .nfce__footer {
-        margin-top: 2.8mm;
+      .nfce-compact__muted {
+        color: #777;
+        font-weight: 500;
+      }
+      .nfce-compact__info-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4mm;
+        font-size: 8.8px;
+        color: #333;
+      }
+      .nfce-compact__info-list li {
+        line-height: 1.35;
+      }
+      .nfce-compact__empty {
+        font-size: 8.8px;
+        text-align: center;
+        color: #666;
+        padding: 1mm 0;
       }
       .receipt__divider {
         width: 100%;
@@ -4421,6 +4559,15 @@
               documento: getChildText(destinatarioNode, 'Documento'),
               contato: getChildText(destinatarioNode, 'Contato'),
               pet: getChildText(destinatarioNode, 'Pet'),
+              apelido: getChildText(destinatarioNode, 'Apelido'),
+              endereco: getChildText(destinatarioNode, 'Endereco'),
+              logradouro: getChildText(destinatarioNode, 'Logradouro'),
+              numero: getChildText(destinatarioNode, 'Numero'),
+              complemento: getChildText(destinatarioNode, 'Complemento'),
+              bairro: getChildText(destinatarioNode, 'Bairro'),
+              municipio: getChildText(destinatarioNode, 'Municipio'),
+              uf: getChildText(destinatarioNode, 'UF'),
+              cep: getChildText(destinatarioNode, 'CEP'),
             }
           : null;
 
@@ -4558,12 +4705,35 @@
             }
           : {};
 
+        const destinatarioEnderecoNode = dest?.getElementsByTagName('enderDest')[0] || null;
+        const destinatarioEndereco = destinatarioEnderecoNode
+          ? {
+              endereco: `${getChildText(destinatarioEnderecoNode, 'xLgr')} ${getChildText(destinatarioEnderecoNode, 'nro')}`.trim(),
+              logradouro: getChildText(destinatarioEnderecoNode, 'xLgr'),
+              numero: getChildText(destinatarioEnderecoNode, 'nro'),
+              complemento: getChildText(destinatarioEnderecoNode, 'xCpl'),
+              bairro: getChildText(destinatarioEnderecoNode, 'xBairro'),
+              municipio: getChildText(destinatarioEnderecoNode, 'xMun'),
+              uf: getChildText(destinatarioEnderecoNode, 'UF'),
+              cep: getChildText(destinatarioEnderecoNode, 'CEP'),
+            }
+          : null;
+
         const destinatario = dest
           ? {
               nome: getChildText(dest, 'xNome'),
               documento: getChildText(dest, 'CNPJ') || getChildText(dest, 'CPF'),
               contato: getChildText(dest, 'email') || getChildText(dest, 'fone'),
               pet: '',
+              apelido: '',
+              endereco: destinatarioEndereco,
+              logradouro: destinatarioEndereco?.logradouro || '',
+              numero: destinatarioEndereco?.numero || '',
+              complemento: destinatarioEndereco?.complemento || '',
+              bairro: destinatarioEndereco?.bairro || '',
+              municipio: destinatarioEndereco?.municipio || '',
+              uf: destinatarioEndereco?.uf || '',
+              cep: destinatarioEndereco?.cep || '',
             }
           : null;
 
@@ -4688,183 +4858,86 @@
       return '<main class="receipt"><p class="receipt-empty">Documento fiscal indisponível para impressão.</p></main>';
     }
 
-    const { identificacao = {}, emitente = {}, destinatario, entrega, itens = [], totais = {}, pagamentos = {}, qrCode = {} } =
-      data;
+    const { identificacao = {}, emitente = {}, destinatario, entrega, itens = [], totais = {}, qrCode = {} } = data;
     const ambienteLabel = formatEnvironmentLabel(identificacao.ambiente);
-    const numeroFiscalLabel = [
-      identificacao.serieFiscal ? `Série ${identificacao.serieFiscal}` : '',
-      identificacao.numeroFiscal ? `Nº ${identificacao.numeroFiscal}` : '',
+    const companyPrimaryName = emitente.nomeFantasia || emitente.razaoSocial || 'Emitente não informado';
+    const companySecondaryName =
+      emitente.nomeFantasia && emitente.razaoSocial && emitente.nomeFantasia !== emitente.razaoSocial
+        ? emitente.razaoSocial
+        : '';
+    const companyDocuments = [
+      emitente.cnpj ? `CNPJ: ${emitente.cnpj}` : '',
+      emitente.inscricaoEstadual ? `IE: ${emitente.inscricaoEstadual}` : '',
     ]
       .filter(Boolean)
       .join(' • ');
-
-    const metaLines = [
-      emitente.nomeFantasia || emitente.razaoSocial || '',
-      emitente.cnpj ? `CNPJ: ${emitente.cnpj}` : '',
-      emitente.inscricaoEstadual ? `IE: ${emitente.inscricaoEstadual}` : '',
-      identificacao.pdvNome ? `PDV: ${identificacao.pdvNome}` : '',
-      identificacao.pdvCodigo ? `Código PDV: ${identificacao.pdvCodigo}` : '',
+    const companyAddressParts = [
+      [emitente.logradouro || emitente.endereco, emitente.numero].filter(Boolean).join(', '),
+      emitente.bairro ? `Bairro: ${emitente.bairro}` : '',
+      [emitente.municipio, emitente.uf].filter(Boolean).join(' - '),
+      emitente.cep ? `CEP: ${emitente.cep}` : '',
     ]
-      .filter(Boolean)
-      .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
-      .join('');
+      .filter((part) => part && part.trim().length)
+      .map((part) => part.trim());
+    const companyAddress = companyAddressParts.join(' • ');
 
-    const identificacaoRows = [
-      identificacao.vendaCodigo ? { label: 'Venda', value: identificacao.vendaCodigo } : null,
-      numeroFiscalLabel ? { label: 'Documento', value: numeroFiscalLabel } : null,
-      identificacao.accessKey
-        ? {
-            label: 'Chave de acesso',
-            value: identificacao.accessKey.replace(/(\d{4})(?=\d)/g, '$1 ').trim(),
-          }
-        : null,
-      identificacao.protocolo ? { label: 'Protocolo', value: identificacao.protocolo } : null,
-      identificacao.operador ? { label: 'Operador', value: identificacao.operador } : null,
-      identificacao.dataEmissao
-        ? { label: 'Data de emissão', value: formatXmlDateTime(identificacao.dataEmissao) }
-        : null,
-      identificacao.dataRegistro
-        ? { label: 'Registrado em', value: formatXmlDateTime(identificacao.dataRegistro) }
-        : null,
-      identificacao.digestValue ? { label: 'Digest value', value: identificacao.digestValue } : null,
-    ]
-      .filter(Boolean)
-      .map(
-        (row) => `
-          <li class="nfce__list-item">
-            <span class="nfce__list-item-label">${escapeHtml(row.label)}</span>
-            <span class="nfce__list-item-value">${escapeHtml(row.value)}</span>
-          </li>`
-      )
-      .join('');
+    const pdvParts = [
+      identificacao.pdvNome ? `PDV ${identificacao.pdvNome}` : '',
+      identificacao.pdvCodigo ? `Cód. PDV ${identificacao.pdvCodigo}` : '',
+      identificacao.vendaCodigo ? `Venda ${identificacao.vendaCodigo}` : '',
+    ].filter(Boolean);
+    const documentoParts = [
+      identificacao.serieFiscal ? `Série ${identificacao.serieFiscal}` : '',
+      identificacao.numeroFiscal ? `NFC-e ${identificacao.numeroFiscal}` : '',
+    ].filter(Boolean);
 
-    const emitenteRows = [
-      emitente.razaoSocial ? { label: 'Razão social', value: emitente.razaoSocial } : null,
-      emitente.nomeFantasia ? { label: 'Nome fantasia', value: emitente.nomeFantasia } : null,
-      emitente.cnpj ? { label: 'CNPJ', value: emitente.cnpj } : null,
-      emitente.inscricaoEstadual ? { label: 'Inscrição estadual', value: emitente.inscricaoEstadual } : null,
-    ]
-      .filter(Boolean)
-      .map(
-        (row) => `
-          <li class="nfce__list-item">
-            <span class="nfce__list-item-label">${escapeHtml(row.label)}</span>
-            <span class="nfce__list-item-value">${escapeHtml(row.value)}</span>
-          </li>`
-      )
-      .join('');
+    const tags = [];
+    if (ambienteLabel) {
+      tags.push(`<span class="nfce-compact__tag">${escapeHtml(ambienteLabel)}</span>`);
+    }
+    const tagsMarkup = tags.length ? `<div class="nfce-compact__tags">${tags.join('')}</div>` : '';
 
-    const destinatarioSection = destinatario && (destinatario.nome || destinatario.documento || destinatario.contato || destinatario.pet)
-      ? `
-        <section class="receipt__section nfce__section">
-          <h2 class="receipt__section-title">Destinatário</h2>
-          <ul class="nfce__list">
-            ${
-              destinatario.nome
-                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Nome</span><span class="nfce__list-item-value">${escapeHtml(
-                    destinatario.nome
-                  )}</span></li>`
-                : ''
-            }
-            ${
-              destinatario.documento
-                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Documento</span><span class="nfce__list-item-value">${escapeHtml(
-                    destinatario.documento
-                  )}</span></li>`
-                : ''
-            }
-            ${
-              destinatario.contato
-                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Contato</span><span class="nfce__list-item-value">${escapeHtml(
-                    destinatario.contato
-                  )}</span></li>`
-                : ''
-            }
-            ${
-              destinatario.pet
-                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Pet</span><span class="nfce__list-item-value">${escapeHtml(
-                    destinatario.pet
-                  )}</span></li>`
-                : ''
-            }
-          </ul>
-        </section>`
+    const referenceLeft = pdvParts.join(' • ');
+    const referenceRight = documentoParts.join(' • ');
+    const referenceSegments = [];
+    if (referenceLeft) {
+      referenceSegments.push(`<span class="nfce-compact__reference-left">${escapeHtml(referenceLeft)}</span>`);
+    }
+    if (referenceLeft && referenceRight) {
+      referenceSegments.push('<span class="nfce-compact__reference-divider">|</span>');
+    }
+    if (referenceRight) {
+      referenceSegments.push(`<span class="nfce-compact__reference-right">${escapeHtml(referenceRight)}</span>`);
+    }
+    const referenceMarkup = referenceSegments.length
+      ? `<div class="nfce-compact__reference">${referenceSegments.join('')}</div>`
       : '';
-
-    const entregaSection = entrega && (entrega.endereco || entrega.apelido || entrega.municipio)
-      ? `
-        <section class="receipt__section nfce__section">
-          <h2 class="receipt__section-title">Entrega</h2>
-          <ul class="nfce__list">
-            ${
-              entrega.apelido
-                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Destino</span><span class="nfce__list-item-value">${escapeHtml(
-                    entrega.apelido
-                  )}</span></li>`
-                : ''
-            }
-            ${
-              entrega.endereco
-                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Endereço</span><span class="nfce__list-item-value">${escapeHtml(
-                    entrega.endereco
-                  )}</span></li>`
-                : ''
-            }
-            ${
-              entrega.numero
-                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Número</span><span class="nfce__list-item-value">${escapeHtml(
-                    entrega.numero
-                  )}</span></li>`
-                : ''
-            }
-            ${
-              entrega.complemento
-                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Complemento</span><span class="nfce__list-item-value">${escapeHtml(
-                    entrega.complemento
-                  )}</span></li>`
-                : ''
-            }
-            ${
-              entrega.bairro
-                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Bairro</span><span class="nfce__list-item-value">${escapeHtml(
-                    entrega.bairro
-                  )}</span></li>`
-                : ''
-            }
-            ${
-              entrega.municipio || entrega.uf
-                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Município</span><span class="nfce__list-item-value">${escapeHtml(
-                    [entrega.municipio, entrega.uf].filter(Boolean).join(' / ')
-                  )}</span></li>`
-                : ''
-            }
-            ${
-              entrega.cep
-                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">CEP</span><span class="nfce__list-item-value">${escapeHtml(
-                    entrega.cep
-                  )}</span></li>`
-                : ''
-            }
-          </ul>
-        </section>`
-      : '';
+    const headerMetaContent = [tagsMarkup, referenceMarkup].filter(Boolean).join('');
+    const headerMeta = headerMetaContent ? `<div class="nfce-compact__header-meta">${headerMetaContent}</div>` : '';
 
     const itensRows = itens.length
       ? itens
-          .map(
-            (item) => `
+          .map((item) => {
+            const description = `${item.numero ? `${item.numero}. ` : ''}${item.descricao || 'Item'}`;
+            const quantityParts = [];
+            if (item.quantidade) quantityParts.push(item.quantidade);
+            if (item.unitario) quantityParts.push(item.unitario);
+            const quantity = quantityParts.length ? quantityParts.join(' × ') : '1';
+            const codes = item.codigos
+              ? `<span class="nfce-compact__item-code">${escapeHtml(item.codigos)}</span>`
+              : '';
+            return `
               <tr>
-                <td>${escapeHtml(item.numero)}</td>
                 <td>
-                  <strong>${escapeHtml(item.descricao || 'Item')}</strong>
-                  ${item.codigos ? `<span class="receipt-table__muted">${escapeHtml(item.codigos)}</span>` : ''}
+                  <span class="nfce-compact__item-name">${escapeHtml(description)}</span>
+                  ${codes}
                 </td>
-                <td>${escapeHtml(item.quantidade || '1')} × ${escapeHtml(item.unitario || '')}</td>
+                <td>${escapeHtml(quantity)}</td>
                 <td>${escapeHtml(item.total || '')}</td>
-              </tr>`
-          )
+              </tr>`;
+          })
           .join('')
-      : '<tr><td colspan="4" class="receipt-list__empty">Nenhum item encontrado.</td></tr>';
+      : '<tr><td colspan="3" class="nfce-compact__empty">Nenhum item informado.</td></tr>';
 
     const totalsRows = [
       totais.bruto ? { label: 'Subtotal', value: totais.bruto } : null,
@@ -4879,101 +4952,187 @@
       totais.troco
         ? { label: 'Troco', value: totais.troco.trim().startsWith('-') ? totais.troco : totais.troco }
         : null,
-    ]
-      .filter(Boolean)
-      .map(
-        (row) => `
-          <li class="receipt-row${row.isTotal ? ' receipt-row--total' : ''}">
-            <span class="receipt-row__label">${escapeHtml(row.label)}</span>
-            <span class="receipt-row__value">${escapeHtml(row.value)}</span>
-          </li>`
-      )
-      .join('');
-
-    const pagamentosRows = pagamentos.items.length
-      ? pagamentos.items
+    ].filter(Boolean);
+    const totalsMarkup = totalsRows.length
+      ? `<ul class="nfce-compact__totals-list">${totalsRows
           .map(
-            (payment) => `
-              <li class="receipt-row">
-                <span class="receipt-row__label">${escapeHtml(payment.descricao || 'Pagamento')}</span>
-                <span class="receipt-row__value">${escapeHtml(payment.valor || '')}</span>
+            (row) => `
+              <li class="nfce-compact__total${row.isTotal ? ' nfce-compact__total--highlight' : ''}">
+                <span>${escapeHtml(row.label)}</span>
+                <span>${escapeHtml(row.value)}</span>
               </li>`
           )
-          .join('')
-      : '<li class="receipt-list__empty">Nenhum pagamento informado.</li>';
+          .join('')}</ul>`
+      : '<p class="nfce-compact__empty">Totais indisponíveis.</p>';
 
-    const qrImage = qrCode.image || '';
-    const qrPayload = qrCode.payload || '';
-    const qrSection = qrImage || qrPayload
-      ? `
-        <section class="receipt__section nfce__section">
-          <h2 class="receipt__section-title">Consulta da NFC-e</h2>
-          <div class="nfce__qr">
-            ${
-              qrImage
-                ? `<img src="${escapeHtml(qrImage)}" alt="QR Code da NFC-e" />`
-                : ''
-            }
-            <div class="nfce__qr-text">
-              <strong>Escaneie para consultar</strong>
-              ${qrPayload ? `<p>${escapeHtml(qrPayload)}</p>` : '<p>QR Code indisponível.</p>'}
-            </div>
-          </div>
+    const destinatarioLines = [];
+    if (destinatario?.nome) destinatarioLines.push(destinatario.nome);
+    if (destinatario?.documento) destinatarioLines.push(`Doc.: ${destinatario.documento}`);
+    if (destinatario?.contato) destinatarioLines.push(`Contato: ${destinatario.contato}`);
+    if (destinatario?.pet) destinatarioLines.push(`Pet: ${destinatario.pet}`);
+    const destinatarioSection = destinatarioLines.length
+      ? `<section class="nfce-compact__section nfce-compact__section--info">
+          <h2 class="nfce-compact__section-title">Destinatário</h2>
+          <p class="nfce-compact__text">${destinatarioLines.map((line) => escapeHtml(line)).join('<br>')}</p>
         </section>`
       : '';
 
-    const ambienteBadge = ambienteLabel ? `<p class="nfce__env">${escapeHtml(ambienteLabel)}</p>` : '';
-    const documentoBadge = numeroFiscalLabel ? `<p class="nfce__identifier">${escapeHtml(numeroFiscalLabel)}</p>` : '';
+    const enderecoLines = [];
+    const pickAddressField = (...candidates) => {
+      for (const value of candidates) {
+        if (typeof value === 'string' && value.trim()) {
+          return value.trim();
+        }
+      }
+      return '';
+    };
 
-    const footerLine = emitente.nomeFantasia || emitente.razaoSocial || 'Obrigado pela preferência!';
-    const consultaHint = ambienteLabel ? `${ambienteLabel}.` : 'Documento emitido eletronicamente.';
+    const enderecoFonte = entrega || destinatario?.endereco || destinatario || null;
+    const enderecoApelido = pickAddressField(entrega?.apelido, destinatario?.apelido);
+    if (enderecoApelido) {
+      enderecoLines.push(enderecoApelido);
+    }
+
+    const logradouro = pickAddressField(
+      entrega?.logradouro,
+      destinatario?.endereco?.logradouro,
+      destinatario?.logradouro,
+      enderecoFonte?.logradouro,
+      enderecoFonte?.endereco
+    );
+    const numero = pickAddressField(entrega?.numero, destinatario?.endereco?.numero, destinatario?.numero, enderecoFonte?.numero);
+    const enderecoPrincipal = logradouro || numero ? [logradouro, numero].filter(Boolean).join(', ') : pickAddressField(entrega?.endereco, destinatario?.endereco?.endereco, destinatario?.endereco, enderecoFonte?.endereco);
+    if (enderecoPrincipal) {
+      enderecoLines.push(enderecoPrincipal);
+    }
+
+    const complemento = pickAddressField(
+      entrega?.complemento,
+      destinatario?.endereco?.complemento,
+      destinatario?.complemento,
+      enderecoFonte?.complemento
+    );
+    if (complemento) {
+      enderecoLines.push(`Compl.: ${complemento}`);
+    }
+
+    const bairro = pickAddressField(
+      entrega?.bairro,
+      destinatario?.endereco?.bairro,
+      destinatario?.bairro,
+      enderecoFonte?.bairro
+    );
+    if (bairro) {
+      enderecoLines.push(`Bairro: ${bairro}`);
+    }
+
+    const municipio = pickAddressField(
+      entrega?.municipio,
+      destinatario?.endereco?.municipio,
+      destinatario?.municipio,
+      enderecoFonte?.municipio
+    );
+    const uf = pickAddressField(entrega?.uf, destinatario?.endereco?.uf, destinatario?.uf, enderecoFonte?.uf);
+    const cidadeLinha = [municipio, uf].filter(Boolean).join(' - ');
+    if (cidadeLinha) {
+      enderecoLines.push(cidadeLinha);
+    }
+
+    const cep = pickAddressField(entrega?.cep, destinatario?.endereco?.cep, destinatario?.cep, enderecoFonte?.cep);
+    if (cep) {
+      enderecoLines.push(`CEP: ${cep}`);
+    }
+    const enderecoSection = enderecoLines.length
+      ? `<section class="nfce-compact__section nfce-compact__section--info">
+          <h2 class="nfce-compact__section-title">Endereço</h2>
+          <p class="nfce-compact__text">${enderecoLines.map((line) => escapeHtml(line)).join('<br>')}</p>
+        </section>`
+      : '';
+
+    const qrImage = qrCode.image || '';
+    const qrPayload = qrCode.payload || '';
+    const qrPayloadText = qrPayload ? escapeHtml(qrPayload) : escapeHtml('QR Code indisponível.');
+    const qrImageMarkup = qrImage ? `<img src="${escapeHtml(qrImage)}" alt="QR Code da NFC-e" />` : '';
+    const qrSection = `<section class="nfce-compact__section nfce-compact__section--qr">
+        <h2 class="nfce-compact__section-title">Consulta</h2>
+        <div class="nfce-compact__qr">
+          ${qrImageMarkup}
+          <p class="nfce-compact__qr-payload">${qrPayloadText}</p>
+        </div>
+      </section>`;
+
+    const accessKeyRaw = (identificacao.accessKey || '').replace(/\s+/g, '');
+    const accessKeyFormatted = accessKeyRaw ? accessKeyRaw.replace(/(\d{4})(?=\d)/g, '$1 ').trim() : '';
+    const accessKeyDisplay = accessKeyFormatted || 'Chave de acesso não disponível.';
+    const accessKeyClass = accessKeyFormatted
+      ? 'nfce-compact__access-key'
+      : 'nfce-compact__access-key nfce-compact__muted';
+    const accessKeySection = `<section class="nfce-compact__section nfce-compact__section--key">
+        <h2 class="nfce-compact__section-title">Chave de acesso</h2>
+        <p class="${accessKeyClass}">${escapeHtml(accessKeyDisplay)}</p>
+      </section>`;
+
+    const infoLines = [
+      ambienteLabel ? `Ambiente: ${ambienteLabel}` : '',
+      identificacao.protocolo ? `Protocolo: ${identificacao.protocolo}` : '',
+      identificacao.dataEmissao ? `Emissão: ${formatXmlDateTime(identificacao.dataEmissao)}` : '',
+      identificacao.dataRegistro ? `Registro: ${formatXmlDateTime(identificacao.dataRegistro)}` : '',
+      identificacao.digestValue ? `Digest: ${identificacao.digestValue}` : '',
+      identificacao.operador ? `Operador: ${identificacao.operador}` : '',
+    ].filter(Boolean);
+    infoLines.push('Documento emitido eletronicamente. Consulte pelo QR Code ou portal da SEFAZ.');
+    const infoSection = `<section class="nfce-compact__section nfce-compact__section--notes">
+        <h2 class="nfce-compact__section-title">Informações obrigatórias</h2>
+        <ul class="nfce-compact__info-list">
+          ${infoLines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
+        </ul>
+      </section>`;
 
     return `
-      <main class="receipt receipt--nfce">
-        <header class="receipt__header">
-          <h1 class="receipt__title">Nota Fiscal de Consumidor Eletrônica</h1>
-          <span class="receipt__badge">NFC-e</span>
-          ${ambienteBadge}
-          ${documentoBadge}
+      <main class="receipt receipt--nfce nfce-compact">
+        <header class="nfce-compact__header">
+          <div class="nfce-compact__company">
+            <h1 class="nfce-compact__company-name">${escapeHtml(companyPrimaryName)}</h1>
+            ${
+              companySecondaryName
+                ? `<p class="nfce-compact__company-secondary">${escapeHtml(companySecondaryName)}</p>`
+                : ''
+            }
+            ${
+              companyDocuments
+                ? `<p class="nfce-compact__company-line">${escapeHtml(companyDocuments)}</p>`
+                : ''
+            }
+            ${
+              companyAddress
+                ? `<p class="nfce-compact__company-line">${escapeHtml(companyAddress)}</p>`
+                : ''
+            }
+          </div>
+          ${headerMeta}
         </header>
-        <section class="receipt__meta nfce__meta">${metaLines}</section>
-        <section class="receipt__section nfce__section">
-          <h2 class="receipt__section-title">Identificação</h2>
-          <ul class="nfce__list">${identificacaoRows}</ul>
-        </section>
-        <section class="receipt__section nfce__section">
-          <h2 class="receipt__section-title">Emitente</h2>
-          <ul class="nfce__list">${emitenteRows}</ul>
-        </section>
-        ${destinatarioSection}
-        ${entregaSection}
-        <section class="receipt__section nfce__section">
-          <h2 class="receipt__section-title">Itens</h2>
-          <table class="receipt-table nfce__items">
+        <section class="nfce-compact__section nfce-compact__section--items">
+          <h2 class="nfce-compact__section-title">Produtos</h2>
+          <table class="nfce-compact__items-table">
             <thead>
               <tr>
-                <th>#</th>
-                <th>Descrição</th>
-                <th>Qtde × Valor</th>
+                <th>Item</th>
+                <th>Qtd × Vlr</th>
                 <th>Total</th>
               </tr>
             </thead>
             <tbody>${itensRows}</tbody>
           </table>
         </section>
-        <section class="receipt__section nfce__section">
-          <h2 class="receipt__section-title">Totais</h2>
-          <ul class="receipt-list">${totalsRows}</ul>
+        <section class="nfce-compact__section nfce-compact__section--totals">
+          <h2 class="nfce-compact__section-title">Totais</h2>
+          ${totalsMarkup}
         </section>
-        <section class="receipt__section nfce__section">
-          <h2 class="receipt__section-title">Pagamentos</h2>
-          <ul class="receipt-list">${pagamentosRows}</ul>
-        </section>
+        ${destinatarioSection}
+        ${enderecoSection}
         ${qrSection}
-        <footer class="receipt__footer nfce__footer">
-          <p class="receipt__footer-strong">${escapeHtml(footerLine)}</p>
-          <p>${escapeHtml(consultaHint)}</p>
-        </footer>
+        ${accessKeySection}
+        ${infoSection}
       </main>`;
   };
 
