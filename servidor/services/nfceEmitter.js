@@ -279,8 +279,29 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const delivery = snapshot?.delivery || null;
   const cliente = snapshot?.cliente || null;
 
-  const certificateBuffer = decryptBuffer(storeObject.certificadoArquivoCriptografado);
-  const certificatePassword = decryptText(storeObject.certificadoSenhaCriptografada || '');
+  const encryptedCertificate = storeObject?.certificadoArquivoCriptografado;
+  if (!encryptedCertificate) {
+    throw new Error('O certificado digital da empresa não está configurado.');
+  }
+
+  const encryptedCertificatePassword = storeObject?.certificadoSenhaCriptografada;
+  if (!encryptedCertificatePassword) {
+    throw new Error('A senha do certificado digital não está configurada.');
+  }
+
+  let certificateBuffer;
+  try {
+    certificateBuffer = decryptBuffer(encryptedCertificate);
+  } catch (error) {
+    throw new Error(`Não foi possível descriptografar o certificado digital: ${error.message}`);
+  }
+
+  let certificatePassword;
+  try {
+    certificatePassword = decryptText(encryptedCertificatePassword);
+  } catch (error) {
+    throw new Error(`Não foi possível recuperar a senha do certificado digital: ${error.message}`);
+  }
   const { privateKeyPem, certificatePem } = extractCertificatePair(certificateBuffer, certificatePassword);
 
   const cscId = environment === 'producao' ? storeObject.cscIdProducao : storeObject.cscIdHomologacao;
@@ -291,7 +312,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   if (!cscId || !cscTokenEncrypted) {
     throw new Error('O CSC do ambiente selecionado não está configurado para a empresa.');
   }
-  const cscToken = decryptText(cscTokenEncrypted).trim();
+  let cscToken;
+  try {
+    cscToken = decryptText(cscTokenEncrypted).trim();
+  } catch (error) {
+    throw new Error(`Não foi possível recuperar o CSC do ambiente selecionado: ${error.message}`);
+  }
 
   const environmentLabel = environment === 'producao' ? 'Produção' : 'Homologação';
 
