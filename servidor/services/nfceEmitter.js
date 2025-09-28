@@ -97,8 +97,45 @@ const buildAccessKey = ({
 };
 
 const extractCertificatePair = (pfxBuffer, password) => {
+  const collectBagAttributes = (bag = {}) => {
+    const { attributes } = bag;
+    if (!attributes) {
+      return [];
+    }
+    if (Array.isArray(attributes)) {
+      return attributes.filter(Boolean);
+    }
+    if (attributes instanceof Map) {
+      return Array.from(attributes.values()).reduce((acc, value) => {
+        if (!value) {
+          return acc;
+        }
+        if (Array.isArray(value)) {
+          acc.push(...value.filter(Boolean));
+        } else {
+          acc.push(value);
+        }
+        return acc;
+      }, []);
+    }
+    if (typeof attributes === 'object') {
+      return Object.values(attributes).reduce((acc, value) => {
+        if (!value) {
+          return acc;
+        }
+        if (Array.isArray(value)) {
+          acc.push(...value.filter(Boolean));
+        } else {
+          acc.push(value);
+        }
+        return acc;
+      }, []);
+    }
+    return [];
+  };
+
   const decodeLocalKeyId = (bag = {}) => {
-    const attribute = (bag.attributes || []).find((attr) => attr.type === forge.pki.oids.localKeyId);
+    const attribute = collectBagAttributes(bag).find((attr) => attr.type === forge.pki.oids.localKeyId);
     if (!attribute || !attribute.value || !attribute.value.length) {
       return null;
     }
@@ -122,7 +159,7 @@ const extractCertificatePair = (pfxBuffer, password) => {
   };
 
   const decodeFriendlyName = (bag = {}) => {
-    const attribute = (bag.attributes || []).find((attr) => attr.type === forge.pki.oids.friendlyName);
+    const attribute = collectBagAttributes(bag).find((attr) => attr.type === forge.pki.oids.friendlyName);
     if (!attribute || !attribute.value || !attribute.value.length) {
       return null;
     }
