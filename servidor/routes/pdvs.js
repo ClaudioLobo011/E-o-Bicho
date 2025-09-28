@@ -995,9 +995,9 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
 
     const emissionDate = new Date();
     const storeForXml =
-      pdv.empresa && typeof pdv.empresa.toObject === 'function'
-        ? pdv.empresa.toObject()
-        : pdv.empresa || {};
+      empresa && typeof empresa.toObject === 'function'
+        ? empresa.toObject()
+        : empresa || {};
     const emissionResult = await emitPdvSaleFiscal({
       sale,
       pdv,
