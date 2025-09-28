@@ -142,6 +142,10 @@
   const deliveryStatusOrder = deliveryStatusSteps.map((step) => step.id);
   let finalizeModalDefaults = { title: '', subtitle: '', confirm: '' };
   let deliveryAddressesController = null;
+  let statePersistTimeout = null;
+  let statePersistInFlight = false;
+  let statePersistPending = false;
+  let lastPersistSignature = '';
   const normalizeId = (value) => (value == null ? '' : String(value));
   const normalizeStoreRecord = (store) => {
     if (!store || typeof store !== 'object') return store;
@@ -242,6 +246,8 @@
       return;
     }
     const identifierSource =
+      pdv?.saleCodeIdentifier ||
+      pdv?.caixa?.saleCodeIdentifier ||
       pdv?.codigo ||
       pdv?.identificador ||
       pdv?.apelido ||
@@ -249,7 +255,12 @@
       pdv?.nome ||
       pdvId;
     state.saleCodeIdentifier = sanitizeSaleCodeIdentifier(identifierSource);
-    state.saleCodeSequence = readSaleSequenceFromStorage(pdvId);
+    const sequenceSource =
+      pdv?.saleCodeSequence ?? pdv?.caixa?.saleCodeSequence ?? readSaleSequenceFromStorage(pdvId);
+    const parsedSequence = Number.parseInt(sequenceSource, 10);
+    state.saleCodeSequence = Number.isFinite(parsedSequence) && parsedSequence >= 1
+      ? parsedSequence
+      : readSaleSequenceFromStorage(pdvId);
     refreshCurrentSaleCode();
     persistSaleSequence(pdvId, state.saleCodeSequence);
     updateSaleCodeDisplay();
@@ -265,6 +276,7 @@
     refreshCurrentSaleCode();
     persistSaleSequence(pdvId, state.saleCodeSequence);
     updateSaleCodeDisplay();
+    scheduleStatePersist();
   };
   const getPdvCompanyId = (pdv) => {
     if (!pdv) return '';
@@ -1183,6 +1195,196 @@
     populatePaymentSelect();
   };
 
+  const normalizePaymentSnapshotForPersist = (payment) => {
+    if (!payment || typeof payment !== 'object') return null;
+    const id = payment.id ? String(payment.id) : createUid();
+    const label = payment.label ? String(payment.label) : 'Pagamento';
+    const type = payment.type ? String(payment.type) : 'avista';
+    const aliases = Array.isArray(payment.aliases)
+      ? payment.aliases.map((alias) => String(alias)).filter(Boolean)
+      : [];
+    const valor = safeNumber(payment.valor ?? payment.value ?? 0);
+    const parcelasRaw = payment.parcelas ?? payment.installments ?? 1;
+    const parcelas = Math.max(1, Number.parseInt(parcelasRaw, 10) || 1);
+    return { id, label, type, aliases, valor, parcelas };
+  };
+
+  const normalizeHistoryEntryForPersist = (entry) => {
+    if (!entry || typeof entry !== 'object') return null;
+    const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
+    return {
+      id: entry.id ? String(entry.id) : createUid(),
+      label: entry.label ? String(entry.label) : 'Movimentação',
+      amount: safeNumber(entry.amount ?? entry.valor ?? 0),
+      delta: safeNumber(entry.delta ?? entry.valor ?? 0),
+      motivo: entry.motivo ? String(entry.motivo) : '',
+      paymentLabel: entry.paymentLabel ? String(entry.paymentLabel) : '',
+      paymentId: entry.paymentId ? String(entry.paymentId) : '',
+      timestamp: timestamp.toISOString(),
+    };
+  };
+
+  const normalizeSaleRecordForPersist = (record) => {
+    if (!record || typeof record !== 'object') return null;
+    const createdAt = record.createdAt ? new Date(record.createdAt) : new Date();
+    return {
+      id: record.id ? String(record.id) : createUid(),
+      type: record.type ? String(record.type) : 'venda',
+      typeLabel: record.typeLabel ? String(record.typeLabel) : '',
+      saleCode: record.saleCode ? String(record.saleCode) : '',
+      saleCodeLabel: record.saleCodeLabel ? String(record.saleCodeLabel) : '',
+      customerName: record.customerName ? String(record.customerName) : 'Cliente não informado',
+      customerDocument: record.customerDocument ? String(record.customerDocument) : '',
+      paymentTags: Array.isArray(record.paymentTags)
+        ? record.paymentTags.map((tag) => String(tag)).filter(Boolean)
+        : [],
+      items: Array.isArray(record.items) ? record.items.map((item) => ({ ...item })) : [],
+      discountValue: safeNumber(record.discountValue ?? 0),
+      discountLabel: record.discountLabel ? String(record.discountLabel) : '',
+      additionValue: safeNumber(record.additionValue ?? 0),
+      createdAt: createdAt.toISOString(),
+      createdAtLabel: record.createdAtLabel ? String(record.createdAtLabel) : '',
+      receiptSnapshot: record.receiptSnapshot || null,
+      fiscalStatus: record.fiscalStatus ? String(record.fiscalStatus) : '',
+      fiscalEmittedAt: record.fiscalEmittedAt ? new Date(record.fiscalEmittedAt).toISOString() : null,
+      fiscalEmittedAtLabel: record.fiscalEmittedAtLabel ? String(record.fiscalEmittedAtLabel) : '',
+      fiscalDriveFileId: record.fiscalDriveFileId ? String(record.fiscalDriveFileId) : '',
+      fiscalXmlUrl: record.fiscalXmlUrl ? String(record.fiscalXmlUrl) : '',
+      fiscalXmlName: record.fiscalXmlName ? String(record.fiscalXmlName) : '',
+      fiscalXmlContent: record.fiscalXmlContent ? String(record.fiscalXmlContent) : '',
+      fiscalQrCodeData: record.fiscalQrCodeData ? String(record.fiscalQrCodeData) : '',
+      fiscalQrCodeImage: record.fiscalQrCodeImage ? String(record.fiscalQrCodeImage) : '',
+      fiscalEnvironment: record.fiscalEnvironment ? String(record.fiscalEnvironment) : '',
+      fiscalSerie: record.fiscalSerie ? String(record.fiscalSerie) : '',
+      fiscalNumber:
+        record.fiscalNumber !== undefined && record.fiscalNumber !== null
+          ? (() => {
+              const numeric = Number(record.fiscalNumber);
+              if (!Number.isFinite(numeric)) return null;
+              const integer = Math.floor(numeric);
+              return integer >= 0 ? integer : null;
+            })()
+          : null,
+      fiscalAccessKey: record.fiscalAccessKey ? String(record.fiscalAccessKey) : '',
+      fiscalDigestValue: record.fiscalDigestValue ? String(record.fiscalDigestValue) : '',
+      fiscalSignature: record.fiscalSignature ? String(record.fiscalSignature) : '',
+      fiscalProtocol: record.fiscalProtocol ? String(record.fiscalProtocol) : '',
+      fiscalItemsSnapshot: Array.isArray(record.fiscalItemsSnapshot)
+        ? record.fiscalItemsSnapshot.map((item) => (item && typeof item === 'object' ? { ...item } : item))
+        : [],
+      expanded: Boolean(record.expanded),
+      status: record.status ? String(record.status) : 'completed',
+      cancellationReason: record.cancellationReason ? String(record.cancellationReason) : '',
+      cancellationAt: record.cancellationAt ? new Date(record.cancellationAt).toISOString() : null,
+      cancellationAtLabel: record.cancellationAtLabel ? String(record.cancellationAtLabel) : '',
+    };
+  };
+
+  const buildStatePersistPayload = () => {
+    const pagamentos = (Array.isArray(state.pagamentos) ? state.pagamentos : [])
+      .map((payment) => normalizePaymentSnapshotForPersist(payment))
+      .filter(Boolean);
+    const previstoPagamentos = (Array.isArray(state.caixaInfo.previstoPagamentos)
+      ? state.caixaInfo.previstoPagamentos
+      : [])
+      .map((payment) => normalizePaymentSnapshotForPersist(payment))
+      .filter(Boolean);
+    const apuradoPagamentos = (Array.isArray(state.caixaInfo.apuradoPagamentos)
+      ? state.caixaInfo.apuradoPagamentos
+      : [])
+      .map((payment) => normalizePaymentSnapshotForPersist(payment))
+      .filter(Boolean);
+    const history = (Array.isArray(state.history) ? state.history : [])
+      .map((entry) => normalizeHistoryEntryForPersist(entry))
+      .filter(Boolean);
+    const completedSales = (Array.isArray(state.completedSales) ? state.completedSales : [])
+      .map((sale) => normalizeSaleRecordForPersist(sale))
+      .filter(Boolean);
+
+    return {
+      caixaAberto: Boolean(state.caixaAberto),
+      summary: {
+        abertura: safeNumber(state.summary.abertura),
+        recebido: safeNumber(state.summary.recebido),
+        saldo: safeNumber(state.summary.saldo),
+      },
+      caixaInfo: {
+        aberturaData: state.caixaInfo.aberturaData || null,
+        fechamentoData: state.caixaInfo.fechamentoData || null,
+        fechamentoPrevisto: safeNumber(state.caixaInfo.fechamentoPrevisto),
+        fechamentoApurado: safeNumber(state.caixaInfo.fechamentoApurado),
+        previstoPagamentos,
+        apuradoPagamentos,
+      },
+      pagamentos,
+      history,
+      completedSales,
+      lastMovement: state.lastMovement ? normalizeHistoryEntryForPersist(state.lastMovement) : null,
+      saleCodeIdentifier: state.saleCodeIdentifier || '',
+      saleCodeSequence: Math.max(1, Number.parseInt(state.saleCodeSequence, 10) || 1),
+      printPreferences:
+        state.printPreferences && typeof state.printPreferences === 'object'
+          ? { ...state.printPreferences }
+          : { fechamento: 'PM', venda: 'PM' },
+    };
+  };
+
+  const sendStatePersistRequest = async (payload) => {
+    const pdvId = normalizeId(state.selectedPdv);
+    if (!pdvId) return;
+    const token = getToken();
+    await fetchWithOptionalAuth(`${API_BASE}/pdvs/${encodeURIComponent(pdvId)}/state`, {
+      method: 'PUT',
+      token,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      errorMessage: 'Não foi possível salvar o estado do PDV.',
+    });
+  };
+
+  const flushStatePersist = async () => {
+    const pdvId = normalizeId(state.selectedPdv);
+    if (!pdvId) return;
+    const payload = buildStatePersistPayload();
+    const signature = JSON.stringify(payload);
+    if (signature === lastPersistSignature) {
+      return;
+    }
+    try {
+      await sendStatePersistRequest(payload);
+      lastPersistSignature = signature;
+    } catch (error) {
+      console.error('Erro ao salvar estado do PDV:', error);
+    }
+  };
+
+  const scheduleStatePersist = ({ immediate = false } = {}) => {
+    if (!state.selectedPdv) return;
+    if (typeof window === 'undefined') return;
+    if (statePersistTimeout) {
+      window.clearTimeout(statePersistTimeout);
+      statePersistTimeout = null;
+    }
+    const delay = immediate ? 0 : 400;
+    statePersistTimeout = window.setTimeout(async () => {
+      statePersistTimeout = null;
+      if (statePersistInFlight) {
+        statePersistPending = true;
+        return;
+      }
+      statePersistInFlight = true;
+      try {
+        await flushStatePersist();
+      } finally {
+        statePersistInFlight = false;
+        if (statePersistPending) {
+          statePersistPending = false;
+          scheduleStatePersist({ immediate: true });
+        }
+      }
+    }, delay);
+  };
+
   const getProductCode = (product) => {
     return (
       product?.codigoInterno ||
@@ -1558,6 +1760,7 @@
       const modeLabel = PRINT_MODE_LABELS[nextMode] || PRINT_MODE_LABELS[nextBase] || PRINT_MODE_LABELS.M;
       const typeLabel = getPrintTypeLabel(type);
       notify(`Impressão de ${typeLabel} definida para ${modeLabel}.`, 'info');
+      scheduleStatePersist();
       return;
     }
     if (confirmationButton && elements.printControls.contains(confirmationButton)) {
@@ -1577,6 +1780,7 @@
       const typeLabel = getPrintTypeLabel(type);
       const promptLabel = PRINT_PROMPT_LABELS[nextPrompt ? 'ask' : 'skip'];
       notify(`Confirmação de impressão para ${typeLabel} definida para ${promptLabel.toLowerCase()}.`, 'info');
+      scheduleStatePersist();
     }
   };
 
@@ -3884,6 +4088,95 @@
         font-weight: 600;
         color: #222;
       }
+      .receipt--nfce .receipt__title {
+        font-size: 12.8px;
+      }
+      .receipt--nfce .receipt__badge {
+        margin-top: 1mm;
+      }
+      .nfce__meta {
+        align-items: flex-start;
+        text-align: left;
+      }
+      .nfce__meta .receipt__meta-item {
+        text-align: left;
+        width: 100%;
+      }
+      .nfce__section {
+        gap: 1.2mm;
+      }
+      .nfce__list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1mm;
+      }
+      .nfce__list-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2mm;
+      }
+      .nfce__list-item-label {
+        font-size: 9.5px;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        color: #444;
+        font-weight: 600;
+      }
+      .nfce__list-item-value {
+        font-size: 10.6px;
+        font-weight: 700;
+        color: #111;
+      }
+      .nfce__env {
+        margin: 1mm 0 0;
+        font-size: 9.6px;
+        font-weight: 700;
+        color: var(--receipt-accent);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+      .nfce__identifier {
+        margin-top: 0.6mm;
+        font-size: 9.4px;
+        color: #555;
+      }
+      .nfce__qr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 3mm;
+      }
+      .nfce__qr img {
+        width: 32mm;
+        height: 32mm;
+        border: 1px solid rgba(17, 17, 17, 0.35);
+        border-radius: 2mm;
+        padding: 1.2mm;
+        background: #fff;
+        image-rendering: pixelated;
+      }
+      .nfce__qr-text {
+        flex: 1 1 34mm;
+        font-size: 9.4px;
+        color: #333;
+        line-height: 1.5;
+        text-align: center;
+      }
+      .nfce__qr-text strong {
+        display: block;
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+        margin-bottom: 1mm;
+        color: #111;
+      }
+      .nfce__footer {
+        margin-top: 2.8mm;
+      }
       .receipt__divider {
         width: 100%;
         border: none;
@@ -4022,6 +4315,665 @@
           <h2 class="receipt__section-title">Fechamento apurado</h2>
           <ul class="receipt-list">${apuradoList}</ul>
         </section>
+      </main>`;
+  };
+
+  const formatEnvironmentLabel = (environment) => {
+    if (!environment) return '';
+    let normalized = String(environment).toLowerCase();
+    if (normalized === '1') {
+      normalized = 'producao';
+    } else if (normalized === '2') {
+      normalized = 'homologacao';
+    }
+    if (normalized === 'producao') {
+      return 'Ambiente de Produção';
+    }
+    if (normalized === 'homologacao') {
+      return 'Ambiente de Homologação';
+    }
+    return `Ambiente: ${environment}`;
+  };
+
+  const formatXmlDateTime = (value) => {
+    if (!value) return '';
+    try {
+      const candidate = new Date(value);
+      if (!Number.isNaN(candidate.getTime())) {
+        return toDateLabel(candidate.toISOString());
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return String(value);
+  };
+
+  const parseFiscalXmlDocument = (xmlContent) => {
+    if (!xmlContent || typeof xmlContent !== 'string') {
+      return null;
+    }
+    if (typeof window === 'undefined' || typeof window.DOMParser === 'undefined') {
+      return null;
+    }
+    try {
+      const parser = new window.DOMParser();
+      const doc = parser.parseFromString(xmlContent, 'application/xml');
+      if (!doc) {
+        return null;
+      }
+      const parseError = doc.querySelector('parsererror');
+      if (parseError) {
+        console.warn('XML fiscal inválido:', parseError.textContent);
+        return null;
+      }
+      const root = doc.documentElement;
+      if (!root) {
+        return null;
+      }
+      const rootName = root.nodeName ? root.nodeName.toLowerCase() : '';
+      const getChildText = (parent, tagName) => {
+        if (!parent) return '';
+        const node = parent.getElementsByTagName(tagName)[0];
+        return node && node.textContent ? node.textContent.trim() : '';
+      };
+
+      const parseLegacyLayout = () => {
+        const identificacaoNode = root.getElementsByTagName('Identificacao')[0];
+        const emitenteNode = root.getElementsByTagName('Emitente')[0];
+        const destinatarioNode = root.getElementsByTagName('Destinatario')[0];
+        const entregaNode = root.getElementsByTagName('Entrega')[0];
+        const itensNode = root.getElementsByTagName('Itens')[0];
+        const totaisNode = root.getElementsByTagName('Totais')[0];
+        const pagamentosNode = root.getElementsByTagName('Pagamentos')[0];
+        const qrCodePayloadNode = root.getElementsByTagName('QrCode')[0];
+        const qrCodeImageNode = root.getElementsByTagName('QrCodeImagem')[0];
+
+        const identificacao = identificacaoNode
+          ? {
+              ambiente: getChildText(identificacaoNode, 'Ambiente'),
+              pdvCodigo: getChildText(identificacaoNode, 'PdvCodigo'),
+              pdvNome: getChildText(identificacaoNode, 'PdvNome'),
+              vendaCodigo: getChildText(identificacaoNode, 'VendaCodigo'),
+              serieFiscal: getChildText(identificacaoNode, 'SerieFiscal'),
+              numeroFiscal: getChildText(identificacaoNode, 'NumeroFiscal'),
+              dataRegistro: getChildText(identificacaoNode, 'DataRegistro'),
+              dataEmissao: getChildText(identificacaoNode, 'DataEmissao'),
+              operador: getChildText(identificacaoNode, 'Operador'),
+              accessKey: '',
+              digestValue: '',
+              signatureValue: '',
+              protocolo: '',
+            }
+          : {};
+
+        const emitente = emitenteNode
+          ? {
+              razaoSocial: getChildText(emitenteNode, 'RazaoSocial'),
+              nomeFantasia: getChildText(emitenteNode, 'NomeFantasia'),
+              cnpj: getChildText(emitenteNode, 'CNPJ'),
+              inscricaoEstadual: getChildText(emitenteNode, 'InscricaoEstadual'),
+            }
+          : {};
+
+        const destinatario = destinatarioNode
+          ? {
+              nome: getChildText(destinatarioNode, 'Nome'),
+              documento: getChildText(destinatarioNode, 'Documento'),
+              contato: getChildText(destinatarioNode, 'Contato'),
+              pet: getChildText(destinatarioNode, 'Pet'),
+            }
+          : null;
+
+        const entrega = entregaNode
+          ? {
+              apelido: getChildText(entregaNode, 'Apelido'),
+              endereco: getChildText(entregaNode, 'Endereco'),
+              cep: getChildText(entregaNode, 'CEP'),
+              logradouro: getChildText(entregaNode, 'Logradouro'),
+              numero: getChildText(entregaNode, 'Numero'),
+              complemento: getChildText(entregaNode, 'Complemento'),
+              bairro: getChildText(entregaNode, 'Bairro'),
+              municipio: getChildText(entregaNode, 'Municipio'),
+              uf: getChildText(entregaNode, 'UF'),
+            }
+          : null;
+
+        const itens = itensNode
+          ? Array.from(itensNode.getElementsByTagName('Item')).map((node, index) => ({
+              numero: getChildText(node, 'Numero') || String(index + 1),
+              descricao: getChildText(node, 'Descricao'),
+              codigos: getChildText(node, 'Codigos'),
+              quantidade: getChildText(node, 'Quantidade'),
+              unitario: getChildText(node, 'ValorUnitario'),
+              total: getChildText(node, 'ValorTotal'),
+            }))
+          : [];
+
+        const descontoNode = totaisNode?.getElementsByTagName('Desconto')[0] || null;
+        const acrescimoNode = totaisNode?.getElementsByTagName('Acrescimo')[0] || null;
+        const trocoNode = totaisNode?.getElementsByTagName('Troco')[0] || null;
+
+        const totais = totaisNode
+          ? {
+              bruto: getChildText(totaisNode, 'Bruto'),
+              desconto: descontoNode && descontoNode.textContent ? descontoNode.textContent.trim() : '',
+              descontoValor: descontoNode?.getAttribute('valor') || '',
+              acrescimo: acrescimoNode && acrescimoNode.textContent ? acrescimoNode.textContent.trim() : '',
+              acrescimoValor: acrescimoNode?.getAttribute('valor') || '',
+              liquido: getChildText(totaisNode, 'Liquido'),
+              pago: getChildText(totaisNode, 'Pago'),
+              troco: trocoNode && trocoNode.textContent ? trocoNode.textContent.trim() : '',
+              trocoValor: trocoNode?.getAttribute('valor') || '',
+            }
+          : {};
+
+        const pagamentos = pagamentosNode
+          ? {
+              total: getChildText(pagamentosNode, 'Total'),
+              items: Array.from(pagamentosNode.getElementsByTagName('Pagamento')).map((node) => ({
+                descricao: getChildText(node, 'Descricao'),
+                valor: getChildText(node, 'Valor'),
+              })),
+            }
+          : { total: '', items: [] };
+
+        const qrCode = {
+          payload: qrCodePayloadNode && qrCodePayloadNode.textContent ? qrCodePayloadNode.textContent.trim() : '',
+          image: qrCodeImageNode && qrCodeImageNode.textContent ? qrCodeImageNode.textContent.trim() : '',
+        };
+
+        return { identificacao, emitente, destinatario, entrega, itens, totais, pagamentos, qrCode };
+      };
+
+      const parseOfficialLayout = () => {
+        const infNFe = root.getElementsByTagName('infNFe')[0];
+        if (!infNFe) {
+          return null;
+        }
+        const ide = infNFe.getElementsByTagName('ide')[0];
+        const emit = infNFe.getElementsByTagName('emit')[0];
+        const dest = infNFe.getElementsByTagName('dest')[0];
+        const entregaNode = infNFe.getElementsByTagName('entrega')[0];
+        const totalNode = infNFe.getElementsByTagName('total')[0];
+        const icmsTotNode = totalNode?.getElementsByTagName('ICMSTot')[0] || null;
+        const pagNode = infNFe.getElementsByTagName('pag')[0];
+        const infAdic = infNFe.getElementsByTagName('infAdic')[0];
+        const suplNode = root.getElementsByTagName('infNFeSupl')[0];
+        const signatureNode = root.getElementsByTagName('Signature')[0];
+
+        const obsMap = (() => {
+          const map = {};
+          if (!infAdic) return map;
+          const obsNodes = Array.from(infAdic.getElementsByTagName('obsCont'));
+          obsNodes.forEach((node) => {
+            const campo = node.getAttribute('xCampo');
+            const valueNode = node.getElementsByTagName('xTexto')[0];
+            const value = valueNode && valueNode.textContent ? valueNode.textContent.trim() : '';
+            if (campo && value) {
+              map[campo] = value;
+            }
+          });
+          return map;
+        })();
+
+        const ambienteCodigo = getChildText(ide, 'tpAmb');
+        const ambiente = ambienteCodigo === '1' ? 'producao' : ambienteCodigo === '2' ? 'homologacao' : ambienteCodigo;
+        const accessKeyRaw = infNFe.getAttribute('Id') || '';
+        const accessKey = accessKeyRaw.replace(/^NFe/i, '');
+        const dhEmi = getChildText(ide, 'dhEmi');
+
+        const identificacao = {
+          ambiente,
+          pdvCodigo: obsMap.PDVCodigo || '',
+          pdvNome: obsMap.PDVNome || '',
+          vendaCodigo: obsMap.VendaCodigo || getChildText(ide, 'cNF'),
+          serieFiscal: getChildText(ide, 'serie'),
+          numeroFiscal: getChildText(ide, 'nNF'),
+          dataEmissao: dhEmi,
+          dataRegistro: obsMap.RegistradoEm || '',
+          operador: obsMap.Operador || '',
+          accessKey,
+          digestValue: '',
+          signatureValue: '',
+          protocolo: obsMap.Protocolo || '',
+        };
+
+        if (signatureNode) {
+          const digestNode = signatureNode.getElementsByTagName('DigestValue')[0];
+          const signatureValueNode = signatureNode.getElementsByTagName('SignatureValue')[0];
+          if (digestNode && digestNode.textContent) {
+            identificacao.digestValue = digestNode.textContent.trim();
+          }
+          if (signatureValueNode && signatureValueNode.textContent) {
+            identificacao.signatureValue = signatureValueNode.textContent.trim();
+          }
+        }
+
+        const emitente = emit
+          ? {
+              razaoSocial: getChildText(emit, 'xNome'),
+              nomeFantasia: getChildText(emit, 'xFant'),
+              cnpj: getChildText(emit, 'CNPJ'),
+              inscricaoEstadual: getChildText(emit, 'IE'),
+            }
+          : {};
+
+        const destinatario = dest
+          ? {
+              nome: getChildText(dest, 'xNome'),
+              documento: getChildText(dest, 'CNPJ') || getChildText(dest, 'CPF'),
+              contato: getChildText(dest, 'email') || getChildText(dest, 'fone'),
+              pet: '',
+            }
+          : null;
+
+        const enderecoEntrega = entregaNode || dest?.getElementsByTagName('enderDest')[0] || null;
+        const entrega = enderecoEntrega
+          ? {
+              apelido: '',
+              endereco: `${getChildText(enderecoEntrega, 'xLgr')} ${getChildText(enderecoEntrega, 'nro')}`.trim(),
+              cep: getChildText(enderecoEntrega, 'CEP'),
+              logradouro: getChildText(enderecoEntrega, 'xLgr'),
+              numero: getChildText(enderecoEntrega, 'nro'),
+              complemento: getChildText(enderecoEntrega, 'xCpl'),
+              bairro: getChildText(enderecoEntrega, 'xBairro'),
+              municipio: getChildText(enderecoEntrega, 'xMun'),
+              uf: getChildText(enderecoEntrega, 'UF'),
+            }
+          : null;
+
+        const detNodes = Array.from(infNFe.getElementsByTagName('det'));
+        const itens = detNodes.map((node, index) => {
+          const prod = node.getElementsByTagName('prod')[0];
+          const numero = node.getAttribute('nItem') || String(index + 1);
+          const descricao = prod ? getChildText(prod, 'xProd') : '';
+          const quantidade = prod ? getChildText(prod, 'qCom') : '';
+          const unitario = prod ? getChildText(prod, 'vUnCom') : '';
+          const total = prod ? getChildText(prod, 'vProd') : '';
+          const codigos = prod ? getChildText(prod, 'cEAN') || getChildText(prod, 'cProd') : '';
+          return {
+            numero,
+            descricao,
+            codigos,
+            quantidade,
+            unitario,
+            total,
+          };
+        });
+
+        const bruto = safeNumber(getChildText(icmsTotNode, 'vProd'));
+        const desconto = safeNumber(getChildText(icmsTotNode, 'vDesc'));
+        const acrescimo = safeNumber(getChildText(icmsTotNode, 'vOutro'));
+        const liquido = safeNumber(getChildText(icmsTotNode, 'vNF'));
+        const pagoValores = [];
+        const pagamentosItems = Array.from(pagNode ? pagNode.getElementsByTagName('detPag') : []).map((detPag) => {
+          const code = getChildText(detPag, 'tPag');
+          const valor = safeNumber(getChildText(detPag, 'vPag'));
+          pagoValores.push(valor);
+          const labels = {
+            '01': 'Dinheiro',
+            '02': 'Cheque',
+            '03': 'Cartão de Crédito',
+            '04': 'Cartão de Débito',
+            '05': 'Crédito Loja',
+            '10': 'Vale Alimentação',
+            '11': 'Vale Refeição',
+            '12': 'Vale Presente',
+            '13': 'Vale Combustível',
+            '14': 'Duplicata Mercantil',
+            '15': 'Boleto Bancário',
+            '16': 'Depósito Bancário',
+            '17': 'PIX',
+            '18': 'Transferência Bancária',
+            '19': 'Programa de Fidelidade',
+            '90': 'Sem pagamento',
+            '99': 'Outros',
+          };
+          const descricao = labels[code] || (code ? `Código ${code}` : 'Pagamento');
+          return {
+            descricao,
+            valor: formatCurrency(valor),
+          };
+        });
+        const totalPago = pagoValores.reduce((sum, value) => sum + value, 0);
+        const troco = safeNumber(getChildText(pagNode, 'vTroco'));
+
+        const totais = {
+          bruto: formatCurrency(bruto),
+          desconto: formatCurrency(desconto),
+          descontoValor: desconto.toFixed(2),
+          acrescimo: formatCurrency(acrescimo),
+          acrescimoValor: acrescimo.toFixed(2),
+          liquido: formatCurrency(liquido),
+          pago: formatCurrency(totalPago),
+          troco: formatCurrency(troco),
+          trocoValor: troco.toFixed(2),
+        };
+
+        const pagamentos = {
+          total: formatCurrency(totalPago),
+          items: pagamentosItems,
+        };
+
+        const qrCodeNode = suplNode?.getElementsByTagName('qrCode')[0] || null;
+        const qrCode = {
+          payload: qrCodeNode && qrCodeNode.textContent ? qrCodeNode.textContent.trim() : '',
+          image: '',
+        };
+
+        return { identificacao, emitente, destinatario, entrega, itens, totais, pagamentos, qrCode };
+      };
+
+      if (rootName === 'nfe') {
+        const parsed = parseOfficialLayout();
+        if (parsed) {
+          return parsed;
+        }
+      }
+
+      if (rootName === 'nfce') {
+        return parseLegacyLayout();
+      }
+
+      console.warn('Documento fiscal não reconhecido para impressão.');
+      return null;
+    } catch (error) {
+      console.error('Erro ao interpretar XML fiscal para impressão:', error);
+      return null;
+    }
+  };
+
+  const buildNfceReceiptMarkup = (data) => {
+    if (!data) {
+      return '<main class="receipt"><p class="receipt-empty">Documento fiscal indisponível para impressão.</p></main>';
+    }
+
+    const { identificacao = {}, emitente = {}, destinatario, entrega, itens = [], totais = {}, pagamentos = {}, qrCode = {} } =
+      data;
+    const ambienteLabel = formatEnvironmentLabel(identificacao.ambiente);
+    const numeroFiscalLabel = [
+      identificacao.serieFiscal ? `Série ${identificacao.serieFiscal}` : '',
+      identificacao.numeroFiscal ? `Nº ${identificacao.numeroFiscal}` : '',
+    ]
+      .filter(Boolean)
+      .join(' • ');
+
+    const metaLines = [
+      emitente.nomeFantasia || emitente.razaoSocial || '',
+      emitente.cnpj ? `CNPJ: ${emitente.cnpj}` : '',
+      emitente.inscricaoEstadual ? `IE: ${emitente.inscricaoEstadual}` : '',
+      identificacao.pdvNome ? `PDV: ${identificacao.pdvNome}` : '',
+      identificacao.pdvCodigo ? `Código PDV: ${identificacao.pdvCodigo}` : '',
+    ]
+      .filter(Boolean)
+      .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
+      .join('');
+
+    const identificacaoRows = [
+      identificacao.vendaCodigo ? { label: 'Venda', value: identificacao.vendaCodigo } : null,
+      numeroFiscalLabel ? { label: 'Documento', value: numeroFiscalLabel } : null,
+      identificacao.accessKey
+        ? {
+            label: 'Chave de acesso',
+            value: identificacao.accessKey.replace(/(\d{4})(?=\d)/g, '$1 ').trim(),
+          }
+        : null,
+      identificacao.protocolo ? { label: 'Protocolo', value: identificacao.protocolo } : null,
+      identificacao.operador ? { label: 'Operador', value: identificacao.operador } : null,
+      identificacao.dataEmissao
+        ? { label: 'Data de emissão', value: formatXmlDateTime(identificacao.dataEmissao) }
+        : null,
+      identificacao.dataRegistro
+        ? { label: 'Registrado em', value: formatXmlDateTime(identificacao.dataRegistro) }
+        : null,
+      identificacao.digestValue ? { label: 'Digest value', value: identificacao.digestValue } : null,
+    ]
+      .filter(Boolean)
+      .map(
+        (row) => `
+          <li class="nfce__list-item">
+            <span class="nfce__list-item-label">${escapeHtml(row.label)}</span>
+            <span class="nfce__list-item-value">${escapeHtml(row.value)}</span>
+          </li>`
+      )
+      .join('');
+
+    const emitenteRows = [
+      emitente.razaoSocial ? { label: 'Razão social', value: emitente.razaoSocial } : null,
+      emitente.nomeFantasia ? { label: 'Nome fantasia', value: emitente.nomeFantasia } : null,
+      emitente.cnpj ? { label: 'CNPJ', value: emitente.cnpj } : null,
+      emitente.inscricaoEstadual ? { label: 'Inscrição estadual', value: emitente.inscricaoEstadual } : null,
+    ]
+      .filter(Boolean)
+      .map(
+        (row) => `
+          <li class="nfce__list-item">
+            <span class="nfce__list-item-label">${escapeHtml(row.label)}</span>
+            <span class="nfce__list-item-value">${escapeHtml(row.value)}</span>
+          </li>`
+      )
+      .join('');
+
+    const destinatarioSection = destinatario && (destinatario.nome || destinatario.documento || destinatario.contato || destinatario.pet)
+      ? `
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Destinatário</h2>
+          <ul class="nfce__list">
+            ${
+              destinatario.nome
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Nome</span><span class="nfce__list-item-value">${escapeHtml(
+                    destinatario.nome
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              destinatario.documento
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Documento</span><span class="nfce__list-item-value">${escapeHtml(
+                    destinatario.documento
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              destinatario.contato
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Contato</span><span class="nfce__list-item-value">${escapeHtml(
+                    destinatario.contato
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              destinatario.pet
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Pet</span><span class="nfce__list-item-value">${escapeHtml(
+                    destinatario.pet
+                  )}</span></li>`
+                : ''
+            }
+          </ul>
+        </section>`
+      : '';
+
+    const entregaSection = entrega && (entrega.endereco || entrega.apelido || entrega.municipio)
+      ? `
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Entrega</h2>
+          <ul class="nfce__list">
+            ${
+              entrega.apelido
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Destino</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.apelido
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.endereco
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Endereço</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.endereco
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.numero
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Número</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.numero
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.complemento
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Complemento</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.complemento
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.bairro
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Bairro</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.bairro
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.municipio || entrega.uf
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Município</span><span class="nfce__list-item-value">${escapeHtml(
+                    [entrega.municipio, entrega.uf].filter(Boolean).join(' / ')
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.cep
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">CEP</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.cep
+                  )}</span></li>`
+                : ''
+            }
+          </ul>
+        </section>`
+      : '';
+
+    const itensRows = itens.length
+      ? itens
+          .map(
+            (item) => `
+              <tr>
+                <td>${escapeHtml(item.numero)}</td>
+                <td>
+                  <strong>${escapeHtml(item.descricao || 'Item')}</strong>
+                  ${item.codigos ? `<span class="receipt-table__muted">${escapeHtml(item.codigos)}</span>` : ''}
+                </td>
+                <td>${escapeHtml(item.quantidade || '1')} × ${escapeHtml(item.unitario || '')}</td>
+                <td>${escapeHtml(item.total || '')}</td>
+              </tr>`
+          )
+          .join('')
+      : '<tr><td colspan="4" class="receipt-list__empty">Nenhum item encontrado.</td></tr>';
+
+    const totalsRows = [
+      totais.bruto ? { label: 'Subtotal', value: totais.bruto } : null,
+      totais.desconto
+        ? { label: 'Desconto', value: totais.desconto.trim().startsWith('-') ? totais.desconto : `- ${totais.desconto}` }
+        : null,
+      totais.acrescimo
+        ? { label: 'Acréscimos', value: totais.acrescimo.trim().startsWith('+') ? totais.acrescimo : totais.acrescimo }
+        : null,
+      totais.liquido ? { label: 'Total', value: totais.liquido, isTotal: true } : null,
+      totais.pago ? { label: 'Pago', value: totais.pago } : null,
+      totais.troco
+        ? { label: 'Troco', value: totais.troco.trim().startsWith('-') ? totais.troco : totais.troco }
+        : null,
+    ]
+      .filter(Boolean)
+      .map(
+        (row) => `
+          <li class="receipt-row${row.isTotal ? ' receipt-row--total' : ''}">
+            <span class="receipt-row__label">${escapeHtml(row.label)}</span>
+            <span class="receipt-row__value">${escapeHtml(row.value)}</span>
+          </li>`
+      )
+      .join('');
+
+    const pagamentosRows = pagamentos.items.length
+      ? pagamentos.items
+          .map(
+            (payment) => `
+              <li class="receipt-row">
+                <span class="receipt-row__label">${escapeHtml(payment.descricao || 'Pagamento')}</span>
+                <span class="receipt-row__value">${escapeHtml(payment.valor || '')}</span>
+              </li>`
+          )
+          .join('')
+      : '<li class="receipt-list__empty">Nenhum pagamento informado.</li>';
+
+    const qrImage = qrCode.image || '';
+    const qrPayload = qrCode.payload || '';
+    const qrSection = qrImage || qrPayload
+      ? `
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Consulta da NFC-e</h2>
+          <div class="nfce__qr">
+            ${
+              qrImage
+                ? `<img src="${escapeHtml(qrImage)}" alt="QR Code da NFC-e" />`
+                : ''
+            }
+            <div class="nfce__qr-text">
+              <strong>Escaneie para consultar</strong>
+              ${qrPayload ? `<p>${escapeHtml(qrPayload)}</p>` : '<p>QR Code indisponível.</p>'}
+            </div>
+          </div>
+        </section>`
+      : '';
+
+    const ambienteBadge = ambienteLabel ? `<p class="nfce__env">${escapeHtml(ambienteLabel)}</p>` : '';
+    const documentoBadge = numeroFiscalLabel ? `<p class="nfce__identifier">${escapeHtml(numeroFiscalLabel)}</p>` : '';
+
+    const footerLine = emitente.nomeFantasia || emitente.razaoSocial || 'Obrigado pela preferência!';
+    const consultaHint = ambienteLabel ? `${ambienteLabel}.` : 'Documento emitido eletronicamente.';
+
+    return `
+      <main class="receipt receipt--nfce">
+        <header class="receipt__header">
+          <h1 class="receipt__title">Nota Fiscal de Consumidor Eletrônica</h1>
+          <span class="receipt__badge">NFC-e</span>
+          ${ambienteBadge}
+          ${documentoBadge}
+        </header>
+        <section class="receipt__meta nfce__meta">${metaLines}</section>
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Identificação</h2>
+          <ul class="nfce__list">${identificacaoRows}</ul>
+        </section>
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Emitente</h2>
+          <ul class="nfce__list">${emitenteRows}</ul>
+        </section>
+        ${destinatarioSection}
+        ${entregaSection}
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Itens</h2>
+          <table class="receipt-table nfce__items">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Descrição</th>
+                <th>Qtde × Valor</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>${itensRows}</tbody>
+          </table>
+        </section>
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Totais</h2>
+          <ul class="receipt-list">${totalsRows}</ul>
+        </section>
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Pagamentos</h2>
+          <ul class="receipt-list">${pagamentosRows}</ul>
+        </section>
+        ${qrSection}
+        <footer class="receipt__footer nfce__footer">
+          <p class="receipt__footer-strong">${escapeHtml(footerLine)}</p>
+          <p>${escapeHtml(consultaHint)}</p>
+        </footer>
       </main>`;
   };
 
@@ -4326,7 +5278,11 @@
     }
   };
 
-  const printReceipt = (type, variant, { snapshot, fallbackText } = {}) => {
+  const printReceipt = (
+    type,
+    variant,
+    { snapshot, fallbackText, xmlContent, qrCodeDataUrl, qrCodePayload } = {}
+  ) => {
     const resolvedVariant = variant || 'matricial';
     let bodyHtml = '';
     let title = '';
@@ -4345,8 +5301,28 @@
         notify('Nenhum dado disponível para imprimir a venda.', 'warning');
         return false;
       }
-      bodyHtml = buildSaleReceiptMarkup(effectiveSnapshot, resolvedVariant);
-      title = 'Comprovante de venda';
+      let markup = '';
+      if (resolvedVariant === 'fiscal') {
+        const xmlSource =
+          xmlContent || (effectiveSnapshot && typeof effectiveSnapshot === 'object'
+            ? effectiveSnapshot.fiscalXmlContent || effectiveSnapshot.xml || ''
+            : '');
+        const fiscalData = parseFiscalXmlDocument(xmlSource);
+        if (fiscalData) {
+          if (!fiscalData.qrCode?.image && qrCodeDataUrl) {
+            fiscalData.qrCode = { ...fiscalData.qrCode, image: qrCodeDataUrl };
+          }
+          if (!fiscalData.qrCode?.payload && qrCodePayload) {
+            fiscalData.qrCode = { ...fiscalData.qrCode, payload: qrCodePayload };
+          }
+          markup = buildNfceReceiptMarkup(fiscalData);
+        }
+      }
+      if (!markup) {
+        markup = buildSaleReceiptMarkup(effectiveSnapshot, resolvedVariant);
+      }
+      bodyHtml = markup;
+      title = resolvedVariant === 'fiscal' ? 'Cupom fiscal NFC-e' : 'Comprovante de venda';
     } else {
       return false;
     }
@@ -4488,6 +5464,17 @@
         totalLabel: formatCurrency(subtotalValue),
       };
     });
+    const fiscalItemsSnapshot = saleItems.map((item) => ({
+      productId: item?.id || item?.productSnapshot?._id || null,
+      quantity: safeNumber(item?.quantidade ?? item?.qtd ?? 0),
+      unitPrice: safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? 0),
+      totalPrice: safeNumber(item?.subtotal ?? item?.total ?? 0),
+      name: item?.nome || item?.descricao || item?.produto || '',
+      barcode: item?.codigoBarras || item?.codigo || '',
+      internalCode: item?.codigoInterno || '',
+      unit: item?.unidade || item?.productSnapshot?.unidade || 'UN',
+      productSnapshot: item?.productSnapshot ? { ...item.productSnapshot } : null,
+    }));
     return {
       id: createUid(),
       type: normalizedType,
@@ -4506,6 +5493,21 @@
       receiptSnapshot: snapshot,
       fiscalStatus: 'pending',
       fiscalEmittedAt: null,
+      fiscalEmittedAtLabel: '',
+      fiscalDriveFileId: '',
+      fiscalXmlUrl: '',
+      fiscalXmlName: '',
+      fiscalXmlContent: '',
+      fiscalQrCodeData: '',
+      fiscalQrCodeImage: '',
+      fiscalEnvironment: '',
+      fiscalSerie: '',
+      fiscalNumber: null,
+      fiscalAccessKey: '',
+      fiscalDigestValue: '',
+      fiscalSignature: '',
+      fiscalProtocol: '',
+      fiscalItemsSnapshot,
       expanded: false,
       status: 'completed',
       cancellationReason: '',
@@ -4578,10 +5580,27 @@
             <span>Imprimir</span>
           </button>`;
       let fiscalControl = '';
-      if (isCancelled) {
+      if (isCancelled || !sale.receiptSnapshot) {
         fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-500"><i class="fas fa-ban text-[11px]"></i><span>Fiscal indisponível</span></span>`;
+      } else if (sale.fiscalStatus === 'emitting') {
+        fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"><i class="fas fa-circle-notch fa-spin text-[11px]"></i><span>Emitindo...</span></span>`;
       } else if (sale.fiscalStatus === 'emitted') {
-        fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"><i class="fas fa-file-circle-check text-[11px]"></i><span>XML Emitida</span></span>`;
+        const fiscalTooltip = [sale.fiscalEmittedAtLabel, sale.fiscalXmlName]
+          .filter(Boolean)
+          .join(' • ');
+        const baseClass =
+          'inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700';
+        if (sale.fiscalXmlUrl) {
+          fiscalControl = `<a class="${baseClass}" href="${escapeHtml(
+            sale.fiscalXmlUrl
+          )}" target="_blank" rel="noopener" ${
+            fiscalTooltip ? `title="${escapeHtml(fiscalTooltip)}"` : ''
+          }><i class="fas fa-file-circle-check text-[11px]"></i><span>XML emitida</span></a>`;
+        } else {
+          fiscalControl = `<span class="${baseClass}" ${
+            fiscalTooltip ? `title="${escapeHtml(fiscalTooltip)}"` : ''
+          }><i class="fas fa-file-circle-check text-[11px]"></i><span>XML emitida</span></span>`;
+        }
       } else {
         fiscalControl = `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary" data-sale-fiscal data-sale-id="${escapeHtml(
           saleId
@@ -4662,6 +5681,7 @@
     if (!record) return null;
     state.completedSales.unshift(record);
     renderSalesList();
+    scheduleStatePersist();
     return record;
   };
 
@@ -4679,6 +5699,23 @@
       status,
       cancellationReason,
       cancellationAt,
+      fiscalStatus,
+      fiscalEmittedAt,
+      fiscalDriveFileId,
+      fiscalXmlUrl,
+      fiscalXmlName,
+      fiscalEnvironment,
+      fiscalEmittedAtLabel,
+      fiscalSerie,
+      fiscalNumber,
+      fiscalXmlContent,
+      fiscalQrCodeData,
+      fiscalQrCodeImage,
+      fiscalAccessKey,
+      fiscalDigestValue,
+      fiscalSignature,
+      fiscalProtocol,
+      fiscalItemsSnapshot,
     } = updates;
     if (saleCode !== undefined) {
       sale.saleCode = saleCode || '';
@@ -4686,6 +5723,62 @@
     }
     if (snapshot !== undefined) {
       sale.receiptSnapshot = snapshot || null;
+    }
+    if (fiscalStatus !== undefined) {
+      sale.fiscalStatus = fiscalStatus || 'pending';
+    }
+    if (fiscalEmittedAt !== undefined) {
+      sale.fiscalEmittedAt = fiscalEmittedAt ? new Date(fiscalEmittedAt).toISOString() : null;
+      sale.fiscalEmittedAtLabel = sale.fiscalEmittedAt
+        ? toDateLabel(sale.fiscalEmittedAt)
+        : '';
+    }
+    if (fiscalEmittedAtLabel !== undefined) {
+      sale.fiscalEmittedAtLabel = fiscalEmittedAtLabel || sale.fiscalEmittedAtLabel || '';
+    }
+    if (fiscalDriveFileId !== undefined) {
+      sale.fiscalDriveFileId = fiscalDriveFileId || '';
+    }
+    if (fiscalXmlUrl !== undefined) {
+      sale.fiscalXmlUrl = fiscalXmlUrl || '';
+    }
+    if (fiscalXmlName !== undefined) {
+      sale.fiscalXmlName = fiscalXmlName || '';
+    }
+    if (fiscalXmlContent !== undefined) {
+      sale.fiscalXmlContent = fiscalXmlContent || '';
+    }
+    if (fiscalQrCodeData !== undefined) {
+      sale.fiscalQrCodeData = fiscalQrCodeData || '';
+    }
+    if (fiscalQrCodeImage !== undefined) {
+      sale.fiscalQrCodeImage = fiscalQrCodeImage || '';
+    }
+    if (fiscalAccessKey !== undefined) {
+      sale.fiscalAccessKey = fiscalAccessKey || '';
+    }
+    if (fiscalDigestValue !== undefined) {
+      sale.fiscalDigestValue = fiscalDigestValue || '';
+    }
+    if (fiscalSignature !== undefined) {
+      sale.fiscalSignature = fiscalSignature || '';
+    }
+    if (fiscalProtocol !== undefined) {
+      sale.fiscalProtocol = fiscalProtocol || '';
+    }
+    if (fiscalEnvironment !== undefined) {
+      sale.fiscalEnvironment = fiscalEnvironment || '';
+    }
+    if (fiscalSerie !== undefined) {
+      sale.fiscalSerie = fiscalSerie || '';
+    }
+    if (fiscalNumber !== undefined) {
+      if (fiscalNumber === null) {
+        sale.fiscalNumber = null;
+      } else {
+        const numeric = Number(fiscalNumber);
+        sale.fiscalNumber = Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : null;
+      }
     }
     const resolvedPayments = Array.isArray(payments) ? payments : null;
     if (resolvedPayments) {
@@ -4721,6 +5814,11 @@
           totalLabel: formatCurrency(subtotalValue),
         };
       });
+    }
+    if (Array.isArray(fiscalItemsSnapshot)) {
+      sale.fiscalItemsSnapshot = fiscalItemsSnapshot.map((entry) =>
+        entry && typeof entry === 'object' ? { ...entry } : entry
+      );
     }
     const discountSource =
       discount !== undefined
@@ -4763,6 +5861,7 @@
       sale.cancellationAtLabel = cancellationAt ? toDateLabel(cancellationAt) : '';
     }
     renderSalesList();
+    scheduleStatePersist();
     return sale;
   };
 
@@ -4787,20 +5886,101 @@
       notify('Não foi possível localizar o comprovante desta venda para impressão.', 'warning');
       return;
     }
-    handleConfiguredPrint('venda', { snapshot: sale.receiptSnapshot });
+    if (sale.fiscalStatus === 'emitted') {
+      printReceipt('venda', 'fiscal', {
+        snapshot: sale.receiptSnapshot,
+        xmlContent: sale.fiscalXmlContent,
+        qrCodeDataUrl: sale.fiscalQrCodeImage,
+        qrCodePayload: sale.fiscalQrCodeData,
+      });
+      return;
+    }
+    handleConfiguredPrint('venda', {
+      snapshot: sale.receiptSnapshot,
+      xmlContent: sale.fiscalXmlContent,
+      qrCodeDataUrl: sale.fiscalQrCodeImage,
+      qrCodePayload: sale.fiscalQrCodeData,
+    });
   };
 
-  const handleSaleEmitFiscal = (saleId) => {
+  const handleSaleEmitFiscal = async (saleId) => {
     const sale = findCompletedSaleById(saleId);
-    if (!sale || sale.fiscalStatus === 'emitted') return;
+    if (!sale || sale.fiscalStatus === 'emitted' || sale.fiscalStatus === 'emitting') {
+      return;
+    }
     if (sale.status === 'cancelled') {
       notify('Não é possível emitir fiscal para uma venda cancelada.', 'info');
       return;
     }
-    sale.fiscalStatus = 'emitted';
-    sale.fiscalEmittedAt = new Date().toISOString();
+    if (!sale.receiptSnapshot) {
+      notify('Não há dados suficientes para gerar o XML fiscal desta venda.', 'warning');
+      return;
+    }
+    if (!state.selectedPdv) {
+      notify('Selecione um PDV para emitir a nota fiscal.', 'warning');
+      return;
+    }
+    sale.fiscalStatus = 'emitting';
     renderSalesList();
-    notify('XML da venda emitida com sucesso.', 'success');
+    try {
+      const token = getToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      const response = await fetch(
+        `${API_BASE}/pdvs/${encodeURIComponent(state.selectedPdv)}/sales/${encodeURIComponent(
+          saleId
+        )}/fiscal`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            snapshot: sale.receiptSnapshot || null,
+            saleCode: sale.saleCode || '',
+          }),
+        }
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = data?.message || 'Não foi possível emitir a nota fiscal.';
+        throw new Error(message);
+      }
+      updateCompletedSaleRecord(saleId, {
+        fiscalStatus: data?.fiscalStatus || 'emitted',
+        fiscalEmittedAt: data?.fiscalEmittedAt || new Date().toISOString(),
+        fiscalEmittedAtLabel: data?.fiscalEmittedAtLabel || '',
+        fiscalDriveFileId: data?.fiscalDriveFileId || '',
+        fiscalXmlUrl: data?.fiscalXmlUrl || '',
+        fiscalXmlName: data?.fiscalXmlName || '',
+        fiscalXmlContent: data?.fiscalXmlContent || sale.fiscalXmlContent || '',
+        fiscalQrCodeData: data?.fiscalQrCodeData || sale.fiscalQrCodeData || '',
+        fiscalQrCodeImage: data?.fiscalQrCodeImage || sale.fiscalQrCodeImage || '',
+        fiscalEnvironment: data?.fiscalEnvironment || '',
+        fiscalSerie: data?.fiscalSerie || '',
+        fiscalNumber:
+          data?.fiscalNumber !== undefined && data?.fiscalNumber !== null
+            ? (() => {
+                const numeric = Number(data.fiscalNumber);
+                return Number.isFinite(numeric) ? numeric : sale.fiscalNumber ?? null;
+              })()
+            : sale.fiscalNumber ?? null,
+        fiscalAccessKey: data?.fiscalAccessKey || sale.fiscalAccessKey || '',
+        fiscalDigestValue: data?.fiscalDigestValue || sale.fiscalDigestValue || '',
+        fiscalSignature: data?.fiscalSignature || sale.fiscalSignature || '',
+        fiscalProtocol: data?.fiscalProtocol || sale.fiscalProtocol || '',
+        fiscalItemsSnapshot: Array.isArray(data?.fiscalItemsSnapshot)
+          ? data.fiscalItemsSnapshot
+          : sale.fiscalItemsSnapshot,
+      });
+      notify('Nota fiscal emitida e salva no Drive.', 'success');
+      scheduleStatePersist({ immediate: true });
+    } catch (error) {
+      console.error('Erro ao emitir fiscal', error);
+      sale.fiscalStatus = 'pending';
+      renderSalesList();
+      notify(error?.message || 'Não foi possível emitir a nota fiscal.', 'error');
+    }
   };
 
   const isModalActive = (modal) => Boolean(modal && !modal.classList.contains('hidden'));
@@ -4883,6 +6063,7 @@
     renderSalesList();
     closeSaleCancelModal();
     notify('Venda cancelada com sucesso.', 'success');
+    scheduleStatePersist({ immediate: true });
   };
 
   const handleSaleCancelModalKeydown = (event) => {
@@ -5059,6 +6240,7 @@
     state.history.unshift(entry);
     renderHistory();
     setLastMovement(entry);
+    scheduleStatePersist();
   };
 
   const resetPagamentos = () => {
@@ -5194,6 +6376,7 @@
     renderCustomerPets();
     setActiveTab('caixa-tab');
     updateSaleCodeDisplay();
+    lastPersistSignature = '';
   };
 
   const updateSelectionHint = (message) => {
@@ -5341,9 +6524,17 @@
         pdv?.status === 'aberto'
     );
     state.caixaAberto = caixaAberto;
+    const summarySource = pdv?.summary || pdv?.caixa?.resumo || {};
     state.summary.abertura = safeNumber(
-      pdv?.caixa?.abertura || pdv?.caixa?.valorAbertura || pdv?.valorAbertura || 0
+      summarySource.abertura ||
+        summarySource.valorAbertura ||
+        pdv?.caixa?.abertura ||
+        pdv?.caixa?.valorAbertura ||
+        pdv?.valorAbertura ||
+        0
     );
+    state.summary.recebido = safeNumber(summarySource.recebido ?? state.summary.recebido ?? 0);
+    state.summary.saldo = safeNumber(summarySource.saldo ?? state.summary.saldo ?? 0);
     const aberturaData =
       pdv?.caixa?.dataAbertura ||
       pdv?.caixa?.aberturaData ||
@@ -5362,6 +6553,20 @@
       pdv?.caixa?.closedAt ||
       pdv?.dataFechamento ||
       pdv?.fechamento;
+    const previstoPagamentosData = Array.isArray(pdv?.caixa?.previstoPagamentos)
+      ? pdv.caixa.previstoPagamentos
+      : Array.isArray(pdv?.caixa?.pagamentosPrevistos)
+      ? pdv.caixa.pagamentosPrevistos
+      : Array.isArray(pdv?.previstoPagamentos)
+      ? pdv.previstoPagamentos
+      : [];
+    const apuradoPagamentosData = Array.isArray(pdv?.caixa?.apuradoPagamentos)
+      ? pdv.caixa.apuradoPagamentos
+      : Array.isArray(pdv?.caixa?.pagamentosApurados)
+      ? pdv.caixa.pagamentosApurados
+      : Array.isArray(pdv?.apuradoPagamentos)
+      ? pdv.apuradoPagamentos
+      : [];
     state.caixaInfo = {
       aberturaData: parseDateValue(aberturaData),
       fechamentoData: parseDateValue(fechamentoData),
@@ -5370,16 +6575,22 @@
           pdv?.caixa?.valorPrevisto ||
           pdv?.caixa?.saldoPrevisto ||
           pdv?.fechamentoPrevisto ||
+          summarySource.fechamentoPrevisto ||
           0
       ),
       fechamentoApurado: safeNumber(
         pdv?.caixa?.fechamentoApurado ||
           pdv?.caixa?.valorApurado ||
           pdv?.fechamentoApurado ||
+          summarySource.fechamentoApurado ||
           0
       ),
-      previstoPagamentos: [],
-      apuradoPagamentos: [],
+      previstoPagamentos: previstoPagamentosData
+        .map((payment) => normalizePaymentSnapshotForPersist(payment))
+        .filter(Boolean),
+      apuradoPagamentos: apuradoPagamentosData
+        .map((payment) => normalizePaymentSnapshotForPersist(payment))
+        .filter(Boolean),
     };
     const impressaoConfig = pdv?.configuracoesImpressao || {};
     const fechamentoMode = normalizePrintMode(
@@ -5399,9 +6610,11 @@
         impressaoConfig.sempreImprimir ||
         impressaoConfig.impressaoVenda
     );
+    const storedPreferences =
+      pdv?.printPreferences && typeof pdv.printPreferences === 'object' ? pdv.printPreferences : null;
     state.printPreferences = {
-      fechamento: fechamentoMode,
-      venda: vendaMode,
+      fechamento: normalizePrintMode(storedPreferences?.fechamento, fechamentoMode),
+      venda: normalizePrintMode(storedPreferences?.venda, vendaMode),
     };
     updatePrintControls();
     const pagamentosData = pdv?.caixa?.pagamentos || pdv?.pagamentos || {};
@@ -5411,21 +6624,30 @@
         index === 0 ? { ...payment, valor: state.summary.abertura } : payment
       );
     }
-    const historico = Array.isArray(pdv?.caixa?.historico) ? pdv.caixa.historico : [];
-    state.history = historico
-      .map((entry) => ({
-        id: entry?.id || entry?._id || 'movimentacao',
-        label: entry?.descricao || entry?.tipo || 'Movimentação',
-        amount: safeNumber(entry?.valor),
-        delta: safeNumber(entry?.delta ?? entry?.valor ?? 0),
-        motivo: entry?.motivo || entry?.observacao || '',
-        paymentLabel: entry?.meioPagamento || entry?.formaPagamento || '',
-        timestamp: entry?.data || entry?.createdAt || entry?.atualizadoEm || new Date().toISOString(),
-      }))
-      .reverse();
+    const historicoFonte = Array.isArray(pdv?.history)
+      ? pdv.history
+      : Array.isArray(pdv?.caixa?.historico)
+      ? pdv.caixa.historico
+      : [];
+    state.history = historicoFonte
+      .map((entry) => normalizeHistoryEntryForPersist(entry))
+      .filter(Boolean);
+    const vendasFonte = Array.isArray(pdv?.completedSales)
+      ? pdv.completedSales
+      : Array.isArray(pdv?.caixa?.vendas)
+      ? pdv.caixa.vendas
+      : [];
+    state.completedSales = vendasFonte
+      .map((sale) => normalizeSaleRecordForPersist(sale))
+      .filter(Boolean)
+      .map((sale) => ({
+        ...sale,
+        paymentTags: Array.isArray(sale.paymentTags) ? sale.paymentTags : [],
+        items: Array.isArray(sale.items) ? sale.items : [],
+      }));
     renderPayments();
     renderHistory();
-    setLastMovement(state.history[state.history.length - 1] || null);
+    setLastMovement(state.history[0] || null);
     renderItemsList();
     renderSalesList();
     clearSelectedProduct();
@@ -5437,6 +6659,7 @@
     updateTabAvailability();
     initializeSaleCodeForPdv(pdv);
     setActiveTab(state.caixaAberto ? 'pdv-tab' : 'caixa-tab');
+    lastPersistSignature = JSON.stringify(buildStatePersistPayload());
   };
 
   const renderSearchResults = (results, term) => {
@@ -5815,6 +7038,7 @@
     input.value = payment.valor.toFixed(2);
     updatePaymentRow(id);
     updateSummary();
+    scheduleStatePersist();
   };
 
   const handleResetPayments = () => {
@@ -5824,6 +7048,7 @@
     }
     resetPagamentos();
     notify('Valores dos meios de pagamento zerados.', 'info');
+    scheduleStatePersist();
   };
 
   const handleClearHistory = () => {
@@ -5831,6 +7056,7 @@
     setLastMovement(null);
     renderHistory();
     notify('Histórico de movimentações limpo.', 'info');
+    scheduleStatePersist();
   };
 
   const handleSearchInput = (event) => {
@@ -6025,6 +7251,7 @@
     updateActionDetails();
     elements.actionAmount && (elements.actionAmount.value = '');
     elements.motivoInput && (elements.motivoInput.value = '');
+    scheduleStatePersist({ immediate: action.id === 'fechamento' });
   };
 
   const handleCompanyChange = async () => {

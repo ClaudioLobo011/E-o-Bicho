@@ -4,8 +4,11 @@ const router = express.Router();
 const Pdv = require('../models/Pdv');
 const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
+const PdvState = require('../models/PdvState');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const { isDriveConfigured, uploadBufferToDrive } = require('../utils/googleDrive');
+const { emitPdvSaleFiscal } = require('../services/nfceEmitter');
 
 const ambientesPermitidos = ['homologacao', 'producao'];
 const ambientesSet = new Set(ambientesPermitidos);
@@ -15,6 +18,20 @@ const perfisDesconto = ['funcionario', 'gerente', 'admin'];
 const perfisDescontoSet = new Set(perfisDesconto);
 const tiposEmissao = ['matricial', 'fiscal', 'ambos'];
 const tiposEmissaoSet = new Set(tiposEmissao);
+
+let qrCodeModulePromise;
+
+const loadQrCodeModule = () => {
+  if (!qrCodeModulePromise) {
+    qrCodeModulePromise = import('qrcode')
+      .then((mod) => mod?.default || mod)
+      .catch((error) => {
+        console.error('Não foi possível carregar a dependência "qrcode".', error);
+        return null;
+      });
+  }
+  return qrCodeModulePromise;
+};
 
 const normalizeString = (value) => {
   if (value === undefined || value === null) return '';
@@ -89,6 +106,32 @@ const createValidationError = (message) => {
   return error;
 };
 
+const parseFiscalNumber = (value, { label, allowZero = false }) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const normalized = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
+
+  if (!Number.isFinite(normalized)) {
+    const message = allowZero
+      ? `Informe um número atual válido para ${label}.`
+      : `Informe um número inicial válido para ${label}.`;
+    throw createValidationError(message);
+  }
+
+  const integer = Math.trunc(normalized);
+  const min = allowZero ? 0 : 1;
+  if (integer < min) {
+    const message = allowZero
+      ? `O número atual de ${label} deve ser maior ou igual a ${min}.`
+      : `O número inicial de ${label} deve ser maior ou igual a ${min}.`;
+    throw createValidationError(message);
+  }
+
+  return integer;
+};
+
 const parseSempreImprimir = (value) => {
   const normalized = normalizeString(value).toLowerCase();
   if (!normalized) return 'perguntar';
@@ -155,11 +198,413 @@ const parseTipoEmissao = (value) => {
   return normalized;
 };
 
+const safeNumber = (value, fallback = 0) => {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const safeDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const escapeXml = (value) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+};
+
+const sanitizeFileName = (value, fallback = 'documento.xml') => {
+  const base = value === undefined || value === null ? '' : String(value);
+  const normalized = base
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9-_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .trim();
+  const trimmed = normalized || fallback;
+  return trimmed.length > 120 ? trimmed.slice(0, 120) : trimmed;
+};
+
+const buildDrivePathSegments = (date) => {
+  const reference = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date();
+  const year = String(reference.getFullYear());
+  const month = String(reference.getMonth() + 1).padStart(2, '0');
+  const day = String(reference.getDate()).padStart(2, '0');
+  return ['Fiscal', 'XMLs', year, month, day];
+};
+
+const formatDateTimeLabel = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const normalizePaymentSnapshotPayload = (snapshot) => {
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  const idSource =
+    snapshot.id ||
+    snapshot._id ||
+    snapshot.code ||
+    snapshot.codigo ||
+    snapshot.label ||
+    snapshot.nome ||
+    snapshot.name;
+  const id = normalizeString(idSource);
+  const labelSource =
+    snapshot.label ||
+    snapshot.nome ||
+    snapshot.name ||
+    snapshot.descricao ||
+    snapshot.description ||
+    id ||
+    'Meio de pagamento';
+  const label = normalizeString(labelSource) || 'Meio de pagamento';
+  const type = normalizeString(snapshot.type || snapshot.tipo).toLowerCase();
+  const aliases = Array.isArray(snapshot.aliases)
+    ? snapshot.aliases.map((alias) => normalizeString(alias)).filter(Boolean)
+    : [];
+  const valor = safeNumber(snapshot.valor ?? snapshot.value ?? snapshot.total ?? 0, 0);
+  const parcelasRaw = snapshot.parcelas ?? snapshot.installments ?? 1;
+  const parcelas = Math.max(1, Number.parseInt(parcelasRaw, 10) || 1);
+  return {
+    id: id || label,
+    label,
+    type: type || 'avista',
+    aliases,
+    valor,
+    parcelas,
+  };
+};
+
+const normalizeHistoryEntryPayload = (entry) => {
+  if (!entry || typeof entry !== 'object') return null;
+  const id = normalizeString(entry.id || entry._id);
+  const label = normalizeString(entry.label || entry.descricao || entry.tipo) || 'Movimentação';
+  const amount = safeNumber(entry.amount ?? entry.valor ?? entry.delta ?? 0, 0);
+  const delta = safeNumber(entry.delta ?? entry.valor ?? amount, 0);
+  const motivo = normalizeString(entry.motivo || entry.observacao);
+  const paymentLabel = normalizeString(entry.paymentLabel || entry.meioPagamento || entry.formaPagamento);
+  const paymentId = normalizeString(entry.paymentId || entry.formaPagamentoId || entry.payment || entry.paymentMethodId);
+  const timestamp = safeDate(entry.timestamp || entry.data || entry.createdAt || entry.atualizadoEm) || new Date();
+  return {
+    id: id || undefined,
+    label,
+    amount,
+    delta,
+    motivo,
+    paymentLabel,
+    paymentId,
+    timestamp,
+  };
+};
+
+const normalizeSaleRecordPayload = (record) => {
+  if (!record || typeof record !== 'object') return null;
+  const id = normalizeString(record.id || record._id) || `sale-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  const type = normalizeString(record.type) || 'venda';
+  const typeLabel = normalizeString(record.typeLabel) || (type === 'delivery' ? 'Delivery' : 'Venda');
+  const saleCode = normalizeString(record.saleCode);
+  const saleCodeLabel = normalizeString(record.saleCodeLabel) || saleCode || 'Sem código';
+  const customerName =
+    normalizeString(record.customerName) || normalizeString(record.cliente) || 'Cliente não informado';
+  const customerDocument = normalizeString(record.customerDocument);
+  const paymentTags = Array.isArray(record.paymentTags)
+    ? record.paymentTags.map((tag) => normalizeString(tag)).filter(Boolean)
+    : [];
+  const items = Array.isArray(record.items)
+    ? record.items.map((item) => (item && typeof item === 'object' ? { ...item } : item))
+    : [];
+  const discountValue = safeNumber(record.discountValue ?? record.desconto ?? 0, 0);
+  const discountLabel = normalizeString(record.discountLabel);
+  const additionValue = safeNumber(record.additionValue ?? record.acrescimo ?? 0, 0);
+  const createdAt = safeDate(record.createdAt) || new Date();
+  const createdAtLabel = normalizeString(record.createdAtLabel);
+  const fiscalStatus = normalizeString(record.fiscalStatus);
+  const fiscalEmittedAt = safeDate(record.fiscalEmittedAt);
+  const fiscalEmittedAtLabel = normalizeString(record.fiscalEmittedAtLabel);
+  const fiscalDriveFileId = normalizeString(record.fiscalDriveFileId);
+  const fiscalXmlUrl = normalizeString(record.fiscalXmlUrl);
+  const fiscalXmlName = normalizeString(record.fiscalXmlName);
+  const fiscalXmlContent = normalizeString(record.fiscalXmlContent);
+  const fiscalQrCodeData = normalizeString(record.fiscalQrCodeData);
+  const fiscalQrCodeImage = normalizeString(record.fiscalQrCodeImage);
+  const fiscalEnvironment = normalizeString(record.fiscalEnvironment);
+  const fiscalSerie = normalizeString(record.fiscalSerie);
+  const fiscalAccessKey = normalizeString(record.fiscalAccessKey);
+  const fiscalDigestValue = normalizeString(record.fiscalDigestValue);
+  const fiscalSignature = normalizeString(record.fiscalSignature);
+  const fiscalProtocol = normalizeString(record.fiscalProtocol);
+  const fiscalItemsSnapshot = Array.isArray(record.fiscalItemsSnapshot || record.fiscalItems)
+    ? (record.fiscalItemsSnapshot || record.fiscalItems).map((item) =>
+        item && typeof item === 'object' ? { ...item } : item
+      )
+    : [];
+  const fiscalNumberParsed =
+    record.fiscalNumber === undefined || record.fiscalNumber === null
+      ? null
+      : Number(record.fiscalNumber);
+  const fiscalNumber = Number.isFinite(fiscalNumberParsed)
+    ? Math.trunc(fiscalNumberParsed)
+    : null;
+  const status = normalizeString(record.status) || 'completed';
+  const cancellationReason = normalizeString(record.cancellationReason);
+  const cancellationAt = safeDate(record.cancellationAt);
+  const cancellationAtLabel = normalizeString(record.cancellationAtLabel);
+  return {
+    id,
+    type,
+    typeLabel,
+    saleCode,
+    saleCodeLabel,
+    customerName,
+    customerDocument,
+    paymentTags,
+    items,
+    discountValue,
+    discountLabel,
+    additionValue,
+    createdAt,
+    createdAtLabel,
+    receiptSnapshot: record.receiptSnapshot || null,
+    fiscalStatus,
+    fiscalEmittedAt,
+    fiscalEmittedAtLabel,
+    fiscalDriveFileId,
+    fiscalXmlUrl,
+    fiscalXmlName,
+    fiscalXmlContent,
+    fiscalQrCodeData,
+    fiscalQrCodeImage,
+    fiscalEnvironment,
+    fiscalSerie,
+    fiscalAccessKey,
+    fiscalDigestValue,
+    fiscalSignature,
+    fiscalProtocol,
+    fiscalItemsSnapshot,
+    fiscalNumber,
+    expanded: Boolean(record.expanded),
+    status,
+    cancellationReason,
+    cancellationAt,
+    cancellationAtLabel,
+  };
+};
+
+const normalizePrintPreference = (value, fallback = 'PM') => {
+  const normalized = normalizeString(value).toUpperCase();
+  if (!normalized) return fallback;
+  const allowed = new Set(['M', 'F', 'PM', 'PF', 'FM', 'FF', 'NONE']);
+  return allowed.has(normalized) ? normalized : fallback;
+};
+
+const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) => {
+  const caixaAberto = Boolean(
+    body.caixaAberto ?? body.caixa?.aberto ?? body.statusCaixa === 'aberto' ?? existingState.caixaAberto
+  );
+  const summarySource = body.summary || body.caixa?.resumo || {};
+  const caixaSource = body.caixaInfo || body.caixa || {};
+  const pagamentosSource = Array.isArray(body.pagamentos) ? body.pagamentos : body.caixa?.pagamentos;
+  const historicoSource = Array.isArray(body.history) ? body.history : body.caixa?.historico;
+  const vendasSource = Array.isArray(body.completedSales) ? body.completedSales : body.caixa?.vendas;
+  const previstoSource = caixaSource.previstoPagamentos || caixaSource.pagamentosPrevistos;
+  const apuradoSource = caixaSource.apuradoPagamentos || caixaSource.pagamentosApurados;
+  const lastMovementSource = body.lastMovement || body.caixa?.ultimoLancamento;
+  const saleCodeIdentifier =
+    normalizeString(body.saleCodeIdentifier || body.saleCode?.identifier || caixaSource.saleCodeIdentifier) ||
+    existingState.saleCodeIdentifier ||
+    '';
+  const saleCodeSequenceRaw =
+    body.saleCodeSequence ?? body.saleCode?.sequence ?? caixaSource.saleCodeSequence ?? existingState.saleCodeSequence;
+  const saleCodeSequence = Number.parseInt(saleCodeSequenceRaw, 10);
+  const printPreferencesSource =
+    (body.printPreferences && typeof body.printPreferences === 'object' && body.printPreferences) ||
+    existingState.printPreferences ||
+    {};
+
+  return {
+    empresa: empresaId,
+    caixaAberto,
+    summary: {
+      abertura: safeNumber(
+        summarySource.abertura ?? summarySource.valorAbertura ?? body.abertura ?? existingState.summary?.abertura ?? 0,
+        0
+      ),
+      recebido: safeNumber(summarySource.recebido ?? existingState.summary?.recebido ?? 0, 0),
+      saldo: safeNumber(summarySource.saldo ?? existingState.summary?.saldo ?? 0, 0),
+    },
+    caixaInfo: {
+      aberturaData:
+        safeDate(caixaSource.aberturaData || caixaSource.dataAbertura || caixaSource.abertura || existingState.caixaInfo?.aberturaData) ||
+        null,
+      fechamentoData:
+        safeDate(caixaSource.fechamentoData || caixaSource.dataFechamento || caixaSource.fechamento || existingState.caixaInfo?.fechamentoData) ||
+        null,
+      fechamentoPrevisto: safeNumber(caixaSource.fechamentoPrevisto ?? caixaSource.valorPrevisto ?? existingState.caixaInfo?.fechamentoPrevisto ?? 0, 0),
+      fechamentoApurado: safeNumber(caixaSource.fechamentoApurado ?? caixaSource.valorApurado ?? existingState.caixaInfo?.fechamentoApurado ?? 0, 0),
+      previstoPagamentos: (Array.isArray(previstoSource) ? previstoSource : [])
+        .map(normalizePaymentSnapshotPayload)
+        .filter(Boolean),
+      apuradoPagamentos: (Array.isArray(apuradoSource) ? apuradoSource : [])
+        .map(normalizePaymentSnapshotPayload)
+        .filter(Boolean),
+    },
+    pagamentos: (Array.isArray(pagamentosSource) ? pagamentosSource : [])
+      .map(normalizePaymentSnapshotPayload)
+      .filter(Boolean),
+    history: (Array.isArray(historicoSource) ? historicoSource : [])
+      .map(normalizeHistoryEntryPayload)
+      .filter(Boolean),
+    completedSales: (Array.isArray(vendasSource) ? vendasSource : [])
+      .map(normalizeSaleRecordPayload)
+      .filter(Boolean),
+    lastMovement: normalizeHistoryEntryPayload(lastMovementSource) || null,
+    saleCodeIdentifier,
+    saleCodeSequence: Number.isFinite(saleCodeSequence) && saleCodeSequence > 0
+      ? saleCodeSequence
+      : existingState.saleCodeSequence || 1,
+    printPreferences: {
+      fechamento: normalizePrintPreference(printPreferencesSource.fechamento || 'PM'),
+      venda: normalizePrintPreference(printPreferencesSource.venda || 'PM'),
+    },
+  };
+};
+
+const serializeStateForResponse = (stateDoc) => {
+  if (!stateDoc) {
+    return {
+      caixa: {
+        aberto: false,
+        status: 'fechado',
+        valorAbertura: 0,
+        valorPrevisto: 0,
+        valorApurado: 0,
+        resumo: { abertura: 0, recebido: 0, saldo: 0 },
+        pagamentos: [],
+        historico: [],
+        previstoPagamentos: [],
+        apuradoPagamentos: [],
+        aberturaData: null,
+        fechamentoData: null,
+        fechamentoPrevisto: 0,
+        fechamentoApurado: 0,
+        ultimoLancamento: null,
+        saleCodeIdentifier: '',
+        saleCodeSequence: 1,
+      },
+      pagamentos: [],
+      summary: { abertura: 0, recebido: 0, saldo: 0 },
+      caixaInfo: {
+        aberturaData: null,
+        fechamentoData: null,
+        fechamentoPrevisto: 0,
+        fechamentoApurado: 0,
+        previstoPagamentos: [],
+        apuradoPagamentos: [],
+      },
+      history: [],
+      completedSales: [],
+      lastMovement: null,
+      saleCodeIdentifier: '',
+      saleCodeSequence: 1,
+      printPreferences: { fechamento: 'PM', venda: 'PM' },
+      updatedAt: null,
+    };
+  }
+
+  const plain = stateDoc.toObject ? stateDoc.toObject() : stateDoc;
+  const summary = plain.summary || {};
+  const caixaInfo = plain.caixaInfo || {};
+  const pagamentos = Array.isArray(plain.pagamentos) ? plain.pagamentos : [];
+  const history = Array.isArray(plain.history) ? plain.history : [];
+  const completedSales = Array.isArray(plain.completedSales) ? plain.completedSales : [];
+
+  return {
+    caixa: {
+      aberto: Boolean(plain.caixaAberto),
+      status: plain.caixaAberto ? 'aberto' : 'fechado',
+      valorAbertura: summary.abertura || 0,
+      valorPrevisto: caixaInfo.fechamentoPrevisto || 0,
+      valorApurado: caixaInfo.fechamentoApurado || 0,
+      resumo: {
+        abertura: summary.abertura || 0,
+        recebido: summary.recebido || 0,
+        saldo: summary.saldo || 0,
+      },
+      pagamentos,
+      historico: history,
+      previstoPagamentos: caixaInfo.previstoPagamentos || [],
+      apuradoPagamentos: caixaInfo.apuradoPagamentos || [],
+      aberturaData: caixaInfo.aberturaData || null,
+      fechamentoData: caixaInfo.fechamentoData || null,
+      fechamentoPrevisto: caixaInfo.fechamentoPrevisto || 0,
+      fechamentoApurado: caixaInfo.fechamentoApurado || 0,
+      ultimoLancamento: plain.lastMovement || null,
+      saleCodeIdentifier: plain.saleCodeIdentifier || '',
+      saleCodeSequence: plain.saleCodeSequence || 1,
+    },
+    pagamentos,
+    summary: {
+      abertura: summary.abertura || 0,
+      recebido: summary.recebido || 0,
+      saldo: summary.saldo || 0,
+    },
+    caixaInfo: {
+      aberturaData: caixaInfo.aberturaData || null,
+      fechamentoData: caixaInfo.fechamentoData || null,
+      fechamentoPrevisto: caixaInfo.fechamentoPrevisto || 0,
+      fechamentoApurado: caixaInfo.fechamentoApurado || 0,
+      previstoPagamentos: caixaInfo.previstoPagamentos || [],
+      apuradoPagamentos: caixaInfo.apuradoPagamentos || [],
+    },
+    history,
+    completedSales,
+    lastMovement: plain.lastMovement || null,
+    saleCodeIdentifier: plain.saleCodeIdentifier || '',
+    saleCodeSequence: plain.saleCodeSequence || 1,
+    printPreferences: plain.printPreferences || { fechamento: 'PM', venda: 'PM' },
+    updatedAt: plain.updatedAt || null,
+  };
+};
+
 const buildPdvPayload = ({ body, store }) => {
   const nome = normalizeString(body.nome);
   const apelido = normalizeString(body.apelido);
   const serieNfe = normalizeString(body.serieNfe || body.serieNFE);
   const serieNfce = normalizeString(body.serieNfce || body.serieNFCE);
+  const numeroNfeInicial = parseFiscalNumber(body.numeroNfeInicial ?? body.numeroInicialNfe, {
+    label: 'NF-e',
+  });
+  const numeroNfceInicial = parseFiscalNumber(body.numeroNfceInicial ?? body.numeroInicialNfce, {
+    label: 'NFC-e',
+  });
+  const numeroNfeAtual = parseFiscalNumber(body.numeroNfeAtual, {
+    label: 'NF-e',
+    allowZero: true,
+  });
+  const numeroNfceAtual = parseFiscalNumber(body.numeroNfceAtual, {
+    label: 'NFC-e',
+    allowZero: true,
+  });
   const observacoes = normalizeString(body.observacoes);
   const ambientesHabilitados = normalizeAmbientes(body.ambientesHabilitados);
   const ambientePadrao = normalizeString(body.ambientePadrao).toLowerCase();
@@ -199,12 +644,28 @@ const buildPdvPayload = ({ body, store }) => {
     }
   }
 
+  if (numeroNfeInicial !== null && numeroNfeAtual !== null && numeroNfeAtual < numeroNfeInicial - 1) {
+    throw createValidationError(
+      'O número atual da NF-e não pode ser inferior ao número inicial menos um.'
+    );
+  }
+
+  if (numeroNfceInicial !== null && numeroNfceAtual !== null && numeroNfceAtual < numeroNfceInicial - 1) {
+    throw createValidationError(
+      'O número atual da NFC-e não pode ser inferior ao número inicial menos um.'
+    );
+  }
+
   return {
     nome,
     apelido,
     ativo,
     serieNfe,
     serieNfce,
+    numeroNfeInicial,
+    numeroNfeAtual,
+    numeroNfceInicial,
+    numeroNfceAtual,
     ambientesHabilitados,
     ambientePadrao,
     sincronizacaoAutomatica,
@@ -253,7 +714,28 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ message: 'PDV não encontrado.' });
     }
 
-    res.json(pdv);
+    const state = await PdvState.findOne({ pdv: pdv._id });
+    const serializedState = serializeStateForResponse(state);
+
+    const response = {
+      ...pdv,
+      caixa: {
+        ...(pdv.caixa || {}),
+        ...serializedState.caixa,
+      },
+      pagamentos: serializedState.pagamentos,
+      summary: serializedState.summary,
+      caixaInfo: serializedState.caixaInfo,
+      history: serializedState.history,
+      completedSales: serializedState.completedSales,
+      lastMovement: serializedState.lastMovement,
+      saleCodeIdentifier: serializedState.saleCodeIdentifier,
+      saleCodeSequence: serializedState.saleCodeSequence,
+      printPreferences: serializedState.printPreferences,
+      caixaAtualizadoEm: serializedState.updatedAt,
+    };
+
+    res.json(response);
   } catch (error) {
     console.error('Erro ao obter PDV:', error);
     res.status(500).json({ message: 'Erro ao obter PDV.' });
@@ -371,6 +853,225 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
   }
 });
 
+router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
+  try {
+    const pdvId = req.params.id;
+    const saleId = normalizeString(req.params.saleId);
+
+    if (!mongoose.Types.ObjectId.isValid(pdvId)) {
+      return res.status(400).json({ message: 'Identificador de PDV inválido.' });
+    }
+
+    if (!saleId) {
+      return res.status(400).json({ message: 'Identificador da venda é obrigatório.' });
+    }
+
+    if (!isDriveConfigured()) {
+      return res.status(500).json({ message: 'Integração com o Google Drive não está configurada.' });
+    }
+
+    const pdv = await Pdv.findById(pdvId).populate('empresa');
+
+    if (!pdv) {
+      return res.status(404).json({ message: 'PDV não encontrado.' });
+    }
+
+    const empresaId = pdv.empresa?._id || pdv.empresa;
+    if (!empresaId) {
+      return res.status(400).json({ message: 'Empresa vinculada ao PDV não foi encontrada.' });
+    }
+
+    const empresa = await Store.findById(empresaId).select(
+      '+certificadoArquivoCriptografado +certificadoSenhaCriptografada +cscTokenProducaoCriptografado +cscTokenHomologacaoCriptografado'
+    );
+
+    if (!empresa) {
+      return res.status(400).json({ message: 'Empresa vinculada ao PDV não foi encontrada.' });
+    }
+
+    if (!empresa.certificadoArquivoCriptografado || !empresa.certificadoSenhaCriptografada) {
+      return res.status(400).json({ message: 'A empresa não possui certificado digital configurado.' });
+    }
+
+    const requestedEnvironment = normalizeString(
+      req.body?.environment || req.body?.ambiente || pdv.ambientePadrao
+    ).toLowerCase();
+
+    let ambiente = ambientesSet.has(requestedEnvironment)
+      ? requestedEnvironment
+      : pdv.ambientePadrao || 'homologacao';
+
+    if (!ambientesSet.has(ambiente)) {
+      ambiente = 'homologacao';
+    }
+
+    const habilitados = Array.isArray(pdv.ambientesHabilitados)
+      ? pdv.ambientesHabilitados.map((item) => normalizeString(item).toLowerCase())
+      : [];
+
+    if (!habilitados.includes(ambiente)) {
+      return res
+        .status(400)
+        .json({ message: 'O ambiente selecionado não está habilitado para este PDV.' });
+    }
+
+    if (!storeSupportsEnvironment(empresa, ambiente)) {
+      const ambienteLabel = ambiente === 'producao' ? 'Produção' : 'Homologação';
+      return res
+        .status(400)
+        .json({ message: `A empresa não possui CSC configurado para ${ambienteLabel}.` });
+    }
+
+    const state = await PdvState.findOne({ pdv: pdvId });
+
+    if (!state) {
+      return res
+        .status(404)
+        .json({ message: 'Nenhuma venda registrada foi encontrada para este PDV.' });
+    }
+
+    const sale = Array.isArray(state.completedSales)
+      ? state.completedSales.find((entry) => entry && entry.id === saleId)
+      : null;
+
+    if (!sale) {
+      return res.status(404).json({ message: 'Venda informada não foi encontrada.' });
+    }
+
+    if (sale.status === 'cancelled') {
+      return res
+        .status(400)
+        .json({ message: 'Não é possível emitir nota fiscal para uma venda cancelada.' });
+    }
+
+    if (sale.fiscalStatus === 'emitted' && sale.fiscalDriveFileId) {
+      return res.status(409).json({ message: 'Esta venda já possui XML emitido.' });
+    }
+
+    const snapshotFromRequest = req.body?.snapshot;
+    if (!sale.receiptSnapshot && snapshotFromRequest) {
+      sale.receiptSnapshot = snapshotFromRequest;
+    }
+
+    if (!sale.saleCode && req.body?.saleCode) {
+      sale.saleCode = normalizeString(req.body.saleCode);
+      sale.saleCodeLabel = sale.saleCode || 'Sem código';
+    }
+
+    if (!sale.receiptSnapshot) {
+      return res
+        .status(400)
+        .json({ message: 'Snapshot da venda indisponível para emissão fiscal.' });
+    }
+
+    const serieNfce = normalizeString(pdv.serieNfce || pdv.serieNfe);
+
+    if (!serieNfce) {
+      return res
+        .status(400)
+        .json({ message: 'Configure a série fiscal do PDV antes de emitir a nota.' });
+    }
+
+    const numeroInicialNfce = Number.isInteger(pdv.numeroNfceInicial)
+      ? pdv.numeroNfceInicial
+      : null;
+    const numeroInicialNfe = Number.isInteger(pdv.numeroNfeInicial) ? pdv.numeroNfeInicial : null;
+    const numeroInicial = numeroInicialNfce || numeroInicialNfe || null;
+
+    if (!numeroInicial || numeroInicial < 1) {
+      return res
+        .status(400)
+        .json({ message: 'Configure o número inicial de emissão para o PDV.' });
+    }
+
+    const numeroAtualNfce = Number.isInteger(pdv.numeroNfceAtual) ? pdv.numeroNfceAtual : null;
+    const numeroAtualNfe = Number.isInteger(pdv.numeroNfeAtual) ? pdv.numeroNfeAtual : null;
+    const ultimoNumeroEmitido = numeroAtualNfce ?? numeroAtualNfe;
+    const baseSequencia =
+      ultimoNumeroEmitido !== null && ultimoNumeroEmitido >= numeroInicial - 1
+        ? ultimoNumeroEmitido
+        : numeroInicial - 1;
+    const proximoNumeroFiscal = baseSequencia + 1;
+
+    const emissionDate = new Date();
+    const storeForXml =
+      empresa && typeof empresa.toObject === 'function'
+        ? empresa.toObject()
+        : empresa || {};
+    const emissionResult = await emitPdvSaleFiscal({
+      sale,
+      pdv,
+      store: storeForXml,
+      emissionDate,
+      environment: ambiente,
+      serie: serieNfce,
+      numero: proximoNumeroFiscal,
+    });
+
+    const qrCodeImage = await generateQrCodeDataUrl(emissionResult.qrCodePayload);
+
+    const saleCodeForName = sale.saleCode || saleId;
+    const baseName = sanitizeFileName(`NFCe-${saleCodeForName || emissionDate.getTime()}`);
+    const fileName = baseName.toLowerCase().endsWith('.xml') ? baseName : `${baseName}.xml`;
+
+    const uploadResult = await uploadBufferToDrive(Buffer.from(emissionResult.xml, 'utf8'), {
+      name: fileName,
+      mimeType: 'application/xml',
+      folderPath: buildDrivePathSegments(emissionDate),
+    });
+
+    sale.fiscalStatus = 'emitted';
+    sale.fiscalEmittedAt = emissionDate;
+    sale.fiscalEmittedAtLabel = formatDateTimeLabel(emissionDate);
+    sale.fiscalDriveFileId = uploadResult?.id || '';
+    sale.fiscalXmlUrl = uploadResult?.webViewLink || uploadResult?.webContentLink || '';
+    sale.fiscalXmlName = uploadResult?.name || fileName;
+    sale.fiscalEnvironment = ambiente;
+    sale.fiscalSerie = serieNfce;
+    sale.fiscalNumber = proximoNumeroFiscal;
+    sale.fiscalXmlContent = emissionResult.xml;
+    sale.fiscalQrCodeData = emissionResult.qrCodePayload || '';
+    sale.fiscalQrCodeImage = qrCodeImage || '';
+    sale.fiscalAccessKey = emissionResult.accessKey || '';
+    sale.fiscalDigestValue = emissionResult.digestValue || '';
+    sale.fiscalSignature = emissionResult.signatureValue || '';
+    sale.fiscalProtocol = sale.fiscalProtocol || '';
+
+    state.markModified('completedSales');
+    await state.save();
+
+    const numeroField = numeroInicialNfce ? 'numeroNfceAtual' : 'numeroNfeAtual';
+    await Pdv.updateOne({ _id: pdvId }, { $set: { [numeroField]: proximoNumeroFiscal } });
+
+    res.json({
+      id: sale.id,
+      fiscalStatus: sale.fiscalStatus,
+      fiscalEmittedAt: sale.fiscalEmittedAt,
+      fiscalEmittedAtLabel: sale.fiscalEmittedAtLabel,
+      fiscalDriveFileId: sale.fiscalDriveFileId,
+      fiscalXmlUrl: sale.fiscalXmlUrl,
+      fiscalXmlName: sale.fiscalXmlName,
+      fiscalEnvironment: sale.fiscalEnvironment,
+      fiscalSerie: sale.fiscalSerie,
+      fiscalNumber: sale.fiscalNumber,
+      fiscalXmlContent: sale.fiscalXmlContent,
+      fiscalQrCodeData: sale.fiscalQrCodeData,
+      fiscalQrCodeImage: sale.fiscalQrCodeImage,
+      fiscalAccessKey: sale.fiscalAccessKey,
+      fiscalDigestValue: sale.fiscalDigestValue,
+      fiscalSignature: sale.fiscalSignature,
+      fiscalProtocol: sale.fiscalProtocol,
+    });
+  } catch (error) {
+    console.error('Erro ao emitir nota fiscal do PDV:', error);
+    const message =
+      error?.message && typeof error.message === 'string'
+        ? error.message
+        : 'Erro ao emitir nota fiscal.';
+    res.status(500).json({ message });
+  }
+});
+
 router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
   try {
     const pdvId = req.params.id;
@@ -446,6 +1147,47 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
         : 'Erro ao salvar configurações do PDV.';
     console.error('Erro ao salvar configurações do PDV:', error);
     res.status(statusCode).json({ message });
+  }
+});
+
+router.put('/:id/state', requireAuth, async (req, res) => {
+  try {
+    const pdvId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(pdvId)) {
+      return res.status(400).json({ message: 'Identificador de PDV inválido.' });
+    }
+
+    const pdv = await Pdv.findById(pdvId).lean();
+
+    if (!pdv) {
+      return res.status(404).json({ message: 'PDV não encontrado.' });
+    }
+
+    const existingState = await PdvState.findOne({ pdv: pdvId });
+
+    const updatePayload = buildStateUpdatePayload({
+      body: req.body || {},
+      existingState: existingState || {},
+      empresaId: pdv.empresa,
+    });
+
+    const updatedState = await PdvState.findOneAndUpdate(
+      { pdv: pdvId },
+      {
+        ...updatePayload,
+        pdv: pdvId,
+        empresa: updatePayload.empresa || pdv.empresa,
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    const serialized = serializeStateForResponse(updatedState);
+
+    res.json(serialized);
+  } catch (error) {
+    console.error('Erro ao salvar estado do PDV:', error);
+    res.status(500).json({ message: 'Erro ao salvar estado do PDV.' });
   }
 });
 

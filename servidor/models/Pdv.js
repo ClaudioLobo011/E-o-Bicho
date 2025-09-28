@@ -62,6 +62,50 @@ const pdvSchema = new mongoose.Schema(
     empresa: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
     serieNfe: { type: String, trim: true },
     serieNfce: { type: String, trim: true },
+    numeroNfeInicial: {
+      type: Number,
+      min: [1, 'O número inicial da NF-e deve ser maior ou igual a 1.'],
+      default: null,
+      validate: {
+        validator(value) {
+          return value === null || Number.isInteger(value);
+        },
+        message: 'O número inicial da NF-e deve ser um inteiro válido.',
+      },
+    },
+    numeroNfceInicial: {
+      type: Number,
+      min: [1, 'O número inicial da NFC-e deve ser maior ou igual a 1.'],
+      default: null,
+      validate: {
+        validator(value) {
+          return value === null || Number.isInteger(value);
+        },
+        message: 'O número inicial da NFC-e deve ser um inteiro válido.',
+      },
+    },
+    numeroNfeAtual: {
+      type: Number,
+      min: [0, 'O número atual da NF-e deve ser maior ou igual a zero.'],
+      default: null,
+      validate: {
+        validator(value) {
+          return value === null || Number.isInteger(value);
+        },
+        message: 'O número atual da NF-e deve ser um inteiro válido.',
+      },
+    },
+    numeroNfceAtual: {
+      type: Number,
+      min: [0, 'O número atual da NFC-e deve ser maior ou igual a zero.'],
+      default: null,
+      validate: {
+        validator(value) {
+          return value === null || Number.isInteger(value);
+        },
+        message: 'O número atual da NFC-e deve ser um inteiro válido.',
+      },
+    },
     ambientesHabilitados: {
       type: [{ type: String, enum: ambientesPermitidos }],
       default: ['homologacao'],

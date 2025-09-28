@@ -344,6 +344,15 @@ const generateProductFiscalReport = (product, store, context = {}) => {
   };
 };
 
+const getFieldLabel = (path) => FIELD_LABELS[path] || path;
+
+const describeMissingFields = (paths = []) => {
+  if (!Array.isArray(paths)) {
+    return [];
+  }
+  return paths.map((path) => getFieldLabel(path));
+};
+
 const mergeFiscalData = (base, overrides) => {
   const merged = deepMerge(normalizeFiscalData(base || {}), overrides || {});
   return normalizeFiscalData(merged);
@@ -356,4 +365,6 @@ module.exports = {
   generateProductFiscalReport,
   mergeFiscalData,
   getFiscalDataForStore,
+  describeMissingFields,
+  getFieldLabel,
 };
