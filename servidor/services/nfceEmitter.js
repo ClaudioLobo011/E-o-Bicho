@@ -531,11 +531,11 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const signer = new SignedXml();
   signer.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
   signer.signatureAlgorithm = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256';
-  signer.addReference(
-    "//*[local-name(.)='infNFe']",
-    ['http://www.w3.org/2000/09/xmldsig#enveloped-signature'],
-    'http://www.w3.org/2000/09/xmldsig#sha1'
-  );
+  signer.addReference({
+    xpath: "//*[local-name(.)='infNFe']",
+    transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature'],
+    digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
+  });
   signer.signingKey = privateKeyPem;
   signer.keyInfoProvider = {
     getKeyInfo: () => `<X509Data><X509Certificate>${certificateBody}</X509Certificate></X509Data>`,
