@@ -97,35 +97,364 @@ const buildAccessKey = ({
 };
 
 const extractCertificatePair = (pfxBuffer, password) => {
-  try {
-    const asn1 = forge.asn1.fromDer(pfxBuffer.toString('binary'));
-    const normalizedPassword = typeof password === 'string' ? password : String(password || '');
-    const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, normalizedPassword);
-    let privateKeyPem = '';
-    let certificatePem = '';
-    for (const safeContent of p12.safeContents) {
-      for (const safeBag of safeContent.safeBags) {
-        if (!privateKeyPem && safeBag.type === forge.pki.oids.pkcs8ShroudedKeyBag) {
-          privateKeyPem = forge.pki.privateKeyToPem(safeBag.key);
-        } else if (!privateKeyPem && safeBag.type === forge.pki.oids.keyBag && safeBag.key) {
-          privateKeyPem = forge.pki.privateKeyToPem(safeBag.key);
+  const collectBagAttributes = (bag = {}) => {
+    const { attributes } = bag;
+    if (!attributes) {
+      return [];
+    }
+    if (Array.isArray(attributes)) {
+      return attributes.filter(Boolean);
+    }
+    if (attributes instanceof Map) {
+      return Array.from(attributes.values()).reduce((acc, value) => {
+        if (!value) {
+          return acc;
         }
-        if (!certificatePem && safeBag.type === forge.pki.oids.certBag) {
-          const certificate = safeBag.cert || safeBag.bagValue?.cert || safeBag.bagValue;
-          if (certificate) {
-            certificatePem = forge.pki.certificateToPem(certificate);
-          }
+        if (Array.isArray(value)) {
+          acc.push(...value.filter(Boolean));
+        } else {
+          acc.push(value);
         }
+        return acc;
+      }, []);
+    }
+    if (typeof attributes === 'object') {
+      if (typeof attributes[Symbol.iterator] === 'function') {
+        return Array.from(attributes).filter(Boolean);
+      }
+      return Object.values(attributes).reduce((acc, value) => {
+        if (!value) {
+          return acc;
+        }
+        if (Array.isArray(value)) {
+          acc.push(...value.filter(Boolean));
+        } else {
+          acc.push(value);
+        }
+        return acc;
+      }, []);
+    }
+    if (typeof attributes === 'function') {
+      try {
+        const result = attributes();
+        return Array.isArray(result) ? result.filter(Boolean) : [];
+      } catch (error) {
+        return [];
       }
     }
-    if (!privateKeyPem) {
+    if (attributes && typeof attributes[Symbol.iterator] === 'function') {
+      return Array.from(attributes).filter(Boolean);
+    }
+    return [];
+  };
+
+  const decodeLocalKeyId = (bag = {}) => {
+    const attributes = collectBagAttributes(bag);
+    if (!attributes || typeof attributes[Symbol.iterator] !== 'function') {
+      return null;
+    }
+
+    let attribute = null;
+    for (const candidate of attributes) {
+      if (candidate && candidate.type === forge.pki.oids.localKeyId) {
+        attribute = candidate;
+        break;
+      }
+    }
+
+    if (!attribute || !attribute.value || !attribute.value.length) {
+      return null;
+    }
+    const raw = attribute.value[0];
+    if (!raw) {
+      return null;
+    }
+    if (typeof raw === 'string') {
+      return Buffer.from(raw, 'binary').toString('hex');
+    }
+    if (raw.value && typeof raw.value === 'string') {
+      return Buffer.from(raw.value, 'binary').toString('hex');
+    }
+    if (typeof raw.getBytes === 'function') {
+      return Buffer.from(raw.getBytes(), 'binary').toString('hex');
+    }
+    if (Array.isArray(raw)) {
+      return Buffer.from(raw).toString('hex');
+    }
+    return null;
+  };
+
+  const decodeFriendlyName = (bag = {}) => {
+    const attributes = collectBagAttributes(bag);
+    if (!attributes || typeof attributes[Symbol.iterator] !== 'function') {
+      return null;
+    }
+
+    let attribute = null;
+    for (const candidate of attributes) {
+      if (candidate && candidate.type === forge.pki.oids.friendlyName) {
+        attribute = candidate;
+        break;
+      }
+    }
+
+    if (!attribute || !attribute.value || !attribute.value.length) {
+      return null;
+    }
+    const raw = attribute.value[0];
+    if (!raw) {
+      return null;
+    }
+    if (typeof raw === 'string') {
+      return raw;
+    }
+    if (raw.value && typeof raw.value === 'string') {
+      return raw.value;
+    }
+    if (typeof raw.getBytes === 'function') {
+      return raw.getBytes();
+    }
+    return null;
+  };
+
+  const normalizePfxBuffer = (value) => {
+    if (!value) {
+      throw new Error('O arquivo do certificado digital está vazio.');
+    }
+    if (Buffer.isBuffer(value)) {
+      return Buffer.from(value);
+    }
+    if (ArrayBuffer.isView(value)) {
+      return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        throw new Error('O arquivo do certificado digital está vazio.');
+      }
+      const sanitized = trimmed.replace(/\s+/g, '');
+      if (sanitized.length >= 4 && sanitized.length % 4 === 0 && /^[A-Za-z0-9+/=]+$/.test(sanitized)) {
+        try {
+          const asBase64 = Buffer.from(sanitized, 'base64');
+          if (
+            asBase64.length &&
+            asBase64.toString('base64').replace(/=+$/, '') === sanitized.replace(/=+$/, '')
+          ) {
+            return asBase64;
+          }
+        } catch (error) {
+          // Ignore and fall back to binary decoding when base64 parsing fails.
+        }
+      }
+      return Buffer.from(trimmed, 'binary');
+    }
+    throw new Error('Formato de certificado digital não suportado.');
+  };
+
+  const collectBagEntries = (p12) => {
+    const keys = [];
+    const certificates = [];
+
+    const pushKeyBag = (bag) => {
+      if (!bag) return;
+      let privateKey;
+      if (bag.key) {
+        privateKey = bag.key;
+      } else if (bag.asn1) {
+        privateKey = forge.pki.privateKeyFromAsn1(bag.asn1);
+      } else if (bag.rsaPrivateKey) {
+        privateKey = forge.pki.privateKeyFromAsn1(bag.rsaPrivateKey);
+      }
+      if (!privateKey) {
+        return;
+      }
+      const pem = forge.pki.privateKeyToPem(privateKey);
+      keys.push({
+        pem,
+        localKeyId: decodeLocalKeyId(bag),
+        friendlyName: decodeFriendlyName(bag),
+      });
+    };
+
+    const pushCertificateBag = (bag) => {
+      if (!bag) return;
+      const certificate = bag.cert || bag.bagValue?.cert || bag.bagValue;
+      if (!certificate) {
+        return;
+      }
+      const pem = forge.pki.certificateToPem(certificate);
+      certificates.push({
+        pem,
+        localKeyId: decodeLocalKeyId(bag),
+        friendlyName: decodeFriendlyName(bag),
+      });
+    };
+
+    const traverseSafeContents = (safeContents = []) => {
+      for (const content of safeContents) {
+        if (content.safeBags) {
+          for (const bag of content.safeBags) {
+            if (bag.type === forge.pki.oids.pkcs8ShroudedKeyBag || bag.type === forge.pki.oids.keyBag) {
+              pushKeyBag(bag);
+            } else if (bag.type === forge.pki.oids.certBag) {
+              pushCertificateBag(bag);
+            }
+          }
+        }
+        if (content.safeContents) {
+          traverseSafeContents(content.safeContents);
+        }
+      }
+    };
+
+    traverseSafeContents(p12.safeContents || []);
+
+    if (!keys.length) {
+      const bagTypes = [forge.pki.oids.pkcs8ShroudedKeyBag, forge.pki.oids.keyBag];
+      for (const bagType of bagTypes) {
+        const bags = p12.getBags({ bagType })?.[bagType] || [];
+        bags.forEach(pushKeyBag);
+      }
+    }
+
+    if (!certificates.length) {
+      const bags = p12.getBags({ bagType: forge.pki.oids.certBag })?.[forge.pki.oids.certBag] || [];
+      bags.forEach(pushCertificateBag);
+    }
+
+    return { keys, certificates };
+  };
+
+  const computePrivateKeyFingerprint = (pem) => {
+    if (!pem) return null;
+    try {
+      const privateKey = forge.pki.privateKeyFromPem(pem);
+      if (privateKey && privateKey.n && privateKey.e) {
+        return privateKey.n.toString(16);
+      }
+    } catch (error) {
+      // Ignore forge parsing issues and fall back to node's crypto implementation below.
+    }
+    try {
+      const keyObject = crypto.createPrivateKey({ key: pem, format: 'pem' });
+      const publicKeyDer = crypto
+        .createPublicKey(keyObject)
+        .export({ type: 'spki', format: 'der' });
+      return crypto.createHash('sha1').update(publicKeyDer).digest('hex');
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const computeCertificateFingerprint = (pem) => {
+    if (!pem) return null;
+    try {
+      const certificate = forge.pki.certificateFromPem(pem);
+      if (certificate?.publicKey?.n && certificate.publicKey.e) {
+        return certificate.publicKey.n.toString(16);
+      }
+    } catch (error) {
+      // Ignore forge parsing issues and fall back to node's crypto implementation below.
+    }
+    try {
+      const x509 = new crypto.X509Certificate(pem);
+      const publicKeyDer = x509.publicKey.export({ type: 'spki', format: 'der' });
+      return crypto.createHash('sha1').update(publicKeyDer).digest('hex');
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const matchKeyWithCertificate = ({ keys, certificates }) => {
+    if (!keys.length) {
       throw new Error('Não foi possível extrair a chave privada do certificado.');
     }
+    if (!certificates.length) {
+      throw new Error('Não foi possível extrair o certificado digital.');
+    }
+
+    const enrichedKeys = keys.map((entry) => ({
+      ...entry,
+      fingerprint: computePrivateKeyFingerprint(entry.pem),
+    }));
+    const enrichedCertificates = certificates.map((entry) => ({
+      ...entry,
+      fingerprint: computeCertificateFingerprint(entry.pem),
+    }));
+
+    for (const keyEntry of enrichedKeys) {
+      const certificateEntry = enrichedCertificates.find((candidate) => {
+        if (keyEntry.localKeyId && candidate.localKeyId && candidate.localKeyId === keyEntry.localKeyId) {
+          return true;
+        }
+        if (keyEntry.friendlyName && candidate.friendlyName && candidate.friendlyName === keyEntry.friendlyName) {
+          return true;
+        }
+        if (keyEntry.fingerprint && candidate.fingerprint && keyEntry.fingerprint === candidate.fingerprint) {
+          return true;
+        }
+        return false;
+      });
+      if (certificateEntry) {
+        return { keyEntry, certificateEntry };
+      }
+    }
+
+    const keyWithFingerprint = enrichedKeys.find((entry) => entry.fingerprint);
+    if (keyWithFingerprint) {
+      const certificateEntry = enrichedCertificates.find(
+        (candidate) => candidate.fingerprint && candidate.fingerprint === keyWithFingerprint.fingerprint
+      );
+      if (certificateEntry) {
+        return { keyEntry: keyWithFingerprint, certificateEntry };
+      }
+    }
+
+    return { keyEntry: enrichedKeys[0], certificateEntry: enrichedCertificates[0] };
+  };
+
+  try {
+    const normalizedPassword = typeof password === 'string' ? password : String(password || '');
+    const buffer = normalizePfxBuffer(pfxBuffer);
+    const der = forge.util.createBuffer(buffer.toString('binary'), 'binary');
+    const asn1 = forge.asn1.fromDer(der);
+    const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, normalizedPassword);
+
+    const entries = collectBagEntries(p12);
+    const { keyEntry, certificateEntry } = matchKeyWithCertificate(entries);
+
+    let normalizedPrivateKeyPem = keyEntry?.pem ? String(keyEntry.pem) : '';
+    if (!normalizedPrivateKeyPem.trim()) {
+      throw new Error('Não foi possível extrair a chave privada do certificado.');
+    }
+
+    try {
+      const keyObject = crypto.createPrivateKey({ key: normalizedPrivateKeyPem, format: 'pem' });
+      try {
+        normalizedPrivateKeyPem = keyObject.export({ type: 'pkcs1', format: 'pem' }).toString();
+      } catch (innerError) {
+        normalizedPrivateKeyPem = keyObject.export({ type: 'pkcs8', format: 'pem' }).toString();
+      }
+      const signer = crypto.createSign('RSA-SHA256');
+      signer.update('nfce-signature-validation');
+      signer.sign(normalizedPrivateKeyPem);
+    } catch (error) {
+      throw new Error('A chave privada do certificado é inválida ou está protegida por senha desconhecida.');
+    }
+
+    const certificatePem = certificateEntry?.pem || '';
     if (!certificatePem) {
       throw new Error('Não foi possível extrair o certificado digital.');
     }
-    return { privateKeyPem, certificatePem };
+
+    return { privateKeyPem: normalizedPrivateKeyPem, certificatePem };
   } catch (error) {
+    if (error instanceof Error && error.message) {
+      if (error.message.startsWith('Falha ao processar o certificado digital da empresa')) {
+        throw error;
+      }
+      throw new Error(`Falha ao processar o certificado digital da empresa: ${error.message}`);
+    }
     throw new Error('Falha ao processar o certificado digital da empresa.');
   }
 };
@@ -542,7 +871,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature'],
     digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
   });
-  signer.signingKey = privateKeyPem;
+  signer.signingKey = Buffer.isBuffer(privateKeyPem) ? privateKeyPem : Buffer.from(String(privateKeyPem));
   signer.keyInfoProvider = {
     getKeyInfo: () => `<X509Data><X509Certificate>${certificateBody}</X509Certificate></X509Data>`,
   };
