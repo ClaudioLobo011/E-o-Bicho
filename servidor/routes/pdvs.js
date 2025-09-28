@@ -1,6 +1,5 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const QRCode = require('qrcode');
 const router = express.Router();
 const Pdv = require('../models/Pdv');
 const Store = require('../models/Store');
@@ -18,6 +17,20 @@ const perfisDesconto = ['funcionario', 'gerente', 'admin'];
 const perfisDescontoSet = new Set(perfisDesconto);
 const tiposEmissao = ['matricial', 'fiscal', 'ambos'];
 const tiposEmissaoSet = new Set(tiposEmissao);
+
+let qrCodeModulePromise;
+
+const loadQrCodeModule = () => {
+  if (!qrCodeModulePromise) {
+    qrCodeModulePromise = import('qrcode')
+      .then((mod) => mod?.default || mod)
+      .catch((error) => {
+        console.error('Não foi possível carregar a dependência "qrcode".', error);
+        return null;
+      });
+  }
+  return qrCodeModulePromise;
+};
 
 const normalizeString = (value) => {
   if (value === undefined || value === null) return '';
@@ -256,8 +269,13 @@ const generateQrCodeDataUrl = async (payload) => {
   if (!payload) {
     return '';
   }
+  const qrCodeModule = await loadQrCodeModule();
+  if (!qrCodeModule || typeof qrCodeModule.toDataURL !== 'function') {
+    console.warn('Módulo "qrcode" não disponível; QR Code não será gerado.');
+    return '';
+  }
   try {
-    return await QRCode.toDataURL(payload, {
+    return await qrCodeModule.toDataURL(payload, {
       errorCorrectionLevel: 'M',
       margin: 0,
       scale: 5,
