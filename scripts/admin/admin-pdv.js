@@ -4559,6 +4559,15 @@
               documento: getChildText(destinatarioNode, 'Documento'),
               contato: getChildText(destinatarioNode, 'Contato'),
               pet: getChildText(destinatarioNode, 'Pet'),
+              apelido: getChildText(destinatarioNode, 'Apelido'),
+              endereco: getChildText(destinatarioNode, 'Endereco'),
+              logradouro: getChildText(destinatarioNode, 'Logradouro'),
+              numero: getChildText(destinatarioNode, 'Numero'),
+              complemento: getChildText(destinatarioNode, 'Complemento'),
+              bairro: getChildText(destinatarioNode, 'Bairro'),
+              municipio: getChildText(destinatarioNode, 'Municipio'),
+              uf: getChildText(destinatarioNode, 'UF'),
+              cep: getChildText(destinatarioNode, 'CEP'),
             }
           : null;
 
@@ -4696,12 +4705,35 @@
             }
           : {};
 
+        const destinatarioEnderecoNode = dest?.getElementsByTagName('enderDest')[0] || null;
+        const destinatarioEndereco = destinatarioEnderecoNode
+          ? {
+              endereco: `${getChildText(destinatarioEnderecoNode, 'xLgr')} ${getChildText(destinatarioEnderecoNode, 'nro')}`.trim(),
+              logradouro: getChildText(destinatarioEnderecoNode, 'xLgr'),
+              numero: getChildText(destinatarioEnderecoNode, 'nro'),
+              complemento: getChildText(destinatarioEnderecoNode, 'xCpl'),
+              bairro: getChildText(destinatarioEnderecoNode, 'xBairro'),
+              municipio: getChildText(destinatarioEnderecoNode, 'xMun'),
+              uf: getChildText(destinatarioEnderecoNode, 'UF'),
+              cep: getChildText(destinatarioEnderecoNode, 'CEP'),
+            }
+          : null;
+
         const destinatario = dest
           ? {
               nome: getChildText(dest, 'xNome'),
               documento: getChildText(dest, 'CNPJ') || getChildText(dest, 'CPF'),
               contato: getChildText(dest, 'email') || getChildText(dest, 'fone'),
               pet: '',
+              apelido: '',
+              endereco: destinatarioEndereco,
+              logradouro: destinatarioEndereco?.logradouro || '',
+              numero: destinatarioEndereco?.numero || '',
+              complemento: destinatarioEndereco?.complemento || '',
+              bairro: destinatarioEndereco?.bairro || '',
+              municipio: destinatarioEndereco?.municipio || '',
+              uf: destinatarioEndereco?.uf || '',
+              cep: destinatarioEndereco?.cep || '',
             }
           : null;
 
@@ -4946,16 +4978,70 @@
       : '';
 
     const enderecoLines = [];
-    if (entrega?.apelido) enderecoLines.push(entrega.apelido);
-    const mainAddress = [entrega?.logradouro || entrega?.endereco || '', entrega?.numero || '']
-      .filter(Boolean)
-      .join(', ');
-    if (mainAddress) enderecoLines.push(mainAddress);
-    if (entrega?.complemento) enderecoLines.push(`Compl.: ${entrega.complemento}`);
-    if (entrega?.bairro) enderecoLines.push(`Bairro: ${entrega.bairro}`);
-    const cityLine = [entrega?.municipio, entrega?.uf].filter(Boolean).join(' - ');
-    if (cityLine) enderecoLines.push(cityLine);
-    if (entrega?.cep) enderecoLines.push(`CEP: ${entrega.cep}`);
+    const pickAddressField = (...candidates) => {
+      for (const value of candidates) {
+        if (typeof value === 'string' && value.trim()) {
+          return value.trim();
+        }
+      }
+      return '';
+    };
+
+    const enderecoFonte = entrega || destinatario?.endereco || destinatario || null;
+    const enderecoApelido = pickAddressField(entrega?.apelido, destinatario?.apelido);
+    if (enderecoApelido) {
+      enderecoLines.push(enderecoApelido);
+    }
+
+    const logradouro = pickAddressField(
+      entrega?.logradouro,
+      destinatario?.endereco?.logradouro,
+      destinatario?.logradouro,
+      enderecoFonte?.logradouro,
+      enderecoFonte?.endereco
+    );
+    const numero = pickAddressField(entrega?.numero, destinatario?.endereco?.numero, destinatario?.numero, enderecoFonte?.numero);
+    const enderecoPrincipal = logradouro || numero ? [logradouro, numero].filter(Boolean).join(', ') : pickAddressField(entrega?.endereco, destinatario?.endereco?.endereco, destinatario?.endereco, enderecoFonte?.endereco);
+    if (enderecoPrincipal) {
+      enderecoLines.push(enderecoPrincipal);
+    }
+
+    const complemento = pickAddressField(
+      entrega?.complemento,
+      destinatario?.endereco?.complemento,
+      destinatario?.complemento,
+      enderecoFonte?.complemento
+    );
+    if (complemento) {
+      enderecoLines.push(`Compl.: ${complemento}`);
+    }
+
+    const bairro = pickAddressField(
+      entrega?.bairro,
+      destinatario?.endereco?.bairro,
+      destinatario?.bairro,
+      enderecoFonte?.bairro
+    );
+    if (bairro) {
+      enderecoLines.push(`Bairro: ${bairro}`);
+    }
+
+    const municipio = pickAddressField(
+      entrega?.municipio,
+      destinatario?.endereco?.municipio,
+      destinatario?.municipio,
+      enderecoFonte?.municipio
+    );
+    const uf = pickAddressField(entrega?.uf, destinatario?.endereco?.uf, destinatario?.uf, enderecoFonte?.uf);
+    const cidadeLinha = [municipio, uf].filter(Boolean).join(' - ');
+    if (cidadeLinha) {
+      enderecoLines.push(cidadeLinha);
+    }
+
+    const cep = pickAddressField(entrega?.cep, destinatario?.endereco?.cep, destinatario?.cep, enderecoFonte?.cep);
+    if (cep) {
+      enderecoLines.push(`CEP: ${cep}`);
+    }
     const enderecoSection = enderecoLines.length
       ? `<section class="nfce-compact__section nfce-compact__section--info">
           <h2 class="nfce-compact__section-title">Endereço</h2>
