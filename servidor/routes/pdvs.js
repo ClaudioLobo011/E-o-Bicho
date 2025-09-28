@@ -38,6 +38,24 @@ const normalizeString = (value) => {
   return String(value).trim();
 };
 
+const generateQrCodeDataUrl = async (payload) => {
+  const normalized = normalizeString(payload);
+  if (!normalized) return '';
+
+  const qrCode = await loadQrCodeModule();
+  if (!qrCode || typeof qrCode.toDataURL !== 'function') {
+    console.error('Dependência "qrcode" indisponível para gerar imagem.');
+    return '';
+  }
+
+  try {
+    return await qrCode.toDataURL(normalized, { margin: 1 });
+  } catch (error) {
+    console.error('Erro ao gerar QR Code da NFC-e.', error);
+    return '';
+  }
+};
+
 const parseBoolean = (value) => {
   if (typeof value === 'boolean') return value;
   if (value === undefined || value === null) return false;
