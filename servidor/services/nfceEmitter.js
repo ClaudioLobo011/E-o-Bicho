@@ -119,6 +119,9 @@ const extractCertificatePair = (pfxBuffer, password) => {
       }, []);
     }
     if (typeof attributes === 'object') {
+      if (typeof attributes[Symbol.iterator] === 'function') {
+        return Array.from(attributes).filter(Boolean);
+      }
       return Object.values(attributes).reduce((acc, value) => {
         if (!value) {
           return acc;
@@ -131,11 +134,34 @@ const extractCertificatePair = (pfxBuffer, password) => {
         return acc;
       }, []);
     }
+    if (typeof attributes === 'function') {
+      try {
+        const result = attributes();
+        return Array.isArray(result) ? result.filter(Boolean) : [];
+      } catch (error) {
+        return [];
+      }
+    }
+    if (attributes && typeof attributes[Symbol.iterator] === 'function') {
+      return Array.from(attributes).filter(Boolean);
+    }
     return [];
   };
 
   const decodeLocalKeyId = (bag = {}) => {
-    const attribute = collectBagAttributes(bag).find((attr) => attr.type === forge.pki.oids.localKeyId);
+    const attributes = collectBagAttributes(bag);
+    if (!attributes || typeof attributes[Symbol.iterator] !== 'function') {
+      return null;
+    }
+
+    let attribute = null;
+    for (const candidate of attributes) {
+      if (candidate && candidate.type === forge.pki.oids.localKeyId) {
+        attribute = candidate;
+        break;
+      }
+    }
+
     if (!attribute || !attribute.value || !attribute.value.length) {
       return null;
     }
@@ -159,7 +185,19 @@ const extractCertificatePair = (pfxBuffer, password) => {
   };
 
   const decodeFriendlyName = (bag = {}) => {
-    const attribute = collectBagAttributes(bag).find((attr) => attr.type === forge.pki.oids.friendlyName);
+    const attributes = collectBagAttributes(bag);
+    if (!attributes || typeof attributes[Symbol.iterator] !== 'function') {
+      return null;
+    }
+
+    let attribute = null;
+    for (const candidate of attributes) {
+      if (candidate && candidate.type === forge.pki.oids.friendlyName) {
+        attribute = candidate;
+        break;
+      }
+    }
+
     if (!attribute || !attribute.value || !attribute.value.length) {
       return null;
     }
