@@ -250,6 +250,46 @@ const extractCertificatePair = (pfxBuffer, password) => {
     return { keys, certificates };
   };
 
+  const computePrivateKeyFingerprint = (pem) => {
+    if (!pem) return null;
+    try {
+      const privateKey = forge.pki.privateKeyFromPem(pem);
+      if (privateKey && privateKey.n && privateKey.e) {
+        return privateKey.n.toString(16);
+      }
+    } catch (error) {
+      // Ignore forge parsing issues and fall back to node's crypto implementation below.
+    }
+    try {
+      const keyObject = crypto.createPrivateKey({ key: pem, format: 'pem' });
+      const publicKeyDer = crypto
+        .createPublicKey(keyObject)
+        .export({ type: 'spki', format: 'der' });
+      return crypto.createHash('sha1').update(publicKeyDer).digest('hex');
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const computeCertificateFingerprint = (pem) => {
+    if (!pem) return null;
+    try {
+      const certificate = forge.pki.certificateFromPem(pem);
+      if (certificate?.publicKey?.n && certificate.publicKey.e) {
+        return certificate.publicKey.n.toString(16);
+      }
+    } catch (error) {
+      // Ignore forge parsing issues and fall back to node's crypto implementation below.
+    }
+    try {
+      const x509 = new crypto.X509Certificate(pem);
+      const publicKeyDer = x509.publicKey.export({ type: 'spki', format: 'der' });
+      return crypto.createHash('sha1').update(publicKeyDer).digest('hex');
+    } catch (error) {
+      return null;
+    }
+  };
+
   const matchKeyWithCertificate = ({ keys, certificates }) => {
     if (!keys.length) {
       throw new Error('Não foi possível extrair a chave privada do certificado.');
@@ -258,15 +298,24 @@ const extractCertificatePair = (pfxBuffer, password) => {
       throw new Error('Não foi possível extrair o certificado digital.');
     }
 
-    for (const keyEntry of keys) {
-      if (!keyEntry.localKeyId && !keyEntry.friendlyName) {
-        continue;
-      }
-      const certificateEntry = certificates.find((candidate) => {
+    const enrichedKeys = keys.map((entry) => ({
+      ...entry,
+      fingerprint: computePrivateKeyFingerprint(entry.pem),
+    }));
+    const enrichedCertificates = certificates.map((entry) => ({
+      ...entry,
+      fingerprint: computeCertificateFingerprint(entry.pem),
+    }));
+
+    for (const keyEntry of enrichedKeys) {
+      const certificateEntry = enrichedCertificates.find((candidate) => {
         if (keyEntry.localKeyId && candidate.localKeyId && candidate.localKeyId === keyEntry.localKeyId) {
           return true;
         }
         if (keyEntry.friendlyName && candidate.friendlyName && candidate.friendlyName === keyEntry.friendlyName) {
+          return true;
+        }
+        if (keyEntry.fingerprint && candidate.fingerprint && keyEntry.fingerprint === candidate.fingerprint) {
           return true;
         }
         return false;
@@ -276,7 +325,17 @@ const extractCertificatePair = (pfxBuffer, password) => {
       }
     }
 
-    return { keyEntry: keys[0], certificateEntry: certificates[0] };
+    const keyWithFingerprint = enrichedKeys.find((entry) => entry.fingerprint);
+    if (keyWithFingerprint) {
+      const certificateEntry = enrichedCertificates.find(
+        (candidate) => candidate.fingerprint && candidate.fingerprint === keyWithFingerprint.fingerprint
+      );
+      if (certificateEntry) {
+        return { keyEntry: keyWithFingerprint, certificateEntry };
+      }
+    }
+
+    return { keyEntry: enrichedKeys[0], certificateEntry: enrichedCertificates[0] };
   };
 
   try {
@@ -289,8 +348,8 @@ const extractCertificatePair = (pfxBuffer, password) => {
     const entries = collectBagEntries(p12);
     const { keyEntry, certificateEntry } = matchKeyWithCertificate(entries);
 
-    let normalizedPrivateKeyPem = keyEntry?.pem || '';
-    if (!normalizedPrivateKeyPem) {
+    let normalizedPrivateKeyPem = keyEntry?.pem ? String(keyEntry.pem) : '';
+    if (!normalizedPrivateKeyPem.trim()) {
       throw new Error('Não foi possível extrair a chave privada do certificado.');
     }
 
@@ -301,6 +360,9 @@ const extractCertificatePair = (pfxBuffer, password) => {
       } catch (innerError) {
         normalizedPrivateKeyPem = keyObject.export({ type: 'pkcs8', format: 'pem' }).toString();
       }
+      const signer = crypto.createSign('RSA-SHA256');
+      signer.update('nfce-signature-validation');
+      signer.sign(normalizedPrivateKeyPem);
     } catch (error) {
       throw new Error('A chave privada do certificado é inválida ou está protegida por senha desconhecida.');
     }
@@ -734,7 +796,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature'],
     digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
   });
-  signer.signingKey = privateKeyPem;
+  signer.signingKey = Buffer.isBuffer(privateKeyPem) ? privateKeyPem : Buffer.from(String(privateKeyPem));
   signer.keyInfoProvider = {
     getKeyInfo: () => `<X509Data><X509Certificate>${certificateBody}</X509Certificate></X509Data>`,
   };
