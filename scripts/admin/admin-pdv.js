@@ -1251,6 +1251,9 @@
       fiscalDriveFileId: record.fiscalDriveFileId ? String(record.fiscalDriveFileId) : '',
       fiscalXmlUrl: record.fiscalXmlUrl ? String(record.fiscalXmlUrl) : '',
       fiscalXmlName: record.fiscalXmlName ? String(record.fiscalXmlName) : '',
+      fiscalXmlContent: record.fiscalXmlContent ? String(record.fiscalXmlContent) : '',
+      fiscalQrCodeData: record.fiscalQrCodeData ? String(record.fiscalQrCodeData) : '',
+      fiscalQrCodeImage: record.fiscalQrCodeImage ? String(record.fiscalQrCodeImage) : '',
       fiscalEnvironment: record.fiscalEnvironment ? String(record.fiscalEnvironment) : '',
       fiscalSerie: record.fiscalSerie ? String(record.fiscalSerie) : '',
       fiscalNumber:
@@ -4078,6 +4081,95 @@
         font-weight: 600;
         color: #222;
       }
+      .receipt--nfce .receipt__title {
+        font-size: 12.8px;
+      }
+      .receipt--nfce .receipt__badge {
+        margin-top: 1mm;
+      }
+      .nfce__meta {
+        align-items: flex-start;
+        text-align: left;
+      }
+      .nfce__meta .receipt__meta-item {
+        text-align: left;
+        width: 100%;
+      }
+      .nfce__section {
+        gap: 1.2mm;
+      }
+      .nfce__list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1mm;
+      }
+      .nfce__list-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2mm;
+      }
+      .nfce__list-item-label {
+        font-size: 9.5px;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        color: #444;
+        font-weight: 600;
+      }
+      .nfce__list-item-value {
+        font-size: 10.6px;
+        font-weight: 700;
+        color: #111;
+      }
+      .nfce__env {
+        margin: 1mm 0 0;
+        font-size: 9.6px;
+        font-weight: 700;
+        color: var(--receipt-accent);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+      .nfce__identifier {
+        margin-top: 0.6mm;
+        font-size: 9.4px;
+        color: #555;
+      }
+      .nfce__qr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 3mm;
+      }
+      .nfce__qr img {
+        width: 32mm;
+        height: 32mm;
+        border: 1px solid rgba(17, 17, 17, 0.35);
+        border-radius: 2mm;
+        padding: 1.2mm;
+        background: #fff;
+        image-rendering: pixelated;
+      }
+      .nfce__qr-text {
+        flex: 1 1 34mm;
+        font-size: 9.4px;
+        color: #333;
+        line-height: 1.5;
+        text-align: center;
+      }
+      .nfce__qr-text strong {
+        display: block;
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+        margin-bottom: 1mm;
+        color: #111;
+      }
+      .nfce__footer {
+        margin-top: 2.8mm;
+      }
       .receipt__divider {
         width: 100%;
         border: none;
@@ -4216,6 +4308,452 @@
           <h2 class="receipt__section-title">Fechamento apurado</h2>
           <ul class="receipt-list">${apuradoList}</ul>
         </section>
+      </main>`;
+  };
+
+  const formatEnvironmentLabel = (environment) => {
+    if (!environment) return '';
+    const normalized = String(environment).toLowerCase();
+    if (normalized === 'producao') {
+      return 'Ambiente de Produção';
+    }
+    if (normalized === 'homologacao') {
+      return 'Ambiente de Homologação';
+    }
+    return `Ambiente: ${environment}`;
+  };
+
+  const formatXmlDateTime = (value) => {
+    if (!value) return '';
+    try {
+      const candidate = new Date(value);
+      if (!Number.isNaN(candidate.getTime())) {
+        return toDateLabel(candidate.toISOString());
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return String(value);
+  };
+
+  const parseFiscalXmlDocument = (xmlContent) => {
+    if (!xmlContent || typeof xmlContent !== 'string') {
+      return null;
+    }
+    if (typeof window === 'undefined' || typeof window.DOMParser === 'undefined') {
+      return null;
+    }
+    try {
+      const parser = new window.DOMParser();
+      const doc = parser.parseFromString(xmlContent, 'application/xml');
+      if (!doc) {
+        return null;
+      }
+      const parseError = doc.querySelector('parsererror');
+      if (parseError) {
+        console.warn('XML fiscal inválido:', parseError.textContent);
+        return null;
+      }
+      const root = doc.documentElement;
+      if (!root || root.nodeName.toLowerCase() !== 'nfce') {
+        console.warn('Documento fiscal não reconhecido para impressão.');
+        return null;
+      }
+      const getChildText = (parent, tagName) => {
+        if (!parent) return '';
+        const node = parent.getElementsByTagName(tagName)[0];
+        return node && node.textContent ? node.textContent.trim() : '';
+      };
+      const identificacaoNode = root.getElementsByTagName('Identificacao')[0];
+      const emitenteNode = root.getElementsByTagName('Emitente')[0];
+      const destinatarioNode = root.getElementsByTagName('Destinatario')[0];
+      const entregaNode = root.getElementsByTagName('Entrega')[0];
+      const itensNode = root.getElementsByTagName('Itens')[0];
+      const totaisNode = root.getElementsByTagName('Totais')[0];
+      const pagamentosNode = root.getElementsByTagName('Pagamentos')[0];
+      const qrCodePayloadNode = root.getElementsByTagName('QrCode')[0];
+      const qrCodeImageNode = root.getElementsByTagName('QrCodeImagem')[0];
+
+      const identificacao = identificacaoNode
+        ? {
+            ambiente: getChildText(identificacaoNode, 'Ambiente'),
+            pdvCodigo: getChildText(identificacaoNode, 'PdvCodigo'),
+            pdvNome: getChildText(identificacaoNode, 'PdvNome'),
+            vendaCodigo: getChildText(identificacaoNode, 'VendaCodigo'),
+            serieFiscal: getChildText(identificacaoNode, 'SerieFiscal'),
+            numeroFiscal: getChildText(identificacaoNode, 'NumeroFiscal'),
+            dataRegistro: getChildText(identificacaoNode, 'DataRegistro'),
+            dataEmissao: getChildText(identificacaoNode, 'DataEmissao'),
+            operador: getChildText(identificacaoNode, 'Operador'),
+          }
+        : {};
+
+      const emitente = emitenteNode
+        ? {
+            razaoSocial: getChildText(emitenteNode, 'RazaoSocial'),
+            nomeFantasia: getChildText(emitenteNode, 'NomeFantasia'),
+            cnpj: getChildText(emitenteNode, 'CNPJ'),
+            inscricaoEstadual: getChildText(emitenteNode, 'InscricaoEstadual'),
+          }
+        : {};
+
+      const destinatario = destinatarioNode
+        ? {
+            nome: getChildText(destinatarioNode, 'Nome'),
+            documento: getChildText(destinatarioNode, 'Documento'),
+            contato: getChildText(destinatarioNode, 'Contato'),
+            pet: getChildText(destinatarioNode, 'Pet'),
+          }
+        : null;
+
+      const entrega = entregaNode
+        ? {
+            apelido: getChildText(entregaNode, 'Apelido'),
+            endereco: getChildText(entregaNode, 'Endereco'),
+            cep: getChildText(entregaNode, 'CEP'),
+            logradouro: getChildText(entregaNode, 'Logradouro'),
+            numero: getChildText(entregaNode, 'Numero'),
+            complemento: getChildText(entregaNode, 'Complemento'),
+            bairro: getChildText(entregaNode, 'Bairro'),
+            municipio: getChildText(entregaNode, 'Municipio'),
+            uf: getChildText(entregaNode, 'UF'),
+          }
+        : null;
+
+      const itens = itensNode
+        ? Array.from(itensNode.getElementsByTagName('Item')).map((node, index) => ({
+            numero: getChildText(node, 'Numero') || String(index + 1),
+            descricao: getChildText(node, 'Descricao'),
+            codigos: getChildText(node, 'Codigos'),
+            quantidade: getChildText(node, 'Quantidade'),
+            unitario: getChildText(node, 'ValorUnitario'),
+            total: getChildText(node, 'ValorTotal'),
+          }))
+        : [];
+
+      const descontoNode = totaisNode?.getElementsByTagName('Desconto')[0] || null;
+      const acrescimoNode = totaisNode?.getElementsByTagName('Acrescimo')[0] || null;
+      const trocoNode = totaisNode?.getElementsByTagName('Troco')[0] || null;
+
+      const totais = totaisNode
+        ? {
+            bruto: getChildText(totaisNode, 'Bruto'),
+            desconto: descontoNode && descontoNode.textContent ? descontoNode.textContent.trim() : '',
+            descontoValor: descontoNode?.getAttribute('valor') || '',
+            acrescimo: acrescimoNode && acrescimoNode.textContent ? acrescimoNode.textContent.trim() : '',
+            acrescimoValor: acrescimoNode?.getAttribute('valor') || '',
+            liquido: getChildText(totaisNode, 'Liquido'),
+            pago: getChildText(totaisNode, 'Pago'),
+            troco: trocoNode && trocoNode.textContent ? trocoNode.textContent.trim() : '',
+            trocoValor: trocoNode?.getAttribute('valor') || '',
+          }
+        : {};
+
+      const pagamentos = pagamentosNode
+        ? {
+            total: getChildText(pagamentosNode, 'Total'),
+            items: Array.from(pagamentosNode.getElementsByTagName('Pagamento')).map((node) => ({
+              descricao: getChildText(node, 'Descricao'),
+              valor: getChildText(node, 'Valor'),
+            })),
+          }
+        : { total: '', items: [] };
+
+      const qrCode = {
+        payload: qrCodePayloadNode && qrCodePayloadNode.textContent ? qrCodePayloadNode.textContent.trim() : '',
+        image: qrCodeImageNode && qrCodeImageNode.textContent ? qrCodeImageNode.textContent.trim() : '',
+      };
+
+      return { identificacao, emitente, destinatario, entrega, itens, totais, pagamentos, qrCode };
+    } catch (error) {
+      console.error('Erro ao interpretar XML fiscal para impressão:', error);
+      return null;
+    }
+  };
+
+  const buildNfceReceiptMarkup = (data) => {
+    if (!data) {
+      return '<main class="receipt"><p class="receipt-empty">Documento fiscal indisponível para impressão.</p></main>';
+    }
+
+    const { identificacao = {}, emitente = {}, destinatario, entrega, itens = [], totais = {}, pagamentos = {}, qrCode = {} } =
+      data;
+    const ambienteLabel = formatEnvironmentLabel(identificacao.ambiente);
+    const numeroFiscalLabel = [
+      identificacao.serieFiscal ? `Série ${identificacao.serieFiscal}` : '',
+      identificacao.numeroFiscal ? `Nº ${identificacao.numeroFiscal}` : '',
+    ]
+      .filter(Boolean)
+      .join(' • ');
+
+    const metaLines = [
+      emitente.nomeFantasia || emitente.razaoSocial || '',
+      emitente.cnpj ? `CNPJ: ${emitente.cnpj}` : '',
+      emitente.inscricaoEstadual ? `IE: ${emitente.inscricaoEstadual}` : '',
+      identificacao.pdvNome ? `PDV: ${identificacao.pdvNome}` : '',
+      identificacao.pdvCodigo ? `Código PDV: ${identificacao.pdvCodigo}` : '',
+    ]
+      .filter(Boolean)
+      .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
+      .join('');
+
+    const identificacaoRows = [
+      identificacao.vendaCodigo ? { label: 'Venda', value: identificacao.vendaCodigo } : null,
+      numeroFiscalLabel ? { label: 'Documento', value: numeroFiscalLabel } : null,
+      identificacao.operador ? { label: 'Operador', value: identificacao.operador } : null,
+      identificacao.dataEmissao
+        ? { label: 'Data de emissão', value: formatXmlDateTime(identificacao.dataEmissao) }
+        : null,
+      identificacao.dataRegistro
+        ? { label: 'Registrado em', value: formatXmlDateTime(identificacao.dataRegistro) }
+        : null,
+    ]
+      .filter(Boolean)
+      .map(
+        (row) => `
+          <li class="nfce__list-item">
+            <span class="nfce__list-item-label">${escapeHtml(row.label)}</span>
+            <span class="nfce__list-item-value">${escapeHtml(row.value)}</span>
+          </li>`
+      )
+      .join('');
+
+    const emitenteRows = [
+      emitente.razaoSocial ? { label: 'Razão social', value: emitente.razaoSocial } : null,
+      emitente.nomeFantasia ? { label: 'Nome fantasia', value: emitente.nomeFantasia } : null,
+      emitente.cnpj ? { label: 'CNPJ', value: emitente.cnpj } : null,
+      emitente.inscricaoEstadual ? { label: 'Inscrição estadual', value: emitente.inscricaoEstadual } : null,
+    ]
+      .filter(Boolean)
+      .map(
+        (row) => `
+          <li class="nfce__list-item">
+            <span class="nfce__list-item-label">${escapeHtml(row.label)}</span>
+            <span class="nfce__list-item-value">${escapeHtml(row.value)}</span>
+          </li>`
+      )
+      .join('');
+
+    const destinatarioSection = destinatario && (destinatario.nome || destinatario.documento || destinatario.contato || destinatario.pet)
+      ? `
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Destinatário</h2>
+          <ul class="nfce__list">
+            ${
+              destinatario.nome
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Nome</span><span class="nfce__list-item-value">${escapeHtml(
+                    destinatario.nome
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              destinatario.documento
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Documento</span><span class="nfce__list-item-value">${escapeHtml(
+                    destinatario.documento
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              destinatario.contato
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Contato</span><span class="nfce__list-item-value">${escapeHtml(
+                    destinatario.contato
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              destinatario.pet
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Pet</span><span class="nfce__list-item-value">${escapeHtml(
+                    destinatario.pet
+                  )}</span></li>`
+                : ''
+            }
+          </ul>
+        </section>`
+      : '';
+
+    const entregaSection = entrega && (entrega.endereco || entrega.apelido || entrega.municipio)
+      ? `
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Entrega</h2>
+          <ul class="nfce__list">
+            ${
+              entrega.apelido
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Destino</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.apelido
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.endereco
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Endereço</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.endereco
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.numero
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Número</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.numero
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.complemento
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Complemento</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.complemento
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.bairro
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Bairro</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.bairro
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.municipio || entrega.uf
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">Município</span><span class="nfce__list-item-value">${escapeHtml(
+                    [entrega.municipio, entrega.uf].filter(Boolean).join(' / ')
+                  )}</span></li>`
+                : ''
+            }
+            ${
+              entrega.cep
+                ? `<li class="nfce__list-item"><span class="nfce__list-item-label">CEP</span><span class="nfce__list-item-value">${escapeHtml(
+                    entrega.cep
+                  )}</span></li>`
+                : ''
+            }
+          </ul>
+        </section>`
+      : '';
+
+    const itensRows = itens.length
+      ? itens
+          .map(
+            (item) => `
+              <tr>
+                <td>${escapeHtml(item.numero)}</td>
+                <td>
+                  <strong>${escapeHtml(item.descricao || 'Item')}</strong>
+                  ${item.codigos ? `<span class="receipt-table__muted">${escapeHtml(item.codigos)}</span>` : ''}
+                </td>
+                <td>${escapeHtml(item.quantidade || '1')} × ${escapeHtml(item.unitario || '')}</td>
+                <td>${escapeHtml(item.total || '')}</td>
+              </tr>`
+          )
+          .join('')
+      : '<tr><td colspan="4" class="receipt-list__empty">Nenhum item encontrado.</td></tr>';
+
+    const totalsRows = [
+      totais.bruto ? { label: 'Subtotal', value: totais.bruto } : null,
+      totais.desconto
+        ? { label: 'Desconto', value: totais.desconto.trim().startsWith('-') ? totais.desconto : `- ${totais.desconto}` }
+        : null,
+      totais.acrescimo
+        ? { label: 'Acréscimos', value: totais.acrescimo.trim().startsWith('+') ? totais.acrescimo : totais.acrescimo }
+        : null,
+      totais.liquido ? { label: 'Total', value: totais.liquido, isTotal: true } : null,
+      totais.pago ? { label: 'Pago', value: totais.pago } : null,
+      totais.troco
+        ? { label: 'Troco', value: totais.troco.trim().startsWith('-') ? totais.troco : totais.troco }
+        : null,
+    ]
+      .filter(Boolean)
+      .map(
+        (row) => `
+          <li class="receipt-row${row.isTotal ? ' receipt-row--total' : ''}">
+            <span class="receipt-row__label">${escapeHtml(row.label)}</span>
+            <span class="receipt-row__value">${escapeHtml(row.value)}</span>
+          </li>`
+      )
+      .join('');
+
+    const pagamentosRows = pagamentos.items.length
+      ? pagamentos.items
+          .map(
+            (payment) => `
+              <li class="receipt-row">
+                <span class="receipt-row__label">${escapeHtml(payment.descricao || 'Pagamento')}</span>
+                <span class="receipt-row__value">${escapeHtml(payment.valor || '')}</span>
+              </li>`
+          )
+          .join('')
+      : '<li class="receipt-list__empty">Nenhum pagamento informado.</li>';
+
+    const qrImage = qrCode.image || '';
+    const qrPayload = qrCode.payload || '';
+    const qrSection = qrImage || qrPayload
+      ? `
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Consulta da NFC-e</h2>
+          <div class="nfce__qr">
+            ${
+              qrImage
+                ? `<img src="${escapeHtml(qrImage)}" alt="QR Code da NFC-e" />`
+                : ''
+            }
+            <div class="nfce__qr-text">
+              <strong>Escaneie para consultar</strong>
+              ${qrPayload ? `<p>${escapeHtml(qrPayload)}</p>` : '<p>QR Code indisponível.</p>'}
+            </div>
+          </div>
+        </section>`
+      : '';
+
+    const ambienteBadge = ambienteLabel ? `<p class="nfce__env">${escapeHtml(ambienteLabel)}</p>` : '';
+    const documentoBadge = numeroFiscalLabel ? `<p class="nfce__identifier">${escapeHtml(numeroFiscalLabel)}</p>` : '';
+
+    const footerLine = emitente.nomeFantasia || emitente.razaoSocial || 'Obrigado pela preferência!';
+    const consultaHint = ambienteLabel ? `${ambienteLabel}.` : 'Documento emitido eletronicamente.';
+
+    return `
+      <main class="receipt receipt--nfce">
+        <header class="receipt__header">
+          <h1 class="receipt__title">Nota Fiscal de Consumidor Eletrônica</h1>
+          <span class="receipt__badge">NFC-e</span>
+          ${ambienteBadge}
+          ${documentoBadge}
+        </header>
+        <section class="receipt__meta nfce__meta">${metaLines}</section>
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Identificação</h2>
+          <ul class="nfce__list">${identificacaoRows}</ul>
+        </section>
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Emitente</h2>
+          <ul class="nfce__list">${emitenteRows}</ul>
+        </section>
+        ${destinatarioSection}
+        ${entregaSection}
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Itens</h2>
+          <table class="receipt-table nfce__items">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Descrição</th>
+                <th>Qtde × Valor</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>${itensRows}</tbody>
+          </table>
+        </section>
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Totais</h2>
+          <ul class="receipt-list">${totalsRows}</ul>
+        </section>
+        <section class="receipt__section nfce__section">
+          <h2 class="receipt__section-title">Pagamentos</h2>
+          <ul class="receipt-list">${pagamentosRows}</ul>
+        </section>
+        ${qrSection}
+        <footer class="receipt__footer nfce__footer">
+          <p class="receipt__footer-strong">${escapeHtml(footerLine)}</p>
+          <p>${escapeHtml(consultaHint)}</p>
+        </footer>
       </main>`;
   };
 
@@ -4520,7 +5058,11 @@
     }
   };
 
-  const printReceipt = (type, variant, { snapshot, fallbackText } = {}) => {
+  const printReceipt = (
+    type,
+    variant,
+    { snapshot, fallbackText, xmlContent, qrCodeDataUrl, qrCodePayload } = {}
+  ) => {
     const resolvedVariant = variant || 'matricial';
     let bodyHtml = '';
     let title = '';
@@ -4539,8 +5081,28 @@
         notify('Nenhum dado disponível para imprimir a venda.', 'warning');
         return false;
       }
-      bodyHtml = buildSaleReceiptMarkup(effectiveSnapshot, resolvedVariant);
-      title = 'Comprovante de venda';
+      let markup = '';
+      if (resolvedVariant === 'fiscal') {
+        const xmlSource =
+          xmlContent || (effectiveSnapshot && typeof effectiveSnapshot === 'object'
+            ? effectiveSnapshot.fiscalXmlContent || effectiveSnapshot.xml || ''
+            : '');
+        const fiscalData = parseFiscalXmlDocument(xmlSource);
+        if (fiscalData) {
+          if (!fiscalData.qrCode?.image && qrCodeDataUrl) {
+            fiscalData.qrCode = { ...fiscalData.qrCode, image: qrCodeDataUrl };
+          }
+          if (!fiscalData.qrCode?.payload && qrCodePayload) {
+            fiscalData.qrCode = { ...fiscalData.qrCode, payload: qrCodePayload };
+          }
+          markup = buildNfceReceiptMarkup(fiscalData);
+        }
+      }
+      if (!markup) {
+        markup = buildSaleReceiptMarkup(effectiveSnapshot, resolvedVariant);
+      }
+      bodyHtml = markup;
+      title = resolvedVariant === 'fiscal' ? 'Cupom fiscal NFC-e' : 'Comprovante de venda';
     } else {
       return false;
     }
@@ -4704,6 +5266,9 @@
       fiscalDriveFileId: '',
       fiscalXmlUrl: '',
       fiscalXmlName: '',
+      fiscalXmlContent: '',
+      fiscalQrCodeData: '',
+      fiscalQrCodeImage: '',
       fiscalEnvironment: '',
       fiscalSerie: '',
       fiscalNumber: null,
@@ -4907,6 +5472,9 @@
       fiscalEmittedAtLabel,
       fiscalSerie,
       fiscalNumber,
+      fiscalXmlContent,
+      fiscalQrCodeData,
+      fiscalQrCodeImage,
     } = updates;
     if (saleCode !== undefined) {
       sale.saleCode = saleCode || '';
@@ -4935,6 +5503,15 @@
     }
     if (fiscalXmlName !== undefined) {
       sale.fiscalXmlName = fiscalXmlName || '';
+    }
+    if (fiscalXmlContent !== undefined) {
+      sale.fiscalXmlContent = fiscalXmlContent || '';
+    }
+    if (fiscalQrCodeData !== undefined) {
+      sale.fiscalQrCodeData = fiscalQrCodeData || '';
+    }
+    if (fiscalQrCodeImage !== undefined) {
+      sale.fiscalQrCodeImage = fiscalQrCodeImage || '';
     }
     if (fiscalEnvironment !== undefined) {
       sale.fiscalEnvironment = fiscalEnvironment || '';
@@ -5052,10 +5629,20 @@
       return;
     }
     if (sale.fiscalStatus === 'emitted') {
-      printReceipt('venda', 'fiscal', { snapshot: sale.receiptSnapshot });
+      printReceipt('venda', 'fiscal', {
+        snapshot: sale.receiptSnapshot,
+        xmlContent: sale.fiscalXmlContent,
+        qrCodeDataUrl: sale.fiscalQrCodeImage,
+        qrCodePayload: sale.fiscalQrCodeData,
+      });
       return;
     }
-    handleConfiguredPrint('venda', { snapshot: sale.receiptSnapshot });
+    handleConfiguredPrint('venda', {
+      snapshot: sale.receiptSnapshot,
+      xmlContent: sale.fiscalXmlContent,
+      qrCodeDataUrl: sale.fiscalQrCodeImage,
+      qrCodePayload: sale.fiscalQrCodeData,
+    });
   };
 
   const handleSaleEmitFiscal = async (saleId) => {
@@ -5108,6 +5695,9 @@
         fiscalDriveFileId: data?.fiscalDriveFileId || '',
         fiscalXmlUrl: data?.fiscalXmlUrl || '',
         fiscalXmlName: data?.fiscalXmlName || '',
+        fiscalXmlContent: data?.fiscalXmlContent || sale.fiscalXmlContent || '',
+        fiscalQrCodeData: data?.fiscalQrCodeData || sale.fiscalQrCodeData || '',
+        fiscalQrCodeImage: data?.fiscalQrCodeImage || sale.fiscalQrCodeImage || '',
         fiscalEnvironment: data?.fiscalEnvironment || '',
         fiscalSerie: data?.fiscalSerie || '',
         fiscalNumber:

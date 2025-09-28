@@ -1,5 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const QRCode = require('qrcode');
 const router = express.Router();
 const Pdv = require('../models/Pdv');
 const Store = require('../models/Store');
@@ -230,7 +231,58 @@ const buildDrivePathSegments = (date) => {
   return ['Fiscal', 'XMLs', year, month, day];
 };
 
-const buildSaleFiscalXml = ({ sale, pdv, store, emissionDate, environment, serie, numero }) => {
+const buildNfceQrPayload = ({ sale, pdv, store, emissionDate, environment, serie, numero }) => {
+  const ambiente = normalizeString(environment) || pdv?.ambientePadrao || '';
+  const serieFiscal =
+    normalizeString(serie) || normalizeString(pdv?.serieNfce) || normalizeString(pdv?.serieNfe) || '';
+  const numeroFiscal =
+    numero !== undefined && numero !== null
+      ? String(numero)
+      : sale?.fiscalNumber !== undefined && sale?.fiscalNumber !== null
+      ? String(sale.fiscalNumber)
+      : '';
+  const emissionIso =
+    emissionDate instanceof Date && !Number.isNaN(emissionDate.getTime())
+      ? emissionDate.toISOString()
+      : new Date().toISOString();
+  const cnpj = normalizeString(store?.cnpj);
+  const pdvCodigo = normalizeString(pdv?.codigo);
+  const saleCode = normalizeString(sale?.saleCode || sale?.id);
+  const parts = ['NFCe', ambiente, cnpj, serieFiscal, numeroFiscal, pdvCodigo, saleCode, emissionIso];
+  return parts.map((part) => encodeURIComponent(part || '')).join('|');
+};
+
+const generateQrCodeDataUrl = async (payload) => {
+  if (!payload) {
+    return '';
+  }
+  try {
+    return await QRCode.toDataURL(payload, {
+      errorCorrectionLevel: 'M',
+      margin: 0,
+      scale: 5,
+      color: {
+        dark: '#000000',
+        light: '#ffffff',
+      },
+    });
+  } catch (error) {
+    console.error('Falha ao gerar QR Code da NFC-e:', error);
+    return '';
+  }
+};
+
+const buildSaleFiscalXml = ({
+  sale,
+  pdv,
+  store,
+  emissionDate,
+  environment,
+  serie,
+  numero,
+  qrCodePayload,
+  qrCodeImage,
+}) => {
   const snapshot = sale?.receiptSnapshot || {};
   const meta = snapshot.meta || {};
   const cliente = snapshot.cliente || {};
@@ -325,8 +377,31 @@ const buildSaleFiscalXml = ({ sale, pdv, store, emissionDate, environment, serie
     lines.push(`    <Total>${escapeXml(pagamentosTotal || '')}</Total>`);
     lines.push('  </Pagamentos>');
   }
+  if (qrCodePayload) {
+    lines.push(`  <QrCode>${escapeXml(qrCodePayload)}</QrCode>`);
+  }
+  if (qrCodeImage) {
+    lines.push(`  <QrCodeImagem>${escapeXml(qrCodeImage)}</QrCodeImagem>`);
+  }
   lines.push('</NFCe>');
   return lines.join('\n');
+};
+
+const buildSaleFiscalDocument = async ({ sale, pdv, store, emissionDate, environment, serie, numero }) => {
+  const qrCodePayload = buildNfceQrPayload({ sale, pdv, store, emissionDate, environment, serie, numero });
+  const qrCodeImage = await generateQrCodeDataUrl(qrCodePayload);
+  const xmlContent = buildSaleFiscalXml({
+    sale,
+    pdv,
+    store,
+    emissionDate,
+    environment,
+    serie,
+    numero,
+    qrCodePayload,
+    qrCodeImage,
+  });
+  return { xmlContent, qrCodePayload, qrCodeImage };
 };
 
 const formatDateTimeLabel = (date) => {
@@ -428,6 +503,9 @@ const normalizeSaleRecordPayload = (record) => {
   const fiscalDriveFileId = normalizeString(record.fiscalDriveFileId);
   const fiscalXmlUrl = normalizeString(record.fiscalXmlUrl);
   const fiscalXmlName = normalizeString(record.fiscalXmlName);
+  const fiscalXmlContent = normalizeString(record.fiscalXmlContent);
+  const fiscalQrCodeData = normalizeString(record.fiscalQrCodeData);
+  const fiscalQrCodeImage = normalizeString(record.fiscalQrCodeImage);
   const fiscalEnvironment = normalizeString(record.fiscalEnvironment);
   const fiscalSerie = normalizeString(record.fiscalSerie);
   const fiscalNumberParsed =
@@ -463,6 +541,9 @@ const normalizeSaleRecordPayload = (record) => {
     fiscalDriveFileId,
     fiscalXmlUrl,
     fiscalXmlName,
+    fiscalXmlContent,
+    fiscalQrCodeData,
+    fiscalQrCodeImage,
     fiscalEnvironment,
     fiscalSerie,
     fiscalNumber,
@@ -1062,7 +1143,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       pdv.empresa && typeof pdv.empresa.toObject === 'function'
         ? pdv.empresa.toObject()
         : pdv.empresa || {};
-    const xmlContent = buildSaleFiscalXml({
+    const { xmlContent, qrCodePayload, qrCodeImage } = await buildSaleFiscalDocument({
       sale,
       pdv,
       store: storeForXml,
@@ -1091,6 +1172,9 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     sale.fiscalEnvironment = ambiente;
     sale.fiscalSerie = serieNfce;
     sale.fiscalNumber = proximoNumeroFiscal;
+    sale.fiscalXmlContent = xmlContent;
+    sale.fiscalQrCodeData = qrCodePayload || '';
+    sale.fiscalQrCodeImage = qrCodeImage || '';
 
     state.markModified('completedSales');
     await state.save();
@@ -1109,6 +1193,9 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       fiscalEnvironment: sale.fiscalEnvironment,
       fiscalSerie: sale.fiscalSerie,
       fiscalNumber: sale.fiscalNumber,
+      fiscalXmlContent: sale.fiscalXmlContent,
+      fiscalQrCodeData: sale.fiscalQrCodeData,
+      fiscalQrCodeImage: sale.fiscalQrCodeImage,
     });
   } catch (error) {
     console.error('Erro ao emitir nota fiscal do PDV:', error);
