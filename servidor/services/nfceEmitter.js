@@ -871,7 +871,10 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature'],
     digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
   });
-  signer.signingKey = Buffer.isBuffer(privateKeyPem) ? privateKeyPem : Buffer.from(String(privateKeyPem));
+  const normalizedPrivateKey = Buffer.isBuffer(privateKeyPem)
+    ? privateKeyPem
+    : Buffer.from(String(privateKeyPem));
+  signer.privateKey = normalizedPrivateKey;
   signer.keyInfoProvider = {
     getKeyInfo: () => `<X509Data><X509Certificate>${certificateBody}</X509Certificate></X509Data>`,
   };
