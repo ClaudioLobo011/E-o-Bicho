@@ -99,16 +99,22 @@ const buildAccessKey = ({
 const extractCertificatePair = (pfxBuffer, password) => {
   try {
     const asn1 = forge.asn1.fromDer(pfxBuffer.toString('binary'));
-    const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, password);
+    const normalizedPassword = typeof password === 'string' ? password : String(password || '');
+    const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, normalizedPassword);
     let privateKeyPem = '';
     let certificatePem = '';
     for (const safeContent of p12.safeContents) {
       for (const safeBag of safeContent.safeBags) {
         if (!privateKeyPem && safeBag.type === forge.pki.oids.pkcs8ShroudedKeyBag) {
           privateKeyPem = forge.pki.privateKeyToPem(safeBag.key);
+        } else if (!privateKeyPem && safeBag.type === forge.pki.oids.keyBag && safeBag.key) {
+          privateKeyPem = forge.pki.privateKeyToPem(safeBag.key);
         }
         if (!certificatePem && safeBag.type === forge.pki.oids.certBag) {
-          certificatePem = forge.pki.certificateToPem(safeBag.cert);
+          const certificate = safeBag.cert || safeBag.bagValue?.cert || safeBag.bagValue;
+          if (certificate) {
+            certificatePem = forge.pki.certificateToPem(certificate);
+          }
         }
       }
     }
