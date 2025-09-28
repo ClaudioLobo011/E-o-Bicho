@@ -98,32 +98,51 @@ const buildAccessKey = ({
 
 const extractCertificatePair = (pfxBuffer, password) => {
   try {
-    const asn1 = forge.asn1.fromDer(pfxBuffer.toString('binary'));
     const normalizedPassword = typeof password === 'string' ? password : String(password || '');
+    const buffer = Buffer.isBuffer(pfxBuffer) ? pfxBuffer : Buffer.from(pfxBuffer || []);
+    const asn1 = forge.asn1.fromDer(buffer.toString('binary'));
     const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, normalizedPassword);
+
     let privateKeyPem = '';
-    let certificatePem = '';
-    for (const safeContent of p12.safeContents) {
-      for (const safeBag of safeContent.safeBags) {
-        if (!privateKeyPem && safeBag.type === forge.pki.oids.pkcs8ShroudedKeyBag) {
-          privateKeyPem = forge.pki.privateKeyToPem(safeBag.key);
-        } else if (!privateKeyPem && safeBag.type === forge.pki.oids.keyBag && safeBag.key) {
-          privateKeyPem = forge.pki.privateKeyToPem(safeBag.key);
+    const keyBagTypes = [forge.pki.oids.pkcs8ShroudedKeyBag, forge.pki.oids.keyBag];
+    for (const bagType of keyBagTypes) {
+      if (privateKeyPem) break;
+      const bags = p12.getBags({ bagType })?.[bagType] || [];
+      for (const bag of bags) {
+        if (bag.key) {
+          privateKeyPem = forge.pki.privateKeyToPem(bag.key);
+          break;
         }
-        if (!certificatePem && safeBag.type === forge.pki.oids.certBag) {
-          const certificate = safeBag.cert || safeBag.bagValue?.cert || safeBag.bagValue;
-          if (certificate) {
-            certificatePem = forge.pki.certificateToPem(certificate);
-          }
+        if (bag.asn1) {
+          const privateKey = forge.pki.privateKeyFromAsn1(bag.asn1);
+          privateKeyPem = forge.pki.privateKeyToPem(privateKey);
+          break;
+        }
+        if (bag.rsaPrivateKey) {
+          const privateKey = forge.pki.privateKeyFromAsn1(bag.rsaPrivateKey);
+          privateKeyPem = forge.pki.privateKeyToPem(privateKey);
+          break;
         }
       }
     }
+
+    let certificatePem = '';
+    const certificateBags = p12.getBags({ bagType: forge.pki.oids.certBag })?.[forge.pki.oids.certBag] || [];
+    for (const bag of certificateBags) {
+      const certificate = bag.cert || bag.bagValue?.cert || bag.bagValue;
+      if (certificate) {
+        certificatePem = forge.pki.certificateToPem(certificate);
+        break;
+      }
+    }
+
     if (!privateKeyPem) {
       throw new Error('Não foi possível extrair a chave privada do certificado.');
     }
     if (!certificatePem) {
       throw new Error('Não foi possível extrair o certificado digital.');
     }
+
     return { privateKeyPem, certificatePem };
   } catch (error) {
     throw new Error('Falha ao processar o certificado digital da empresa.');
