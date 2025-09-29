@@ -92,19 +92,14 @@ const buildSoapEnvelope = (enviNfeXml) => {
     .join('\n');
 
   return [
-    '<?xml version="1.0" encoding="utf-8"?>',
-    '<soap12:Envelope',
-    '  xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"',
-    '  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
-    '  xmlns:xsd="http://www.w3.org/2001/XMLSchema"',
-    '  xmlns:nfe="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4"',
-    '>',
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
     '  <soap12:Body>',
-    '    <nfe:nfeAutorizacaoLote>',
-    '      <nfe:nfeDadosMsg>',
+    '    <nfeAutorizacaoLote xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">',
+    '      <nfeDadosMsg>',
     nfeBody,
-    '      </nfe:nfeDadosMsg>',
-    '    </nfe:nfeAutorizacaoLote>',
+    '      </nfeDadosMsg>',
+    '    </nfeAutorizacaoLote>',
     '  </soap12:Body>',
     '</soap12:Envelope>',
   ].join('\n');
@@ -373,7 +368,8 @@ const performSoapRequest = ({
         port: url.port || (isHttps ? 443 : 80),
         path: `${url.pathname}${url.search || ''}`,
         headers: {
-          'Content-Type': `application/soap+xml; charset=utf-8; action="${SOAP_ACTION}"`,
+          'Content-Type': 'application/soap+xml; charset=UTF-8',
+          SOAPAction: SOAP_ACTION,
           'Content-Length': Buffer.byteLength(envelope),
           'User-Agent': 'EoBicho-PDV/1.0',
         },
