@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const forge = require('node-forge');
-const { DOMParser } = require('@xmldom/xmldom');
+const { DOMParser, XMLSerializer } = require('@xmldom/xmldom');
 const xpath = require('xpath');
 const { SignedXml } = require('xml-crypto');
 const Product = require('../models/Product');
@@ -1205,10 +1205,6 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   };
   const refXPath = "/*[local-name()='NFe']/*[local-name()='infNFe']";
   const refUri = `#${infId}`;
-  signer.signatureLocation = {
-    reference: refXPath,
-    action: 'after',
-  };
   signer.addReference({
     xpath: refXPath,
     transforms: [
@@ -1219,9 +1215,53 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     uri: refUri,
   });
   console.debug('XPath ref:', refXPath);
-  signer.computeSignature(xmlForSignature, { prefix: '' });
+  signer.computeSignature(xmlForSignature, {
+    prefix: '',
+    location: {
+      reference: refXPath,
+      action: 'after',
+    },
+  });
 
-  const signedXmlContent = signer.getSignedXml();
+  let signedXmlContent = signer.getSignedXml();
+
+  try {
+    const signedDocument = new DOMParser().parseFromString(signedXmlContent, 'text/xml');
+    const [nfeNode] = xpath.select("/*[local-name()='NFe']", signedDocument);
+    const [infNfeSignedNode] = nfeNode
+      ? xpath.select("./*[local-name()='infNFe']", nfeNode)
+      : [];
+    const [signatureNode] = nfeNode
+      ? xpath.select("./*[local-name()='Signature']", nfeNode)
+      : [];
+    const [infNfeSuplNode] = nfeNode
+      ? xpath.select("./*[local-name()='infNFeSupl']", nfeNode)
+      : [];
+
+    if (nfeNode && infNfeSignedNode && signatureNode && signatureNode.parentNode === nfeNode) {
+      nfeNode.removeChild(signatureNode);
+
+      let insertionPoint = null;
+      if (infNfeSuplNode && infNfeSuplNode.parentNode === nfeNode) {
+        insertionPoint = infNfeSuplNode;
+      } else {
+        let sibling = infNfeSignedNode.nextSibling;
+        while (sibling) {
+          if (sibling.nodeType === 1) {
+            insertionPoint = sibling;
+            break;
+          }
+          sibling = sibling.nextSibling;
+        }
+      }
+
+      nfeNode.insertBefore(signatureNode, insertionPoint);
+      const serializer = new XMLSerializer();
+      signedXmlContent = serializer.serializeToString(signedDocument);
+    }
+  } catch (error) {
+    console.debug('[NFCE] Falha ao reordenar assinatura NFC-e:', error);
+  }
 
   if (process.env.NODE_ENV === 'development') {
     console.debug('[NFCE] XML assinado para transmissão:', signedXmlContent);
