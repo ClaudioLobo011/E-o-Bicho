@@ -8,7 +8,9 @@
     "data:import": "node seeder.js",
     "data:destroy": "node seeder.js -d",
     "category:import": "node categorySeeder.js",
-    "category:destroy": "node categorySeeder.js -d"
+    "category:destroy": "node categorySeeder.js -d",
+    "nfce:status": "node scripts/test-status-servico.js",
+    "nfce:envio:hom": "node scripts/test-autorizacao-hom.js"
   },
   "keywords": [],
   "author": "",

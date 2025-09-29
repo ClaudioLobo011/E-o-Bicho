@@ -946,7 +946,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('    </infAdic>');
   infNfeLines.push('  </infNFe>');
 
-  const certificateBody = certificatePem
+  const certB64 = certificatePem
     .replace('-----BEGIN CERTIFICATE-----', '')
     .replace('-----END CERTIFICATE-----', '')
     .replace(/\s+/g, '');
@@ -954,21 +954,30 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const baseXmlLines = ['<?xml version="1.0" encoding="UTF-8"?>', '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">', ...infNfeLines, '</NFe>'];
   const xmlForSignature = baseXmlLines.join('\n');
 
-  const signer = new SignedXml();
-  signer.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
-  signer.signatureAlgorithm = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256';
+  const keyPemString = Buffer.isBuffer(privateKeyPem)
+    ? privateKeyPem.toString('utf8')
+    : String(privateKeyPem || '');
+
+  if (!/-----BEGIN (?:RSA )?PRIVATE KEY-----/.test(keyPemString)) {
+    throw new Error('Chave privada inválida/ausente.');
+  }
+
+  const signer = new SignedXml({
+    privateKey: Buffer.from(keyPemString),
+    signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
+  });
+  signer.canonicalizationAlgorithm = 'http://www.w3.org/2001/10/xml-exc-c14n#';
+  signer.keyInfoProvider = {
+    getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+  };
   signer.addReference({
-    xpath: "//*[local-name(.)='infNFe']",
-    transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature'],
+    xpath: "//*[local-name(.)='infNFe' and @Id]",
+    transforms: [
+      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+      'http://www.w3.org/2001/10/xml-exc-c14n#',
+    ],
     digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
   });
-  const normalizedPrivateKey = Buffer.isBuffer(privateKeyPem)
-    ? privateKeyPem
-    : Buffer.from(String(privateKeyPem));
-  signer.privateKey = normalizedPrivateKey;
-  signer.keyInfoProvider = {
-    getKeyInfo: () => `<X509Data><X509Certificate>${certificateBody}</X509Certificate></X509Data>`,
-  };
   signer.computeSignature(xmlForSignature, { prefix: '' });
 
   const signedXmlContent = signer.getSignedXml();

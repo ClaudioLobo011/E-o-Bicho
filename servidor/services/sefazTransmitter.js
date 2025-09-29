@@ -1,6 +1,7 @@
 const https = require('https');
 const { URL } = require('url');
 const tls = require('tls');
+const dgram = require('dgram');
 const forge = require('node-forge');
 const fs = require('fs');
 const path = require('path');
@@ -27,6 +28,20 @@ const AUTORIZACAO_ENDPOINTS = {
 const SOAP_ACTION =
   'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote';
 
+const STATUS_ENDPOINTS = {
+  homologacao: {
+    MS: 'https://nfcehomologacao.sefaz.ms.gov.br/ws/NFeStatusServico4/NFeStatusServico4.asmx',
+    default: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NFeStatusServico4.asmx',
+  },
+  producao: {
+    MS: 'https://nfce.sefaz.ms.gov.br/ws/NFeStatusServico4/NFeStatusServico4.asmx',
+    default: 'https://nfce.svrs.rs.gov.br/ws/NfeStatusServico/NFeStatusServico4.asmx',
+  },
+};
+
+const STATUS_SOAP_ACTION =
+  'http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF';
+
 const CERTIFICATE_PATTERN = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g;
 
 const EXTRA_CA_TEXT_ENV_VARS = [
@@ -50,6 +65,98 @@ const EXTRA_CA_PATH_ENV_VARS = [
 const DEFAULT_EXTRA_CA_FILES = [
   path.resolve(__dirname, '../config/sefaz-ca-bundle.pem'),
 ];
+
+const wait = (ms) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, Number(ms) || 0));
+  });
+
+const NTP_PACKET_SIZE = 48;
+const NTP_PORT = 123;
+const NTP_UNIX_EPOCH_DELTA = 2208988800; // seconds between 1900-01-01 and 1970-01-01
+const CLOCK_RESYNC_INTERVAL = 10 * 60 * 1000;
+const DEFAULT_NTP_SERVER = process.env.NFCE_NTP_SERVER || 'pool.ntp.org';
+
+let lastClockSync = 0;
+let clockOffsetMs = 0;
+
+const queryClockOffset = (server = DEFAULT_NTP_SERVER) => {
+  return new Promise((resolve, reject) => {
+    const socket = dgram.createSocket('udp4');
+    const packet = Buffer.alloc(NTP_PACKET_SIZE);
+    packet[0] = 0x1b;
+
+    const handleError = (error) => {
+      try {
+        socket.close();
+      } catch (closeError) {
+        // ignore
+      }
+      reject(error);
+    };
+
+    const timeout = setTimeout(() => {
+      clearTimeout(timeout);
+      handleError(new Error('Timeout ao consultar servidor NTP.'));
+    }, 5000);
+
+    socket.once('error', (error) => {
+      clearTimeout(timeout);
+      handleError(error);
+    });
+
+    socket.once('message', (message) => {
+      clearTimeout(timeout);
+      try {
+        if (!message || message.length < NTP_PACKET_SIZE) {
+          throw new Error('Resposta NTP inválida.');
+        }
+        const seconds = message.readUInt32BE(40);
+        const fractions = message.readUInt32BE(44);
+        const ntpTime = seconds - NTP_UNIX_EPOCH_DELTA + fractions / 0x100000000;
+        const serverMs = ntpTime * 1000;
+        const offset = serverMs - Date.now();
+        resolve(offset);
+      } catch (error) {
+        reject(error);
+      } finally {
+        try {
+          socket.close();
+        } catch (closeError) {
+          // ignore
+        }
+      }
+    });
+
+    socket.send(packet, 0, packet.length, NTP_PORT, server, (error) => {
+      if (error) {
+        clearTimeout(timeout);
+        handleError(error);
+      }
+    });
+  });
+};
+
+const ensureClockSynchronization = async () => {
+  const now = Date.now();
+  if (now - lastClockSync < CLOCK_RESYNC_INTERVAL) {
+    return clockOffsetMs;
+  }
+
+  lastClockSync = now;
+  try {
+    const offset = await queryClockOffset();
+    clockOffsetMs = offset;
+    if (Math.abs(offset) > 1000) {
+      console.info(`[SEFAZ] Ajuste de relógio estimado: ${offset.toFixed(0)}ms.`);
+    }
+  } catch (error) {
+    console.warn(`[SEFAZ] Falha ao sincronizar relógio via NTP: ${error.message}`);
+  }
+  return clockOffsetMs;
+};
+
+const getSynchronizedDate = () => new Date(Date.now() + clockOffsetMs);
 
 const removeXmlDeclaration = (xml) => {
   if (!xml) return '';
@@ -81,32 +188,128 @@ const buildEnviNfePayload = ({ xml, loteId, synchronous = true }) => {
   ].join('\n');
 };
 
-const buildSoapEnvelope = (enviNfeXml) => {
+const UF_CODE_BY_ACRONYM = {
+  AC: '12',
+  AL: '27',
+  AM: '13',
+  AP: '16',
+  BA: '29',
+  CE: '23',
+  DF: '53',
+  ES: '32',
+  GO: '52',
+  MA: '21',
+  MG: '31',
+  MS: '50',
+  MT: '51',
+  PA: '15',
+  PB: '25',
+  PE: '26',
+  PI: '22',
+  PR: '41',
+  RJ: '33',
+  RN: '24',
+  RO: '11',
+  RR: '14',
+  RS: '43',
+  SC: '42',
+  SE: '28',
+  SP: '35',
+  TO: '17',
+};
+
+const resolveUfCode = (uf) => {
+  if (!uf && uf !== 0) {
+    return '00';
+  }
+
+  const normalized = String(uf).trim();
+  if (!normalized) {
+    return '00';
+  }
+
+  if (/^\d{2}$/.test(normalized)) {
+    return normalized;
+  }
+
+  const acronym = normalized.toUpperCase();
+  return UF_CODE_BY_ACRONYM[acronym] || '00';
+};
+
+const buildSoapEnvelope = ({ enviNfeXml, uf }) => {
   const sanitized = removeXmlDeclaration(enviNfeXml)
     .split('\n')
     .map((line) => line.trimEnd())
     .filter((line, index, array) => line || index < array.length - 1);
 
   const nfeBody = sanitized
-    .map((line) => `        ${line}`)
+    .map((line) => `      ${line}`)
     .join('\n');
+
+  const ufCode = resolveUfCode(uf);
 
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
-    '<soap12:Envelope',
-    '  xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"',
-    '  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
-    '  xmlns:xsd="http://www.w3.org/2001/XMLSchema"',
-    '  xmlns:nfe="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4"',
-    '>',
+    '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"',
+    '                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    '                 xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
+    '  <soap12:Header>',
+    '    <nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">',
+    `      <cUF>${ufCode}</cUF>`,
+    '      <versaoDados>4.00</versaoDados>',
+    '    </nfeCabecMsg>',
+    '  </soap12:Header>',
     '  <soap12:Body>',
-    '    <nfe:nfeAutorizacaoLote>',
-    '      <nfe:nfeDadosMsg>',
+    '    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">',
+    '      <!-- inserir aquí o enviNFe v4.00 assinado -->',
     nfeBody,
-    '      </nfe:nfeDadosMsg>',
-    '    </nfe:nfeAutorizacaoLote>',
+    '    </nfeDadosMsg>',
     '  </soap12:Body>',
     '</soap12:Envelope>',
+  ].join('\n');
+};
+
+const buildStatusSoapEnvelope = ({ payloadXml, uf }) => {
+  const sanitized = removeXmlDeclaration(payloadXml)
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line, index, array) => line || index < array.length - 1);
+
+  const body = sanitized
+    .map((line) => `      ${line}`)
+    .join('\n');
+
+  const ufCode = resolveUfCode(uf);
+
+  return [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"',
+    '                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    '                 xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
+    '  <soap12:Header>',
+    '    <nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4">',
+    `      <cUF>${ufCode}</cUF>`,
+    '      <versaoDados>4.00</versaoDados>',
+    '    </nfeCabecMsg>',
+    '  </soap12:Header>',
+    '  <soap12:Body>',
+    '    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4">',
+    body,
+    '    </nfeDadosMsg>',
+    '  </soap12:Body>',
+    '</soap12:Envelope>',
+  ].join('\n');
+};
+
+const buildStatusPayload = ({ uf, environment }) => {
+  const ufCode = resolveUfCode(uf);
+  const tpAmb = environment === 'producao' ? '1' : '2';
+  return [
+    '<consStatServ xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">',
+    `  <tpAmb>${tpAmb}</tpAmb>`,
+    `  <cUF>${ufCode}</cUF>`,
+    '  <xServ>STATUS</xServ>',
+    '</consStatServ>',
   ].join('\n');
 };
 
@@ -117,6 +320,17 @@ const resolveEndpoint = (uf, environment) => {
   const endpoint = map[normalizedUf] || map.default;
   if (!endpoint) {
     throw new SefazTransmissionError('Endpoint da SEFAZ não configurado para o estado informado.');
+  }
+  return endpoint;
+};
+
+const resolveStatusEndpoint = (uf, environment) => {
+  const envKey = environment === 'producao' ? 'producao' : 'homologacao';
+  const map = STATUS_ENDPOINTS[envKey] || {};
+  const normalizedUf = (uf || '').toString().trim().toUpperCase();
+  const endpoint = map[normalizedUf] || map.default;
+  if (!endpoint) {
+    throw new SefazTransmissionError('Endpoint de status da SEFAZ não configurado para o estado informado.');
   }
   return endpoint;
 };
@@ -310,150 +524,208 @@ const loadExtraCertificateAuthorities = () => {
   return collected;
 };
 
-const performSoapRequest = ({
+const performSoapRequest = async ({
   endpoint,
   envelope,
   certificate,
   certificateChain = [],
   privateKey,
   timeout = 45000,
+  soapAction = SOAP_ACTION,
 }) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const url = new URL(endpoint);
-      const isHttps = url.protocol === 'https:';
-      const normalizedChain = Array.isArray(certificateChain)
-        ? certificateChain
-            .map((entry) => {
-              if (!entry) return null;
-              if (Buffer.isBuffer(entry)) {
-                const asString = entry.toString();
+  await ensureClockSynchronization();
+
+  const envelopeString = typeof envelope === 'string' ? envelope : String(envelope || '');
+  const envelopePreview = envelopeString.slice(0, 2000);
+  const maxAttempts = 2;
+
+  const attemptRequest = (attempt = 1) => {
+    return new Promise((resolve, reject) => {
+      try {
+        const url = new URL(endpoint);
+        const isHttps = url.protocol === 'https:';
+        const normalizedChain = Array.isArray(certificateChain)
+          ? certificateChain
+              .map((entry) => {
+                if (!entry) return null;
+                if (Buffer.isBuffer(entry)) {
+                  const asString = entry.toString();
+                  return asString.trim() ? asString : null;
+                }
+                const asString = String(entry);
                 return asString.trim() ? asString : null;
-              }
-              const asString = String(entry);
-              return asString.trim() ? asString : null;
-            })
-            .filter((pem, index, array) => pem && array.indexOf(pem) === index)
-        : [];
+              })
+              .filter((pem, index, array) => pem && array.indexOf(pem) === index)
+          : [];
 
-      const normalizedCertificate = (() => {
-        if (!certificate) return '';
-        if (Buffer.isBuffer(certificate)) {
-          const asString = certificate.toString();
-          return asString.trim() ? asString : '';
-        }
-        const asString = String(certificate);
-        return asString.trim() ? asString : '';
-      })();
-
-      if (normalizedCertificate) {
-        const existingIndex = normalizedChain.indexOf(normalizedCertificate);
-        if (existingIndex >= 0) {
-          normalizedChain.splice(existingIndex, 1);
-        }
-        normalizedChain.unshift(normalizedCertificate);
-      }
-
-      const orderedChain = orderCertificateChain(normalizedChain);
-
-      const certificateList = [];
-      for (const entry of orderedChain) {
-        const normalizedEntry = (entry || '').trim();
-        if (normalizedEntry && !certificateList.includes(normalizedEntry)) {
-          certificateList.push(normalizedEntry);
-        }
-      }
-
-      const formattedCertificate = certificateList.map((entry) => normalizePem(entry)).join('');
-
-      const options = {
-        method: 'POST',
-        protocol: url.protocol,
-        hostname: url.hostname,
-        port: url.port || (isHttps ? 443 : 80),
-        path: `${url.pathname}${url.search || ''}`,
-        headers: {
-          'Content-Type': `application/soap+xml; charset=utf-8; action="${SOAP_ACTION}"`,
-          'Content-Length': Buffer.byteLength(envelope),
-          'User-Agent': 'EoBicho-PDV/1.0',
-        },
-        key: privateKey,
-      };
-
-      if (formattedCertificate) {
-        options.cert = formattedCertificate;
-      }
-
-      const defaultCaBundle = Array.isArray(tls.rootCertificates)
-        ? tls.rootCertificates.map((entry) => normalizePem(entry)).filter(Boolean)
-        : [];
-      const additionalAuthorities = collectCertificateAuthorities(certificateList)
-        .map((entry) => normalizePem(entry))
-        .filter((entry) => entry && !defaultCaBundle.includes(entry));
-      const extraAuthorities = loadExtraCertificateAuthorities()
-        .map((entry) => normalizePem(entry))
-        .filter((entry) => entry && !defaultCaBundle.includes(entry));
-
-      const caBundle = [...defaultCaBundle];
-      let caBundleModified = false;
-
-      for (const authority of additionalAuthorities) {
-        if (!caBundle.includes(authority)) {
-          caBundle.push(authority);
-          caBundleModified = true;
-        }
-      }
-
-      for (const authority of extraAuthorities) {
-        if (!caBundle.includes(authority)) {
-          caBundle.push(authority);
-          caBundleModified = true;
-        }
-      }
-
-      if (caBundleModified) {
-        options.ca = caBundle;
-      }
-
-      const request = https.request(options, (response) => {
-        let body = '';
-        response.setEncoding('utf8');
-        response.on('data', (chunk) => {
-          body += chunk;
-        });
-        response.on('end', () => {
-          if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
-            resolve(body.trim());
-          } else {
-            reject(
-              new SefazTransmissionError(
-                `SEFAZ retornou status HTTP ${response.statusCode || 'desconhecido'}.`,
-                { statusCode: response.statusCode, body }
-              )
-            );
+        const normalizedCertificate = (() => {
+          if (!certificate) return '';
+          if (Buffer.isBuffer(certificate)) {
+            const asString = certificate.toString();
+            return asString.trim() ? asString : '';
           }
+          const asString = String(certificate);
+          return asString.trim() ? asString : '';
+        })();
+
+        if (normalizedCertificate) {
+          const existingIndex = normalizedChain.indexOf(normalizedCertificate);
+          if (existingIndex >= 0) {
+            normalizedChain.splice(existingIndex, 1);
+          }
+          normalizedChain.unshift(normalizedCertificate);
+        }
+
+        const orderedChain = orderCertificateChain(normalizedChain);
+
+        const certificateList = [];
+        for (const entry of orderedChain) {
+          const normalizedEntry = (entry || '').trim();
+          if (normalizedEntry && !certificateList.includes(normalizedEntry)) {
+            certificateList.push(normalizedEntry);
+          }
+        }
+
+        const formattedCertificate = certificateList.map((entry) => normalizePem(entry)).join('');
+        if (formattedCertificate && !/-----BEGIN CERTIFICATE-----/.test(formattedCertificate)) {
+          throw new SefazTransmissionError('Certificado do cliente inválido.');
+        }
+
+        const normalizedPrivateKey = normalizePem(privateKey);
+        if (!normalizedPrivateKey || !/-----BEGIN (?:RSA )?PRIVATE KEY-----/.test(normalizedPrivateKey)) {
+          throw new SefazTransmissionError('Chave privada inválida/ausente.');
+        }
+
+        const headers = {
+          'Content-Type': `application/soap+xml; charset=utf-8; action="${soapAction}"`,
+          'Content-Length': Buffer.byteLength(envelopeString, 'utf8'),
+          'User-Agent': 'EoBicho-PDV/1.0',
+        };
+
+        const options = {
+          method: 'POST',
+          protocol: url.protocol,
+          hostname: url.hostname,
+          port: url.port || (isHttps ? 443 : 80),
+          path: `${url.pathname}${url.search || ''}`,
+          headers,
+          key: normalizedPrivateKey,
+          minVersion: 'TLSv1.2',
+        };
+
+        if (formattedCertificate) {
+          options.cert = formattedCertificate;
+        }
+
+        const defaultCaBundle = Array.isArray(tls.rootCertificates)
+          ? tls.rootCertificates.map((entry) => normalizePem(entry)).filter(Boolean)
+          : [];
+        const additionalAuthorities = collectCertificateAuthorities(certificateList)
+          .map((entry) => normalizePem(entry))
+          .filter((entry) => entry && !defaultCaBundle.includes(entry));
+        const extraAuthorities = loadExtraCertificateAuthorities()
+          .map((entry) => normalizePem(entry))
+          .filter((entry) => entry && !defaultCaBundle.includes(entry));
+
+        const caBundle = [...defaultCaBundle];
+        let caBundleModified = false;
+
+        for (const authority of additionalAuthorities) {
+          if (!caBundle.includes(authority)) {
+            caBundle.push(authority);
+            caBundleModified = true;
+          }
+        }
+
+        for (const authority of extraAuthorities) {
+          if (!caBundle.includes(authority)) {
+            caBundle.push(authority);
+            caBundleModified = true;
+          }
+        }
+
+        if (caBundleModified) {
+          options.ca = caBundle;
+        }
+
+        const logPrefix = `[SEFAZ] [SOAP tentativa ${attempt}]`;
+        console.info(`${logPrefix} Envelope (máx. 2000 chars): ${envelopePreview}`);
+
+        const request = https.request(options, (response) => {
+          let body = '';
+          response.setEncoding('utf8');
+          response.on('data', (chunk) => {
+            body += chunk;
+          });
+          response.on('end', () => {
+            const trimmed = body.trim();
+            const firstLine = trimmed.split(/\r?\n/).find((line) => line.trim()) || '';
+            console.info(`${logPrefix} Primeira linha da resposta: ${firstLine}`);
+            if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
+              resolve(trimmed);
+            } else {
+              reject(
+                new SefazTransmissionError(
+                  `SEFAZ retornou status HTTP ${response.statusCode || 'desconhecido'}.`,
+                  { statusCode: response.statusCode, body: trimmed }
+                )
+              );
+            }
+          });
         });
-      });
 
-      if (typeof timeout === 'number' && timeout > 0) {
-        request.setTimeout(timeout);
+        if (typeof timeout === 'number' && timeout > 0) {
+          request.setTimeout(timeout);
+        }
+
+        request.on('error', (error) => {
+          reject(
+            new SefazTransmissionError('Falha de comunicação com a SEFAZ.', {
+              cause: error,
+              attempt,
+            })
+          );
+        });
+
+        request.on('timeout', () => {
+          request.destroy();
+          reject(
+            new SefazTransmissionError('Tempo limite excedido ao comunicar com a SEFAZ.', {
+              timeout: true,
+              attempt,
+            })
+          );
+        });
+
+        request.write(envelopeString, 'utf8');
+        request.end();
+      } catch (error) {
+        if (error instanceof SefazTransmissionError) {
+          reject(error);
+        } else {
+          reject(
+            new SefazTransmissionError('Não foi possível enviar a requisição para a SEFAZ.', {
+              cause: error,
+            })
+          );
+        }
       }
+    }).catch(async (error) => {
+      const isTimeout =
+        error instanceof SefazTransmissionError && error.details && error.details.timeout === true;
+      if (isTimeout && attempt < maxAttempts) {
+        const delay = 1000 * 2 ** (attempt - 1);
+        console.warn(
+          `[SEFAZ] [SOAP tentativa ${attempt}] Tempo limite. Repetindo em ${delay}ms (máx. ${maxAttempts} tentativas).`
+        );
+        await wait(delay);
+        return attemptRequest(attempt + 1);
+      }
+      throw error;
+    });
+  };
 
-      request.on('error', (error) => {
-        reject(new SefazTransmissionError('Falha de comunicação com a SEFAZ.', { cause: error }));
-      });
-
-      request.on('timeout', () => {
-        request.destroy();
-        reject(new SefazTransmissionError('Tempo limite excedido ao comunicar com a SEFAZ.'));
-      });
-
-      request.write(envelope);
-      request.end();
-    } catch (error) {
-      reject(new SefazTransmissionError('Não foi possível enviar a requisição para a SEFAZ.', { cause: error }));
-    }
-  });
+  return attemptRequest();
 };
 
 const escapeTagName = (tag) => tag.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
@@ -488,7 +760,15 @@ const transmitNfceToSefaz = async ({
 }) => {
   const endpoint = resolveEndpoint(uf, environment);
   const enviNfe = buildEnviNfePayload({ xml, loteId: lotId, synchronous: true });
-  const envelope = buildSoapEnvelope(enviNfe);
+  if (!/versao="4\.00"/.test(enviNfe)) {
+    throw new SefazTransmissionError('enviNFe deve ser gerado na versão 4.00.');
+  }
+
+  const loteMatch = /<idLote>([^<]+)<\/idLote>/.exec(enviNfe);
+  if (!loteMatch || !/^\d+$/.test(loteMatch[1])) {
+    throw new SefazTransmissionError('IdLote inválido: informe apenas dígitos.');
+  }
+  const envelope = buildSoapEnvelope({ enviNfeXml: enviNfe, uf });
 
   const responseXml = await performSoapRequest({
     endpoint,
@@ -560,8 +840,35 @@ const transmitNfceToSefaz = async ({
   };
 };
 
+const consultNfceStatusServico = async ({
+  uf,
+  environment,
+  certificate,
+  certificateChain,
+  privateKey,
+}) => {
+  const endpoint = resolveStatusEndpoint(uf, environment);
+  const payload = buildStatusPayload({ uf, environment });
+  const envelope = buildStatusSoapEnvelope({ payloadXml: payload, uf });
+
+  const responseXml = await performSoapRequest({
+    endpoint,
+    envelope,
+    certificate,
+    certificateChain,
+    privateKey,
+    soapAction: STATUS_SOAP_ACTION,
+  });
+
+  return {
+    endpoint,
+    responseXml,
+  };
+};
+
 module.exports = {
   transmitNfceToSefaz,
+  consultNfceStatusServico,
   SefazTransmissionError,
   __TESTING__: {
     performSoapRequest,
@@ -571,5 +878,11 @@ module.exports = {
     splitCertificatesFromPem,
     extractTagContent,
     extractSection,
+    resolveUfCode,
+    buildSoapEnvelope,
+    buildStatusSoapEnvelope,
+    buildStatusPayload,
+    ensureClockSynchronization,
+    getSynchronizedDate,
   },
 };
