@@ -48,6 +48,7 @@ const sanitizeDigits = (value, { fallback = '' } = {}) => {
 };
 
 const onlyDigits = (s) => String(s ?? '').replace(/\D/g, '');
+const dec = (n) => Number(n ?? 0).toFixed(2);
 const sanitize = (s) =>
   String(s ?? '')
     .replace(/[\u0000-\u001F\u007F]/g, '')
@@ -57,6 +58,65 @@ const pushTagIf = (arr, tag, value, indent = '        ') => {
   const v = sanitize(value);
   if (v) arr.push(`${indent}<${tag}>${v}</${tag}>`);
 };
+
+const PAYMENT_TYPE_MAP = {
+  '01': '01',
+  dinheiro: '01',
+  cash: '01',
+  '02': '02',
+  cheque: '02',
+  '03': '03',
+  credito: '03',
+  cartaocredito: '03',
+  '04': '04',
+  debito: '04',
+  cartaodebito: '04',
+  '05': '05',
+  crediario: '05',
+  loja: '05',
+  '15': '15',
+  boleto: '15',
+  '16': '16',
+  deposito: '16',
+  '17': '17',
+  pix: '17',
+  '18': '18',
+  transferencia: '18',
+  transferenciabancaria: '18',
+  '90': '90',
+  semdinheiro: '90',
+  sempagamento: '90',
+  '99': '99',
+  outros: '99',
+};
+
+const resolvePaymentCode = (raw) => {
+  const source = String(raw ?? '').trim();
+  if (!source) {
+    return '01';
+  }
+
+  const digits = onlyDigits(source).padStart(2, '0');
+  if (PAYMENT_TYPE_MAP[digits]) {
+    return PAYMENT_TYPE_MAP[digits];
+  }
+
+  const normalizedSource =
+    typeof source.normalize === 'function' ? source.normalize('NFD') : source;
+  const normalized = normalizedSource.replace(/[^\p{Letter}\p{Number}]+/gu, '').toLowerCase();
+  if (PAYMENT_TYPE_MAP[normalized]) {
+    return PAYMENT_TYPE_MAP[normalized];
+  }
+
+  return '99';
+};
+
+const resolveIndPag = (raw) => {
+  const digits = onlyDigits(raw);
+  return digits === '0' || digits === '1' || digits === '2' ? digits : '';
+};
+
+const CARD_PAYMENT_CODES = new Set(['03', '04']);
 
 const resolveStoreUf = (store = {}) => {
   const ufSource = store.uf || store.estado || store.state || '';
@@ -704,7 +764,13 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     ? pagamentosRaw.map((payment) => ({
         descricao: payment?.descricao || payment?.label || payment?.nome || 'Pagamento',
         valor: safeNumber(payment?.valor ?? payment?.formatted ?? 0, 0),
-        forma: payment?.forma || payment?.codigo || '01',
+        forma: payment?.forma || payment?.codigo || payment?.tipo || '01',
+        indPag: payment?.indPag ?? payment?.indicador ?? payment?.indicadorPagamento,
+        integracao: payment?.tpIntegra ?? payment?.integracao ?? payment?.tipoIntegracao,
+        card: payment?.card || payment?.cartao || null,
+        cnpj: payment?.cnpjCredenciadora || payment?.cnpj || null,
+        tBand: payment?.tBand || payment?.bandeira || null,
+        cAut: payment?.cAut || payment?.autorizacao || null,
       }))
     : [
         {
@@ -990,15 +1056,70 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('      </ICMSTot>');
   infNfeLines.push('    </total>');
 
+  const paymentDetails = pagamentos.map((payment) => {
+    const valor = safeNumber(payment.valor, 0);
+    const tPag = resolvePaymentCode(payment.forma);
+    const indPag = resolveIndPag(payment.indPag);
+    let card = null;
+
+    if (CARD_PAYMENT_CODES.has(tPag)) {
+      const cardSource = payment.card || {};
+      const integraRaw = payment.integracao ?? cardSource.tpIntegra ?? cardSource.integracao;
+      const integraDigits = onlyDigits(integraRaw);
+      const tpIntegra = integraDigits === '1' ? '1' : '2';
+      const cnpjCred = onlyDigits(
+        cardSource.cnpj || cardSource.cnpjCredenciadora || payment.cnpj || payment.cnpjCredenciadora
+      );
+      const bandDigits = onlyDigits(cardSource.tBand || cardSource.bandeira || payment.tBand);
+      const cAutValue = sanitize(cardSource.cAut || cardSource.autorizacao || payment.cAut);
+      card = {
+        tpIntegra,
+        cnpj: cnpjCred.length === 14 ? cnpjCred : '',
+        tBand: bandDigits ? bandDigits.padStart(2, '0').slice(-2) : '',
+        cAut: cAutValue ? cAutValue.slice(0, 20) : '',
+      };
+    }
+
+    return { valor, tPag, indPag, card };
+  });
+
+  if (!paymentDetails.length) {
+    throw new Error('NFC-e inválida: grupo <pag> requer ao menos um <detPag>.');
+  }
+
+  const totalPagamentos = paymentDetails.reduce((sum, item) => sum + item.valor, 0);
+  const difference = Math.abs(totalPagamentos - troco - totalLiquido);
+  if (difference > 0.01) {
+    throw new Error('NFC-e inválida: soma dos pagamentos não confere com o vNF.');
+  }
+
   infNfeLines.push('    <pag>');
-  pagamentos.forEach((payment) => {
-    const forma = sanitizeDigits(payment.forma, { fallback: '01' }).padStart(2, '0');
+  paymentDetails.forEach((payment) => {
     infNfeLines.push('      <detPag>');
-    infNfeLines.push(`        <tPag>${forma}</tPag>`);
-    infNfeLines.push(`        <vPag>${toDecimal(payment.valor)}</vPag>`);
+    if (payment.indPag) {
+      infNfeLines.push(`        <indPag>${payment.indPag}</indPag>`);
+    }
+    infNfeLines.push(`        <tPag>${payment.tPag}</tPag>`);
+    infNfeLines.push(`        <vPag>${dec(payment.valor)}</vPag>`);
+    if (payment.card) {
+      infNfeLines.push('        <card>');
+      infNfeLines.push(`          <tpIntegra>${payment.card.tpIntegra}</tpIntegra>`);
+      if (payment.card.cnpj) {
+        infNfeLines.push(`          <CNPJ>${payment.card.cnpj}</CNPJ>`);
+      }
+      if (payment.card.tBand) {
+        infNfeLines.push(`          <tBand>${payment.card.tBand}</tBand>`);
+      }
+      if (payment.card.cAut) {
+        infNfeLines.push(`          <cAut>${payment.card.cAut}</cAut>`);
+      }
+      infNfeLines.push('        </card>');
+    }
     infNfeLines.push('      </detPag>');
   });
-  infNfeLines.push(`      <vTroco>${toDecimal(troco)}</vTroco>`);
+  if (Math.abs(troco) > 0.009) {
+    infNfeLines.push(`      <vTroco>${dec(troco)}</vTroco>`);
+  }
   infNfeLines.push('    </pag>');
 
   const obs = buildInfAdicObservations({ pdv, sale, environmentLabel });
