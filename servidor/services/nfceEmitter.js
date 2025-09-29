@@ -48,10 +48,14 @@ const sanitizeDigits = (value, { fallback = '' } = {}) => {
 };
 
 const onlyDigits = (s) => String(s ?? '').replace(/\D/g, '');
-const sanitize = (s) => String(s ?? '').replace(/[\u0000-\u001F\u007F]/g, '').trim();
-const pushTagIf = (arr, tag, value) => {
+const sanitize = (s) =>
+  String(s ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ');
+const pushTagIf = (arr, tag, value, indent = '        ') => {
   const v = sanitize(value);
-  if (v) arr.push(`        <${tag}>${v}</${tag}>`);
+  if (v) arr.push(`${indent}<${tag}>${v}</${tag}>`);
 };
 
 const resolveStoreUf = (store = {}) => {
@@ -828,49 +832,64 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('      <CRT>1</CRT>');
   infNfeLines.push('    </emit>');
 
-  const destNomeRaw = cliente?.nome ?? cliente?.razaoSocial ?? '';
-  const destNomeSanitized = sanitize(destNomeRaw);
-  const destNome = destNomeSanitized || 'CONSUMIDOR';
-  const dLgr = sanitize(delivery?.logradouro || cliente?.logradouro);
-  const dNro = onlyDigits(delivery?.numero ?? cliente?.numero);
-  const dCompl = sanitize(delivery?.complemento || cliente?.complemento);
-  const dBairro = sanitize(delivery?.bairro || cliente?.bairro);
-  const dCMun = onlyDigits(
-    delivery?.cMun ?? delivery?.codigoIbgeMunicipio ?? cliente?.cMun ?? cliente?.codigoIbgeMunicipio
-  );
-  const dXMun = sanitize(
-    delivery?.xMun || delivery?.cidade || cliente?.xMun || cliente?.cidade || ''
-  );
-  const dUF = sanitize((delivery?.UF || delivery?.uf || cliente?.UF || cliente?.uf || '')).toUpperCase();
-  const dCEP = onlyDigits(delivery?.CEP || delivery?.cep || cliente?.CEP || cliente?.cep);
-  const hasAddr = dLgr || dNro || dBairro || dCMun || dXMun || dUF || dCEP || dCompl;
+  const destCPF = onlyDigits(cliente?.cpf || delivery?.cpf);
+  const destCNPJ = onlyDigits(cliente?.cnpj);
+  const destIdE = sanitize(cliente?.idEstrangeiro);
 
-  infNfeLines.push('    <dest>');
-  if (cliente?.cnpj) {
-    infNfeLines.push(`      <CNPJ>${sanitizeDigits(cliente.cnpj)}</CNPJ>`);
-  } else if (cliente?.cpf) {
-    infNfeLines.push(`      <CPF>${sanitizeDigits(cliente.cpf)}</CPF>`);
+  const hasCPF = /^\d{11}$/.test(destCPF);
+  const hasCNPJ = /^\d{14}$/.test(destCNPJ);
+  const hasIdE = !!destIdE;
+
+  const xNome = sanitize(cliente?.nome || cliente?.razaoSocial || delivery?.nome || '');
+  const xNome60 = (xNome || 'CONSUMIDOR').slice(0, 60);
+
+  if (hasCPF || hasCNPJ || hasIdE) {
+    const dLgr = sanitize(delivery?.logradouro || cliente?.logradouro);
+    const dNro = onlyDigits(delivery?.numero ?? cliente?.numero);
+    const dCompl = sanitize(delivery?.complemento || cliente?.complemento);
+    const dBairro = sanitize(delivery?.bairro || cliente?.bairro);
+    const dCMun = onlyDigits(
+      delivery?.cMun ??
+        delivery?.codigoIbgeMunicipio ??
+        cliente?.cMun ??
+        cliente?.codigoIbgeMunicipio
+    );
+    const dXMun = sanitize(
+      delivery?.xMun ?? delivery?.cidade ?? cliente?.xMun ?? cliente?.cidade
+    );
+    const dUF = sanitize(
+      (delivery?.UF ?? delivery?.uf ?? cliente?.UF ?? cliente?.uf || '')
+    ).toUpperCase();
+    const dCEP = onlyDigits(delivery?.CEP ?? delivery?.cep ?? cliente?.CEP ?? cliente?.cep);
+
+    const hasAddr = dLgr || dNro || dCompl || dBairro || dCMun || dXMun || dUF || dCEP;
+
+    infNfeLines.push('    <dest>');
+    if (hasCNPJ) infNfeLines.push(`      <CNPJ>${destCNPJ}</CNPJ>`);
+    else if (hasCPF) infNfeLines.push(`      <CPF>${destCPF}</CPF>`);
+    else infNfeLines.push(`      <idEstrangeiro>${destIdE}</idEstrangeiro>`);
+
+    if (xNome60) infNfeLines.push(`      <xNome>${xNome60}</xNome>`);
+
+    if (hasAddr) {
+      infNfeLines.push('      <enderDest>');
+      pushTagIf(infNfeLines, 'xLgr', dLgr, '        ');
+      infNfeLines.push(`        <nro>${dNro || '0'}</nro>`);
+      pushTagIf(infNfeLines, 'xCpl', dCompl, '        ');
+      pushTagIf(infNfeLines, 'xBairro', dBairro, '        ');
+      if (dCMun) infNfeLines.push(`        <cMun>${dCMun}</cMun>`);
+      pushTagIf(infNfeLines, 'xMun', dXMun, '        ');
+      if (/^[A-Z]{2}$/.test(dUF)) infNfeLines.push(`        <UF>${dUF}</UF>`);
+      if (/^\d{8}$/.test(dCEP)) infNfeLines.push(`        <CEP>${dCEP}</CEP>`);
+      infNfeLines.push('      </enderDest>');
+    }
+
+    infNfeLines.push('      <indIEDest>9</indIEDest>');
+    if (cliente?.email) {
+      infNfeLines.push(`      <email>${sanitize(cliente.email)}</email>`);
+    }
+    infNfeLines.push('    </dest>');
   }
-  infNfeLines.push(`      <xNome>${destNome}</xNome>`);
-  if (cliente?.email) {
-    infNfeLines.push(`      <email>${sanitize(cliente.email)}</email>`);
-  }
-  if (hasAddr) {
-    infNfeLines.push('      <enderDest>');
-    if (dLgr) infNfeLines.push(`        <xLgr>${dLgr}</xLgr>`);
-    infNfeLines.push(`        <nro>${dNro || '0'}</nro>`);
-    if (dCompl) infNfeLines.push(`        <xCpl>${dCompl}</xCpl>`);
-    if (dBairro) infNfeLines.push(`        <xBairro>${dBairro}</xBairro>`);
-    if (dCMun) infNfeLines.push(`        <cMun>${dCMun}</cMun>`);
-    if (dXMun) infNfeLines.push(`        <xMun>${dXMun}</xMun>`);
-    if (/^[A-Z]{2}$/.test(dUF)) infNfeLines.push(`        <UF>${dUF}</UF>`);
-    if (/^\d{8}$/.test(dCEP)) infNfeLines.push(`        <CEP>${dCEP}</CEP>`);
-    infNfeLines.push('        <cPais>1058</cPais>');
-    infNfeLines.push('        <xPais>BRASIL</xPais>');
-    infNfeLines.push('      </enderDest>');
-  }
-  infNfeLines.push(`      <indIEDest>9</indIEDest>`);
-  infNfeLines.push('    </dest>');
 
   fiscalItems.forEach((item, index) => {
     const product = item.productId ? productsMap.get(String(item.productId)) : null;
