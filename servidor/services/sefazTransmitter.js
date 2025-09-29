@@ -2,6 +2,8 @@ const https = require('https');
 const { URL } = require('url');
 const tls = require('tls');
 const forge = require('node-forge');
+const fs = require('fs');
+const path = require('path');
 
 class SefazTransmissionError extends Error {
   constructor(message, details = {}) {
@@ -24,6 +26,30 @@ const AUTORIZACAO_ENDPOINTS = {
 
 const SOAP_ACTION =
   'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote';
+
+const CERTIFICATE_PATTERN = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g;
+
+const EXTRA_CA_TEXT_ENV_VARS = [
+  'NFCE_EXTRA_CA',
+  'NFCE_EXTRA_CA_BUNDLE',
+  'NFCE_ADDITIONAL_CA',
+  'NFCE_ADDITIONAL_CA_BUNDLE',
+];
+
+const EXTRA_CA_PATH_ENV_VARS = [
+  'NFCE_EXTRA_CA_FILE',
+  'NFCE_EXTRA_CA_PATH',
+  'NFCE_EXTRA_CA_FILES',
+  'NFCE_EXTRA_CA_PATHS',
+  'NFCE_ADDITIONAL_CA_FILE',
+  'NFCE_ADDITIONAL_CA_PATH',
+  'NFCE_ADDITIONAL_CA_FILES',
+  'NFCE_ADDITIONAL_CA_PATHS',
+];
+
+const DEFAULT_EXTRA_CA_FILES = [
+  path.resolve(__dirname, '../config/sefaz-ca-bundle.pem'),
+];
 
 const removeXmlDeclaration = (xml) => {
   if (!xml) return '';
@@ -199,6 +225,82 @@ const collectCertificateAuthorities = (chain = []) => {
   return authorities;
 };
 
+const splitCertificatesFromPem = (input) => {
+  if (!input) {
+    return [];
+  }
+
+  const asString = Buffer.isBuffer(input) ? input.toString('utf8') : String(input);
+  const matches = asString.match(CERTIFICATE_PATTERN);
+  if (!matches || !matches.length) {
+    const trimmed = asString.trim();
+    return trimmed ? [trimmed] : [];
+  }
+
+  return matches.map((entry) => entry.trim()).filter(Boolean);
+};
+
+const loadExtraCertificateAuthorities = () => {
+  const collected = [];
+  const seen = new Set();
+
+  for (const envVar of EXTRA_CA_TEXT_ENV_VARS) {
+    const value = process.env[envVar];
+    if (!value) continue;
+    for (const certificate of splitCertificatesFromPem(value)) {
+      const trimmed = certificate.trim();
+      if (trimmed && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        collected.push(trimmed);
+      }
+    }
+  }
+
+  const candidatePaths = new Set();
+
+  for (const envVar of EXTRA_CA_PATH_ENV_VARS) {
+    const value = process.env[envVar];
+    if (!value) continue;
+    const parts = String(value)
+      .split(/[;,\n]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    for (const part of parts) {
+      candidatePaths.add(part);
+    }
+  }
+
+  for (const defaultPath of DEFAULT_EXTRA_CA_FILES) {
+    candidatePaths.add(defaultPath);
+  }
+
+  const processedFiles = new Set();
+
+  for (const candidate of candidatePaths) {
+    try {
+      const resolved = path.isAbsolute(candidate)
+        ? candidate
+        : path.resolve(process.cwd(), candidate);
+      if (processedFiles.has(resolved)) {
+        continue;
+      }
+      const content = fs.readFileSync(resolved, 'utf8');
+      processedFiles.add(resolved);
+      for (const certificate of splitCertificatesFromPem(content)) {
+        const trimmed = certificate.trim();
+        if (trimmed && !seen.has(trimmed)) {
+          seen.add(trimmed);
+          collected.push(trimmed);
+        }
+      }
+    } catch (error) {
+      // Ignore missing files or read errors.
+    }
+  }
+
+  return collected;
+};
+
 const performSoapRequest = ({
   endpoint,
   envelope,
@@ -279,9 +381,29 @@ const performSoapRequest = ({
       const additionalAuthorities = collectCertificateAuthorities(certificateList)
         .map((entry) => normalizePem(entry))
         .filter((entry) => entry && !defaultCaBundle.includes(entry));
+      const extraAuthorities = loadExtraCertificateAuthorities()
+        .map((entry) => normalizePem(entry))
+        .filter((entry) => entry && !defaultCaBundle.includes(entry));
 
-      if (additionalAuthorities.length) {
-        options.ca = [...defaultCaBundle, ...additionalAuthorities];
+      const caBundle = [...defaultCaBundle];
+      let caBundleModified = false;
+
+      for (const authority of additionalAuthorities) {
+        if (!caBundle.includes(authority)) {
+          caBundle.push(authority);
+          caBundleModified = true;
+        }
+      }
+
+      for (const authority of extraAuthorities) {
+        if (!caBundle.includes(authority)) {
+          caBundle.push(authority);
+          caBundleModified = true;
+        }
+      }
+
+      if (caBundleModified) {
+        options.ca = caBundle;
       }
 
       const request = https.request(options, (response) => {
@@ -429,5 +551,7 @@ module.exports = {
     performSoapRequest,
     normalizePem,
     collectCertificateAuthorities,
+    loadExtraCertificateAuthorities,
+    splitCertificatesFromPem,
   },
 };

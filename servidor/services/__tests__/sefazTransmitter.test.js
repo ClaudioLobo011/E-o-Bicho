@@ -3,6 +3,8 @@ const assert = require('node:assert');
 const https = require('https');
 const tls = require('tls');
 const forge = require('node-forge');
+const fs = require('fs');
+const path = require('path');
 const { EventEmitter } = require('node:events');
 
 test('performSoapRequest forwards intermediate certificates via options.ca', async () => {
@@ -149,5 +151,106 @@ test('performSoapRequest forwards intermediate certificates via options.ca', asy
   } finally {
     https.request = originalRequest;
     forge.pki.certificateFromPem = originalCertificateFromPem;
+  }
+});
+
+test('performSoapRequest merges extra CA bundles configured via environment', async () => {
+  const originalRequest = https.request;
+  const originalReadFileSync = fs.readFileSync;
+
+  let capturedOptions = null;
+
+  https.request = (options, callback) => {
+    capturedOptions = options;
+    const response = new EventEmitter();
+    response.setEncoding = () => {};
+    callback(response);
+
+    const request = new EventEmitter();
+    request.setTimeout = () => {};
+    request.write = () => {};
+    request.end = () => {
+      process.nextTick(() => {
+        response.statusCode = 200;
+        response.emit('data', '<soap />');
+        response.emit('end');
+      });
+    };
+    request.destroy = () => {};
+    request.on = function (event, handler) {
+      EventEmitter.prototype.on.call(this, event, handler);
+      return this;
+    };
+    return request;
+  };
+
+  const fileCertificates = new Map();
+  const fakeAbsolutePath = path.join('/etc', 'sefaz-extra-ca.pem');
+  const fakeRelativePath = path.join('config', 'custom-sefaz-ca.pem');
+  fileCertificates.set(
+    fakeAbsolutePath,
+    '-----BEGIN CERTIFICATE-----\nFILEABSOLUTE\n-----END CERTIFICATE-----'
+  );
+  fileCertificates.set(
+    path.resolve(process.cwd(), fakeRelativePath),
+    '-----BEGIN CERTIFICATE-----\nFILERELATIVE\n-----END CERTIFICATE-----'
+  );
+
+  fs.readFileSync = (candidate, encoding) => {
+    const normalized = path.isAbsolute(candidate) ? candidate : path.resolve(process.cwd(), candidate);
+    if (fileCertificates.has(candidate)) {
+      return fileCertificates.get(candidate);
+    }
+    if (fileCertificates.has(normalized)) {
+      return fileCertificates.get(normalized);
+    }
+    return originalReadFileSync(candidate, encoding || 'utf8');
+  };
+
+  process.env.NFCE_EXTRA_CA = '-----BEGIN CERTIFICATE-----\nENVCONFIG\n-----END CERTIFICATE-----';
+  process.env.NFCE_EXTRA_CA_PATHS = `${fakeAbsolutePath};${fakeRelativePath}`;
+
+  delete require.cache[require.resolve('../sefazTransmitter')];
+  const { __TESTING__ } = require('../sefazTransmitter');
+  const { performSoapRequest, normalizePem } = __TESTING__;
+
+  try {
+    await performSoapRequest({
+      endpoint: 'https://nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+      envelope: '<xml />',
+      certificate: '-----BEGIN CERTIFICATE-----\nCLIENT\n-----END CERTIFICATE-----',
+      certificateChain: ['-----BEGIN CERTIFICATE-----\nCLIENT\n-----END CERTIFICATE-----'],
+      privateKey: '-----BEGIN PRIVATE KEY-----\nMIIFfake\n-----END PRIVATE KEY-----',
+    });
+
+    const defaultCaBundle = Array.isArray(tls.rootCertificates)
+      ? tls.rootCertificates.map((entry) => normalizePem(entry)).filter(Boolean)
+      : [];
+
+    const expectedExtras = [
+      '-----BEGIN CERTIFICATE-----\nENVCONFIG\n-----END CERTIFICATE-----',
+      '-----BEGIN CERTIFICATE-----\nFILEABSOLUTE\n-----END CERTIFICATE-----',
+      '-----BEGIN CERTIFICATE-----\nFILERELATIVE\n-----END CERTIFICATE-----',
+    ].map((entry) => normalizePem(entry));
+
+    assert.ok(Array.isArray(capturedOptions.ca));
+    for (const certificate of defaultCaBundle) {
+      assert.ok(
+        capturedOptions.ca.includes(certificate),
+        'O bundle de CAs deve manter os certificados raiz padrão do Node.'
+      );
+    }
+
+    for (const certificate of expectedExtras) {
+      assert.ok(
+        capturedOptions.ca.includes(certificate),
+        'Os certificados adicionais devem ser mesclados ao bundle de CAs.'
+      );
+    }
+  } finally {
+    https.request = originalRequest;
+    fs.readFileSync = originalReadFileSync;
+    delete process.env.NFCE_EXTRA_CA;
+    delete process.env.NFCE_EXTRA_CA_PATHS;
   }
 });
