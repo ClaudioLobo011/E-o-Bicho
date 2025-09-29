@@ -1205,15 +1205,15 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   };
   const refXPath = "/*[local-name()='NFe']/*[local-name()='infNFe']";
   const refUri = `#${infId}`;
-  signer.addReference({
-    xpath: refXPath,
-    transforms: [
+  signer.addReference(
+    refXPath,
+    [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
       'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     ],
-    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
-    uri: refUri,
-  });
+    'http://www.w3.org/2000/09/xmldsig#sha1',
+    refUri
+  );
   console.debug('XPath ref:', refXPath);
   signer.computeSignature(xmlForSignature, {
     prefix: '',
@@ -1256,6 +1256,13 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       }
 
       nfeNode.insertBefore(signatureNode, insertionPoint);
+      const childElements = [];
+      for (let node = nfeNode.firstChild; node; node = node.nextSibling) {
+        if (node.nodeType === 1) {
+          childElements.push(node.localName || node.nodeName);
+        }
+      }
+      console.debug('[NFCE] Ordem filhos <NFe>:', childElements);
       const serializer = new XMLSerializer();
       signedXmlContent = serializer.serializeToString(signedDocument);
     }
