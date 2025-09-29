@@ -261,7 +261,6 @@ const buildSoapEnvelope = ({ enviNfeXml, uf }) => {
     '  </soap12:Header>',
     '  <soap12:Body>',
     '    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">',
-    '      <!-- inserir aquí o enviNFe v4.00 assinado -->',
     nfeBody,
     '    </nfeDadosMsg>',
     '  </soap12:Body>',
