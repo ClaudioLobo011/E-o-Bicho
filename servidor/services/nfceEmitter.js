@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const forge = require('node-forge');
+const { DOMParser } = require('@xmldom/xmldom');
+const xpath = require('xpath');
 const { SignedXml } = require('xml-crypto');
 const Product = require('../models/Product');
 const {
@@ -49,11 +51,21 @@ const sanitizeDigits = (value, { fallback = '' } = {}) => {
 
 const onlyDigits = (s) => String(s ?? '').replace(/\D/g, '');
 const dec = (n) => Number(n ?? 0).toFixed(2);
+const escapeXmlText = (value) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
 const sanitize = (s) =>
-  String(s ?? '')
-    .replace(/[\u0000-\u001F\u007F]/g, '')
-    .trim()
-    .replace(/\s+/g, ' ');
+  escapeXmlText(
+    String(s ?? '')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .trim()
+      .replace(/\s+/g, ' ')
+  );
 const pushTagIf = (arr, tag, value, indent = '        ') => {
   const v = sanitize(value);
   if (v) arr.push(`${indent}<${tag}>${v}</${tag}>`);
@@ -985,20 +997,21 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     const cst = fiscalData?.cst || '';
     infNfeLines.push(`    <det nItem="${index + 1}">`);
     infNfeLines.push('      <prod>');
-    infNfeLines.push(`        <cProd>${item.internalCode || item.productId || String(index + 1).padStart(4, '0')}</cProd>`);
+    const productCode = item.internalCode || item.productId || String(index + 1).padStart(4, '0');
+    infNfeLines.push(`        <cProd>${sanitize(productCode)}</cProd>`);
     infNfeLines.push(`        <cEAN>${cEAN}</cEAN>`);
-    infNfeLines.push(`        <xProd>${item.name}</xProd>`);
+    infNfeLines.push(`        <xProd>${sanitize(item.name)}</xProd>`);
     infNfeLines.push(`        <NCM>${ncm.padStart(8, '0')}</NCM>`);
     if (fiscalData?.cest) {
       infNfeLines.push(`        <CEST>${fiscalData.cest}</CEST>`);
     }
     infNfeLines.push(`        <CFOP>${cfop}</CFOP>`);
-    infNfeLines.push(`        <uCom>${item.unit}</uCom>`);
+    infNfeLines.push(`        <uCom>${sanitize(item.unit)}</uCom>`);
     infNfeLines.push(`        <qCom>${toDecimal(item.quantity, 4)}</qCom>`);
     infNfeLines.push(`        <vUnCom>${toDecimal(item.unitPrice)}</vUnCom>`);
     infNfeLines.push(`        <vProd>${toDecimal(item.total)}</vProd>`);
     infNfeLines.push(`        <cEANTrib>${cEANTrib}</cEANTrib>`);
-    infNfeLines.push(`        <uTrib>${item.unit}</uTrib>`);
+    infNfeLines.push(`        <uTrib>${sanitize(item.unit)}</uTrib>`);
     infNfeLines.push(`        <qTrib>${toDecimal(item.quantity, 4)}</qTrib>`);
     infNfeLines.push(`        <vUnTrib>${toDecimal(item.unitPrice)}</vUnTrib>`);
     infNfeLines.push('        <indTot>1</indTot>');
@@ -1141,11 +1154,15 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('    <infAdic>');
   if (obs.length) {
     obs.forEach((entry) => {
-      infNfeLines.push(`      <obsCont xCampo="${entry.tag}"><xTexto>${entry.value}</xTexto></obsCont>`);
+      infNfeLines.push(
+        `      <obsCont xCampo="${sanitize(entry.tag)}"><xTexto>${sanitize(entry.value)}</xTexto></obsCont>`
+      );
     });
   }
   if (snapshot?.meta?.observacoes || snapshot?.meta?.observacaoGeral) {
-    infNfeLines.push(`      <infCpl>${snapshot.meta.observacoes || snapshot.meta.observacaoGeral}</infCpl>`);
+    infNfeLines.push(
+      `      <infCpl>${sanitize(snapshot.meta.observacoes || snapshot.meta.observacaoGeral)}</infCpl>`
+    );
   }
   infNfeLines.push('    </infAdic>');
   infNfeLines.push('  </infNFe>');
@@ -1158,6 +1175,16 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const baseXmlLines = ['<?xml version="1.0" encoding="UTF-8"?>', '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">', ...infNfeLines, '</NFe>'];
   const xmlForSignature = baseXmlLines.join('\n');
 
+  const xmlDocument = new DOMParser().parseFromString(xmlForSignature, 'text/xml');
+  const [infNfeNode] = xpath.select("/*[local-name()='NFe']/*[local-name()='infNFe']", xmlDocument);
+  if (!infNfeNode) {
+    throw new Error('Estrutura NFC-e inválida: nó <infNFe> ausente.');
+  }
+  const infId = infNfeNode.getAttribute('Id');
+  if (!infId) {
+    throw new Error('Estrutura NFC-e inválida: atributo Id ausente em <infNFe>.');
+  }
+
   const keyPemString = Buffer.isBuffer(privateKeyPem)
     ? privateKeyPem.toString('utf8')
     : String(privateKeyPem || '');
@@ -1169,14 +1196,19 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const signer = new SignedXml({
     privateKey: Buffer.from(keyPemString),
     signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    idAttribute: 'Id',
   });
   // NFC-e 4.00 (RJ) exige assinatura SHA1 com canonicalização C14N inclusiva.
   signer.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
   signer.keyInfoProvider = {
     getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
   };
+  signer.signatureLocation = {
+    reference: "/*[local-name()='NFe']/*[local-name()='infNFe']",
+    action: 'after',
+  };
   signer.addReference({
-    xpath: "//*[local-name(.)='infNFe' and @Id]",
+    uri: `#${infId}`,
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
       'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
@@ -1186,6 +1218,10 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   signer.computeSignature(xmlForSignature, { prefix: '' });
 
   const signedXmlContent = signer.getSignedXml();
+
+  if (process.env.NODE_ENV === 'development') {
+    console.debug('[NFCE] XML assinado para transmissão:', signedXmlContent);
+  }
   const digestValue = signer.references?.[0]?.digestValue || '';
   const signatureValue = signer.signatureValue || '';
 
