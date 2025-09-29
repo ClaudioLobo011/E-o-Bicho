@@ -47,6 +47,77 @@ const sanitizeDigits = (value, { fallback = '' } = {}) => {
   return digits || fallback;
 };
 
+const onlyDigits = (s) => String(s ?? '').replace(/\D/g, '');
+const dec = (n) => Number(n ?? 0).toFixed(2);
+const sanitize = (s) =>
+  String(s ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ');
+const pushTagIf = (arr, tag, value, indent = '        ') => {
+  const v = sanitize(value);
+  if (v) arr.push(`${indent}<${tag}>${v}</${tag}>`);
+};
+
+const PAYMENT_TYPE_MAP = {
+  '01': '01',
+  dinheiro: '01',
+  cash: '01',
+  '02': '02',
+  cheque: '02',
+  '03': '03',
+  credito: '03',
+  cartaocredito: '03',
+  '04': '04',
+  debito: '04',
+  cartaodebito: '04',
+  '05': '05',
+  crediario: '05',
+  loja: '05',
+  '15': '15',
+  boleto: '15',
+  '16': '16',
+  deposito: '16',
+  '17': '17',
+  pix: '17',
+  '18': '18',
+  transferencia: '18',
+  transferenciabancaria: '18',
+  '90': '90',
+  semdinheiro: '90',
+  sempagamento: '90',
+  '99': '99',
+  outros: '99',
+};
+
+const resolvePaymentCode = (raw) => {
+  const source = String(raw ?? '').trim();
+  if (!source) {
+    return '01';
+  }
+
+  const digits = onlyDigits(source).padStart(2, '0');
+  if (PAYMENT_TYPE_MAP[digits]) {
+    return PAYMENT_TYPE_MAP[digits];
+  }
+
+  const normalizedSource =
+    typeof source.normalize === 'function' ? source.normalize('NFD') : source;
+  const normalized = normalizedSource.replace(/[^\p{Letter}\p{Number}]+/gu, '').toLowerCase();
+  if (PAYMENT_TYPE_MAP[normalized]) {
+    return PAYMENT_TYPE_MAP[normalized];
+  }
+
+  return '99';
+};
+
+const resolveIndPag = (raw) => {
+  const digits = onlyDigits(raw);
+  return digits === '0' || digits === '1' || digits === '2' ? digits : '';
+};
+
+const CARD_PAYMENT_CODES = new Set(['03', '04']);
+
 const resolveStoreUf = (store = {}) => {
   const ufSource = store.uf || store.estado || store.state || '';
   if (ufSource) {
@@ -693,7 +764,13 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     ? pagamentosRaw.map((payment) => ({
         descricao: payment?.descricao || payment?.label || payment?.nome || 'Pagamento',
         valor: safeNumber(payment?.valor ?? payment?.formatted ?? 0, 0),
-        forma: payment?.forma || payment?.codigo || '01',
+        forma: payment?.forma || payment?.codigo || payment?.tipo || '01',
+        indPag: payment?.indPag ?? payment?.indicador ?? payment?.indicadorPagamento,
+        integracao: payment?.tpIntegra ?? payment?.integracao ?? payment?.tipoIntegracao,
+        card: payment?.card || payment?.cartao || null,
+        cnpj: payment?.cnpjCredenciadora || payment?.cnpj || null,
+        tBand: payment?.tBand || payment?.bandeira || null,
+        cAut: payment?.cAut || payment?.autorizacao || null,
       }))
     : [
         {
@@ -752,6 +829,29 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
   const environmentLabel = environment === 'producao' ? 'Produção' : 'Homologação';
 
+  const emLgr = sanitize(storeObject?.logradouro || storeObject?.endereco);
+  const emNro = onlyDigits(storeObject?.numero);
+  const emCompl = sanitize(storeObject?.complemento);
+  const emBairro = sanitize(storeObject?.bairro);
+  const emCMun = onlyDigits(
+    storeObject?.cMun || storeObject?.codigoMunicipio || storeObject?.codigoIbgeMunicipio || ''
+  );
+  const emXMun = sanitize(storeObject?.xMun || storeObject?.municipio);
+  const emUF = sanitize(storeObject?.uf || storeObject?.UF || '').toUpperCase();
+  const emCEP = onlyDigits(storeObject?.cep);
+
+  if (!emLgr) throw new Error('Endereço do emitente inválido: xLgr é obrigatório.');
+  if (!emNro) throw new Error('Endereço do emitente inválido: nro é obrigatório (apenas dígitos).');
+  if (!emBairro) throw new Error('Endereço do emitente inválido: xBairro é obrigatório.');
+  if (!/^\d{7}$/.test(emCMun)) {
+    throw new Error('Endereço do emitente inválido: cMun deve ter 7 dígitos IBGE.');
+  }
+  if (!emXMun) throw new Error('Endereço do emitente inválido: xMun é obrigatório.');
+  if (!/^[A-Z]{2}$/.test(emUF)) throw new Error('Endereço do emitente inválido: UF inválida.');
+  if (!/^\d{8}$/.test(emCEP)) {
+    throw new Error('Endereço do emitente inválido: CEP deve ter 8 dígitos.');
+  }
+
   const emissionIso = formatDateTimeWithOffset(emissionRef);
 
   const infNfeLines = [];
@@ -766,7 +866,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push(`      <dhEmi>${emissionIso}</dhEmi>`);
   infNfeLines.push(`      <tpNF>1</tpNF>`);
   infNfeLines.push('      <idDest>1</idDest>');
-  infNfeLines.push(`      <cMunFG>${sanitizeDigits(storeObject?.codigoIbgeMunicipio, { fallback: '0000000' }).padStart(7, '0')}</cMunFG>`);
+  infNfeLines.push(`      <cMunFG>${emCMun}</cMunFG>`);
   infNfeLines.push(`      <tpImp>4</tpImp>`);
   infNfeLines.push(`      <tpEmis>1</tpEmis>`);
   infNfeLines.push(`      <cDV>${accessKey.slice(-1)}</cDV>`);
@@ -779,17 +879,18 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('    </ide>');
   infNfeLines.push('    <emit>');
   infNfeLines.push(`      <CNPJ>${cnpj}</CNPJ>`);
-  infNfeLines.push(`      <xNome>${storeObject?.razaoSocial || storeObject?.nome || ''}</xNome>`);
-  infNfeLines.push(`      <xFant>${storeObject?.nomeFantasia || storeObject?.razaoSocial || ''}</xFant>`);
+  infNfeLines.push(`      <xNome>${sanitize(storeObject?.razaoSocial || storeObject?.nome || '')}</xNome>`);
+  infNfeLines.push(`      <xFant>${sanitize(storeObject?.nomeFantasia || storeObject?.razaoSocial || '')}</xFant>`);
   infNfeLines.push('      <enderEmit>');
-  infNfeLines.push(`        <xLgr>${storeObject?.logradouro || storeObject?.endereco || ''}</xLgr>`);
-  infNfeLines.push(`        <nro>${storeObject?.numero || 'S/N'}</nro>`);
-  infNfeLines.push(`        <xCpl>${storeObject?.complemento || ''}</xCpl>`);
-  infNfeLines.push(`        <xBairro>${storeObject?.bairro || ''}</xBairro>`);
-  infNfeLines.push(`        <cMun>${sanitizeDigits(storeObject?.codigoIbgeMunicipio, { fallback: '0000000' }).padStart(7, '0')}</cMun>`);
-  infNfeLines.push(`        <xMun>${storeObject?.municipio || ''}</xMun>`);
-  infNfeLines.push(`        <UF>${(storeObject?.uf || '').toString().toUpperCase()}</UF>`);
-  infNfeLines.push(`        <CEP>${sanitizeDigits(storeObject?.cep, { fallback: '' }).padStart(8, '0')}</CEP>`);
+  infNfeLines.push(`        <xLgr>${emLgr}</xLgr>`);
+  infNfeLines.push(`        <nro>${emNro}</nro>`);
+  // Complemento opcional não deve aparecer vazio para o Schema 4.00
+  pushTagIf(infNfeLines, 'xCpl', emCompl);
+  infNfeLines.push(`        <xBairro>${emBairro}</xBairro>`);
+  infNfeLines.push(`        <cMun>${emCMun}</cMun>`);
+  infNfeLines.push(`        <xMun>${emXMun}</xMun>`);
+  infNfeLines.push(`        <UF>${emUF}</UF>`);
+  infNfeLines.push(`        <CEP>${emCEP}</CEP>`);
   infNfeLines.push('        <cPais>1058</cPais>');
   infNfeLines.push('        <xPais>BRASIL</xPais>');
   infNfeLines.push('      </enderEmit>');
@@ -797,36 +898,64 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('      <CRT>1</CRT>');
   infNfeLines.push('    </emit>');
 
-  const destNome = cliente?.nome || cliente?.razaoSocial || 'CONSUMIDOR';
-  infNfeLines.push('    <dest>');
-  if (cliente?.cnpj) {
-    infNfeLines.push(`      <CNPJ>${sanitizeDigits(cliente.cnpj)}</CNPJ>`);
-  } else if (cliente?.cpf) {
-    infNfeLines.push(`      <CPF>${sanitizeDigits(cliente.cpf)}</CPF>`);
+  const destCPF = onlyDigits(cliente?.cpf || delivery?.cpf);
+  const destCNPJ = onlyDigits(cliente?.cnpj);
+  const destIdE = sanitize(cliente?.idEstrangeiro);
+
+  const hasCPF = /^\d{11}$/.test(destCPF);
+  const hasCNPJ = /^\d{14}$/.test(destCNPJ);
+  const hasIdE = !!destIdE;
+
+  const xNome = sanitize(cliente?.nome || cliente?.razaoSocial || delivery?.nome || '');
+  const xNome60 = (xNome || 'CONSUMIDOR').slice(0, 60);
+
+  if (hasCPF || hasCNPJ || hasIdE) {
+    const dLgr = sanitize(delivery?.logradouro || cliente?.logradouro);
+    const dNro = onlyDigits(delivery?.numero ?? cliente?.numero);
+    const dCompl = sanitize(delivery?.complemento || cliente?.complemento);
+    const dBairro = sanitize(delivery?.bairro || cliente?.bairro);
+    const dCMun = onlyDigits(
+      delivery?.cMun ??
+        delivery?.codigoIbgeMunicipio ??
+        cliente?.cMun ??
+        cliente?.codigoIbgeMunicipio
+    );
+    const dXMun = sanitize(
+      delivery?.xMun ?? delivery?.cidade ?? cliente?.xMun ?? cliente?.cidade
+    );
+    const dUF = sanitize(
+      (delivery?.UF ?? delivery?.uf ?? cliente?.UF ?? cliente?.uf) || ''
+    ).toUpperCase();
+    const dCEP = onlyDigits(delivery?.CEP ?? delivery?.cep ?? cliente?.CEP ?? cliente?.cep);
+
+    const hasAddr = dLgr || dNro || dCompl || dBairro || dCMun || dXMun || dUF || dCEP;
+
+    infNfeLines.push('    <dest>');
+    if (hasCNPJ) infNfeLines.push(`      <CNPJ>${destCNPJ}</CNPJ>`);
+    else if (hasCPF) infNfeLines.push(`      <CPF>${destCPF}</CPF>`);
+    else infNfeLines.push(`      <idEstrangeiro>${destIdE}</idEstrangeiro>`);
+
+    if (xNome60) infNfeLines.push(`      <xNome>${xNome60}</xNome>`);
+
+    if (hasAddr) {
+      infNfeLines.push('      <enderDest>');
+      pushTagIf(infNfeLines, 'xLgr', dLgr, '        ');
+      infNfeLines.push(`        <nro>${dNro || '0'}</nro>`);
+      pushTagIf(infNfeLines, 'xCpl', dCompl, '        ');
+      pushTagIf(infNfeLines, 'xBairro', dBairro, '        ');
+      if (dCMun) infNfeLines.push(`        <cMun>${dCMun}</cMun>`);
+      pushTagIf(infNfeLines, 'xMun', dXMun, '        ');
+      if (/^[A-Z]{2}$/.test(dUF)) infNfeLines.push(`        <UF>${dUF}</UF>`);
+      if (/^\d{8}$/.test(dCEP)) infNfeLines.push(`        <CEP>${dCEP}</CEP>`);
+      infNfeLines.push('      </enderDest>');
+    }
+
+    infNfeLines.push('      <indIEDest>9</indIEDest>');
+    if (cliente?.email) {
+      infNfeLines.push(`      <email>${sanitize(cliente.email)}</email>`);
+    }
+    infNfeLines.push('    </dest>');
   }
-  infNfeLines.push(`      <xNome>${destNome}</xNome>`);
-  if (cliente?.email) {
-    infNfeLines.push(`      <email>${cliente.email}</email>`);
-  }
-  infNfeLines.push('      <enderDest>');
-  infNfeLines.push(`        <xLgr>${delivery?.logradouro || cliente?.logradouro || ''}</xLgr>`);
-  infNfeLines.push(`        <nro>${delivery?.numero || cliente?.numero || 'S/N'}</nro>`);
-  infNfeLines.push(`        <xCpl>${delivery?.complemento || cliente?.complemento || ''}</xCpl>`);
-  infNfeLines.push(`        <xBairro>${delivery?.bairro || cliente?.bairro || ''}</xBairro>`);
-  const destMunicipio = delivery?.cidade || cliente?.cidade || storeObject?.municipio || '';
-  const destIbge = sanitizeDigits(delivery?.codigoIbgeMunicipio || cliente?.codigoIbgeMunicipio || storeObject?.codigoIbgeMunicipio, {
-    fallback: '0000000',
-  }).padStart(7, '0');
-  const destUf = (delivery?.uf || cliente?.uf || storeObject?.uf || '').toString().toUpperCase();
-  infNfeLines.push(`        <cMun>${destIbge}</cMun>`);
-  infNfeLines.push(`        <xMun>${destMunicipio}</xMun>`);
-  infNfeLines.push(`        <UF>${destUf}</UF>`);
-  infNfeLines.push(`        <CEP>${sanitizeDigits(delivery?.cep || cliente?.cep, { fallback: '' }).padStart(8, '0')}</CEP>`);
-  infNfeLines.push('        <cPais>1058</cPais>');
-  infNfeLines.push('        <xPais>BRASIL</xPais>');
-  infNfeLines.push('      </enderDest>');
-  infNfeLines.push(`      <indIEDest>9</indIEDest>`);
-  infNfeLines.push('    </dest>');
 
   fiscalItems.forEach((item, index) => {
     const product = item.productId ? productsMap.get(String(item.productId)) : null;
@@ -927,15 +1056,70 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('      </ICMSTot>');
   infNfeLines.push('    </total>');
 
+  const paymentDetails = pagamentos.map((payment) => {
+    const valor = safeNumber(payment.valor, 0);
+    const tPag = resolvePaymentCode(payment.forma);
+    const indPag = resolveIndPag(payment.indPag);
+    let card = null;
+
+    if (CARD_PAYMENT_CODES.has(tPag)) {
+      const cardSource = payment.card || {};
+      const integraRaw = payment.integracao ?? cardSource.tpIntegra ?? cardSource.integracao;
+      const integraDigits = onlyDigits(integraRaw);
+      const tpIntegra = integraDigits === '1' ? '1' : '2';
+      const cnpjCred = onlyDigits(
+        cardSource.cnpj || cardSource.cnpjCredenciadora || payment.cnpj || payment.cnpjCredenciadora
+      );
+      const bandDigits = onlyDigits(cardSource.tBand || cardSource.bandeira || payment.tBand);
+      const cAutValue = sanitize(cardSource.cAut || cardSource.autorizacao || payment.cAut);
+      card = {
+        tpIntegra,
+        cnpj: cnpjCred.length === 14 ? cnpjCred : '',
+        tBand: bandDigits ? bandDigits.padStart(2, '0').slice(-2) : '',
+        cAut: cAutValue ? cAutValue.slice(0, 20) : '',
+      };
+    }
+
+    return { valor, tPag, indPag, card };
+  });
+
+  if (!paymentDetails.length) {
+    throw new Error('NFC-e inválida: grupo <pag> requer ao menos um <detPag>.');
+  }
+
+  const totalPagamentos = paymentDetails.reduce((sum, item) => sum + item.valor, 0);
+  const difference = Math.abs(totalPagamentos - troco - totalLiquido);
+  if (difference > 0.01) {
+    throw new Error('NFC-e inválida: soma dos pagamentos não confere com o vNF.');
+  }
+
   infNfeLines.push('    <pag>');
-  pagamentos.forEach((payment) => {
-    const forma = sanitizeDigits(payment.forma, { fallback: '01' }).padStart(2, '0');
+  paymentDetails.forEach((payment) => {
     infNfeLines.push('      <detPag>');
-    infNfeLines.push(`        <tPag>${forma}</tPag>`);
-    infNfeLines.push(`        <vPag>${toDecimal(payment.valor)}</vPag>`);
+    if (payment.indPag) {
+      infNfeLines.push(`        <indPag>${payment.indPag}</indPag>`);
+    }
+    infNfeLines.push(`        <tPag>${payment.tPag}</tPag>`);
+    infNfeLines.push(`        <vPag>${dec(payment.valor)}</vPag>`);
+    if (payment.card) {
+      infNfeLines.push('        <card>');
+      infNfeLines.push(`          <tpIntegra>${payment.card.tpIntegra}</tpIntegra>`);
+      if (payment.card.cnpj) {
+        infNfeLines.push(`          <CNPJ>${payment.card.cnpj}</CNPJ>`);
+      }
+      if (payment.card.tBand) {
+        infNfeLines.push(`          <tBand>${payment.card.tBand}</tBand>`);
+      }
+      if (payment.card.cAut) {
+        infNfeLines.push(`          <cAut>${payment.card.cAut}</cAut>`);
+      }
+      infNfeLines.push('        </card>');
+    }
     infNfeLines.push('      </detPag>');
   });
-  infNfeLines.push(`      <vTroco>${toDecimal(troco)}</vTroco>`);
+  if (Math.abs(troco) > 0.009) {
+    infNfeLines.push(`      <vTroco>${dec(troco)}</vTroco>`);
+  }
   infNfeLines.push('    </pag>');
 
   const obs = buildInfAdicObservations({ pdv, sale, environmentLabel });

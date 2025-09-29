@@ -381,6 +381,7 @@ const sanitizeStorePayload = (body = {}) => {
     const municipio = trimString(body.municipio);
     const uf = normalizeUf(body.uf);
     const logradouro = trimString(body.logradouro);
+    const bairro = trimString(body.bairro);
     const numero = trimString(body.numero);
     const complemento = trimString(body.complemento);
     const codigoIbgeMunicipio = trimString(body.codigoIbgeMunicipio || body.codIbgeMunicipio);
@@ -442,6 +443,7 @@ const sanitizeStorePayload = (body = {}) => {
         municipio,
         uf,
         logradouro,
+        bairro,
         numero,
         complemento,
         codigoIbgeMunicipio,
