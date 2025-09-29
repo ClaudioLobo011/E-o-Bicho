@@ -1224,17 +1224,22 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   });
 
   let signedXmlContent = signer.getSignedXml();
+  let signedDocument = null;
+  let nfeNode = null;
+  let infNfeSignedNode = null;
+  let signatureNode = null;
+  let infNfeSuplNode = null;
 
   try {
-    const signedDocument = new DOMParser().parseFromString(signedXmlContent, 'text/xml');
-    const [nfeNode] = xpath.select("/*[local-name()='NFe']", signedDocument);
-    const [infNfeSignedNode] = nfeNode
+    signedDocument = new DOMParser().parseFromString(signedXmlContent, 'text/xml');
+    [nfeNode] = xpath.select("/*[local-name()='NFe']", signedDocument);
+    [infNfeSignedNode] = nfeNode
       ? xpath.select("./*[local-name()='infNFe']", nfeNode)
       : [];
-    const [signatureNode] = nfeNode
+    [signatureNode] = nfeNode
       ? xpath.select("./*[local-name()='Signature']", nfeNode)
       : [];
-    const [infNfeSuplNode] = nfeNode
+    [infNfeSuplNode] = nfeNode
       ? xpath.select("./*[local-name()='infNFeSupl']", nfeNode)
       : [];
 
@@ -1256,18 +1261,17 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       }
 
       nfeNode.insertBefore(signatureNode, insertionPoint);
-      const childElements = [];
-      for (let node = nfeNode.firstChild; node; node = node.nextSibling) {
-        if (node.nodeType === 1) {
-          childElements.push(node.localName || node.nodeName);
-        }
+
+      if (!signatureNode.getAttribute('xmlns')) {
+        signatureNode.setAttribute('xmlns', 'http://www.w3.org/2000/09/xmldsig#');
       }
-      console.debug('[NFCE] Ordem filhos <NFe>:', childElements);
-      const serializer = new XMLSerializer();
-      signedXmlContent = serializer.serializeToString(signedDocument);
     }
   } catch (error) {
     console.debug('[NFCE] Falha ao reordenar assinatura NFC-e:', error);
+    signedDocument = null;
+    nfeNode = null;
+    signatureNode = null;
+    infNfeSuplNode = null;
   }
 
   if (process.env.NODE_ENV === 'development') {
@@ -1306,31 +1310,78 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     throw new Error('Falha ao gerar QR Code da NFC-e.');
   }
 
-  const infNfeSuplXml = [
-    '  <infNFeSupl>',
-    `    <qrCode><![CDATA[${qrCodePayload}]]></qrCode>`,
-    `    <urlChave>${qrCodeBaseUrl}</urlChave>`,
-    '  </infNFeSupl>',
-  ].join('\n');
+  const NFCE_NAMESPACE = 'http://www.portalfiscal.inf.br/nfe';
+  if (signedDocument && nfeNode) {
+    if (!signatureNode || signatureNode.parentNode !== nfeNode) {
+      [signatureNode] = xpath.select("./*[local-name()='Signature']", nfeNode);
+      if (signatureNode && !signatureNode.getAttribute('xmlns')) {
+        signatureNode.setAttribute('xmlns', 'http://www.w3.org/2000/09/xmldsig#');
+      }
+    }
 
-  const signatureCloseTag = '</Signature>';
-  const signatureCloseIndex = signedXmlContent.indexOf(signatureCloseTag);
-  let finalXml;
-  if (signatureCloseIndex === -1) {
-    finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
+    if (!infNfeSuplNode || infNfeSuplNode.parentNode !== nfeNode) {
+      [infNfeSuplNode] = xpath.select("./*[local-name()='infNFeSupl']", nfeNode);
+    }
+
+    if (!infNfeSuplNode) {
+      infNfeSuplNode = signedDocument.createElementNS(NFCE_NAMESPACE, 'infNFeSupl');
+      let referenceNode = signatureNode ? signatureNode.nextSibling : null;
+      while (referenceNode && referenceNode.nodeType !== 1) {
+        referenceNode = referenceNode.nextSibling;
+      }
+      nfeNode.insertBefore(infNfeSuplNode, referenceNode || null);
+    } else {
+      while (infNfeSuplNode.firstChild) {
+        infNfeSuplNode.removeChild(infNfeSuplNode.firstChild);
+      }
+    }
+
+    const qrCodeElement = signedDocument.createElementNS(NFCE_NAMESPACE, 'qrCode');
+    qrCodeElement.appendChild(signedDocument.createCDATASection(qrCodePayload));
+    const urlChaveElement = signedDocument.createElementNS(NFCE_NAMESPACE, 'urlChave');
+    urlChaveElement.appendChild(signedDocument.createTextNode(qrCodeBaseUrl));
+    infNfeSuplNode.appendChild(qrCodeElement);
+    infNfeSuplNode.appendChild(urlChaveElement);
+
+    const childElements = [];
+    for (let node = nfeNode.firstChild; node; node = node.nextSibling) {
+      if (node.nodeType === 1) {
+        childElements.push(node.localName || node.nodeName);
+      }
+    }
+    console.debug('[NFCE] Ordem filhos <NFe>:', childElements);
+    console.debug('[NFCE] Namespace Signature:', signatureNode?.namespaceURI || null);
+
+    const serializer = new XMLSerializer();
+    signedXmlContent = serializer.serializeToString(signedDocument);
   } else {
-    const insertionPoint = signatureCloseIndex + signatureCloseTag.length;
-    const beforeSignature = signedXmlContent.slice(0, insertionPoint);
-    const afterSignature = signedXmlContent.slice(insertionPoint);
-    // Mantém o bloco supl imediatamente após </Signature>, respeitando a formatação existente.
-    const needsLeadingNewline = !beforeSignature.endsWith('\n');
-    const leadingNewline = needsLeadingNewline ? '\n' : '';
-    finalXml = `${beforeSignature}${leadingNewline}${infNfeSuplXml}\n${afterSignature}`;
+    const infNfeSuplXml = [
+      '  <infNFeSupl>',
+      `    <qrCode><![CDATA[${qrCodePayload}]]></qrCode>`,
+      `    <urlChave>${qrCodeBaseUrl}</urlChave>`,
+      '  </infNFeSupl>',
+    ].join('\n');
+
+    const signatureCloseTag = '</Signature>';
+    const signatureCloseIndex = signedXmlContent.indexOf(signatureCloseTag);
+    let finalXml;
+    if (signatureCloseIndex === -1) {
+      finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
+    } else {
+      const insertionPoint = signatureCloseIndex + signatureCloseTag.length;
+      const beforeSignature = signedXmlContent.slice(0, insertionPoint);
+      const afterSignature = signedXmlContent.slice(insertionPoint);
+      const needsLeadingNewline = !beforeSignature.endsWith('\n');
+      const leadingNewline = needsLeadingNewline ? '\n' : '';
+      finalXml = `${beforeSignature}${leadingNewline}${infNfeSuplXml}\n${afterSignature}`;
+    }
+
+    signedXmlContent = finalXml;
   }
 
-  const xml = finalXml.startsWith('<?xml')
-    ? finalXml
-    : `<?xml version="1.0" encoding="UTF-8"?>\n${finalXml}`;
+  const xml = signedXmlContent.startsWith('<?xml')
+    ? signedXmlContent
+    : `<?xml version="1.0" encoding="UTF-8"?>\n${signedXmlContent}`;
 
   let transmission = null;
   try {
