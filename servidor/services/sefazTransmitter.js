@@ -163,29 +163,22 @@ const removeXmlDeclaration = (xml) => {
   return String(xml).replace(/^\s*<\?xml[^>]*>\s*/i, '').trim();
 };
 
-const indentXml = (xml, indent = '') => {
-  return removeXmlDeclaration(xml)
-    .split('\n')
-    .map((line) => `${indent}${line}`)
-    .join('\n');
-};
-
 const buildEnviNfePayload = ({ xml, loteId, synchronous = true }) => {
-  const normalizedNfe = removeXmlDeclaration(xml);
+  const normalizedNfe = removeXmlDeclaration(xml)
+    .replace(/>[\s\r\n\t]+</g, '><')
+    .trim();
   const lote = String(loteId || Date.now())
     .replace(/\D+/g, '')
     .padStart(15, '0')
     .slice(-15);
 
-  const nfeIndented = indentXml(normalizedNfe, '  ');
-
-  return [
-    '<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">',
-    `  <idLote>${lote}</idLote>`,
-    `  <indSinc>${synchronous ? '1' : '0'}</indSinc>`,
-    nfeIndented,
-    '</enviNFe>',
-  ].join('\n');
+  return (
+    '<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">' +
+    `<idLote>${lote}</idLote>` +
+    `<indSinc>${synchronous ? '1' : '0'}</indSinc>` +
+    normalizedNfe +
+    '</enviNFe>'
+  );
 };
 
 const UF_CODE_BY_ACRONYM = {
@@ -238,13 +231,8 @@ const resolveUfCode = (uf) => {
 
 const buildSoapEnvelope = ({ enviNfeXml, uf }) => {
   const sanitized = removeXmlDeclaration(enviNfeXml)
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter((line, index, array) => line || index < array.length - 1);
-
-  const nfeBody = sanitized
-    .map((line) => `      ${line}`)
-    .join('\n');
+    .replace(/>[\s\r\n\t]+</g, '><')
+    .trim();
 
   const ufCode = resolveUfCode(uf);
 
@@ -260,9 +248,7 @@ const buildSoapEnvelope = ({ enviNfeXml, uf }) => {
     '    </nfeCabecMsg>',
     '  </soap12:Header>',
     '  <soap12:Body>',
-    '    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">',
-    nfeBody,
-    '    </nfeDadosMsg>',
+    `    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">${sanitized}</nfeDadosMsg>`,
     '  </soap12:Body>',
     '</soap12:Envelope>',
   ].join('\n');
@@ -270,13 +256,8 @@ const buildSoapEnvelope = ({ enviNfeXml, uf }) => {
 
 const buildStatusSoapEnvelope = ({ payloadXml, uf }) => {
   const sanitized = removeXmlDeclaration(payloadXml)
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter((line, index, array) => line || index < array.length - 1);
-
-  const body = sanitized
-    .map((line) => `      ${line}`)
-    .join('\n');
+    .replace(/>[\s\r\n\t]+</g, '><')
+    .trim();
 
   const ufCode = resolveUfCode(uf);
 
@@ -292,9 +273,7 @@ const buildStatusSoapEnvelope = ({ payloadXml, uf }) => {
     '    </nfeCabecMsg>',
     '  </soap12:Header>',
     '  <soap12:Body>',
-    '    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4">',
-    body,
-    '    </nfeDadosMsg>',
+    `    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4">${sanitized}</nfeDadosMsg>`,
     '  </soap12:Body>',
     '</soap12:Envelope>',
   ].join('\n');
