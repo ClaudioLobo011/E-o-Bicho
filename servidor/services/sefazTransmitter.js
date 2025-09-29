@@ -447,16 +447,23 @@ const performSoapRequest = ({
   });
 };
 
+const escapeTagName = (tag) => tag.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+
+const buildNamespacedTagRegex = (tag) => {
+  const escapedTag = escapeTagName(tag);
+  return new RegExp(`<((?:[A-Za-z_][\\w.-]*:)?${escapedTag})[^>]*>([\\s\\S]*?)</\\1>`, 'i');
+};
+
 const extractTagContent = (xml, tag) => {
   if (!xml) return null;
-  const regex = new RegExp(`<${tag}[^>]*>([\s\S]*?)</${tag}>`, 'i');
+  const regex = buildNamespacedTagRegex(tag);
   const match = regex.exec(xml);
-  return match ? match[1].trim() : null;
+  return match ? match[2].trim() : null;
 };
 
 const extractSection = (xml, tag) => {
   if (!xml) return null;
-  const regex = new RegExp(`<${tag}[^>]*>([\s\S]*?)</${tag}>`, 'i');
+  const regex = buildNamespacedTagRegex(tag);
   const match = regex.exec(xml);
   return match ? match[0] : null;
 };
@@ -553,5 +560,7 @@ module.exports = {
     collectCertificateAuthorities,
     loadExtraCertificateAuthorities,
     splitCertificatesFromPem,
+    extractTagContent,
+    extractSection,
   },
 };

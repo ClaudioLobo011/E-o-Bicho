@@ -282,3 +282,48 @@ test('loadExtraCertificateAuthorities returns entries from default bundle when p
     assert.ok(entry.includes('BEGIN CERTIFICATE'), 'Cada CA adicional deve estar em formato PEM.');
   }
 });
+
+test('extract helpers tolerate namespace prefixes in SEFAZ responses', () => {
+  delete require.cache[require.resolve('../sefazTransmitter')];
+  const { __TESTING__ } = require('../sefazTransmitter');
+  const { extractSection, extractTagContent } = __TESTING__;
+
+  const soapResponse = `<?xml version="1.0" encoding="utf-8"?>
+  <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+    <soap:Body>
+      <nfe:autorizacaoResponse xmlns:nfe="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">
+        <nfe:result>
+          <ns2:retEnviNFe xmlns:ns2="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+            <ns2:cStat>104</ns2:cStat>
+            <ns2:xMotivo>Lote processado</ns2:xMotivo>
+            <ns2:nRec>123456789012345</ns2:nRec>
+            <ns3:protNFe xmlns:ns3="http://www.portalfiscal.inf.br/nfe">
+              <ns3:infProt>
+                <ns3:tpAmb>2</ns3:tpAmb>
+                <ns3:verAplic>SVRS</ns3:verAplic>
+                <ns3:chNFe>12345678901234567890123456789012345678901234</ns3:chNFe>
+                <ns3:dhRecbto>2025-01-01T00:00:00-03:00</ns3:dhRecbto>
+                <ns3:nProt>135220000000000</ns3:nProt>
+                <ns3:digVal>abc123==</ns3:digVal>
+                <ns3:cStat>100</ns3:cStat>
+                <ns3:xMotivo>Autorizado o uso da NF-e</ns3:xMotivo>
+              </ns3:infProt>
+            </ns3:protNFe>
+          </ns2:retEnviNFe>
+        </nfe:result>
+      </nfe:autorizacaoResponse>
+    </soap:Body>
+  </soap:Envelope>`;
+
+  const retEnviSection = extractSection(soapResponse, 'retEnviNFe');
+  assert.ok(retEnviSection.startsWith('<ns2:retEnviNFe'), 'A seção retEnviNFe deve ser localizada mesmo com prefixo.');
+
+  const loteStatus = extractTagContent(retEnviSection, 'cStat');
+  assert.strictEqual(loteStatus, '104');
+
+  const protSection = extractSection(retEnviSection, 'protNFe');
+  assert.ok(protSection.startsWith('<ns3:protNFe'), 'O protocolo deve ser localizado mesmo com prefixo.');
+
+  const protocolStatus = extractTagContent(protSection, 'cStat');
+  assert.strictEqual(protocolStatus, '100');
+});
