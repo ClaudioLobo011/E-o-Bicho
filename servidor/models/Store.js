@@ -34,6 +34,7 @@ const storeSchema = new mongoose.Schema({
     municipio: { type: String, trim: true },
     uf: { type: String, trim: true, uppercase: true },
     logradouro: { type: String, trim: true },
+    bairro: { type: String, trim: true },
     numero: { type: String, trim: true },
     complemento: { type: String, trim: true },
     codigoIbgeMunicipio: { type: String, trim: true },

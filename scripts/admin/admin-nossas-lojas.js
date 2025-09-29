@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const municipioInput = document.getElementById('store-municipio');
     const ufInput = document.getElementById('store-uf');
     const logradouroInput = document.getElementById('store-logradouro');
+    const bairroInput = document.getElementById('store-bairro');
     const numeroInput = document.getElementById('store-numero');
     const complementoInput = document.getElementById('store-complemento');
     const codIbgeMunicipioInput = document.getElementById('store-cod-ibge-municipio');
@@ -76,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const lonInput = document.getElementById('store-longitude');
 
     // --- Utilidades de formulário ---
-    const enderecoFields = [logradouroInput, numeroInput, complementoInput, municipioInput, ufInput];
+    const enderecoFields = [logradouroInput, numeroInput, complementoInput, bairroInput, municipioInput, ufInput];
 
     const formatSingleCnaeValue = (value = '') => {
         const digits = String(value || '').replace(/\D/g, '').slice(0, 7);
@@ -249,6 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const logradouro = (logradouroInput?.value || '').trim();
         const numero = (numeroInput?.value || '').trim();
         const complemento = (complementoInput?.value || '').trim();
+        const bairro = (bairroInput?.value || '').trim();
         const municipio = (municipioInput?.value || '').trim();
         const uf = (ufInput?.value || '').trim();
 
@@ -258,6 +260,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (complemento) {
             partes.push(complemento);
+        }
+        if (bairro) {
+            partes.push(bairro);
         }
         if (municipio || uf) {
             const regiao = [municipio, uf].filter(Boolean).join(' - ');
@@ -726,6 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
             municipioInput.value = store.municipio || '';
             ufInput.value = store.uf || '';
             logradouroInput.value = store.logradouro || '';
+            if (bairroInput) bairroInput.value = store.bairro || '';
             numeroInput.value = store.numero || '';
             complementoInput.value = store.complemento || '';
             codIbgeMunicipioInput.value = store.codigoIbgeMunicipio || store.codIbgeMunicipio || '';
@@ -948,6 +954,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         logradouroInput.value = cepData.logradouro || '';
         complementoInput.value = cepData.complemento || '';
+        if (bairroInput) bairroInput.value = cepData.bairro || '';
         municipioInput.value = cepData.localidade || '';
         ufInput.value = (cepData.uf || '').toUpperCase();
         codIbgeMunicipioInput.value = cepData.ibge || '';
@@ -1072,6 +1079,7 @@ document.addEventListener('DOMContentLoaded', () => {
             municipio: municipioInput.value,
             uf: ufInput.value,
             logradouro: logradouroInput.value,
+            bairro: bairroInput?.value || '',
             numero: numeroInput.value,
             complemento: complementoInput.value,
             codigoIbgeMunicipio: codIbgeMunicipioInput.value,
