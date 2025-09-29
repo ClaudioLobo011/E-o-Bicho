@@ -181,6 +181,18 @@ const formatDateTimeWithOffset = (date) => {
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${sign}${offsetHours}:${offsetMins}`;
 };
 
+// Gera o QR Code v2 on-line exigido pela SEFAZ/RJ para NFC-e autorizada em emissão normal.
+const buildQrCodeRJ = ({ chNFe, tpAmb, idToken, csc }) => {
+  const versaoQR = '2';
+  const base = 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode';
+  const idT = String(idToken ?? '').replace(/^0+/, '');
+  const pSemHash = `${chNFe}|${versaoQR}|${tpAmb}|${idT}`;
+  const hashInput = `${pSemHash}|${csc}`.replace('||', '|');
+  const cHash = crypto.createHash('sha1').update(hashInput, 'utf8').digest('hex');
+  const url = `${base}?p=${chNFe}|${versaoQR}|${tpAmb}|${idT}|${cHash}`;
+  return { url, base };
+};
+
 const buildCnf = (sale) => {
   const base =
     sale?.saleCode ||
@@ -1055,6 +1067,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push(`        <vNF>${toDecimal(totalLiquido)}</vNF>`);
   infNfeLines.push('      </ICMSTot>');
   infNfeLines.push('    </total>');
+  infNfeLines.push('    <transp>');
+  infNfeLines.push('      <modFrete>9</modFrete>');
+  infNfeLines.push('    </transp>');
 
   const paymentDetails = pagamentos.map((payment) => {
     const valor = safeNumber(payment.valor, 0);
@@ -1153,9 +1168,10 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
   const signer = new SignedXml({
     privateKey: Buffer.from(keyPemString),
-    signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
   });
-  signer.canonicalizationAlgorithm = 'http://www.w3.org/2001/10/xml-exc-c14n#';
+  // NFC-e 4.00 (RJ) exige assinatura SHA1 com canonicalização C14N inclusiva.
+  signer.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
   signer.keyInfoProvider = {
     getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
   };
@@ -1163,9 +1179,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     xpath: "//*[local-name(.)='infNFe' and @Id]",
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-      'http://www.w3.org/2001/10/xml-exc-c14n#',
+      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     ],
-    digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
   signer.computeSignature(xmlForSignature, { prefix: '' });
 
@@ -1173,32 +1189,56 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const digestValue = signer.references?.[0]?.digestValue || '';
   const signatureValue = signer.signatureValue || '';
 
-  const qrParams = new URLSearchParams();
-  qrParams.set('chNFe', accessKey);
-  qrParams.set('nVersao', '100');
-  qrParams.set('tpAmb', tpAmb);
-  qrParams.set('dhEmi', emissionIso);
-  qrParams.set('vNF', toDecimal(totalLiquido));
-  qrParams.set('vICMS', '0.00');
-  qrParams.set('digVal', digestValue);
-  qrParams.set('cIdToken', cscId);
-  const qrBase = qrParams.toString();
-  const cHashQRCode = crypto.createHash('sha1').update(`${qrBase}${cscToken}`).digest('hex');
-  const qrCodePayload = `${qrBase}&cHashQRCode=${cHashQRCode}`;
+  let qrCodePayload = '';
+  let qrCodeBaseUrl = 'https://www.sefaz.br.gov.br/nfce/consulta';
+  if (storeUf === 'RJ') {
+    const { url, base } = buildQrCodeRJ({
+      chNFe: accessKey,
+      tpAmb,
+      idToken: cscId,
+      csc: cscToken,
+    });
+    qrCodePayload = url;
+    qrCodeBaseUrl = base;
+  } else {
+    const qrParams = new URLSearchParams();
+    qrParams.set('chNFe', accessKey);
+    qrParams.set('nVersao', '100');
+    qrParams.set('tpAmb', tpAmb);
+    qrParams.set('dhEmi', emissionIso);
+    qrParams.set('vNF', toDecimal(totalLiquido));
+    qrParams.set('vICMS', '0.00');
+    qrParams.set('digVal', digestValue);
+    qrParams.set('cIdToken', cscId);
+    const qrBase = qrParams.toString();
+    const cHashQRCode = crypto.createHash('sha1').update(`${qrBase}${cscToken}`).digest('hex');
+    qrCodePayload = `${qrBase}&cHashQRCode=${cHashQRCode}`;
+  }
+
+  if (!qrCodePayload) {
+    throw new Error('Falha ao gerar QR Code da NFC-e.');
+  }
 
   const infNfeSuplXml = [
     '  <infNFeSupl>',
     `    <qrCode><![CDATA[${qrCodePayload}]]></qrCode>`,
-    '    <urlChave>https://www.sefaz.br.gov.br/nfce/consulta</urlChave>',
+    `    <urlChave>${qrCodeBaseUrl}</urlChave>`,
     '  </infNFeSupl>',
   ].join('\n');
 
-  const signatureIndex = signedXmlContent.indexOf('<Signature');
+  const signatureCloseTag = '</Signature>';
+  const signatureCloseIndex = signedXmlContent.indexOf(signatureCloseTag);
   let finalXml;
-  if (signatureIndex === -1) {
+  if (signatureCloseIndex === -1) {
     finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
   } else {
-    finalXml = `${signedXmlContent.slice(0, signatureIndex)}${infNfeSuplXml}\n${signedXmlContent.slice(signatureIndex)}`;
+    const insertionPoint = signatureCloseIndex + signatureCloseTag.length;
+    const beforeSignature = signedXmlContent.slice(0, insertionPoint);
+    const afterSignature = signedXmlContent.slice(insertionPoint);
+    // Mantém o bloco supl imediatamente após </Signature>, respeitando a formatação existente.
+    const needsLeadingNewline = !beforeSignature.endsWith('\n');
+    const leadingNewline = needsLeadingNewline ? '\n' : '';
+    finalXml = `${beforeSignature}${leadingNewline}${infNfeSuplXml}\n${afterSignature}`;
   }
 
   const xml = finalXml.startsWith('<?xml')
