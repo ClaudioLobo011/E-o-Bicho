@@ -1055,6 +1055,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push(`        <vNF>${toDecimal(totalLiquido)}</vNF>`);
   infNfeLines.push('      </ICMSTot>');
   infNfeLines.push('    </total>');
+  infNfeLines.push('    <transp>');
+  infNfeLines.push('      <modFrete>9</modFrete>');
+  infNfeLines.push('    </transp>');
 
   const paymentDetails = pagamentos.map((payment) => {
     const valor = safeNumber(payment.valor, 0);
