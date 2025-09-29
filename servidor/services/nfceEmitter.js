@@ -664,7 +664,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
   const ufCode = sanitizeDigits(storeObject?.codigoUf, { fallback: '00' }).padStart(2, '0');
   const cnpj = sanitizeDigits(storeObject?.cnpj, { fallback: '00000000000000' }).padStart(14, '0');
-  const serieFiscal = String(serie || '').padStart(3, '0');
+  const resolvedSerie = serie ?? storeObject?.serieFiscal ?? 1;
+  const serieNumber = Number.parseInt(resolvedSerie, 10);
+  if (!Number.isInteger(serieNumber) || serieNumber <= 0 || serieNumber > 999) {
+    throw new Error('Série fiscal inválida. Informe um valor inteiro entre 1 e 999.');
+  }
+  const serieFiscal = String(serieNumber).padStart(3, '0');
   const numeroFiscal = Number(numero);
   const cnf = buildCnf(sale);
   const tpAmb = environment === 'producao' ? '1' : '2';
@@ -756,7 +761,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push(`      <cNF>${cnf}</cNF>`);
   infNfeLines.push(`      <natOp>${snapshot?.meta?.naturezaOperacao || 'VENDA AO CONSUMIDOR'}</natOp>`);
   infNfeLines.push('      <mod>65</mod>');
-  infNfeLines.push(`      <serie>${serieFiscal}</serie>`);
+  infNfeLines.push(`      <serie>${serieNumber}</serie>`);
   infNfeLines.push(`      <nNF>${String(numeroFiscal)}</nNF>`);
   infNfeLines.push(`      <dhEmi>${emissionIso}</dhEmi>`);
   infNfeLines.push(`      <tpNF>1</tpNF>`);
