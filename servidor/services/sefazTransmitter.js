@@ -93,19 +93,19 @@ const buildSoapEnvelope = (enviNfeXml) => {
 
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
-    '<soap:Envelope',
-    '  xmlns:soap="http://www.w3.org/2003/05/soap-envelope"',
+    '<soap12:Envelope',
+    '  xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"',
     '  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
     '  xmlns:xsd="http://www.w3.org/2001/XMLSchema"',
     '>',
-    '  <soap:Body>',
+    '  <soap12:Body>',
     '    <nfeAutorizacaoLote xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">',
-    '      <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">',
+    '      <nfeDadosMsg>',
     nfeBody,
     '      </nfeDadosMsg>',
     '    </nfeAutorizacaoLote>',
-    '  </soap:Body>',
-    '</soap:Envelope>',
+    '  </soap12:Body>',
+    '</soap12:Envelope>',
   ].join('\n');
 };
 
