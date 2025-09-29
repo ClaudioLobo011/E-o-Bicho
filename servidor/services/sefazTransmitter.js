@@ -368,8 +368,7 @@ const performSoapRequest = ({
         port: url.port || (isHttps ? 443 : 80),
         path: `${url.pathname}${url.search || ''}`,
         headers: {
-          'Content-Type': 'application/soap+xml; charset=utf-8',
-          SOAPAction: SOAP_ACTION,
+          'Content-Type': `application/soap+xml; charset=utf-8; action="${SOAP_ACTION}"`,
           'Content-Length': Buffer.byteLength(envelope),
           'User-Agent': 'EoBicho-PDV/1.0',
         },
