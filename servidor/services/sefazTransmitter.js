@@ -82,14 +82,23 @@ const buildEnviNfePayload = ({ xml, loteId, synchronous = true }) => {
 };
 
 const buildSoapEnvelope = (enviNfeXml) => {
-  const nfeBody = enviNfeXml
+  const sanitized = removeXmlDeclaration(enviNfeXml)
     .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line, index, array) => line || index < array.length - 1);
+
+  const nfeBody = sanitized
     .map((line) => `        ${line}`)
     .join('\n');
 
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
-    '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope" xmlns:nfe="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">',
+    '<soap12:Envelope',
+    '  xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"',
+    '  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    '  xmlns:xsd="http://www.w3.org/2001/XMLSchema"',
+    '  xmlns:nfe="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4"',
+    '>',
     '  <soap12:Body>',
     '    <nfe:nfeAutorizacaoLote>',
     '      <nfe:nfeDadosMsg>',
