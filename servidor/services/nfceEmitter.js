@@ -858,7 +858,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       delivery?.xMun ?? delivery?.cidade ?? cliente?.xMun ?? cliente?.cidade
     );
     const dUF = sanitize(
-      (delivery?.UF ?? delivery?.uf ?? cliente?.UF ?? cliente?.uf || '')
+      (delivery?.UF ?? delivery?.uf ?? cliente?.UF ?? cliente?.uf) || ''
     ).toUpperCase();
     const dCEP = onlyDigits(delivery?.CEP ?? delivery?.cep ?? cliente?.CEP ?? cliente?.cep);
 
