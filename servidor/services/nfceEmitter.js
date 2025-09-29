@@ -828,7 +828,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('      <CRT>1</CRT>');
   infNfeLines.push('    </emit>');
 
-  const destNome = cliente?.nome || cliente?.razaoSocial || 'CONSUMIDOR';
+  const destNomeRaw = cliente?.nome ?? cliente?.razaoSocial ?? '';
+  const destNomeSanitized = sanitize(destNomeRaw);
+  const destNome = destNomeSanitized || 'CONSUMIDOR';
   const dLgr = sanitize(delivery?.logradouro || cliente?.logradouro);
   const dNro = onlyDigits(delivery?.numero ?? cliente?.numero);
   const dCompl = sanitize(delivery?.complemento || cliente?.complemento);
@@ -849,7 +851,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   } else if (cliente?.cpf) {
     infNfeLines.push(`      <CPF>${sanitizeDigits(cliente.cpf)}</CPF>`);
   }
-  infNfeLines.push(`      <xNome>${sanitize(destNome)}</xNome>`);
+  infNfeLines.push(`      <xNome>${destNome}</xNome>`);
   if (cliente?.email) {
     infNfeLines.push(`      <email>${sanitize(cliente.email)}</email>`);
   }
