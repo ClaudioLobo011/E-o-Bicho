@@ -78,7 +78,7 @@ test('performSoapRequest forwards intermediate certificates via options.ca', asy
 
     assert.strictEqual(body, soapResponse.trim());
     assert.strictEqual(capturedOptions.cert, certificateChain.join(''));
-    assert.deepStrictEqual(capturedOptions.ca, [certificateChain[1]]);
+    assert.strictEqual(capturedOptions.ca, undefined);
   } finally {
     https.request = originalRequest;
   }

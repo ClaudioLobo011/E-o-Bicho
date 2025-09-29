@@ -232,15 +232,6 @@ const performSoapRequest = ({
         options.cert = formattedCertificate;
       }
 
-      if (certificateList.length > 1) {
-        options.ca = certificateList.slice(1).map((entry) => {
-          const normalizedEntry = entry && entry.trim ? entry.trim() : entry;
-          if (!normalizedEntry) return '';
-          return normalizedEntry.endsWith('\n') ? normalizedEntry : `${normalizedEntry}\n`;
-        });
-        options.ca = options.ca.filter((entry) => entry && entry.trim());
-      }
-
       const request = https.request(options, (response) => {
         let body = '';
         response.setEncoding('utf8');
