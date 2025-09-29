@@ -8,12 +8,75 @@ const {
   describeMissingFields,
   getFiscalDataForStore,
 } = require('./fiscalRuleEngine');
+const { transmitNfceToSefaz, SefazTransmissionError } = require('./sefazTransmitter');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
+
+const UF_BY_CODE = {
+  '11': 'RO',
+  '12': 'AC',
+  '13': 'AM',
+  '14': 'RR',
+  '15': 'PA',
+  '16': 'AP',
+  '17': 'TO',
+  '21': 'MA',
+  '22': 'PI',
+  '23': 'CE',
+  '24': 'RN',
+  '25': 'PB',
+  '26': 'PE',
+  '27': 'AL',
+  '28': 'SE',
+  '29': 'BA',
+  '31': 'MG',
+  '32': 'ES',
+  '33': 'RJ',
+  '35': 'SP',
+  '41': 'PR',
+  '42': 'SC',
+  '43': 'RS',
+  '50': 'MS',
+  '51': 'MT',
+  '52': 'GO',
+  '53': 'DF',
+};
 
 const sanitizeDigits = (value, { fallback = '' } = {}) => {
   if (!value) return fallback;
   const digits = String(value).replace(/\D+/g, '');
   return digits || fallback;
+};
+
+const resolveStoreUf = (store = {}) => {
+  const ufSource = store.uf || store.estado || store.state || '';
+  if (ufSource) {
+    const normalized = String(ufSource).trim().toUpperCase();
+    if (normalized.length === 2) {
+      return normalized;
+    }
+  }
+
+  const codeCandidates = [
+    store.codigoUf,
+    store.codigoUF,
+    store.codigoEstado,
+    store.codigoUfIbge,
+    store.codigoIbgeUf,
+    store.codigoEstadoIbge,
+  ];
+
+  for (const candidate of codeCandidates) {
+    if (!candidate && candidate !== 0) continue;
+    const digits = sanitizeDigits(candidate, { fallback: '' });
+    if (!digits) continue;
+    const normalizedCode = digits.padStart(2, '0').slice(-2);
+    const resolved = UF_BY_CODE[normalizedCode];
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return '';
 };
 
 const safeNumber = (value, fallback = 0) => {
@@ -442,12 +505,33 @@ const extractCertificatePair = (pfxBuffer, password) => {
       throw new Error('A chave privada do certificado é inválida ou está protegida por senha desconhecida.');
     }
 
-    const certificatePem = certificateEntry?.pem || '';
-    if (!certificatePem) {
+    const certificatePem = certificateEntry?.pem ? String(certificateEntry.pem) : '';
+    if (!certificatePem.trim()) {
       throw new Error('Não foi possível extrair o certificado digital.');
     }
 
-    return { privateKeyPem: normalizedPrivateKeyPem, certificatePem };
+    const rawCertificates = Array.isArray(entries?.certificates)
+      ? entries.certificates.map((entry) => (entry?.pem ? String(entry.pem) : '')).filter(Boolean)
+      : [];
+
+    const certificateChain = [];
+    const normalizedLeaf = certificatePem;
+    certificateChain.push(normalizedLeaf);
+
+    for (const candidate of rawCertificates) {
+      if (!candidate.trim()) {
+        continue;
+      }
+      if (normalizedLeaf && candidate === normalizedLeaf) {
+        continue;
+      }
+      if (certificateChain.includes(candidate)) {
+        continue;
+      }
+      certificateChain.push(candidate);
+    }
+
+    return { privateKeyPem: normalizedPrivateKeyPem, certificatePem: normalizedLeaf, certificateChain };
   } catch (error) {
     if (error instanceof Error && error.message) {
       if (error.message.startsWith('Falha ao processar o certificado digital da empresa')) {
@@ -540,6 +624,10 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
   const productsMap = await loadProductsByIds(fiscalItems.map((item) => item.productId));
   const storeObject = store && typeof store.toObject === 'function' ? store.toObject() : store || {};
+  const storeUf = resolveStoreUf(storeObject);
+  if (!storeUf) {
+    throw new Error('UF da empresa não está configurada para transmissão fiscal.');
+  }
   const regime = storeObject?.regimeTributario || storeObject?.regime || '';
   const missingByProduct = [];
 
@@ -637,7 +725,10 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   } catch (error) {
     throw new Error(`Não foi possível recuperar a senha do certificado digital: ${error.message}`);
   }
-  const { privateKeyPem, certificatePem } = extractCertificatePair(certificateBuffer, certificatePassword);
+  const { privateKeyPem, certificatePem, certificateChain } = extractCertificatePair(
+    certificateBuffer,
+    certificatePassword
+  );
 
   const cscId = environment === 'producao' ? storeObject.cscIdProducao : storeObject.cscIdHomologacao;
   const cscTokenEncrypted =
@@ -916,12 +1007,31 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     ? finalXml
     : `<?xml version="1.0" encoding="UTF-8"?>\n${finalXml}`;
 
+  let transmission = null;
+  try {
+    transmission = await transmitNfceToSefaz({
+      xml,
+      uf: storeUf,
+      environment,
+      certificate: certificatePem,
+      certificateChain,
+      privateKey: privateKeyPem,
+      lotId: `${cnf}${Date.now()}`,
+    });
+  } catch (error) {
+    if (error instanceof SefazTransmissionError || error?.name === 'SefazTransmissionError') {
+      throw new Error(error.message || 'Falha ao transmitir NFC-e para a SEFAZ.');
+    }
+    throw new Error(`Falha ao transmitir NFC-e para a SEFAZ: ${error.message}`);
+  }
+
   return {
     xml,
     qrCodePayload,
     digestValue,
     signatureValue,
     accessKey,
+    transmission,
     totals: {
       totalProducts,
       totalLiquido,

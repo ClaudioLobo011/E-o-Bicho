@@ -1026,6 +1026,8 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       numero: proximoNumeroFiscal,
     });
 
+    const transmission = emissionResult.transmission || null;
+
     const qrCodeImage = await generateQrCodeDataUrl(emissionResult.qrCodePayload);
 
     const saleCodeForName = sale.saleCode || saleId;
@@ -1053,7 +1055,33 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     sale.fiscalAccessKey = emissionResult.accessKey || '';
     sale.fiscalDigestValue = emissionResult.digestValue || '';
     sale.fiscalSignature = emissionResult.signatureValue || '';
-    sale.fiscalProtocol = sale.fiscalProtocol || '';
+    if (transmission) {
+      sale.fiscalProtocol = transmission.protocol || sale.fiscalProtocol || '';
+      sale.fiscalReceiptNumber = transmission.receipt || sale.fiscalReceiptNumber || '';
+      sale.fiscalSefazStatus = transmission.status || sale.fiscalSefazStatus || '';
+      sale.fiscalSefazMessage = transmission.message || sale.fiscalSefazMessage || '';
+
+      if (transmission.processedAt) {
+        const processedAt = new Date(transmission.processedAt);
+        if (!Number.isNaN(processedAt.getTime())) {
+          sale.fiscalSefazProcessedAt = processedAt;
+          sale.fiscalSefazProcessedAtLabel = formatDateTimeLabel(processedAt);
+        } else {
+          sale.fiscalSefazProcessedAt = null;
+          sale.fiscalSefazProcessedAtLabel = '';
+        }
+      } else {
+        sale.fiscalSefazProcessedAt = null;
+        sale.fiscalSefazProcessedAtLabel = '';
+      }
+    } else {
+      sale.fiscalProtocol = sale.fiscalProtocol || '';
+      sale.fiscalReceiptNumber = sale.fiscalReceiptNumber || '';
+      sale.fiscalSefazStatus = sale.fiscalSefazStatus || '';
+      sale.fiscalSefazMessage = sale.fiscalSefazMessage || '';
+      sale.fiscalSefazProcessedAt = sale.fiscalSefazProcessedAt || null;
+      sale.fiscalSefazProcessedAtLabel = sale.fiscalSefazProcessedAtLabel || '';
+    }
 
     state.markModified('completedSales');
     await state.save();
@@ -1079,6 +1107,11 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       fiscalDigestValue: sale.fiscalDigestValue,
       fiscalSignature: sale.fiscalSignature,
       fiscalProtocol: sale.fiscalProtocol,
+      fiscalReceiptNumber: sale.fiscalReceiptNumber,
+      fiscalSefazStatus: sale.fiscalSefazStatus,
+      fiscalSefazMessage: sale.fiscalSefazMessage,
+      fiscalSefazProcessedAt: sale.fiscalSefazProcessedAt,
+      fiscalSefazProcessedAtLabel: sale.fiscalSefazProcessedAtLabel,
     });
   } catch (error) {
     console.error('Erro ao emitir nota fiscal do PDV:', error);
