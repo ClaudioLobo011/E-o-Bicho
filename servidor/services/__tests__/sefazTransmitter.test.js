@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const https = require('https');
+const tls = require('tls');
+const forge = require('node-forge');
 const { EventEmitter } = require('node:events');
 
 test('performSoapRequest forwards intermediate certificates via options.ca', async () => {
@@ -60,12 +62,50 @@ test('performSoapRequest forwards intermediate certificates via options.ca', asy
 
   delete require.cache[require.resolve('../sefazTransmitter')];
   const { __TESTING__ } = require('../sefazTransmitter');
-  const { performSoapRequest } = __TESTING__;
+  const { performSoapRequest, normalizePem } = __TESTING__;
 
   const certificateChain = [
     '-----BEGIN CERTIFICATE-----\nMIIFleaf\n-----END CERTIFICATE-----\n',
     '-----BEGIN CERTIFICATE-----\nMIIFintermediate\n-----END CERTIFICATE-----\n',
+    '-----BEGIN CERTIFICATE-----\nMIIFroot\n-----END CERTIFICATE-----\n',
   ];
+
+  const originalCertificateFromPem = forge.pki.certificateFromPem;
+
+  const certificatesMap = new Map([
+    [
+      certificateChain[0].trim(),
+      {
+        subject: { attributes: [{ name: 'commonName', value: 'Client Certificate' }] },
+        issuer: { attributes: [{ name: 'commonName', value: 'Intermediate CA' }] },
+        extensions: [{ name: 'basicConstraints', cA: false }],
+      },
+    ],
+    [
+      certificateChain[1].trim(),
+      {
+        subject: { attributes: [{ name: 'commonName', value: 'Intermediate CA' }] },
+        issuer: { attributes: [{ name: 'commonName', value: 'Root CA' }] },
+        extensions: [{ name: 'basicConstraints', cA: true }],
+      },
+    ],
+    [
+      certificateChain[2].trim(),
+      {
+        subject: { attributes: [{ name: 'commonName', value: 'Root CA' }] },
+        issuer: { attributes: [{ name: 'commonName', value: 'Root CA' }] },
+        extensions: [{ name: 'basicConstraints', cA: true }],
+      },
+    ],
+  ]);
+
+  forge.pki.certificateFromPem = (pem) => {
+    const normalized = (pem || '').trim();
+    if (certificatesMap.has(normalized)) {
+      return certificatesMap.get(normalized);
+    }
+    return originalCertificateFromPem(pem);
+  };
 
   try {
     const body = await performSoapRequest({
@@ -77,9 +117,37 @@ test('performSoapRequest forwards intermediate certificates via options.ca', asy
     });
 
     assert.strictEqual(body, soapResponse.trim());
-    assert.strictEqual(capturedOptions.cert, certificateChain[0]);
-    assert.deepStrictEqual(capturedOptions.ca, [certificateChain[1]]);
+    assert.strictEqual(capturedOptions.cert, certificateChain.map((entry) => normalizePem(entry)).join(''));
+
+    const defaultCaBundle = Array.isArray(tls.rootCertificates)
+      ? tls.rootCertificates.map((entry) => normalizePem(entry)).filter(Boolean)
+      : [];
+
+    assert.ok(Array.isArray(capturedOptions.ca));
+    for (const defaultCa of defaultCaBundle) {
+      assert.ok(
+        capturedOptions.ca.includes(defaultCa),
+        'A lista de CAs deve incluir os certificados raiz padrão do Node.'
+      );
+    }
+
+    const additionalAuthorities = certificateChain
+      .slice(1)
+      .map((entry) => normalizePem(entry));
+
+    for (const authority of additionalAuthorities) {
+      assert.ok(
+        capturedOptions.ca.includes(authority),
+        'Os certificados intermediários do cliente devem ser anexados ao bundle de CAs.'
+      );
+    }
+
+    assert.ok(
+      !capturedOptions.ca.includes(normalizePem(certificateChain[0])),
+      'O certificado do cliente não deve ser adicionado ao bundle de CAs.'
+    );
   } finally {
     https.request = originalRequest;
+    forge.pki.certificateFromPem = originalCertificateFromPem;
   }
 });

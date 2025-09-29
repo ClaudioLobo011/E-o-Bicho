@@ -1020,9 +1020,15 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     });
   } catch (error) {
     if (error instanceof SefazTransmissionError || error?.name === 'SefazTransmissionError') {
-      throw new Error(error.message || 'Falha ao transmitir NFC-e para a SEFAZ.');
+      const causeMessage = error?.details?.cause?.message || error?.cause?.message || '';
+      const detailedMessage = causeMessage
+        ? `${error.message || 'Falha ao transmitir NFC-e para a SEFAZ.'} (${causeMessage})`
+        : error.message || 'Falha ao transmitir NFC-e para a SEFAZ.';
+      throw new Error(detailedMessage);
     }
-    throw new Error(`Falha ao transmitir NFC-e para a SEFAZ: ${error.message}`);
+    throw new Error(
+      `Falha ao transmitir NFC-e para a SEFAZ: ${error?.message || 'erro desconhecido.'}`
+    );
   }
 
   return {

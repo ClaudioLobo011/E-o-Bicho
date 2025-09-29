@@ -1,5 +1,7 @@
 const https = require('https');
 const { URL } = require('url');
+const tls = require('tls');
+const forge = require('node-forge');
 
 class SefazTransmissionError extends Error {
   constructor(message, details = {}) {
@@ -84,6 +86,119 @@ const resolveEndpoint = (uf, environment) => {
   return endpoint;
 };
 
+const distinguishNameToString = (name = {}) => {
+  if (!name || !Array.isArray(name.attributes)) {
+    return '';
+  }
+
+  return name.attributes
+    .map((attribute) => {
+      if (!attribute) return '';
+      const key = attribute.shortName || attribute.name || '';
+      const value = attribute.value || '';
+      if (!key) {
+        return value ? String(value) : '';
+      }
+      return `${key}=${value}`;
+    })
+    .filter(Boolean)
+    .join(',');
+};
+
+const normalizePem = (pem) => {
+  if (!pem) return '';
+  const trimmed = String(pem).trim();
+  if (!trimmed) return '';
+  return trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
+};
+
+const orderCertificateChain = (chain = []) => {
+  if (!Array.isArray(chain) || chain.length <= 1) {
+    return Array.isArray(chain) ? chain.filter(Boolean) : [];
+  }
+
+  try {
+    const parsed = chain
+      .map((pem) => {
+        const normalized = (pem || '').trim();
+        if (!normalized) return null;
+        const certificate = forge.pki.certificateFromPem(normalized);
+        return {
+          pem: normalized,
+          subject: distinguishNameToString(certificate.subject),
+          issuer: distinguishNameToString(certificate.issuer),
+        };
+      })
+      .filter(Boolean);
+
+    if (!parsed.length) {
+      return [];
+    }
+
+    const issuerSubjects = new Set(parsed.map((entry) => entry.issuer));
+    const used = new Set();
+
+    const leaf = parsed.find((entry) => !issuerSubjects.has(entry.subject)) || parsed[0];
+    const ordered = [];
+
+    let current = leaf;
+    while (current && !used.has(current.pem)) {
+      ordered.push(current.pem);
+      used.add(current.pem);
+      const next = parsed.find(
+        (candidate) => !used.has(candidate.pem) && candidate.subject === current.issuer
+      );
+      current = next || null;
+    }
+
+    for (const entry of parsed) {
+      if (!used.has(entry.pem)) {
+        ordered.push(entry.pem);
+        used.add(entry.pem);
+      }
+    }
+
+    return ordered;
+  } catch (error) {
+    return chain.filter((entry) => entry && String(entry).trim());
+  }
+};
+
+const collectCertificateAuthorities = (chain = []) => {
+  if (!Array.isArray(chain) || chain.length <= 1) {
+    return [];
+  }
+
+  const authorities = [];
+
+  for (const entry of chain.slice(1)) {
+    const normalizedEntry = normalizePem(entry);
+    if (!normalizedEntry) {
+      continue;
+    }
+
+    try {
+      const certificate = forge.pki.certificateFromPem(normalizedEntry);
+      const basicConstraints = Array.isArray(certificate.extensions)
+        ? certificate.extensions.find((extension) => extension?.name === 'basicConstraints')
+        : null;
+
+      const isCertificateAuthority = Boolean(basicConstraints?.cA);
+      const subject = distinguishNameToString(certificate.subject);
+      const issuer = distinguishNameToString(certificate.issuer);
+      const isSelfSigned = subject && issuer && subject === issuer;
+
+      if ((isCertificateAuthority || isSelfSigned) && !authorities.includes(normalizedEntry)) {
+        authorities.push(normalizedEntry);
+      }
+    } catch (error) {
+      // Ignore parsing errors and skip certificates that cannot be processed.
+    }
+  }
+
+  return authorities;
+};
+
 const performSoapRequest = ({
   endpoint,
   envelope,
@@ -110,18 +225,35 @@ const performSoapRequest = ({
             .filter((pem, index, array) => pem && array.indexOf(pem) === index)
         : [];
 
-      const [leafFromChain, ...intermediateChain] = normalizedChain;
-      const effectiveCertificate = (() => {
-        if (certificate) {
-          if (Buffer.isBuffer(certificate)) {
-            const asString = certificate.toString();
-            return asString.trim() ? asString : leafFromChain;
-          }
-          const asString = String(certificate);
-          return asString.trim() ? asString : leafFromChain;
+      const normalizedCertificate = (() => {
+        if (!certificate) return '';
+        if (Buffer.isBuffer(certificate)) {
+          const asString = certificate.toString();
+          return asString.trim() ? asString : '';
         }
-        return leafFromChain || '';
+        const asString = String(certificate);
+        return asString.trim() ? asString : '';
       })();
+
+      if (normalizedCertificate) {
+        const existingIndex = normalizedChain.indexOf(normalizedCertificate);
+        if (existingIndex >= 0) {
+          normalizedChain.splice(existingIndex, 1);
+        }
+        normalizedChain.unshift(normalizedCertificate);
+      }
+
+      const orderedChain = orderCertificateChain(normalizedChain);
+
+      const certificateList = [];
+      for (const entry of orderedChain) {
+        const normalizedEntry = (entry || '').trim();
+        if (normalizedEntry && !certificateList.includes(normalizedEntry)) {
+          certificateList.push(normalizedEntry);
+        }
+      }
+
+      const formattedCertificate = certificateList.map((entry) => normalizePem(entry)).join('');
 
       const options = {
         method: 'POST',
@@ -135,11 +267,21 @@ const performSoapRequest = ({
           'User-Agent': 'EoBicho-PDV/1.0',
         },
         key: privateKey,
-        cert: effectiveCertificate,
       };
 
-      if (intermediateChain.length) {
-        options.ca = intermediateChain;
+      if (formattedCertificate) {
+        options.cert = formattedCertificate;
+      }
+
+      const defaultCaBundle = Array.isArray(tls.rootCertificates)
+        ? tls.rootCertificates.map((entry) => normalizePem(entry)).filter(Boolean)
+        : [];
+      const additionalAuthorities = collectCertificateAuthorities(certificateList)
+        .map((entry) => normalizePem(entry))
+        .filter((entry) => entry && !defaultCaBundle.includes(entry));
+
+      if (additionalAuthorities.length) {
+        options.ca = [...defaultCaBundle, ...additionalAuthorities];
       }
 
       const request = https.request(options, (response) => {
@@ -285,5 +427,7 @@ module.exports = {
   SefazTransmissionError,
   __TESTING__: {
     performSoapRequest,
+    normalizePem,
+    collectCertificateAuthorities,
   },
 };
