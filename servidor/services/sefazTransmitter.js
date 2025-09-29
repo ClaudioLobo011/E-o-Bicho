@@ -123,6 +123,26 @@ const performSoapRequest = ({
         return leafFromChain || '';
       })();
 
+      const certificateList = [];
+
+      const normalizedEffective = (effectiveCertificate || '').trim();
+      const normalizedLeaf = (leafFromChain || '').trim();
+
+      if (normalizedEffective) {
+        certificateList.push(normalizedEffective);
+      } else if (normalizedLeaf) {
+        certificateList.push(normalizedLeaf);
+      }
+
+      for (const entry of intermediateChain) {
+        const normalizedEntry = (entry || '').trim();
+        if (normalizedEntry && !certificateList.includes(normalizedEntry)) {
+          certificateList.push(normalizedEntry);
+        }
+      }
+
+      const formattedCertificate = certificateList.filter(Boolean).join('\n');
+
       const options = {
         method: 'POST',
         protocol: url.protocol,
@@ -135,11 +155,16 @@ const performSoapRequest = ({
           'User-Agent': 'EoBicho-PDV/1.0',
         },
         key: privateKey,
-        cert: effectiveCertificate,
       };
 
+      if (formattedCertificate) {
+        options.cert = formattedCertificate;
+      }
+
       if (intermediateChain.length) {
-        options.ca = intermediateChain;
+        options.ca = intermediateChain
+          .map((entry) => (entry && entry.trim() ? entry.trim() : ''))
+          .filter(Boolean);
       }
 
       const request = https.request(options, (response) => {
