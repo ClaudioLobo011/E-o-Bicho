@@ -254,3 +254,31 @@ test('performSoapRequest merges extra CA bundles configured via environment', as
     delete process.env.NFCE_EXTRA_CA_PATHS;
   }
 });
+
+test('loadExtraCertificateAuthorities returns entries from default bundle when present', () => {
+  delete process.env.NFCE_EXTRA_CA;
+  delete process.env.NFCE_EXTRA_CA_BUNDLE;
+  delete process.env.NFCE_EXTRA_CA_FILE;
+  delete process.env.NFCE_EXTRA_CA_PATH;
+  delete process.env.NFCE_EXTRA_CA_FILES;
+  delete process.env.NFCE_EXTRA_CA_PATHS;
+  delete process.env.NFCE_ADDITIONAL_CA;
+  delete process.env.NFCE_ADDITIONAL_CA_BUNDLE;
+  delete process.env.NFCE_ADDITIONAL_CA_FILE;
+  delete process.env.NFCE_ADDITIONAL_CA_PATH;
+  delete process.env.NFCE_ADDITIONAL_CA_FILES;
+  delete process.env.NFCE_ADDITIONAL_CA_PATHS;
+
+  delete require.cache[require.resolve('../sefazTransmitter')];
+  const { __TESTING__ } = require('../sefazTransmitter');
+  const { loadExtraCertificateAuthorities } = __TESTING__;
+
+  const authorities = loadExtraCertificateAuthorities();
+
+  assert.ok(Array.isArray(authorities), 'O resultado deve ser um array.');
+  assert.ok(authorities.length > 0, 'O bundle padrão de CAs da SEFAZ deve ser carregado.');
+  for (const entry of authorities) {
+    assert.strictEqual(typeof entry, 'string');
+    assert.ok(entry.includes('BEGIN CERTIFICATE'), 'Cada CA adicional deve estar em formato PEM.');
+  }
+});
