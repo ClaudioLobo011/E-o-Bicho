@@ -664,7 +664,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
   const ufCode = sanitizeDigits(storeObject?.codigoUf, { fallback: '00' }).padStart(2, '0');
   const cnpj = sanitizeDigits(storeObject?.cnpj, { fallback: '00000000000000' }).padStart(14, '0');
-  const serieFiscal = String(serie || '').padStart(3, '0');
+  const resolvedSerie = serie ?? storeObject?.serieFiscal ?? 1;
+  const serieNumber = Number.parseInt(resolvedSerie, 10);
+  if (!Number.isInteger(serieNumber) || serieNumber <= 0 || serieNumber > 999) {
+    throw new Error('Série fiscal inválida. Informe um valor inteiro entre 1 e 999.');
+  }
+  const serieFiscal = String(serieNumber).padStart(3, '0');
   const numeroFiscal = Number(numero);
   const cnf = buildCnf(sale);
   const tpAmb = environment === 'producao' ? '1' : '2';
@@ -756,7 +761,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push(`      <cNF>${cnf}</cNF>`);
   infNfeLines.push(`      <natOp>${snapshot?.meta?.naturezaOperacao || 'VENDA AO CONSUMIDOR'}</natOp>`);
   infNfeLines.push('      <mod>65</mod>');
-  infNfeLines.push(`      <serie>${serieFiscal}</serie>`);
+  infNfeLines.push(`      <serie>${serieNumber}</serie>`);
   infNfeLines.push(`      <nNF>${String(numeroFiscal)}</nNF>`);
   infNfeLines.push(`      <dhEmi>${emissionIso}</dhEmi>`);
   infNfeLines.push(`      <tpNF>1</tpNF>`);
@@ -946,7 +951,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('    </infAdic>');
   infNfeLines.push('  </infNFe>');
 
-  const certificateBody = certificatePem
+  const certB64 = certificatePem
     .replace('-----BEGIN CERTIFICATE-----', '')
     .replace('-----END CERTIFICATE-----', '')
     .replace(/\s+/g, '');
@@ -954,21 +959,30 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const baseXmlLines = ['<?xml version="1.0" encoding="UTF-8"?>', '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">', ...infNfeLines, '</NFe>'];
   const xmlForSignature = baseXmlLines.join('\n');
 
-  const signer = new SignedXml();
-  signer.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
-  signer.signatureAlgorithm = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256';
+  const keyPemString = Buffer.isBuffer(privateKeyPem)
+    ? privateKeyPem.toString('utf8')
+    : String(privateKeyPem || '');
+
+  if (!/-----BEGIN (?:RSA )?PRIVATE KEY-----/.test(keyPemString)) {
+    throw new Error('Chave privada inválida/ausente.');
+  }
+
+  const signer = new SignedXml({
+    privateKey: Buffer.from(keyPemString),
+    signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
+  });
+  signer.canonicalizationAlgorithm = 'http://www.w3.org/2001/10/xml-exc-c14n#';
+  signer.keyInfoProvider = {
+    getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+  };
   signer.addReference({
-    xpath: "//*[local-name(.)='infNFe']",
-    transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature'],
+    xpath: "//*[local-name(.)='infNFe' and @Id]",
+    transforms: [
+      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+      'http://www.w3.org/2001/10/xml-exc-c14n#',
+    ],
     digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
   });
-  const normalizedPrivateKey = Buffer.isBuffer(privateKeyPem)
-    ? privateKeyPem
-    : Buffer.from(String(privateKeyPem));
-  signer.privateKey = normalizedPrivateKey;
-  signer.keyInfoProvider = {
-    getKeyInfo: () => `<X509Data><X509Certificate>${certificateBody}</X509Certificate></X509Data>`,
-  };
   signer.computeSignature(xmlForSignature, { prefix: '' });
 
   const signedXmlContent = signer.getSignedXml();
