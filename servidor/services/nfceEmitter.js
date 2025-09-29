@@ -181,6 +181,16 @@ const formatDateTimeWithOffset = (date) => {
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${sign}${offsetHours}:${offsetMins}`;
 };
 
+const buildQrCodeRJ = ({ chNFe, tpAmb, idToken, csc }) => {
+  const base = 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode';
+  const payload = `${chNFe}|2|${tpAmb}|${idToken}|${csc}`;
+  const cHash = crypto.createHash('sha1').update(payload).digest('hex');
+  return {
+    url: `${base}?p=${chNFe}|2|${tpAmb}|${idToken}|${cHash}`,
+    base,
+  };
+};
+
 const buildCnf = (sale) => {
   const base =
     sale?.saleCode ||
@@ -1176,32 +1186,46 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const digestValue = signer.references?.[0]?.digestValue || '';
   const signatureValue = signer.signatureValue || '';
 
-  const qrParams = new URLSearchParams();
-  qrParams.set('chNFe', accessKey);
-  qrParams.set('nVersao', '100');
-  qrParams.set('tpAmb', tpAmb);
-  qrParams.set('dhEmi', emissionIso);
-  qrParams.set('vNF', toDecimal(totalLiquido));
-  qrParams.set('vICMS', '0.00');
-  qrParams.set('digVal', digestValue);
-  qrParams.set('cIdToken', cscId);
-  const qrBase = qrParams.toString();
-  const cHashQRCode = crypto.createHash('sha1').update(`${qrBase}${cscToken}`).digest('hex');
-  const qrCodePayload = `${qrBase}&cHashQRCode=${cHashQRCode}`;
-
-  const infNfeSuplXml = [
-    '  <infNFeSupl>',
-    `    <qrCode><![CDATA[${qrCodePayload}]]></qrCode>`,
-    '    <urlChave>https://www.sefaz.br.gov.br/nfce/consulta</urlChave>',
-    '  </infNFeSupl>',
-  ].join('\n');
-
-  const signatureIndex = signedXmlContent.indexOf('<Signature');
-  let finalXml;
-  if (signatureIndex === -1) {
-    finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
+  let qrCodePayload = '';
+  let qrCodeBaseUrl = 'https://www.sefaz.br.gov.br/nfce/consulta';
+  if (storeUf === 'RJ') {
+    const { url, base } = buildQrCodeRJ({
+      chNFe: accessKey,
+      tpAmb,
+      idToken: cscId,
+      csc: cscToken,
+    });
+    qrCodePayload = url;
+    qrCodeBaseUrl = base;
   } else {
-    finalXml = `${signedXmlContent.slice(0, signatureIndex)}${infNfeSuplXml}\n${signedXmlContent.slice(signatureIndex)}`;
+    const qrParams = new URLSearchParams();
+    qrParams.set('chNFe', accessKey);
+    qrParams.set('nVersao', '100');
+    qrParams.set('tpAmb', tpAmb);
+    qrParams.set('dhEmi', emissionIso);
+    qrParams.set('vNF', toDecimal(totalLiquido));
+    qrParams.set('vICMS', '0.00');
+    qrParams.set('digVal', digestValue);
+    qrParams.set('cIdToken', cscId);
+    const qrBase = qrParams.toString();
+    const cHashQRCode = crypto.createHash('sha1').update(`${qrBase}${cscToken}`).digest('hex');
+    qrCodePayload = `${qrBase}&cHashQRCode=${cHashQRCode}`;
+  }
+
+  if (!qrCodePayload) {
+    throw new Error('Falha ao gerar QR Code da NFC-e.');
+  }
+
+  const infNfeSuplXml = `<infNFeSupl><qrCode><![CDATA[${qrCodePayload}]]></qrCode><urlChave>${qrCodeBaseUrl}</urlChave></infNFeSupl>`;
+
+  const signatureCloseTag = '</Signature>';
+  const signatureCloseIndex = signedXmlContent.indexOf(signatureCloseTag);
+  let finalXml;
+  if (signatureCloseIndex === -1) {
+    finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}</NFe>`);
+  } else {
+    const insertionPoint = signatureCloseIndex + signatureCloseTag.length;
+    finalXml = `${signedXmlContent.slice(0, insertionPoint)}${infNfeSuplXml}${signedXmlContent.slice(insertionPoint)}`;
   }
 
   const xml = finalXml.startsWith('<?xml')
