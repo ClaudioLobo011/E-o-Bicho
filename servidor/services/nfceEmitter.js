@@ -505,12 +505,33 @@ const extractCertificatePair = (pfxBuffer, password) => {
       throw new Error('A chave privada do certificado é inválida ou está protegida por senha desconhecida.');
     }
 
-    const certificatePem = certificateEntry?.pem || '';
-    if (!certificatePem) {
+    const certificatePem = certificateEntry?.pem ? String(certificateEntry.pem) : '';
+    if (!certificatePem.trim()) {
       throw new Error('Não foi possível extrair o certificado digital.');
     }
 
-    return { privateKeyPem: normalizedPrivateKeyPem, certificatePem };
+    const rawCertificates = Array.isArray(entries?.certificates)
+      ? entries.certificates.map((entry) => (entry?.pem ? String(entry.pem) : '')).filter(Boolean)
+      : [];
+
+    const certificateChain = [];
+    const normalizedLeaf = certificatePem;
+    certificateChain.push(normalizedLeaf);
+
+    for (const candidate of rawCertificates) {
+      if (!candidate.trim()) {
+        continue;
+      }
+      if (normalizedLeaf && candidate === normalizedLeaf) {
+        continue;
+      }
+      if (certificateChain.includes(candidate)) {
+        continue;
+      }
+      certificateChain.push(candidate);
+    }
+
+    return { privateKeyPem: normalizedPrivateKeyPem, certificatePem: normalizedLeaf, certificateChain };
   } catch (error) {
     if (error instanceof Error && error.message) {
       if (error.message.startsWith('Falha ao processar o certificado digital da empresa')) {
@@ -704,7 +725,10 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   } catch (error) {
     throw new Error(`Não foi possível recuperar a senha do certificado digital: ${error.message}`);
   }
-  const { privateKeyPem, certificatePem } = extractCertificatePair(certificateBuffer, certificatePassword);
+  const { privateKeyPem, certificatePem, certificateChain } = extractCertificatePair(
+    certificateBuffer,
+    certificatePassword
+  );
 
   const cscId = environment === 'producao' ? storeObject.cscIdProducao : storeObject.cscIdHomologacao;
   const cscTokenEncrypted =
@@ -990,6 +1014,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       uf: storeUf,
       environment,
       certificate: certificatePem,
+      certificateChain,
       privateKey: privateKeyPem,
       lotId: `${cnf}${Date.now()}`,
     });

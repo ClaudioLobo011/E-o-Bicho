@@ -84,11 +84,45 @@ const resolveEndpoint = (uf, environment) => {
   return endpoint;
 };
 
-const performSoapRequest = ({ endpoint, envelope, certificate, privateKey, timeout = 45000 }) => {
+const performSoapRequest = ({
+  endpoint,
+  envelope,
+  certificate,
+  certificateChain = [],
+  privateKey,
+  timeout = 45000,
+}) => {
   return new Promise((resolve, reject) => {
     try {
       const url = new URL(endpoint);
       const isHttps = url.protocol === 'https:';
+      const normalizedChain = Array.isArray(certificateChain)
+        ? certificateChain
+            .map((entry) => {
+              if (!entry) return null;
+              if (Buffer.isBuffer(entry)) {
+                const asString = entry.toString();
+                return asString.trim() ? asString : null;
+              }
+              const asString = String(entry);
+              return asString.trim() ? asString : null;
+            })
+            .filter((pem, index, array) => pem && array.indexOf(pem) === index)
+        : [];
+
+      const [leafFromChain, ...intermediateChain] = normalizedChain;
+      const effectiveCertificate = (() => {
+        if (certificate) {
+          if (Buffer.isBuffer(certificate)) {
+            const asString = certificate.toString();
+            return asString.trim() ? asString : leafFromChain;
+          }
+          const asString = String(certificate);
+          return asString.trim() ? asString : leafFromChain;
+        }
+        return leafFromChain || '';
+      })();
+
       const options = {
         method: 'POST',
         protocol: url.protocol,
@@ -101,8 +135,12 @@ const performSoapRequest = ({ endpoint, envelope, certificate, privateKey, timeo
           'User-Agent': 'EoBicho-PDV/1.0',
         },
         key: privateKey,
-        cert: certificate,
+        cert: effectiveCertificate,
       };
+
+      if (intermediateChain.length) {
+        options.ca = intermediateChain;
+      }
 
       const request = https.request(options, (response) => {
         let body = '';
@@ -164,6 +202,7 @@ const transmitNfceToSefaz = async ({
   uf,
   environment,
   certificate,
+  certificateChain,
   privateKey,
   lotId,
 }) => {
@@ -175,6 +214,7 @@ const transmitNfceToSefaz = async ({
     endpoint,
     envelope,
     certificate,
+    certificateChain,
     privateKey,
   });
 
@@ -243,4 +283,7 @@ const transmitNfceToSefaz = async ({
 module.exports = {
   transmitNfceToSefaz,
   SefazTransmissionError,
+  __TESTING__: {
+    performSoapRequest,
+  },
 };
