@@ -1,5 +1,6 @@
 const https = require('https');
 const { URL } = require('url');
+const tls = require('tls');
 const forge = require('node-forge');
 
 class SefazTransmissionError extends Error {
@@ -104,6 +105,13 @@ const distinguishNameToString = (name = {}) => {
     .join(',');
 };
 
+const normalizePem = (pem) => {
+  if (!pem) return '';
+  const trimmed = String(pem).trim();
+  if (!trimmed) return '';
+  return trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
+};
+
 const orderCertificateChain = (chain = []) => {
   if (!Array.isArray(chain) || chain.length <= 1) {
     return Array.isArray(chain) ? chain.filter(Boolean) : [];
@@ -154,6 +162,41 @@ const orderCertificateChain = (chain = []) => {
   } catch (error) {
     return chain.filter((entry) => entry && String(entry).trim());
   }
+};
+
+const collectCertificateAuthorities = (chain = []) => {
+  if (!Array.isArray(chain) || chain.length <= 1) {
+    return [];
+  }
+
+  const authorities = [];
+
+  for (const entry of chain.slice(1)) {
+    const normalizedEntry = normalizePem(entry);
+    if (!normalizedEntry) {
+      continue;
+    }
+
+    try {
+      const certificate = forge.pki.certificateFromPem(normalizedEntry);
+      const basicConstraints = Array.isArray(certificate.extensions)
+        ? certificate.extensions.find((extension) => extension?.name === 'basicConstraints')
+        : null;
+
+      const isCertificateAuthority = Boolean(basicConstraints?.cA);
+      const subject = distinguishNameToString(certificate.subject);
+      const issuer = distinguishNameToString(certificate.issuer);
+      const isSelfSigned = subject && issuer && subject === issuer;
+
+      if ((isCertificateAuthority || isSelfSigned) && !authorities.includes(normalizedEntry)) {
+        authorities.push(normalizedEntry);
+      }
+    } catch (error) {
+      // Ignore parsing errors and skip certificates that cannot be processed.
+    }
+  }
+
+  return authorities;
 };
 
 const performSoapRequest = ({
@@ -210,9 +253,7 @@ const performSoapRequest = ({
         }
       }
 
-      const formattedCertificate = certificateList
-        .map((entry) => (entry.endsWith('\n') ? entry : `${entry}\n`))
-        .join('');
+      const formattedCertificate = certificateList.map((entry) => normalizePem(entry)).join('');
 
       const options = {
         method: 'POST',
@@ -230,6 +271,17 @@ const performSoapRequest = ({
 
       if (formattedCertificate) {
         options.cert = formattedCertificate;
+      }
+
+      const defaultCaBundle = Array.isArray(tls.rootCertificates)
+        ? tls.rootCertificates.map((entry) => normalizePem(entry)).filter(Boolean)
+        : [];
+      const additionalAuthorities = collectCertificateAuthorities(certificateList)
+        .map((entry) => normalizePem(entry))
+        .filter((entry) => entry && !defaultCaBundle.includes(entry));
+
+      if (additionalAuthorities.length) {
+        options.ca = [...defaultCaBundle, ...additionalAuthorities];
       }
 
       const request = https.request(options, (response) => {
@@ -375,5 +427,7 @@ module.exports = {
   SefazTransmissionError,
   __TESTING__: {
     performSoapRequest,
+    normalizePem,
+    collectCertificateAuthorities,
   },
 };
