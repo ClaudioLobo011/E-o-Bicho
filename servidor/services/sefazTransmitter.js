@@ -1,5 +1,6 @@
 const https = require('https');
 const { URL } = require('url');
+const forge = require('node-forge');
 
 class SefazTransmissionError extends Error {
   constructor(message, details = {}) {
@@ -84,6 +85,77 @@ const resolveEndpoint = (uf, environment) => {
   return endpoint;
 };
 
+const distinguishNameToString = (name = {}) => {
+  if (!name || !Array.isArray(name.attributes)) {
+    return '';
+  }
+
+  return name.attributes
+    .map((attribute) => {
+      if (!attribute) return '';
+      const key = attribute.shortName || attribute.name || '';
+      const value = attribute.value || '';
+      if (!key) {
+        return value ? String(value) : '';
+      }
+      return `${key}=${value}`;
+    })
+    .filter(Boolean)
+    .join(',');
+};
+
+const orderCertificateChain = (chain = []) => {
+  if (!Array.isArray(chain) || chain.length <= 1) {
+    return Array.isArray(chain) ? chain.filter(Boolean) : [];
+  }
+
+  try {
+    const parsed = chain
+      .map((pem) => {
+        const normalized = (pem || '').trim();
+        if (!normalized) return null;
+        const certificate = forge.pki.certificateFromPem(normalized);
+        return {
+          pem: normalized,
+          subject: distinguishNameToString(certificate.subject),
+          issuer: distinguishNameToString(certificate.issuer),
+        };
+      })
+      .filter(Boolean);
+
+    if (!parsed.length) {
+      return [];
+    }
+
+    const issuerSubjects = new Set(parsed.map((entry) => entry.issuer));
+    const used = new Set();
+
+    const leaf = parsed.find((entry) => !issuerSubjects.has(entry.subject)) || parsed[0];
+    const ordered = [];
+
+    let current = leaf;
+    while (current && !used.has(current.pem)) {
+      ordered.push(current.pem);
+      used.add(current.pem);
+      const next = parsed.find(
+        (candidate) => !used.has(candidate.pem) && candidate.subject === current.issuer
+      );
+      current = next || null;
+    }
+
+    for (const entry of parsed) {
+      if (!used.has(entry.pem)) {
+        ordered.push(entry.pem);
+        used.add(entry.pem);
+      }
+    }
+
+    return ordered;
+  } catch (error) {
+    return chain.filter((entry) => entry && String(entry).trim());
+  }
+};
+
 const performSoapRequest = ({
   endpoint,
   envelope,
@@ -110,38 +182,37 @@ const performSoapRequest = ({
             .filter((pem, index, array) => pem && array.indexOf(pem) === index)
         : [];
 
-      const [leafFromChain, ...intermediateChain] = normalizedChain;
-      const effectiveCertificate = (() => {
-        if (certificate) {
-          if (Buffer.isBuffer(certificate)) {
-            const asString = certificate.toString();
-            return asString.trim() ? asString : leafFromChain;
-          }
-          const asString = String(certificate);
-          return asString.trim() ? asString : leafFromChain;
+      const normalizedCertificate = (() => {
+        if (!certificate) return '';
+        if (Buffer.isBuffer(certificate)) {
+          const asString = certificate.toString();
+          return asString.trim() ? asString : '';
         }
-        return leafFromChain || '';
+        const asString = String(certificate);
+        return asString.trim() ? asString : '';
       })();
 
-      const certificateList = [];
-
-      const normalizedEffective = (effectiveCertificate || '').trim();
-      const normalizedLeaf = (leafFromChain || '').trim();
-
-      if (normalizedEffective) {
-        certificateList.push(normalizedEffective);
-      } else if (normalizedLeaf) {
-        certificateList.push(normalizedLeaf);
+      if (normalizedCertificate) {
+        const existingIndex = normalizedChain.indexOf(normalizedCertificate);
+        if (existingIndex >= 0) {
+          normalizedChain.splice(existingIndex, 1);
+        }
+        normalizedChain.unshift(normalizedCertificate);
       }
 
-      for (const entry of intermediateChain) {
+      const orderedChain = orderCertificateChain(normalizedChain);
+
+      const certificateList = [];
+      for (const entry of orderedChain) {
         const normalizedEntry = (entry || '').trim();
         if (normalizedEntry && !certificateList.includes(normalizedEntry)) {
           certificateList.push(normalizedEntry);
         }
       }
 
-      const formattedCertificate = certificateList.filter(Boolean).join('\n');
+      const formattedCertificate = certificateList
+        .map((entry) => (entry.endsWith('\n') ? entry : `${entry}\n`))
+        .join('');
 
       const options = {
         method: 'POST',
@@ -161,10 +232,13 @@ const performSoapRequest = ({
         options.cert = formattedCertificate;
       }
 
-      if (intermediateChain.length) {
-        options.ca = intermediateChain
-          .map((entry) => (entry && entry.trim() ? entry.trim() : ''))
-          .filter(Boolean);
+      if (certificateList.length > 1) {
+        options.ca = certificateList.slice(1).map((entry) => {
+          const normalizedEntry = entry && entry.trim ? entry.trim() : entry;
+          if (!normalizedEntry) return '';
+          return normalizedEntry.endsWith('\n') ? normalizedEntry : `${normalizedEntry}\n`;
+        });
+        options.ca = options.ca.filter((entry) => entry && entry.trim());
       }
 
       const request = https.request(options, (response) => {
