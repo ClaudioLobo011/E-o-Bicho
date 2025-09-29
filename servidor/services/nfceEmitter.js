@@ -1245,25 +1245,14 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
     if (nfeNode && infNfeSignedNode && signatureNode && signatureNode.parentNode === nfeNode) {
       nfeNode.removeChild(signatureNode);
-
-      let insertionPoint = null;
-      if (infNfeSuplNode && infNfeSuplNode.parentNode === nfeNode) {
-        insertionPoint = infNfeSuplNode;
-      } else {
-        let sibling = infNfeSignedNode.nextSibling;
-        while (sibling) {
-          if (sibling.nodeType === 1) {
-            insertionPoint = sibling;
-            break;
-          }
-          sibling = sibling.nextSibling;
-        }
-      }
-
-      nfeNode.insertBefore(signatureNode, insertionPoint);
+      nfeNode.appendChild(signatureNode);
 
       if (!signatureNode.getAttribute('xmlns')) {
-        signatureNode.setAttribute('xmlns', 'http://www.w3.org/2000/09/xmldsig#');
+        signatureNode.setAttributeNS(
+          'http://www.w3.org/2000/xmlns/',
+          'xmlns',
+          'http://www.w3.org/2000/09/xmldsig#'
+        );
       }
     }
   } catch (error) {
@@ -1315,7 +1304,11 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     if (!signatureNode || signatureNode.parentNode !== nfeNode) {
       [signatureNode] = xpath.select("./*[local-name()='Signature']", nfeNode);
       if (signatureNode && !signatureNode.getAttribute('xmlns')) {
-        signatureNode.setAttribute('xmlns', 'http://www.w3.org/2000/09/xmldsig#');
+        signatureNode.setAttributeNS(
+          'http://www.w3.org/2000/xmlns/',
+          'xmlns',
+          'http://www.w3.org/2000/09/xmldsig#'
+        );
       }
     }
 
@@ -1323,14 +1316,16 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       [infNfeSuplNode] = xpath.select("./*[local-name()='infNFeSupl']", nfeNode);
     }
 
+    const signaturePlacementNode =
+      signatureNode && signatureNode.parentNode === nfeNode ? signatureNode : null;
+
     if (!infNfeSuplNode) {
       infNfeSuplNode = signedDocument.createElementNS(NFCE_NAMESPACE, 'infNFeSupl');
-      let referenceNode = signatureNode ? signatureNode.nextSibling : null;
-      while (referenceNode && referenceNode.nodeType !== 1) {
-        referenceNode = referenceNode.nextSibling;
-      }
-      nfeNode.insertBefore(infNfeSuplNode, referenceNode || null);
+      nfeNode.insertBefore(infNfeSuplNode, signaturePlacementNode);
     } else {
+      if (signaturePlacementNode && infNfeSuplNode.nextSibling !== signaturePlacementNode) {
+        nfeNode.insertBefore(infNfeSuplNode, signaturePlacementNode);
+      }
       while (infNfeSuplNode.firstChild) {
         infNfeSuplNode.removeChild(infNfeSuplNode.firstChild);
       }
