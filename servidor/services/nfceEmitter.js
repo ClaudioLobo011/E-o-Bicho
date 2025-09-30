@@ -196,6 +196,56 @@ const toDecimal = (value, fractionDigits = 2) => {
   return number.toFixed(fractionDigits);
 };
 
+const TAX_NT_CODES = new Set(['04', '05', '06', '07', '08', '09']);
+const TAX_ALIQ_CODES = new Set(['01', '02']);
+const TAX_QTDE_CODES = new Set(['03']);
+
+const buildTaxGroup = ({ lines, tag, data = {}, baseValue = 0, quantity = 0 }) => {
+  const upperTag = tag.toUpperCase();
+  const subgroupIndent = '          ';
+  const valueIndent = '            ';
+  const baseNumber = safeNumber(baseValue, 0);
+  const quantityNumber = safeNumber(quantity, 0);
+  const aliquotNumber = safeNumber(data?.aliquota, 0);
+  const amountByAliquot = (baseNumber * aliquotNumber) / 100;
+  const quantityAmount = quantityNumber * aliquotNumber;
+  const cstDigitsRaw = onlyDigits(data?.cst);
+  const normalizedCst = cstDigitsRaw ? cstDigitsRaw.padStart(2, '0').slice(-2) : '';
+  const effectiveCst = normalizedCst || '99';
+
+  lines.push(`        <${upperTag}>`);
+
+  if (TAX_NT_CODES.has(effectiveCst)) {
+    lines.push(`${subgroupIndent}<${upperTag}NT>`);
+    lines.push(`${valueIndent}<CST>${effectiveCst}</CST>`);
+    lines.push(`${subgroupIndent}</${upperTag}NT>`);
+  } else if (TAX_QTDE_CODES.has(effectiveCst)) {
+    lines.push(`${subgroupIndent}<${upperTag}Qtde>`);
+    lines.push(`${valueIndent}<CST>${effectiveCst}</CST>`);
+    lines.push(`${valueIndent}<qBCProd>${toDecimal(quantityNumber, 4)}</qBCProd>`);
+    lines.push(`${valueIndent}<vAliqProd>${toDecimal(aliquotNumber, 4)}</vAliqProd>`);
+    lines.push(`${valueIndent}<v${upperTag}>${toDecimal(quantityAmount)}</v${upperTag}>`);
+    lines.push(`${subgroupIndent}</${upperTag}Qtde>`);
+  } else if (effectiveCst === '60') {
+    lines.push(`${subgroupIndent}<${upperTag}ST>`);
+    lines.push(`${valueIndent}<CST>${effectiveCst}</CST>`);
+    lines.push(`${valueIndent}<vBC>${toDecimal(baseNumber)}</vBC>`);
+    lines.push(`${valueIndent}<p${upperTag}>${toDecimal(aliquotNumber)}</p${upperTag}>`);
+    lines.push(`${valueIndent}<v${upperTag}>${toDecimal(amountByAliquot)}</v${upperTag}>`);
+    lines.push(`${subgroupIndent}</${upperTag}ST>`);
+  } else {
+    const groupTag = TAX_ALIQ_CODES.has(effectiveCst) ? `${upperTag}Aliq` : `${upperTag}Outr`;
+    lines.push(`${subgroupIndent}<${groupTag}>`);
+    lines.push(`${valueIndent}<CST>${effectiveCst}</CST>`);
+    lines.push(`${valueIndent}<vBC>${toDecimal(baseNumber)}</vBC>`);
+    lines.push(`${valueIndent}<p${upperTag}>${toDecimal(aliquotNumber)}</p${upperTag}>`);
+    lines.push(`${valueIndent}<v${upperTag}>${toDecimal(amountByAliquot)}</v${upperTag}>`);
+    lines.push(`${subgroupIndent}</${groupTag}>`);
+  }
+
+  lines.push(`        </${upperTag}>`);
+};
+
 const formatDateTimeWithOffset = (date) => {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
     return new Date().toISOString();
@@ -925,7 +975,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('      <indFinal>1</indFinal>');
   infNfeLines.push('      <indPres>1</indPres>');
   infNfeLines.push('      <procEmi>0</procEmi>');
-  infNfeLines.push('      <verProc>PDV-EOBICHO-1.0</verProc>');
+  const verProcSource = snapshot?.meta?.versaoProcesso || snapshot?.meta?.verProc || '1.0';
+  let verProcValue = sanitize(verProcSource);
+  if (!verProcValue) {
+    verProcValue = '1.0';
+  }
+  infNfeLines.push(`      <verProc>${verProcValue}</verProc>`);
   infNfeLines.push('    </ide>');
   infNfeLines.push('    <emit>');
   infNfeLines.push(`      <CNPJ>${cnpj}</CNPJ>`);
@@ -942,7 +997,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push(`        <UF>${emUF}</UF>`);
   infNfeLines.push(`        <CEP>${emCEP}</CEP>`);
   infNfeLines.push('        <cPais>1058</cPais>');
-  infNfeLines.push('        <xPais>BRASIL</xPais>');
+  infNfeLines.push('        <xPais>Brasil</xPais>');
   infNfeLines.push('      </enderEmit>');
   infNfeLines.push(`      <IE>${sanitizeDigits(storeObject?.inscricaoEstadual, { fallback: '' })}</IE>`);
   infNfeLines.push('      <CRT>1</CRT>');
@@ -1060,22 +1115,20 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       infNfeLines.push('          </ICMS00>');
     }
     infNfeLines.push('        </ICMS>');
-    infNfeLines.push('        <PIS>');
-    infNfeLines.push('          <PISAliq>');
-    infNfeLines.push(`            <CST>${fiscalData?.pis?.cst || '49'}</CST>`);
-    infNfeLines.push('            <vBC>0.00</vBC>');
-    infNfeLines.push(`            <pPIS>${toDecimal(fiscalData?.pis?.aliquota ?? 0)}</pPIS>`);
-    infNfeLines.push('            <vPIS>0.00</vPIS>');
-    infNfeLines.push('          </PISAliq>');
-    infNfeLines.push('        </PIS>');
-    infNfeLines.push('        <COFINS>');
-    infNfeLines.push('          <COFINSAliq>');
-    infNfeLines.push(`            <CST>${fiscalData?.cofins?.cst || '49'}</CST>`);
-    infNfeLines.push('            <vBC>0.00</vBC>');
-    infNfeLines.push(`            <pCOFINS>${toDecimal(fiscalData?.cofins?.aliquota ?? 0)}</pCOFINS>`);
-    infNfeLines.push('            <vCOFINS>0.00</vCOFINS>');
-    infNfeLines.push('          </COFINSAliq>');
-    infNfeLines.push('        </COFINS>');
+    buildTaxGroup({
+      lines: infNfeLines,
+      tag: 'PIS',
+      data: fiscalData?.pis,
+      baseValue: item.total,
+      quantity: item.quantity,
+    });
+    buildTaxGroup({
+      lines: infNfeLines,
+      tag: 'COFINS',
+      data: fiscalData?.cofins,
+      baseValue: item.total,
+      quantity: item.quantity,
+    });
     infNfeLines.push('      </imposto>');
     infNfeLines.push('    </det>');
   });
