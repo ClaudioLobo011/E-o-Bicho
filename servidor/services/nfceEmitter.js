@@ -322,7 +322,8 @@ const buildQrCodeRJ = ({ chNFe, tpAmb, idToken, csc }) => {
   const base = 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode';
   const idT = String(idToken ?? '').replace(/^0+/, '');
   const pSemHash = `${chNFe}|${versaoQR}|${tpAmb}|${idT}`;
-  const hashInput = `${pSemHash}|${csc}`.replace('||', '|');
+  const token = String(csc ?? '');
+  const hashInput = `${pSemHash}${token}`;
   const cHash = crypto
     .createHash('sha1')
     .update(hashInput, 'utf8')
