@@ -323,7 +323,11 @@ const buildQrCodeRJ = ({ chNFe, tpAmb, idToken, csc }) => {
   const idT = String(idToken ?? '').replace(/^0+/, '');
   const pSemHash = `${chNFe}|${versaoQR}|${tpAmb}|${idT}`;
   const hashInput = `${pSemHash}|${csc}`.replace('||', '|');
-  const cHash = crypto.createHash('sha1').update(hashInput, 'utf8').digest('hex');
+  const cHash = crypto
+    .createHash('sha1')
+    .update(hashInput, 'utf8')
+    .digest('hex')
+    .toUpperCase();
   const url = `${base}?p=${chNFe}|${versaoQR}|${tpAmb}|${idT}|${cHash}`;
   return { url, base };
 };
@@ -1476,7 +1480,11 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     qrParams.set('digVal', digestValue);
     qrParams.set('cIdToken', cscId);
     const qrBase = qrParams.toString();
-    const cHashQRCode = crypto.createHash('sha1').update(`${qrBase}${cscToken}`).digest('hex');
+    const cHashQRCode = crypto
+      .createHash('sha1')
+      .update(`${qrBase}${cscToken}`)
+      .digest('hex')
+      .toUpperCase();
     qrCodePayload = `${qrBase}&cHashQRCode=${cHashQRCode}`;
   }
 
