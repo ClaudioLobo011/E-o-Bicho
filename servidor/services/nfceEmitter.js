@@ -49,6 +49,27 @@ const sanitizeDigits = (value, { fallback = '' } = {}) => {
   return digits || fallback;
 };
 
+const normalizeStringSafe = (value) => {
+  if (!value && value !== 0) {
+    return '';
+  }
+  const source = String(value)
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!source) {
+    return '';
+  }
+  let normalized = source;
+  if (typeof normalized.normalize === 'function') {
+    normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+  return normalized
+    .replace(/[^0-9a-zA-Z]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+};
+
 const onlyDigits = (s) => String(s ?? '').replace(/\D/g, '');
 const dec = (n) => Number(n ?? 0).toFixed(2);
 const escapeXmlText = (value) =>
@@ -707,6 +728,8 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     throw new Error('Venda inválida para emissão fiscal.');
   }
   const snapshot = sale.receiptSnapshot || {};
+  const saleCodeForFile = normalizeStringSafe(sale?.saleCode) || normalizeStringSafe(sale?.id);
+  let xmlFileBaseName = saleCodeForFile ? `NFCe-${saleCodeForFile}` : '';
   const fiscalItemsRaw = Array.isArray(sale.fiscalItemsSnapshot)
     ? sale.fiscalItemsSnapshot
     : Array.isArray(sale.itemsSnapshot)
@@ -778,6 +801,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     emissionType: '1',
     cnf,
   });
+  if (!xmlFileBaseName) {
+    xmlFileBaseName = `NFCe-${accessKey}`;
+  }
 
   const totalProducts = fiscalItems.reduce((sum, item) => sum + item.total, 0);
   const desconto = safeNumber(snapshot?.totais?.descontoValor ?? snapshot?.totais?.desconto ?? sale.discountValue ?? 0, 0);
@@ -1172,7 +1198,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     .replace('-----END CERTIFICATE-----', '')
     .replace(/\s+/g, '');
 
-  const baseXmlLines = ['<?xml version="1.0" encoding="UTF-8"?>', '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">', ...infNfeLines, '</NFe>'];
+  const baseXmlLines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<NFe xmlns="http://www.portalfiscal.inf.br/nfe" xmlns:ds="http://www.w3.org/2000/09/xmldsig#">',
+    ...infNfeLines,
+    '</NFe>',
+  ];
   const xmlForSignature = baseXmlLines.join('\n');
 
   const xmlDocument = new DOMParser().parseFromString(xmlForSignature, 'text/xml');
@@ -1196,34 +1227,28 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const signer = new SignedXml({
     privateKey: Buffer.from(keyPemString),
     idAttribute: 'Id',
-    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
     signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
   signer.keyInfoProvider = {
-    getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+    getKeyInfo: () =>
+      `<ds:X509Data><ds:X509Certificate>${certB64}</ds:X509Certificate></ds:X509Data>`,
   };
   const refXPath = "/*[local-name()='NFe']/*[local-name()='infNFe']";
   signer.addReference({
     xpath: refXPath,
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+      'http://www.w3.org/2001/10/xml-exc-c14n#',
     ],
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
   console.debug('XPath ref:', refXPath);
-  const [infNfeSuplForLocation] = xpath.select(
-    "/*[local-name()='NFe']/*[local-name()='infNFeSupl']",
-    xmlDocument
-  );
-  const signatureLocationReference = infNfeSuplForLocation
-    ? "/*[local-name()='NFe']/*[local-name()='infNFeSupl']"
-    : refXPath;
   signer.computeSignature(xmlForSignature, {
-    prefix: '',
+    prefix: 'ds',
     location: {
-      reference: signatureLocationReference,
+      reference: refXPath,
       action: 'after',
     },
   });
@@ -1297,20 +1322,21 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       signatureNode &&
       signatureNode.parentNode === nfeNode
     ) {
-      if (!signatureNode.getAttribute('xmlns')) {
-        signatureNode.setAttributeNS(
-          'http://www.w3.org/2000/xmlns/',
-          'xmlns',
-          'http://www.w3.org/2000/09/xmldsig#'
-        );
+      if (infNfeSuplNode && infNfeSuplNode.parentNode === nfeNode) {
+        nfeNode.removeChild(infNfeSuplNode);
+      }
+      if (!infNfeSuplNode) {
+        infNfeSuplNode = signedDocument.createElementNS(NFCE_NAMESPACE, 'infNFeSupl');
       }
 
-      nfeNode.removeChild(signatureNode);
+      if (signatureNode.removeAttribute) {
+        signatureNode.removeAttribute('xmlns');
+        signatureNode.removeAttribute('xmlns:ds');
+      }
 
-      if (infNfeSuplNode) {
-        nfeNode.removeChild(infNfeSuplNode);
-      } else {
-        infNfeSuplNode = signedDocument.createElementNS(NFCE_NAMESPACE, 'infNFeSupl');
+      if (signatureNode.previousSibling !== infNfeSignedNode) {
+        nfeNode.removeChild(signatureNode);
+        nfeNode.insertBefore(signatureNode, infNfeSignedNode.nextSibling);
       }
 
       while (infNfeSuplNode.firstChild) {
@@ -1324,17 +1350,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       infNfeSuplNode.appendChild(qrCodeElement);
       infNfeSuplNode.appendChild(urlChaveElement);
 
-      let nextElementAfterInfNfe = infNfeSignedNode.nextSibling;
-      while (nextElementAfterInfNfe && nextElementAfterInfNfe.nodeType !== 1) {
-        nextElementAfterInfNfe = nextElementAfterInfNfe.nextSibling;
+      const insertAfterSignature = signatureNode.nextSibling;
+      if (insertAfterSignature) {
+        nfeNode.insertBefore(infNfeSuplNode, insertAfterSignature);
+      } else {
+        nfeNode.appendChild(infNfeSuplNode);
       }
-      nfeNode.insertBefore(infNfeSuplNode, nextElementAfterInfNfe || null);
-
-      let afterInfNfeSupl = infNfeSuplNode.nextSibling;
-      while (afterInfNfeSupl && afterInfNfeSupl.nodeType !== 1) {
-        afterInfNfeSupl = afterInfNfeSupl.nextSibling;
-      }
-      nfeNode.insertBefore(signatureNode, afterInfNfeSupl || null);
 
       const childElements = [];
       for (let node = nfeNode.firstChild; node; node = node.nextSibling) {
@@ -1343,7 +1364,11 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
         }
       }
       console.debug('[NFCE] Ordem filhos <NFe>:', childElements);
-      console.debug('[NFCE] Namespace Signature:', signatureNode?.namespaceURI || null);
+      console.debug('[NFCE] Signature info:', {
+        localName: signatureNode?.localName || null,
+        prefix: signatureNode?.prefix || null,
+        namespaceURI: signatureNode?.namespaceURI || null,
+      });
 
       const serializer = new XMLSerializer();
       signedXmlContent = serializer.serializeToString(signedDocument);
@@ -1363,17 +1388,39 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       '  </infNFeSupl>',
     ].join('\n');
 
-    const signatureOpenTag = '<Signature';
-    const signatureIndex = signedXmlContent.indexOf(signatureOpenTag);
+    const cleanedXmlContent = signedXmlContent.replace(
+      /\s*<infNFeSupl[\s\S]*?<\/infNFeSupl>\s*/g,
+      ''
+    );
+
+    const signatureCandidates = ['<ds:Signature', '<Signature'];
+    let signatureIndex = -1;
+    let signatureTagName = null;
+    for (const candidate of signatureCandidates) {
+      signatureIndex = cleanedXmlContent.indexOf(candidate);
+      if (signatureIndex !== -1) {
+        signatureTagName = candidate.startsWith('<ds:') ? 'ds:Signature' : 'Signature';
+        break;
+      }
+    }
     let finalXml;
     if (signatureIndex === -1) {
-      finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
+      finalXml = cleanedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
     } else {
-      const beforeSignature = signedXmlContent.slice(0, signatureIndex);
-      const afterSignature = signedXmlContent.slice(signatureIndex);
-      const needsTrailingNewline = !beforeSignature.endsWith('\n');
-      const trailingNewline = needsTrailingNewline ? '\n' : '';
-      finalXml = `${beforeSignature}${trailingNewline}${infNfeSuplXml}\n${afterSignature}`;
+      const closingTag = signatureTagName ? `</${signatureTagName}>` : '</Signature>';
+      const closingIndex = cleanedXmlContent.indexOf(closingTag, signatureIndex);
+      if (closingIndex === -1) {
+        finalXml = cleanedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
+      } else {
+        const endOfSignature = closingIndex + closingTag.length;
+        const beforeSignatureBlock = cleanedXmlContent.slice(0, endOfSignature);
+        const afterSignatureBlock = cleanedXmlContent.slice(endOfSignature);
+        const needsSignatureSeparator =
+          beforeSignatureBlock.endsWith('\n') || infNfeSuplXml.startsWith('\n') ? '' : '\n';
+        const needsSuffixNewline =
+          infNfeSuplXml.endsWith('\n') || afterSignatureBlock.startsWith('\n') ? '' : '\n';
+        finalXml = `${beforeSignatureBlock}${needsSignatureSeparator}${infNfeSuplXml}${needsSuffixNewline}${afterSignatureBlock}`;
+      }
     }
 
     signedXmlContent = finalXml;
@@ -1395,14 +1442,26 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       lotId: `${cnf}${Date.now()}`,
     });
   } catch (error) {
+    const fileNameHint = xmlFileBaseName || `NFCe-${Date.now()}`;
+    const buildEnrichedError = (message) => {
+      const enriched = new Error(message);
+      enriched.name = 'NfceTransmissionError';
+      enriched.cause = error;
+      enriched.xmlContent = xml;
+      enriched.xmlAccessKey = accessKey;
+      enriched.xmlFileBaseName = fileNameHint;
+      return enriched;
+    };
+
     if (error instanceof SefazTransmissionError || error?.name === 'SefazTransmissionError') {
       const causeMessage = error?.details?.cause?.message || error?.cause?.message || '';
       const detailedMessage = causeMessage
         ? `${error.message || 'Falha ao transmitir NFC-e para a SEFAZ.'} (${causeMessage})`
         : error.message || 'Falha ao transmitir NFC-e para a SEFAZ.';
-      throw new Error(detailedMessage);
+      throw buildEnrichedError(detailedMessage);
     }
-    throw new Error(
+
+    throw buildEnrichedError(
       `Falha ao transmitir NFC-e para a SEFAZ: ${error?.message || 'erro desconhecido.'}`
     );
   }
