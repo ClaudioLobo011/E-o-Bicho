@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const forge = require('node-forge');
-const { DOMParser } = require('@xmldom/xmldom');
+const { DOMParser, XMLSerializer } = require('@xmldom/xmldom');
 const xpath = require('xpath');
 const { SignedXml } = require('xml-crypto');
 const Product = require('../models/Product');
@@ -1195,29 +1195,33 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
   const signer = new SignedXml({
     privateKey: Buffer.from(keyPemString),
-    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
     idAttribute: 'Id',
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
   });
-  // NFC-e 4.00 (RJ) exige assinatura SHA1 com canonicalização C14N inclusiva.
-  signer.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
   signer.keyInfoProvider = {
     getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
   };
-  signer.signatureLocation = {
-    reference: "/*[local-name()='NFe']/*[local-name()='infNFe']",
-    action: 'after',
-  };
-  signer.addReference({
-    uri: `#${infId}`,
-    transforms: [
+  const refXPath = "/*[local-name()='NFe']/*[local-name()='infNFe']";
+  signer.addReference(
+    refXPath,
+    [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
       'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     ],
-    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+    'http://www.w3.org/2000/09/xmldsig#sha1'
+  );
+  console.debug('XPath ref:', refXPath);
+  signer.computeSignature(xmlForSignature, {
+    prefix: '',
+    location: {
+      reference: refXPath,
+      action: 'after',
+    },
   });
-  signer.computeSignature(xmlForSignature, { prefix: '' });
 
-  const signedXmlContent = signer.getSignedXml();
+  let signedXmlContent = signer.getSignedXml();
+  let signedDocument = null;
 
   if (process.env.NODE_ENV === 'development') {
     console.debug('[NFCE] XML assinado para transmissão:', signedXmlContent);
@@ -1255,31 +1259,125 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     throw new Error('Falha ao gerar QR Code da NFC-e.');
   }
 
-  const infNfeSuplXml = [
-    '  <infNFeSupl>',
-    `    <qrCode><![CDATA[${qrCodePayload}]]></qrCode>`,
-    `    <urlChave>${qrCodeBaseUrl}</urlChave>`,
-    '  </infNFeSupl>',
-  ].join('\n');
+  const NFCE_NAMESPACE = 'http://www.portalfiscal.inf.br/nfe';
+  let nfeNode = null;
+  let signatureNode = null;
+  let infNfeSuplNode = null;
 
-  const signatureCloseTag = '</Signature>';
-  const signatureCloseIndex = signedXmlContent.indexOf(signatureCloseTag);
-  let finalXml;
-  if (signatureCloseIndex === -1) {
-    finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
-  } else {
-    const insertionPoint = signatureCloseIndex + signatureCloseTag.length;
-    const beforeSignature = signedXmlContent.slice(0, insertionPoint);
-    const afterSignature = signedXmlContent.slice(insertionPoint);
-    // Mantém o bloco supl imediatamente após </Signature>, respeitando a formatação existente.
-    const needsLeadingNewline = !beforeSignature.endsWith('\n');
-    const leadingNewline = needsLeadingNewline ? '\n' : '';
-    finalXml = `${beforeSignature}${leadingNewline}${infNfeSuplXml}\n${afterSignature}`;
+  try {
+    signedDocument = new DOMParser().parseFromString(signedXmlContent, 'text/xml');
+    [nfeNode] = xpath.select("/*[local-name()='NFe']", signedDocument);
+    const [infNfeSignedNode] = nfeNode
+      ? xpath.select("./*[local-name()='infNFe']", nfeNode)
+      : [];
+    [signatureNode] = nfeNode
+      ? xpath.select(
+          "./*[local-name()='Signature' and namespace-uri()='http://www.w3.org/2000/09/xmldsig#']",
+          nfeNode
+        )
+      : [];
+    if (!signatureNode && nfeNode) {
+      [signatureNode] = xpath.select("./*[local-name()='Signature']", nfeNode);
+    }
+    [infNfeSuplNode] = nfeNode
+      ? xpath.select("./*[local-name()='infNFeSupl']", nfeNode)
+      : [];
+
+    if (
+      nfeNode &&
+      infNfeSignedNode &&
+      signatureNode &&
+      signatureNode.parentNode === nfeNode
+    ) {
+      if (!signatureNode.getAttribute('xmlns')) {
+        signatureNode.setAttributeNS(
+          'http://www.w3.org/2000/xmlns/',
+          'xmlns',
+          'http://www.w3.org/2000/09/xmldsig#'
+        );
+      }
+
+      nfeNode.removeChild(signatureNode);
+      if (infNfeSuplNode) {
+        nfeNode.insertBefore(signatureNode, infNfeSuplNode);
+      } else {
+        let nextSibling = infNfeSignedNode.nextSibling;
+        while (nextSibling && nextSibling.nodeType !== 1) {
+          nextSibling = nextSibling.nextSibling;
+        }
+        nfeNode.insertBefore(signatureNode, nextSibling || null);
+      }
+
+      if (infNfeSuplNode) {
+        nfeNode.removeChild(infNfeSuplNode);
+      } else {
+        infNfeSuplNode = signedDocument.createElementNS(NFCE_NAMESPACE, 'infNFeSupl');
+      }
+
+      while (infNfeSuplNode.firstChild) {
+        infNfeSuplNode.removeChild(infNfeSuplNode.firstChild);
+      }
+
+      const qrCodeElement = signedDocument.createElementNS(NFCE_NAMESPACE, 'qrCode');
+      qrCodeElement.appendChild(signedDocument.createCDATASection(qrCodePayload));
+      const urlChaveElement = signedDocument.createElementNS(NFCE_NAMESPACE, 'urlChave');
+      urlChaveElement.appendChild(signedDocument.createTextNode(qrCodeBaseUrl));
+      infNfeSuplNode.appendChild(qrCodeElement);
+      infNfeSuplNode.appendChild(urlChaveElement);
+
+      let afterSignature = signatureNode.nextSibling;
+      while (afterSignature && afterSignature.nodeType !== 1) {
+        afterSignature = afterSignature.nextSibling;
+      }
+      nfeNode.insertBefore(infNfeSuplNode, afterSignature || null);
+
+      const childElements = [];
+      for (let node = nfeNode.firstChild; node; node = node.nextSibling) {
+        if (node.nodeType === 1) {
+          childElements.push(node.localName || node.nodeName);
+        }
+      }
+      console.debug('[NFCE] Ordem filhos <NFe>:', childElements);
+      console.debug('[NFCE] Namespace Signature:', signatureNode?.namespaceURI || null);
+
+      const serializer = new XMLSerializer();
+      signedXmlContent = serializer.serializeToString(signedDocument);
+    } else {
+      signedDocument = null;
+    }
+  } catch (error) {
+    console.debug('[NFCE] Falha ao reordenar assinatura NFC-e:', error);
+    signedDocument = null;
   }
 
-  const xml = finalXml.startsWith('<?xml')
-    ? finalXml
-    : `<?xml version="1.0" encoding="UTF-8"?>\n${finalXml}`;
+  if (!signedDocument) {
+    const infNfeSuplXml = [
+      '  <infNFeSupl>',
+      `    <qrCode><![CDATA[${qrCodePayload}]]></qrCode>`,
+      `    <urlChave>${qrCodeBaseUrl}</urlChave>`,
+      '  </infNFeSupl>',
+    ].join('\n');
+
+    const signatureCloseTag = '</Signature>';
+    const signatureCloseIndex = signedXmlContent.indexOf(signatureCloseTag);
+    let finalXml;
+    if (signatureCloseIndex === -1) {
+      finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
+    } else {
+      const insertionPoint = signatureCloseIndex + signatureCloseTag.length;
+      const beforeSignature = signedXmlContent.slice(0, insertionPoint);
+      const afterSignature = signedXmlContent.slice(insertionPoint);
+      const needsLeadingNewline = !beforeSignature.endsWith('\n');
+      const leadingNewline = needsLeadingNewline ? '\n' : '';
+      finalXml = `${beforeSignature}${leadingNewline}${infNfeSuplXml}\n${afterSignature}`;
+    }
+
+    signedXmlContent = finalXml;
+  }
+
+  const xml = signedXmlContent.startsWith('<?xml')
+    ? signedXmlContent
+    : `<?xml version="1.0" encoding="UTF-8"?>\n${signedXmlContent}`;
 
   let transmission = null;
   try {
