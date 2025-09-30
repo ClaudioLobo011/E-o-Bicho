@@ -1177,20 +1177,24 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('    </pag>');
 
   const obs = buildInfAdicObservations({ pdv, sale, environmentLabel });
-  infNfeLines.push('    <infAdic>');
+  const infAdicLines = [];
   if (obs.length) {
     obs.forEach((entry) => {
-      infNfeLines.push(
+      infAdicLines.push(
         `      <obsCont xCampo="${sanitize(entry.tag)}"><xTexto>${sanitize(entry.value)}</xTexto></obsCont>`
       );
     });
   }
   if (snapshot?.meta?.observacoes || snapshot?.meta?.observacaoGeral) {
-    infNfeLines.push(
+    infAdicLines.push(
       `      <infCpl>${sanitize(snapshot.meta.observacoes || snapshot.meta.observacaoGeral)}</infCpl>`
     );
   }
-  infNfeLines.push('    </infAdic>');
+  if (infAdicLines.length) {
+    infNfeLines.push('    <infAdic>');
+    infAdicLines.forEach((line) => infNfeLines.push(line));
+    infNfeLines.push('    </infAdic>');
+  }
   infNfeLines.push('  </infNFe>');
 
   const certB64 = certificatePem
@@ -1200,7 +1204,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
   const baseXmlLines = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<NFe xmlns="http://www.portalfiscal.inf.br/nfe" xmlns:ds="http://www.w3.org/2000/09/xmldsig#">',
+    '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">',
     ...infNfeLines,
     '</NFe>',
   ];
@@ -1227,26 +1231,26 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const signer = new SignedXml({
     privateKey: Buffer.from(keyPemString),
     idAttribute: 'Id',
-    canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
   signer.keyInfoProvider = {
     getKeyInfo: () =>
-      `<ds:X509Data><ds:X509Certificate>${certB64}</ds:X509Certificate></ds:X509Data>`,
+      `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
   };
   const refXPath = "/*[local-name()='NFe']/*[local-name()='infNFe']";
   signer.addReference({
     xpath: refXPath,
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-      'http://www.w3.org/2001/10/xml-exc-c14n#',
+      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     ],
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
   console.debug('XPath ref:', refXPath);
   signer.computeSignature(xmlForSignature, {
-    prefix: 'ds',
+    prefix: '',
     location: {
       reference: refXPath,
       action: 'after',
@@ -1293,6 +1297,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   }
 
   const NFCE_NAMESPACE = 'http://www.portalfiscal.inf.br/nfe';
+  const XMLDSIG_NAMESPACE = 'http://www.w3.org/2000/09/xmldsig#';
   let nfeNode = null;
   let signatureNode = null;
   let infNfeSuplNode = null;
@@ -1329,14 +1334,19 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
         infNfeSuplNode = signedDocument.createElementNS(NFCE_NAMESPACE, 'infNFeSupl');
       }
 
-      if (signatureNode.removeAttribute) {
-        signatureNode.removeAttribute('xmlns');
-        signatureNode.removeAttribute('xmlns:ds');
-      }
-
       if (signatureNode.previousSibling !== infNfeSignedNode) {
         nfeNode.removeChild(signatureNode);
         nfeNode.insertBefore(signatureNode, infNfeSignedNode.nextSibling);
+      }
+      const [keyInfoNode] = xpath.select("./*[local-name()='KeyInfo']", signatureNode);
+      if (!keyInfoNode) {
+        const keyInfoElement = signedDocument.createElementNS(XMLDSIG_NAMESPACE, 'KeyInfo');
+        const x509DataElement = signedDocument.createElementNS(XMLDSIG_NAMESPACE, 'X509Data');
+        const certificateElement = signedDocument.createElementNS(XMLDSIG_NAMESPACE, 'X509Certificate');
+        certificateElement.appendChild(signedDocument.createTextNode(certB64));
+        x509DataElement.appendChild(certificateElement);
+        keyInfoElement.appendChild(x509DataElement);
+        signatureNode.appendChild(keyInfoElement);
       }
 
       while (infNfeSuplNode.firstChild) {
@@ -1344,18 +1354,13 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       }
 
       const qrCodeElement = signedDocument.createElementNS(NFCE_NAMESPACE, 'qrCode');
-      qrCodeElement.appendChild(signedDocument.createCDATASection(qrCodePayload));
+      qrCodeElement.appendChild(signedDocument.createTextNode(qrCodePayload));
       const urlChaveElement = signedDocument.createElementNS(NFCE_NAMESPACE, 'urlChave');
       urlChaveElement.appendChild(signedDocument.createTextNode(qrCodeBaseUrl));
       infNfeSuplNode.appendChild(qrCodeElement);
       infNfeSuplNode.appendChild(urlChaveElement);
 
-      const insertAfterSignature = signatureNode.nextSibling;
-      if (insertAfterSignature) {
-        nfeNode.insertBefore(infNfeSuplNode, insertAfterSignature);
-      } else {
-        nfeNode.appendChild(infNfeSuplNode);
-      }
+      nfeNode.insertBefore(infNfeSuplNode, signatureNode);
 
       const childElements = [];
       for (let node = nfeNode.firstChild; node; node = node.nextSibling) {
@@ -1381,10 +1386,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   }
 
   if (!signedDocument) {
+    const qrCodeText = escapeXmlText(qrCodePayload);
+    const urlChaveText = escapeXmlText(qrCodeBaseUrl);
     const infNfeSuplXml = [
       '  <infNFeSupl>',
-      `    <qrCode><![CDATA[${qrCodePayload}]]></qrCode>`,
-      `    <urlChave>${qrCodeBaseUrl}</urlChave>`,
+      `    <qrCode>${qrCodeText}</qrCode>`,
+      `    <urlChave>${urlChaveText}</urlChave>`,
       '  </infNFeSupl>',
     ].join('\n');
 
@@ -1393,39 +1400,21 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       ''
     );
 
-    const signatureCandidates = ['<ds:Signature', '<Signature'];
-    let signatureIndex = -1;
-    let signatureTagName = null;
-    for (const candidate of signatureCandidates) {
-      signatureIndex = cleanedXmlContent.indexOf(candidate);
-      if (signatureIndex !== -1) {
-        signatureTagName = candidate.startsWith('<ds:') ? 'ds:Signature' : 'Signature';
-        break;
-      }
-    }
-    let finalXml;
-    if (signatureIndex === -1) {
-      finalXml = cleanedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
+    const signatureMatch = /<(?:ds:)?Signature(?=\s|>)/.exec(cleanedXmlContent);
+    const insertIndex = signatureMatch
+      ? signatureMatch.index
+      : cleanedXmlContent.indexOf('</NFe>');
+
+    if (insertIndex === -1) {
+      signedXmlContent = `${cleanedXmlContent}\n${infNfeSuplXml}`;
     } else {
-      const closingTag = signatureTagName ? `</${signatureTagName}>` : '</Signature>';
-      const closingIndex = cleanedXmlContent.indexOf(closingTag, signatureIndex);
-      if (closingIndex === -1) {
-        finalXml = cleanedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
-      } else {
-        const endOfSignature = closingIndex + closingTag.length;
-        const beforeSignatureBlock = cleanedXmlContent.slice(0, endOfSignature);
-        const afterSignatureBlock = cleanedXmlContent.slice(endOfSignature);
-        const needsSignatureSeparator =
-          beforeSignatureBlock.endsWith('\n') || infNfeSuplXml.startsWith('\n') ? '' : '\n';
-        const needsSuffixNewline =
-          infNfeSuplXml.endsWith('\n') || afterSignatureBlock.startsWith('\n') ? '' : '\n';
-        finalXml = `${beforeSignatureBlock}${needsSignatureSeparator}${infNfeSuplXml}${needsSuffixNewline}${afterSignatureBlock}`;
-      }
+      const prefix = cleanedXmlContent.slice(0, insertIndex);
+      const suffix = cleanedXmlContent.slice(insertIndex);
+      const prefixWithBreak = prefix && !prefix.endsWith('\n') ? `${prefix}\n` : prefix;
+      const suffixWithBreak = suffix && !suffix.startsWith('\n') ? `\n${suffix}` : suffix;
+      signedXmlContent = `${prefixWithBreak}${infNfeSuplXml}\n${suffixWithBreak}`;
     }
-
-    signedXmlContent = finalXml;
   }
-
   const xml = signedXmlContent.startsWith('<?xml')
     ? signedXmlContent
     : `<?xml version="1.0" encoding="UTF-8"?>\n${signedXmlContent}`;
