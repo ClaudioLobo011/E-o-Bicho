@@ -599,6 +599,23 @@ const extractCertificatePair = (pfxBuffer, password) => {
     }
   };
 
+  const keysMatch = (keyPem, certificatePem) => {
+    if (!keyPem || !certificatePem) {
+      return false;
+    }
+    try {
+      const privateKey = crypto.createPrivateKey({ key: keyPem, format: 'pem' });
+      const publicFromPrivate = crypto
+        .createPublicKey(privateKey)
+        .export({ type: 'spki', format: 'der' });
+      const certificatePublicKey = new crypto.X509Certificate(certificatePem)
+        .publicKey.export({ type: 'spki', format: 'der' });
+      return Buffer.compare(publicFromPrivate, certificatePublicKey) === 0;
+    } catch (error) {
+      return false;
+    }
+  };
+
   const matchKeyWithCertificate = ({ keys, certificates }) => {
     if (!keys.length) {
       throw new Error('Não foi possível extrair a chave privada do certificado.');
@@ -619,13 +636,13 @@ const extractCertificatePair = (pfxBuffer, password) => {
     for (const keyEntry of enrichedKeys) {
       const certificateEntry = enrichedCertificates.find((candidate) => {
         if (keyEntry.localKeyId && candidate.localKeyId && candidate.localKeyId === keyEntry.localKeyId) {
-          return true;
+          return keysMatch(keyEntry.pem, candidate.pem);
         }
         if (keyEntry.friendlyName && candidate.friendlyName && candidate.friendlyName === keyEntry.friendlyName) {
-          return true;
+          return keysMatch(keyEntry.pem, candidate.pem);
         }
         if (keyEntry.fingerprint && candidate.fingerprint && keyEntry.fingerprint === candidate.fingerprint) {
-          return true;
+          return keysMatch(keyEntry.pem, candidate.pem);
         }
         return false;
       });
@@ -634,17 +651,31 @@ const extractCertificatePair = (pfxBuffer, password) => {
       }
     }
 
-    const keyWithFingerprint = enrichedKeys.find((entry) => entry.fingerprint);
-    if (keyWithFingerprint) {
+    for (const keyEntry of enrichedKeys) {
+      if (!keyEntry.fingerprint) {
+        continue;
+      }
       const certificateEntry = enrichedCertificates.find(
-        (candidate) => candidate.fingerprint && candidate.fingerprint === keyWithFingerprint.fingerprint
+        (candidate) =>
+          candidate.fingerprint &&
+          candidate.fingerprint === keyEntry.fingerprint &&
+          keysMatch(keyEntry.pem, candidate.pem)
       );
       if (certificateEntry) {
-        return { keyEntry: keyWithFingerprint, certificateEntry };
+        return { keyEntry, certificateEntry };
       }
     }
 
-    return { keyEntry: enrichedKeys[0], certificateEntry: enrichedCertificates[0] };
+    for (const keyEntry of enrichedKeys) {
+      const certificateEntry = enrichedCertificates.find((candidate) => keysMatch(keyEntry.pem, candidate.pem));
+      if (certificateEntry) {
+        return { keyEntry, certificateEntry };
+      }
+    }
+
+    throw new Error(
+      'O certificado digital não contém um par de chave privada e certificado compatível. Verifique o arquivo PFX.'
+    );
   };
 
   try {
