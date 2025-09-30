@@ -1322,15 +1322,6 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       signatureNode &&
       signatureNode.parentNode === nfeNode
     ) {
-      let desiredPosition = infNfeSignedNode.nextSibling;
-      while (desiredPosition && desiredPosition.nodeType !== 1) {
-        desiredPosition = desiredPosition.nextSibling;
-      }
-      if (desiredPosition !== signatureNode) {
-        nfeNode.removeChild(signatureNode);
-        nfeNode.insertBefore(signatureNode, desiredPosition || null);
-      }
-
       if (infNfeSuplNode && infNfeSuplNode.parentNode === nfeNode) {
         nfeNode.removeChild(infNfeSuplNode);
       }
@@ -1349,15 +1340,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       infNfeSuplNode.appendChild(qrCodeElement);
       infNfeSuplNode.appendChild(urlChaveElement);
 
-      const referenceNode =
-        signatureNode && signatureNode.parentNode === nfeNode
-          ? signatureNode
-          : infNfeSignedNode;
-      let afterReference = referenceNode.nextSibling;
-      while (afterReference && afterReference.nodeType !== 1) {
-        afterReference = afterReference.nextSibling;
-      }
-      nfeNode.insertBefore(infNfeSuplNode, afterReference || null);
+      nfeNode.insertBefore(infNfeSuplNode, signatureNode);
+      nfeNode.removeChild(signatureNode);
+      nfeNode.appendChild(signatureNode);
 
       const childElements = [];
       for (let node = nfeNode.firstChild; node; node = node.nextSibling) {
@@ -1390,11 +1375,16 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       '  </infNFeSupl>',
     ].join('\n');
 
+    const cleanedXmlContent = signedXmlContent.replace(
+      /\s*<infNFeSupl[\s\S]*?<\/infNFeSupl>\s*/g,
+      ''
+    );
+
     const signatureCandidates = ['<ds:Signature', '<Signature'];
     let signatureIndex = -1;
     let signatureTagName = null;
     for (const candidate of signatureCandidates) {
-      signatureIndex = signedXmlContent.indexOf(candidate);
+      signatureIndex = cleanedXmlContent.indexOf(candidate);
       if (signatureIndex !== -1) {
         signatureTagName = candidate.startsWith('<ds:') ? 'ds:Signature' : 'Signature';
         break;
@@ -1402,19 +1392,22 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     }
     let finalXml;
     if (signatureIndex === -1) {
-      finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
+      finalXml = cleanedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
     } else {
       const closingTag = signatureTagName ? `</${signatureTagName}>` : '</Signature>';
-      const closingIndex = signedXmlContent.indexOf(closingTag, signatureIndex);
+      const closingIndex = cleanedXmlContent.indexOf(closingTag, signatureIndex);
       if (closingIndex === -1) {
-        finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
+        finalXml = cleanedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
       } else {
         const endOfSignature = closingIndex + closingTag.length;
-        const beforeSignatureBlock = signedXmlContent.slice(0, endOfSignature);
-        const afterSignatureBlock = signedXmlContent.slice(endOfSignature);
-        const leadingNewline = beforeSignatureBlock.endsWith('\n') ? '' : '\n';
-        const trailingNewline = afterSignatureBlock.startsWith('\n') ? '' : '\n';
-        finalXml = `${beforeSignatureBlock}${leadingNewline}${infNfeSuplXml}${trailingNewline}${afterSignatureBlock}`;
+        const beforeSignatureBlock = cleanedXmlContent.slice(0, signatureIndex);
+        const signatureBlock = cleanedXmlContent.slice(signatureIndex, endOfSignature);
+        const afterSignatureBlock = cleanedXmlContent.slice(endOfSignature);
+        const needsPrefixNewline =
+          beforeSignatureBlock.endsWith('\n') || !beforeSignatureBlock ? '' : '\n';
+        const needsSignatureSeparator =
+          infNfeSuplXml.endsWith('\n') || signatureBlock.startsWith('\n') ? '' : '\n';
+        finalXml = `${beforeSignatureBlock}${needsPrefixNewline}${infNfeSuplXml}${needsSignatureSeparator}${signatureBlock}${afterSignatureBlock}`;
       }
     }
 
