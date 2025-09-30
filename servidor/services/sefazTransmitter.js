@@ -164,9 +164,7 @@ const removeXmlDeclaration = (xml) => {
 };
 
 const buildEnviNfePayload = ({ xml, loteId, synchronous = true }) => {
-  const normalizedNfe = removeXmlDeclaration(xml)
-    .replace(/>[\s\r\n\t]+</g, '><')
-    .trim();
+  const normalizedNfe = removeXmlDeclaration(xml);
   const lote = String(loteId || Date.now())
     .replace(/\D+/g, '')
     .padStart(15, '0')
@@ -230,9 +228,7 @@ const resolveUfCode = (uf) => {
 };
 
 const buildSoapEnvelope = ({ enviNfeXml, uf }) => {
-  const sanitized = removeXmlDeclaration(enviNfeXml)
-    .replace(/>[\s\r\n\t]+</g, '><')
-    .trim();
+  const sanitized = removeXmlDeclaration(enviNfeXml);
 
   const ufCode = resolveUfCode(uf);
 
@@ -255,9 +251,7 @@ const buildSoapEnvelope = ({ enviNfeXml, uf }) => {
 };
 
 const buildStatusSoapEnvelope = ({ payloadXml, uf }) => {
-  const sanitized = removeXmlDeclaration(payloadXml)
-    .replace(/>[\s\r\n\t]+</g, '><')
-    .trim();
+  const sanitized = removeXmlDeclaration(payloadXml);
 
   const ufCode = resolveUfCode(uf);
 
@@ -860,6 +854,7 @@ module.exports = {
     buildSoapEnvelope,
     buildStatusSoapEnvelope,
     buildStatusPayload,
+    buildEnviNfePayload,
     ensureClockSynchronization,
     getSynchronizedDate,
   },
