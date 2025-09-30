@@ -1296,125 +1296,63 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     throw new Error('Falha ao gerar QR Code da NFC-e.');
   }
 
-  const NFCE_NAMESPACE = 'http://www.portalfiscal.inf.br/nfe';
-  const XMLDSIG_NAMESPACE = 'http://www.w3.org/2000/09/xmldsig#';
-  let nfeNode = null;
-  let signatureNode = null;
-  let infNfeSuplNode = null;
-
-  try {
-    signedDocument = new DOMParser().parseFromString(signedXmlContent, 'text/xml');
-    [nfeNode] = xpath.select("/*[local-name()='NFe']", signedDocument);
-    const [infNfeSignedNode] = nfeNode
-      ? xpath.select("./*[local-name()='infNFe']", nfeNode)
-      : [];
-    [signatureNode] = nfeNode
-      ? xpath.select(
-          "./*[local-name()='Signature' and namespace-uri()='http://www.w3.org/2000/09/xmldsig#']",
-          nfeNode
-        )
-      : [];
-    if (!signatureNode && nfeNode) {
-      [signatureNode] = xpath.select("./*[local-name()='Signature']", nfeNode);
+  const hasKeyInfo = /<KeyInfo\b/.test(signedXmlContent);
+  if (!hasKeyInfo) {
+    const signatureValueClose = '</SignatureValue>';
+    const signatureValueIndex = signedXmlContent.indexOf(signatureValueClose);
+    if (signatureValueIndex === -1) {
+      throw new Error('Assinatura NFC-e invalida: bloco <SignatureValue> ausente.');
     }
-    [infNfeSuplNode] = nfeNode
-      ? xpath.select("./*[local-name()='infNFeSupl']", nfeNode)
-      : [];
-
-    if (
-      nfeNode &&
-      infNfeSignedNode &&
-      signatureNode &&
-      signatureNode.parentNode === nfeNode
-    ) {
-      if (infNfeSuplNode && infNfeSuplNode.parentNode === nfeNode) {
-        nfeNode.removeChild(infNfeSuplNode);
-      }
-      if (!infNfeSuplNode) {
-        infNfeSuplNode = signedDocument.createElementNS(NFCE_NAMESPACE, 'infNFeSupl');
-      }
-
-      if (signatureNode.previousSibling !== infNfeSignedNode) {
-        nfeNode.removeChild(signatureNode);
-        nfeNode.insertBefore(signatureNode, infNfeSignedNode.nextSibling);
-      }
-      const [keyInfoNode] = xpath.select("./*[local-name()='KeyInfo']", signatureNode);
-      if (!keyInfoNode) {
-        const keyInfoElement = signedDocument.createElementNS(XMLDSIG_NAMESPACE, 'KeyInfo');
-        const x509DataElement = signedDocument.createElementNS(XMLDSIG_NAMESPACE, 'X509Data');
-        const certificateElement = signedDocument.createElementNS(XMLDSIG_NAMESPACE, 'X509Certificate');
-        certificateElement.appendChild(signedDocument.createTextNode(certB64));
-        x509DataElement.appendChild(certificateElement);
-        keyInfoElement.appendChild(x509DataElement);
-        signatureNode.appendChild(keyInfoElement);
-      }
-
-      while (infNfeSuplNode.firstChild) {
-        infNfeSuplNode.removeChild(infNfeSuplNode.firstChild);
-      }
-
-      const qrCodeElement = signedDocument.createElementNS(NFCE_NAMESPACE, 'qrCode');
-      qrCodeElement.appendChild(signedDocument.createTextNode(qrCodePayload));
-      const urlChaveElement = signedDocument.createElementNS(NFCE_NAMESPACE, 'urlChave');
-      urlChaveElement.appendChild(signedDocument.createTextNode(qrCodeBaseUrl));
-      infNfeSuplNode.appendChild(qrCodeElement);
-      infNfeSuplNode.appendChild(urlChaveElement);
-
-      nfeNode.insertBefore(infNfeSuplNode, signatureNode);
-
-      const childElements = [];
-      for (let node = nfeNode.firstChild; node; node = node.nextSibling) {
-        if (node.nodeType === 1) {
-          childElements.push(node.localName || node.nodeName);
-        }
-      }
-      console.debug('[NFCE] Ordem filhos <NFe>:', childElements);
-      console.debug('[NFCE] Signature info:', {
-        localName: signatureNode?.localName || null,
-        prefix: signatureNode?.prefix || null,
-        namespaceURI: signatureNode?.namespaceURI || null,
-      });
-
-      const serializer = new XMLSerializer();
-      signedXmlContent = serializer.serializeToString(signedDocument);
-    } else {
-      signedDocument = null;
-    }
-  } catch (error) {
-    console.debug('[NFCE] Falha ao reordenar assinatura NFC-e:', error);
-    signedDocument = null;
+    const insertPosition = signatureValueIndex + signatureValueClose.length;
+    const keyInfoXml =
+      '<KeyInfo><X509Data><X509Certificate>' +
+      certB64 +
+      '</X509Certificate></X509Data></KeyInfo>';
+    signedXmlContent =
+      signedXmlContent.slice(0, insertPosition) +
+      keyInfoXml +
+      signedXmlContent.slice(insertPosition);
   }
 
-  if (!signedDocument) {
-    const qrCodeText = escapeXmlText(qrCodePayload);
-    const urlChaveText = escapeXmlText(qrCodeBaseUrl);
-    const infNfeSuplXml = [
-      '  <infNFeSupl>',
-      `    <qrCode>${qrCodeText}</qrCode>`,
-      `    <urlChave>${urlChaveText}</urlChave>`,
-      '  </infNFeSupl>',
-    ].join('\n');
+  const qrCodeText = escapeXmlText(qrCodePayload);
+  const urlChaveText = escapeXmlText(qrCodeBaseUrl);
+  const infNfeSuplXml = [
+    '  <infNFeSupl>',
+    '    <qrCode>' + qrCodeText + '</qrCode>',
+    '    <urlChave>' + urlChaveText + '</urlChave>',
+    '  </infNFeSupl>',
+  ].join('\n');
 
-    const cleanedXmlContent = signedXmlContent.replace(
-      /\s*<infNFeSupl[\s\S]*?<\/infNFeSupl>\s*/g,
-      ''
-    );
+  const cleanedXmlContent = signedXmlContent.replace(
+    /\s*<infNFeSupl[\s\S]*?<\/infNFeSupl>\s*/g,
+    ''
+  );
 
-    const signatureMatch = /<(?:ds:)?Signature(?=\s|>)/.exec(cleanedXmlContent);
-    const insertIndex = signatureMatch
-      ? signatureMatch.index
-      : cleanedXmlContent.indexOf('</NFe>');
-
-    if (insertIndex === -1) {
-      signedXmlContent = `${cleanedXmlContent}\n${infNfeSuplXml}`;
+  const signatureMatch = /<(?:ds:)?Signature(?=\s|>)/.exec(cleanedXmlContent);
+  if (signatureMatch) {
+    const insertIndex = signatureMatch.index;
+    const prefix = cleanedXmlContent.slice(0, insertIndex);
+    const suffix = cleanedXmlContent.slice(insertIndex);
+    const needsPrefixBreak = prefix.length && !prefix.endsWith('\n');
+    const needsSuffixBreak = suffix.length && !suffix.startsWith('\n');
+    signedXmlContent =
+      prefix +
+      (needsPrefixBreak ? '\n' : '') +
+      infNfeSuplXml +
+      (needsSuffixBreak ? '\n' : '') +
+      suffix;
+  } else {
+    const closingTag = '</NFe>';
+    if (cleanedXmlContent.includes(closingTag)) {
+      signedXmlContent = cleanedXmlContent.replace(
+        closingTag,
+        infNfeSuplXml + '\n' + closingTag
+      );
     } else {
-      const prefix = cleanedXmlContent.slice(0, insertIndex);
-      const suffix = cleanedXmlContent.slice(insertIndex);
-      const prefixWithBreak = prefix && !prefix.endsWith('\n') ? `${prefix}\n` : prefix;
-      const suffixWithBreak = suffix && !suffix.startsWith('\n') ? `\n${suffix}` : suffix;
-      signedXmlContent = `${prefixWithBreak}${infNfeSuplXml}\n${suffixWithBreak}`;
+      signedXmlContent = cleanedXmlContent + '\n' + infNfeSuplXml;
     }
   }
+
   const xml = signedXmlContent.startsWith('<?xml')
     ? signedXmlContent
     : `<?xml version="1.0" encoding="UTF-8"?>\n${signedXmlContent}`;
