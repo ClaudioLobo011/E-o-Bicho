@@ -700,9 +700,6 @@ const extractCertificatePair = (pfxBuffer, password) => {
       } catch (innerError) {
         normalizedPrivateKeyPem = keyObject.export({ type: 'pkcs8', format: 'pem' }).toString();
       }
-      const signer = crypto.createSign('RSA-SHA256');
-      signer.update('nfce-signature-validation');
-      signer.sign(normalizedPrivateKeyPem);
     } catch (error) {
       throw new Error('A chave privada do certificado é inválida ou está protegida por senha desconhecida.');
     }
@@ -710,6 +707,28 @@ const extractCertificatePair = (pfxBuffer, password) => {
     const certificatePem = certificateEntry?.pem ? String(certificateEntry.pem) : '';
     if (!certificatePem.trim()) {
       throw new Error('Não foi possível extrair o certificado digital.');
+    }
+
+    try {
+      const signer = crypto.createSign('RSA-SHA1');
+      signer.update('nfce-signature-validation');
+      signer.end();
+      const signature = signer.sign(normalizedPrivateKeyPem);
+      const verifier = crypto.createVerify('RSA-SHA1');
+      verifier.update('nfce-signature-validation');
+      verifier.end();
+      if (!verifier.verify(certificatePem, signature)) {
+        throw new Error('A chave privada não corresponde ao certificado digital informado.');
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === 'A chave privada não corresponde ao certificado digital informado.') {
+        throw error;
+      }
+      throw new Error('Falha ao validar o par chave/certificado do arquivo PFX.');
+    }
+
+    if (!keysMatch(normalizedPrivateKeyPem, certificatePem)) {
+      throw new Error('A chave privada não corresponde ao certificado digital informado.');
     }
 
     const rawCertificates = Array.isArray(entries?.certificates)
