@@ -49,6 +49,64 @@ const sanitizeDigits = (value, { fallback = '' } = {}) => {
   return digits || fallback;
 };
 
+const BRAZILIAN_CNPJ_OID = '2.16.76.1.3.3';
+
+const describeCertificate = (pem) => {
+  if (!pem) {
+    return null;
+  }
+
+  try {
+    const certificate = forge.pki.certificateFromPem(pem);
+    const subject = certificate?.subject?.attributes || [];
+    const issuer = certificate?.issuer?.attributes || [];
+
+    const subjectString = subject
+      .map((attr) => `${attr?.shortName || attr?.name || attr?.type}=${attr?.value}`)
+      .filter(Boolean)
+      .join(', ');
+
+    const issuerString = issuer
+      .map((attr) => `${attr?.shortName || attr?.name || attr?.type}=${attr?.value}`)
+      .filter(Boolean)
+      .join(', ');
+
+    const findAttributeValue = (attributes, identifier) => {
+      if (!attributes) return null;
+      for (const attr of attributes) {
+        if (!attr) continue;
+        if (attr.type === identifier || attr.name === identifier || attr.shortName === identifier) {
+          if (attr.value && typeof attr.value === 'string') {
+            return attr.value;
+          }
+        }
+      }
+      try {
+        const field = certificate.subject.getField(identifier);
+        if (field?.value) {
+          return field.value;
+        }
+      } catch (error) {
+        // Ignore forge lookup errors.
+      }
+      return null;
+    };
+
+    const subjectCnpj = findAttributeValue(subject, BRAZILIAN_CNPJ_OID) || findAttributeValue(subject, 'CNPJ');
+
+    return {
+      subject: subjectString,
+      issuer: issuerString,
+      serialNumber: certificate?.serialNumber || null,
+      validFrom: certificate?.validity?.notBefore || null,
+      validTo: certificate?.validity?.notAfter || null,
+      cnpj: subjectCnpj ? onlyDigits(subjectCnpj) : null,
+    };
+  } catch (error) {
+    return null;
+  }
+};
+
 const normalizeStringSafe = (value) => {
   if (!value && value !== 0) {
     return '';
@@ -962,12 +1020,30 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   } catch (error) {
     throw new Error(`Não foi possível recuperar a senha do certificado digital: ${error.message}`);
   }
+  if (!certificatePassword) {
+    throw new Error('A senha do certificado digital descriptografada está vazia.');
+  }
   const { privateKeyPem, certificatePem, certificateChain } = extractCertificatePair(
     certificateBuffer,
     certificatePassword
   );
 
-  const cscId = environment === 'producao' ? storeObject.cscIdProducao : storeObject.cscIdHomologacao;
+  const certificateInfo = describeCertificate(certificatePem);
+  const storeCnpjDigits = sanitizeDigits(storeObject?.cnpj, { fallback: '' });
+  if (certificateInfo?.cnpj && storeCnpjDigits && certificateInfo.cnpj !== storeCnpjDigits) {
+    throw new Error(
+      `O certificado digital pertence ao CNPJ ${certificateInfo.cnpj}, diferente do CNPJ configurado (${storeCnpjDigits}).`
+    );
+  }
+
+  if (certificateInfo?.validTo instanceof Date && Number.isFinite(certificateInfo.validTo.getTime())) {
+    if (certificateInfo.validTo < new Date()) {
+      throw new Error('O certificado digital configurado está vencido e não pode ser utilizado.');
+    }
+  }
+
+  const cscIdRaw = environment === 'producao' ? storeObject.cscIdProducao : storeObject.cscIdHomologacao;
+  const cscId = String(cscIdRaw ?? '').trim();
   const cscTokenEncrypted =
     environment === 'producao'
       ? storeObject.cscTokenProducaoCriptografado
@@ -980,6 +1056,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     cscToken = decryptText(cscTokenEncrypted).trim();
   } catch (error) {
     throw new Error(`Não foi possível recuperar o CSC do ambiente selecionado: ${error.message}`);
+  }
+  if (!cscToken) {
+    throw new Error('O CSC configurado para a empresa está vazio após a descriptografia.');
   }
 
   const environmentLabel = environment === 'producao' ? 'Produção' : 'Homologação';
