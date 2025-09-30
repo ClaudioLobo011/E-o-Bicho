@@ -1227,7 +1227,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const signer = new SignedXml({
     privateKey: Buffer.from(keyPemString),
     idAttribute: 'Id',
-    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
     signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
@@ -1240,7 +1240,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     xpath: refXPath,
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+      'http://www.w3.org/2001/10/xml-exc-c14n#',
     ],
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
@@ -1329,6 +1329,16 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
         infNfeSuplNode = signedDocument.createElementNS(NFCE_NAMESPACE, 'infNFeSupl');
       }
 
+      if (signatureNode.removeAttribute) {
+        signatureNode.removeAttribute('xmlns');
+        signatureNode.removeAttribute('xmlns:ds');
+      }
+
+      if (signatureNode.previousSibling !== infNfeSignedNode) {
+        nfeNode.removeChild(signatureNode);
+        nfeNode.insertBefore(signatureNode, infNfeSignedNode.nextSibling);
+      }
+
       while (infNfeSuplNode.firstChild) {
         infNfeSuplNode.removeChild(infNfeSuplNode.firstChild);
       }
@@ -1340,9 +1350,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       infNfeSuplNode.appendChild(qrCodeElement);
       infNfeSuplNode.appendChild(urlChaveElement);
 
-      nfeNode.insertBefore(infNfeSuplNode, signatureNode);
-      nfeNode.removeChild(signatureNode);
-      nfeNode.appendChild(signatureNode);
+      const insertAfterSignature = signatureNode.nextSibling;
+      if (insertAfterSignature) {
+        nfeNode.insertBefore(infNfeSuplNode, insertAfterSignature);
+      } else {
+        nfeNode.appendChild(infNfeSuplNode);
+      }
 
       const childElements = [];
       for (let node = nfeNode.firstChild; node; node = node.nextSibling) {
@@ -1400,14 +1413,13 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
         finalXml = cleanedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
       } else {
         const endOfSignature = closingIndex + closingTag.length;
-        const beforeSignatureBlock = cleanedXmlContent.slice(0, signatureIndex);
-        const signatureBlock = cleanedXmlContent.slice(signatureIndex, endOfSignature);
+        const beforeSignatureBlock = cleanedXmlContent.slice(0, endOfSignature);
         const afterSignatureBlock = cleanedXmlContent.slice(endOfSignature);
-        const needsPrefixNewline =
-          beforeSignatureBlock.endsWith('\n') || !beforeSignatureBlock ? '' : '\n';
         const needsSignatureSeparator =
-          infNfeSuplXml.endsWith('\n') || signatureBlock.startsWith('\n') ? '' : '\n';
-        finalXml = `${beforeSignatureBlock}${needsPrefixNewline}${infNfeSuplXml}${needsSignatureSeparator}${signatureBlock}${afterSignatureBlock}`;
+          beforeSignatureBlock.endsWith('\n') || infNfeSuplXml.startsWith('\n') ? '' : '\n';
+        const needsSuffixNewline =
+          infNfeSuplXml.endsWith('\n') || afterSignatureBlock.startsWith('\n') ? '' : '\n';
+        finalXml = `${beforeSignatureBlock}${needsSignatureSeparator}${infNfeSuplXml}${needsSuffixNewline}${afterSignatureBlock}`;
       }
     }
 
