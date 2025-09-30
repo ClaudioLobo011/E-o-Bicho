@@ -1172,7 +1172,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     .replace('-----END CERTIFICATE-----', '')
     .replace(/\s+/g, '');
 
-  const baseXmlLines = ['<?xml version="1.0" encoding="UTF-8"?>', '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">', ...infNfeLines, '</NFe>'];
+  const baseXmlLines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<NFe xmlns="http://www.portalfiscal.inf.br/nfe" xmlns:ds="http://www.w3.org/2000/09/xmldsig#">',
+    ...infNfeLines,
+    '</NFe>',
+  ];
   const xmlForSignature = baseXmlLines.join('\n');
 
   const xmlDocument = new DOMParser().parseFromString(xmlForSignature, 'text/xml');
@@ -1196,34 +1201,28 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const signer = new SignedXml({
     privateKey: Buffer.from(keyPemString),
     idAttribute: 'Id',
-    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
     signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
   signer.keyInfoProvider = {
-    getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+    getKeyInfo: () =>
+      `<ds:X509Data><ds:X509Certificate>${certB64}</ds:X509Certificate></ds:X509Data>`,
   };
   const refXPath = "/*[local-name()='NFe']/*[local-name()='infNFe']";
   signer.addReference({
     xpath: refXPath,
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+      'http://www.w3.org/2001/10/xml-exc-c14n#',
     ],
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
   console.debug('XPath ref:', refXPath);
-  const [infNfeSuplForLocation] = xpath.select(
-    "/*[local-name()='NFe']/*[local-name()='infNFeSupl']",
-    xmlDocument
-  );
-  const signatureLocationReference = infNfeSuplForLocation
-    ? "/*[local-name()='NFe']/*[local-name()='infNFeSupl']"
-    : refXPath;
   signer.computeSignature(xmlForSignature, {
-    prefix: '',
+    prefix: 'ds',
     location: {
-      reference: signatureLocationReference,
+      reference: refXPath,
       action: 'after',
     },
   });
@@ -1297,19 +1296,19 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       signatureNode &&
       signatureNode.parentNode === nfeNode
     ) {
-      if (!signatureNode.getAttribute('xmlns')) {
-        signatureNode.setAttributeNS(
-          'http://www.w3.org/2000/xmlns/',
-          'xmlns',
-          'http://www.w3.org/2000/09/xmldsig#'
-        );
+      let desiredPosition = infNfeSignedNode.nextSibling;
+      while (desiredPosition && desiredPosition.nodeType !== 1) {
+        desiredPosition = desiredPosition.nextSibling;
+      }
+      if (desiredPosition !== signatureNode) {
+        nfeNode.removeChild(signatureNode);
+        nfeNode.insertBefore(signatureNode, desiredPosition || null);
       }
 
-      nfeNode.removeChild(signatureNode);
-
-      if (infNfeSuplNode) {
+      if (infNfeSuplNode && infNfeSuplNode.parentNode === nfeNode) {
         nfeNode.removeChild(infNfeSuplNode);
-      } else {
+      }
+      if (!infNfeSuplNode) {
         infNfeSuplNode = signedDocument.createElementNS(NFCE_NAMESPACE, 'infNFeSupl');
       }
 
@@ -1324,17 +1323,15 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       infNfeSuplNode.appendChild(qrCodeElement);
       infNfeSuplNode.appendChild(urlChaveElement);
 
-      let nextElementAfterInfNfe = infNfeSignedNode.nextSibling;
-      while (nextElementAfterInfNfe && nextElementAfterInfNfe.nodeType !== 1) {
-        nextElementAfterInfNfe = nextElementAfterInfNfe.nextSibling;
+      const referenceNode =
+        signatureNode && signatureNode.parentNode === nfeNode
+          ? signatureNode
+          : infNfeSignedNode;
+      let afterReference = referenceNode.nextSibling;
+      while (afterReference && afterReference.nodeType !== 1) {
+        afterReference = afterReference.nextSibling;
       }
-      nfeNode.insertBefore(infNfeSuplNode, nextElementAfterInfNfe || null);
-
-      let afterInfNfeSupl = infNfeSuplNode.nextSibling;
-      while (afterInfNfeSupl && afterInfNfeSupl.nodeType !== 1) {
-        afterInfNfeSupl = afterInfNfeSupl.nextSibling;
-      }
-      nfeNode.insertBefore(signatureNode, afterInfNfeSupl || null);
+      nfeNode.insertBefore(infNfeSuplNode, afterReference || null);
 
       const childElements = [];
       for (let node = nfeNode.firstChild; node; node = node.nextSibling) {
@@ -1343,7 +1340,11 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
         }
       }
       console.debug('[NFCE] Ordem filhos <NFe>:', childElements);
-      console.debug('[NFCE] Namespace Signature:', signatureNode?.namespaceURI || null);
+      console.debug('[NFCE] Signature info:', {
+        localName: signatureNode?.localName || null,
+        prefix: signatureNode?.prefix || null,
+        namespaceURI: signatureNode?.namespaceURI || null,
+      });
 
       const serializer = new XMLSerializer();
       signedXmlContent = serializer.serializeToString(signedDocument);
@@ -1363,17 +1364,32 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       '  </infNFeSupl>',
     ].join('\n');
 
-    const signatureOpenTag = '<Signature';
-    const signatureIndex = signedXmlContent.indexOf(signatureOpenTag);
+    const signatureCandidates = ['<ds:Signature', '<Signature'];
+    let signatureIndex = -1;
+    let signatureTagName = null;
+    for (const candidate of signatureCandidates) {
+      signatureIndex = signedXmlContent.indexOf(candidate);
+      if (signatureIndex !== -1) {
+        signatureTagName = candidate.startsWith('<ds:') ? 'ds:Signature' : 'Signature';
+        break;
+      }
+    }
     let finalXml;
     if (signatureIndex === -1) {
       finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
     } else {
-      const beforeSignature = signedXmlContent.slice(0, signatureIndex);
-      const afterSignature = signedXmlContent.slice(signatureIndex);
-      const needsTrailingNewline = !beforeSignature.endsWith('\n');
-      const trailingNewline = needsTrailingNewline ? '\n' : '';
-      finalXml = `${beforeSignature}${trailingNewline}${infNfeSuplXml}\n${afterSignature}`;
+      const closingTag = signatureTagName ? `</${signatureTagName}>` : '</Signature>';
+      const closingIndex = signedXmlContent.indexOf(closingTag, signatureIndex);
+      if (closingIndex === -1) {
+        finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
+      } else {
+        const endOfSignature = closingIndex + closingTag.length;
+        const beforeSignatureBlock = signedXmlContent.slice(0, endOfSignature);
+        const afterSignatureBlock = signedXmlContent.slice(endOfSignature);
+        const leadingNewline = beforeSignatureBlock.endsWith('\n') ? '' : '\n';
+        const trailingNewline = afterSignatureBlock.startsWith('\n') ? '' : '\n';
+        finalXml = `${beforeSignatureBlock}${leadingNewline}${infNfeSuplXml}${trailingNewline}${afterSignatureBlock}`;
+      }
     }
 
     signedXmlContent = finalXml;
