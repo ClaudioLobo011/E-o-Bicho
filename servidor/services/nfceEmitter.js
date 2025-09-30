@@ -212,6 +212,7 @@ const buildTaxGroup = ({ lines, tag, data = {}, baseValue = 0, quantity = 0 }) =
   const cstDigitsRaw = onlyDigits(data?.cst);
   const normalizedCst = cstDigitsRaw ? cstDigitsRaw.padStart(2, '0').slice(-2) : '';
   const effectiveCst = normalizedCst || '99';
+  let summaryAmount = 0;
 
   lines.push(`        <${upperTag}>`);
 
@@ -226,6 +227,7 @@ const buildTaxGroup = ({ lines, tag, data = {}, baseValue = 0, quantity = 0 }) =
     lines.push(`${valueIndent}<vAliqProd>${toDecimal(aliquotNumber, 4)}</vAliqProd>`);
     lines.push(`${valueIndent}<v${upperTag}>${toDecimal(quantityAmount)}</v${upperTag}>`);
     lines.push(`${subgroupIndent}</${upperTag}Qtde>`);
+    summaryAmount = quantityAmount;
   } else if (effectiveCst === '60') {
     lines.push(`${subgroupIndent}<${upperTag}ST>`);
     lines.push(`${valueIndent}<CST>${effectiveCst}</CST>`);
@@ -233,6 +235,7 @@ const buildTaxGroup = ({ lines, tag, data = {}, baseValue = 0, quantity = 0 }) =
     lines.push(`${valueIndent}<p${upperTag}>${toDecimal(aliquotNumber)}</p${upperTag}>`);
     lines.push(`${valueIndent}<v${upperTag}>${toDecimal(amountByAliquot)}</v${upperTag}>`);
     lines.push(`${subgroupIndent}</${upperTag}ST>`);
+    summaryAmount = amountByAliquot;
   } else {
     const groupTag = TAX_ALIQ_CODES.has(effectiveCst) ? `${upperTag}Aliq` : `${upperTag}Outr`;
     lines.push(`${subgroupIndent}<${groupTag}>`);
@@ -241,9 +244,11 @@ const buildTaxGroup = ({ lines, tag, data = {}, baseValue = 0, quantity = 0 }) =
     lines.push(`${valueIndent}<p${upperTag}>${toDecimal(aliquotNumber)}</p${upperTag}>`);
     lines.push(`${valueIndent}<v${upperTag}>${toDecimal(amountByAliquot)}</v${upperTag}>`);
     lines.push(`${subgroupIndent}</${groupTag}>`);
+    summaryAmount = amountByAliquot;
   }
 
   lines.push(`        </${upperTag}>`);
+  return { amount: summaryAmount };
 };
 
 const formatDateTimeWithOffset = (date) => {
@@ -1062,6 +1067,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     infNfeLines.push('    </dest>');
   }
 
+  let totalPis = 0;
+  let totalCofins = 0;
+
   fiscalItems.forEach((item, index) => {
     const product = item.productId ? productsMap.get(String(item.productId)) : null;
     const fiscalData = product ? getFiscalDataForStore(product, storeObject) : {};
@@ -1115,20 +1123,22 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       infNfeLines.push('          </ICMS00>');
     }
     infNfeLines.push('        </ICMS>');
-    buildTaxGroup({
+    const pisSummary = buildTaxGroup({
       lines: infNfeLines,
       tag: 'PIS',
       data: fiscalData?.pis,
       baseValue: item.total,
       quantity: item.quantity,
     });
-    buildTaxGroup({
+    totalPis += pisSummary.amount || 0;
+    const cofinsSummary = buildTaxGroup({
       lines: infNfeLines,
       tag: 'COFINS',
       data: fiscalData?.cofins,
       baseValue: item.total,
       quantity: item.quantity,
     });
+    totalCofins += cofinsSummary.amount || 0;
     infNfeLines.push('      </imposto>');
     infNfeLines.push('    </det>');
   });
@@ -1153,8 +1163,8 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push(`        <vII>0.00</vII>`);
   infNfeLines.push(`        <vIPI>0.00</vIPI>`);
   infNfeLines.push(`        <vIPIDevol>0.00</vIPIDevol>`);
-  infNfeLines.push(`        <vPIS>0.00</vPIS>`);
-  infNfeLines.push(`        <vCOFINS>0.00</vCOFINS>`);
+  infNfeLines.push(`        <vPIS>${toDecimal(totalPis)}</vPIS>`);
+  infNfeLines.push(`        <vCOFINS>${toDecimal(totalCofins)}</vCOFINS>`);
   infNfeLines.push(`        <vOutro>${toDecimal(acrescimo)}</vOutro>`);
   infNfeLines.push(`        <vNF>${toDecimal(totalLiquido)}</vNF>`);
   infNfeLines.push('      </ICMSTot>');
