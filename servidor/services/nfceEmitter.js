@@ -319,7 +319,7 @@ const formatDateTimeWithOffset = (date) => {
 // Gera o QR Code v2 on-line exigido pela SEFAZ/RJ para NFC-e autorizada em emissão normal.
 const buildQrCodeRJ = ({ chNFe, tpAmb, idToken, csc }) => {
   const versaoQR = '2';
-  const base = 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode';
+  const base = 'https://www4.fazenda.rj.gov.br/consultaNFCe/QRCode';
   const idT = String(idToken ?? '').replace(/^0+/, '');
   const pSemHash = `${chNFe}|${versaoQR}|${tpAmb}|${idT}`;
   const token = String(csc ?? '');
