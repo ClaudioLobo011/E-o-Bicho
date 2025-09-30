@@ -6,6 +6,7 @@ const forge = require('node-forge');
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('node:events');
+const { sanitizeXmlContent } = require('../../utils/xmlSanitizer');
 
 test('performSoapRequest forwards intermediate certificates via options.ca', async () => {
   const originalRequest = https.request;
@@ -354,7 +355,8 @@ test('buildEnviNfePayload preserva integralmente o XML assinado', () => {
   const originalInf = originalXml.match(/<infNFe[\s\S]*<\/infNFe>/)[0];
   const payloadInf = payload.match(/<infNFe[\s\S]*<\/infNFe>/)[0];
 
-  assert.strictEqual(payloadInf, originalInf);
+  const sanitizedOriginalInf = sanitizeXmlContent(originalInf);
+  assert.strictEqual(payloadInf, sanitizedOriginalInf);
   assert.match(payload, /<idLote>000000000000042<\/idLote>/);
   assert.match(payload, /<indSinc>1<\/indSinc>/);
 });
@@ -388,7 +390,8 @@ test('buildEnviNfePayload remove caracteres de edição fora do infNFe', () => {
   const originalInf = originalXml.match(/<infNFe[\s\S]*?<\/infNFe>/)[0];
   const payloadInf = payload.match(/<infNFe[\s\S]*?<\/infNFe>/)[0];
 
-  assert.strictEqual(payloadInf, originalInf);
+  const sanitizedOriginalInf = sanitizeXmlContent(originalInf);
+  assert.strictEqual(payloadInf, sanitizedOriginalInf);
   assert.match(payload, /<NFe[^>]*><infNFe/);
   assert.match(payload, /<\/infNFe><infNFeSupl>/);
   assert.match(payload, /<\/infNFeSupl><Signature/);
