@@ -22,7 +22,7 @@ test('sanitizeXmlAttribute delegates to sanitizeXmlText', () => {
 test('sanitizeXmlContent normalizes whitespace and strips forbidden characters', () => {
   const input = "\ufeff<?xml version=\"1.0\"?>\r\n<NFe>\u200b\n  <infNFe>\u00a0</infNFe>\n</NFe>\r\n";
   const result = sanitizeXmlContent(input);
-  assert.strictEqual(result, '<?xml version="1.0"?>\n<NFe>\n  <infNFe> </infNFe>\n</NFe>');
+  assert.strictEqual(result, '<?xml version="1.0"?><NFe><infNFe></infNFe></NFe>');
 });
 
 test('escapeXml escapes special characters without additional normalization', () => {

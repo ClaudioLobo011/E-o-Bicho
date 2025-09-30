@@ -52,6 +52,8 @@ const sanitizeXmlContent = (xml) => {
   normalized = normalized.replace(/\n{3,}/g, '\n\n');
   // Trim leading/trailing blank lines
   normalized = normalized.replace(/^\s+|\s+$/g, '');
+  // Remove any editing characters (spaces, tabs, newlines) between tags
+  normalized = normalized.replace(/>\s+</g, '><');
   return normalized;
 };
 
