@@ -1537,10 +1537,12 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     ? signedXmlContent
     : `<?xml version="1.0" encoding="UTF-8"?>\n${signedXmlContent}`;
 
+  const sanitizedXml = sanitizeXmlContent(xml);
+
   let transmission = null;
   try {
     transmission = await transmitNfceToSefaz({
-      xml,
+      xml: sanitizedXml,
       uf: storeUf,
       environment,
       certificate: certificatePem,
@@ -1574,7 +1576,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   }
 
   return {
-    xml,
+    xml: sanitizedXml,
     qrCodePayload,
     digestValue,
     signatureValue,
