@@ -327,3 +327,70 @@ test('extract helpers tolerate namespace prefixes in SEFAZ responses', () => {
   const protocolStatus = extractTagContent(protSection, 'cStat');
   assert.strictEqual(protocolStatus, '100');
 });
+
+test('buildEnviNfePayload preserva integralmente o XML assinado', () => {
+  delete require.cache[require.resolve('../sefazTransmitter')];
+  const { __TESTING__ } = require('../sefazTransmitter');
+  const { buildEnviNfePayload } = __TESTING__;
+
+  const originalXml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">',
+    '  <infNFe Id="NFe123" versao="4.00">',
+    '    <ide>',
+    '      <cUF>33</cUF>',
+    '    </ide>',
+    '    <det nItem="1">',
+    '      <prod>',
+    '        <cProd>001</cProd>',
+    '      </prod>',
+    '    </det>',
+    '  </infNFe>',
+    '</NFe>',
+  ].join('\n');
+
+  const payload = buildEnviNfePayload({ xml: originalXml, loteId: '42', synchronous: true });
+
+  const originalInf = originalXml.match(/<infNFe[\s\S]*<\/infNFe>/)[0];
+  const payloadInf = payload.match(/<infNFe[\s\S]*<\/infNFe>/)[0];
+
+  assert.strictEqual(payloadInf, originalInf);
+  assert.match(payload, /<idLote>000000000000042<\/idLote>/);
+  assert.match(payload, /<indSinc>1<\/indSinc>/);
+});
+
+test('buildEnviNfePayload remove caracteres de edição fora do infNFe', () => {
+  delete require.cache[require.resolve('../sefazTransmitter')];
+  const { __TESTING__ } = require('../sefazTransmitter');
+  const { buildEnviNfePayload } = __TESTING__;
+
+  const originalXml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">',
+    '  <infNFe Id="NFe123" versao="4.00">',
+    '    <ide>',
+    '      <cUF>33</cUF>',
+    '    </ide>',
+    '  </infNFe>',
+    '',
+    '  <infNFeSupl>',
+    '    <qrCode>123</qrCode>',
+    '  </infNFeSupl>',
+    '',
+    '  <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">',
+    '    <SignedInfo />',
+    '  </Signature>',
+    '</NFe>',
+  ].join('\n');
+
+  const payload = buildEnviNfePayload({ xml: originalXml, loteId: '1', synchronous: false });
+
+  const originalInf = originalXml.match(/<infNFe[\s\S]*?<\/infNFe>/)[0];
+  const payloadInf = payload.match(/<infNFe[\s\S]*?<\/infNFe>/)[0];
+
+  assert.strictEqual(payloadInf, originalInf);
+  assert.match(payload, /<NFe[^>]*><infNFe/);
+  assert.match(payload, /<\/infNFe><infNFeSupl>/);
+  assert.match(payload, /<\/infNFeSupl><Signature/);
+  assert.match(payload, /<\/Signature><\/NFe>/);
+});

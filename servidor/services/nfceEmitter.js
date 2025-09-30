@@ -12,6 +12,7 @@ const {
 } = require('./fiscalRuleEngine');
 const { transmitNfceToSefaz, SefazTransmissionError } = require('./sefazTransmitter');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
+const { sanitizeXmlAttribute, sanitizeXmlContent, sanitizeXmlText } = require('../utils/xmlSanitizer');
 
 const UF_BY_CODE = {
   '11': 'RO',
@@ -130,21 +131,7 @@ const normalizeStringSafe = (value) => {
 
 const onlyDigits = (s) => String(s ?? '').replace(/\D/g, '');
 const dec = (n) => Number(n ?? 0).toFixed(2);
-const escapeXmlText = (value) =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-
-const sanitize = (s) =>
-  escapeXmlText(
-    String(s ?? '')
-      .replace(/[\u0000-\u001F\u007F]/g, '')
-      .trim()
-      .replace(/\s+/g, ' ')
-  );
+const sanitize = (value) => sanitizeXmlText(value);
 const pushTagIf = (arr, tag, value, indent = '        ') => {
   const v = sanitize(value);
   if (v) arr.push(`${indent}<${tag}>${v}</${tag}>`);
@@ -1093,7 +1080,8 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('    <ide>');
   infNfeLines.push(`      <cUF>${ufCode}</cUF>`);
   infNfeLines.push(`      <cNF>${cnf}</cNF>`);
-  infNfeLines.push(`      <natOp>${snapshot?.meta?.naturezaOperacao || 'VENDA AO CONSUMIDOR'}</natOp>`);
+  const naturezaOperacao = sanitize(snapshot?.meta?.naturezaOperacao) || 'VENDA AO CONSUMIDOR';
+  infNfeLines.push(`      <natOp>${naturezaOperacao}</natOp>`);
   infNfeLines.push('      <mod>65</mod>');
   infNfeLines.push(`      <serie>${serieNumber}</serie>`);
   infNfeLines.push(`      <nNF>${String(numeroFiscal)}</nNF>`);
@@ -1372,9 +1360,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const infAdicLines = [];
   if (obs.length) {
     obs.forEach((entry) => {
-      infAdicLines.push(
-        `      <obsCont xCampo="${sanitize(entry.tag)}"><xTexto>${sanitize(entry.value)}</xTexto></obsCont>`
-      );
+      const campo = sanitizeXmlAttribute(entry.tag);
+      const texto = sanitize(entry.value);
+      infAdicLines.push(`      <obsCont xCampo="${campo}"><xTexto>${texto}</xTexto></obsCont>`);
     });
   }
   if (snapshot?.meta?.observacoes || snapshot?.meta?.observacaoGeral) {
@@ -1400,7 +1388,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     ...infNfeLines,
     '</NFe>',
   ];
-  const xmlForSignature = baseXmlLines.join('\n');
+  const xmlForSignature = sanitizeXmlContent(baseXmlLines.join('\n'));
 
   const xmlDocument = new DOMParser().parseFromString(xmlForSignature, 'text/xml');
   const [infNfeNode] = xpath.select("/*[local-name()='NFe']/*[local-name()='infNFe']", xmlDocument);
@@ -1506,8 +1494,8 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       signedXmlContent.slice(insertPosition);
   }
 
-  const qrCodeText = escapeXmlText(qrCodePayload);
-  const urlChaveText = escapeXmlText(qrCodeBaseUrl);
+  const qrCodeText = sanitize(qrCodePayload);
+  const urlChaveText = sanitize(qrCodeBaseUrl);
   const infNfeSuplXml = [
     '  <infNFeSupl>',
     '    <qrCode>' + qrCodeText + '</qrCode>',

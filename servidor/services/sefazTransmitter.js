@@ -5,6 +5,7 @@ const dgram = require('dgram');
 const forge = require('node-forge');
 const fs = require('fs');
 const path = require('path');
+const { sanitizeXmlContent } = require('../utils/xmlSanitizer');
 
 class SefazTransmissionError extends Error {
   constructor(message, details = {}) {
@@ -160,13 +161,32 @@ const getSynchronizedDate = () => new Date(Date.now() + clockOffsetMs);
 
 const removeXmlDeclaration = (xml) => {
   if (!xml) return '';
-  return String(xml).replace(/^\s*<\?xml[^>]*>\s*/i, '').trim();
+  const sanitized = sanitizeXmlContent(String(xml));
+  return sanitized.replace(/^<\?xml[^>]*>\s*/i, '').trim();
+};
+
+const collapseRootLevelWhitespace = (xml) => {
+  if (!xml) return '';
+
+  let result = String(xml);
+
+  const replacements = [
+    [/(<NFe\b[^>]*>)[\s\r\n]+(<)/, '$1$2'],
+    [/(<\/infNFe>)[\s\r\n]+(<)/g, '$1$2'],
+    [/(<\/infNFeSupl>)[\s\r\n]+(<)/g, '$1$2'],
+    [/(<\/Signature>)[\s\r\n]+(<)/g, '$1$2'],
+    [/>[\s\r\n]+<\/NFe>/, '></NFe>'],
+  ];
+
+  for (const [pattern, replacement] of replacements) {
+    result = result.replace(pattern, replacement);
+  }
+
+  return result;
 };
 
 const buildEnviNfePayload = ({ xml, loteId, synchronous = true }) => {
-  const normalizedNfe = removeXmlDeclaration(xml)
-    .replace(/>[\s\r\n\t]+</g, '><')
-    .trim();
+  const normalizedNfe = collapseRootLevelWhitespace(removeXmlDeclaration(xml));
   const lote = String(loteId || Date.now())
     .replace(/\D+/g, '')
     .padStart(15, '0')
@@ -230,9 +250,7 @@ const resolveUfCode = (uf) => {
 };
 
 const buildSoapEnvelope = ({ enviNfeXml, uf }) => {
-  const sanitized = removeXmlDeclaration(enviNfeXml)
-    .replace(/>[\s\r\n\t]+</g, '><')
-    .trim();
+  const sanitized = removeXmlDeclaration(enviNfeXml);
 
   const ufCode = resolveUfCode(uf);
 
@@ -255,9 +273,7 @@ const buildSoapEnvelope = ({ enviNfeXml, uf }) => {
 };
 
 const buildStatusSoapEnvelope = ({ payloadXml, uf }) => {
-  const sanitized = removeXmlDeclaration(payloadXml)
-    .replace(/>[\s\r\n\t]+</g, '><')
-    .trim();
+  const sanitized = removeXmlDeclaration(payloadXml);
 
   const ufCode = resolveUfCode(uf);
 
@@ -860,6 +876,7 @@ module.exports = {
     buildSoapEnvelope,
     buildStatusSoapEnvelope,
     buildStatusPayload,
+    buildEnviNfePayload,
     ensureClockSynchronization,
     getSynchronizedDate,
   },
