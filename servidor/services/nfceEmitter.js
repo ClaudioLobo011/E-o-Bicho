@@ -1198,24 +1198,32 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     idAttribute: 'Id',
     canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
   signer.keyInfoProvider = {
     getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
   };
   const refXPath = "/*[local-name()='NFe']/*[local-name()='infNFe']";
-  signer.addReference(
-    refXPath,
-    [
+  signer.addReference({
+    xpath: refXPath,
+    transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
       'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     ],
-    'http://www.w3.org/2000/09/xmldsig#sha1'
-  );
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+  });
   console.debug('XPath ref:', refXPath);
+  const [infNfeSuplForLocation] = xpath.select(
+    "/*[local-name()='NFe']/*[local-name()='infNFeSupl']",
+    xmlDocument
+  );
+  const signatureLocationReference = infNfeSuplForLocation
+    ? "/*[local-name()='NFe']/*[local-name()='infNFeSupl']"
+    : refXPath;
   signer.computeSignature(xmlForSignature, {
     prefix: '',
     location: {
-      reference: refXPath,
+      reference: signatureLocationReference,
       action: 'after',
     },
   });
@@ -1298,15 +1306,6 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       }
 
       nfeNode.removeChild(signatureNode);
-      if (infNfeSuplNode) {
-        nfeNode.insertBefore(signatureNode, infNfeSuplNode);
-      } else {
-        let nextSibling = infNfeSignedNode.nextSibling;
-        while (nextSibling && nextSibling.nodeType !== 1) {
-          nextSibling = nextSibling.nextSibling;
-        }
-        nfeNode.insertBefore(signatureNode, nextSibling || null);
-      }
 
       if (infNfeSuplNode) {
         nfeNode.removeChild(infNfeSuplNode);
@@ -1325,11 +1324,17 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       infNfeSuplNode.appendChild(qrCodeElement);
       infNfeSuplNode.appendChild(urlChaveElement);
 
-      let afterSignature = signatureNode.nextSibling;
-      while (afterSignature && afterSignature.nodeType !== 1) {
-        afterSignature = afterSignature.nextSibling;
+      let nextElementAfterInfNfe = infNfeSignedNode.nextSibling;
+      while (nextElementAfterInfNfe && nextElementAfterInfNfe.nodeType !== 1) {
+        nextElementAfterInfNfe = nextElementAfterInfNfe.nextSibling;
       }
-      nfeNode.insertBefore(infNfeSuplNode, afterSignature || null);
+      nfeNode.insertBefore(infNfeSuplNode, nextElementAfterInfNfe || null);
+
+      let afterInfNfeSupl = infNfeSuplNode.nextSibling;
+      while (afterInfNfeSupl && afterInfNfeSupl.nodeType !== 1) {
+        afterInfNfeSupl = afterInfNfeSupl.nextSibling;
+      }
+      nfeNode.insertBefore(signatureNode, afterInfNfeSupl || null);
 
       const childElements = [];
       for (let node = nfeNode.firstChild; node; node = node.nextSibling) {
@@ -1358,18 +1363,17 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       '  </infNFeSupl>',
     ].join('\n');
 
-    const signatureCloseTag = '</Signature>';
-    const signatureCloseIndex = signedXmlContent.indexOf(signatureCloseTag);
+    const signatureOpenTag = '<Signature';
+    const signatureIndex = signedXmlContent.indexOf(signatureOpenTag);
     let finalXml;
-    if (signatureCloseIndex === -1) {
+    if (signatureIndex === -1) {
       finalXml = signedXmlContent.replace('</NFe>', `${infNfeSuplXml}\n</NFe>`);
     } else {
-      const insertionPoint = signatureCloseIndex + signatureCloseTag.length;
-      const beforeSignature = signedXmlContent.slice(0, insertionPoint);
-      const afterSignature = signedXmlContent.slice(insertionPoint);
-      const needsLeadingNewline = !beforeSignature.endsWith('\n');
-      const leadingNewline = needsLeadingNewline ? '\n' : '';
-      finalXml = `${beforeSignature}${leadingNewline}${infNfeSuplXml}\n${afterSignature}`;
+      const beforeSignature = signedXmlContent.slice(0, signatureIndex);
+      const afterSignature = signedXmlContent.slice(signatureIndex);
+      const needsTrailingNewline = !beforeSignature.endsWith('\n');
+      const trailingNewline = needsTrailingNewline ? '\n' : '';
+      finalXml = `${beforeSignature}${trailingNewline}${infNfeSuplXml}\n${afterSignature}`;
     }
 
     signedXmlContent = finalXml;
