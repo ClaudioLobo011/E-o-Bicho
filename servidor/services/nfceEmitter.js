@@ -51,6 +51,8 @@ const sanitizeDigits = (value, { fallback = '' } = {}) => {
 };
 
 const BRAZILIAN_CNPJ_OID = '2.16.76.1.3.3';
+const HOMOLOGATION_FIRST_ITEM_DESCRIPTION =
+  'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
 
 const describeCertificate = (pem) => {
   if (!pem) {
@@ -321,7 +323,11 @@ const buildQrCodeRJ = ({ chNFe, tpAmb, idToken, csc }) => {
   const idT = String(idToken ?? '').replace(/^0+/, '');
   const pSemHash = `${chNFe}|${versaoQR}|${tpAmb}|${idT}`;
   const hashInput = `${pSemHash}|${csc}`.replace('||', '|');
-  const cHash = crypto.createHash('sha1').update(hashInput, 'utf8').digest('hex');
+  const cHash = crypto
+    .createHash('sha1')
+    .update(hashInput, 'utf8')
+    .digest('hex')
+    .toUpperCase();
   const url = `${base}?p=${chNFe}|${versaoQR}|${tpAmb}|${idT}|${cHash}`;
   return { url, base };
 };
@@ -1187,6 +1193,8 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   let totalPis = 0;
   let totalCofins = 0;
 
+  const isHomologation = tpAmb === '2';
+
   fiscalItems.forEach((item, index) => {
     const product = item.productId ? productsMap.get(String(item.productId)) : null;
     const fiscalData = product ? getFiscalDataForStore(product, storeObject) : {};
@@ -1206,7 +1214,11 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     const productCode = item.internalCode || item.productId || String(index + 1).padStart(4, '0');
     infNfeLines.push(`        <cProd>${sanitize(productCode)}</cProd>`);
     infNfeLines.push(`        <cEAN>${cEAN}</cEAN>`);
-    infNfeLines.push(`        <xProd>${sanitize(item.name)}</xProd>`);
+    const productDescription =
+      index === 0 && isHomologation
+        ? HOMOLOGATION_FIRST_ITEM_DESCRIPTION
+        : item.name;
+    infNfeLines.push(`        <xProd>${sanitize(productDescription)}</xProd>`);
     infNfeLines.push(`        <NCM>${ncm.padStart(8, '0')}</NCM>`);
     if (fiscalData?.cest) {
       infNfeLines.push(`        <CEST>${fiscalData.cest}</CEST>`);
@@ -1468,7 +1480,11 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     qrParams.set('digVal', digestValue);
     qrParams.set('cIdToken', cscId);
     const qrBase = qrParams.toString();
-    const cHashQRCode = crypto.createHash('sha1').update(`${qrBase}${cscToken}`).digest('hex');
+    const cHashQRCode = crypto
+      .createHash('sha1')
+      .update(`${qrBase}${cscToken}`)
+      .digest('hex')
+      .toUpperCase();
     qrCodePayload = `${qrBase}&cHashQRCode=${cHashQRCode}`;
   }
 
