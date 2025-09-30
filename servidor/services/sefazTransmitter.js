@@ -5,6 +5,7 @@ const dgram = require('dgram');
 const forge = require('node-forge');
 const fs = require('fs');
 const path = require('path');
+const { sanitizeXmlContent } = require('../utils/xmlSanitizer');
 
 class SefazTransmissionError extends Error {
   constructor(message, details = {}) {
@@ -160,7 +161,8 @@ const getSynchronizedDate = () => new Date(Date.now() + clockOffsetMs);
 
 const removeXmlDeclaration = (xml) => {
   if (!xml) return '';
-  return String(xml).replace(/^\s*<\?xml[^>]*>\s*/i, '').trim();
+  const sanitized = sanitizeXmlContent(String(xml));
+  return sanitized.replace(/^<\?xml[^>]*>\s*/i, '').trim();
 };
 
 const collapseRootLevelWhitespace = (xml) => {
