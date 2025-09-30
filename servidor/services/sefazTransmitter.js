@@ -163,8 +163,28 @@ const removeXmlDeclaration = (xml) => {
   return String(xml).replace(/^\s*<\?xml[^>]*>\s*/i, '').trim();
 };
 
+const collapseRootLevelWhitespace = (xml) => {
+  if (!xml) return '';
+
+  let result = String(xml);
+
+  const replacements = [
+    [/(<NFe\b[^>]*>)[\s\r\n]+(<)/, '$1$2'],
+    [/(<\/infNFe>)[\s\r\n]+(<)/g, '$1$2'],
+    [/(<\/infNFeSupl>)[\s\r\n]+(<)/g, '$1$2'],
+    [/(<\/Signature>)[\s\r\n]+(<)/g, '$1$2'],
+    [/>[\s\r\n]+<\/NFe>/, '></NFe>'],
+  ];
+
+  for (const [pattern, replacement] of replacements) {
+    result = result.replace(pattern, replacement);
+  }
+
+  return result;
+};
+
 const buildEnviNfePayload = ({ xml, loteId, synchronous = true }) => {
-  const normalizedNfe = removeXmlDeclaration(xml);
+  const normalizedNfe = collapseRootLevelWhitespace(removeXmlDeclaration(xml));
   const lote = String(loteId || Date.now())
     .replace(/\D+/g, '')
     .padStart(15, '0')
