@@ -49,6 +49,27 @@ const sanitizeDigits = (value, { fallback = '' } = {}) => {
   return digits || fallback;
 };
 
+const normalizeStringSafe = (value) => {
+  if (!value && value !== 0) {
+    return '';
+  }
+  const source = String(value)
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!source) {
+    return '';
+  }
+  let normalized = source;
+  if (typeof normalized.normalize === 'function') {
+    normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+  return normalized
+    .replace(/[^0-9a-zA-Z]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+};
+
 const onlyDigits = (s) => String(s ?? '').replace(/\D/g, '');
 const dec = (n) => Number(n ?? 0).toFixed(2);
 const escapeXmlText = (value) =>
@@ -707,6 +728,8 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     throw new Error('Venda inválida para emissão fiscal.');
   }
   const snapshot = sale.receiptSnapshot || {};
+  const saleCodeForFile = normalizeStringSafe(sale?.saleCode) || normalizeStringSafe(sale?.id);
+  let xmlFileBaseName = saleCodeForFile ? `NFCe-${saleCodeForFile}` : '';
   const fiscalItemsRaw = Array.isArray(sale.fiscalItemsSnapshot)
     ? sale.fiscalItemsSnapshot
     : Array.isArray(sale.itemsSnapshot)
@@ -778,6 +801,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     emissionType: '1',
     cnf,
   });
+  if (!xmlFileBaseName) {
+    xmlFileBaseName = `NFCe-${accessKey}`;
+  }
 
   const totalProducts = fiscalItems.reduce((sum, item) => sum + item.total, 0);
   const desconto = safeNumber(snapshot?.totais?.descontoValor ?? snapshot?.totais?.desconto ?? sale.discountValue ?? 0, 0);
@@ -1201,7 +1227,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const signer = new SignedXml({
     privateKey: Buffer.from(keyPemString),
     idAttribute: 'Id',
-    canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
@@ -1214,7 +1240,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     xpath: refXPath,
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-      'http://www.w3.org/2001/10/xml-exc-c14n#',
+      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     ],
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
   });
@@ -1411,14 +1437,26 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       lotId: `${cnf}${Date.now()}`,
     });
   } catch (error) {
+    const fileNameHint = xmlFileBaseName || `NFCe-${Date.now()}`;
+    const buildEnrichedError = (message) => {
+      const enriched = new Error(message);
+      enriched.name = 'NfceTransmissionError';
+      enriched.cause = error;
+      enriched.xmlContent = xml;
+      enriched.xmlAccessKey = accessKey;
+      enriched.xmlFileBaseName = fileNameHint;
+      return enriched;
+    };
+
     if (error instanceof SefazTransmissionError || error?.name === 'SefazTransmissionError') {
       const causeMessage = error?.details?.cause?.message || error?.cause?.message || '';
       const detailedMessage = causeMessage
         ? `${error.message || 'Falha ao transmitir NFC-e para a SEFAZ.'} (${causeMessage})`
         : error.message || 'Falha ao transmitir NFC-e para a SEFAZ.';
-      throw new Error(detailedMessage);
+      throw buildEnrichedError(detailedMessage);
     }
-    throw new Error(
+
+    throw buildEnrichedError(
       `Falha ao transmitir NFC-e para a SEFAZ: ${error?.message || 'erro desconhecido.'}`
     );
   }

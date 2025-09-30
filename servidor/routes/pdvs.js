@@ -872,6 +872,10 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
 });
 
 router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
+  let sale = null;
+  let emissionDate = null;
+  let saleCodeForName = '';
+
   try {
     const pdvId = req.params.id;
     const saleId = normalizeString(req.params.saleId);
@@ -948,7 +952,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
         .json({ message: 'Nenhuma venda registrada foi encontrada para este PDV.' });
     }
 
-    const sale = Array.isArray(state.completedSales)
+    sale = Array.isArray(state.completedSales)
       ? state.completedSales.find((entry) => entry && entry.id === saleId)
       : null;
 
@@ -1011,7 +1015,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
         : numeroInicial - 1;
     const proximoNumeroFiscal = baseSequencia + 1;
 
-    const emissionDate = new Date();
+    emissionDate = new Date();
     const storeForXml =
       empresa && typeof empresa.toObject === 'function'
         ? empresa.toObject()
@@ -1030,7 +1034,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
 
     const qrCodeImage = await generateQrCodeDataUrl(emissionResult.qrCodePayload);
 
-    const saleCodeForName = sale.saleCode || saleId;
+    saleCodeForName = sale.saleCode || saleId;
     const baseName = sanitizeFileName(`NFCe-${saleCodeForName || emissionDate.getTime()}`);
     const fileName = baseName.toLowerCase().endsWith('.xml') ? baseName : `${baseName}.xml`;
 
@@ -1119,6 +1123,22 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
       error?.message && typeof error.message === 'string'
         ? error.message
         : 'Erro ao emitir nota fiscal.';
+    if (error?.xmlContent) {
+      const referenceDate =
+        emissionDate instanceof Date && !Number.isNaN(emissionDate.getTime())
+          ? emissionDate
+          : new Date();
+      const baseNameSource =
+        error.xmlFileBaseName || saleCodeForName || `NFCe-${referenceDate.getTime()}`;
+      const baseName = sanitizeFileName(baseNameSource);
+      const fileName = baseName.toLowerCase().endsWith('.xml') ? baseName : `${baseName}.xml`;
+      res.set('Content-Type', 'application/xml; charset=utf-8');
+      res.set('Content-Disposition', `attachment; filename="${fileName}"`);
+      if (message) {
+        res.set('X-Error-Message', encodeURIComponent(message));
+      }
+      return res.status(500).send(error.xmlContent);
+    }
     res.status(500).json({ message });
   }
 });
