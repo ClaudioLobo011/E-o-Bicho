@@ -21,12 +21,16 @@
 
   let initialized = false;
 
+  const STORAGE_KEY = 'admin-tab-state';
+  let isRestoringState = false;
+
   function bootstrap(tabList, panelContainer) {
     const tabs = new Map();
     const hrefToId = new Map();
     const order = [];
     let activeId = null;
     let counter = 0;
+    let persistReady = false;
 
     const BASE_TRIGGER_CLASSES = [
       'admin-tab-trigger',
@@ -104,6 +108,8 @@
       if (entry.trigger) {
         entry.trigger.focus({ preventScroll: true });
       }
+
+      persistState();
     }
 
     function ensureTabVisible(item) {
@@ -354,6 +360,8 @@
           setActive('dashboard');
         }
       }
+
+      persistState();
     }
 
     function isTabEligible(pathname) {
@@ -471,6 +479,7 @@
         frameWrapper,
         locked: false,
         cleanupFns: [],
+        label: resolvedLabel,
       };
 
       tabs.set(newId, record);
@@ -503,6 +512,7 @@
         panel: defaultPanel,
         item: defaultItem,
         locked: true,
+        label: (defaultTrigger.textContent || '').replace(/\s+/g, ' ').trim() || 'Painel Principal',
       });
 
       hrefToId.set(defaultHref, 'dashboard');
@@ -511,8 +521,76 @@
       setActive('dashboard');
     }
 
+    function readPersistedState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !Array.isArray(parsed.tabs)) return null;
+        return parsed;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function persistState() {
+      if (isRestoringState || !persistReady) return;
+      try {
+        const openTabs = order
+          .map((id) => tabs.get(id))
+          .filter((entry) => entry && !entry.locked && entry.href)
+          .map((entry) => ({
+            href: entry.href,
+            label: entry.label || (entry.trigger ? entry.trigger.textContent.replace(/\s+/g, ' ').trim() : ''),
+          }));
+
+        const activeEntry = tabs.get(activeId);
+        const payload = {
+          tabs: openTabs,
+          activeHref: activeEntry && !activeEntry.locked ? activeEntry.href : null,
+          timestamp: Date.now(),
+        };
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      } catch (err) {
+        // Ignore storage errors (e.g., private mode or quota exceeded).
+      }
+    }
+
+    function restoreState() {
+      const state = readPersistedState();
+      if (!state || !Array.isArray(state.tabs) || !state.tabs.length) {
+        return;
+      }
+
+      isRestoringState = true;
+      try {
+        state.tabs.forEach((tab) => {
+          if (!tab || !tab.href) return;
+          const label = tab.label || 'Nova aba';
+          openTab(tab.href, label);
+        });
+
+        if (state.activeHref) {
+          const normalizedActive = normalizeHref(state.activeHref);
+          if (normalizedActive) {
+            const activeRestoredId = hrefToId.get(normalizedActive);
+            if (activeRestoredId && tabs.has(activeRestoredId)) {
+              setActive(activeRestoredId);
+              ensureTabVisible(tabs.get(activeRestoredId).item);
+            }
+          }
+        }
+      } finally {
+        isRestoringState = false;
+      }
+    }
+
     registerDefaultTab();
     queuePanelHeightUpdate();
+    restoreState();
+    persistReady = true;
+    persistState();
 
     if (pendingOpenCommands.length) {
       const queued = pendingOpenCommands.splice(0, pendingOpenCommands.length);
@@ -560,6 +638,10 @@
         return activeId;
       },
     };
+
+    window.addEventListener('beforeunload', () => {
+      persistState();
+    });
   }
 
   function tryInitialize() {
