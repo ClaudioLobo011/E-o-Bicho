@@ -3545,7 +3545,102 @@
     updateStatusBadge();
   };
 
-  const finalizeSaleFlow = () => {
+  const emitFiscalForSale = async (saleId, { notifyOnSuccess = true } = {}) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale || sale.fiscalStatus === 'emitted' || sale.fiscalStatus === 'emitting') {
+      return { success: false, reason: 'unavailable' };
+    }
+    if (sale.status === 'cancelled') {
+      notify('Não é possível emitir fiscal para uma venda cancelada.', 'info');
+      return { success: false, reason: 'cancelled' };
+    }
+    if (!sale.receiptSnapshot) {
+      notify('Não há dados suficientes para gerar o XML fiscal desta venda.', 'warning');
+      return { success: false, reason: 'missing-snapshot' };
+    }
+    if (!state.selectedPdv) {
+      notify('Selecione um PDV para emitir a nota fiscal.', 'warning');
+      return { success: false, reason: 'missing-pdv' };
+    }
+    sale.fiscalStatus = 'emitting';
+    renderSalesList();
+    // Garante que o backend conheça a venda antes da emissão fiscal
+    if (statePersistTimeout) {
+      window.clearTimeout(statePersistTimeout);
+      statePersistTimeout = null;
+    }
+    while (statePersistInFlight) {
+      // Aguarda persistências anteriores concluírem para evitar condições de corrida
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
+    }
+    await flushStatePersist();
+    try {
+      const token = getToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      const response = await fetch(
+        `${API_BASE}/pdvs/${encodeURIComponent(state.selectedPdv)}/sales/${encodeURIComponent(
+          saleId
+        )}/fiscal`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            snapshot: sale.receiptSnapshot || null,
+            saleCode: sale.saleCode || '',
+          }),
+        }
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = data?.message || 'Não foi possível emitir a nota fiscal.';
+        throw new Error(message);
+      }
+      updateCompletedSaleRecord(saleId, {
+        fiscalStatus: data?.fiscalStatus || 'emitted',
+        fiscalEmittedAt: data?.fiscalEmittedAt || new Date().toISOString(),
+        fiscalEmittedAtLabel: data?.fiscalEmittedAtLabel || '',
+        fiscalDriveFileId: data?.fiscalDriveFileId || '',
+        fiscalXmlUrl: data?.fiscalXmlUrl || '',
+        fiscalXmlName: data?.fiscalXmlName || '',
+        fiscalXmlContent: data?.fiscalXmlContent || sale.fiscalXmlContent || '',
+        fiscalQrCodeData: data?.fiscalQrCodeData || sale.fiscalQrCodeData || '',
+        fiscalQrCodeImage: data?.fiscalQrCodeImage || sale.fiscalQrCodeImage || '',
+        fiscalEnvironment: data?.fiscalEnvironment || '',
+        fiscalSerie: data?.fiscalSerie || '',
+        fiscalNumber:
+          data?.fiscalNumber !== undefined && data?.fiscalNumber !== null
+            ? (() => {
+                const numeric = Number(data.fiscalNumber);
+                return Number.isFinite(numeric) ? numeric : sale.fiscalNumber ?? null;
+              })()
+            : sale.fiscalNumber ?? null,
+        fiscalAccessKey: data?.fiscalAccessKey || sale.fiscalAccessKey || '',
+        fiscalDigestValue: data?.fiscalDigestValue || sale.fiscalDigestValue || '',
+        fiscalSignature: data?.fiscalSignature || sale.fiscalSignature || '',
+        fiscalProtocol: data?.fiscalProtocol || sale.fiscalProtocol || '',
+        fiscalItemsSnapshot: Array.isArray(data?.fiscalItemsSnapshot)
+          ? data.fiscalItemsSnapshot
+          : sale.fiscalItemsSnapshot,
+      });
+      if (notifyOnSuccess) {
+        notify('Nota fiscal emitida e salva no Drive.', 'success');
+      }
+      scheduleStatePersist({ immediate: true });
+      return { success: true, data: data || null };
+    } catch (error) {
+      console.error('Erro ao emitir fiscal', error);
+      sale.fiscalStatus = 'pending';
+      renderSalesList();
+      notify(error?.message || 'Não foi possível emitir a nota fiscal.', 'error');
+      return { success: false, reason: 'error', error };
+    }
+  };
+
+  const finalizeSaleFlow = async () => {
     const total = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
     if (!state.itens.length) {
@@ -3567,7 +3662,7 @@
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, { saleCode });
     registerSaleOnCaixa(pagamentosVenda, total, saleCode);
-    registerCompletedSaleRecord({
+    const saleRecord = registerCompletedSaleRecord({
       type: 'venda',
       saleCode,
       snapshot: saleSnapshot,
@@ -3594,7 +3689,25 @@
     updateSaleSummary();
     closeFinalizeModal();
     advanceSaleCode();
-    handleConfiguredPrint('venda', { snapshot: saleSnapshot });
+    const preferences = state.printPreferences || {};
+    const mode = normalizePrintMode(preferences.venda, 'PM');
+    const shouldEmitFiscal = resolvePrintVariant(mode) === 'fiscal';
+    if (shouldEmitFiscal && saleRecord) {
+      const emissionResult = await emitFiscalForSale(saleRecord.id);
+      const updatedSale = findCompletedSaleById(saleRecord.id) || saleRecord;
+      if (emissionResult?.success) {
+        handleConfiguredPrint('venda', {
+          snapshot: updatedSale.receiptSnapshot || saleSnapshot,
+          xmlContent: updatedSale.fiscalXmlContent || '',
+          qrCodeDataUrl: updatedSale.fiscalQrCodeImage || '',
+          qrCodePayload: updatedSale.fiscalQrCodeData || '',
+        });
+      } else {
+        handleConfiguredPrint('venda', { snapshot: saleSnapshot });
+      }
+    } else {
+      handleConfiguredPrint('venda', { snapshot: saleSnapshot });
+    }
   };
 
   const finalizeDeliveryFlow = () => {
@@ -3764,7 +3877,7 @@
     promptDeliveryPrint(saleSnapshot);
   };
 
-  const handleFinalizeConfirm = () => {
+  const handleFinalizeConfirm = async () => {
     if (state.activeFinalizeContext === 'delivery') {
       finalizeDeliveryFlow();
       return;
@@ -3773,7 +3886,11 @@
       finalizeRegisteredDeliveryOrder();
       return;
     }
-    finalizeSaleFlow();
+    try {
+      await finalizeSaleFlow();
+    } catch (error) {
+      console.error('Erro ao finalizar venda', error);
+    }
   };
 
   const handleSaleAdjust = () => {
@@ -6062,85 +6179,7 @@
     });
   };
 
-  const handleSaleEmitFiscal = async (saleId) => {
-    const sale = findCompletedSaleById(saleId);
-    if (!sale || sale.fiscalStatus === 'emitted' || sale.fiscalStatus === 'emitting') {
-      return;
-    }
-    if (sale.status === 'cancelled') {
-      notify('Não é possível emitir fiscal para uma venda cancelada.', 'info');
-      return;
-    }
-    if (!sale.receiptSnapshot) {
-      notify('Não há dados suficientes para gerar o XML fiscal desta venda.', 'warning');
-      return;
-    }
-    if (!state.selectedPdv) {
-      notify('Selecione um PDV para emitir a nota fiscal.', 'warning');
-      return;
-    }
-    sale.fiscalStatus = 'emitting';
-    renderSalesList();
-    try {
-      const token = getToken();
-      const headers = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-      const response = await fetch(
-        `${API_BASE}/pdvs/${encodeURIComponent(state.selectedPdv)}/sales/${encodeURIComponent(
-          saleId
-        )}/fiscal`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            snapshot: sale.receiptSnapshot || null,
-            saleCode: sale.saleCode || '',
-          }),
-        }
-      );
-      const data = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message = data?.message || 'Não foi possível emitir a nota fiscal.';
-        throw new Error(message);
-      }
-      updateCompletedSaleRecord(saleId, {
-        fiscalStatus: data?.fiscalStatus || 'emitted',
-        fiscalEmittedAt: data?.fiscalEmittedAt || new Date().toISOString(),
-        fiscalEmittedAtLabel: data?.fiscalEmittedAtLabel || '',
-        fiscalDriveFileId: data?.fiscalDriveFileId || '',
-        fiscalXmlUrl: data?.fiscalXmlUrl || '',
-        fiscalXmlName: data?.fiscalXmlName || '',
-        fiscalXmlContent: data?.fiscalXmlContent || sale.fiscalXmlContent || '',
-        fiscalQrCodeData: data?.fiscalQrCodeData || sale.fiscalQrCodeData || '',
-        fiscalQrCodeImage: data?.fiscalQrCodeImage || sale.fiscalQrCodeImage || '',
-        fiscalEnvironment: data?.fiscalEnvironment || '',
-        fiscalSerie: data?.fiscalSerie || '',
-        fiscalNumber:
-          data?.fiscalNumber !== undefined && data?.fiscalNumber !== null
-            ? (() => {
-                const numeric = Number(data.fiscalNumber);
-                return Number.isFinite(numeric) ? numeric : sale.fiscalNumber ?? null;
-              })()
-            : sale.fiscalNumber ?? null,
-        fiscalAccessKey: data?.fiscalAccessKey || sale.fiscalAccessKey || '',
-        fiscalDigestValue: data?.fiscalDigestValue || sale.fiscalDigestValue || '',
-        fiscalSignature: data?.fiscalSignature || sale.fiscalSignature || '',
-        fiscalProtocol: data?.fiscalProtocol || sale.fiscalProtocol || '',
-        fiscalItemsSnapshot: Array.isArray(data?.fiscalItemsSnapshot)
-          ? data.fiscalItemsSnapshot
-          : sale.fiscalItemsSnapshot,
-      });
-      notify('Nota fiscal emitida e salva no Drive.', 'success');
-      scheduleStatePersist({ immediate: true });
-    } catch (error) {
-      console.error('Erro ao emitir fiscal', error);
-      sale.fiscalStatus = 'pending';
-      renderSalesList();
-      notify(error?.message || 'Não foi possível emitir a nota fiscal.', 'error');
-    }
-  };
+  const handleSaleEmitFiscal = (saleId) => emitFiscalForSale(saleId);
 
   const isModalActive = (modal) => Boolean(modal && !modal.classList.contains('hidden'));
 
