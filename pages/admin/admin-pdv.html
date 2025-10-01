@@ -97,6 +97,7 @@
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="pdv-tab" aria-disabled="true">PDV</button>
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-primary text-primary rounded-t" data-tab-target="caixa-tab">Caixa</button>
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="sales-tab">Vendas</button>
+                            <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="orcamentos-tab">Orçamentos</button>
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="delivery-tab">Delivery</button>
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="cliente-tab">Cliente</button>
                         </nav>
@@ -299,6 +300,105 @@
                                     </div>
                                 </div>
                             </div>
+                            <div data-tab-panel="orcamentos-tab" class="hidden space-y-5">
+                                <section class="rounded-xl border border-gray-200 bg-white p-6 space-y-6">
+                                    <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                        <div>
+                                            <h2 class="text-lg font-semibold text-gray-800">Orçamentos registrados</h2>
+                                            <p class="text-sm text-gray-500">Visualize, importe ou gerencie os orçamentos salvos no PDV.</p>
+                                        </div>
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                            <div class="flex flex-wrap items-center gap-2" id="pdv-budget-presets">
+                                                <button type="button" data-budget-preset="hoje" class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary">Hoje</button>
+                                                <button type="button" data-budget-preset="semana" class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary">Semana</button>
+                                                <button type="button" data-budget-preset="mes" class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary">Mês</button>
+                                                <button type="button" data-budget-preset="todos" class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary">Todos</button>
+                                            </div>
+                                            <div class="flex items-center gap-2 text-xs text-gray-500">
+                                                <label for="pdv-budget-start" class="font-semibold">Período</label>
+                                                <input type="date" id="pdv-budget-start" class="rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                                <span class="text-gray-400">até</span>
+                                                <input type="date" id="pdv-budget-end" class="rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                            </div>
+                                        </div>
+                                    </header>
+                                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" id="pdv-budget-kpis">
+                                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Hoje</p>
+                                            <p id="pdv-budget-kpi-today" class="mt-1 text-2xl font-bold text-gray-800">0</p>
+                                        </div>
+                                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Semana</p>
+                                            <p id="pdv-budget-kpi-week" class="mt-1 text-2xl font-bold text-gray-800">0</p>
+                                        </div>
+                                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Mês</p>
+                                            <p id="pdv-budget-kpi-month" class="mt-1 text-2xl font-bold text-gray-800">0</p>
+                                        </div>
+                                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Total</p>
+                                            <p id="pdv-budget-kpi-all" class="mt-1 text-2xl font-bold text-gray-800">0</p>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-1 gap-6 lg:grid-cols-5">
+                                        <section class="lg:col-span-2 space-y-4">
+                                            <div class="flex items-center justify-between">
+                                                <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Lista de orçamentos</h3>
+                                                <span id="pdv-budget-count" class="text-xs font-semibold text-gray-500">0 registros</span>
+                                            </div>
+                                            <div class="rounded-xl border border-gray-200">
+                                                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                                    <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                                        <tr>
+                                                            <th scope="col" class="px-4 py-3">Código</th>
+                                                            <th scope="col" class="px-4 py-3">Cliente</th>
+                                                            <th scope="col" class="px-4 py-3">Validade</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="pdv-budget-list" class="divide-y divide-gray-100"></tbody>
+                                                </table>
+                                                <div id="pdv-budget-empty" class="hidden px-4 py-6 text-sm text-gray-500">Nenhum orçamento encontrado para o filtro selecionado.</div>
+                                            </div>
+                                        </section>
+                                        <section class="lg:col-span-3 space-y-4">
+                                            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                                <div>
+                                                    <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Detalhes do orçamento</h3>
+                                                    <p id="pdv-budget-details-hint" class="text-xs text-gray-500">Selecione um orçamento para visualizar os detalhes.</p>
+                                                </div>
+                                                <div class="flex flex-wrap gap-2">
+                                                    <button id="pdv-budget-import" type="button" class="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60">Importar orçamento</button>
+                                                    <button id="pdv-budget-delete" type="button" class="rounded-lg border border-red-200 px-4 py-2 text-xs font-semibold text-red-600 transition hover:border-red-500 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60">Excluir orçamento</button>
+                                                </div>
+                                            </div>
+                                            <div id="pdv-budget-details" class="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
+                                                <div id="pdv-budget-info" class="space-y-2 text-sm text-gray-600">
+                                                    <p><span class="font-semibold text-gray-700">Código:</span> <span id="pdv-budget-code">—</span></p>
+                                                    <p><span class="font-semibold text-gray-700">Cliente:</span> <span id="pdv-budget-customer">—</span></p>
+                                                    <p><span class="font-semibold text-gray-700">Validade:</span> <span id="pdv-budget-validity">—</span></p>
+                                                    <p><span class="font-semibold text-gray-700">Total:</span> <span id="pdv-budget-total">R$ 0,00</span></p>
+                                                </div>
+                                                <div class="overflow-x-auto">
+                                                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                                        <thead class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                                            <tr>
+                                                                <th scope="col" class="px-4 py-3">Cód. barras</th>
+                                                                <th scope="col" class="px-4 py-3">Nome</th>
+                                                                <th scope="col" class="px-4 py-3">Qtd</th>
+                                                                <th scope="col" class="px-4 py-3">Valor uni.</th>
+                                                                <th scope="col" class="px-4 py-3">Desconto</th>
+                                                                <th scope="col" class="px-4 py-3">Valor total</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="pdv-budget-items" class="divide-y divide-gray-100"></tbody>
+                                                    </table>
+                                                    <div id="pdv-budget-items-empty" class="px-4 py-6 text-sm text-gray-500">Nenhum item selecionado.</div>
+                                                </div>
+                                            </div>
+                                        </section>
+                                    </div>
+                                </section>
+                            </div>
                             <div data-tab-panel="delivery-tab" class="hidden space-y-5">
                                 <div class="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -458,6 +558,30 @@
                         </div>
                     </div>
                 </section>
+            </div>
+        </div>
+    </div>
+
+    <div id="pdv-budget-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-slate-900/60" data-budget-dismiss="backdrop"></div>
+        <div class="relative mx-auto mt-32 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-800">Salvar orçamento</h2>
+                    <p class="text-sm text-gray-500">Informe por quantos dias o orçamento será válido.</p>
+                </div>
+                <button type="button" id="pdv-budget-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de orçamento">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="space-y-4 px-6 py-5">
+                <label for="pdv-budget-validity" class="block text-sm font-semibold text-gray-700">Validade do orçamento (em dias)</label>
+                <input type="number" id="pdv-budget-validity" min="1" max="365" value="7" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 7">
+                <p id="pdv-budget-error" class="hidden text-sm font-semibold text-red-600">Informe um período de 1 a 365 dias.</p>
+            </div>
+            <div class="flex items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
+                <button type="button" id="pdv-budget-cancel" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
+                <button type="button" id="pdv-budget-confirm" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary">Continuar</button>
             </div>
         </div>
     </div>
