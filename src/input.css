@@ -1206,26 +1206,34 @@
   }
 
   body.admin-embedded main {
-    @apply min-h-0 px-4 py-6;
+    @apply mx-0 w-full max-w-full px-0 pt-3 pb-6;
+  }
+
+  body.admin-embedded main.container {
+    @apply max-w-none;
   }
 
   body.admin-embedded .admin-embedded-grid {
-    @apply block gap-6;
+    @apply gap-4;
+  }
+
+  body.admin-embedded .admin-tab-iframe-wrapper {
+    @apply bg-transparent;
   }
 
   body.admin-embedded[data-admin-tabs-root] {
     @apply h-full;
   }
 
-  .admin-tab-iframe {
-    width: 100%;
-    border: 0;
-    min-height: 720px;
+  .admin-tab-panel {
+    @apply h-full;
   }
 
-  @media (min-width: 768px) {
-    .admin-tab-iframe {
-      min-height: calc(100vh - 220px);
-    }
+  .admin-tab-iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    border: 0;
   }
 }
