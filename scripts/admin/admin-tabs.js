@@ -182,7 +182,7 @@
       panel.className = 'admin-tab-panel hidden';
 
       const frameWrapper = document.createElement('div');
-      frameWrapper.className = 'relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm';
+      frameWrapper.className = 'relative w-full admin-tab-iframe-wrapper';
 
       const loader = document.createElement('div');
       loader.className = 'absolute inset-0 flex items-center justify-center bg-white/80';
@@ -237,6 +237,12 @@
       }
     }
 
+    function isTabEligible(pathname) {
+      if (!pathname) return false;
+      const allowedPrefixes = ['/pages/admin/', '/pages/funcionarios/'];
+      return allowedPrefixes.some((prefix) => pathname.startsWith(prefix));
+    }
+
     function openTab(href, label) {
       const normalized = normalizeHref(href);
       if (!normalized) {
@@ -244,7 +250,7 @@
         return;
       }
 
-      if (!normalized.includes('/pages/admin/')) {
+      if (!isTabEligible(normalized)) {
         window.location.href = normalized;
         return;
       }
@@ -336,7 +342,7 @@
       if (!href || href === '#' || href.startsWith('mailto:') || href.startsWith('tel:')) return false;
       const normalized = normalizeHref(href);
       if (!normalized) return false;
-      if (!normalized.includes('/pages/admin/')) return false;
+      if (!isTabEligible(normalized)) return false;
       return true;
     }
 

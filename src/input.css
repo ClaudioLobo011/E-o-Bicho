@@ -1206,11 +1206,19 @@
   }
 
   body.admin-embedded main {
-    @apply min-h-0 px-4 py-6;
+    @apply min-h-0 w-full px-4 py-6;
+  }
+
+  body.admin-embedded main.container {
+    @apply max-w-full;
   }
 
   body.admin-embedded .admin-embedded-grid {
     @apply block gap-6;
+  }
+
+  body.admin-embedded .admin-tab-iframe-wrapper {
+    @apply bg-transparent;
   }
 
   body.admin-embedded[data-admin-tabs-root] {
