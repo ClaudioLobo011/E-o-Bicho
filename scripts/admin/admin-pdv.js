@@ -7118,6 +7118,12 @@
       customerName:
         appointment.clienteNome ||
         appointment.customerName ||
+        appointment.tutor ||
+        appointment.tutorNome ||
+        appointment.tutor?.nomeCompleto ||
+        appointment.tutor?.nomeContato ||
+        appointment.tutor?.razaoSocial ||
+        appointment.tutor?.nome ||
         appointment.cliente?.nomeCompleto ||
         appointment.cliente?.nomeContato ||
         appointment.cliente?.razaoSocial ||
@@ -7129,12 +7135,21 @@
         appointment.cliente?.documento ||
         appointment.documento ||
         '',
-      customerEmail: appointment.cliente?.email || appointment.email || '',
+      customerEmail:
+        appointment.cliente?.email ||
+        appointment.email ||
+        appointment.tutorEmail ||
+        appointment.emailTutor ||
+        '',
       customerPhone:
         appointment.cliente?.celular ||
         appointment.cliente?.telefone ||
         appointment.telefone ||
         appointment.celular ||
+        appointment.telefoneTutor ||
+        appointment.celularTutor ||
+        appointment.tutorTelefone ||
+        appointment.tutorCelular ||
         '',
       petId: normalizeId(appointment.petId || appointment.pet?._id),
       petName:
@@ -7151,6 +7166,21 @@
         '',
       paid: Boolean(appointment.pago || appointment.paid || appointment.quitado),
       saleCode: appointment.codigoVenda || appointment.saleCode || '',
+      professionalId: normalizeId(
+        appointment.profissionalId ||
+          appointment.professionalId ||
+          appointment.profissional?._id ||
+          appointment.profissional?.id
+      ),
+      professionalName:
+        appointment.profissionalNome ||
+        appointment.profissional ||
+        appointment.professionalName ||
+        appointment.professional ||
+        appointment.profissional?.nomeCompleto ||
+        appointment.profissional?.nomeContato ||
+        appointment.profissional?.razaoSocial ||
+        '',
       updatedAt: parseDateValue(appointment.updatedAt || appointment.atualizadoEm),
     };
   };
@@ -7353,6 +7383,9 @@
           `<span class="inline-flex items-center gap-1 rounded-full border border-dashed border-gray-300 px-2.5 py-1 text-xs font-semibold text-gray-500">+${extraServices} serviço(s)</span>`
         );
       }
+      const professionalLine = appointment.professionalName
+        ? `<p class="text-xs text-gray-500">Profissional: ${escapeHtml(appointment.professionalName)}</p>`
+        : '';
       const notes = appointment.notes
         ? `<p class="text-xs text-gray-500 italic">Obs.: ${escapeHtml(appointment.notes)}</p>`
         : '';
@@ -7406,6 +7439,7 @@
                 ? `Pet: ${escapeHtml(appointment.petName)}`
                 : 'Pet não informado'
             }</p>
+            ${professionalLine}
           </div>
           <div class="flex flex-wrap gap-2">${serviceBadges.join('')}</div>
           ${notes}
@@ -7539,7 +7573,15 @@
         force: forceReload,
       });
       if (requestId !== appointmentsRequestId) return;
-      state.appointments = dataset.map((item) => cloneAppointmentRecord(item)).filter(Boolean);
+      const normalizedList = dataset.map((item) => cloneAppointmentRecord(item)).filter(Boolean);
+      normalizedList.sort((a, b) => getTimeValue(a?.scheduledAt) - getTimeValue(b?.scheduledAt));
+      state.appointments = normalizedList;
+      if (state.activeAppointmentId) {
+        const stillExists = state.appointments.some((item) => item.id === state.activeAppointmentId);
+        if (!stillExists) {
+          state.activeAppointmentId = '';
+        }
+      }
       state.appointmentsLoading = false;
       const presetKey = (state.appointmentFilters.preset || 'today').toLowerCase();
       if (['today', 'week', 'month'].includes(presetKey)) {
@@ -7640,6 +7682,15 @@
     const applyUpdates = (appointment) => {
       if (!appointment) return;
       Object.assign(appointment, updates);
+      if (updates.status) {
+        appointment.status = (updates.status || '').toLowerCase();
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'saleCode')) {
+        appointment.saleCode = updates.saleCode || '';
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'paid')) {
+        appointment.paid = Boolean(updates.paid);
+      }
       if (Array.isArray(appointment.services)) {
         appointment.services = appointment.services.map((service) => ({ ...service }));
       }
@@ -7665,10 +7716,17 @@
         token,
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigoVenda: saleCode || '', pago: true }),
+        body: JSON.stringify({ codigoVenda: saleCode || '', pago: true, status: 'finalizado' }),
         errorMessage: 'Não foi possível atualizar o atendimento como pago.',
       });
-      updateAppointmentRecord(normalized, { paid: true, saleCode: saleCode || '' });
+      updateAppointmentRecord(normalized, {
+        paid: true,
+        saleCode: saleCode || '',
+        status: 'finalizado',
+      });
+      refreshAppointmentMetrics({ force: true }).catch((error) =>
+        console.error('Erro ao atualizar indicadores após finalizar venda do atendimento:', error)
+      );
     } catch (error) {
       console.error('Erro ao sincronizar atendimento após a venda:', error);
       notify(
