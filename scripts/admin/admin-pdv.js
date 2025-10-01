@@ -137,6 +137,8 @@
   };
 
   const elements = {};
+  let budgetImportDefaultLabel = 'Importar orçamento';
+  const BUDGET_IMPORT_FINALIZED_LABEL = 'Orçamento finalizado';
   const customerPetsCache = new Map();
   const customerAddressesCache = new Map();
 
@@ -1402,6 +1404,27 @@
         subtotal,
       };
     });
+    const finalizedSource =
+      budget.finalizedAt ||
+      budget.finalizadoEm ||
+      budget.finalizado_at ||
+      budget.dataFinalizacao ||
+      budget.finalizacaoEm ||
+      budget.dataFinalizada;
+    let finalizedAtIso = null;
+    if (finalizedSource) {
+      const parsed = new Date(finalizedSource);
+      if (!Number.isNaN(parsed.getTime())) {
+        finalizedAtIso = parsed.toISOString();
+      }
+    }
+    const finalizedSaleIdSource =
+      budget.finalizedSaleId ||
+      budget.vendaFinalizadaId ||
+      budget.vendaIdFinalizada ||
+      budget.finalizedSale ||
+      budget.saleFinalizedId ||
+      budget.vendaRelacionadaId;
     return {
       id,
       code: String(budget.code || budget.codigo || budget.numero || id),
@@ -1425,6 +1448,11 @@
               return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
             })()
           : null,
+      finalizedAt: finalizedAtIso,
+      finalizedSaleId:
+        finalizedSaleIdSource !== undefined && finalizedSaleIdSource !== null && finalizedSaleIdSource !== ''
+          ? String(finalizedSaleIdSource)
+          : '',
     };
   };
 
@@ -1716,6 +1744,7 @@
     elements.budgetCode = document.getElementById('pdv-budget-code');
     elements.budgetCustomer = document.getElementById('pdv-budget-customer');
     elements.budgetValidity = document.getElementById('pdv-budget-validity');
+    elements.budgetStatus = document.getElementById('pdv-budget-status');
     elements.budgetTotal = document.getElementById('pdv-budget-total');
     elements.budgetItems = document.getElementById('pdv-budget-items');
     elements.budgetItemsEmpty = document.getElementById('pdv-budget-items-empty');
@@ -1752,6 +1781,10 @@
     elements.budgetModalClose = document.getElementById('pdv-budget-close');
     elements.budgetModalBackdrop =
       elements.budgetModal?.querySelector('[data-budget-dismiss="backdrop"]') || null;
+    if (elements.budgetImport) {
+      budgetImportDefaultLabel =
+        elements.budgetImport.textContent?.trim() || budgetImportDefaultLabel;
+    }
 
     elements.fiscalStatusModal = document.getElementById('pdv-fiscal-status-modal');
     elements.fiscalStatusTitle = document.getElementById('pdv-fiscal-status-title');
@@ -3939,6 +3972,10 @@
       notify('Selecione um orçamento para importar.', 'info');
       return;
     }
+    if (isBudgetFinalized(budget)) {
+      notify('Este orçamento já foi finalizado e não pode ser importado novamente.', 'info');
+      return;
+    }
     state.activeBudgetId = budget.id;
     state.pendingBudgetValidityDays = clampBudgetValidityDays(budget.validityDays);
     applySaleStateSnapshot({
@@ -4254,6 +4291,8 @@
       notify('O valor pago deve ser igual ao total da venda.', 'warning');
       return;
     }
+    const budgetIdToFinalize = state.activeBudgetId || '';
+    const budgetToFinalize = budgetIdToFinalize ? findBudgetById(budgetIdToFinalize) : null;
     const saleCode = state.currentSaleCode || '';
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
@@ -4269,6 +4308,16 @@
       addition: state.vendaAcrescimo,
       customer: state.vendaCliente,
     });
+    if (budgetToFinalize) {
+      const finalizeIso = new Date().toISOString();
+      budgetToFinalize.status = 'finalizado';
+      budgetToFinalize.finalizedAt = finalizeIso;
+      budgetToFinalize.updatedAt = finalizeIso;
+      if (saleRecord?.id) {
+        budgetToFinalize.finalizedSaleId = saleRecord.id;
+      }
+      state.selectedBudgetId = budgetToFinalize.id;
+    }
     const successMessage = saleCode
       ? `Venda ${saleCode} finalizada com sucesso.`
       : 'Venda finalizada com sucesso.';
@@ -4287,6 +4336,10 @@
     updateFinalizeButton();
     updateSaleSummary();
     closeFinalizeModal();
+    if (budgetToFinalize) {
+      renderBudgets();
+      scheduleStatePersist({ immediate: true });
+    }
     advanceSaleCode();
     const preferences = state.printPreferences || {};
     const mode = normalizePrintMode(preferences.venda, 'PM');
@@ -6579,6 +6632,27 @@
     );
   };
 
+  const isBudgetFinalized = (budget) => {
+    const status = budget?.status ? String(budget.status).toLowerCase() : '';
+    return status === 'finalizado' || status === 'finalizada';
+  };
+
+  const describeBudgetStatus = (budget) => {
+    if (!budget) return '—';
+    if (isBudgetFinalized(budget)) {
+      if (budget.finalizedAt) {
+        const label = toDateLabel(budget.finalizedAt);
+        return label ? `Finalizado em ${label}` : 'Finalizado';
+      }
+      return 'Finalizado';
+    }
+    const status = budget.status ? String(budget.status).toLowerCase() : 'aberto';
+    if (status === 'cancelado' || status === 'cancelada') {
+      return 'Cancelado';
+    }
+    return 'Aberto';
+  };
+
   const getBudgetValidityLabel = (budget) => {
     if (!budget) return '—';
     const days = clampBudgetValidityDays(budget.validityDays);
@@ -6725,13 +6799,21 @@
       const tr = document.createElement('tr');
       tr.setAttribute('data-budget-id', budget.id);
       tr.className = 'cursor-pointer transition hover:bg-primary/5';
+      const finalized = isBudgetFinalized(budget);
       if (budget.id === state.selectedBudgetId) {
         tr.classList.add('bg-primary/10');
       }
+      if (finalized) {
+        tr.classList.add('bg-gray-50');
+      }
+      const validityLabel = escapeHtml(getBudgetValidityLabel(budget));
+      const statusBadge = finalized
+        ? ' <span class="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Finalizado</span>'
+        : '';
       tr.innerHTML = `
         <td class="px-4 py-3 font-semibold text-gray-700">${escapeHtml(budget.code)}</td>
         <td class="px-4 py-3 text-gray-600">${escapeHtml(getBudgetCustomerLabel(budget))}</td>
-        <td class="px-4 py-3 text-gray-600">${escapeHtml(getBudgetValidityLabel(budget))}</td>
+        <td class="px-4 py-3 text-gray-600">${validityLabel}${statusBadge}</td>
       `;
       fragment.appendChild(tr);
     });
@@ -6741,8 +6823,20 @@
   const renderBudgetDetails = () => {
     const budget = findBudgetById(state.selectedBudgetId);
     const hasBudget = Boolean(budget);
+    const budgetFinalized = isBudgetFinalized(budget);
     if (elements.budgetImport) {
-      elements.budgetImport.disabled = !hasBudget;
+      const canImport = hasBudget && !budgetFinalized;
+      elements.budgetImport.disabled = !canImport;
+      if (!hasBudget) {
+        elements.budgetImport.textContent = budgetImportDefaultLabel;
+        elements.budgetImport.title = '';
+      } else if (budgetFinalized) {
+        elements.budgetImport.textContent = BUDGET_IMPORT_FINALIZED_LABEL;
+        elements.budgetImport.title = 'Este orçamento já foi finalizado e não pode ser importado novamente.';
+      } else {
+        elements.budgetImport.textContent = budgetImportDefaultLabel;
+        elements.budgetImport.title = 'Importe este orçamento para o PDV.';
+      }
     }
     if (elements.budgetDelete) {
       elements.budgetDelete.disabled = !hasBudget;
@@ -6751,6 +6845,7 @@
       if (elements.budgetCode) elements.budgetCode.textContent = '—';
       if (elements.budgetCustomer) elements.budgetCustomer.textContent = '—';
       if (elements.budgetValidity) elements.budgetValidity.textContent = '—';
+      if (elements.budgetStatus) elements.budgetStatus.textContent = '—';
       if (elements.budgetTotal) elements.budgetTotal.textContent = formatCurrency(0);
       if (elements.budgetItems) elements.budgetItems.innerHTML = '';
       if (elements.budgetItemsEmpty) elements.budgetItemsEmpty.classList.remove('hidden');
@@ -6768,14 +6863,24 @@
     if (elements.budgetValidity) {
       elements.budgetValidity.textContent = getBudgetValidityLabel(budget);
     }
+    if (elements.budgetStatus) {
+      elements.budgetStatus.textContent = describeBudgetStatus(budget);
+    }
     if (elements.budgetTotal) {
       elements.budgetTotal.textContent = formatCurrency(getBudgetNetTotal(budget));
     }
     if (elements.budgetDetailsHint) {
       const paymentsLabel = describeBudgetPayments(budget);
-      elements.budgetDetailsHint.textContent = paymentsLabel
-        ? `Pagamentos sugeridos: ${paymentsLabel}.`
-        : 'Nenhum pagamento sugerido para este orçamento.';
+      const messages = [];
+      if (paymentsLabel) {
+        messages.push(`Pagamentos sugeridos: ${paymentsLabel}.`);
+      } else {
+        messages.push('Nenhum pagamento sugerido para este orçamento.');
+      }
+      if (budgetFinalized) {
+        messages.push('Este orçamento foi finalizado e não pode ser importado novamente.');
+      }
+      elements.budgetDetailsHint.textContent = messages.join(' ');
     }
     if (elements.budgetItems) {
       elements.budgetItems.innerHTML = '';
