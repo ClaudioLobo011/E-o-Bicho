@@ -3564,6 +3564,17 @@
     }
     sale.fiscalStatus = 'emitting';
     renderSalesList();
+    // Garante que o backend conheça a venda antes da emissão fiscal
+    if (statePersistTimeout) {
+      window.clearTimeout(statePersistTimeout);
+      statePersistTimeout = null;
+    }
+    while (statePersistInFlight) {
+      // Aguarda persistências anteriores concluírem para evitar condições de corrida
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
+    }
+    await flushStatePersist();
     try {
       const token = getToken();
       const headers = { 'Content-Type': 'application/json' };
