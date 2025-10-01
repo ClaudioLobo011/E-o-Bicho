@@ -26,7 +26,6 @@ async function loadComponents() {
                 if (id === 'account-sidebar-placeholder') {
                     updateActiveAccountLink();
                     checkAdminLink();
-                    checkFuncionariosLink();
                 }
 
                 if (id === 'header-placeholder') {
@@ -796,11 +795,6 @@ async function checkRoleLink(linkId, allowedRoles) {
     console.error('checkRoleLink:', e);
     toggle(false);
   }
-}
-
-// Mantém a assinatura pública pedida para Funcionários
-function checkFuncionariosLink() {
-  return checkRoleLink('funcionarios-link', ['funcionario','admin','admin_master']);
 }
 
 async function loadFeaturedProducts() {
