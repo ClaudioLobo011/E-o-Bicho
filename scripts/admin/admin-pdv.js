@@ -161,6 +161,7 @@
   const BUDGET_CODE_PREFIX = 'ORC';
   const BUDGET_CODE_PADDING = 6;
   const ACTIVE_TAB_STORAGE_KEY = 'adminPdvActiveTab';
+  let pendingActiveTabPreference = '';
   const loadActiveTabPreference = () => {
     if (typeof window === 'undefined') {
       return '';
@@ -197,6 +198,47 @@
   let statePersistPending = false;
   let lastPersistSignature = '';
   const normalizeId = (value) => (value == null ? '' : String(value));
+  const getDefaultPdvSelectionPreference = () => ({ storeId: '', pdvId: '' });
+  const PDV_SELECTION_STORAGE_KEY = 'adminPdvSelection';
+  const loadPdvSelectionPreference = () => {
+    if (typeof window === 'undefined') {
+      return getDefaultPdvSelectionPreference();
+    }
+    try {
+      const raw = window.localStorage?.getItem(PDV_SELECTION_STORAGE_KEY);
+      if (!raw) {
+        return getDefaultPdvSelectionPreference();
+      }
+      const parsed = JSON.parse(raw);
+      const storeId = normalizeId(parsed.storeId ?? parsed.companyId ?? '');
+      const pdvId = normalizeId(parsed.pdvId ?? parsed.pdv ?? '');
+      return { storeId, pdvId };
+    } catch (error) {
+      return getDefaultPdvSelectionPreference();
+    }
+  };
+  const persistPdvSelectionPreference = (partialSelection = {}) => {
+    if (typeof window === 'undefined' || !partialSelection || typeof partialSelection !== 'object') {
+      return;
+    }
+    try {
+      const current = loadPdvSelectionPreference();
+      const next = { ...current };
+      if (Object.prototype.hasOwnProperty.call(partialSelection, 'storeId')) {
+        next.storeId = normalizeId(partialSelection.storeId);
+      }
+      if (Object.prototype.hasOwnProperty.call(partialSelection, 'pdvId')) {
+        next.pdvId = normalizeId(partialSelection.pdvId);
+      }
+      if (!next.storeId && !next.pdvId) {
+        window.localStorage?.removeItem(PDV_SELECTION_STORAGE_KEY);
+        return;
+      }
+      window.localStorage?.setItem(PDV_SELECTION_STORAGE_KEY, JSON.stringify(next));
+    } catch (error) {
+      // Ignore storage persistence errors
+    }
+  };
   const normalizeStoreRecord = (store) => {
     if (!store || typeof store !== 'object') return store;
     const normalized = { ...store, _id: normalizeId(store._id) };
@@ -2025,11 +2067,22 @@
 
   const setActiveTab = (targetId, options = {}) => {
     const { persist = true } = options;
-    let resolvedTarget = targetId;
+    if (!elements.tabTriggers?.length || !elements.tabPanels?.length) return;
+    let resolvedTarget = targetId || 'caixa-tab';
     if (resolvedTarget === 'pdv-tab' && !state.caixaAberto) {
       resolvedTarget = 'caixa-tab';
     }
-    if (!elements.tabTriggers || !elements.tabPanels) return;
+    const availableTargets = Array.from(elements.tabPanels)
+      .map((panel) => panel.getAttribute('data-tab-panel') || '')
+      .filter(Boolean);
+    if (!availableTargets.length) {
+      return;
+    }
+    if (!availableTargets.includes(resolvedTarget)) {
+      resolvedTarget = availableTargets.includes('caixa-tab')
+        ? 'caixa-tab'
+        : availableTargets[0];
+    }
     elements.tabTriggers.forEach((trigger) => {
       const target = trigger.getAttribute('data-tab-target');
       const isActive = target === resolvedTarget;
@@ -2042,7 +2095,7 @@
       const panelId = panel.getAttribute('data-tab-panel');
       panel.classList.toggle('hidden', panelId !== resolvedTarget);
     });
-    if (persist) {
+    if (persist && resolvedTarget) {
       persistActiveTabPreference(resolvedTarget);
     }
   };
@@ -8489,7 +8542,7 @@
     updateCustomerModalActions();
     renderCustomerSearchResults();
     renderCustomerPets();
-    setActiveTab('caixa-tab');
+    setActiveTab('caixa-tab', { persist: false });
     updateSaleCodeDisplay();
     lastPersistSignature = '';
   };
@@ -8801,7 +8854,16 @@
     updateStatusBadge();
     updateTabAvailability();
     initializeSaleCodeForPdv(pdv);
-    setActiveTab(state.caixaAberto ? 'pdv-tab' : 'caixa-tab');
+    const fallbackTab = state.caixaAberto ? 'pdv-tab' : 'caixa-tab';
+    let targetTab = fallbackTab;
+    if (pendingActiveTabPreference) {
+      targetTab =
+        pendingActiveTabPreference === 'pdv-tab' && !state.caixaAberto
+          ? 'caixa-tab'
+          : pendingActiveTabPreference;
+    }
+    pendingActiveTabPreference = '';
+    setActiveTab(targetTab);
     lastPersistSignature = JSON.stringify(buildStatePersistPayload());
   };
 
@@ -9401,6 +9463,7 @@
     const value = normalizeId(elements.companySelect?.value || '');
     state.selectedStore = value;
     state.selectedPdv = '';
+    persistPdvSelectionPreference({ storeId: value, pdvId: '' });
     state.paymentMethods = [];
     state.paymentMethodsLoading = false;
     resetWorkspace();
@@ -9434,6 +9497,7 @@
   const handlePdvChange = async () => {
     const value = normalizeId(elements.pdvSelect?.value || '');
     state.selectedPdv = value;
+    persistPdvSelectionPreference({ pdvId: value });
     resetWorkspace();
     if (!value) {
       updateWorkspaceVisibility(false);
@@ -9451,6 +9515,39 @@
       updateWorkspaceVisibility(false);
       updateSelectionHint('Erro ao carregar o PDV. Selecione novamente.');
     }
+  };
+
+  const restorePersistedSelection = async (selection) => {
+    if (!selection || typeof selection !== 'object') {
+      return false;
+    }
+    const storeId = normalizeId(selection.storeId);
+    const pdvId = normalizeId(selection.pdvId);
+    if (!storeId) {
+      if (pdvId) {
+        persistPdvSelectionPreference({ pdvId: '' });
+      }
+      return false;
+    }
+    if (!findStoreById(storeId)) {
+      persistPdvSelectionPreference({ storeId: '', pdvId: '' });
+      return false;
+    }
+    if (elements.companySelect) {
+      elements.companySelect.value = storeId;
+    }
+    await handleCompanyChange();
+    let restored = Boolean(state.selectedStore);
+    if (pdvId && findPdvById(pdvId)) {
+      if (elements.pdvSelect) {
+        elements.pdvSelect.value = pdvId;
+      }
+      await handlePdvChange();
+      restored = Boolean(state.selectedPdv);
+    } else if (pdvId) {
+      persistPdvSelectionPreference({ pdvId: '' });
+    }
+    return restored;
   };
 
   const bindEvents = () => {
@@ -9594,8 +9691,9 @@
 
   const init = async () => {
     queryElements();
-    const preferredTab = loadActiveTabPreference();
-    setActiveTab(preferredTab || 'caixa-tab', { persist: false });
+    pendingActiveTabPreference = loadActiveTabPreference();
+    const selectionPreference = loadPdvSelectionPreference();
+    setActiveTab(pendingActiveTabPreference || 'caixa-tab', { persist: false });
     resetWorkspace();
     updateWorkspaceVisibility(false);
     bindEvents();
@@ -9605,9 +9703,15 @@
     updateTabAvailability();
     try {
       await fetchStores();
-      if (state.stores.length > 0) {
-        updateSelectionHint('Escolha a empresa para carregar os PDVs disponíveis.');
-      } else {
+      await restorePersistedSelection(selectionPreference);
+      if (!state.selectedStore) {
+        if (state.stores.length > 0) {
+          updateSelectionHint('Escolha a empresa para carregar os PDVs disponíveis.');
+        } else {
+          updateSelectionHint('Cadastre uma empresa para habilitar o PDV.');
+        }
+      }
+      if (state.stores.length === 0) {
         updateSelectionHint('Cadastre uma empresa para habilitar o PDV.');
       }
     } catch (error) {
