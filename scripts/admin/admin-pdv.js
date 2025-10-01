@@ -1891,9 +1891,6 @@
       elements.appointmentModal?.querySelector('[data-appointment-dismiss="backdrop"]') || null;
     elements.appointmentClose = document.getElementById('pdv-appointment-close');
     elements.appointmentPresets = document.getElementById('pdv-appointment-presets');
-    elements.appointmentKpiToday = document.getElementById('pdv-appointment-kpi-today');
-    elements.appointmentKpiWeek = document.getElementById('pdv-appointment-kpi-week');
-    elements.appointmentKpiMonth = document.getElementById('pdv-appointment-kpi-month');
     elements.appointmentStart = document.getElementById('pdv-appointment-start');
     elements.appointmentEnd = document.getElementById('pdv-appointment-end');
     elements.appointmentApply = document.getElementById('pdv-appointment-apply');
@@ -7351,7 +7348,6 @@
     const storeId = getActiveAppointmentStoreId();
     if (!storeId) {
       state.appointmentMetrics = { today: 0, week: 0, month: 0 };
-      renderAppointmentMetrics();
       return;
     }
     const presets = ['today', 'week', 'month'];
@@ -7370,7 +7366,6 @@
         console.error('Erro ao atualizar indicadores de atendimentos:', error);
       }
     }
-    renderAppointmentMetrics();
   };
   const renderAppointmentFilters = () => {
     const filters = state.appointmentFilters || { preset: 'today', start: '', end: '' };
@@ -7381,9 +7376,10 @@
         const isActive = preset === filters.preset && preset !== 'custom';
         button.classList.toggle('border-primary', isActive);
         button.classList.toggle('text-primary', isActive);
-        button.classList.toggle('bg-primary/5', isActive);
+        button.classList.toggle('bg-primary/10', isActive);
         button.classList.toggle('border-gray-200', !isActive);
-        button.classList.toggle('bg-gray-50', !isActive);
+        button.classList.toggle('bg-white', !isActive);
+        button.classList.toggle('text-gray-600', !isActive);
       });
     }
     if (elements.appointmentStart) {
@@ -7396,17 +7392,6 @@
       const count = state.appointments.length;
       const label = count === 1 ? '1 atendimento encontrado.' : `${count} atendimentos encontrados.`;
       elements.appointmentCount.textContent = label;
-    }
-  };
-  const renderAppointmentMetrics = () => {
-    if (elements.appointmentKpiToday) {
-      elements.appointmentKpiToday.textContent = String(state.appointmentMetrics.today || 0);
-    }
-    if (elements.appointmentKpiWeek) {
-      elements.appointmentKpiWeek.textContent = String(state.appointmentMetrics.week || 0);
-    }
-    if (elements.appointmentKpiMonth) {
-      elements.appointmentKpiMonth.textContent = String(state.appointmentMetrics.month || 0);
     }
   };
   const renderAppointmentList = () => {
@@ -7524,7 +7509,6 @@
   };
   const renderAppointments = () => {
     renderAppointmentFilters();
-    renderAppointmentMetrics();
     renderAppointmentList();
   };
   const openAppointmentModal = async () => {
