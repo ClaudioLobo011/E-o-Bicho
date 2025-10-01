@@ -760,9 +760,6 @@
   .h-\[55px\] {
     height: 55px;
   }
-  .h-\[72vh\] {
-    height: 72vh;
-  }
   .h-\[85vh\] {
     height: 85vh;
   }
@@ -5332,8 +5329,18 @@
     display: block;
     gap: calc(var(--spacing) * 6);
   }
-  body.admin-embedded [data-admin-tabs-root] {
+  body.admin-embedded[data-admin-tabs-root] {
     height: 100%;
+  }
+  .admin-tab-iframe {
+    width: 100%;
+    border: 0;
+    min-height: 720px;
+  }
+  @media (min-width: 768px) {
+    .admin-tab-iframe {
+      min-height: calc(100vh - 220px);
+    }
   }
 }
 @property --tw-translate-x {

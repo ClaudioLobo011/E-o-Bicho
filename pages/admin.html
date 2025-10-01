@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../src/output.css">
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-100" data-admin-tabs-root>
 
     <div id="admin-header-placeholder"></div>
 
@@ -20,63 +20,51 @@
             </aside>
 
             <div class="md:col-span-4">
-                <div class="flex flex-col gap-4" data-admin-tabs-root>
-                    <div class="rounded-2xl border border-gray-200 bg-white/80 px-2 shadow-sm backdrop-blur-sm">
-                        <div class="flex items-center gap-2 overflow-x-auto py-2" data-admin-tab-list role="tablist" aria-label="Abas do painel administrativo">
-                            <div class="flex items-center" data-tab-item data-tab-id="dashboard">
-                                <button id="admin-tab-trigger-dashboard" type="button" role="tab" aria-selected="true" aria-controls="admin-tab-dashboard" data-tab-trigger data-tab-id="dashboard" class="admin-tab-trigger inline-flex items-center gap-2 rounded-lg border border-transparent bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm transition hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/20">
-                                    <span class="truncate">Painel Principal</span>
-                                </button>
+                <div class="relative" data-admin-tab-panels>
+                    <section id="admin-tab-dashboard" role="tabpanel" aria-labelledby="admin-tab-trigger-dashboard" data-tab-panel data-tab-id="dashboard" class="admin-tab-panel">
+                        <div class="rounded-2xl bg-white p-6 shadow">
+                            <h1 class="mb-6 text-2xl font-bold text-gray-800">Painel Principal</h1>
+
+                            <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+
+                                <a href="admin/admin-produtos.html" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
+                                    <div class="flex items-center space-x-4">
+                                        <div class="rounded-full bg-primary/10 p-3">
+                                            <i class="fas fa-box-open text-2xl text-primary"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-lg font-bold text-gray-800">Gerir Produtos</h3>
+                                            <p class="text-sm text-gray-600">Adicionar e editar produtos</p>
+                                        </div>
+                                    </div>
+                                </a>
+                                <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
+                                    <div class="flex items-center space-x-4">
+                                        <div class="rounded-full bg-primary/10 p-3">
+                                            <i class="fas fa-receipt text-2xl text-primary"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-lg font-bold text-gray-800">Ver Pedidos</h3>
+                                            <p class="text-sm text-gray-600">Visualizar pedidos dos clientes</p>
+                                        </div>
+                                    </div>
+                                </a>
+
+                                <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
+                                    <div class="flex items-center space-x-4">
+                                        <div class="rounded-full bg-primary/10 p-3">
+                                            <i class="fas fa-users text-2xl text-primary"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-lg font-bold text-gray-800">Gerir Clientes</h3>
+                                            <p class="text-sm text-gray-600">Consultar lista de clientes</p>
+                                        </div>
+                                    </div>
+                                </a>
+
                             </div>
                         </div>
-                    </div>
-
-                    <div class="relative" data-admin-tab-panels>
-                        <section id="admin-tab-dashboard" role="tabpanel" aria-labelledby="admin-tab-trigger-dashboard" data-tab-panel data-tab-id="dashboard" class="admin-tab-panel">
-                            <div class="rounded-2xl bg-white p-6 shadow">
-                                <h1 class="mb-6 text-2xl font-bold text-gray-800">Painel Principal</h1>
-
-                                <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-
-                                    <a href="admin/admin-produtos.html" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                                        <div class="flex items-center space-x-4">
-                                            <div class="rounded-full bg-primary/10 p-3">
-                                                <i class="fas fa-box-open text-2xl text-primary"></i>
-                                            </div>
-                                            <div>
-                                                <h3 class="text-lg font-bold text-gray-800">Gerir Produtos</h3>
-                                                <p class="text-sm text-gray-600">Adicionar e editar produtos</p>
-                                            </div>
-                                        </div>
-                                    </a>
-                                    <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                                        <div class="flex items-center space-x-4">
-                                            <div class="rounded-full bg-primary/10 p-3">
-                                                <i class="fas fa-receipt text-2xl text-primary"></i>
-                                            </div>
-                                            <div>
-                                                <h3 class="text-lg font-bold text-gray-800">Ver Pedidos</h3>
-                                                <p class="text-sm text-gray-600">Visualizar pedidos dos clientes</p>
-                                            </div>
-                                        </div>
-                                    </a>
-
-                                    <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                                        <div class="flex items-center space-x-4">
-                                            <div class="rounded-full bg-primary/10 p-3">
-                                                <i class="fas fa-users text-2xl text-primary"></i>
-                                            </div>
-                                            <div>
-                                                <h3 class="text-lg font-bold text-gray-800">Gerir Clientes</h3>
-                                                <p class="text-sm text-gray-600">Consultar lista de clientes</p>
-                                            </div>
-                                        </div>
-                                    </a>
-
-                                </div>
-                            </div>
-                        </section>
-                    </div>
+                    </section>
                 </div>
             </div>
 
