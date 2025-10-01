@@ -10,41 +10,41 @@
 <body class="bg-gray-100">
     <div id="admin-header-placeholder"></div>
 
-    <main class="container mx-auto px-4 py-8 min-h-screen">
+    <main class="container mx-auto px-4 py-6 min-h-screen">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
             <aside class="md:col-span-4">
                 <div id="admin-sidebar-placeholder"></div>
             </aside>
 
             <div class="md:col-span-4 space-y-6">
-                <section class="bg-white border border-gray-100 rounded-xl shadow-sm p-6 space-y-6">
-                    <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                        <div>
-                            <h1 class="text-2xl font-bold text-gray-800">PDV</h1>
-                            <p class="text-sm text-gray-600">Selecione a empresa e o ponto de venda para operar o caixa.</p>
+                <section class="bg-white border border-gray-100 rounded-xl shadow-sm p-4 space-y-4">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div class="flex flex-col gap-1">
+                            <h1 class="text-xl font-semibold text-gray-800">PDV</h1>
+                            <p class="text-xs text-gray-600">Selecione a empresa e o ponto de venda para operar o caixa.</p>
                         </div>
-                        <div class="flex items-center gap-3 text-xs text-gray-500">
-                            <i class="fas fa-cash-register text-primary"></i>
-                            <span>Movimentação registrada diretamente no PDV</span>
+                        <div class="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] text-gray-500">
+                            <i class="fas fa-cash-register text-primary text-xs"></i>
+                            <span class="font-medium uppercase tracking-wide">Movimentação direta no PDV</span>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                        <div>
-                            <label for="company-select" class="block text-sm font-semibold text-gray-700 mb-1">Empresa</label>
-                            <select id="company-select" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                        <div class="space-y-1">
+                            <label for="company-select" class="block text-[13px] font-semibold text-gray-700">Empresa</label>
+                            <select id="company-select" class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
                                 <option value="">Selecione uma empresa</option>
                             </select>
                         </div>
-                        <div>
-                            <label for="pdv-select" class="block text-sm font-semibold text-gray-700 mb-1">PDV</label>
-                            <select id="pdv-select" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" disabled>
+                        <div class="space-y-1">
+                            <label for="pdv-select" class="block text-[13px] font-semibold text-gray-700">PDV</label>
+                            <select id="pdv-select" class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" disabled>
                                 <option value="">Selecione um PDV</option>
                             </select>
                         </div>
                     </div>
 
-                    <p id="pdv-selection-hint" class="text-xs text-gray-500">Escolha a empresa para carregar os PDVs disponíveis.</p>
+                    <p id="pdv-selection-hint" class="text-[11px] text-gray-500">Escolha a empresa para carregar os PDVs disponíveis.</p>
                 </section>
 
                 <section class="bg-white border border-gray-100 rounded-xl shadow-sm p-6 space-y-6">
