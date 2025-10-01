@@ -188,6 +188,26 @@
     }
     return normalized;
   };
+  const extractNormalizedId = (value) => {
+    if (value == null) return '';
+    if (typeof value === 'object') {
+      const directKeys = ['_id', 'id', 'value', 'codigo', 'codigoInterno'];
+      for (const key of directKeys) {
+        if (value[key] != null) {
+          return normalizeId(value[key]);
+        }
+      }
+      if (typeof value.toString === 'function') {
+        const stringValue = value.toString();
+        if (stringValue && stringValue !== '[object Object]') {
+          return normalizeId(stringValue);
+        }
+      }
+      return '';
+    }
+    return normalizeId(value);
+  };
+
   const normalizePdvRecord = (pdv) => {
     if (!pdv || typeof pdv !== 'object') return pdv;
     const normalized = { ...pdv, _id: normalizeId(pdv._id) };
@@ -196,15 +216,24 @@
     } else if (pdv.empresa != null) {
       normalized.empresa = normalizeId(pdv.empresa);
     }
+    if (pdv.empresaId != null) {
+      normalized.empresaId = normalizeId(pdv.empresaId);
+    }
     if (pdv.store && typeof pdv.store === 'object') {
       normalized.store = { ...pdv.store, _id: normalizeId(pdv.store._id) };
     } else if (pdv.store != null) {
       normalized.store = normalizeId(pdv.store);
     }
+    if (pdv.storeId != null) {
+      normalized.storeId = normalizeId(pdv.storeId);
+    }
     if (pdv.company && typeof pdv.company === 'object') {
       normalized.company = { ...pdv.company, _id: normalizeId(pdv.company._id) };
     } else if (pdv.company != null) {
       normalized.company = normalizeId(pdv.company);
+    }
+    if (pdv.companyId != null) {
+      normalized.companyId = normalizeId(pdv.companyId);
     }
     return normalized;
   };
@@ -308,22 +337,36 @@
   };
   const getPdvCompanyId = (pdv) => {
     if (!pdv) return '';
-    if (pdv.empresa && typeof pdv.empresa === 'object') return normalizeId(pdv.empresa._id);
-    if (pdv.empresa != null) return normalizeId(pdv.empresa);
-    if (pdv.company && typeof pdv.company === 'object') return normalizeId(pdv.company._id);
-    if (pdv.company != null) return normalizeId(pdv.company);
-    if (pdv.store && typeof pdv.store === 'object') return normalizeId(pdv.store._id);
-    if (pdv.store != null) return normalizeId(pdv.store);
+    const candidates = [
+      pdv.company,
+      pdv.companyId,
+      pdv.empresa,
+      pdv.empresaId,
+      pdv.store?.empresa,
+      pdv.store?.company,
+      pdv.store,
+      pdv.storeId,
+    ];
+    for (const candidate of candidates) {
+      const id = extractNormalizedId(candidate);
+      if (id) return id;
+    }
     return '';
   };
   const getPdvStoreId = (pdv) => {
     if (!pdv) return '';
-    if (pdv.store && typeof pdv.store === 'object') return normalizeId(pdv.store._id);
-    if (pdv.store != null) return normalizeId(pdv.store);
-    if (pdv.empresa && typeof pdv.empresa === 'object') return normalizeId(pdv.empresa._id);
-    if (pdv.empresa != null) return normalizeId(pdv.empresa);
-    if (pdv.company && typeof pdv.company === 'object') return normalizeId(pdv.company._id);
-    if (pdv.company != null) return normalizeId(pdv.company);
+    const candidates = [
+      pdv.store,
+      pdv.storeId,
+      pdv.empresa,
+      pdv.empresaId,
+      pdv.company,
+      pdv.companyId,
+    ];
+    for (const candidate of candidates) {
+      const id = extractNormalizedId(candidate);
+      if (id) return id;
+    }
     return '';
   };
   const getActiveAppointmentStoreId = () => {
@@ -7735,7 +7778,15 @@
   const syncAppointmentAfterSale = async (appointmentId, saleCode) => {
     const normalized = normalizeId(appointmentId);
     if (!normalized) return;
+    const previousState = findAppointmentById(normalized);
+    const optimisticUpdates = {
+      paid: true,
+      saleCode: saleCode || '',
+      status: 'finalizado',
+    };
+    updateAppointmentRecord(normalized, optimisticUpdates);
     const token = getToken();
+    let syncSucceeded = false;
     try {
       await fetchWithOptionalAuth(`${API_BASE}/func/agendamentos/${normalized}`, {
         token,
@@ -7744,21 +7795,31 @@
         body: JSON.stringify({ codigoVenda: saleCode || '', pago: true, status: 'finalizado' }),
         errorMessage: 'Não foi possível atualizar o atendimento como pago.',
       });
-      updateAppointmentRecord(normalized, {
-        paid: true,
-        saleCode: saleCode || '',
-        status: 'finalizado',
-      });
+      syncSucceeded = true;
       refreshAppointmentMetrics({ force: true }).catch((error) =>
         console.error('Erro ao atualizar indicadores após finalizar venda do atendimento:', error)
       );
     } catch (error) {
       console.error('Erro ao sincronizar atendimento após a venda:', error);
+      if (previousState) {
+        updateAppointmentRecord(normalized, {
+          paid: Boolean(previousState.paid),
+          saleCode: previousState.saleCode || '',
+          status: previousState.status || 'agendado',
+        });
+      }
       notify(
         'Venda finalizada, porém não foi possível atualizar o atendimento na agenda.',
         'warning'
       );
     } finally {
+      if (!syncSucceeded && !previousState) {
+        updateAppointmentRecord(normalized, {
+          paid: false,
+          saleCode: '',
+          status: 'agendado',
+        });
+      }
       state.activeAppointmentId = '';
     }
   };

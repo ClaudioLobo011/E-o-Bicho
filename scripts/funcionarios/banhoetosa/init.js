@@ -45,13 +45,6 @@ function setupShortcuts() {
 
 function bindBaseEvents() {
   els.addBtn?.addEventListener('click', () => {
-    try {
-      const vm = document.getElementById('venda-modal');
-      if (vm && !vm.classList.contains('hidden')) {
-        vm.classList.add('hidden');
-        vm.setAttribute('aria-hidden', 'true');
-      }
-    } catch {}
     openAddModal();
   });
   els.modalClose?.addEventListener('click', closeModal);
