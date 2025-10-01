@@ -180,9 +180,13 @@
       panel.setAttribute('role', 'tabpanel');
       panel.setAttribute('aria-labelledby', `admin-tab-trigger-${id}`);
       panel.className = 'admin-tab-panel hidden';
+      panel.dataset.embeddedPanel = 'true';
 
       const frameWrapper = document.createElement('div');
       frameWrapper.className = 'relative w-full admin-tab-iframe-wrapper';
+      frameWrapper.style.minHeight = 'inherit';
+      frameWrapper.style.display = 'flex';
+      frameWrapper.style.flexDirection = 'column';
 
       const loader = document.createElement('div');
       loader.className = 'absolute inset-0 flex items-center justify-center bg-white/80';
@@ -197,6 +201,9 @@
       iframe.className = 'admin-tab-iframe';
       iframe.setAttribute('loading', 'lazy');
       iframe.setAttribute('title', label);
+      iframe.style.flex = '1 1 auto';
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
       iframe.src = buildIframeSrc(href);
 
       iframe.addEventListener('load', () => {
@@ -243,6 +250,62 @@
       return allowedPrefixes.some((prefix) => pathname.startsWith(prefix));
     }
 
+    function computeAvailablePanelHeight() {
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const tabListElement = root.querySelector('[data-admin-tab-list]');
+      const header = tabListElement ? tabListElement.closest('header') : null;
+      const headerRect = header ? header.getBoundingClientRect() : { bottom: 0, top: 0 };
+      const rootRect = root.getBoundingClientRect();
+      const offsetTop = headerRect.bottom - rootRect.top;
+      const available = viewportHeight - offsetTop - 16; // keep a small breathing space below the header
+      const MIN_PANEL_HEIGHT = 480;
+      return Math.max(available, MIN_PANEL_HEIGHT);
+    }
+
+    let pendingHeightUpdate = null;
+
+    function applyPanelHeights() {
+      const available = computeAvailablePanelHeight();
+      if (!Number.isFinite(available) || available <= 0) {
+        return;
+      }
+
+      panelContainer.style.minHeight = `${available}px`;
+
+      tabs.forEach((entry) => {
+        if (entry.panel) {
+          entry.panel.style.minHeight = `${available}px`;
+        }
+
+        if (entry.iframe) {
+          entry.iframe.style.minHeight = `${available}px`;
+        }
+      });
+    }
+
+    function queuePanelHeightUpdate() {
+      if (pendingHeightUpdate !== null) {
+        cancelAnimationFrame(pendingHeightUpdate);
+      }
+
+      pendingHeightUpdate = requestAnimationFrame(() => {
+        pendingHeightUpdate = null;
+        applyPanelHeights();
+      });
+    }
+
+    const tabHeaderElement = root.querySelector('[data-admin-tab-list]');
+    let headerResizeObserver = null;
+    if (typeof ResizeObserver === 'function' && tabHeaderElement) {
+      const header = tabHeaderElement.closest('header');
+      if (header) {
+        headerResizeObserver = new ResizeObserver(() => queuePanelHeightUpdate());
+        headerResizeObserver.observe(header);
+      }
+    }
+
+    window.addEventListener('resize', queuePanelHeightUpdate);
+
     function openTab(href, label) {
       const normalized = normalizeHref(href);
       if (!normalized) {
@@ -278,7 +341,7 @@
       tabList.appendChild(item);
       ensureTabVisible(item);
 
-      const { panel } = createIframePanel(newId, href, resolvedLabel);
+      const { panel, iframe } = createIframePanel(newId, href, resolvedLabel);
       panelContainer.appendChild(panel);
 
       const record = {
@@ -288,6 +351,7 @@
         panel,
         item,
         closeBtn,
+        iframe,
         locked: false,
       };
 
@@ -296,6 +360,7 @@
       order.push(newId);
 
       setActive(newId);
+      queuePanelHeightUpdate();
     }
 
     function registerDefaultTab() {
@@ -328,10 +393,12 @@
     }
 
     registerDefaultTab();
+    queuePanelHeightUpdate();
 
     if (pendingOpenCommands.length) {
       const queued = pendingOpenCommands.splice(0, pendingOpenCommands.length);
       queued.forEach(([href, label]) => openTab(href, label));
+      queuePanelHeightUpdate();
     }
 
     function shouldHandleLink(anchor) {
