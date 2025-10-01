@@ -322,9 +322,11 @@ const buildQrCodeRJ = ({ chNFe, tpAmb, idToken, csc }) => {
   // Conforme a versão vigente do Manual de Orientação Técnica do QR Code da
   // NFC-e do RJ, tanto o QR Code on-line (parâmetro "p") quanto o endereço
   // impresso no DANFE (campo <urlChave>) devem apontar para o domínio
-  // consultadfe.fazenda.rj.gov.br.
-  const qrCodeBase = 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode';
-  const urlChaveBase = 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode';
+  // oficial www4.fazenda.rj.gov.br, que é o mesmo informado na tabela de URLs
+  // publicada pela SEFAZ/RJ para homologação e produção (o domínio realiza o
+  // redirecionamento para consultadfe.fazenda.rj.gov.br).
+  const qrCodeBase = 'https://www4.fazenda.rj.gov.br/consultaNFCe/QRCode';
+  const urlChaveBase = 'https://www4.fazenda.rj.gov.br/consultaNFCe/QRCode';
   const idT = String(idToken ?? '').replace(/^0+/, '');
   const pSemHash = `${chNFe}|${versaoQR}|${tpAmb}|${idT}`;
   const token = String(csc ?? '');
