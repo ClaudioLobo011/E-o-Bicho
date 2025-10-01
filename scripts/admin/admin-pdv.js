@@ -135,6 +135,7 @@
     appointmentsLoading: false,
     appointmentFilters: { preset: 'today', start: '', end: '' },
     appointmentMetrics: { today: 0, week: 0, month: 0 },
+    appointmentScrollPending: false,
     activeAppointmentId: '',
     activeSaleCancellationId: '',
     fiscalEmissionStep: '',
@@ -1887,13 +1888,11 @@
     elements.budgetItemsEmpty = document.getElementById('pdv-budget-items-empty');
 
     elements.appointmentModal = document.getElementById('pdv-appointment-modal');
+    elements.appointmentScrollContainer = document.querySelector('[data-appointment-scroll-container]');
     elements.appointmentBackdrop =
       elements.appointmentModal?.querySelector('[data-appointment-dismiss="backdrop"]') || null;
     elements.appointmentClose = document.getElementById('pdv-appointment-close');
     elements.appointmentPresets = document.getElementById('pdv-appointment-presets');
-    elements.appointmentKpiToday = document.getElementById('pdv-appointment-kpi-today');
-    elements.appointmentKpiWeek = document.getElementById('pdv-appointment-kpi-week');
-    elements.appointmentKpiMonth = document.getElementById('pdv-appointment-kpi-month');
     elements.appointmentStart = document.getElementById('pdv-appointment-start');
     elements.appointmentEnd = document.getElementById('pdv-appointment-end');
     elements.appointmentApply = document.getElementById('pdv-appointment-apply');
@@ -7351,7 +7350,6 @@
     const storeId = getActiveAppointmentStoreId();
     if (!storeId) {
       state.appointmentMetrics = { today: 0, week: 0, month: 0 };
-      renderAppointmentMetrics();
       return;
     }
     const presets = ['today', 'week', 'month'];
@@ -7370,7 +7368,6 @@
         console.error('Erro ao atualizar indicadores de atendimentos:', error);
       }
     }
-    renderAppointmentMetrics();
   };
   const renderAppointmentFilters = () => {
     const filters = state.appointmentFilters || { preset: 'today', start: '', end: '' };
@@ -7379,11 +7376,13 @@
       buttons.forEach((button) => {
         const preset = button.getAttribute('data-appointment-preset');
         const isActive = preset === filters.preset && preset !== 'custom';
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
         button.classList.toggle('border-primary', isActive);
         button.classList.toggle('text-primary', isActive);
-        button.classList.toggle('bg-primary/5', isActive);
+        button.classList.toggle('bg-primary/10', isActive);
         button.classList.toggle('border-gray-200', !isActive);
-        button.classList.toggle('bg-gray-50', !isActive);
+        button.classList.toggle('bg-white', !isActive);
+        button.classList.toggle('text-gray-600', !isActive);
       });
     }
     if (elements.appointmentStart) {
@@ -7398,29 +7397,32 @@
       elements.appointmentCount.textContent = label;
     }
   };
-  const renderAppointmentMetrics = () => {
-    if (elements.appointmentKpiToday) {
-      elements.appointmentKpiToday.textContent = String(state.appointmentMetrics.today || 0);
-    }
-    if (elements.appointmentKpiWeek) {
-      elements.appointmentKpiWeek.textContent = String(state.appointmentMetrics.week || 0);
-    }
-    if (elements.appointmentKpiMonth) {
-      elements.appointmentKpiMonth.textContent = String(state.appointmentMetrics.month || 0);
-    }
-  };
   const renderAppointmentList = () => {
     if (!elements.appointmentList || !elements.appointmentEmpty || !elements.appointmentLoading) return;
+    const scrollContainer = elements.appointmentScrollContainer;
+    const maybeResetScroll = (smooth = false) => {
+      if (!state.appointmentScrollPending) return;
+      if (scrollContainer) {
+        if (typeof scrollContainer.scrollTo === 'function') {
+          scrollContainer.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
+        } else {
+          scrollContainer.scrollTop = 0;
+        }
+      }
+      state.appointmentScrollPending = false;
+    };
     elements.appointmentLoading.classList.toggle('hidden', !state.appointmentsLoading);
     if (state.appointmentsLoading) {
       elements.appointmentEmpty.classList.add('hidden');
       elements.appointmentList.innerHTML = '';
+      maybeResetScroll(false);
       return;
     }
     const appointments = Array.isArray(state.appointments) ? state.appointments : [];
     if (!appointments.length) {
       elements.appointmentList.innerHTML = '';
       elements.appointmentEmpty.classList.remove('hidden');
+      maybeResetScroll(false);
       return;
     }
     elements.appointmentEmpty.classList.add('hidden');
@@ -7521,10 +7523,10 @@
     });
     elements.appointmentList.innerHTML = '';
     elements.appointmentList.appendChild(fragment);
+    maybeResetScroll(true);
   };
   const renderAppointments = () => {
     renderAppointmentFilters();
-    renderAppointmentMetrics();
     renderAppointmentList();
   };
   const openAppointmentModal = async () => {
@@ -7632,6 +7634,7 @@
     }
     const requestId = ++appointmentsRequestId;
     state.appointmentsLoading = true;
+    state.appointmentScrollPending = true;
     renderAppointments();
     try {
       const dataset = await loadAppointmentsDataset({
@@ -8375,6 +8378,7 @@
     state.appointmentsLoading = false;
     state.appointmentFilters = { preset: 'today', start: '', end: '' };
     state.appointmentMetrics = { today: 0, week: 0, month: 0 };
+    state.appointmentScrollPending = false;
     state.activeAppointmentId = '';
     state.activeSaleCancellationId = '';
     state.activePdvStoreId = '';
@@ -8752,6 +8756,7 @@
     state.appointmentsLoading = false;
     state.appointmentFilters = { preset: 'today', start: '', end: '' };
     state.appointmentMetrics = { today: 0, week: 0, month: 0 };
+    state.appointmentScrollPending = false;
     state.activeAppointmentId = '';
     appointmentCache.clear();
     appointmentsRequestId = 0;
