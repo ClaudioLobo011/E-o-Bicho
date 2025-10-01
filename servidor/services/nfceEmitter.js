@@ -140,17 +140,9 @@ const onlyDigits = (s) => String(s ?? '').replace(/\D/g, '');
 const dec = (n) => Number(n ?? 0).toFixed(2);
 const sanitize = (value) => sanitizeXmlText(value);
 
-const buildCdataSection = (value) => {
-  const safeValue = String(value ?? '');
-  if (!safeValue) {
-    return '<![CDATA[]]>';
-  }
-  return `<![CDATA[${safeValue.replace(/\]\]>/g, ']]]]><![CDATA[>')}]]>`;
-};
-
 const sanitizeQrCodeContent = (value) => {
   const normalized = normalizeWhitespace(value ?? '').trim();
-  return buildCdataSection(normalized);
+  return sanitize(normalized);
 };
 const pushTagIf = (arr, tag, value, indent = '        ') => {
   const v = sanitize(value);
