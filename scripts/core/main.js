@@ -37,6 +37,10 @@ async function loadComponents() {
                     checkAdminLink();
                 }
 
+                if (id === 'admin-header-placeholder') {
+                    try { initializeAdminHeaderSearch(); } catch(_) {}
+                }
+
                 if (id === 'cart-placeholder') {
                     initializeCart(); // A função agora é chamada aqui!
                 }
@@ -496,6 +500,252 @@ function initializeHeaderSearch() {
   panel.addEventListener('click', (e)=>{
     const li = e.target.closest('[data-term]');
     if (li) navigateToSearch(li.dataset.term);
+  });
+}
+
+function initializeAdminHeaderSearch() {
+  const root = document.querySelector('[data-admin-screen-search]');
+  if (!root || root.dataset.enhanced === 'true') return;
+
+  const input = root.querySelector('[data-admin-screen-search-input]');
+  const panel = root.querySelector('[data-admin-screen-search-results]');
+  const list = root.querySelector('[data-results-list]');
+  const emptyState = root.querySelector('[data-empty-state]');
+  const noResultsState = root.querySelector('[data-no-results]');
+  if (!input || !panel || !list || !emptyState || !noResultsState) return;
+
+  root.dataset.enhanced = 'true';
+
+  const normalize = (value = '') => value
+    .toString()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+
+  let screens = [];
+  let matches = [];
+  let activeIndex = -1;
+
+  const MIN_LENGTH = 2;
+
+  const placeholder = document.getElementById('admin-sidebar-placeholder');
+
+  const collectGroups = (link) => {
+    const groups = [];
+    let current = link.closest('[data-accordion-content]');
+    while (current) {
+      const toggle = current.previousElementSibling;
+      if (toggle && toggle.hasAttribute('data-accordion-button')) {
+        const text = toggle.textContent.replace(/\s+/g, ' ').trim();
+        if (text) groups.unshift(text);
+        current = toggle.closest('[data-accordion-content]');
+      } else {
+        break;
+      }
+    }
+    return groups;
+  };
+
+  const collectScreens = () => {
+    if (!placeholder) return [];
+    const panelEl = placeholder.querySelector('[data-admin-sidebar-panel]');
+    if (!panelEl) return [];
+
+    const links = Array.from(panelEl.querySelectorAll('a[href]:not([href="#"])'));
+    const unique = new Map();
+
+    links.forEach((link) => {
+      const href = link.getAttribute('href');
+      if (!href) return;
+      const label = link.textContent.replace(/\s+/g, ' ').trim();
+      if (!label) return;
+
+      const groups = collectGroups(link);
+      const searchText = normalize(`${label} ${groups.join(' ')}`);
+
+      if (!unique.has(href)) {
+        unique.set(href, {
+          label,
+          href,
+          groups,
+          searchText,
+        });
+      }
+    });
+
+    return Array.from(unique.values());
+  };
+
+  const refreshScreens = () => {
+    const collected = collectScreens();
+    if (collected.length) {
+      screens = collected;
+    }
+  };
+
+  refreshScreens();
+
+  if (placeholder && !screens.length) {
+    const observer = new MutationObserver(() => {
+      refreshScreens();
+      if (screens.length) observer.disconnect();
+    });
+    observer.observe(placeholder, { childList: true, subtree: true });
+  }
+
+  const hidePanel = () => {
+    panel.classList.add('hidden');
+    activeIndex = -1;
+    matches = [];
+  };
+
+  const showPanel = () => {
+    panel.classList.remove('hidden');
+  };
+
+  const setState = (state) => {
+    showPanel();
+    if (state === 'empty') {
+      emptyState.classList.remove('hidden');
+      noResultsState.classList.add('hidden');
+      list.classList.add('hidden');
+    } else if (state === 'no-results') {
+      emptyState.classList.add('hidden');
+      noResultsState.classList.remove('hidden');
+      list.classList.add('hidden');
+    } else if (state === 'results') {
+      emptyState.classList.add('hidden');
+      noResultsState.classList.add('hidden');
+      list.classList.remove('hidden');
+    }
+  };
+
+  const highlight = (index) => {
+    const items = list.querySelectorAll('a[data-index]');
+    items.forEach((item, idx) => {
+      if (idx === index) {
+        item.classList.add('bg-primary/10');
+      } else {
+        item.classList.remove('bg-primary/10');
+      }
+    });
+    activeIndex = index;
+  };
+
+  const openMatch = (index) => {
+    const match = matches[index];
+    if (!match) return;
+    window.location.href = match.href;
+    hidePanel();
+  };
+
+  const renderMatches = () => {
+    list.innerHTML = matches
+      .map((screen, index) => {
+        const breadcrumb = screen.groups.length ? `<span class="text-xs text-gray-500">${screen.groups.join(' • ')}</span>` : '';
+        return `
+          <li>
+            <a href="${screen.href}" data-index="${index}" class="flex w-full flex-col gap-1 rounded-lg px-3 py-2 text-sm text-gray-800 transition focus:outline-none focus:ring-0 hover:bg-primary/10">
+              <span class="font-semibold text-gray-900 leading-tight">${screen.label}</span>
+              ${breadcrumb}
+            </a>
+          </li>
+        `;
+      })
+      .join('');
+    highlight(matches.length ? 0 : -1);
+  };
+
+  const filterScreens = (value) => {
+    const term = value.trim();
+    if (!term) {
+      matches = [];
+      list.innerHTML = '';
+      setState('empty');
+      highlight(-1);
+      return;
+    }
+
+    if (term.length < MIN_LENGTH) {
+      matches = [];
+      list.innerHTML = '';
+      setState('empty');
+      highlight(-1);
+      return;
+    }
+
+    const normalized = normalize(term);
+    matches = screens
+      .filter((screen) => screen.searchText.includes(normalized))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+
+    if (!matches.length) {
+      list.innerHTML = '';
+      setState('no-results');
+      highlight(-1);
+      return;
+    }
+
+    renderMatches();
+    setState('results');
+  };
+
+  list.classList.add('hidden');
+
+  input.addEventListener('focus', () => {
+    refreshScreens();
+    if (input.value.trim().length >= MIN_LENGTH) {
+      filterScreens(input.value);
+    } else {
+      setState('empty');
+    }
+  });
+
+  input.addEventListener('input', () => {
+    refreshScreens();
+    filterScreens(input.value);
+  });
+
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown') {
+      if (!matches.length) return;
+      event.preventDefault();
+      const next = activeIndex < matches.length - 1 ? activeIndex + 1 : 0;
+      highlight(next);
+    } else if (event.key === 'ArrowUp') {
+      if (!matches.length) return;
+      event.preventDefault();
+      const prev = activeIndex > 0 ? activeIndex - 1 : matches.length - 1;
+      highlight(prev);
+    } else if (event.key === 'Enter') {
+      if (matches.length === 1 && activeIndex === -1) {
+        event.preventDefault();
+        openMatch(0);
+      } else if (activeIndex >= 0) {
+        event.preventDefault();
+        openMatch(activeIndex);
+      }
+    } else if (event.key === 'Escape') {
+      hidePanel();
+      input.blur();
+    }
+  });
+
+  list.addEventListener('click', (event) => {
+    const anchor = event.target.closest('a[data-index]');
+    if (!anchor) return;
+    event.preventDefault();
+    const index = Number(anchor.dataset.index);
+    if (!Number.isNaN(index)) {
+      openMatch(index);
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!root.contains(event.target)) {
+      hidePanel();
+    }
   });
 }
 
