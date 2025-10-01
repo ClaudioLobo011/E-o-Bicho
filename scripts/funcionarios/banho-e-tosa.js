@@ -76,91 +76,13 @@
     }
   }
 
-  // --- Modal de Código de Venda ---
-  let __vendaTargetId = null;
+  const SALE_VIA_PDV_MESSAGE = 'Finalize a venda pelo PDV para gerar o código automaticamente.';
 
-  function openVendaModal(item) {
-      __vendaTargetId = item?._id || null;
-
-      const m = document.getElementById('venda-modal');
-      const input = document.getElementById('venda-codigo-input');
-      const lab = document.getElementById('venda-modal-title');
-      if (!m || !input) return;
-
-      // fecha a modal de edição, se estiver aberta, para evitar “duas telas”
-      try {
-        const modalAdd = document.getElementById('modal-add-servico');
-        if (modalAdd && !modalAdd.classList.contains('hidden')) {
-          modalAdd.classList.add('hidden');
-          modalAdd.classList.remove('flex');
-        }
-      } catch (_) {}
-
-      if (lab) lab.textContent = `Registrar venda — ${item?.clienteNome || ''} | ${item?.pet || ''}`;
-      input.value = item?.codigoVenda || '';
-
-      // garante abertura VISÍVEL e no topo
-      m.classList.remove('hidden');
-      m.classList.add('flex');
-      try {
-        m.style.display = '';         // remove display inline residual
-        m.style.zIndex = '9999';      // acima dos demais z-50
-        m.style.pointerEvents = 'auto';
-        m.setAttribute('aria-hidden', 'false');
-      } catch (_) {}
-
-      // foco no input
-      requestAnimationFrame(() => { try { input.focus(); } catch(_){} });
-    }
-
-  function closeVendaModal() {
-    __vendaTargetId = null;
-    const m = document.getElementById('venda-modal');
-    if (m) m.classList.add('hidden');
+  function openVendaModal() {
+    notify(SALE_VIA_PDV_MESSAGE, 'info');
   }
 
-  // Bind dos botões da modal (uma única vez)
-  (function bindVendaModalOnce(){
-    if (document.__bindVendaModalApplied) return;
-    document.__bindVendaModalApplied = true;
-
-    const cancel = document.getElementById('venda-cancel-btn');
-    const closeX = document.getElementById('venda-close-btn');
-    const save = document.getElementById('venda-save-btn');
-
-    cancel?.addEventListener('click', closeVendaModal);
-    closeX?.addEventListener('click', closeVendaModal);
-
-    save?.addEventListener('click', async () => {
-      const input = document.getElementById('venda-codigo-input');
-      const code = String(input?.value || '').trim();
-      if (!__vendaTargetId) { alert('Agendamento inválido.'); return; }
-      if (!code) { alert('Informe o código da venda.'); return; }
-
-      try {
-        const resp = await api(`/func/agendamentos/${__vendaTargetId}`, {
-          method: 'PUT',
-          body: JSON.stringify({ codigoVenda: code, pago: true })
-        });
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({}));
-          throw new Error(err.message || 'Falha ao registrar o código de venda.');
-        }
-        closeVendaModal();
-
-        // Atualiza grade/contadores (mantendo padrões do arquivo)
-        await loadAgendamentos();
-        renderKpis?.();
-        renderFilters?.();
-        renderGrid();
-        enhanceAgendaUI?.();
-      } catch (e) {
-        console.error('venda-save', e);
-        alert(e.message || 'Não foi possível registrar o código de venda.');
-      }
-    });
-    
-  })();
+  function closeVendaModal() {}
 
   window.openVendaModal = openVendaModal;
   window.closeVendaModal = closeVendaModal;
@@ -2218,9 +2140,6 @@
     if (!id) return;
 
     if (btn.classList.contains('edit')) {
-      // Se a modal de venda estiver aberta, não abrir edição (para versões que ainda usam este arquivo)
-      const vendaOpen = !document.getElementById('venda-modal')?.classList.contains('hidden');
-      if (vendaOpen) return;
       const item = state.agendamentos.find(x => String(x._id) === String(id));
       if (!item) return;
       if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) {
@@ -2242,17 +2161,8 @@
         notify('Este agendamento já possui código de venda registrado.', 'warning');
         return;
       }
-        // Fecha a de edição, se por algum motivo estiver visível
-        try {
-          const modalAdd = document.getElementById('modal-add-servico');
-          if (modalAdd && !modalAdd.classList.contains('hidden')) {
-            modalAdd.classList.add('hidden');
-            modalAdd.classList.remove('flex');
-            modalAdd.style.display = 'none';
-            modalAdd.setAttribute('aria-hidden', 'true');
-          }
-        } catch (_) {}
-        requestAnimationFrame(() => (window.openVendaModal || openVendaModal)(item)); // agora abre somente a modal de venda
+
+      notify(SALE_VIA_PDV_MESSAGE, 'info');
     }
   });
 

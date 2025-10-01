@@ -6,12 +6,11 @@ import { renderGrid } from './grid.js';
 import { enhanceAgendaUI } from './ui.js';
 import { confirmCheckinPrompt, openCheckinModal, findAppointmentById, closeCheckinModal, isCheckinModalOpen } from './checkin.js';
 
-let __vendaTargetId = null;
-let __vendaLastFocus = null;
-
 let __pendingCheckin = null;
 let __pendingCheckinTimer = null;
 let __pendingCheckinPromise = null;
+
+const SALE_VIA_PDV_MESSAGE = 'Finalize a venda pelo PDV para gerar o código automaticamente.';
 
 function clearPendingCheckinQueue() {
   if (__pendingCheckinTimer) {
@@ -144,117 +143,11 @@ if (typeof document !== 'undefined') {
   });
 }
 
-export function openVendaModal(item) {
-  __vendaTargetId = item?._id || null;
-
-  const m = document.getElementById('venda-modal');
-  const input = document.getElementById('venda-codigo-input');
-  const lab = document.getElementById('venda-modal-title');
-  if (!m || !input) return;
-
-  // salva o elemento atualmente focado para restaurar apÃ³s o fechamento
-  __vendaLastFocus = document.activeElement;
-
-  // se a modal de "Adicionar ServiÃ§o" estiver aberta, fecha para nÃ£o ter duas sobrepostas
-  try {
-    const modalAdd = document.getElementById('modal-add-servico');
-    if (modalAdd && !modalAdd.classList.contains('hidden')) {
-      modalAdd.classList.add('hidden');
-      modalAdd.classList.remove('flex');
-      modalAdd.style.display = 'none';
-      modalAdd.setAttribute('aria-hidden', 'true');
-    }
-  } catch {}
-
-  if (lab) lab.textContent = `Registrar venda â€” ${item?.clienteNome || ''} | ${item?.pet || ''}`;
-  input.value = item?.codigoVenda || '';
-
-  // mostra a modal
-  m.classList.remove('hidden');
-  m.classList.add('flex');
-
-  try {
-    if (m.parentElement !== document.body) document.body.appendChild(m);
-    m.style.display = 'flex';
-    m.style.visibility = 'visible';
-    m.style.opacity = '1';
-    m.style.position = 'fixed';
-    m.style.zIndex = '2147483647';
-    m.style.pointerEvents = 'auto';
-
-    // acessibilidade
-    m.removeAttribute('inert');
-    m.setAttribute('role', 'dialog');
-    m.setAttribute('aria-modal', 'true');
-    m.setAttribute('aria-hidden', 'false');
-  } catch {}
-
-  // foca o primeiro campo interativo
-  requestAnimationFrame(() => { try { input.focus(); } catch {} });
+export function openVendaModal() {
+  notify(SALE_VIA_PDV_MESSAGE, 'info');
 }
 
-export function closeVendaModal() {
-  __vendaTargetId = null;
-  const m = document.getElementById('venda-modal');
-  if (!m) return;
-
-  // 1) tirar o foco de dentro da modal ANTES de aplicar aria-hidden
-  const active = document.activeElement;
-  const restore =
-    (__vendaLastFocus && document.contains(__vendaLastFocus))
-      ? __vendaLastFocus
-      : document.body; // fallback seguro
-
-  if (m.contains(active)) {
-    try { restore.focus?.(); } catch { try { active.blur?.(); } catch {} }
-  }
-
-  // 2) ocultar e bloquear interaÃ§Ã£o
-  m.classList.add('hidden');
-  m.classList.remove('flex');
-  try {
-    m.style.display = 'none';
-    m.style.visibility = 'hidden';
-    m.style.pointerEvents = 'none';
-    m.setAttribute('aria-hidden', 'true');
-    m.setAttribute('inert', ''); // impede foco/interaÃ§Ã£o no subtree
-  } catch {}
-
-  // 3) limpar referÃªncia de foco
-  __vendaLastFocus = null;
-}
-
-function bindVendaModalOnce(){
-  if (document.__bindVendaModalApplied) return;
-  document.__bindVendaModalApplied = true;
-  const cancel = document.getElementById('venda-cancel-btn');
-  const closeX = document.getElementById('venda-close-btn');
-  const save = document.getElementById('venda-save-btn');
-  cancel?.addEventListener('click', closeVendaModal);
-  closeX?.addEventListener('click', closeVendaModal);
-  save?.addEventListener('click', async () => {
-    const input = document.getElementById('venda-codigo-input');
-    const code = String(input?.value || '').trim();
-    if (!__vendaTargetId) { alert('Agendamento invÃ¡lido.'); return; }
-    if (!code) { alert('Informe o cÃ³digo da venda.'); return; }
-    try {
-      const resp = await api(`/func/agendamentos/${__vendaTargetId}`, { method: 'PUT', body: JSON.stringify({ codigoVenda: code, pago: true }) });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.message || 'Falha ao registrar o cÃ³digo de venda.');
-      }
-      closeVendaModal();
-      await loadAgendamentos();
-      renderKpis();
-      renderFilters();
-      renderGrid();
-      enhanceAgendaUI();
-    } catch (e) {
-      console.error('venda-save', e);
-      alert(e.message || 'NÃ£o foi possÃ­vel registrar o cÃ³digo de venda.');
-    }
-  });
-}
+export function closeVendaModal() {}
 
 // expose for external triggers, keeping backward-compat
 window.openVendaModal = openVendaModal;
@@ -749,7 +642,6 @@ export async function confirmAsync(title, message, opts = {}) {
 }
 
 export function bindModalAndActionsEvents() {
-  bindVendaModalOnce();
   // Atualiza preÃ§os da lista e do item selecionado ao mudar empresa/pet
   els.addStoreSelect?.addEventListener('change', () => { updateVisibleServicePrices(); updateSelectedServicePrice(); });
   els.petSelect?.addEventListener('change', () => { updateVisibleServicePrices(); updateSelectedServicePrice(); });
@@ -807,9 +699,6 @@ export function bindModalAndActionsEvents() {
     if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
     const id = btn.getAttribute('data-id'); if (!id) return;
     if (btn.classList.contains('edit')) {
-      // Se a modal de venda estiver aberta, nÃ£o abrir ediÃ§Ã£o
-      const vendaOpen = !document.getElementById('venda-modal')?.classList.contains('hidden');
-      if (vendaOpen) return;
       const item = state.agendamentos.find(x => String(x._id) === String(id));
       if (!item) return;
       if ((item.pago || item.codigoVenda) && !isPrivilegedRole()) { notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning'); return; }
@@ -824,7 +713,7 @@ export function bindModalAndActionsEvents() {
       const item = state.agendamentos.find(x => String(x._id) === String(id));
       if (!item) return;
       if (item.pago || item.codigoVenda) { notify('Este agendamento já possui código de venda registrado.', 'warning'); return; }
-      requestAnimationFrame(() => (window.openVendaModal || openVendaModal)(item));
+      notify(SALE_VIA_PDV_MESSAGE, 'info');
     }
   }, true);
   // disabled: usando handlers diretos nos botÃµes em ui.js
@@ -841,17 +730,7 @@ export function bindModalAndActionsEvents() {
     const item = state.agendamentos.find(x => String(x._id) === String(id));
     if (!item) return;
     if (item.pago || item.codigoVenda) { notify('Este agendamento já possui código de venda registrado.', 'warning'); return; }
-    // Fecha a de ediÃ§Ã£o, se aberta
-    try {
-      const modalAdd = document.getElementById('modal-add-servico');
-      if (modalAdd && !modalAdd.classList.contains('hidden')) {
-        modalAdd.classList.add('hidden');
-        modalAdd.classList.remove('flex');
-        modalAdd.style.display = 'none';
-        modalAdd.setAttribute('aria-hidden', 'true');
-      }
-    } catch {}
-    requestAnimationFrame(() => (window.openVendaModal || openVendaModal)(item));
+    notify(SALE_VIA_PDV_MESSAGE, 'info');
   };
   document.addEventListener('click', docChargeHandler, true);
   els.cliInput?.addEventListener('input', debounce((e) => searchClientes(e.target.value), 300));

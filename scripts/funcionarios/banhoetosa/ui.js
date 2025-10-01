@@ -116,10 +116,7 @@ export function decorateCards() {
             notify('Este agendamento já possui código de venda registrado.', 'warning');
             return;
           }
-          // chama via window para evitar ciclo de imports
-          if (window.openVendaModal) {
-            window.openVendaModal(current);
-          }
+          notify('Finalize a venda pelo PDV para gerar o código automaticamente.', 'info');
         } catch (err) { console.error('cobrar-click', err); }
       };
       // captura e bolha, para máxima robustez
@@ -134,11 +131,6 @@ export function decorateCards() {
           e.preventDefault();
           if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
           e.stopPropagation();
-          const vm = document.getElementById('venda-modal');
-          const vendaOpen = vm && !vm.classList.contains('hidden');
-          if (vendaOpen) {
-            try { vm.classList.add('hidden'); vm.setAttribute('aria-hidden','true'); } catch {}
-          }
           const current = (state.agendamentos || []).find(x => String(x._id) === String(id));
           if (!current) return;
           if (e[CARD_ACTION_EVENT_FLAG]) return;
@@ -163,8 +155,6 @@ export function decorateCards() {
           e.preventDefault();
           if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
           e.stopPropagation();
-          const vm = document.getElementById('venda-modal');
-          if (vm && !vm.classList.contains('hidden')) { try { vm.classList.add('hidden'); vm.setAttribute('aria-hidden','true'); } catch {} }
           const current = (state.agendamentos || []).find(x => String(x._id) === String(id));
           if (!current) return;
           if (e[CARD_ACTION_EVENT_FLAG]) return;
