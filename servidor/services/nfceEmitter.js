@@ -12,7 +12,12 @@ const {
 } = require('./fiscalRuleEngine');
 const { transmitNfceToSefaz, SefazTransmissionError } = require('./sefazTransmitter');
 const { decryptBuffer, decryptText } = require('../utils/certificates');
-const { sanitizeXmlAttribute, sanitizeXmlContent, sanitizeXmlText } = require('../utils/xmlSanitizer');
+const {
+  normalizeWhitespace,
+  sanitizeXmlAttribute,
+  sanitizeXmlContent,
+  sanitizeXmlText,
+} = require('../utils/xmlSanitizer');
 
 const UF_BY_CODE = {
   '11': 'RO',
@@ -134,6 +139,11 @@ const normalizeStringSafe = (value) => {
 const onlyDigits = (s) => String(s ?? '').replace(/\D/g, '');
 const dec = (n) => Number(n ?? 0).toFixed(2);
 const sanitize = (value) => sanitizeXmlText(value);
+
+const sanitizeQrCodeContent = (value) => {
+  const normalized = normalizeWhitespace(value ?? '').trim();
+  return sanitize(normalized);
+};
 const pushTagIf = (arr, tag, value, indent = '        ') => {
   const v = sanitize(value);
   if (v) arr.push(`${indent}<${tag}>${v}</${tag}>`);
@@ -319,13 +329,17 @@ const formatDateTimeWithOffset = (date) => {
 // Gera o QR Code v2 on-line exigido pela SEFAZ/RJ para NFC-e autorizada em emissão normal.
 const buildQrCodeRJ = ({ chNFe, tpAmb, idToken, csc }) => {
   const versaoQR = '2';
-  // Conforme a versão vigente do Manual de Orientação Técnica do QR Code da
-  // NFC-e do RJ, tanto o QR Code on-line (parâmetro "p") quanto o endereço
-  // impresso no DANFE (campo <urlChave>) devem apontar para o domínio
-  // consultadfe.fazenda.rj.gov.br.
+  // As URLs oficiais publicadas pela SEFAZ/RJ para consulta on-line da NFC-e
+  // utilizam o domínio consultadfe.fazenda.rj.gov.br no QR Code (parâmetro
+  // "p") e www.fazenda.rj.gov.br/nfce/consulta para o endereço impresso no
+  // DANFE. A SEFAZ rejeita o documento quando outras variações de domínio são
+  // informadas.
   const qrCodeBase = 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode';
-  const urlChaveBase = 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode';
-  const idT = String(idToken ?? '').replace(/^0+/, '');
+  const urlChaveBase = 'www.fazenda.rj.gov.br/nfce/consulta';
+  const idT = onlyDigits(idToken);
+  if (!idT) {
+    throw new Error('Identificador do CSC (cIdToken) inválido para NFC-e do RJ.');
+  }
   const pSemHash = `${chNFe}|${versaoQR}|${tpAmb}|${idT}`;
   const token = String(csc ?? '');
   const hashInput = `${pSemHash}${token}`;
@@ -1516,7 +1530,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       signedXmlContent.slice(insertPosition);
   }
 
-  const qrCodeText = sanitize(qrCodePayload);
+  const qrCodeText = sanitizeQrCodeContent(qrCodePayload);
   const urlChaveText = sanitize(qrCodeBaseUrl);
   const infNfeSuplXml = [
     '  <infNFeSupl>',
