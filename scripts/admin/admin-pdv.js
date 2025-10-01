@@ -139,6 +139,7 @@
     activeSaleCancellationId: '',
     fiscalEmissionStep: '',
     fiscalEmissionModalOpen: false,
+    activePdvStoreId: '',
   };
 
   const elements = {};
@@ -314,6 +315,27 @@
     if (pdv.store && typeof pdv.store === 'object') return normalizeId(pdv.store._id);
     if (pdv.store != null) return normalizeId(pdv.store);
     return '';
+  };
+  const getPdvStoreId = (pdv) => {
+    if (!pdv) return '';
+    if (pdv.store && typeof pdv.store === 'object') return normalizeId(pdv.store._id);
+    if (pdv.store != null) return normalizeId(pdv.store);
+    if (pdv.empresa && typeof pdv.empresa === 'object') return normalizeId(pdv.empresa._id);
+    if (pdv.empresa != null) return normalizeId(pdv.empresa);
+    if (pdv.company && typeof pdv.company === 'object') return normalizeId(pdv.company._id);
+    if (pdv.company != null) return normalizeId(pdv.company);
+    return '';
+  };
+  const getActiveAppointmentStoreId = () => {
+    if (state.activePdvStoreId) {
+      return state.activePdvStoreId;
+    }
+    const pdv = findPdvById(state.selectedPdv);
+    const pdvStoreId = getPdvStoreId(pdv);
+    if (pdvStoreId) {
+      return pdvStoreId;
+    }
+    return state.selectedStore || '';
   };
   const findStoreById = (storeId) =>
     state.stores.find((item) => normalizeId(item._id) === normalizeId(storeId));
@@ -7246,7 +7268,8 @@
     };
   };
   const loadAppointmentsDataset = async ({ startParam, endParam, storeId, force = false }) => {
-    const key = `${storeId || 'default'}|${startParam}|${endParam}`;
+    const normalizedStoreId = storeId ? normalizeId(storeId) : '';
+    const key = `${normalizedStoreId || 'all'}|${startParam}|${endParam}`;
     if (!force && appointmentCache.has(key)) {
       return appointmentCache
         .get(key)
@@ -7256,7 +7279,9 @@
     const params = new URLSearchParams();
     if (startParam) params.set('start', startParam);
     if (endParam) params.set('end', endParam);
-    if (storeId) params.set('storeId', storeId);
+    if (normalizedStoreId) params.set('storeId', normalizedStoreId);
+    params.set('status', 'all');
+    params.set('includePaid', '1');
     const token = getToken();
     const payload = await fetchWithOptionalAuth(
       `${API_BASE}/func/agendamentos/range?${params.toString()}`,
@@ -7280,7 +7305,7 @@
     return normalized.map((item) => cloneAppointmentRecord(item)).filter(Boolean);
   };
   const refreshAppointmentMetrics = async ({ force = false } = {}) => {
-    const storeId = state.selectedStore;
+    const storeId = getActiveAppointmentStoreId();
     if (!storeId) {
       state.appointmentMetrics = { today: 0, week: 0, month: 0 };
       renderAppointmentMetrics();
@@ -7552,14 +7577,14 @@
     return true;
   };
   const loadAppointmentsForCurrentFilter = async ({ forceReload = false } = {}) => {
-    const storeId = state.selectedStore;
-    if (!storeId) {
-      notify('Selecione a empresa e o PDV para importar atendimentos.', 'warning');
-      return;
-    }
     const range = getAppointmentRangeFromFilters(state.appointmentFilters);
     if (!range) {
       notify('Informe um período válido para buscar atendimentos.', 'warning');
+      return;
+    }
+    const storeId = getActiveAppointmentStoreId();
+    if (!storeId) {
+      notify('Selecione a empresa e o PDV para importar atendimentos.', 'warning');
       return;
     }
     const requestId = ++appointmentsRequestId;
@@ -8291,6 +8316,7 @@
     state.appointmentMetrics = { today: 0, week: 0, month: 0 };
     state.activeAppointmentId = '';
     state.activeSaleCancellationId = '';
+    state.activePdvStoreId = '';
     state.deliveryAddresses = [];
     state.deliveryAddressesLoading = false;
     state.deliveryAddressSaving = false;
@@ -8515,6 +8541,8 @@
       }
       populateCompanySelect();
     }
+    const appointmentStoreId = getPdvStoreId(pdv) || companyId || state.selectedStore || '';
+    state.activePdvStoreId = appointmentStoreId;
     const caixaAberto = Boolean(
       pdv?.caixa?.aberto ||
         pdv?.caixaAberto ||
