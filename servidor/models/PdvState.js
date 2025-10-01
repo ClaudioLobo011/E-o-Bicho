@@ -74,6 +74,28 @@ const saleRecordSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const budgetRecordSchema = new mongoose.Schema(
+  {
+    id: { type: String, trim: true },
+    code: { type: String, trim: true },
+    createdAt: { type: Date, default: null },
+    updatedAt: { type: Date, default: null },
+    validityDays: { type: Number, default: null },
+    validUntil: { type: Date, default: null },
+    total: { type: Number, default: 0 },
+    discount: { type: Number, default: 0 },
+    addition: { type: Number, default: 0 },
+    customer: { type: mongoose.Schema.Types.Mixed, default: null },
+    pet: { type: mongoose.Schema.Types.Mixed, default: null },
+    items: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    payments: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    paymentLabel: { type: String, trim: true, default: '' },
+    status: { type: String, trim: true, default: 'aberto' },
+    importedAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
 const pdvStateSchema = new mongoose.Schema(
   {
     pdv: { type: mongoose.Schema.Types.ObjectId, ref: 'Pdv', required: true, unique: true },
@@ -95,9 +117,11 @@ const pdvStateSchema = new mongoose.Schema(
     pagamentos: { type: [paymentSnapshotSchema], default: [] },
     history: { type: [historyEntrySchema], default: [] },
     completedSales: { type: [saleRecordSchema], default: [] },
+    budgets: { type: [budgetRecordSchema], default: [] },
     lastMovement: { type: historyEntrySchema, default: null },
     saleCodeIdentifier: { type: String, trim: true, default: '' },
     saleCodeSequence: { type: Number, default: 1 },
+    budgetSequence: { type: Number, default: 1 },
     printPreferences: {
       fechamento: { type: String, trim: true, default: 'PM' },
       venda: { type: String, trim: true, default: 'PM' },

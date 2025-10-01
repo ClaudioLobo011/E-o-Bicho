@@ -428,6 +428,111 @@ const normalizeSaleRecordPayload = (record) => {
   };
 };
 
+const normalizeBudgetRecordPayload = (budget, { useDefaults = false } = {}) => {
+  if (!budget || typeof budget !== 'object') return null;
+
+  let id = normalizeString(
+    budget.id || budget._id || budget.code || budget.codigo || budget.numero || budget.identificador
+  );
+
+  if (!id && useDefaults) {
+    id = `orc-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  }
+
+  if (!id) {
+    return null;
+  }
+
+  const codeSource =
+    budget.code || budget.codigo || budget.numero || budget.identificador || budget.label || id;
+  const code = normalizeString(codeSource) || id;
+
+  const createdAt =
+    safeDate(
+      budget.createdAt || budget.criadoEm || budget.criadoAt || budget.created_at || budget.created_at_em
+    ) || (useDefaults ? new Date() : null);
+  const updatedAt =
+    safeDate(budget.updatedAt || budget.atualizadoEm || budget.updated_at || budget.atualizadoAt) ||
+    (useDefaults ? new Date() : null);
+
+  const validitySource =
+    budget.validityDays ??
+    budget.validadeDias ??
+    budget.validade ??
+    budget.validadeEmDias ??
+    budget.validade_orcamento;
+  const parsedValidity =
+    validitySource === null || validitySource === undefined || validitySource === ''
+      ? null
+      : Number.parseInt(validitySource, 10);
+  const validityDays = Number.isFinite(parsedValidity) ? parsedValidity : null;
+
+  let validUntil = safeDate(
+    budget.validUntil ||
+      budget.validadeAte ||
+      budget.validadeFim ||
+      budget.expiraEm ||
+      budget.dataValidade ||
+      budget.validade
+  );
+
+  if (!validUntil && validityDays && createdAt instanceof Date && !Number.isNaN(createdAt.getTime())) {
+    validUntil = new Date(createdAt.getTime() + validityDays * 24 * 60 * 60 * 1000);
+  }
+
+  const total = safeNumber(budget.total ?? budget.valorTotal ?? budget.valor ?? 0, 0);
+  const discount = safeNumber(budget.discount ?? budget.desconto ?? 0, 0);
+  const addition = safeNumber(budget.addition ?? budget.acrescimo ?? 0, 0);
+
+  const customer =
+    budget.customer && typeof budget.customer === 'object'
+      ? { ...budget.customer }
+      : budget.cliente && typeof budget.cliente === 'object'
+      ? { ...budget.cliente }
+      : null;
+
+  const pet =
+    budget.pet && typeof budget.pet === 'object'
+      ? { ...budget.pet }
+      : budget.petCliente && typeof budget.petCliente === 'object'
+      ? { ...budget.petCliente }
+      : null;
+
+  const itemsSource = Array.isArray(budget.items) ? budget.items : Array.isArray(budget.itens) ? budget.itens : [];
+  const items = itemsSource.map((item) => (item && typeof item === 'object' ? { ...item } : item));
+
+  const paymentsSource = Array.isArray(budget.payments)
+    ? budget.payments
+    : Array.isArray(budget.pagamentos)
+    ? budget.pagamentos
+    : [];
+  const payments = paymentsSource.map((payment) => (payment && typeof payment === 'object' ? { ...payment } : payment));
+
+  const paymentLabel =
+    normalizeString(budget.paymentLabel || budget.meioPagamento || budget.formaPagamento || budget.condicaoPagamento) || '';
+  const status = normalizeString(budget.status || budget.situacao) || (useDefaults ? 'aberto' : '');
+  const importedAt = safeDate(budget.importedAt || budget.importadoEm || budget.imported_at) || null;
+
+  return {
+    id,
+    code,
+    createdAt,
+    updatedAt,
+    validityDays,
+    validUntil: validUntil || null,
+    total,
+    discount,
+    addition,
+    customer,
+    pet,
+    items,
+    payments,
+    paymentLabel,
+    status: status || 'aberto',
+    importedAt,
+  };
+};
+
 const normalizePrintPreference = (value, fallback = 'PM') => {
   const normalized = normalizeString(value).toUpperCase();
   if (!normalized) return fallback;
@@ -458,6 +563,22 @@ const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) =
     (body.printPreferences && typeof body.printPreferences === 'object' && body.printPreferences) ||
     existingState.printPreferences ||
     {};
+  const budgetsSource =
+    Array.isArray(body.budgets)
+      ? body.budgets
+      : Array.isArray(body.orcamentos)
+      ? body.orcamentos
+      : existingState.budgets || [];
+  const budgetSequenceRaw =
+    body.budgetSequence ??
+    body.orcamentoSequencia ??
+    body.budgetsSequence ??
+    existingState.budgetSequence ??
+    1;
+  const parsedBudgetSequence = Number.parseInt(budgetSequenceRaw, 10);
+  const budgetSequence = Number.isFinite(parsedBudgetSequence) && parsedBudgetSequence > 0
+    ? parsedBudgetSequence
+    : existingState.budgetSequence || 1;
 
   return {
     empresa: empresaId,
@@ -495,11 +616,15 @@ const buildStateUpdatePayload = ({ body = {}, existingState = {}, empresaId }) =
     completedSales: (Array.isArray(vendasSource) ? vendasSource : [])
       .map(normalizeSaleRecordPayload)
       .filter(Boolean),
+    budgets: (Array.isArray(budgetsSource) ? budgetsSource : [])
+      .map((budget) => normalizeBudgetRecordPayload(budget, { useDefaults: true }))
+      .filter(Boolean),
     lastMovement: normalizeHistoryEntryPayload(lastMovementSource) || null,
     saleCodeIdentifier,
     saleCodeSequence: Number.isFinite(saleCodeSequence) && saleCodeSequence > 0
       ? saleCodeSequence
       : existingState.saleCodeSequence || 1,
+    budgetSequence,
     printPreferences: {
       fechamento: normalizePrintPreference(printPreferencesSource.fechamento || 'PM'),
       venda: normalizePrintPreference(printPreferencesSource.venda || 'PM'),
@@ -541,9 +666,13 @@ const serializeStateForResponse = (stateDoc) => {
       },
       history: [],
       completedSales: [],
+      budgets: [],
+      orcamentos: [],
       lastMovement: null,
       saleCodeIdentifier: '',
       saleCodeSequence: 1,
+      budgetSequence: 1,
+      orcamentoSequencia: 1,
       printPreferences: { fechamento: 'PM', venda: 'PM' },
       updatedAt: null,
     };
@@ -555,6 +684,12 @@ const serializeStateForResponse = (stateDoc) => {
   const pagamentos = Array.isArray(plain.pagamentos) ? plain.pagamentos : [];
   const history = Array.isArray(plain.history) ? plain.history : [];
   const completedSales = Array.isArray(plain.completedSales) ? plain.completedSales : [];
+  const budgetsSource = Array.isArray(plain.budgets) ? plain.budgets : [];
+  const budgets = budgetsSource
+    .map((budget) => normalizeBudgetRecordPayload(budget, { useDefaults: false }))
+    .filter(Boolean);
+  const rawBudgetSequence = Number.parseInt(plain.budgetSequence, 10);
+  const budgetSequence = Number.isFinite(rawBudgetSequence) && rawBudgetSequence > 0 ? rawBudgetSequence : 1;
 
   return {
     caixa: {
@@ -596,9 +731,13 @@ const serializeStateForResponse = (stateDoc) => {
     },
     history,
     completedSales,
+    budgets,
+    orcamentos: budgets,
     lastMovement: plain.lastMovement || null,
     saleCodeIdentifier: plain.saleCodeIdentifier || '',
     saleCodeSequence: plain.saleCodeSequence || 1,
+    budgetSequence,
+    orcamentoSequencia: budgetSequence,
     printPreferences: plain.printPreferences || { fechamento: 'PM', venda: 'PM' },
     updatedAt: plain.updatedAt || null,
   };
@@ -746,9 +885,13 @@ router.get('/:id', async (req, res) => {
       caixaInfo: serializedState.caixaInfo,
       history: serializedState.history,
       completedSales: serializedState.completedSales,
+      budgets: serializedState.budgets,
+      orcamentos: serializedState.budgets,
       lastMovement: serializedState.lastMovement,
       saleCodeIdentifier: serializedState.saleCodeIdentifier,
       saleCodeSequence: serializedState.saleCodeSequence,
+      budgetSequence: serializedState.budgetSequence,
+      orcamentoSequencia: serializedState.budgetSequence,
       printPreferences: serializedState.printPreferences,
       caixaAtualizadoEm: serializedState.updatedAt,
     };
