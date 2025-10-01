@@ -415,7 +415,7 @@ function adjustSiteMainSpacing() {
 
     const headerTop = document.getElementById('header-top');
     const categoryNav = document.getElementById('category-nav');
-    const gap = 16;
+    const gap = 8;
 
     let offset = gap;
 
