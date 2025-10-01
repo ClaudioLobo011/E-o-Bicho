@@ -4174,7 +4174,7 @@
     const total = getSaleTotalLiquido();
     const customerSnapshot = state.vendaCliente ? { ...state.vendaCliente } : null;
     const petSnapshot = state.vendaPet ? { ...state.vendaPet } : null;
-    const budgetId = state.activeBudgetId || state.selectedBudgetId || '';
+    const budgetId = state.activeBudgetId || '';
     const existingBudget = budgetId ? findBudgetById(budgetId) : null;
     let budget = existingBudget;
     if (existingBudget) {
