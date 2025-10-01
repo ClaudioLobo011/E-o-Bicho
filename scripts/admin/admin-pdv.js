@@ -125,16 +125,35 @@
     currentSaleCode: '',
     deliveryFinalizingOrderId: '',
     completedSales: [],
+    budgets: [],
+    selectedBudgetId: '',
+    activeBudgetId: '',
+    pendingBudgetValidityDays: null,
+    budgetSequence: 1,
+    budgetFilters: { preset: 'todos', start: '', end: '' },
     activeSaleCancellationId: '',
     fiscalEmissionStep: '',
     fiscalEmissionModalOpen: false,
   };
 
   const elements = {};
+  let budgetImportDefaultLabel = 'Importar orçamento';
+  const BUDGET_IMPORT_FINALIZED_LABEL = 'Orçamento finalizado';
   const customerPetsCache = new Map();
   const customerAddressesCache = new Map();
+
+  const generateBudgetCode = () => {
+    const sequence = Math.max(1, Number.parseInt(state.budgetSequence, 10) || 1);
+    const code = `${BUDGET_CODE_PREFIX}-${String(sequence).padStart(BUDGET_CODE_PADDING, '0')}`;
+    state.budgetSequence = sequence + 1;
+    return code;
+  };
   const SALE_CODE_STORAGE_PREFIX = 'pdvSaleSequence:';
   const SALE_CODE_PADDING = 6;
+  const BUDGET_CODE_PREFIX = 'ORC';
+  const BUDGET_CODE_PADDING = 6;
+  const DEFAULT_BUDGET_VALIDITY_DAYS = 7;
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
   const deliveryStatusSteps = [
     { id: 'registrado', label: 'Registrado' },
     { id: 'emSeparacao', label: 'Em separação' },
@@ -726,6 +745,55 @@
     return date.toISOString();
   };
 
+  const parseDateInputValue = (value) => {
+    if (!value) return null;
+    const normalized = `${value}T00:00:00`;
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return null;
+    return date;
+  };
+
+  const toStartOfDay = (value) => {
+    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value || Date.now());
+    if (Number.isNaN(date.getTime())) return null;
+    date.setHours(0, 0, 0, 0);
+    return date;
+  };
+
+  const toEndOfDay = (value) => {
+    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value || Date.now());
+    if (Number.isNaN(date.getTime())) return null;
+    date.setHours(23, 59, 59, 999);
+    return date;
+  };
+
+  const clampBudgetValidityDays = (days) => {
+    const numeric = Math.floor(Number(days) || 0);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return DEFAULT_BUDGET_VALIDITY_DAYS;
+    }
+    return Math.min(365, Math.max(1, numeric));
+  };
+
+  const isDateWithinRange = (date, start, end) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return false;
+    const timestamp = date.getTime();
+    if (start instanceof Date && !Number.isNaN(start.getTime()) && timestamp < start.getTime()) {
+      return false;
+    }
+    if (end instanceof Date && !Number.isNaN(end.getTime()) && timestamp > end.getTime()) {
+      return false;
+    }
+    return true;
+  };
+
+  const getTimeValue = (value) => {
+    if (!value) return 0;
+    const date = value instanceof Date ? value : new Date(value);
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return 0;
+    return date.getTime();
+  };
+
   const getStoreLabel = () => {
     const store = findStoreById(state.selectedStore);
     return (
@@ -1282,6 +1350,112 @@
     };
   };
 
+  const normalizeBudgetRecordForPersist = (budget) => {
+    if (!budget || typeof budget !== 'object') return null;
+    const rawId = budget.id || budget._id || createUid();
+    const id = String(rawId);
+    const createdSource =
+      budget.createdAt || budget.criadoEm || budget.criado || budget.created_at || budget.dataCriacao;
+    const createdDate = createdSource ? new Date(createdSource) : new Date();
+    const createdAt = Number.isNaN(createdDate.getTime()) ? new Date() : createdDate;
+    const createdAtIso = createdAt.toISOString();
+    const updatedSource = budget.updatedAt || budget.atualizadoEm || budget.updated_at || budget.dataAtualizacao;
+    const updatedDate = updatedSource ? new Date(updatedSource) : createdAt;
+    const updatedAtIso = Number.isNaN(updatedDate.getTime()) ? createdAtIso : updatedDate.toISOString();
+    const validityDays = clampBudgetValidityDays(budget.validityDays ?? budget.validadeDias ?? budget.validade);
+    let validUntilDate = null;
+    const validUntilSource = budget.validUntil || budget.validadeAte || budget.validadeFim;
+    if (validUntilSource) {
+      const parsed = new Date(validUntilSource);
+      if (!Number.isNaN(parsed.getTime())) {
+        validUntilDate = parsed;
+      }
+    }
+    if (!validUntilDate) {
+      const base = toStartOfDay(createdAt) || createdAt;
+      validUntilDate = new Date(base.getTime() + validityDays * MS_PER_DAY);
+    }
+    const validUntilIso = validUntilDate.toISOString();
+    const customerSource = budget.customer || budget.cliente || null;
+    const petSource = budget.pet || budget.petCliente || budget.petClienteSelecionado || null;
+    const paymentsSource = Array.isArray(budget.payments)
+      ? budget.payments
+      : Array.isArray(budget.pagamentos)
+      ? budget.pagamentos
+      : [];
+    const itemsSource = Array.isArray(budget.items)
+      ? budget.items
+      : Array.isArray(budget.itens)
+      ? budget.itens
+      : [];
+    const normalizedPayments = paymentsSource.map((payment) => ({ ...payment }));
+    const normalizedItems = itemsSource.map((item, index) => {
+      const quantidade = safeNumber(item?.quantidade ?? item?.qtd ?? item?.quant ?? 0);
+      const valor = safeNumber(item?.valor ?? item?.valorUnitario ?? item?.preco ?? item?.unitario ?? 0);
+      const subtotal = safeNumber(item?.subtotal ?? item?.total ?? valor * quantidade);
+      return {
+        ...item,
+        id: item?.id || `${id}-item-${index}`,
+        codigo: item?.codigo || item?.codigoInterno || item?.sku || '',
+        codigoBarras: item?.codigoBarras || item?.barcode || item?.ean || '',
+        nome: item?.nome || item?.descricao || item?.produto || `Item ${index + 1}`,
+        quantidade,
+        valor,
+        subtotal,
+      };
+    });
+    const finalizedSource =
+      budget.finalizedAt ||
+      budget.finalizadoEm ||
+      budget.finalizado_at ||
+      budget.dataFinalizacao ||
+      budget.finalizacaoEm ||
+      budget.dataFinalizada;
+    let finalizedAtIso = null;
+    if (finalizedSource) {
+      const parsed = new Date(finalizedSource);
+      if (!Number.isNaN(parsed.getTime())) {
+        finalizedAtIso = parsed.toISOString();
+      }
+    }
+    const finalizedSaleIdSource =
+      budget.finalizedSaleId ||
+      budget.vendaFinalizadaId ||
+      budget.vendaIdFinalizada ||
+      budget.finalizedSale ||
+      budget.saleFinalizedId ||
+      budget.vendaRelacionadaId;
+    return {
+      id,
+      code: String(budget.code || budget.codigo || budget.numero || id),
+      createdAt: createdAtIso,
+      updatedAt: updatedAtIso,
+      validityDays,
+      validUntil: validUntilIso,
+      total: safeNumber(budget.total ?? budget.valorTotal ?? 0),
+      discount: safeNumber(budget.discount ?? budget.desconto ?? 0),
+      addition: safeNumber(budget.addition ?? budget.acrescimo ?? 0),
+      customer: customerSource && typeof customerSource === 'object' ? { ...customerSource } : null,
+      pet: petSource && typeof petSource === 'object' ? { ...petSource } : null,
+      items: normalizedItems,
+      payments: normalizedPayments,
+      paymentLabel: budget.paymentLabel ? String(budget.paymentLabel) : '',
+      status: budget.status ? String(budget.status) : 'aberto',
+      importedAt:
+        budget.importedAt || budget.importadoEm
+          ? (() => {
+              const parsed = new Date(budget.importedAt || budget.importadoEm);
+              return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+            })()
+          : null,
+      finalizedAt: finalizedAtIso,
+      finalizedSaleId:
+        finalizedSaleIdSource !== undefined && finalizedSaleIdSource !== null && finalizedSaleIdSource !== ''
+          ? String(finalizedSaleIdSource)
+          : '',
+    };
+  };
+
   const buildStatePersistPayload = () => {
     const pagamentos = (Array.isArray(state.pagamentos) ? state.pagamentos : [])
       .map((payment) => normalizePaymentSnapshotForPersist(payment))
@@ -1302,6 +1476,9 @@
     const completedSales = (Array.isArray(state.completedSales) ? state.completedSales : [])
       .map((sale) => normalizeSaleRecordForPersist(sale))
       .filter(Boolean);
+    const budgets = (Array.isArray(state.budgets) ? state.budgets : [])
+      .map((budget) => normalizeBudgetRecordForPersist(budget))
+      .filter(Boolean);
 
     return {
       caixaAberto: Boolean(state.caixaAberto),
@@ -1321,9 +1498,11 @@
       pagamentos,
       history,
       completedSales,
+      budgets,
       lastMovement: state.lastMovement ? normalizeHistoryEntryForPersist(state.lastMovement) : null,
       saleCodeIdentifier: state.saleCodeIdentifier || '',
       saleCodeSequence: Math.max(1, Number.parseInt(state.saleCodeSequence, 10) || 1),
+      budgetSequence: Math.max(1, Number.parseInt(state.budgetSequence, 10) || 1),
       printPreferences:
         state.printPreferences && typeof state.printPreferences === 'object'
           ? { ...state.printPreferences }
@@ -1549,6 +1728,27 @@
     elements.salesList = document.getElementById('pdv-sales-list');
     elements.salesEmpty = document.getElementById('pdv-sales-empty');
 
+    elements.budgetPresets = document.getElementById('pdv-budget-presets');
+    elements.budgetStart = document.getElementById('pdv-budget-start');
+    elements.budgetEnd = document.getElementById('pdv-budget-end');
+    elements.budgetKpiToday = document.getElementById('pdv-budget-kpi-today');
+    elements.budgetKpiWeek = document.getElementById('pdv-budget-kpi-week');
+    elements.budgetKpiMonth = document.getElementById('pdv-budget-kpi-month');
+    elements.budgetKpiAll = document.getElementById('pdv-budget-kpi-all');
+    elements.budgetCount = document.getElementById('pdv-budget-count');
+    elements.budgetList = document.getElementById('pdv-budget-list');
+    elements.budgetEmpty = document.getElementById('pdv-budget-empty');
+    elements.budgetDetailsHint = document.getElementById('pdv-budget-details-hint');
+    elements.budgetImport = document.getElementById('pdv-budget-import');
+    elements.budgetDelete = document.getElementById('pdv-budget-delete');
+    elements.budgetCode = document.getElementById('pdv-budget-code');
+    elements.budgetCustomer = document.getElementById('pdv-budget-customer');
+    elements.budgetValidity = document.getElementById('pdv-budget-validity');
+    elements.budgetStatus = document.getElementById('pdv-budget-status');
+    elements.budgetTotal = document.getElementById('pdv-budget-total');
+    elements.budgetItems = document.getElementById('pdv-budget-items');
+    elements.budgetItemsEmpty = document.getElementById('pdv-budget-items-empty');
+
     elements.saleCancelModal = document.getElementById('pdv-sale-cancel-modal');
     elements.saleCancelClose = document.getElementById('pdv-sale-cancel-close');
     elements.saleCancelCancel = document.getElementById('pdv-sale-cancel-cancel');
@@ -1572,6 +1772,19 @@
     elements.salePaid = document.getElementById('pdv-sale-paid');
     elements.saleAdjust = document.getElementById('pdv-sale-adjust');
     elements.saleItemAdjust = document.getElementById('pdv-sale-item-adjust');
+
+    elements.budgetModal = document.getElementById('pdv-budget-modal');
+    elements.budgetModalInput = document.getElementById('pdv-budget-validity');
+    elements.budgetModalError = document.getElementById('pdv-budget-error');
+    elements.budgetModalConfirm = document.getElementById('pdv-budget-confirm');
+    elements.budgetModalCancel = document.getElementById('pdv-budget-cancel');
+    elements.budgetModalClose = document.getElementById('pdv-budget-close');
+    elements.budgetModalBackdrop =
+      elements.budgetModal?.querySelector('[data-budget-dismiss="backdrop"]') || null;
+    if (elements.budgetImport) {
+      budgetImportDefaultLabel =
+        elements.budgetImport.textContent?.trim() || budgetImportDefaultLabel;
+    }
 
     elements.fiscalStatusModal = document.getElementById('pdv-fiscal-status-modal');
     elements.fiscalStatusTitle = document.getElementById('pdv-fiscal-status-title');
@@ -3256,6 +3469,7 @@
   };
 
   const getFinalizeContextActionLabel = (context) => {
+    if (context === 'orcamento') return 'salvar o orçamento';
     if (context === 'delivery') return 'registrar o delivery';
     if (context === 'delivery-complete') return 'finalizar o delivery';
     return 'finalizar a venda';
@@ -3284,6 +3498,17 @@
       if (elements.finalizeConfirm) {
         elements.finalizeConfirm.textContent = 'Finalizar delivery';
       }
+    } else if (context === 'orcamento') {
+      if (elements.finalizeTitle) {
+        elements.finalizeTitle.textContent = 'Finalizar orçamento';
+      }
+      if (elements.finalizeSubtitle) {
+        elements.finalizeSubtitle.textContent =
+          'Revise os meios de pagamento sugeridos antes de concluir o orçamento.';
+      }
+      if (elements.finalizeConfirm) {
+        elements.finalizeConfirm.textContent = 'Finalizar orçamento';
+      }
     } else {
       if (elements.finalizeTitle) {
         elements.finalizeTitle.textContent = finalizeModalDefaults.title || 'Finalizar venda';
@@ -3301,7 +3526,8 @@
   };
 
   const openFinalizeModal = (context = 'sale') => {
-    if (!state.caixaAberto) {
+    const isBudget = context === 'orcamento';
+    if (!isBudget && !state.caixaAberto) {
       notify(`Abra o caixa para ${getFinalizeContextActionLabel(context)}.`, 'warning');
       return;
     }
@@ -3309,11 +3535,11 @@
       notify(`Adicione itens para ${getFinalizeContextActionLabel(context)}.`, 'warning');
       return;
     }
-    if (state.paymentMethodsLoading) {
+    if (!isBudget && state.paymentMethodsLoading) {
       notify('Aguarde o carregamento dos meios de pagamento.', 'info');
       return;
     }
-    if (!state.paymentMethods.length) {
+    if (!isBudget && !state.paymentMethods.length) {
       notify('Cadastre meios de pagamento para concluir a operação.', 'warning');
       return;
     }
@@ -3367,6 +3593,9 @@
     closePaymentValueModal(true);
     if (!elements.deliveryAddressModal || elements.deliveryAddressModal.classList.contains('hidden')) {
       document.body.classList.remove('overflow-hidden');
+    }
+    if (context === 'orcamento') {
+      state.pendingBudgetValidityDays = null;
     }
     if (context === 'delivery-complete') {
       state.deliveryFinalizingOrderId = '';
@@ -3639,6 +3868,162 @@
     renderSalePaymentsPreview();
   };
 
+  const openBudgetModal = () => {
+    if (!elements.budgetModal) return;
+    const activeBudget = state.activeBudgetId
+      ? findBudgetById(state.activeBudgetId)
+      : state.selectedBudgetId
+      ? findBudgetById(state.selectedBudgetId)
+      : null;
+    const defaultDays = state.pendingBudgetValidityDays ?? activeBudget?.validityDays ?? DEFAULT_BUDGET_VALIDITY_DAYS;
+    const clamped = clampBudgetValidityDays(defaultDays);
+    if (elements.budgetModalInput) {
+      elements.budgetModalInput.value = String(clamped);
+      elements.budgetModalInput.focus();
+      elements.budgetModalInput.select?.();
+    }
+    if (elements.budgetModalError) {
+      elements.budgetModalError.classList.add('hidden');
+    }
+    elements.budgetModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+  };
+
+  const closeBudgetModal = ({ preserveValidity = false } = {}) => {
+    if (!elements.budgetModal) return;
+    elements.budgetModal.classList.add('hidden');
+    if (!preserveValidity) {
+      state.pendingBudgetValidityDays = null;
+    }
+    if (elements.budgetModalError) {
+      elements.budgetModalError.classList.add('hidden');
+    }
+    document.body.classList.remove('overflow-hidden');
+  };
+
+  const confirmBudgetValidity = () => {
+    const rawValue = Number(elements.budgetModalInput?.value || DEFAULT_BUDGET_VALIDITY_DAYS);
+    if (!Number.isFinite(rawValue) || rawValue < 1 || rawValue > 365) {
+      elements.budgetModalError?.classList.remove('hidden');
+      return;
+    }
+    if (elements.budgetModalError) {
+      elements.budgetModalError.classList.add('hidden');
+    }
+    state.pendingBudgetValidityDays = clampBudgetValidityDays(rawValue);
+    closeBudgetModal({ preserveValidity: true });
+    openFinalizeModal('orcamento');
+  };
+
+  const handleBudgetAction = () => {
+    if (!state.itens.length) {
+      notify('Adicione itens para salvar o orçamento.', 'warning');
+      return;
+    }
+    if (!state.vendaCliente) {
+      notify('Vincule um cliente para salvar o orçamento.', 'warning');
+      return;
+    }
+    openBudgetModal();
+  };
+
+  const handleBudgetPresetClick = (event) => {
+    const button = event.target.closest('[data-budget-preset]');
+    if (!button) return;
+    event.preventDefault();
+    const preset = button.getAttribute('data-budget-preset');
+    if (!preset) return;
+    state.budgetFilters = { preset, start: '', end: '' };
+    renderBudgets();
+  };
+
+  const handleBudgetDateChange = () => {
+    const startInput = elements.budgetStart;
+    const endInput = elements.budgetEnd;
+    let startValue = startInput?.value || '';
+    let endValue = endInput?.value || '';
+    const startDate = parseDateInputValue(startValue || '');
+    const endDate = parseDateInputValue(endValue || '');
+    if (startDate && endDate && startDate.getTime() > endDate.getTime()) {
+      const temp = startValue;
+      startValue = endValue;
+      endValue = temp;
+    }
+    state.budgetFilters = {
+      preset: startValue || endValue ? 'custom' : 'todos',
+      start: startValue,
+      end: endValue,
+    };
+    renderBudgets();
+  };
+
+  const handleBudgetListClick = (event) => {
+    const row = event.target.closest('tr[data-budget-id]');
+    if (!row) return;
+    const budgetId = row.getAttribute('data-budget-id');
+    if (!budgetId || state.selectedBudgetId === budgetId) return;
+    state.selectedBudgetId = budgetId;
+    renderBudgets();
+  };
+
+  const handleBudgetImport = () => {
+    const budget = findBudgetById(state.selectedBudgetId);
+    if (!budget) {
+      notify('Selecione um orçamento para importar.', 'info');
+      return;
+    }
+    if (isBudgetFinalized(budget)) {
+      notify('Este orçamento já foi finalizado e não pode ser importado novamente.', 'info');
+      return;
+    }
+    state.activeBudgetId = budget.id;
+    state.pendingBudgetValidityDays = clampBudgetValidityDays(budget.validityDays);
+    applySaleStateSnapshot({
+      itens: Array.isArray(budget.items) ? budget.items.map((item) => ({ ...item })) : [],
+      vendaPagamentos: Array.isArray(budget.payments)
+        ? budget.payments.map((payment) => ({ ...payment }))
+        : [],
+      vendaDesconto: safeNumber(budget.discount ?? 0),
+      vendaAcrescimo: safeNumber(budget.addition ?? 0),
+      selectedProduct: null,
+      quantidade: 1,
+    });
+    state.vendaCliente = budget.customer ? { ...budget.customer } : null;
+    state.vendaPet = budget.pet ? { ...budget.pet } : null;
+    updateSaleCustomerSummary();
+    renderItemsList();
+    renderSalePaymentsPreview();
+    updateFinalizeButton();
+    updateSaleSummary();
+    clearSaleSearchAreas();
+    const nowIso = new Date().toISOString();
+    budget.importedAt = nowIso;
+    budget.updatedAt = nowIso;
+    renderBudgets();
+    scheduleStatePersist();
+    notify('Orçamento importado para o PDV. Finalize a venda ou salve novamente para atualizar.', 'success');
+    setActiveTab('pdv-tab');
+  };
+
+  const handleBudgetDelete = () => {
+    const budget = findBudgetById(state.selectedBudgetId);
+    if (!budget) {
+      notify('Selecione um orçamento para excluir.', 'info');
+      return;
+    }
+    const confirmed = window.confirm(`Deseja realmente excluir o orçamento ${budget.code}?`);
+    if (!confirmed) return;
+    state.budgets = state.budgets.filter((item) => item.id !== budget.id);
+    if (state.activeBudgetId === budget.id) {
+      state.activeBudgetId = '';
+      state.pendingBudgetValidityDays = null;
+    }
+    state.selectedBudgetId = '';
+    renderBudgets();
+    scheduleStatePersist({ immediate: true });
+    notify('Orçamento excluído com sucesso.', 'success');
+  };
+
   const handleFinalizeButtonClick = () => {
     if (elements.finalizeButton?.disabled) return;
     openFinalizeModal('sale');
@@ -3802,6 +4187,93 @@
     }
   };
 
+  const finalizeBudgetFlow = async () => {
+    if (!state.itens.length) {
+      notify('Adicione itens para salvar o orçamento.', 'warning');
+      closeFinalizeModal();
+      return;
+    }
+    if (!state.vendaCliente) {
+      notify('Vincule um cliente para salvar o orçamento.', 'warning');
+      closeFinalizeModal();
+      return;
+    }
+    const validityDays = clampBudgetValidityDays(
+      state.pendingBudgetValidityDays ?? DEFAULT_BUDGET_VALIDITY_DAYS
+    );
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const validUntil = new Date((toStartOfDay(now) || now).getTime() + validityDays * MS_PER_DAY);
+    const itensSnapshot = state.itens.map((item) => ({ ...item }));
+    const pagamentosSnapshot = state.vendaPagamentos.map((payment) => ({ ...payment }));
+    const discount = state.vendaDesconto;
+    const addition = state.vendaAcrescimo;
+    const total = getSaleTotalLiquido();
+    const customerSnapshot = state.vendaCliente ? { ...state.vendaCliente } : null;
+    const petSnapshot = state.vendaPet ? { ...state.vendaPet } : null;
+    const budgetId = state.activeBudgetId || '';
+    const existingBudget = budgetId ? findBudgetById(budgetId) : null;
+    let budget = existingBudget;
+    if (existingBudget) {
+      existingBudget.items = itensSnapshot;
+      existingBudget.payments = pagamentosSnapshot;
+      existingBudget.discount = discount;
+      existingBudget.addition = addition;
+      existingBudget.total = total;
+      existingBudget.customer = customerSnapshot;
+      existingBudget.pet = petSnapshot;
+      existingBudget.validityDays = validityDays;
+      existingBudget.validUntil = validUntil.toISOString();
+      existingBudget.updatedAt = nowIso;
+      existingBudget.paymentLabel = describeSalePayments(pagamentosSnapshot);
+    } else {
+      budget = {
+        id: createUid(),
+        code: generateBudgetCode(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        validityDays,
+        validUntil: validUntil.toISOString(),
+        total,
+        discount,
+        addition,
+        customer: customerSnapshot,
+        pet: petSnapshot,
+        items: itensSnapshot,
+        payments: pagamentosSnapshot,
+        paymentLabel: describeSalePayments(pagamentosSnapshot),
+        status: 'aberto',
+        importedAt: null,
+      };
+      state.budgets.unshift(budget);
+    }
+    state.selectedBudgetId = budget?.id || existingBudget?.id || '';
+    state.pendingBudgetValidityDays = null;
+    state.activeBudgetId = '';
+    notify(
+      budget?.code
+        ? `Orçamento ${budget.code} salvo com sucesso.`
+        : existingBudget?.code
+        ? `Orçamento ${existingBudget.code} atualizado com sucesso.`
+        : 'Orçamento salvo com sucesso.',
+      'success'
+    );
+    state.itens = [];
+    state.vendaPagamentos = [];
+    state.vendaDesconto = 0;
+    state.vendaAcrescimo = 0;
+    setSaleCustomer(null, null);
+    clearSelectedProduct();
+    clearSaleSearchAreas();
+    renderItemsList();
+    renderSalePaymentsPreview();
+    updateFinalizeButton();
+    updateSaleSummary();
+    renderBudgets();
+    scheduleStatePersist({ immediate: true });
+    closeFinalizeModal();
+  };
+
   const finalizeSaleFlow = async () => {
     const total = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
@@ -3819,6 +4291,8 @@
       notify('O valor pago deve ser igual ao total da venda.', 'warning');
       return;
     }
+    const budgetIdToFinalize = state.activeBudgetId || '';
+    const budgetToFinalize = budgetIdToFinalize ? findBudgetById(budgetIdToFinalize) : null;
     const saleCode = state.currentSaleCode || '';
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
@@ -3834,10 +4308,22 @@
       addition: state.vendaAcrescimo,
       customer: state.vendaCliente,
     });
+    if (budgetToFinalize) {
+      const finalizeIso = new Date().toISOString();
+      budgetToFinalize.status = 'finalizado';
+      budgetToFinalize.finalizedAt = finalizeIso;
+      budgetToFinalize.updatedAt = finalizeIso;
+      if (saleRecord?.id) {
+        budgetToFinalize.finalizedSaleId = saleRecord.id;
+      }
+      state.selectedBudgetId = budgetToFinalize.id;
+    }
     const successMessage = saleCode
       ? `Venda ${saleCode} finalizada com sucesso.`
       : 'Venda finalizada com sucesso.';
     notify(successMessage, 'success');
+    state.activeBudgetId = '';
+    state.pendingBudgetValidityDays = null;
     state.itens = [];
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
@@ -3850,6 +4336,10 @@
     updateFinalizeButton();
     updateSaleSummary();
     closeFinalizeModal();
+    if (budgetToFinalize) {
+      renderBudgets();
+      scheduleStatePersist({ immediate: true });
+    }
     advanceSaleCode();
     const preferences = state.printPreferences || {};
     const mode = normalizePrintMode(preferences.venda, 'PM');
@@ -4048,6 +4538,14 @@
       finalizeRegisteredDeliveryOrder();
       return;
     }
+    if (state.activeFinalizeContext === 'orcamento') {
+      try {
+        await finalizeBudgetFlow();
+      } catch (error) {
+        console.error('Erro ao salvar orçamento', error);
+      }
+      return;
+    }
     try {
       await finalizeSaleFlow();
     } catch (error) {
@@ -4067,6 +4565,7 @@
     const totalLiquido = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
     const desconto = state.vendaDesconto > 0 ? state.vendaDesconto : 0;
+    const isBudgetContext = state.activeFinalizeContext === 'orcamento';
     if (elements.saleTotal) {
       elements.saleTotal.textContent = formatCurrency(totalLiquido);
     }
@@ -4078,16 +4577,18 @@
     }
     if (elements.finalizeConfirm) {
       const difference = Math.abs(totalLiquido - pago);
-      const canFinalize = totalLiquido > 0 && difference < 0.01;
+      const canFinalize = totalLiquido > 0 && (isBudgetContext || difference < 0.01);
       elements.finalizeConfirm.disabled = !canFinalize;
       elements.finalizeConfirm.classList.toggle('opacity-60', !canFinalize);
       if (elements.finalizeDifference) {
         if (totalLiquido === 0) {
           elements.finalizeDifference.textContent = 'Adicione itens para finalizar a venda.';
-        } else if (difference >= 0.01) {
+        } else if (!isBudgetContext && difference >= 0.01) {
           const remaining = totalLiquido - pago;
           const label = remaining > 0 ? `Faltam ${formatCurrency(remaining)}` : `Pago a maior ${formatCurrency(Math.abs(remaining))}`;
           elements.finalizeDifference.textContent = label;
+        } else if (isBudgetContext) {
+          elements.finalizeDifference.textContent = 'Pagamentos são opcionais para o orçamento.';
         } else {
           elements.finalizeDifference.textContent = '';
         }
@@ -6114,6 +6615,313 @@
     elements.salesList.appendChild(fragment);
   };
 
+  const findBudgetById = (budgetId) => {
+    if (!budgetId) return null;
+    return state.budgets.find((budget) => budget.id === budgetId) || null;
+  };
+
+  const getBudgetCustomerLabel = (budget) => {
+    if (!budget) return 'Cliente não informado';
+    const customer = budget.customer || {};
+    return (
+      customer.nome ||
+      customer.nomeFantasia ||
+      customer.razaoSocial ||
+      customer.fantasia ||
+      'Cliente não informado'
+    );
+  };
+
+  const isBudgetFinalized = (budget) => {
+    const status = budget?.status ? String(budget.status).toLowerCase() : '';
+    return status === 'finalizado' || status === 'finalizada';
+  };
+
+  const describeBudgetStatus = (budget) => {
+    if (!budget) return '—';
+    if (isBudgetFinalized(budget)) {
+      if (budget.finalizedAt) {
+        const label = toDateLabel(budget.finalizedAt);
+        return label ? `Finalizado em ${label}` : 'Finalizado';
+      }
+      return 'Finalizado';
+    }
+    const status = budget.status ? String(budget.status).toLowerCase() : 'aberto';
+    if (status === 'cancelado' || status === 'cancelada') {
+      return 'Cancelado';
+    }
+    return 'Aberto';
+  };
+
+  const getBudgetValidityLabel = (budget) => {
+    if (!budget) return '—';
+    const days = clampBudgetValidityDays(budget.validityDays);
+    const untilIso = budget.validUntil || '';
+    if (!untilIso) {
+      return `${days} ${days === 1 ? 'dia' : 'dias'}`;
+    }
+    const label = toDateLabel(untilIso);
+    return `${label} (${days} ${days === 1 ? 'dia' : 'dias'})`;
+  };
+
+  const describeBudgetPayments = (budget) => {
+    if (!budget) return '';
+    if (budget.paymentLabel) return budget.paymentLabel;
+    const payments = Array.isArray(budget.payments) ? budget.payments : [];
+    return describeSalePayments(payments);
+  };
+
+  const getBudgetNetTotal = (budget) => {
+    if (!budget) return 0;
+    const total = safeNumber(budget.total ?? 0);
+    const addition = safeNumber(budget.addition ?? 0);
+    const discount = safeNumber(budget.discount ?? 0);
+    return total + addition - discount;
+  };
+
+  const computeBudgetKpis = () => {
+    const budgets = Array.isArray(state.budgets) ? state.budgets : [];
+    const now = new Date();
+    const todayStart = toStartOfDay(now);
+    const todayEnd = toEndOfDay(now);
+    const weekStart = toStartOfDay(new Date(now.getTime() - 6 * MS_PER_DAY));
+    const monthStart = toStartOfDay(new Date(now.getTime() - 29 * MS_PER_DAY));
+    let today = 0;
+    let week = 0;
+    let month = 0;
+    budgets.forEach((budget) => {
+      const createdAt = budget.createdAt ? new Date(budget.createdAt) : null;
+      if (!createdAt || Number.isNaN(createdAt.getTime())) return;
+      if (isDateWithinRange(createdAt, todayStart, todayEnd)) {
+        today += 1;
+      }
+      if (isDateWithinRange(createdAt, weekStart, todayEnd)) {
+        week += 1;
+      }
+      if (isDateWithinRange(createdAt, monthStart, todayEnd)) {
+        month += 1;
+      }
+    });
+    return { today, week, month, all: budgets.length };
+  };
+
+  const getFilteredBudgets = () => {
+    const budgets = Array.isArray(state.budgets) ? state.budgets : [];
+    const filters = state.budgetFilters || { preset: 'todos', start: '', end: '' };
+    const now = new Date();
+    let start = null;
+    let end = null;
+    if (filters.preset === 'hoje') {
+      start = toStartOfDay(now);
+      end = toEndOfDay(now);
+    } else if (filters.preset === 'semana') {
+      start = toStartOfDay(new Date(now.getTime() - 6 * MS_PER_DAY));
+      end = toEndOfDay(now);
+    } else if (filters.preset === 'mes') {
+      start = toStartOfDay(new Date(now.getTime() - 29 * MS_PER_DAY));
+      end = toEndOfDay(now);
+    } else if (filters.preset === 'custom') {
+      const parsedStart = parseDateInputValue(filters.start || '') || null;
+      const parsedEnd = parseDateInputValue(filters.end || '') || null;
+      start = parsedStart ? toStartOfDay(parsedStart) : null;
+      end = parsedEnd ? toEndOfDay(parsedEnd) : null;
+    }
+    const filtered = start || end
+      ? budgets.filter((budget) => {
+          const createdAt = budget.createdAt ? new Date(budget.createdAt) : null;
+          if (!createdAt || Number.isNaN(createdAt.getTime())) return false;
+          return isDateWithinRange(createdAt, start, end);
+        })
+      : budgets;
+    return filtered
+      .slice()
+      .sort((a, b) => getTimeValue(b.updatedAt || b.createdAt) - getTimeValue(a.updatedAt || a.createdAt));
+  };
+
+  const renderBudgetFilters = () => {
+    if (elements.budgetPresets) {
+      const buttons = elements.budgetPresets.querySelectorAll('[data-budget-preset]');
+      buttons.forEach((button) => {
+        const preset = button.getAttribute('data-budget-preset');
+        const active = preset && state.budgetFilters.preset === preset;
+        button.classList.toggle('border-primary', active);
+        button.classList.toggle('text-primary', active);
+        button.classList.toggle('bg-primary/10', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+    }
+    if (elements.budgetStart) {
+      elements.budgetStart.value = state.budgetFilters.start || '';
+    }
+    if (elements.budgetEnd) {
+      elements.budgetEnd.value = state.budgetFilters.end || '';
+    }
+  };
+
+  const renderBudgetKpis = () => {
+    const kpis = computeBudgetKpis();
+    if (elements.budgetKpiToday) {
+      elements.budgetKpiToday.textContent = String(kpis.today);
+    }
+    if (elements.budgetKpiWeek) {
+      elements.budgetKpiWeek.textContent = String(kpis.week);
+    }
+    if (elements.budgetKpiMonth) {
+      elements.budgetKpiMonth.textContent = String(kpis.month);
+    }
+    if (elements.budgetKpiAll) {
+      elements.budgetKpiAll.textContent = String(kpis.all);
+    }
+  };
+
+  const renderBudgetList = () => {
+    if (!elements.budgetList || !elements.budgetEmpty) return;
+    const budgets = getFilteredBudgets();
+    const hasBudgets = budgets.length > 0;
+    elements.budgetList.innerHTML = '';
+    elements.budgetEmpty.classList.toggle('hidden', hasBudgets);
+    if (elements.budgetCount) {
+      const countLabel = budgets.length === 1 ? '1 registro' : `${budgets.length} registros`;
+      elements.budgetCount.textContent = countLabel;
+    }
+    if (!hasBudgets) {
+      if (state.selectedBudgetId) {
+        state.selectedBudgetId = '';
+        renderBudgetDetails();
+      }
+      return;
+    }
+    if (state.selectedBudgetId && !budgets.some((budget) => budget.id === state.selectedBudgetId)) {
+      state.selectedBudgetId = '';
+    }
+    const fragment = document.createDocumentFragment();
+    budgets.forEach((budget) => {
+      const tr = document.createElement('tr');
+      tr.setAttribute('data-budget-id', budget.id);
+      tr.className = 'cursor-pointer transition hover:bg-primary/5';
+      const finalized = isBudgetFinalized(budget);
+      if (budget.id === state.selectedBudgetId) {
+        tr.classList.add('bg-primary/10');
+      }
+      if (finalized) {
+        tr.classList.add('bg-gray-50');
+      }
+      const validityLabel = escapeHtml(getBudgetValidityLabel(budget));
+      const statusBadge = finalized
+        ? ' <span class="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Finalizado</span>'
+        : '';
+      tr.innerHTML = `
+        <td class="px-4 py-3 font-semibold text-gray-700">${escapeHtml(budget.code)}</td>
+        <td class="px-4 py-3 text-gray-600">${escapeHtml(getBudgetCustomerLabel(budget))}</td>
+        <td class="px-4 py-3 text-gray-600">${validityLabel}${statusBadge}</td>
+      `;
+      fragment.appendChild(tr);
+    });
+    elements.budgetList.appendChild(fragment);
+  };
+
+  const renderBudgetDetails = () => {
+    const budget = findBudgetById(state.selectedBudgetId);
+    const hasBudget = Boolean(budget);
+    const budgetFinalized = isBudgetFinalized(budget);
+    if (elements.budgetImport) {
+      const canImport = hasBudget && !budgetFinalized;
+      elements.budgetImport.disabled = !canImport;
+      if (!hasBudget) {
+        elements.budgetImport.textContent = budgetImportDefaultLabel;
+        elements.budgetImport.title = '';
+      } else if (budgetFinalized) {
+        elements.budgetImport.textContent = BUDGET_IMPORT_FINALIZED_LABEL;
+        elements.budgetImport.title = 'Este orçamento já foi finalizado e não pode ser importado novamente.';
+      } else {
+        elements.budgetImport.textContent = budgetImportDefaultLabel;
+        elements.budgetImport.title = 'Importe este orçamento para o PDV.';
+      }
+    }
+    if (elements.budgetDelete) {
+      elements.budgetDelete.disabled = !hasBudget;
+    }
+    if (!budget) {
+      if (elements.budgetCode) elements.budgetCode.textContent = '—';
+      if (elements.budgetCustomer) elements.budgetCustomer.textContent = '—';
+      if (elements.budgetValidity) elements.budgetValidity.textContent = '—';
+      if (elements.budgetStatus) elements.budgetStatus.textContent = '—';
+      if (elements.budgetTotal) elements.budgetTotal.textContent = formatCurrency(0);
+      if (elements.budgetItems) elements.budgetItems.innerHTML = '';
+      if (elements.budgetItemsEmpty) elements.budgetItemsEmpty.classList.remove('hidden');
+      if (elements.budgetDetailsHint) {
+        elements.budgetDetailsHint.textContent = 'Selecione um orçamento para visualizar os detalhes.';
+      }
+      return;
+    }
+    if (elements.budgetCode) {
+      elements.budgetCode.textContent = budget.code;
+    }
+    if (elements.budgetCustomer) {
+      elements.budgetCustomer.textContent = getBudgetCustomerLabel(budget);
+    }
+    if (elements.budgetValidity) {
+      elements.budgetValidity.textContent = getBudgetValidityLabel(budget);
+    }
+    if (elements.budgetStatus) {
+      elements.budgetStatus.textContent = describeBudgetStatus(budget);
+    }
+    if (elements.budgetTotal) {
+      elements.budgetTotal.textContent = formatCurrency(getBudgetNetTotal(budget));
+    }
+    if (elements.budgetDetailsHint) {
+      const paymentsLabel = describeBudgetPayments(budget);
+      const messages = [];
+      if (paymentsLabel) {
+        messages.push(`Pagamentos sugeridos: ${paymentsLabel}.`);
+      } else {
+        messages.push('Nenhum pagamento sugerido para este orçamento.');
+      }
+      if (budgetFinalized) {
+        messages.push('Este orçamento foi finalizado e não pode ser importado novamente.');
+      }
+      elements.budgetDetailsHint.textContent = messages.join(' ');
+    }
+    if (elements.budgetItems) {
+      elements.budgetItems.innerHTML = '';
+      const items = Array.isArray(budget.items) ? budget.items : [];
+      if (!items.length) {
+        if (elements.budgetItemsEmpty) elements.budgetItemsEmpty.classList.remove('hidden');
+      } else {
+        if (elements.budgetItemsEmpty) elements.budgetItemsEmpty.classList.add('hidden');
+        const fragment = document.createDocumentFragment();
+        items.forEach((item, index) => {
+          const tr = document.createElement('tr');
+          const quantityValue = safeNumber(item?.quantidade ?? item?.qtd ?? 0);
+          const quantityLabel = quantityValue.toLocaleString('pt-BR', {
+            minimumFractionDigits: Number.isInteger(quantityValue) ? 0 : 2,
+            maximumFractionDigits: 3,
+          });
+          const unitValue = safeNumber(item?.valor ?? item?.valorUnitario ?? 0);
+          const subtotalValue = safeNumber(item?.subtotal ?? item?.total ?? unitValue * quantityValue);
+          const discountValue = safeNumber(item?.desconto ?? 0);
+          tr.innerHTML = `
+            <td class="px-4 py-3 text-gray-600">${escapeHtml(item?.codigoBarras || item?.codigo || '—')}</td>
+            <td class="px-4 py-3 text-gray-700">${escapeHtml(item?.nome || item?.descricao || `Item ${index + 1}`)}</td>
+            <td class="px-4 py-3 text-gray-600">${escapeHtml(quantityLabel)}</td>
+            <td class="px-4 py-3 text-gray-600">${escapeHtml(formatCurrency(unitValue))}</td>
+            <td class="px-4 py-3 text-gray-600">${escapeHtml(formatCurrency(discountValue))}</td>
+            <td class="px-4 py-3 text-gray-600">${escapeHtml(formatCurrency(subtotalValue))}</td>
+          `;
+          fragment.appendChild(tr);
+        });
+        elements.budgetItems.appendChild(fragment);
+      }
+    }
+  };
+
+  const renderBudgets = () => {
+    renderBudgetFilters();
+    renderBudgetKpis();
+    renderBudgetList();
+    renderBudgetDetails();
+  };
+
   const registerCompletedSaleRecord = (options = {}) => {
     const record = createCompletedSaleRecord(options);
     if (!record) return null;
@@ -6655,6 +7463,12 @@
     state.printPreferences = { fechamento: 'PM', venda: 'PM' };
     state.deliveryOrders = [];
     state.completedSales = [];
+    state.budgets = [];
+    state.selectedBudgetId = '';
+    state.activeBudgetId = '';
+    state.pendingBudgetValidityDays = null;
+    state.budgetSequence = 1;
+    state.budgetFilters = { preset: 'todos', start: '', end: '' };
     state.activeSaleCancellationId = '';
     state.deliveryAddresses = [];
     state.deliveryAddressesLoading = false;
@@ -6718,6 +7532,7 @@
     renderDeliveryAddresses();
     renderDeliveryOrders();
     renderSalesList();
+    renderBudgets();
     if (elements.deliveryAddressModal) {
       elements.deliveryAddressModal.classList.add('hidden');
     }
@@ -7005,11 +7820,28 @@
         paymentTags: Array.isArray(sale.paymentTags) ? sale.paymentTags : [],
         items: Array.isArray(sale.items) ? sale.items : [],
       }));
+    const budgetsFonte = Array.isArray(pdv?.budgets)
+      ? pdv.budgets
+      : Array.isArray(pdv?.orcamentos)
+      ? pdv.orcamentos
+      : [];
+    state.budgets = budgetsFonte.map((budget) => normalizeBudgetRecordForPersist(budget)).filter(Boolean);
+    if (pdv?.budgetSequence != null) {
+      state.budgetSequence = Math.max(1, Number.parseInt(pdv.budgetSequence, 10) || 1);
+    } else if (pdv?.orcamentoSequencia != null) {
+      state.budgetSequence = Math.max(1, Number.parseInt(pdv.orcamentoSequencia, 10) || 1);
+    } else {
+      state.budgetSequence = state.budgets.length + 1;
+    }
+    state.selectedBudgetId = '';
+    state.activeBudgetId = '';
+    state.pendingBudgetValidityDays = null;
     renderPayments();
     renderHistory();
     setLastMovement(state.history[0] || null);
     renderItemsList();
     renderSalesList();
+    renderBudgets();
     clearSelectedProduct();
     updateWorkspaceInfo();
     renderCaixaActions();
@@ -7726,10 +8558,24 @@
         button.addEventListener('click', handleDeliveryAction);
         return;
       }
+      if (action === 'orcamento') {
+        button.addEventListener('click', handleBudgetAction);
+        return;
+      }
       button.addEventListener('click', () => {
         notify('Funcionalidade em desenvolvimento.', 'info');
       });
     });
+    elements.budgetPresets?.addEventListener('click', handleBudgetPresetClick);
+    elements.budgetStart?.addEventListener('change', handleBudgetDateChange);
+    elements.budgetEnd?.addEventListener('change', handleBudgetDateChange);
+    elements.budgetList?.addEventListener('click', handleBudgetListClick);
+    elements.budgetImport?.addEventListener('click', handleBudgetImport);
+    elements.budgetDelete?.addEventListener('click', handleBudgetDelete);
+    elements.budgetModalConfirm?.addEventListener('click', confirmBudgetValidity);
+    elements.budgetModalCancel?.addEventListener('click', () => closeBudgetModal());
+    elements.budgetModalClose?.addEventListener('click', () => closeBudgetModal());
+    elements.budgetModalBackdrop?.addEventListener('click', () => closeBudgetModal());
     elements.customerRemove?.addEventListener('click', handleCustomerRemove);
     elements.customerModalClose?.addEventListener('click', closeCustomerModal);
     elements.customerModalBackdrop?.addEventListener('click', closeCustomerModal);
@@ -7791,6 +8637,7 @@
     updateWorkspaceVisibility(false);
     bindEvents();
     renderSalePaymentMethods();
+    renderBudgets();
     updateTabAvailability();
     try {
       await fetchStores();
