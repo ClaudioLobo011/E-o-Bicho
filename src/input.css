@@ -1213,6 +1213,18 @@
     @apply max-w-none;
   }
 
+  body.admin-embedded .admin-embedded-main {
+    @apply w-full max-w-none px-4 sm:px-6 lg:px-8 pt-6 pb-10 min-h-screen;
+  }
+
+  body.admin-embedded .admin-embedded-main > .admin-embedded-grid {
+    @apply w-full max-w-none;
+  }
+
+  body.admin-embedded .admin-embedded-main > .admin-embedded-grid > * {
+    @apply w-full max-w-none;
+  }
+
   body.admin-embedded .admin-embedded-grid {
     @apply gap-4;
   }

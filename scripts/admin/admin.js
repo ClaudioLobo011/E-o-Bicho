@@ -70,6 +70,12 @@ async function checkAdminAccess() {
         if (mainGrid) {
           mainGrid.classList.add('admin-embedded-grid');
         }
+
+        const mainElement = document.querySelector('main');
+        if (mainElement) {
+          mainElement.classList.remove('container', 'mx-auto', 'px-4', 'py-8', 'min-h-screen');
+          mainElement.classList.add('admin-embedded-main');
+        }
       };
 
       if (document.readyState === 'loading') {
