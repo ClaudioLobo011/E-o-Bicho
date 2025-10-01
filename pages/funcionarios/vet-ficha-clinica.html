@@ -10,15 +10,19 @@
 </head>
 
 <body class="bg-gray-100">
-    <!-- Header global -->
-    <div id="func-header-placeholder"></div>
+    <div id="admin-header-placeholder"></div>
 
     <main class="container mx-auto px-4 py-6 min-h-screen">
-        <!-- Sidebar Funcionários -->
-        <div class="mb-4" id="func-sidebar-placeholder"></div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 lg:gap-8">
+
+            <aside class="md:col-span-4">
+                <div id="admin-sidebar-placeholder"></div>
+            </aside>
+
+            <div class="md:col-span-4 space-y-4">
 
         <!-- TOP BAR da Ficha Clínica (Tutor/Pet e Ações do topo) -->
-        <section class="bg-white rounded-xl shadow-sm ring-1 ring-black/5 p-4 mb-4">
+        <section class="bg-white rounded-xl shadow-sm ring-1 ring-black/5 p-4">
             <div class="flex items-center gap-6">
                 <!-- Tutor -->
                 <div class="flex-1 min-w-[280px]">
@@ -331,19 +335,21 @@
                 </div>
             </aside>
         </div>
+            </div> <!-- /md:col-span-4 space-y-4 -->
+        </div> <!-- /grid -->
     </main>
 
     <!-- Modais/rodapé padrão -->
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
-    <div id="func-footer-placeholder"></div>
+    <div id="admin-footer-placeholder"></div>
 
     <!-- Scripts base do projeto -->
     <script>var basePath = '../../';</script>
     <script src="../../scripts/core/config.js"></script>
     <script src="../../scripts/core/ui.js"></script>
     <script src="../../scripts/core/main.js"></script>
-    <script src="../../scripts/funcionarios/funcionarios.js"></script>
+    <script src="../../scripts/admin/admin.js"></script>
     <script type="module" src="../../scripts/funcionarios/vet/ficha-clinica/index.js"></script>
 </body>
 

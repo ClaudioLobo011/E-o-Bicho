@@ -240,12 +240,16 @@
   </style>
 </head>
 <body class="bg-gray-100">
-  <div id="func-header-placeholder"></div>
+  <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 py-8 min-h-screen">
-    <div class="mb-6" id="func-sidebar-placeholder"></div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
 
-    <section class="bg-white rounded-xl shadow-sm ring-1 ring-black/5 p-6">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <section class="md:col-span-4 bg-white rounded-xl shadow-sm ring-1 ring-black/5 p-6">
       <div class="flex items-start gap-3">
         <div class="h-12 w-12 rounded-xl bg-primary/10 text-primary grid place-items-center text-xl">
           <i class="fas fa-prescription-bottle-medical"></i>
@@ -389,18 +393,19 @@
 
         <div id="vet-rec-list" class="mt-6 space-y-4"></div>
       </div>
-    </section>
+      </section>
+    </div>
   </main>
 
   <div id="modal-placeholder"></div>
   <div id="confirm-modal-placeholder"></div>
-  <div id="func-footer-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
 
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js"></script>
   <script src="../../scripts/core/ui.js"></script>
   <script src="../../scripts/core/main.js"></script>
-  <script src="../../scripts/funcionarios/funcionarios.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
   <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
   <script type="module" src="../../scripts/funcionarios/vet/receitas.js"></script>
 </body>
