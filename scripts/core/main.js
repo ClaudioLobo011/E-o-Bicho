@@ -636,7 +636,13 @@ function initializeAdminHeaderSearch() {
   const openMatch = (index) => {
     const match = matches[index];
     if (!match) return;
-    window.location.href = match.href;
+
+    if (window.AdminTabs && typeof window.AdminTabs.open === 'function') {
+      window.AdminTabs.open(match.href, match.label);
+    } else {
+      window.location.href = match.href;
+    }
+
     hidePanel();
   };
 

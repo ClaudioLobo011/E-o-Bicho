@@ -1199,3 +1199,33 @@
   .shadow, .shadow-sm, .shadow-md,
   .ring-1, .ring-2 { box-shadow: none !important; }
 }
+
+@layer components {
+  body.admin-embedded {
+    @apply bg-transparent;
+  }
+
+  body.admin-embedded main {
+    @apply min-h-0 px-4 py-6;
+  }
+
+  body.admin-embedded .admin-embedded-grid {
+    @apply block gap-6;
+  }
+
+  body.admin-embedded[data-admin-tabs-root] {
+    @apply h-full;
+  }
+
+  .admin-tab-iframe {
+    width: 100%;
+    border: 0;
+    min-height: 720px;
+  }
+
+  @media (min-width: 768px) {
+    .admin-tab-iframe {
+      min-height: calc(100vh - 220px);
+    }
+  }
+}
