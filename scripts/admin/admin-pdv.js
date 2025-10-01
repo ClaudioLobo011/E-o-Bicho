@@ -160,6 +160,27 @@
   const SALE_CODE_PADDING = 6;
   const BUDGET_CODE_PREFIX = 'ORC';
   const BUDGET_CODE_PADDING = 6;
+  const ACTIVE_TAB_STORAGE_KEY = 'adminPdvActiveTab';
+  const loadActiveTabPreference = () => {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    try {
+      return window.localStorage?.getItem(ACTIVE_TAB_STORAGE_KEY) || '';
+    } catch (error) {
+      return '';
+    }
+  };
+  const persistActiveTabPreference = (tabId) => {
+    if (typeof window === 'undefined' || !tabId) {
+      return;
+    }
+    try {
+      window.localStorage?.setItem(ACTIVE_TAB_STORAGE_KEY, tabId);
+    } catch (error) {
+      // Ignore storage persistence errors
+    }
+  };
   const DEFAULT_BUDGET_VALIDITY_DAYS = 7;
   const MS_PER_DAY = 24 * 60 * 60 * 1000;
   const deliveryStatusSteps = [
@@ -2002,14 +2023,16 @@
     }
   };
 
-  const setActiveTab = (targetId) => {
-    if (targetId === 'pdv-tab' && !state.caixaAberto) {
-      targetId = 'caixa-tab';
+  const setActiveTab = (targetId, options = {}) => {
+    const { persist = true } = options;
+    let resolvedTarget = targetId;
+    if (resolvedTarget === 'pdv-tab' && !state.caixaAberto) {
+      resolvedTarget = 'caixa-tab';
     }
     if (!elements.tabTriggers || !elements.tabPanels) return;
     elements.tabTriggers.forEach((trigger) => {
       const target = trigger.getAttribute('data-tab-target');
-      const isActive = target === targetId;
+      const isActive = target === resolvedTarget;
       trigger.classList.toggle('text-primary', isActive);
       trigger.classList.toggle('border-primary', isActive);
       trigger.classList.toggle('border-transparent', !isActive);
@@ -2017,8 +2040,11 @@
     });
     elements.tabPanels.forEach((panel) => {
       const panelId = panel.getAttribute('data-tab-panel');
-      panel.classList.toggle('hidden', panelId !== targetId);
+      panel.classList.toggle('hidden', panelId !== resolvedTarget);
     });
+    if (persist) {
+      persistActiveTabPreference(resolvedTarget);
+    }
   };
 
   const updateTabAvailability = () => {
@@ -9568,6 +9594,8 @@
 
   const init = async () => {
     queryElements();
+    const preferredTab = loadActiveTabPreference();
+    setActiveTab(preferredTab || 'caixa-tab', { persist: false });
     resetWorkspace();
     updateWorkspaceVisibility(false);
     bindEvents();
