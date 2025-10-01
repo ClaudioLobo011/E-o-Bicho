@@ -172,6 +172,108 @@
       return { item, trigger, closeBtn, label: safeLabel };
     }
 
+    function setupIframeAutoHeight(iframe, cleanupFns, frameWrapper) {
+      if (!iframe) return;
+
+      const resize = () => {
+        try {
+          const doc = iframe.contentDocument || iframe.contentWindow?.document;
+          const win = iframe.contentWindow;
+          if (!doc || !win) {
+            return;
+          }
+
+          const html = doc.documentElement;
+          const body = doc.body;
+
+          const measurements = [
+            body?.scrollHeight,
+            body?.offsetHeight,
+            html?.clientHeight,
+            html?.scrollHeight,
+            html?.offsetHeight,
+          ].filter((value) => typeof value === 'number');
+
+          const targetHeight = measurements.length ? Math.max(...measurements) : 0;
+
+          if (Number.isFinite(targetHeight) && targetHeight > 0) {
+            iframe.style.height = `${targetHeight}px`;
+          }
+        } catch (err) {
+          // Ignore cross-origin issues or transient access errors.
+        }
+      };
+
+      const detachFns = [];
+
+      const attachObservers = () => {
+        resize();
+
+        try {
+          const win = iframe.contentWindow;
+          const doc = win?.document;
+
+          if (!win || !doc) {
+            return;
+          }
+
+          if (frameWrapper) {
+            frameWrapper.style.minHeight = '0px';
+          }
+
+          if (typeof win.ResizeObserver === 'function') {
+            const resizeObserver = new win.ResizeObserver(() => resize());
+            resizeObserver.observe(doc.documentElement);
+            if (doc.body) {
+              resizeObserver.observe(doc.body);
+            }
+            detachFns.push(() => resizeObserver.disconnect());
+          } else {
+            const intervalId = win.setInterval(() => resize(), 500);
+            detachFns.push(() => win.clearInterval(intervalId));
+          }
+
+          if (typeof win.MutationObserver === 'function') {
+            const mutationObserver = new win.MutationObserver(() => resize());
+            mutationObserver.observe(doc.documentElement, {
+              attributes: true,
+              childList: true,
+              subtree: true,
+            });
+            detachFns.push(() => mutationObserver.disconnect());
+          }
+        } catch (err) {
+          // Ignore ResizeObserver failures when the iframe navigates away.
+        }
+      };
+
+      const loadHandler = () => {
+        attachObservers();
+      };
+
+      iframe.addEventListener('load', loadHandler);
+
+      cleanupFns.push(() => iframe.removeEventListener('load', loadHandler));
+      cleanupFns.push(() => {
+        while (detachFns.length) {
+          const fn = detachFns.pop();
+          try {
+            fn();
+          } catch (err) {
+            // noop
+          }
+        }
+      });
+
+      try {
+        if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+          attachObservers();
+        }
+      } catch (err) {
+        // Ignore access errors if the iframe is still loading.
+      }
+    }
+
     function createIframePanel(id, href, label) {
       const panel = document.createElement('section');
       panel.id = `admin-tab-panel-${id}`;
@@ -184,9 +286,8 @@
 
       const frameWrapper = document.createElement('div');
       frameWrapper.className = 'relative w-full admin-tab-iframe-wrapper';
-      frameWrapper.style.minHeight = 'inherit';
-      frameWrapper.style.display = 'flex';
-      frameWrapper.style.flexDirection = 'column';
+      frameWrapper.style.display = 'block';
+      frameWrapper.style.minHeight = '480px';
 
       const loader = document.createElement('div');
       loader.className = 'absolute inset-0 flex items-center justify-center bg-white/80';
@@ -201,20 +302,21 @@
       iframe.className = 'admin-tab-iframe';
       iframe.setAttribute('loading', 'lazy');
       iframe.setAttribute('title', label);
-      iframe.style.flex = '1 1 auto';
       iframe.style.width = '100%';
-      iframe.style.height = '100%';
+      iframe.style.height = '0px';
+      iframe.dataset.autoHeight = 'true';
       iframe.src = buildIframeSrc(href);
 
       iframe.addEventListener('load', () => {
         loader.classList.add('hidden');
+        frameWrapper.style.minHeight = '0px';
       }, { once: true });
 
       frameWrapper.appendChild(iframe);
       frameWrapper.appendChild(loader);
       panel.appendChild(frameWrapper);
 
-      return { panel, iframe, loader };
+      return { panel, iframe, loader, frameWrapper };
     }
 
     function closeTab(id) {
@@ -223,6 +325,16 @@
 
       if (entry.item) entry.item.remove();
       if (entry.panel) entry.panel.remove();
+
+      if (entry.cleanupFns && Array.isArray(entry.cleanupFns)) {
+        entry.cleanupFns.forEach((fn) => {
+          try {
+            fn();
+          } catch (err) {
+            // noop
+          }
+        });
+      }
 
       tabs.delete(id);
       if (entry.href) {
@@ -278,7 +390,11 @@
         }
 
         if (entry.iframe) {
-          entry.iframe.style.minHeight = `${available}px`;
+          if (entry.iframe.dataset.autoHeight === 'true') {
+            entry.iframe.style.minHeight = '0px';
+          } else {
+            entry.iframe.style.minHeight = `${available}px`;
+          }
         }
       });
     }
@@ -341,7 +457,7 @@
       tabList.appendChild(item);
       ensureTabVisible(item);
 
-      const { panel, iframe } = createIframePanel(newId, href, resolvedLabel);
+      const { panel, iframe, frameWrapper } = createIframePanel(newId, href, resolvedLabel);
       panelContainer.appendChild(panel);
 
       const record = {
@@ -352,7 +468,9 @@
         item,
         closeBtn,
         iframe,
+        frameWrapper,
         locked: false,
+        cleanupFns: [],
       };
 
       tabs.set(newId, record);
@@ -360,6 +478,7 @@
       order.push(newId);
 
       setActive(newId);
+      setupIframeAutoHeight(iframe, record.cleanupFns, frameWrapper);
       queuePanelHeightUpdate();
     }
 
