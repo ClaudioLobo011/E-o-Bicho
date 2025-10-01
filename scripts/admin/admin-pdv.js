@@ -126,6 +126,8 @@
     deliveryFinalizingOrderId: '',
     completedSales: [],
     activeSaleCancellationId: '',
+    fiscalEmissionStep: '',
+    fiscalEmissionModalOpen: false,
   };
 
   const elements = {};
@@ -1570,6 +1572,10 @@
     elements.salePaid = document.getElementById('pdv-sale-paid');
     elements.saleAdjust = document.getElementById('pdv-sale-adjust');
     elements.saleItemAdjust = document.getElementById('pdv-sale-item-adjust');
+
+    elements.fiscalStatusModal = document.getElementById('pdv-fiscal-status-modal');
+    elements.fiscalStatusTitle = document.getElementById('pdv-fiscal-status-title');
+    elements.fiscalStatusSteps = document.getElementById('pdv-fiscal-status-steps');
 
     elements.deliveryList = document.getElementById('pdv-delivery-list');
     elements.deliveryEmpty = document.getElementById('pdv-delivery-empty');
@@ -3370,6 +3376,140 @@
     state.activeFinalizeContext = null;
   };
 
+  const fiscalEmissionStepOrder = ['montando', 'assinando', 'transmitindo'];
+
+  const updateFiscalEmissionStepIndicators = (activeStep = fiscalEmissionStepOrder[0]) => {
+    state.fiscalEmissionStep = activeStep;
+    if (!elements.fiscalStatusSteps) return;
+    const items = elements.fiscalStatusSteps.querySelectorAll('[data-fiscal-step]');
+    const activeIndex = fiscalEmissionStepOrder.indexOf(activeStep);
+    items.forEach((item) => {
+      const stepId = item.getAttribute('data-fiscal-step');
+      const index = fiscalEmissionStepOrder.indexOf(stepId);
+      const iconWrapper = item.querySelector('[data-fiscal-step-icon]');
+      const iconElement = iconWrapper?.querySelector('i');
+      const status = item.querySelector('[data-fiscal-step-status]');
+
+      item.classList.remove('border-primary', 'bg-primary/5', 'text-primary', 'border-emerald-200', 'bg-emerald-50', 'text-emerald-700');
+      item.classList.add('border-gray-200', 'bg-gray-50', 'text-gray-600');
+
+      if (iconWrapper) {
+        iconWrapper.classList.remove('bg-primary/10', 'text-primary', 'bg-emerald-100', 'text-emerald-600');
+        iconWrapper.classList.add('bg-gray-100', 'text-gray-400');
+      }
+
+      if (iconElement) {
+        iconElement.classList.remove('fa-circle-notch', 'fa-check', 'animate-spin');
+        iconElement.classList.add('fa-circle');
+      }
+
+      if (status) {
+        status.textContent = 'Aguardando...';
+        status.classList.remove('text-primary', 'text-emerald-600');
+        status.classList.add('text-gray-400');
+      }
+
+      if (index === -1 || activeIndex === -1) {
+        return;
+      }
+
+      if (index < activeIndex) {
+        item.classList.remove('border-gray-200', 'bg-gray-50', 'text-gray-600');
+        item.classList.add('border-emerald-200', 'bg-emerald-50', 'text-emerald-700');
+        if (iconWrapper) {
+          iconWrapper.classList.remove('bg-gray-100', 'text-gray-400');
+          iconWrapper.classList.add('bg-emerald-100', 'text-emerald-600');
+        }
+        if (iconElement) {
+          iconElement.classList.remove('fa-circle');
+          iconElement.classList.add('fa-check');
+        }
+        if (status) {
+          status.textContent = 'Concluído';
+          status.classList.remove('text-gray-400');
+          status.classList.add('text-emerald-600');
+        }
+        return;
+      }
+
+      if (index === activeIndex) {
+        item.classList.remove('border-gray-200', 'bg-gray-50', 'text-gray-600');
+        item.classList.add('border-primary', 'bg-primary/5', 'text-primary');
+        if (iconWrapper) {
+          iconWrapper.classList.remove('bg-gray-100', 'text-gray-400');
+          iconWrapper.classList.add('bg-primary/10', 'text-primary');
+        }
+        if (iconElement) {
+          iconElement.classList.remove('fa-circle');
+          iconElement.classList.add('fa-circle-notch', 'animate-spin');
+        }
+        if (status) {
+          status.textContent = 'Em andamento';
+          status.classList.remove('text-gray-400');
+          status.classList.add('text-primary');
+        }
+      }
+    });
+  };
+
+  const markFiscalEmissionCompleted = () => {
+    state.fiscalEmissionStep = 'completed';
+    if (!elements.fiscalStatusSteps) return;
+    const items = elements.fiscalStatusSteps.querySelectorAll('[data-fiscal-step]');
+    items.forEach((item) => {
+      const iconWrapper = item.querySelector('[data-fiscal-step-icon]');
+      const iconElement = iconWrapper?.querySelector('i');
+      const status = item.querySelector('[data-fiscal-step-status]');
+
+      item.classList.remove(
+        'border-gray-200',
+        'bg-gray-50',
+        'text-gray-600',
+        'border-primary',
+        'bg-primary/5',
+        'text-primary'
+      );
+      item.classList.add('border-emerald-200', 'bg-emerald-50', 'text-emerald-700');
+
+      if (iconWrapper) {
+        iconWrapper.classList.remove('bg-gray-100', 'text-gray-400', 'bg-primary/10', 'text-primary');
+        iconWrapper.classList.add('bg-emerald-100', 'text-emerald-600');
+      }
+
+      if (iconElement) {
+        iconElement.classList.remove('fa-circle', 'fa-circle-notch', 'animate-spin');
+        iconElement.classList.add('fa-check');
+      }
+
+      if (status) {
+        status.textContent = 'Concluído';
+        status.classList.remove('text-gray-400', 'text-primary');
+        status.classList.add('text-emerald-600');
+      }
+    });
+  };
+
+  const openFiscalEmissionModal = (initialStep = fiscalEmissionStepOrder[0]) => {
+    state.fiscalEmissionModalOpen = true;
+    if (!elements.fiscalStatusModal) return;
+    elements.fiscalStatusModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    if (elements.fiscalStatusTitle) {
+      elements.fiscalStatusTitle.textContent = 'Emitindo nota fiscal...';
+    }
+    updateFiscalEmissionStepIndicators(initialStep);
+  };
+
+  const closeFiscalEmissionModal = () => {
+    if (!state.fiscalEmissionModalOpen) return;
+    state.fiscalEmissionModalOpen = false;
+    if (!elements.fiscalStatusModal) return;
+    elements.fiscalStatusModal.classList.add('hidden');
+    if (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) {
+      document.body.classList.remove('overflow-hidden');
+    }
+  };
+
   const openPaymentValueModal = (method, parcelas) => {
     return new Promise((resolve, reject) => {
       if (!elements.paymentValueModal || !elements.paymentValueInput) {
@@ -3564,6 +3704,13 @@
     }
     sale.fiscalStatus = 'emitting';
     renderSalesList();
+    let emissionModalOpened = false;
+    const ensureEmissionModal = (initialStep = fiscalEmissionStepOrder[0]) => {
+      if (emissionModalOpened) return;
+      openFiscalEmissionModal(initialStep);
+      emissionModalOpened = true;
+    };
+    ensureEmissionModal('montando');
     // Garante que o backend conheça a venda antes da emissão fiscal
     if (statePersistTimeout) {
       window.clearTimeout(statePersistTimeout);
@@ -3574,13 +3721,16 @@
       // eslint-disable-next-line no-await-in-loop
       await new Promise((resolve) => window.setTimeout(resolve, 50));
     }
+    updateFiscalEmissionStepIndicators('montando');
     await flushStatePersist();
+    updateFiscalEmissionStepIndicators('assinando');
     try {
       const token = getToken();
       const headers = { 'Content-Type': 'application/json' };
       if (token) {
         headers.Authorization = `Bearer ${token}`;
       }
+      updateFiscalEmissionStepIndicators('transmitindo');
       const response = await fetch(
         `${API_BASE}/pdvs/${encodeURIComponent(state.selectedPdv)}/sales/${encodeURIComponent(
           saleId
@@ -3626,10 +3776,17 @@
           ? data.fiscalItemsSnapshot
           : sale.fiscalItemsSnapshot,
       });
+      if (elements.fiscalStatusTitle) {
+        elements.fiscalStatusTitle.textContent = 'Nota fiscal emitida com sucesso!';
+      }
+      markFiscalEmissionCompleted();
       if (notifyOnSuccess) {
         notify('Nota fiscal emitida e salva no Drive.', 'success');
       }
       scheduleStatePersist({ immediate: true });
+      if (emissionModalOpened) {
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+      }
       return { success: true, data: data || null };
     } catch (error) {
       console.error('Erro ao emitir fiscal', error);
@@ -3637,6 +3794,11 @@
       renderSalesList();
       notify(error?.message || 'Não foi possível emitir a nota fiscal.', 'error');
       return { success: false, reason: 'error', error };
+    }
+    finally {
+      if (emissionModalOpened) {
+        closeFiscalEmissionModal();
+      }
     }
   };
 

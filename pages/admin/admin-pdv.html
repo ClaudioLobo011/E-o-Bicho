@@ -462,6 +462,55 @@
         </div>
     </div>
 
+    <div id="pdv-fiscal-status-modal" class="fixed inset-0 z-[70] hidden">
+        <div class="absolute inset-0 bg-slate-900/60"></div>
+        <div class="relative mx-auto mt-32 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div class="flex justify-center">
+                <div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <i class="fas fa-circle-notch animate-spin text-xl"></i>
+                </div>
+            </div>
+            <h2 id="pdv-fiscal-status-title" class="mt-4 text-center text-lg font-semibold text-gray-800">
+                Emitindo nota fiscal...
+            </h2>
+            <p class="mt-2 text-center text-sm text-gray-500">
+                Aguarde enquanto concluímos as etapas de emissão fiscal.
+            </p>
+            <ul id="pdv-fiscal-status-steps" class="mt-6 space-y-3 text-left">
+                <li data-fiscal-step="montando" class="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-400" data-fiscal-step-icon>
+                        <i class="fas fa-circle text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-medium">Montando XML</p>
+                        <p class="text-xs text-gray-400" data-fiscal-step-status>Aguardando...</p>
+                    </div>
+                </li>
+                <li data-fiscal-step="assinando" class="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-400" data-fiscal-step-icon>
+                        <i class="fas fa-circle text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-medium">Assinando XML</p>
+                        <p class="text-xs text-gray-400" data-fiscal-step-status>Aguardando...</p>
+                    </div>
+                </li>
+                <li data-fiscal-step="transmitindo" class="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-400" data-fiscal-step-icon>
+                        <i class="fas fa-circle text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-medium">Transmitindo XML</p>
+                        <p class="text-xs text-gray-400" data-fiscal-step-status>Aguardando...</p>
+                    </div>
+                </li>
+            </ul>
+            <p class="mt-6 text-center text-xs text-gray-400">
+                Não feche esta janela até que a emissão seja concluída.
+            </p>
+        </div>
+    </div>
+
     <div id="pdv-sale-cancel-modal" class="fixed inset-0 z-[60] hidden">
         <div class="absolute inset-0 bg-slate-900/60" data-sale-cancel-dismiss="backdrop"></div>
         <div class="relative mx-auto mt-20 w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
