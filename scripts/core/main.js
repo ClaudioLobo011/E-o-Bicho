@@ -35,6 +35,7 @@ async function loadComponents() {
                     initializeHideOnScroll();
                     initializeFlyoutMenu();
                     checkAdminLink();
+                    setupSiteMainSpacing();
                 }
 
                 if (id === 'admin-header-placeholder') {
@@ -404,6 +405,75 @@ async function initializeHeaderScripts() {
             });
         }
     } catch(_) { /* ignora */ }
+}
+
+let siteHeaderSpacingInitialized = false;
+
+function adjustSiteMainSpacing() {
+    const mains = document.querySelectorAll('main[data-header-offset="site"]');
+    if (!mains.length) return;
+
+    const headerTop = document.getElementById('header-top');
+    const categoryNav = document.getElementById('category-nav');
+    const gap = 16;
+
+    let offset = gap;
+
+    if (categoryNav) {
+        const navRect = categoryNav.getBoundingClientRect();
+        if (navRect.height > 0) {
+            offset = Math.max(offset, Math.round(navRect.bottom + gap));
+        }
+    }
+
+    if (headerTop && offset === gap) {
+        const headerRect = headerTop.getBoundingClientRect();
+        if (headerRect.height > 0) {
+            offset = Math.max(offset, Math.round(headerRect.bottom + gap));
+        }
+    }
+
+    mains.forEach((main) => {
+        main.style.paddingTop = `${offset}px`;
+    });
+}
+
+function setupSiteMainSpacing() {
+    const recalc = () => adjustSiteMainSpacing();
+
+    adjustSiteMainSpacing();
+
+    if (!siteHeaderSpacingInitialized) {
+        siteHeaderSpacingInitialized = true;
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => recalc(), 100);
+        });
+        window.addEventListener('load', recalc);
+    }
+
+    if (typeof ResizeObserver !== 'undefined') {
+        const headerTop = document.getElementById('header-top');
+        const categoryNav = document.getElementById('category-nav');
+
+        if (!window.__siteHeaderResizeObserver) {
+            window.__siteHeaderResizeObserver = new ResizeObserver(() => recalc());
+        }
+        if (!window.__siteNavResizeObserver) {
+            window.__siteNavResizeObserver = new ResizeObserver(() => recalc());
+        }
+
+        if (headerTop) {
+            window.__siteHeaderResizeObserver.disconnect();
+            window.__siteHeaderResizeObserver.observe(headerTop);
+        }
+
+        if (categoryNav) {
+            window.__siteNavResizeObserver.disconnect();
+            window.__siteNavResizeObserver.observe(categoryNav);
+        }
+    }
 }
 
 // Busca do topo (auto-complete + sugestões)
