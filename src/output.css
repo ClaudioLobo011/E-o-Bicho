@@ -5321,12 +5321,18 @@
     background-color: transparent;
   }
   body.admin-embedded main {
+    margin-inline: calc(var(--spacing) * 0);
     width: 100%;
-    padding-inline: calc(var(--spacing) * 4);
-    padding-block: calc(var(--spacing) * 4);
+    max-width: 100%;
+    padding-inline: calc(var(--spacing) * 0);
+    padding-top: calc(var(--spacing) * 3);
+    padding-bottom: calc(var(--spacing) * 6);
   }
   body.admin-embedded main.container {
-    max-width: 100%;
+    max-width: none;
+  }
+  body.admin-embedded .admin-embedded-grid {
+    gap: calc(var(--spacing) * 4);
   }
   body.admin-embedded .admin-tab-iframe-wrapper {
     background-color: transparent;
