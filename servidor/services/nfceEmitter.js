@@ -319,12 +319,12 @@ const formatDateTimeWithOffset = (date) => {
 // Gera o QR Code v2 on-line exigido pela SEFAZ/RJ para NFC-e autorizada em emissão normal.
 const buildQrCodeRJ = ({ chNFe, tpAmb, idToken, csc }) => {
   const versaoQR = '2';
-  // Conforme o Manual de Orientação Técnica do QR Code da NFC-e do RJ,
-  // o portal público de consulta via QR Code é servido pelo domínio
-  // consultadfe.fazenda.rj.gov.br, enquanto o campo <urlChave> deve
-  // remeter ao endereço institucional www4.fazenda.rj.gov.br.
+  // Conforme a versão vigente do Manual de Orientação Técnica do QR Code da
+  // NFC-e do RJ, tanto o QR Code on-line (parâmetro "p") quanto o endereço
+  // impresso no DANFE (campo <urlChave>) devem apontar para o domínio
+  // consultadfe.fazenda.rj.gov.br.
   const qrCodeBase = 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode';
-  const urlChaveBase = 'https://www4.fazenda.rj.gov.br/consultaNFCe/QRCode';
+  const urlChaveBase = 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode';
   const idT = String(idToken ?? '').replace(/^0+/, '');
   const pSemHash = `${chNFe}|${versaoQR}|${tpAmb}|${idT}`;
   const token = String(csc ?? '');
