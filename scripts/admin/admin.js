@@ -39,6 +39,46 @@ async function checkAdminAccess() {
     }
 
     // Ok, mostra a página
+    const params = new URLSearchParams(window.location.search);
+    const isEmbedded = params.get('embedded') === '1' || window.top !== window;
+
+    if (isEmbedded) {
+      document.body.classList.add('admin-embedded');
+
+      const adjustLayout = () => {
+        const headerPlaceholder = document.getElementById('admin-header-placeholder');
+        if (headerPlaceholder) {
+          headerPlaceholder.remove();
+        }
+
+        const footerPlaceholder = document.getElementById('admin-footer-placeholder');
+        if (footerPlaceholder) {
+          footerPlaceholder.remove();
+        }
+
+        const sidebarPlaceholder = document.getElementById('admin-sidebar-placeholder');
+        if (sidebarPlaceholder) {
+          const aside = sidebarPlaceholder.closest('aside');
+          if (aside) {
+            aside.remove();
+          } else {
+            sidebarPlaceholder.remove();
+          }
+        }
+
+        const mainGrid = document.querySelector('main > .grid');
+        if (mainGrid) {
+          mainGrid.classList.add('admin-embedded-grid');
+        }
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', adjustLayout, { once: true });
+      } else {
+        adjustLayout();
+      }
+    }
+
     document.body.style.visibility = 'visible';
   } catch (err) {
     console.error('Erro ao verificar permissões:', err);

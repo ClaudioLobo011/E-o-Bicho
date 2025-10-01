@@ -1199,3 +1199,21 @@
   .shadow, .shadow-sm, .shadow-md,
   .ring-1, .ring-2 { box-shadow: none !important; }
 }
+
+@layer components {
+  body.admin-embedded {
+    @apply bg-transparent;
+  }
+
+  body.admin-embedded main {
+    @apply min-h-0 px-4 py-6;
+  }
+
+  body.admin-embedded .admin-embedded-grid {
+    @apply block gap-6;
+  }
+
+  body.admin-embedded [data-admin-tabs-root] {
+    @apply h-full;
+  }
+}
