@@ -1,6 +1,6 @@
   <header class="bg-white shadow-sm">
-    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-      <div class="flex items-center gap-4">
+    <div class="container mx-auto px-4 py-3 flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
+      <div class="flex items-center gap-4 md:w-auto">
         <button type="button" data-admin-sidebar-trigger class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
           <span class="sr-only">Abrir menu administrativo</span>
           <i class="fas fa-bars text-lg"></i>
@@ -10,7 +10,29 @@
         </a>
       </div>
 
-      <div class="flex items-center text-gray-500">
+      <div data-admin-screen-search class="w-full md:flex-1">
+        <label for="admin-screen-search-input" class="sr-only">Pesquisar telas</label>
+        <div class="relative">
+          <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-gray-400">
+            <i class="fas fa-magnifying-glass"></i>
+          </span>
+          <input
+            id="admin-screen-search-input"
+            type="search"
+            autocomplete="off"
+            placeholder="Buscar telas do painel"
+            data-admin-screen-search-input
+            class="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-11 pr-4 text-sm text-gray-700 shadow-sm placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+          <div data-admin-screen-search-results class="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl hidden">
+            <div data-empty-state class="px-4 py-6 text-sm text-gray-500">Comece a digitar para encontrar uma tela.</div>
+            <ul data-results-list class="max-h-80 divide-y divide-gray-100 overflow-auto"></ul>
+            <div data-no-results class="hidden px-4 py-6 text-sm text-gray-500">Nenhuma tela encontrada para essa pesquisa.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center text-gray-500 md:ml-auto">
         <span class="border-r border-gray-300 h-6 mr-4"></span>
         <span class="font-semibold text-sm">Administrador</span>
       </div>
