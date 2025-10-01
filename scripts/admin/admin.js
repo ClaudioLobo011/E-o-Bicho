@@ -9,7 +9,7 @@ async function checkAdminAccess() {
 
     // Sem login -> login
     if (!loggedInUser || !token) {
-      alert('Você precisa estar logado como administrador.');
+      alert('Você precisa estar logado para acessar o painel interno.');
       window.location.replace('/pages/login.html');
       return;
     }
@@ -29,10 +29,10 @@ async function checkAdminAccess() {
     const data = await resp.json();
     const role = data?.role;
 
-    // Libera somente admin e admin_master
-    const allowed = role === 'admin' || role === 'admin_master';
+    // Libera funcionários, admin e admin_master
+    const allowed = ['funcionario', 'admin', 'admin_master'].includes(role);
     if (!allowed) {
-      alert('Acesso negado. Esta área é restrita a administradores.');
+      alert('Acesso negado. Esta área é restrita a colaboradores autorizados.');
       // se quiser mandar para home em vez do login, troque a URL abaixo
       window.location.replace('/pages/login.html');
       return;

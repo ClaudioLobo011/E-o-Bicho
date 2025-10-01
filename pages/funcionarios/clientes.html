@@ -9,30 +9,35 @@
   <link rel="stylesheet" href="../../src/output.css">
 </head>
 <body class="bg-gray-100">
-  <div id="func-header-placeholder"></div>
+  <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 py-8 min-h-screen">
-    <div class="mb-6" id="func-sidebar-placeholder"></div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
 
-    <section class="">
-      <div class="bg-white rounded-lg shadow p-6">
-        <div class="flex items-center gap-3 mb-4">
-          <i class="fas fa-users text-gray-400 text-2xl"></i>
-          <h1 class="text-2xl font-bold text-gray-800">Clientes</h1>
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <section class="md:col-span-4">
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="flex items-center gap-3 mb-4">
+            <i class="fas fa-users text-gray-400 text-2xl"></i>
+            <h1 class="text-2xl font-bold text-gray-800">Clientes</h1>
+          </div>
+          <p class="text-gray-600">Em breve: listagem e ferramentas de clientes.</p>
         </div>
-        <p class="text-gray-600">Em breve: listagem e ferramentas de clientes.</p>
-      </div>
-    </section>
+      </section>
+    </div>
   </main>
 
   <div id="modal-placeholder"></div>
   <div id="confirm-modal-placeholder"></div>
-  <div id="func-footer-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
 
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js"></script>
   <script src="../../scripts/core/ui.js"></script>
   <script src="../../scripts/core/main.js"></script>
-  <script src="../../scripts/funcionarios/funcionarios.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
 </body>
 </html>

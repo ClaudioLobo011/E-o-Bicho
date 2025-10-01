@@ -8,16 +8,17 @@
   <link rel="stylesheet" href="../../src/output.css">
 </head>
 <body class="bg-gray-100">
-  <!-- Header dos Funcionários -->
-  <div id="func-header-placeholder"></div>
+  <div id="admin-header-placeholder"></div>
 
   <main class="container mx-auto px-4 py-8 min-h-screen">
-    <!-- Sidebar agora como faixa horizontal abaixo do cabeçalho -->
-    <div class="mb-6" id="func-sidebar-placeholder"></div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
 
-    <!-- Conteúdo ocupa 100% da largura -->
-    <section>
-      <div class="bg-white rounded-xl shadow-sm ring-1 ring-black/5">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <section class="md:col-span-4">
+        <div class="bg-white rounded-xl shadow-sm ring-1 ring-black/5">
         <!-- Filtros -->
         <div class="agenda-toolbar px-6 py-4 border-b bg-white sticky top-0 z-20 no-print flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div class="flex items-center gap-3">
@@ -66,16 +67,16 @@
         <div id="agenda-wrapper" class="relative overflow-x-auto">
           <div id="agenda-list" class="min-w-[720px]"></div>
         </div>
-      </div>
-    </section>
+        </div>
+      </section>
+    </div>
   </main>
 
   <!-- Modais compartilhados -->
   <div id="modal-placeholder"></div>
   <div id="confirm-modal-placeholder"></div>
 
-  <!-- Footer dos Funcionários -->
-  <div id="func-footer-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
 
   <!-- Base path relativo à pasta /pages -->
   <script defer>var basePath = '../../';</script>
@@ -84,7 +85,7 @@
   <script defer src="../../scripts/core/config.js"></script>
   <script defer src="../../scripts/core/ui.js"></script>
   <script defer src="../../scripts/core/main.js"></script>
-  <script defer src="../../scripts/funcionarios/funcionarios.js"></script>
+  <script defer src="../../scripts/admin/admin.js"></script>
 
   <!-- Página: Banho e Tosa (modulada) -->
   <script type="module" src="../../scripts/funcionarios/banhoetosa/index.js"></script>

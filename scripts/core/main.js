@@ -757,7 +757,7 @@ function initializeFlyoutMenu() {
 }
 
 function checkAdminLink() {
-  return checkRoleLink('admin-link', ['admin','admin_master']);
+  return checkRoleLink('admin-link', ['funcionario','admin','admin_master']);
 }
 
 let __roleCachePromise = null;
