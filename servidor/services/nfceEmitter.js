@@ -327,7 +327,9 @@ const buildQrCodeRJ = ({ chNFe, tpAmb, idToken, csc }) => {
   // redirecionamento para consultadfe.fazenda.rj.gov.br).
   const qrCodeBase = 'https://www4.fazenda.rj.gov.br/consultaNFCe/QRCode';
   const urlChaveBase = 'https://www4.fazenda.rj.gov.br/consultaNFCe/QRCode';
-  const idT = String(idToken ?? '').replace(/^0+/, '');
+  // O identificador do CSC (cIdToken) deve ser enviado sempre com 6 dígitos,
+  // preservando zeros à esquerda conforme o manual técnico da NFC-e do RJ.
+  const idT = onlyDigits(idToken).padStart(6, '0');
   const pSemHash = `${chNFe}|${versaoQR}|${tpAmb}|${idT}`;
   const token = String(csc ?? '');
   const hashInput = `${pSemHash}${token}`;
