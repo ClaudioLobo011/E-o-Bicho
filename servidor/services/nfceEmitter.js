@@ -329,26 +329,21 @@ const formatDateTimeWithOffset = (date) => {
 // Gera o QR Code v2 on-line exigido pela SEFAZ/RJ para NFC-e autorizada em emissão normal.
 const buildQrCodeRJ = ({ chNFe, tpAmb, idToken, csc }) => {
   const versaoQR = '2';
-  // As URLs oficiais publicadas pela SEFAZ/RJ para consulta on-line da NFC-e
-  // utilizam o domínio consultadfe.fazenda.rj.gov.br no QR Code (parâmetro
-  // "p") e www.fazenda.rj.gov.br/nfce/consulta para o endereço impresso no
-  // DANFE. A SEFAZ rejeita o documento quando outras variações de domínio são
-  // informadas.
   const qrCodeBase = 'https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode';
   const urlChaveBase = 'www.fazenda.rj.gov.br/nfce/consulta';
-  const idT = onlyDigits(idToken);
-  if (!idT) {
+
+  // NORMALIZAÇÃO CRÍTICA: remover zeros à esquerda
+  const rawId = onlyDigits(idToken);
+  const idT = String(Number(rawId)); // "000003" -> "3"
+  if (!idT || idT === '0') {
     throw new Error('Identificador do CSC (cIdToken) inválido para NFC-e do RJ.');
   }
+
   const pSemHash = `${chNFe}|${versaoQR}|${tpAmb}|${idT}`;
   const token = String(csc ?? '');
   const hashInput = `${pSemHash}${token}`;
-  const cHash = crypto
-    .createHash('sha1')
-    .update(hashInput, 'utf8')
-    .digest('hex')
-    .toUpperCase();
-  const qrCodeUrl = `${qrCodeBase}?p=${chNFe}|${versaoQR}|${tpAmb}|${idT}|${cHash}`;
+  const cHash = crypto.createHash('sha1').update(hashInput, 'utf8').digest('hex').toUpperCase();
+  const qrCodeUrl = `${qrCodeBase}?p=${pSemHash}|${cHash}`;
   return { qrCodeUrl, urlChaveBase };
 };
 
