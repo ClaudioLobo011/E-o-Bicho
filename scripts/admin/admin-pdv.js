@@ -131,9 +131,15 @@
     pendingBudgetValidityDays: null,
     budgetSequence: 1,
     budgetFilters: { preset: 'todos', start: '', end: '' },
+    appointments: [],
+    appointmentsLoading: false,
+    appointmentFilters: { preset: 'today', start: '', end: '' },
+    appointmentMetrics: { today: 0, week: 0, month: 0 },
+    activeAppointmentId: '',
     activeSaleCancellationId: '',
     fiscalEmissionStep: '',
     fiscalEmissionModalOpen: false,
+    activePdvStoreId: '',
   };
 
   const elements = {};
@@ -141,6 +147,7 @@
   const BUDGET_IMPORT_FINALIZED_LABEL = 'Orçamento finalizado';
   const customerPetsCache = new Map();
   const customerAddressesCache = new Map();
+  const appointmentCache = new Map();
 
   const generateBudgetCode = () => {
     const sequence = Math.max(1, Number.parseInt(state.budgetSequence, 10) || 1);
@@ -309,6 +316,27 @@
     if (pdv.store != null) return normalizeId(pdv.store);
     return '';
   };
+  const getPdvStoreId = (pdv) => {
+    if (!pdv) return '';
+    if (pdv.store && typeof pdv.store === 'object') return normalizeId(pdv.store._id);
+    if (pdv.store != null) return normalizeId(pdv.store);
+    if (pdv.empresa && typeof pdv.empresa === 'object') return normalizeId(pdv.empresa._id);
+    if (pdv.empresa != null) return normalizeId(pdv.empresa);
+    if (pdv.company && typeof pdv.company === 'object') return normalizeId(pdv.company._id);
+    if (pdv.company != null) return normalizeId(pdv.company);
+    return '';
+  };
+  const getActiveAppointmentStoreId = () => {
+    if (state.activePdvStoreId) {
+      return state.activePdvStoreId;
+    }
+    const pdv = findPdvById(state.selectedPdv);
+    const pdvStoreId = getPdvStoreId(pdv);
+    if (pdvStoreId) {
+      return pdvStoreId;
+    }
+    return state.selectedStore || '';
+  };
   const findStoreById = (storeId) =>
     state.stores.find((item) => normalizeId(item._id) === normalizeId(storeId));
   const findPdvById = (pdvId) =>
@@ -318,6 +346,7 @@
   let customerSearchController = null;
   let customerPetsController = null;
   let paymentModalState = null;
+  let appointmentsRequestId = 0;
 
   const createUid = () => `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
@@ -765,6 +794,71 @@
     if (Number.isNaN(date.getTime())) return null;
     date.setHours(23, 59, 59, 999);
     return date;
+  };
+  const addDays = (value, days) => {
+    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value || Date.now());
+    if (Number.isNaN(date.getTime())) return null;
+    date.setDate(date.getDate() + Number(days || 0));
+    return date;
+  };
+  const startOfWeek = (value) => {
+    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value || Date.now());
+    if (Number.isNaN(date.getTime())) return null;
+    const day = date.getDay();
+    const diff = (day === 0 ? -6 : 1) - day; // segunda-feira como início
+    date.setDate(date.getDate() + diff);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  };
+  const endOfWeek = (value) => {
+    const start = startOfWeek(value);
+    if (!start) return null;
+    const end = addDays(start, 7);
+    return end;
+  };
+  const startOfMonth = (value) => {
+    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value || Date.now());
+    if (Number.isNaN(date.getTime())) return null;
+    date.setDate(1);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  };
+  const endOfMonth = (value) => {
+    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value || Date.now());
+    if (Number.isNaN(date.getTime())) return null;
+    date.setMonth(date.getMonth() + 1, 1);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  };
+  const formatDateParam = (value) => {
+    const date = value instanceof Date ? value : new Date(value || Date.now());
+    if (Number.isNaN(date.getTime())) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const formatHourMinute = (value) => {
+    if (!value) return '';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+  const formatDayMonth = (value) => {
+    if (!value) return '';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  };
+  const getAppointmentScheduleLabel = (appointment) => {
+    if (!appointment) return 'Data não informada';
+    const source = appointment.scheduledAt || appointment.h || appointment.data || appointment.scheduledAtIso;
+    if (!source) return 'Data não informada';
+    const date = new Date(source);
+    if (Number.isNaN(date.getTime())) return 'Data não informada';
+    const dayMonth = formatDayMonth(date);
+    const time = formatHourMinute(date);
+    return `${dayMonth} • ${time}`;
   };
 
   const clampBudgetValidityDays = (days) => {
@@ -1749,6 +1843,23 @@
     elements.budgetItems = document.getElementById('pdv-budget-items');
     elements.budgetItemsEmpty = document.getElementById('pdv-budget-items-empty');
 
+    elements.appointmentModal = document.getElementById('pdv-appointment-modal');
+    elements.appointmentBackdrop =
+      elements.appointmentModal?.querySelector('[data-appointment-dismiss="backdrop"]') || null;
+    elements.appointmentClose = document.getElementById('pdv-appointment-close');
+    elements.appointmentPresets = document.getElementById('pdv-appointment-presets');
+    elements.appointmentKpiToday = document.getElementById('pdv-appointment-kpi-today');
+    elements.appointmentKpiWeek = document.getElementById('pdv-appointment-kpi-week');
+    elements.appointmentKpiMonth = document.getElementById('pdv-appointment-kpi-month');
+    elements.appointmentStart = document.getElementById('pdv-appointment-start');
+    elements.appointmentEnd = document.getElementById('pdv-appointment-end');
+    elements.appointmentApply = document.getElementById('pdv-appointment-apply');
+    elements.appointmentReload = document.getElementById('pdv-appointment-reload');
+    elements.appointmentCount = document.getElementById('pdv-appointment-count');
+    elements.appointmentList = document.getElementById('pdv-appointment-list');
+    elements.appointmentEmpty = document.getElementById('pdv-appointment-empty');
+    elements.appointmentLoading = document.getElementById('pdv-appointment-loading');
+
     elements.saleCancelModal = document.getElementById('pdv-sale-cancel-modal');
     elements.saleCancelClose = document.getElementById('pdv-sale-cancel-close');
     elements.saleCancelCancel = document.getElementById('pdv-sale-cancel-cancel');
@@ -2666,6 +2777,10 @@
       elements.itemsEmpty.classList.remove('hidden');
       elements.itemsCount.textContent = '0 itens';
       elements.itemsTotal.textContent = formatCurrency(0);
+      if (state.activeAppointmentId) {
+        state.activeAppointmentId = '';
+        renderAppointments();
+      }
       updateFinalizeButton();
       updateSaleSummary();
       return;
@@ -4322,6 +4437,9 @@
       ? `Venda ${saleCode} finalizada com sucesso.`
       : 'Venda finalizada com sucesso.';
     notify(successMessage, 'success');
+    if (state.activeAppointmentId) {
+      await syncAppointmentAfterSale(state.activeAppointmentId, saleCode);
+    }
     state.activeBudgetId = '';
     state.pendingBudgetValidityDays = null;
     state.itens = [];
@@ -6922,6 +7040,729 @@
     renderBudgetDetails();
   };
 
+  const cloneAppointmentRecord = (appointment) => {
+    if (!appointment || typeof appointment !== 'object') return null;
+    return {
+      ...appointment,
+      services: Array.isArray(appointment.services)
+        ? appointment.services.map((service) => ({ ...service }))
+        : [],
+    };
+  };
+  const getAppointmentStatusMeta = (status) => {
+    const normalized = (status || 'agendado').toLowerCase();
+    const map = {
+      agendado: { label: 'Agendado', badgeClass: 'bg-blue-100 text-blue-700' },
+      em_espera: { label: 'Em espera', badgeClass: 'bg-amber-100 text-amber-700' },
+      em_atendimento: { label: 'Em atendimento', badgeClass: 'bg-indigo-100 text-indigo-700' },
+      finalizado: { label: 'Finalizado', badgeClass: 'bg-emerald-100 text-emerald-700' },
+      cancelado: { label: 'Cancelado', badgeClass: 'bg-rose-100 text-rose-700' },
+    };
+    return map[normalized] || { label: 'Status indeterminado', badgeClass: 'bg-gray-100 text-gray-600' };
+  };
+  const normalizeAppointmentRecord = (appointment) => {
+    if (!appointment || typeof appointment !== 'object') return null;
+    const id = normalizeId(appointment._id || appointment.id);
+    if (!id) return null;
+    const scheduledIso =
+      parseDateValue(
+        appointment.scheduledAt ||
+          appointment.h ||
+          appointment.data ||
+          appointment.scheduled_at ||
+          appointment.date ||
+          appointment.scheduledAtIso
+      ) || null;
+    const servicesSource = Array.isArray(appointment.servicos)
+      ? appointment.servicos
+      : Array.isArray(appointment.itens)
+      ? appointment.itens
+      : [];
+    const services = servicesSource
+      .map((service, index) => {
+        const serviceData =
+          service && typeof service === 'object' && service.servico && typeof service.servico === 'object'
+            ? service.servico
+            : service || {};
+        const serviceId =
+          normalizeId(service?._id || service?.id || serviceData?._id || serviceData?.id) ||
+          `${id}:svc:${index}`;
+        const quantidade =
+          safeNumber(service?.quantidade ?? service?.qtd ?? serviceData?.quantidade ?? 1) || 1;
+        const unitValue = safeNumber(
+          service?.valor ??
+            service?.preco ??
+            service?.price ??
+            serviceData?.valor ??
+            serviceData?.preco ??
+            serviceData?.price ??
+            0
+        );
+        return {
+          id: serviceId,
+          nome:
+            serviceData?.nome ||
+            service?.nome ||
+            service?.descricao ||
+            service?.descricaoServico ||
+            `Serviço ${index + 1}`,
+          quantidade,
+          valor: unitValue,
+          subtotal: unitValue * quantidade,
+        };
+      })
+      .filter(Boolean);
+    const totalInformado = safeNumber(
+      appointment.total ||
+        appointment.valor ||
+        appointment.valorTotal ||
+        appointment.price ||
+        appointment.totalValue ||
+        0
+    );
+    const totalCalculado = services.reduce((sum, service) => sum + safeNumber(service.subtotal), 0);
+    const total = totalCalculado > 0 ? totalCalculado : totalInformado;
+    return {
+      id,
+      storeId: normalizeId(
+        appointment.storeId ||
+          appointment.store ||
+          appointment.store?._id ||
+          appointment.empresa ||
+          appointment.loja
+      ),
+      customerId: normalizeId(
+        appointment.clienteId ||
+          appointment.customerId ||
+          appointment.cliente?._id ||
+          appointment.cliente?._id
+      ),
+      customerName:
+        appointment.clienteNome ||
+        appointment.customerName ||
+        appointment.tutor ||
+        appointment.tutorNome ||
+        appointment.tutor?.nomeCompleto ||
+        appointment.tutor?.nomeContato ||
+        appointment.tutor?.razaoSocial ||
+        appointment.tutor?.nome ||
+        appointment.cliente?.nomeCompleto ||
+        appointment.cliente?.nomeContato ||
+        appointment.cliente?.razaoSocial ||
+        appointment.cliente?.nome ||
+        '',
+      customerDocument:
+        appointment.cliente?.cpf ||
+        appointment.cliente?.cnpj ||
+        appointment.cliente?.documento ||
+        appointment.documento ||
+        '',
+      customerEmail:
+        appointment.cliente?.email ||
+        appointment.email ||
+        appointment.tutorEmail ||
+        appointment.emailTutor ||
+        '',
+      customerPhone:
+        appointment.cliente?.celular ||
+        appointment.cliente?.telefone ||
+        appointment.telefone ||
+        appointment.celular ||
+        appointment.telefoneTutor ||
+        appointment.celularTutor ||
+        appointment.tutorTelefone ||
+        appointment.tutorCelular ||
+        '',
+      petId: normalizeId(appointment.petId || appointment.pet?._id),
+      petName:
+        appointment.petNome || appointment.petName || appointment.pet?.nome || appointment.pet || '',
+      services,
+      total,
+      status: (appointment.status || 'agendado').toLowerCase(),
+      scheduledAt: scheduledIso,
+      notes:
+        appointment.observacoes ||
+        appointment.obs ||
+        appointment.anotacoes ||
+        appointment.notes ||
+        '',
+      paid: Boolean(appointment.pago || appointment.paid || appointment.quitado),
+      saleCode: appointment.codigoVenda || appointment.saleCode || '',
+      professionalId: normalizeId(
+        appointment.profissionalId ||
+          appointment.professionalId ||
+          appointment.profissional?._id ||
+          appointment.profissional?.id
+      ),
+      professionalName:
+        appointment.profissionalNome ||
+        appointment.profissional ||
+        appointment.professionalName ||
+        appointment.professional ||
+        appointment.profissional?.nomeCompleto ||
+        appointment.profissional?.nomeContato ||
+        appointment.profissional?.razaoSocial ||
+        '',
+      updatedAt: parseDateValue(appointment.updatedAt || appointment.atualizadoEm),
+    };
+  };
+  const findAppointmentById = (appointmentId) => {
+    const normalized = normalizeId(appointmentId);
+    if (!normalized) return null;
+    const inState = state.appointments.find((item) => item.id === normalized);
+    if (inState) return cloneAppointmentRecord(inState);
+    for (const list of appointmentCache.values()) {
+      const found = list.find((item) => item.id === normalized);
+      if (found) {
+        return cloneAppointmentRecord(found);
+      }
+    }
+    return null;
+  };
+  const getAppointmentRangeFromFilters = (filters = state.appointmentFilters) => {
+    const preset = (filters?.preset || 'today').toLowerCase();
+    if (preset === 'custom') {
+      const startValue = filters.start || '';
+      const endValue = filters.end || '';
+      const startInput = parseDateInputValue(startValue);
+      const endInput = parseDateInputValue(endValue);
+      if (!startInput || !endInput) return null;
+      let startDate = toStartOfDay(startInput);
+      let endDate = toStartOfDay(endInput);
+      if (!startDate || !endDate) return null;
+      if (startDate.getTime() > endDate.getTime()) {
+        const temp = startDate;
+        startDate = endDate;
+        endDate = temp;
+      }
+      const endExclusive = addDays(endDate, 1);
+      return {
+        preset,
+        startDate,
+        endDate,
+        startParam: formatDateParam(startDate),
+        endParam: formatDateParam(endExclusive),
+      };
+    }
+    const reference = new Date();
+    let startDate = null;
+    let endExclusive = null;
+    if (preset === 'week') {
+      startDate = startOfWeek(reference);
+      endExclusive = endOfWeek(reference);
+    } else if (preset === 'month') {
+      startDate = startOfMonth(reference);
+      endExclusive = endOfMonth(reference);
+    } else {
+      startDate = toStartOfDay(reference);
+      endExclusive = addDays(startDate, 1);
+    }
+    if (!startDate || !endExclusive) return null;
+    const endDate = addDays(endExclusive, -1);
+    return {
+      preset,
+      startDate,
+      endDate,
+      startParam: formatDateParam(startDate),
+      endParam: formatDateParam(endExclusive),
+    };
+  };
+  const loadAppointmentsDataset = async ({ startParam, endParam, storeId, force = false }) => {
+    const normalizedStoreId = storeId ? normalizeId(storeId) : '';
+    const key = `${normalizedStoreId || 'all'}|${startParam}|${endParam}`;
+    if (!force && appointmentCache.has(key)) {
+      return appointmentCache
+        .get(key)
+        .map((item) => cloneAppointmentRecord(item))
+        .filter(Boolean);
+    }
+    const params = new URLSearchParams();
+    if (startParam) params.set('start', startParam);
+    if (endParam) params.set('end', endParam);
+    if (normalizedStoreId) params.set('storeId', normalizedStoreId);
+    params.set('status', 'all');
+    params.set('includePaid', '1');
+    const token = getToken();
+    const payload = await fetchWithOptionalAuth(
+      `${API_BASE}/func/agendamentos/range?${params.toString()}`,
+      {
+        token,
+        errorMessage: 'Não foi possível carregar os atendimentos da agenda.',
+      }
+    );
+    const rawList = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.agendamentos)
+      ? payload.agendamentos
+      : Array.isArray(payload?.appointments)
+      ? payload.appointments
+      : [];
+    const normalized = rawList.map((item) => normalizeAppointmentRecord(item)).filter(Boolean);
+    appointmentCache.set(
+      key,
+      normalized.map((item) => cloneAppointmentRecord(item)).filter(Boolean)
+    );
+    return normalized.map((item) => cloneAppointmentRecord(item)).filter(Boolean);
+  };
+  const refreshAppointmentMetrics = async ({ force = false } = {}) => {
+    const storeId = getActiveAppointmentStoreId();
+    if (!storeId) {
+      state.appointmentMetrics = { today: 0, week: 0, month: 0 };
+      renderAppointmentMetrics();
+      return;
+    }
+    const presets = ['today', 'week', 'month'];
+    for (const preset of presets) {
+      const range = getAppointmentRangeFromFilters({ preset });
+      if (!range) continue;
+      try {
+        const dataset = await loadAppointmentsDataset({
+          startParam: range.startParam,
+          endParam: range.endParam,
+          storeId,
+          force,
+        });
+        state.appointmentMetrics[preset] = dataset.length;
+      } catch (error) {
+        console.error('Erro ao atualizar indicadores de atendimentos:', error);
+      }
+    }
+    renderAppointmentMetrics();
+  };
+  const renderAppointmentFilters = () => {
+    const filters = state.appointmentFilters || { preset: 'today', start: '', end: '' };
+    if (elements.appointmentPresets) {
+      const buttons = elements.appointmentPresets.querySelectorAll('[data-appointment-preset]');
+      buttons.forEach((button) => {
+        const preset = button.getAttribute('data-appointment-preset');
+        const isActive = preset === filters.preset && preset !== 'custom';
+        button.classList.toggle('border-primary', isActive);
+        button.classList.toggle('text-primary', isActive);
+        button.classList.toggle('bg-primary/5', isActive);
+        button.classList.toggle('border-gray-200', !isActive);
+        button.classList.toggle('bg-gray-50', !isActive);
+      });
+    }
+    if (elements.appointmentStart) {
+      elements.appointmentStart.value = filters.start || '';
+    }
+    if (elements.appointmentEnd) {
+      elements.appointmentEnd.value = filters.end || '';
+    }
+    if (elements.appointmentCount) {
+      const count = state.appointments.length;
+      const label = count === 1 ? '1 atendimento encontrado.' : `${count} atendimentos encontrados.`;
+      elements.appointmentCount.textContent = label;
+    }
+  };
+  const renderAppointmentMetrics = () => {
+    if (elements.appointmentKpiToday) {
+      elements.appointmentKpiToday.textContent = String(state.appointmentMetrics.today || 0);
+    }
+    if (elements.appointmentKpiWeek) {
+      elements.appointmentKpiWeek.textContent = String(state.appointmentMetrics.week || 0);
+    }
+    if (elements.appointmentKpiMonth) {
+      elements.appointmentKpiMonth.textContent = String(state.appointmentMetrics.month || 0);
+    }
+  };
+  const renderAppointmentList = () => {
+    if (!elements.appointmentList || !elements.appointmentEmpty || !elements.appointmentLoading) return;
+    elements.appointmentLoading.classList.toggle('hidden', !state.appointmentsLoading);
+    if (state.appointmentsLoading) {
+      elements.appointmentEmpty.classList.add('hidden');
+      elements.appointmentList.innerHTML = '';
+      return;
+    }
+    const appointments = Array.isArray(state.appointments) ? state.appointments : [];
+    if (!appointments.length) {
+      elements.appointmentList.innerHTML = '';
+      elements.appointmentEmpty.classList.remove('hidden');
+      return;
+    }
+    elements.appointmentEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    appointments.forEach((appointment) => {
+      const isActive = state.activeAppointmentId && state.activeAppointmentId === appointment.id;
+      const alreadyPaid = Boolean(appointment.paid || appointment.saleCode);
+      const scheduleLabel = getAppointmentScheduleLabel(appointment);
+      const statusMeta = getAppointmentStatusMeta(appointment.status);
+      const paidBadge = appointment.paid
+        ? '<span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700"><i class="fas fa-check-circle"></i><span>Pago</span></span>'
+        : '';
+      const saleBadge = appointment.saleCode
+        ? `<span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">Venda ${escapeHtml(appointment.saleCode)}</span>`
+        : '';
+      const services = Array.isArray(appointment.services) ? appointment.services : [];
+      const serviceBadges = services.slice(0, 4).map((service) => `
+          <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-600">
+            <i class="fas fa-paw"></i>
+            <span>${escapeHtml(service.nome || 'Serviço')}</span>
+          </span>
+        `);
+      const extraServices = services.length > 4 ? services.length - 4 : 0;
+      if (!services.length) {
+        serviceBadges.push('<span class="text-xs text-gray-500">Nenhum serviço vinculado ao atendimento.</span>');
+      } else if (extraServices > 0) {
+        serviceBadges.push(
+          `<span class="inline-flex items-center gap-1 rounded-full border border-dashed border-gray-300 px-2.5 py-1 text-xs font-semibold text-gray-500">+${extraServices} serviço(s)</span>`
+        );
+      }
+      const professionalLine = appointment.professionalName
+        ? `<p class="text-xs text-gray-500">Profissional: ${escapeHtml(appointment.professionalName)}</p>`
+        : '';
+      const notes = appointment.notes
+        ? `<p class="text-xs text-gray-500 italic">Obs.: ${escapeHtml(appointment.notes)}</p>`
+        : '';
+      const buttonDisabled = alreadyPaid && !isActive;
+      const buttonClasses = buttonDisabled
+        ? 'inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-400 cursor-not-allowed'
+        : 'inline-flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/20';
+      const buttonLabel = buttonDisabled
+        ? appointment.saleCode
+          ? `Venda ${escapeHtml(appointment.saleCode)}`
+          : 'Atendimento pago'
+        : isActive
+        ? 'Atendimento selecionado'
+        : 'Importar serviços';
+      const buttonAttributes = buttonDisabled
+        ? 'type="button" disabled'
+        : `type="button" data-appointment-import="${escapeHtml(appointment.id)}"`;
+      const card = document.createElement('article');
+      card.dataset.appointmentId = appointment.id;
+      card.className = `rounded-xl border ${
+        isActive ? 'border-primary shadow-lg shadow-primary/10' : 'border-gray-200'
+      } bg-white p-4 transition`;
+      card.innerHTML = `
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+              <i class="fas fa-clock"></i>
+              <span>${escapeHtml(scheduleLabel)}</span>
+            </span>
+            <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${escapeHtml(
+              statusMeta.badgeClass
+            )}">
+              <i class="fas fa-calendar-check"></i>
+              <span>${escapeHtml(statusMeta.label)}</span>
+            </span>
+            ${paidBadge}
+            ${saleBadge}
+          </div>
+          <button ${buttonAttributes} class="${buttonClasses}">
+            <i class="fas fa-file-import"></i>
+            <span>${escapeHtml(buttonLabel)}</span>
+          </button>
+        </div>
+        <div class="mt-3 space-y-2">
+          <div>
+            <p class="text-sm font-semibold text-gray-800">${escapeHtml(
+              appointment.customerName || 'Cliente não informado'
+            )}</p>
+            <p class="text-xs text-gray-500">${
+              appointment.petName
+                ? `Pet: ${escapeHtml(appointment.petName)}`
+                : 'Pet não informado'
+            }</p>
+            ${professionalLine}
+          </div>
+          <div class="flex flex-wrap gap-2">${serviceBadges.join('')}</div>
+          ${notes}
+        </div>
+        <div class="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
+          <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Total</span>
+          <span class="text-base font-semibold text-gray-800">${formatCurrency(appointment.total)}</span>
+        </div>
+      `;
+      fragment.appendChild(card);
+    });
+    elements.appointmentList.innerHTML = '';
+    elements.appointmentList.appendChild(fragment);
+  };
+  const renderAppointments = () => {
+    renderAppointmentFilters();
+    renderAppointmentMetrics();
+    renderAppointmentList();
+  };
+  const openAppointmentModal = async () => {
+    if (!elements.appointmentModal) return;
+    elements.appointmentModal.classList.remove('hidden');
+    renderAppointments();
+    try {
+      await loadAppointmentsForCurrentFilter();
+    } catch (error) {
+      console.error('Erro ao carregar atendimentos na abertura do modal:', error);
+    }
+    refreshAppointmentMetrics().catch((error) =>
+      console.error('Erro ao atualizar métricas de atendimentos:', error)
+    );
+  };
+  const closeAppointmentModal = () => {
+    if (!elements.appointmentModal) return;
+    elements.appointmentModal.classList.add('hidden');
+  };
+  const applyAppointmentToSale = (appointment) => {
+    if (!appointment) return false;
+    const services = Array.isArray(appointment.services) ? appointment.services : [];
+    if (!services.length && safeNumber(appointment.total) <= 0) {
+      notify('Este atendimento não possui serviços cadastrados para importar.', 'info');
+      return false;
+    }
+    const hasItems = state.itens.length > 0;
+    const isDifferentAppointment =
+      hasItems && state.activeAppointmentId && state.activeAppointmentId !== appointment.id;
+    if (hasItems && isDifferentAppointment) {
+      const confirmed = window.confirm(
+        'Os itens atuais da venda serão substituídos pelos serviços do atendimento selecionado. Deseja continuar?'
+      );
+      if (!confirmed) return false;
+    }
+    const itemsToApply = services.length
+      ? services.map((service, index) => {
+          const quantity = safeNumber(service.quantidade) > 0 ? safeNumber(service.quantidade) : 1;
+          const value = safeNumber(service.valor);
+          return {
+            id: service.id || `${appointment.id}:${index}`,
+            codigo: service.id || '',
+            codigoInterno: service.id || '',
+            codigoBarras: '',
+            nome: service.nome || `Serviço ${index + 1}`,
+            quantidade: quantity,
+            valor: value,
+            subtotal: value * quantity,
+            generalPromo: false,
+          };
+        })
+      : [
+          {
+            id: `${appointment.id}:svc`,
+            codigo: appointment.id,
+            codigoInterno: appointment.id,
+            codigoBarras: '',
+            nome: 'Serviços do atendimento',
+            quantidade: 1,
+            valor: safeNumber(appointment.total),
+            subtotal: safeNumber(appointment.total),
+            generalPromo: false,
+          },
+        ];
+    applySaleStateSnapshot({
+      itens: itemsToApply,
+      vendaPagamentos: [],
+      vendaDesconto: 0,
+      vendaAcrescimo: 0,
+      selectedProduct: null,
+      quantidade: 1,
+    });
+    state.vendaPagamentos = [];
+    state.vendaDesconto = 0;
+    state.vendaAcrescimo = 0;
+    const customer = {
+      nome: appointment.customerName || 'Cliente da agenda',
+      doc: appointment.customerDocument || '',
+      email: appointment.customerEmail || '',
+      celular: appointment.customerPhone || '',
+    };
+    const pet = appointment.petName ? { nome: appointment.petName } : null;
+    setSaleCustomer(customer, pet);
+    renderItemsList();
+    renderSalePaymentsPreview();
+    updateFinalizeButton();
+    updateSaleSummary();
+    clearSaleSearchAreas();
+    state.activeAppointmentId = appointment.id;
+    setActiveTab('pdv-tab');
+    notify('Serviços do atendimento importados para a venda.', 'success');
+    renderAppointments();
+    return true;
+  };
+  const loadAppointmentsForCurrentFilter = async ({ forceReload = false } = {}) => {
+    const range = getAppointmentRangeFromFilters(state.appointmentFilters);
+    if (!range) {
+      notify('Informe um período válido para buscar atendimentos.', 'warning');
+      return;
+    }
+    const storeId = getActiveAppointmentStoreId();
+    if (!storeId) {
+      notify('Selecione a empresa e o PDV para importar atendimentos.', 'warning');
+      return;
+    }
+    const requestId = ++appointmentsRequestId;
+    state.appointmentsLoading = true;
+    renderAppointments();
+    try {
+      const dataset = await loadAppointmentsDataset({
+        startParam: range.startParam,
+        endParam: range.endParam,
+        storeId,
+        force: forceReload,
+      });
+      if (requestId !== appointmentsRequestId) return;
+      const normalizedList = dataset.map((item) => cloneAppointmentRecord(item)).filter(Boolean);
+      normalizedList.sort((a, b) => getTimeValue(a?.scheduledAt) - getTimeValue(b?.scheduledAt));
+      state.appointments = normalizedList;
+      if (state.activeAppointmentId) {
+        const stillExists = state.appointments.some((item) => item.id === state.activeAppointmentId);
+        if (!stillExists) {
+          state.activeAppointmentId = '';
+        }
+      }
+      state.appointmentsLoading = false;
+      const presetKey = (state.appointmentFilters.preset || 'today').toLowerCase();
+      if (['today', 'week', 'month'].includes(presetKey)) {
+        state.appointmentMetrics[presetKey] = state.appointments.length;
+      }
+      renderAppointments();
+    } catch (error) {
+      if (requestId !== appointmentsRequestId) return;
+      console.error('Erro ao carregar atendimentos da agenda:', error);
+      state.appointments = [];
+      state.appointmentsLoading = false;
+      renderAppointments();
+      notify(error.message || 'Não foi possível carregar os atendimentos da agenda.', 'error');
+    }
+  };
+  const handleAppointmentAction = () => {
+    if (!state.selectedStore || !state.selectedPdv) {
+      notify('Selecione a empresa e o PDV para importar atendimentos.', 'warning');
+      return;
+    }
+    if (!state.caixaAberto) {
+      notify('Abra o caixa para registrar o pagamento do atendimento importado.', 'info');
+    }
+    openAppointmentModal();
+  };
+  const handleAppointmentPresetClick = async (event) => {
+    const button = event.target.closest('[data-appointment-preset]');
+    if (!button) return;
+    event.preventDefault();
+    const preset = button.getAttribute('data-appointment-preset');
+    if (!preset) return;
+    if (state.appointmentFilters.preset === preset && preset !== 'custom') {
+      await loadAppointmentsForCurrentFilter();
+      return;
+    }
+    state.appointmentFilters = { preset, start: '', end: '' };
+    renderAppointmentFilters();
+    await loadAppointmentsForCurrentFilter();
+  };
+  const handleAppointmentApply = async () => {
+    const startInput = elements.appointmentStart?.value || '';
+    const endInput = elements.appointmentEnd?.value || '';
+    if (!startInput || !endInput) {
+      notify('Informe as datas inicial e final para aplicar o filtro por período.', 'warning');
+      return;
+    }
+    let startDate = parseDateInputValue(startInput);
+    let endDate = parseDateInputValue(endInput);
+    if (!startDate || !endDate) {
+      notify('Período inválido. Verifique as datas informadas.', 'warning');
+      return;
+    }
+    if (startDate.getTime() > endDate.getTime()) {
+      const temp = startDate;
+      startDate = endDate;
+      endDate = temp;
+    }
+    const normalizedStart = formatDateParam(startDate);
+    const normalizedEnd = formatDateParam(endDate);
+    state.appointmentFilters = {
+      preset: 'custom',
+      start: normalizedStart,
+      end: normalizedEnd,
+    };
+    renderAppointmentFilters();
+    await loadAppointmentsForCurrentFilter({ forceReload: true });
+  };
+  const handleAppointmentListClick = (event) => {
+    const button = event.target.closest('[data-appointment-import]');
+    if (!button) return;
+    const appointmentId = button.getAttribute('data-appointment-import');
+    if (!appointmentId) return;
+    const appointment = findAppointmentById(appointmentId);
+    if (!appointment) {
+      notify('Não foi possível localizar os dados do atendimento selecionado.', 'error');
+      return;
+    }
+    if (appointment.paid || appointment.saleCode) {
+      notify('Este atendimento já foi faturado e não pode ser importado novamente.', 'info');
+      return;
+    }
+    const applied = applyAppointmentToSale(appointment);
+    if (applied) {
+      closeAppointmentModal();
+    }
+  };
+  const handleAppointmentRefresh = () => {
+    loadAppointmentsForCurrentFilter({ forceReload: true }).catch((error) =>
+      console.error('Erro ao atualizar atendimentos:', error)
+    );
+    refreshAppointmentMetrics({ force: true }).catch((error) =>
+      console.error('Erro ao atualizar métricas de atendimentos:', error)
+    );
+  };
+  const updateAppointmentRecord = (appointmentId, updates = {}) => {
+    const normalized = normalizeId(appointmentId);
+    if (!normalized) return;
+    const applyUpdates = (appointment) => {
+      if (!appointment) return;
+      Object.assign(appointment, updates);
+      if (updates.status) {
+        appointment.status = (updates.status || '').toLowerCase();
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'saleCode')) {
+        appointment.saleCode = updates.saleCode || '';
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'paid')) {
+        appointment.paid = Boolean(updates.paid);
+      }
+      if (Array.isArray(appointment.services)) {
+        appointment.services = appointment.services.map((service) => ({ ...service }));
+      }
+    };
+    const target = state.appointments.find((item) => item.id === normalized);
+    if (target) {
+      applyUpdates(target);
+    }
+    appointmentCache.forEach((list) => {
+      const cached = list.find((item) => item.id === normalized);
+      if (cached) {
+        applyUpdates(cached);
+      }
+    });
+    renderAppointments();
+  };
+  const syncAppointmentAfterSale = async (appointmentId, saleCode) => {
+    const normalized = normalizeId(appointmentId);
+    if (!normalized) return;
+    const token = getToken();
+    try {
+      await fetchWithOptionalAuth(`${API_BASE}/func/agendamentos/${normalized}`, {
+        token,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigoVenda: saleCode || '', pago: true, status: 'finalizado' }),
+        errorMessage: 'Não foi possível atualizar o atendimento como pago.',
+      });
+      updateAppointmentRecord(normalized, {
+        paid: true,
+        saleCode: saleCode || '',
+        status: 'finalizado',
+      });
+      refreshAppointmentMetrics({ force: true }).catch((error) =>
+        console.error('Erro ao atualizar indicadores após finalizar venda do atendimento:', error)
+      );
+    } catch (error) {
+      console.error('Erro ao sincronizar atendimento após a venda:', error);
+      notify(
+        'Venda finalizada, porém não foi possível atualizar o atendimento na agenda.',
+        'warning'
+      );
+    } finally {
+      state.activeAppointmentId = '';
+    }
+  };
+
   const registerCompletedSaleRecord = (options = {}) => {
     const record = createCompletedSaleRecord(options);
     if (!record) return null;
@@ -7469,7 +8310,13 @@
     state.pendingBudgetValidityDays = null;
     state.budgetSequence = 1;
     state.budgetFilters = { preset: 'todos', start: '', end: '' };
+    state.appointments = [];
+    state.appointmentsLoading = false;
+    state.appointmentFilters = { preset: 'today', start: '', end: '' };
+    state.appointmentMetrics = { today: 0, week: 0, month: 0 };
+    state.activeAppointmentId = '';
     state.activeSaleCancellationId = '';
+    state.activePdvStoreId = '';
     state.deliveryAddresses = [];
     state.deliveryAddressesLoading = false;
     state.deliveryAddressSaving = false;
@@ -7478,6 +8325,8 @@
     state.deliverySelectedAddress = null;
     state.activeFinalizeContext = null;
     customerAddressesCache.clear();
+    appointmentCache.clear();
+    appointmentsRequestId = 0;
     updatePrintControls();
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
@@ -7692,6 +8541,8 @@
       }
       populateCompanySelect();
     }
+    const appointmentStoreId = getPdvStoreId(pdv) || companyId || state.selectedStore || '';
+    state.activePdvStoreId = appointmentStoreId;
     const caixaAberto = Boolean(
       pdv?.caixa?.aberto ||
         pdv?.caixaAberto ||
@@ -7836,12 +8687,20 @@
     state.selectedBudgetId = '';
     state.activeBudgetId = '';
     state.pendingBudgetValidityDays = null;
+    state.appointments = [];
+    state.appointmentsLoading = false;
+    state.appointmentFilters = { preset: 'today', start: '', end: '' };
+    state.appointmentMetrics = { today: 0, week: 0, month: 0 };
+    state.activeAppointmentId = '';
+    appointmentCache.clear();
+    appointmentsRequestId = 0;
     renderPayments();
     renderHistory();
     setLastMovement(state.history[0] || null);
     renderItemsList();
     renderSalesList();
     renderBudgets();
+    renderAppointments();
     clearSelectedProduct();
     updateWorkspaceInfo();
     renderCaixaActions();
@@ -8562,6 +9421,10 @@
         button.addEventListener('click', handleBudgetAction);
         return;
       }
+      if (action === 'importar-atendimento') {
+        button.addEventListener('click', handleAppointmentAction);
+        return;
+      }
       button.addEventListener('click', () => {
         notify('Funcionalidade em desenvolvimento.', 'info');
       });
@@ -8605,6 +9468,12 @@
     elements.saleCancelBackdrop?.addEventListener('click', closeSaleCancelModal);
     elements.saleCancelModal?.addEventListener('keydown', handleSaleCancelModalKeydown);
     elements.saleCancelReason?.addEventListener('input', clearSaleCancelError);
+    elements.appointmentPresets?.addEventListener('click', handleAppointmentPresetClick);
+    elements.appointmentApply?.addEventListener('click', handleAppointmentApply);
+    elements.appointmentList?.addEventListener('click', handleAppointmentListClick);
+    elements.appointmentReload?.addEventListener('click', handleAppointmentRefresh);
+    elements.appointmentClose?.addEventListener('click', closeAppointmentModal);
+    elements.appointmentBackdrop?.addEventListener('click', closeAppointmentModal);
     if (elements.deliveryAddressFields?.cep) {
       const cepInput = elements.deliveryAddressFields.cep;
       cepInput.addEventListener('input', () => {
@@ -8638,6 +9507,7 @@
     bindEvents();
     renderSalePaymentMethods();
     renderBudgets();
+    renderAppointments();
     updateTabAvailability();
     try {
       await fetchStores();
