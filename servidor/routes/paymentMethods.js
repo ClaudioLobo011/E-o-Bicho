@@ -1,8 +1,11 @@
 const express = require('express');
+const mongoose = require('mongoose');
+
 const router = express.Router();
 
 const PaymentMethod = require('../models/PaymentMethod');
 const Store = require('../models/Store');
+const AccountingAccount = require('../models/AccountingAccount');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
@@ -15,6 +18,26 @@ const parseNumber = (value, fallback = 0) => {
   if (value === undefined || value === null || value === '') return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const VALID_TYPES = new Set(['avista', 'debito', 'credito', 'crediario']);
+
+const validateAccountingAccount = async (accountingAccountId) => {
+  if (!accountingAccountId) return null;
+  if (!mongoose.Types.ObjectId.isValid(accountingAccountId)) {
+    const error = new Error('Conta contábil selecionada é inválida.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const accountExists = await AccountingAccount.exists({ _id: accountingAccountId });
+  if (!accountExists) {
+    const error = new Error('Conta contábil selecionada não foi encontrada.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return accountingAccountId;
 };
 
 const extractNumericValue = (value) => {
@@ -77,7 +100,8 @@ router.get('/', async (req, res) => {
 
     const methods = await PaymentMethod.find(query)
       .sort({ createdAt: -1 })
-      .populate('company', 'nome nomeFantasia razaoSocial cnpj cpf');
+      .populate('company', 'nome nomeFantasia razaoSocial cnpj cpf')
+      .populate('accountingAccount', 'name code');
 
     res.json({ paymentMethods: methods });
   } catch (error) {
@@ -105,12 +129,20 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
       return res.status(404).json({ message: 'Empresa informada não foi encontrada.' });
     }
 
-    if (!['avista', 'debito', 'credito'].includes(type)) {
+    if (!VALID_TYPES.has(type)) {
       return res.status(400).json({ message: 'Tipo de recebimento inválido.' });
     }
 
     const rawCode = normalizeString(req.body.code);
     let code = rawCode && rawCode.toLowerCase() !== 'gerado automaticamente' ? rawCode : await generateNextCode(company);
+
+    let accountingAccountId = null;
+    try {
+      accountingAccountId = await validateAccountingAccount(normalizeString(req.body.accountingAccount));
+    } catch (validationError) {
+      const statusCode = validationError.statusCode || 400;
+      return res.status(statusCode).json({ message: validationError.message || 'Conta contábil inválida.' });
+    }
 
     let attempts = 0;
     while (await PaymentMethod.exists({ company, code }) && attempts < 5) {
@@ -147,10 +179,19 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
       if (installmentConfigurations.length) {
         payload.discount = installmentConfigurations[0].discount;
       }
+    } else if (type === 'crediario') {
+      const installments = Math.max(1, Math.min(24, parseNumber(req.body.installments, 1)));
+      payload.installments = installments;
+    }
+
+    if (accountingAccountId) {
+      payload.accountingAccount = accountingAccountId;
     }
 
     const created = await PaymentMethod.create(payload);
-    const populated = await created.populate('company', 'nome nomeFantasia razaoSocial cnpj cpf');
+    const populated = await created
+      .populate('company', 'nome nomeFantasia razaoSocial cnpj cpf')
+      .populate('accountingAccount', 'name code');
     res.status(201).json(populated);
   } catch (error) {
     console.error('Erro ao criar meio de pagamento:', error);
@@ -186,7 +227,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
     }
 
     let type = normalizeString(req.body.type).toLowerCase();
-    if (!['avista', 'debito', 'credito'].includes(type)) {
+    if (!VALID_TYPES.has(type)) {
       type = existing.type;
     }
 
@@ -215,12 +256,28 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
     const days = Math.max(0, parseNumber(req.body.days, existing.days || 0));
     let discount = Math.max(0, parseNumber(req.body.discount, existing.discount || 0));
 
+    let accountingAccountIdToApply = existing.accountingAccount ? String(existing.accountingAccount) : undefined;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'accountingAccount')) {
+      const normalizedAccount = normalizeString(req.body.accountingAccount);
+      try {
+        accountingAccountIdToApply = await validateAccountingAccount(normalizedAccount);
+      } catch (validationError) {
+        const statusCode = validationError.statusCode || 400;
+        return res.status(statusCode).json({ message: validationError.message || 'Conta contábil inválida.' });
+      }
+
+      if (!accountingAccountIdToApply) {
+        accountingAccountIdToApply = undefined;
+      }
+    }
+
     existing.company = company;
     existing.code = candidateCode;
     existing.name = name;
     existing.type = type;
     existing.days = days;
     existing.discount = discount;
+    existing.accountingAccount = accountingAccountIdToApply;
 
     if (type === 'credito') {
       const installments = Math.max(1, Math.min(12, parseNumber(req.body.installments, existing.installments || 1)));
@@ -237,13 +294,22 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
       }
       existing.markModified('installmentConfigurations');
     } else {
-      existing.installments = 1;
+      if (type === 'crediario') {
+        existing.installments = Math.max(
+          1,
+          Math.min(24, parseNumber(req.body.installments, existing.installments || 1))
+        );
+      } else {
+        existing.installments = 1;
+      }
       existing.installmentConfigurations = undefined;
       existing.markModified('installmentConfigurations');
     }
 
     const saved = await existing.save();
-    const populated = await saved.populate('company', 'nome nomeFantasia razaoSocial cnpj cpf');
+    const populated = await saved
+      .populate('company', 'nome nomeFantasia razaoSocial cnpj cpf')
+      .populate('accountingAccount', 'name code');
     res.json(populated);
   } catch (error) {
     console.error('Erro ao atualizar meio de pagamento:', error);

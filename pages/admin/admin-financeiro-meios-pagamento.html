@@ -51,24 +51,44 @@
                     <p class="text-xs text-gray-500 mt-1">Os parâmetros fiscais e contábeis herdam da empresa selecionada.</p>
                   </div>
 
-                  <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
-                    <div class="md:col-span-4">
-                      <label for="payment-code" class="block text-sm font-medium text-gray-700 mb-1">Código</label>
-                      <div class="relative">
-                        <input type="text" id="payment-code" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700" readonly>
-                        <span class="absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">Automático</span>
-                      </div>
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  <div class="md:col-span-4">
+                    <label for="payment-code" class="block text-sm font-medium text-gray-700 mb-1">Código</label>
+                    <div class="relative">
+                      <input type="text" id="payment-code" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700" readonly>
+                      <span class="absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">Automático</span>
                     </div>
-                    <div class="md:col-span-8">
-                      <label for="payment-name" class="block text-sm font-medium text-gray-700 mb-1">Nome do meio de pagamento <span class="text-red-500">*</span></label>
-                      <input type="text" id="payment-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Cartão de Crédito" required>
-                    </div>
+                  </div>
+                  <div class="md:col-span-8">
+                    <label for="payment-name" class="block text-sm font-medium text-gray-700 mb-1">Nome do meio de pagamento <span class="text-red-500">*</span></label>
+                    <input type="text" id="payment-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Cartão de Crédito" required>
+                  </div>
+                </div>
+
+                <div>
+                  <label for="payment-accounting-account" class="block text-sm font-medium text-gray-700 mb-1">Conta contábil</label>
+                  <div class="space-y-2">
+                    <input
+                      type="text"
+                      id="payment-accounting-account-search"
+                      class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      placeholder="Pesquise pelo nome ou código da conta"
+                      autocomplete="off"
+                    >
+                    <select
+                      id="payment-accounting-account"
+                      class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="">Carregando contas contábeis...</option>
+                    </select>
+                    <p id="payment-accounting-account-status" class="text-xs text-gray-500">Digite para filtrar e selecione a conta desejada.</p>
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div class="space-y-4">
-                <h2 class="text-lg font-semibold text-gray-800">Tipo de recebimento</h2>
+            <div class="space-y-4">
+              <h2 class="text-lg font-semibold text-gray-800">Tipo de recebimento</h2>
                 <p class="text-sm text-gray-600">Defina como o pagamento será processado para ajustar repasses e prazos.</p>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -83,6 +103,10 @@
                   <label class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 has-[:checked]:border-primary has-[:checked]:text-primary">
                     <span>Crédito</span>
                     <input type="radio" name="payment-type" value="credito" class="text-primary focus:ring-primary">
+                  </label>
+                  <label class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 has-[:checked]:border-primary has-[:checked]:text-primary">
+                    <span>Crediário</span>
+                    <input type="radio" name="payment-type" value="crediario" class="text-primary focus:ring-primary">
                   </label>
                 </div>
 
@@ -157,9 +181,35 @@
                       Os campos abaixo atualizam o desconto de cada parcela instantaneamente.
                     </div>
                     <div id="credito-preview-list" class="space-y-2"></div>
+                </div>
+              </div>
+
+              <div id="crediario-section" class="space-y-4 hidden">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div class="md:col-span-1">
+                    <label for="crediario-installments" class="block text-sm font-medium text-gray-700 mb-1">Parcelas máximas</label>
+                    <input type="number" id="crediario-installments" min="1" max="24" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="6">
+                  </div>
+                  <div class="md:col-span-1">
+                    <label for="crediario-days" class="block text-sm font-medium text-gray-700 mb-1">Prazo médio de recebimento (dias)</label>
+                    <input type="number" id="crediario-days" min="0" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="30">
+                  </div>
+                  <div class="md:col-span-1">
+                    <label for="crediario-interest" class="block text-sm font-medium text-gray-700 mb-1">Juros padrão (%)</label>
+                    <input type="number" id="crediario-interest" min="0" step="0.01" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0">
+                  </div>
+                </div>
+                <div class="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3">
+                  <div class="flex items-center gap-3 text-amber-700">
+                    <i class="fas fa-file-invoice-dollar text-lg"></i>
+                    <div>
+                      <p class="text-sm font-semibold">Resumo do crediário</p>
+                      <p id="crediario-preview" class="text-sm text-amber-800">Configure parcelas, prazo e juros para o crediário.</p>
+                    </div>
                   </div>
                 </div>
               </div>
+            </div>
 
               <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between border-t border-gray-100 pt-4">
                 <p class="text-xs text-gray-500">Campos marcados com <span class="text-red-500">*</span> são obrigatórios.</p>
