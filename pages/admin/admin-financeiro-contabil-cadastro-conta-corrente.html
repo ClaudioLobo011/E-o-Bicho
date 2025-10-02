@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Cadastro de Conta Corrente - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-800">Cadastro de Conta Corrente</h1>
+            <p class="text-sm text-gray-600">Gerencie as contas bancárias utilizadas na conciliação e no envio de remessas.</p>
+          </div>
+          <span class="inline-flex items-center gap-2 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1">
+            <i class="fas fa-building-columns"></i>
+            Integração bancária
+          </span>
+        </header>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="space-y-1">
+            <h2 class="text-lg font-semibold text-gray-800">Identificação da conta</h2>
+            <p class="text-sm text-gray-600">Informe os dados conforme cadastro bancário oficial para garantir validação junto à instituição.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label for="bank-code" class="block text-sm font-medium text-gray-700 mb-1">Banco (código Bacen)<span class="text-red-500"> *</span></label>
+              <select id="bank-code" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Selecione um banco</option>
+                <option value="001">001 - Banco do Brasil S.A.</option>
+                <option value="033">033 - Banco Santander (Brasil) S.A.</option>
+                <option value="104">104 - Caixa Econômica Federal</option>
+                <option value="237">237 - Banco Bradesco S.A.</option>
+                <option value="341">341 - Itaú Unibanco S.A.</option>
+                <option value="748">748 - Banco Cooperativo Sicredi S.A.</option>
+              </select>
+            </div>
+            <div>
+              <label for="agency" class="block text-sm font-medium text-gray-700 mb-1">Agência<span class="text-red-500"> *</span></label>
+              <input type="text" id="agency" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0001" required>
+            </div>
+            <div>
+              <label for="account-number" class="block text-sm font-medium text-gray-700 mb-1">Conta<span class="text-red-500"> *</span></label>
+              <input type="text" id="account-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="12345-6" required>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label for="account-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo de conta<span class="text-red-500"> *</span></label>
+              <select id="account-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="corrente">Conta Corrente</option>
+                <option value="conta-pagamento">Conta de Pagamento</option>
+                <option value="conta-investimento">Conta Investimento</option>
+              </select>
+            </div>
+            <div>
+              <label for="pix-key" class="block text-sm font-medium text-gray-700 mb-1">Chave Pix</label>
+              <input type="text" id="pix-key" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="CNPJ, e-mail ou chave aleatória">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label for="company-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ da conta<span class="text-red-500"> *</span></label>
+              <input type="text" id="company-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="00.000.000/0001-00" required>
+            </div>
+            <div>
+              <label for="account-alias" class="block text-sm font-medium text-gray-700 mb-1">Nome interno</label>
+              <input type="text" id="account-alias" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Conta matriz - pagamentos">
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Integrações e arquivos bancários</h2>
+              <p class="text-sm text-gray-600">Configure CNAB, homologação e períodos de conciliação com base nas exigências da Febraban.</p>
+            </div>
+            <button type="button" class="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">
+              <i class="fas fa-file-export"></i>
+              Consultar layouts CNAB
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label for="cnab-layout" class="block text-sm font-medium text-gray-700 mb-1">Layout CNAB</label>
+              <select id="cnab-layout" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Selecione</option>
+                <option value="240">CNAB 240</option>
+                <option value="400">CNAB 400</option>
+                <option value="750">CNAB 750 (Recebíveis)</option>
+              </select>
+            </div>
+            <div>
+              <label for="integration-status" class="block text-sm font-medium text-gray-700 mb-1">Situação da integração</label>
+              <select id="integration-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="pendente">Pendente de homologação</option>
+                <option value="homologada">Homologada</option>
+                <option value="em-validacao">Em validação com o banco</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label for="return-deadline" class="block text-sm font-medium text-gray-700 mb-1">Prazo de retorno (dias)</label>
+              <input type="number" id="return-deadline" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="2">
+            </div>
+            <div>
+              <label for="conciliation-window" class="block text-sm font-medium text-gray-700 mb-1">Janela de conciliação</label>
+              <select id="conciliation-window" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="diaria">Diária</option>
+                <option value="semanal">Semanal</option>
+                <option value="mensal">Mensal</option>
+              </select>
+            </div>
+            <div>
+              <label for="boleto-beneficiary" class="block text-sm font-medium text-gray-700 mb-1">Beneficiário para boletos</label>
+              <input type="text" id="boleto-beneficiary" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Razão social impressa no boleto">
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="space-y-1">
+            <h2 class="text-lg font-semibold text-gray-800">Controle de acesso</h2>
+            <p class="text-sm text-gray-600">Defina responsáveis e notificações para movimentações bancárias.</p>
+          </div>
+
+          <div class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label for="responsible-user" class="block text-sm font-medium text-gray-700 mb-1">Responsável principal</label>
+                <select id="responsible-user" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Selecione um usuário</option>
+                  <option value="mariana">Mariana Souza</option>
+                  <option value="daniel">Daniel Freitas</option>
+                  <option value="joana">Joana Martins</option>
+                </select>
+              </div>
+              <div>
+                <label for="notification-email" class="block text-sm font-medium text-gray-700 mb-1">E-mail para alertas</label>
+                <input type="email" id="notification-email" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="tesouraria@empresa.com">
+              </div>
+            </div>
+
+            <div class="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+              <i class="fas fa-shield-alt text-primary mt-0.5"></i>
+              <div class="space-y-1 text-sm text-gray-600">
+                <p>Utilize perfis com duplo fator habilitado para autorizar remessas e pagamentos segundo as melhores práticas do Bacen.</p>
+                <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary">
+                  Exigir dupla aprovação para pagamentos acima de R$ 10.000,00
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex items-center gap-2 text-xs text-gray-500">
+              <i class="fas fa-clock text-gray-400"></i>
+              Última conciliação automática: há 2 horas
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+                <i class="fas fa-undo"></i>
+                Descartar alterações
+              </button>
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                <i class="fas fa-save"></i>
+                Salvar conta
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+</body>
+</html>
