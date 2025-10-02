@@ -6,6 +6,7 @@ const router = express.Router();
 const PaymentMethod = require('../models/PaymentMethod');
 const Store = require('../models/Store');
 const AccountingAccount = require('../models/AccountingAccount');
+const BankAccount = require('../models/BankAccount');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 
@@ -38,6 +39,24 @@ const validateAccountingAccount = async (accountingAccountId) => {
   }
 
   return accountingAccountId;
+};
+
+const validateBankAccount = async (bankAccountId) => {
+  if (!bankAccountId) return null;
+  if (!mongoose.Types.ObjectId.isValid(bankAccountId)) {
+    const error = new Error('Conta corrente selecionada é inválida.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const accountExists = await BankAccount.exists({ _id: bankAccountId });
+  if (!accountExists) {
+    const error = new Error('Conta corrente selecionada não foi encontrada.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return bankAccountId;
 };
 
 const extractNumericValue = (value) => {
@@ -101,7 +120,8 @@ router.get('/', async (req, res) => {
     const methods = await PaymentMethod.find(query)
       .sort({ createdAt: -1 })
       .populate('company', 'nome nomeFantasia razaoSocial cnpj cpf')
-      .populate('accountingAccount', 'name code');
+      .populate('accountingAccount', 'name code')
+      .populate('bankAccount', 'alias bankName agency accountNumber accountDigit accountType');
 
     res.json({ paymentMethods: methods });
   } catch (error) {
@@ -142,6 +162,14 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
     } catch (validationError) {
       const statusCode = validationError.statusCode || 400;
       return res.status(statusCode).json({ message: validationError.message || 'Conta contábil inválida.' });
+    }
+
+    let bankAccountId = null;
+    try {
+      bankAccountId = await validateBankAccount(normalizeString(req.body.bankAccount));
+    } catch (validationError) {
+      const statusCode = validationError.statusCode || 400;
+      return res.status(statusCode).json({ message: validationError.message || 'Conta corrente inválida.' });
     }
 
     let attempts = 0;
@@ -188,10 +216,15 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
       payload.accountingAccount = accountingAccountId;
     }
 
+    if (bankAccountId) {
+      payload.bankAccount = bankAccountId;
+    }
+
     const created = await PaymentMethod.create(payload);
     const populated = await created
       .populate('company', 'nome nomeFantasia razaoSocial cnpj cpf')
-      .populate('accountingAccount', 'name code');
+      .populate('accountingAccount', 'name code')
+      .populate('bankAccount', 'alias bankName agency accountNumber accountDigit accountType');
     res.status(201).json(populated);
   } catch (error) {
     console.error('Erro ao criar meio de pagamento:', error);
@@ -271,6 +304,21 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
       }
     }
 
+    let bankAccountIdToApply = existing.bankAccount ? String(existing.bankAccount) : undefined;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'bankAccount')) {
+      const normalizedBankAccount = normalizeString(req.body.bankAccount);
+      try {
+        bankAccountIdToApply = await validateBankAccount(normalizedBankAccount);
+      } catch (validationError) {
+        const statusCode = validationError.statusCode || 400;
+        return res.status(statusCode).json({ message: validationError.message || 'Conta corrente inválida.' });
+      }
+
+      if (!bankAccountIdToApply) {
+        bankAccountIdToApply = undefined;
+      }
+    }
+
     existing.company = company;
     existing.code = candidateCode;
     existing.name = name;
@@ -278,6 +326,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
     existing.days = days;
     existing.discount = discount;
     existing.accountingAccount = accountingAccountIdToApply;
+    existing.bankAccount = bankAccountIdToApply;
 
     if (type === 'credito') {
       const installments = Math.max(1, Math.min(12, parseNumber(req.body.installments, existing.installments || 1)));
@@ -309,7 +358,8 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
     const saved = await existing.save();
     const populated = await saved
       .populate('company', 'nome nomeFantasia razaoSocial cnpj cpf')
-      .populate('accountingAccount', 'name code');
+      .populate('accountingAccount', 'name code')
+      .populate('bankAccount', 'alias bankName agency accountNumber accountDigit accountType');
     res.json(populated);
   } catch (error) {
     console.error('Erro ao atualizar meio de pagamento:', error);

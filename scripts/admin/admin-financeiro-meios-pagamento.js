@@ -14,6 +14,9 @@
     accountingAccountSelect: '#payment-accounting-account',
     accountingAccountSearch: '#payment-accounting-account-search',
     accountingAccountStatus: '#payment-accounting-account-status',
+    bankAccountSelect: '#payment-bank-account',
+    bankAccountSearch: '#payment-bank-account-search',
+    bankAccountStatus: '#payment-bank-account-status',
     codeInput: '#payment-code',
     nameInput: '#payment-name',
     typeRadios: 'input[name="payment-type"]',
@@ -52,9 +55,15 @@
     accountingAccountSearchTerm: '',
     selectedAccountingAccountId: '',
     selectedAccountingAccount: null,
+    bankAccounts: [],
+    filteredBankAccounts: [],
+    bankAccountSearchTerm: '',
+    selectedBankAccountId: '',
+    selectedBankAccount: null,
     saving: false,
     loadingMethods: false,
-    loadingAccounts: false,
+    loadingAccountingAccounts: false,
+    loadingBankAccounts: false,
     defaultEmptyStateHtml: '',
     editingId: '',
     editingCode: '',
@@ -120,6 +129,30 @@
     return name || code || 'Conta contábil';
   };
 
+  const buildBankAccountLabel = (account) => {
+    if (!account) return 'Conta corrente não informada';
+    const alias = account.alias ? escapeHtml(account.alias) : '';
+    const bankName = account.bankName ? escapeHtml(account.bankName) : '';
+    const agency = account.agency ? escapeHtml(account.agency) : '';
+    const number = account.accountNumber ? escapeHtml(account.accountNumber) : '';
+    const digit = account.accountDigit ? escapeHtml(account.accountDigit) : '';
+
+    const details = [];
+    if (agency) {
+      details.push(`Ag. ${agency}`);
+    }
+    if (number) {
+      details.push(`Conta ${number}${digit ? `-${digit}` : ''}`);
+    }
+
+    const parts = [];
+    if (alias) parts.push(alias);
+    if (bankName) parts.push(bankName);
+    if (details.length) parts.push(details.join(' • '));
+
+    return parts.join(' • ') || bankName || alias || 'Conta corrente';
+  };
+
   const updateAccountingAccountStatus = () => {
     if (!elements.accountingAccountStatus) return;
 
@@ -127,7 +160,7 @@
     statusEl.classList.remove('text-amber-600');
     statusEl.classList.add('text-gray-500');
 
-    if (state.loadingAccounts) {
+    if (state.loadingAccountingAccounts) {
       statusEl.textContent = 'Carregando contas contábeis...';
       return;
     }
@@ -153,13 +186,58 @@
   };
 
   const setAccountingAccountLoading = (loading) => {
-    state.loadingAccounts = loading;
+    state.loadingAccountingAccounts = loading;
     if (elements.accountingAccountSelect) {
       elements.accountingAccountSelect.disabled = loading;
       elements.accountingAccountSelect.classList.toggle('opacity-60', loading);
       elements.accountingAccountSelect.classList.toggle('pointer-events-none', loading);
     }
     updateAccountingAccountStatus();
+  };
+
+  const updateBankAccountStatus = () => {
+    if (!elements.bankAccountStatus) return;
+
+    const statusEl = elements.bankAccountStatus;
+    statusEl.classList.remove('text-amber-600');
+    statusEl.classList.add('text-gray-500');
+
+    if (!state.selectedCompanyId) {
+      statusEl.textContent = 'Selecione uma empresa para listar as contas correntes.';
+      return;
+    }
+
+    if (state.loadingBankAccounts) {
+      statusEl.textContent = 'Carregando contas correntes...';
+      return;
+    }
+
+    const total = Array.isArray(state.bankAccounts) ? state.bankAccounts.length : 0;
+    const filtered = Array.isArray(state.filteredBankAccounts) ? state.filteredBankAccounts.length : 0;
+
+    if (!total) {
+      statusEl.textContent = 'Nenhuma conta corrente encontrada.';
+      return;
+    }
+
+    if (!filtered) {
+      statusEl.textContent = 'Nenhuma conta corresponde à pesquisa.';
+      statusEl.classList.remove('text-gray-500');
+      statusEl.classList.add('text-amber-600');
+      return;
+    }
+
+    statusEl.textContent = `${filtered} conta(s) exibida(s).`;
+  };
+
+  const setBankAccountLoading = (loading) => {
+    state.loadingBankAccounts = loading;
+    if (elements.bankAccountSelect) {
+      elements.bankAccountSelect.disabled = loading;
+      elements.bankAccountSelect.classList.toggle('opacity-60', loading);
+      elements.bankAccountSelect.classList.toggle('pointer-events-none', loading);
+    }
+    updateBankAccountStatus();
   };
 
   const updateAccountingAccountOptions = () => {
@@ -212,6 +290,70 @@
     elements.accountingAccountSelect.innerHTML = options.join('');
     elements.accountingAccountSelect.value = selectedId;
     updateAccountingAccountStatus();
+  };
+
+  const updateBankAccountOptions = () => {
+    if (!elements.bankAccountSelect) return;
+
+    const accounts = Array.isArray(state.bankAccounts) ? state.bankAccounts : [];
+    const term = (state.bankAccountSearchTerm || '').trim().toLowerCase();
+
+    const filtered = !term
+      ? accounts
+      : accounts.filter((account) => {
+          const alias = (account?.alias || '').toLowerCase();
+          const bankName = (account?.bankName || '').toLowerCase();
+          const agency = (account?.agency || '').toLowerCase();
+          const number = (account?.accountNumber || '').toLowerCase();
+          const digit = (account?.accountDigit || '').toLowerCase();
+          const combined = `${number}${digit ? `-${digit}` : ''}`;
+          return (
+            alias.includes(term) ||
+            bankName.includes(term) ||
+            agency.includes(term) ||
+            combined.toLowerCase().includes(term)
+          );
+        });
+
+    state.filteredBankAccounts = filtered;
+
+    const options = [];
+    if (!state.selectedCompanyId) {
+      options.push('<option value="">Selecione uma empresa para carregar as contas</option>');
+    } else if (!filtered.length) {
+      options.push('<option value="">Nenhuma conta encontrada</option>');
+    } else {
+      options.push('<option value="">Selecione uma conta corrente</option>');
+      filtered.forEach((account) => {
+        options.push(`<option value="${escapeHtml(account._id)}">${buildBankAccountLabel(account)}</option>`);
+      });
+    }
+
+    const selectedId = state.selectedBankAccountId || '';
+    let selectedAccount = null;
+    if (selectedId) {
+      selectedAccount = accounts.find((account) => String(account._id) === String(selectedId)) || null;
+      if (selectedAccount) {
+        state.selectedBankAccount = selectedAccount;
+      }
+    }
+
+    const selectedInFiltered = filtered.some((account) => String(account._id) === String(selectedId));
+    if (selectedId && !selectedInFiltered) {
+      const fallback =
+        selectedAccount ||
+        state.selectedBankAccount ||
+        accounts.find((account) => String(account._id) === String(selectedId));
+      if (fallback) {
+        options.push(
+          `<option value="${escapeHtml(fallback._id)}">${buildBankAccountLabel(fallback)} (selecionada)</option>`
+        );
+      }
+    }
+
+    elements.bankAccountSelect.innerHTML = options.join('');
+    elements.bankAccountSelect.value = selectedId;
+    updateBankAccountStatus();
   };
 
   const handleAccountingAccountSearch = (event) => {
@@ -280,6 +422,84 @@
     } finally {
       setAccountingAccountLoading(false);
       updateAccountingAccountOptions();
+      updateOverview();
+    }
+  };
+
+  const handleBankAccountSearch = (event) => {
+    state.bankAccountSearchTerm = event.target.value || '';
+    updateBankAccountOptions();
+  };
+
+  const handleBankAccountSelectChange = (event) => {
+    const selectedId = event.target.value || '';
+    state.selectedBankAccountId = selectedId;
+    if (!selectedId) {
+      state.selectedBankAccount = null;
+      updateOverview();
+      return;
+    }
+
+    const match = state.bankAccounts.find((account) => String(account._id) === String(selectedId));
+    if (match) {
+      state.selectedBankAccount = match;
+    }
+    updateOverview();
+  };
+
+  const fetchBankAccounts = async (companyId) => {
+    if (!elements.bankAccountSelect) return;
+
+    if (!companyId) {
+      state.bankAccounts = [];
+      state.filteredBankAccounts = [];
+      state.selectedBankAccount = null;
+      state.selectedBankAccountId = '';
+      updateBankAccountOptions();
+      return;
+    }
+
+    const token = getToken();
+    if (!token) {
+      notify('Sua sessão expirou. Faça login novamente para carregar as contas correntes.', 'error');
+      state.bankAccounts = [];
+      state.filteredBankAccounts = [];
+      state.selectedBankAccount = null;
+      state.selectedBankAccountId = '';
+      updateBankAccountOptions();
+      updateOverview();
+      return;
+    }
+
+    setBankAccountLoading(true);
+    try {
+      const query = `?company=${encodeURIComponent(companyId)}`;
+      const response = await fetch(`${API_BASE}/bank-accounts${query}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        const message = await parseErrorResponse(response, 'Não foi possível carregar as contas correntes.');
+        throw new Error(message);
+      }
+      const payload = await response.json();
+      state.bankAccounts = Array.isArray(payload?.accounts) ? payload.accounts : [];
+      if (state.selectedBankAccountId) {
+        const match = state.bankAccounts.find(
+          (account) => String(account._id) === String(state.selectedBankAccountId)
+        );
+        if (match) {
+          state.selectedBankAccount = match;
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar contas correntes:', error);
+      notify(error.message || 'Erro ao carregar contas correntes.', 'error');
+      state.bankAccounts = [];
+    } finally {
+      setBankAccountLoading(false);
+      updateBankAccountOptions();
       updateOverview();
     }
   };
@@ -409,6 +629,11 @@
         state.selectedAccountingAccount
       : null;
     const accountLabel = selectedAccount ? buildAccountingAccountLabel(selectedAccount) : 'Não vinculada';
+    const selectedBankAccount = state.selectedBankAccountId
+      ? state.bankAccounts.find((account) => String(account._id) === String(state.selectedBankAccountId)) ||
+        state.selectedBankAccount
+      : null;
+    const bankAccountLabel = selectedBankAccount ? buildBankAccountLabel(selectedBankAccount) : 'Não vinculada';
 
     const buildRow = (label, value) => `
       <div class="flex items-start justify-between gap-4">
@@ -424,6 +649,7 @@
         <div class="space-y-3">
           ${buildRow('Empresa', companyName)}
           ${buildRow('Conta contábil', accountLabel)}
+          ${buildRow('Conta corrente', bankAccountLabel)}
           ${buildRow('Modalidade', 'À vista')}
           ${buildRow('Prazo', days)}
           ${buildRow('Desconto', discount)}
@@ -439,6 +665,7 @@
         <div class="space-y-3">
           ${buildRow('Empresa', companyName)}
           ${buildRow('Conta contábil', accountLabel)}
+          ${buildRow('Conta corrente', bankAccountLabel)}
           ${buildRow('Modalidade', 'Débito')}
           ${buildRow('Prazo', days)}
           ${buildRow('Desconto', discount)}
@@ -455,6 +682,7 @@
         <div class="space-y-3">
           ${buildRow('Empresa', companyName)}
           ${buildRow('Conta contábil', accountLabel)}
+          ${buildRow('Conta corrente', bankAccountLabel)}
           ${buildRow('Modalidade', 'Crediário')}
           ${buildRow('Parcelas', `${installments}x`)}
           ${buildRow('Prazo médio', days)}
@@ -484,6 +712,7 @@
       <div class="space-y-3">
         ${buildRow('Empresa', companyName)}
         ${buildRow('Conta contábil', accountLabel)}
+        ${buildRow('Conta corrente', bankAccountLabel)}
         ${buildRow('Modalidade', 'Crédito')}
         ${buildRow('Parcelas', `${installments}x`)}
         ${buildRow('Prazo', days)}
@@ -664,11 +893,22 @@
       elements.accountingAccountSearch.value = '';
     }
     updateAccountingAccountOptions();
+    state.selectedBankAccountId = '';
+    state.selectedBankAccount = null;
+    state.bankAccountSearchTerm = '';
+    if (elements.bankAccountSelect) {
+      elements.bankAccountSelect.value = '';
+    }
+    if (elements.bankAccountSearch) {
+      elements.bankAccountSearch.value = '';
+    }
+    updateBankAccountOptions();
     updateCompanySummary();
     updateOverview();
     await Promise.all([
       fetchPaymentMethods(state.selectedCompanyId),
       fetchAccountingAccounts(state.selectedCompanyId),
+      fetchBankAccounts(state.selectedCompanyId),
     ]);
     updateOverview();
   };
@@ -705,15 +945,25 @@
     }
 
     state.selectedAccountingAccountId = '';
-    state.selectedAccountingAccount = null;
-    state.accountingAccountSearchTerm = '';
-    if (elements.accountingAccountSelect) {
-      elements.accountingAccountSelect.value = '';
+   state.selectedAccountingAccount = null;
+   state.accountingAccountSearchTerm = '';
+   if (elements.accountingAccountSelect) {
+     elements.accountingAccountSelect.value = '';
+   }
+   if (elements.accountingAccountSearch) {
+     elements.accountingAccountSearch.value = '';
+   }
+   updateAccountingAccountOptions();
+    state.selectedBankAccountId = '';
+    state.selectedBankAccount = null;
+    state.bankAccountSearchTerm = '';
+    if (elements.bankAccountSelect) {
+      elements.bankAccountSelect.value = '';
     }
-    if (elements.accountingAccountSearch) {
-      elements.accountingAccountSearch.value = '';
+    if (elements.bankAccountSearch) {
+      elements.bankAccountSearch.value = '';
     }
-    updateAccountingAccountOptions();
+    updateBankAccountOptions();
 
     if (elements.avistaDays) elements.avistaDays.value = 0;
     if (elements.avistaDiscount) elements.avistaDiscount.value = 0;
@@ -780,6 +1030,13 @@
         const accountLabel = buildAccountingAccountLabel(method.accountingAccount);
         details.push(
           `<p class="text-xs text-gray-500"><span class="font-medium text-gray-600">Conta contábil:</span> ${accountLabel}</p>`
+        );
+      }
+
+      if (method.bankAccount) {
+        const bankLabel = buildBankAccountLabel(method.bankAccount);
+        details.push(
+          `<p class="text-xs text-gray-500"><span class="font-medium text-gray-600">Conta corrente:</span> ${bankLabel}</p>`
         );
       }
 
@@ -913,6 +1170,21 @@
       elements.accountingAccountSelect.value = state.selectedAccountingAccountId;
     }
     updateAccountingAccountOptions();
+
+    const rawBankAccount =
+      typeof method.bankAccount === 'object' && method.bankAccount
+        ? method.bankAccount._id || method.bankAccount.id || method.bankAccount.value
+        : method.bankAccount;
+    state.selectedBankAccountId = rawBankAccount ? String(rawBankAccount) : '';
+    state.selectedBankAccount = (typeof method.bankAccount === 'object' && method.bankAccount) || null;
+    state.bankAccountSearchTerm = '';
+    if (elements.bankAccountSearch) {
+      elements.bankAccountSearch.value = '';
+    }
+    if (elements.bankAccountSelect) {
+      elements.bankAccountSelect.value = state.selectedBankAccountId;
+    }
+    updateBankAccountOptions();
 
     if (elements.nameInput) {
       elements.nameInput.value = method.name || '';
@@ -1095,6 +1367,7 @@
     }
 
     payload.accountingAccount = state.selectedAccountingAccountId || null;
+    payload.bankAccount = state.selectedBankAccountId || null;
 
     if (state.currentType === 'avista') {
       payload.days = Math.max(0, parseNumber(elements.avistaDays?.value, 0));
@@ -1169,6 +1442,8 @@
 
     elements.accountingAccountSearch?.addEventListener('input', handleAccountingAccountSearch);
     elements.accountingAccountSelect?.addEventListener('change', handleAccountingAccountSelectChange);
+    elements.bankAccountSearch?.addEventListener('input', handleBankAccountSearch);
+    elements.bankAccountSelect?.addEventListener('change', handleBankAccountSelectChange);
 
     const radios = Array.from(document.querySelectorAll(selectors.typeRadios));
     radios.forEach((radio) => radio.addEventListener('change', handleTypeChange));
@@ -1258,10 +1533,13 @@
     updateCrediarioPreview();
     updateCompanySummary();
     updateOverview();
+    updateAccountingAccountOptions();
+    updateBankAccountOptions();
     renderMethods();
     bindEvents();
     fetchCompanies();
     fetchAccountingAccounts();
+    fetchBankAccounts();
   };
 
   document.addEventListener('DOMContentLoaded', initialize);

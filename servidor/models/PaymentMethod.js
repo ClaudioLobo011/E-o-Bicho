@@ -23,6 +23,7 @@ const paymentMethodSchema = new mongoose.Schema(
       default: undefined,
     },
     accountingAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'AccountingAccount' },
+    bankAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'BankAccount' },
   },
   {
     timestamps: true,
