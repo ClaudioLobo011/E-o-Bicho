@@ -221,11 +221,15 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
     }
 
     const created = await PaymentMethod.create(payload);
-    const populated = await created
-      .populate('company', 'nome nomeFantasia razaoSocial cnpj cpf')
-      .populate('accountingAccount', 'name code')
-      .populate('bankAccount', 'alias bankName agency accountNumber accountDigit accountType');
-    res.status(201).json(populated);
+    await created.populate([
+      { path: 'company', select: 'nome nomeFantasia razaoSocial cnpj cpf' },
+      { path: 'accountingAccount', select: 'name code' },
+      {
+        path: 'bankAccount',
+        select: 'alias bankName agency accountNumber accountDigit accountType',
+      },
+    ]);
+    res.status(201).json(created);
   } catch (error) {
     console.error('Erro ao criar meio de pagamento:', error);
     res.status(500).json({ message: 'Erro ao criar meio de pagamento.' });
@@ -356,11 +360,15 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
     }
 
     const saved = await existing.save();
-    const populated = await saved
-      .populate('company', 'nome nomeFantasia razaoSocial cnpj cpf')
-      .populate('accountingAccount', 'name code')
-      .populate('bankAccount', 'alias bankName agency accountNumber accountDigit accountType');
-    res.json(populated);
+    await saved.populate([
+      { path: 'company', select: 'nome nomeFantasia razaoSocial cnpj cpf' },
+      { path: 'accountingAccount', select: 'name code' },
+      {
+        path: 'bankAccount',
+        select: 'alias bankName agency accountNumber accountDigit accountType',
+      },
+    ]);
+    res.json(saved);
   } catch (error) {
     console.error('Erro ao atualizar meio de pagamento:', error);
     res.status(500).json({ message: 'Erro ao atualizar meio de pagamento.' });
