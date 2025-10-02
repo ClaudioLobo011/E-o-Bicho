@@ -5428,6 +5428,17 @@
   body.admin-embedded[data-admin-tabs-root] {
     min-height: calc(var(--spacing) * 0);
   }
+  body.admin-embedded {
+    --admin-modal-extra-height: 0px;
+  }
+  body.admin-embedded::after {
+    content: '';
+    display: block;
+    height: var(--admin-modal-extra-height, 0px);
+  }
+  body.admin-embedded:has(.fixed:not(.hidden)[data-admin-modal]), body.admin-embedded:has(.fixed:not(.hidden) .modal-shell) {
+    --admin-modal-extra-height: clamp(640px, 85vh, 820px);
+  }
   .admin-tab-panel {
     min-height: calc(var(--spacing) * 0);
   }
