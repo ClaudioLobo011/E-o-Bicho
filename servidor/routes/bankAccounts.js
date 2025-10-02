@@ -261,4 +261,25 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
   }
 });
 
+router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Identificador inválido.' });
+    }
+
+    const account = await BankAccount.findById(id);
+    if (!account) {
+      return res.status(404).json({ message: 'Conta bancária não encontrada.' });
+    }
+
+    await account.deleteOne();
+
+    res.json({ message: 'Conta bancária excluída com sucesso.' });
+  } catch (error) {
+    console.error('Erro ao excluir conta bancária:', error);
+    res.status(500).json({ message: 'Erro ao excluir conta bancária.' });
+  }
+});
+
 module.exports = router;

@@ -19,6 +19,8 @@
     status: '#bank-account-status',
     submitButton: '#bank-account-submit',
     submitLabel: '#bank-account-submit-label',
+    resetButton: '#bank-account-reset',
+    resetLabel: '#bank-account-reset-label',
     listStatus: '#bank-account-list-status',
     table: '#bank-account-table',
     tableBody: '#bank-account-table-body',
@@ -29,6 +31,9 @@
     saving: false,
     accounts: [],
     loadingAccounts: false,
+    editingAccountId: null,
+    editingAccount: null,
+    deletingIds: new Set(),
   };
 
   const elements = {};
@@ -93,6 +98,64 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
 
+  const normalizeId = (value) => (value ? String(value) : '');
+
+  const formatCurrency = (value) => {
+    if (value === undefined || value === null || value === '') return '';
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '';
+    return number.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const formatPercentage = (value) => {
+    if (value === undefined || value === null || value === '') return '';
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '';
+    return number.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    });
+  };
+
+  const describeAccount = (account) => {
+    if (!account) return '';
+    const companyLabel = account.company && typeof account.company === 'object'
+      ? buildCompanyLabel(account.company)
+      : buildCompanyLabel({ nome: account.company });
+    const bankCode = account.bankCode ? `Banco ${account.bankCode}` : '';
+    const agency = account.agency ? `Agência ${account.agency}` : '';
+    const accountNumber = account.accountNumber ? `Conta ${account.accountNumber}` : '';
+    return [companyLabel, bankCode, agency, accountNumber].filter(Boolean).join(' • ');
+  };
+
+  const ensureSelectOption = (select, value, label, dataset = {}) => {
+    if (!select || !value) return null;
+    const normalizedValue = String(value);
+    const existing = Array.from(select.options || []).find((option) => option.value === normalizedValue);
+    if (existing) {
+      if (label) existing.textContent = label;
+      Object.entries(dataset).forEach(([key, dataValue]) => {
+        if (dataValue !== undefined && dataValue !== null) {
+          existing.dataset[key] = dataValue;
+        }
+      });
+      return existing;
+    }
+    const option = document.createElement('option');
+    option.value = normalizedValue;
+    option.textContent = label || normalizedValue;
+    Object.entries(dataset).forEach(([key, dataValue]) => {
+      if (dataValue !== undefined && dataValue !== null) {
+        option.dataset[key] = dataValue;
+      }
+    });
+    select.appendChild(option);
+    return option;
+  };
+
   const updateStatus = (message) => {
     if (elements.status) {
       elements.status.textContent = message || 'Nenhum envio realizado ainda.';
@@ -112,6 +175,18 @@
     }
   };
 
+  const getSubmitLabel = (saving) => {
+    if (saving) {
+      return state.editingAccountId ? 'Atualizando...' : 'Salvando...';
+    }
+    return state.editingAccountId ? 'Atualizar conta' : 'Salvar conta';
+  };
+
+  const updateResetLabel = () => {
+    if (!elements.resetLabel) return;
+    elements.resetLabel.textContent = state.editingAccountId ? 'Cancelar edição' : 'Descartar alterações';
+  };
+
   const setSavingState = (saving) => {
     state.saving = saving;
     if (elements.submitButton) {
@@ -120,8 +195,9 @@
       elements.submitButton.classList.toggle('pointer-events-none', saving);
     }
     if (elements.submitLabel) {
-      elements.submitLabel.textContent = saving ? 'Salvando...' : 'Salvar conta';
+      elements.submitLabel.textContent = getSubmitLabel(saving);
     }
+    updateResetLabel();
   };
 
   const parseErrorResponse = async (response) => {
@@ -161,12 +237,15 @@
 
     if (!Array.isArray(state.accounts) || !state.accounts.length) {
       elements.tableBody.innerHTML =
-        '<tr><td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">Nenhuma conta cadastrada no momento.</td></tr>';
+        '<tr><td colspan="7" class="px-4 py-6 text-center text-sm text-gray-500">Nenhuma conta cadastrada no momento.</td></tr>';
       return;
     }
 
+    const editingId = normalizeId(state.editingAccountId);
+
     const rows = state.accounts
       .map((account) => {
+        const id = normalizeId(account._id);
         const company = account.company && typeof account.company === 'object'
           ? buildCompanyLabel(account.company)
           : buildCompanyLabel({ nome: account.company });
@@ -185,9 +264,27 @@
               timeStyle: 'short',
             })
           : '—';
+        const isEditing = editingId && editingId === id;
+        const isDeleting = state.deletingIds.has(id);
+        const actionBaseClass =
+          'inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-1';
+        const editClasses = `${actionBaseClass} ${isDeleting || state.saving
+          ? 'cursor-not-allowed opacity-60'
+          : 'text-primary-700 hover:bg-primary/10 focus:ring-primary/40'}`;
+        const deleteClasses = `${actionBaseClass} ${isDeleting || state.saving
+          ? 'cursor-not-allowed opacity-60'
+          : 'text-red-600 hover:bg-red-50 focus:ring-red-300'}`;
+        const editLabel = isEditing ? 'Em edição' : 'Editar';
+        const deleteLabel = isDeleting ? 'Excluindo...' : 'Excluir';
+        const rowClasses = ['transition'];
+        if (isEditing) {
+          rowClasses.push('bg-primary/5', 'ring-1', 'ring-primary/30');
+        } else {
+          rowClasses.push('hover:bg-gray-50');
+        }
 
         return `
-          <tr class="hover:bg-gray-50 transition">
+          <tr class="${rowClasses.join(' ')}" data-account-id="${escapeHtml(id)}">
             <td class="px-4 py-3 align-top">
               <div class="font-medium text-gray-800">${escapeHtml(company)}</div>
               ${account.alias ? `<div class="text-xs text-gray-500">${escapeHtml(account.alias)}</div>` : ''}
@@ -203,12 +300,179 @@
             <td class="px-4 py-3 align-top text-gray-700">${escapeHtml(documentNumber)}</td>
             <td class="px-4 py-3 align-top text-gray-700">${escapeHtml(pixKey)}</td>
             <td class="px-4 py-3 align-top text-gray-700">${escapeHtml(updatedAtLabel)}</td>
+            <td class="px-4 py-3 align-top">
+              <div class="flex items-center justify-end gap-2">
+                <button type="button" class="${editClasses}" data-action="edit" data-id="${escapeHtml(id)}" title="Editar conta bancária" ${
+                  isDeleting || state.saving ? 'disabled' : ''
+                }>
+                  <i class="fas fa-pen-to-square"></i>
+                  <span>${escapeHtml(editLabel)}</span>
+                </button>
+                <button type="button" class="${deleteClasses}" data-action="delete" data-id="${escapeHtml(id)}" title="Excluir conta bancária" ${
+                  isDeleting || state.saving ? 'disabled' : ''
+                }>
+                  <i class="fas fa-trash"></i>
+                  <span>${escapeHtml(deleteLabel)}</span>
+                </button>
+              </div>
+            </td>
           </tr>
         `;
       })
       .join('');
 
     elements.tableBody.innerHTML = rows;
+  };
+
+  const resetFormFields = () => {
+    const fieldKeys = [
+      'company',
+      'bank',
+      'agency',
+      'accountNumber',
+      'accountDigit',
+      'pixKey',
+      'documentNumber',
+      'alias',
+      'initialBalance',
+      'dailyCdi',
+    ];
+
+    fieldKeys.forEach((key) => {
+      const element = elements[key];
+      if (!element) return;
+      if (element.tagName === 'SELECT') {
+        element.value = '';
+      } else {
+        element.value = '';
+      }
+    });
+
+    if (elements.accountType) {
+      const defaultOption = Array.from(elements.accountType.options || []).find((option) => option.value === 'corrente');
+      elements.accountType.value = defaultOption ? defaultOption.value : (elements.accountType.options?.[0]?.value || '');
+    }
+  };
+
+  const populateFormWithAccount = (account) => {
+    if (!account) return;
+
+    const companyId = account.company && typeof account.company === 'object'
+      ? normalizeId(account.company._id || account.company.id || account.company.value)
+      : normalizeId(account.company);
+    if (elements.company) {
+      if (companyId) {
+        const companyLabel = account.company && typeof account.company === 'object'
+          ? buildCompanyLabel(account.company)
+          : buildCompanyLabel({ nome: account.company });
+        ensureSelectOption(elements.company, companyId, companyLabel);
+        elements.company.value = companyId;
+      } else {
+        elements.company.value = '';
+      }
+    }
+
+    if (elements.bank) {
+      const bankCode = sanitizeString(account.bankCode);
+      if (bankCode) {
+        ensureSelectOption(elements.bank, bankCode, `${bankCode} - ${account.bankName || 'Banco não informado'}`, {
+          bankName: account.bankName || '',
+        });
+        elements.bank.value = bankCode;
+      } else {
+        elements.bank.value = '';
+      }
+    }
+
+    if (elements.agency) elements.agency.value = sanitizeString(account.agency);
+    if (elements.accountNumber) elements.accountNumber.value = sanitizeString(account.accountNumber);
+    if (elements.accountDigit) elements.accountDigit.value = sanitizeString(account.accountDigit);
+    if (elements.accountType) {
+      const type = sanitizeString(account.accountType) || 'corrente';
+      const validOption = Array.from(elements.accountType.options || []).some((option) => option.value === type);
+      elements.accountType.value = validOption ? type : 'corrente';
+    }
+    if (elements.pixKey) elements.pixKey.value = sanitizeString(account.pixKey);
+    if (elements.documentNumber) elements.documentNumber.value = sanitizeString(account.documentNumber);
+    if (elements.alias) elements.alias.value = sanitizeString(account.alias);
+    if (elements.initialBalance) elements.initialBalance.value = formatCurrency(account.initialBalance);
+    if (elements.dailyCdi) elements.dailyCdi.value = formatPercentage(account.dailyCdi);
+  };
+
+  const updateFormMode = () => {
+    if (elements.form) {
+      if (state.editingAccountId) {
+        elements.form.setAttribute('data-mode', 'edit');
+      } else {
+        elements.form.removeAttribute('data-mode');
+      }
+    }
+
+    if (elements.submitLabel) {
+      elements.submitLabel.textContent = getSubmitLabel(state.saving);
+    }
+
+    if (elements.submitButton) {
+      const label = state.editingAccountId ? 'Atualizar conta bancária' : 'Salvar conta bancária';
+      elements.submitButton.setAttribute('aria-label', label);
+      elements.submitButton.setAttribute('title', label);
+    }
+
+    if (elements.resetButton) {
+      const resetLabel = state.editingAccountId
+        ? 'Cancelar edição da conta bancária em andamento'
+        : 'Descartar alterações do formulário de conta bancária';
+      elements.resetButton.setAttribute('aria-label', resetLabel);
+      elements.resetButton.setAttribute('title', resetLabel);
+    }
+
+    updateResetLabel();
+  };
+
+  const startEditingAccount = (accountId) => {
+    if (!accountId) return;
+    if (state.saving) {
+      notify('Aguarde o término do salvamento atual para editar outra conta.', 'warning');
+      return;
+    }
+
+    const id = normalizeId(accountId);
+    const account = state.accounts.find((item) => normalizeId(item._id) === id);
+    if (!account) {
+      notify('Conta bancária não encontrada para edição.', 'error');
+      return;
+    }
+
+    state.editingAccountId = id;
+    state.editingAccount = account;
+    populateFormWithAccount(account);
+    updateStatus(`Editando conta cadastrada — ${describeAccount(account)}`);
+    updateFormMode();
+    renderAccounts();
+
+    if (elements.form) {
+      try {
+        elements.form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (_) {
+        // ignore scroll errors
+      }
+    }
+
+    notify('Conta carregada para edição.', 'info');
+  };
+
+  const cancelEditing = ({ keepStatus = false } = {}) => {
+    const wasEditing = !!state.editingAccountId;
+    state.editingAccountId = null;
+    state.editingAccount = null;
+    updateFormMode();
+    renderAccounts();
+    if (!keepStatus) {
+      updateStatus('Nenhum envio realizado ainda.');
+    }
+    if (wasEditing && !keepStatus) {
+      notify('Edição da conta cancelada.', 'info');
+    }
   };
 
   const loadAccounts = async () => {
@@ -231,6 +495,22 @@
       const data = await response.json();
       state.accounts = Array.isArray(data?.accounts) ? data.accounts : [];
 
+      if (state.editingAccountId) {
+        const refreshed = state.accounts.find((item) => normalizeId(item._id) === state.editingAccountId);
+        if (refreshed) {
+          state.editingAccount = refreshed;
+        } else {
+          const previousId = state.editingAccountId;
+          state.editingAccountId = null;
+          state.editingAccount = null;
+          updateFormMode();
+          if (previousId) {
+            updateStatus('A conta em edição não está mais disponível na listagem.');
+            notify('A conta em edição não está mais disponível na listagem.', 'warning');
+          }
+        }
+      }
+
       if (!state.accounts.length) {
         setListStatus('Nenhuma conta cadastrada até o momento.');
       } else {
@@ -246,6 +526,101 @@
     } finally {
       state.loadingAccounts = false;
       setListStatus(elements.listStatus?.textContent || '', false);
+    }
+  };
+
+  const deleteAccount = async (accountId) => {
+    const id = normalizeId(accountId);
+    if (!id || state.deletingIds.has(id)) return;
+
+    state.deletingIds.add(id);
+    renderAccounts();
+    const previousStatus = elements.listStatus ? elements.listStatus.textContent : '';
+    setListStatus('Removendo conta bancária...', true);
+
+    try {
+      const token = getToken();
+      const headers = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_BASE}/bank-accounts/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (!response.ok) {
+        const message = (await parseErrorResponse(response)) || 'Não foi possível excluir a conta bancária.';
+        throw new Error(message);
+      }
+
+      if (state.editingAccountId === id) {
+        cancelEditing({ keepStatus: true });
+        updateStatus('Conta excluída com sucesso.');
+      }
+
+      notify('Conta bancária excluída com sucesso.', 'success');
+      await loadAccounts();
+    } catch (error) {
+      console.error('Erro ao excluir conta bancária:', error);
+      notify(error?.message || 'Não foi possível excluir a conta bancária.', 'error');
+    } finally {
+      state.deletingIds.delete(id);
+      const currentStatus = elements.listStatus ? elements.listStatus.textContent : '';
+      if (currentStatus === 'Removendo conta bancária...') {
+        setListStatus(previousStatus, false);
+      } else {
+        setListStatus(currentStatus, false);
+      }
+      renderAccounts();
+    }
+  };
+
+  const confirmDeleteAccount = (accountId) => {
+    const id = normalizeId(accountId);
+    if (!id) return;
+
+    const account = state.accounts.find((item) => normalizeId(item._id) === id);
+    if (!account) {
+      notify('Conta bancária não encontrada para exclusão.', 'error');
+      return;
+    }
+
+    const description = describeAccount(account) || 'Conta bancária selecionada';
+    const message = `Deseja realmente excluir a conta bancária selecionada?\n\n${description}\n\nEsta ação não poderá ser desfeita.`;
+
+    if (typeof window.showModal === 'function') {
+      window.showModal({
+        title: 'Excluir conta bancária',
+        message,
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar',
+        onConfirm: () => deleteAccount(id),
+      });
+      return;
+    }
+
+    if (window.confirm(message)) {
+      deleteAccount(id);
+    }
+  };
+
+  const handleTableClick = (event) => {
+    const actionButton = event.target.closest('[data-action]');
+    if (!actionButton || !elements.tableBody?.contains(actionButton)) return;
+
+    const action = actionButton.dataset.action;
+    const id = actionButton.dataset.id;
+
+    if (!action || !id) return;
+
+    event.preventDefault();
+
+    if (action === 'edit') {
+      startEditingAccount(id);
+    } else if (action === 'delete') {
+      confirmDeleteAccount(id);
     }
   };
 
@@ -420,6 +795,8 @@
     event.preventDefault();
     if (state.saving) return;
 
+    const isEditing = !!state.editingAccountId;
+
     try {
       const payload = buildPayload();
       validatePayload(payload);
@@ -431,39 +808,52 @@
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${API_BASE}/bank-accounts`, {
-        method: 'POST',
+      const endpoint = isEditing
+        ? `${API_BASE}/bank-accounts/${encodeURIComponent(state.editingAccountId)}`
+        : `${API_BASE}/bank-accounts`;
+
+      const response = await fetch(endpoint, {
+        method: isEditing ? 'PUT' : 'POST',
         headers,
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        const message = (await parseErrorResponse(response)) || 'Não foi possível salvar a conta bancária.';
+        const fallbackMessage = isEditing
+          ? 'Não foi possível atualizar a conta bancária.'
+          : 'Não foi possível salvar a conta bancária.';
+        const message = (await parseErrorResponse(response)) || fallbackMessage;
         throw new Error(message);
       }
 
-      notify('Conta bancária salva com sucesso!', 'success');
       const now = new Date();
-      updateStatus(`Conta salva em ${now.toLocaleString('pt-BR')}`);
-      if (elements.form) {
-        elements.form.reset();
+      if (isEditing) {
+        notify('Conta bancária atualizada com sucesso!', 'success');
+        updateStatus(`Conta atualizada em ${now.toLocaleString('pt-BR')}`);
+      } else {
+        notify('Conta bancária salva com sucesso!', 'success');
+        updateStatus(`Conta salva em ${now.toLocaleString('pt-BR')}`);
       }
-      if (elements.company) {
-        elements.company.value = '';
-      }
-      if (elements.bank) {
-        elements.bank.value = '';
-      }
-      loadAccounts();
+
+      resetFormFields();
+      cancelEditing({ keepStatus: true });
+      await loadAccounts();
     } catch (error) {
-      notify(error?.message || 'Não foi possível salvar a conta bancária.', 'error');
+      const fallback = isEditing
+        ? 'Não foi possível atualizar a conta bancária.'
+        : 'Não foi possível salvar a conta bancária.';
+      notify(error?.message || fallback, 'error');
     } finally {
       setSavingState(false);
     }
   };
 
-  const handleReset = () => {
-    updateStatus('Nenhum envio realizado ainda.');
+  const handleReset = (event) => {
+    if (event) {
+      event.preventDefault();
+    }
+    resetFormFields();
+    cancelEditing();
     setSavingState(false);
   };
 
@@ -471,12 +861,16 @@
     initElements();
     if (!elements.form) return;
 
+    updateFormMode();
     loadBanks();
     loadCompanies();
     loadAccounts();
 
     elements.form.addEventListener('submit', handleSubmit);
     elements.form.addEventListener('reset', handleReset);
+    if (elements.tableBody) {
+      elements.tableBody.addEventListener('click', handleTableClick);
+    }
   };
 
   if (document.readyState === 'loading') {

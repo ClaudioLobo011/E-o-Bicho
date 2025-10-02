@@ -108,7 +108,7 @@
             <div class="flex items-center gap-2">
               <button type="reset" id="bank-account-reset" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
                 <i class="fas fa-undo"></i>
-                Descartar alterações
+                <span id="bank-account-reset-label">Descartar alterações</span>
               </button>
               <button type="submit" id="bank-account-submit" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
                 <i class="fas fa-save"></i>
@@ -137,11 +137,12 @@
                   <th scope="col" class="px-4 py-3">Documento</th>
                   <th scope="col" class="px-4 py-3">Chave Pix</th>
                   <th scope="col" class="px-4 py-3">Atualizado em</th>
+                  <th scope="col" class="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody id="bank-account-table-body" class="divide-y divide-gray-100">
                 <tr>
-                  <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">Nenhuma conta cadastrada no momento.</td>
+                  <td colspan="7" class="px-4 py-6 text-center text-sm text-gray-500">Nenhuma conta cadastrada no momento.</td>
                 </tr>
               </tbody>
             </table>
