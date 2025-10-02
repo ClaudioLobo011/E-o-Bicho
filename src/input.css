@@ -1247,7 +1247,11 @@
   }
 
   body.admin-embedded.admin-modal-open {
-    --admin-modal-extra-height: clamp(640px, 85vh, 820px);
+    @apply overflow-visible;
+  }
+
+  body.admin-embedded .admin-embedded-panel {
+    @apply bg-transparent shadow-none rounded-none;
   }
 
   .admin-tab-panel {

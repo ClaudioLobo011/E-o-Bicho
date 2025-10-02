@@ -5433,7 +5433,13 @@
     padding-bottom: var(--admin-modal-extra-height, 0px);
   }
   body.admin-embedded.admin-modal-open {
-    --admin-modal-extra-height: clamp(640px, 85vh, 820px);
+    overflow: visible;
+  }
+  body.admin-embedded .admin-embedded-panel {
+    border-radius: 0;
+    background-color: transparent;
+    --tw-shadow: 0 0 #0000;
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
   .admin-tab-panel {
     min-height: calc(var(--spacing) * 0);

@@ -45,26 +45,83 @@ async function checkAdminAccess() {
     if (isEmbedded) {
       document.body.classList.add('admin-embedded');
 
+      const MODAL_HEIGHT_SELECTORS = [
+        '.modal-shell',
+        '.modal-box',
+        '.modal-content',
+        '.modal-dialog',
+        '.modal-panel',
+      ];
+
+      const isElementVisible = (el) => {
+        if (!(el instanceof HTMLElement)) {
+          return false;
+        }
+
+        if (el.classList.contains('hidden')) {
+          return false;
+        }
+
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') {
+          return false;
+        }
+
+        const opacity = parseFloat(style.opacity || '1');
+        if (Number.isFinite(opacity) && opacity <= 0.01) {
+          return false;
+        }
+
+        if (style.pointerEvents === 'none') {
+          return false;
+        }
+
+        return true;
+      };
+
+      const findMeasurementTarget = (modal) => {
+        if (!isElementVisible(modal)) {
+          return null;
+        }
+
+        for (const selector of MODAL_HEIGHT_SELECTORS) {
+          const candidate = modal.querySelector(selector);
+          if (candidate && isElementVisible(candidate)) {
+            return candidate;
+          }
+        }
+
+        return modal;
+      };
+
       const updateEmbeddedModalState = () => {
         const modals = document.querySelectorAll('[data-admin-modal]');
-        const hasOpenModal = Array.from(modals).some((modal) => {
+        let hasOpenModal = false;
+        let tallestModal = 0;
+
+        for (const modal of modals) {
           if (!(modal instanceof HTMLElement)) {
-            return false;
+            continue;
           }
 
-          if (modal.classList.contains('hidden')) {
-            return false;
+          const measurementTarget = findMeasurementTarget(modal);
+          if (!measurementTarget) {
+            continue;
           }
 
-          const style = window.getComputedStyle(modal);
-          if (style.display === 'none' || style.visibility === 'hidden') {
-            return false;
-          }
-
-          return true;
-        });
+          hasOpenModal = true;
+          const rect = measurementTarget.getBoundingClientRect();
+          tallestModal = Math.max(tallestModal, rect.height);
+        }
 
         document.body.classList.toggle('admin-modal-open', hasOpenModal);
+
+        if (hasOpenModal && Number.isFinite(tallestModal) && tallestModal > 0) {
+          const buffer = Math.min(Math.max(Math.ceil(tallestModal + 48), 480), 1040);
+          document.body.style.setProperty('--admin-modal-extra-height', `${buffer}px`);
+        } else {
+          document.body.style.removeProperty('--admin-modal-extra-height');
+        }
       };
 
       const modalObserver = new MutationObserver((mutations) => {
@@ -151,6 +208,34 @@ async function checkAdminAccess() {
           mainElement.classList.remove('container', 'mx-auto', 'px-4', 'py-8', 'min-h-screen');
           mainElement.classList.add('admin-embedded-main');
         }
+
+        const convertPanels = () => {
+          const embeddedPanels = document.querySelectorAll(
+            '.admin-embedded-main .bg-white'
+          );
+
+          embeddedPanels.forEach((panel) => {
+            if (!(panel instanceof HTMLElement)) {
+              return;
+            }
+
+            panel.classList.remove(
+              'bg-white',
+              'shadow',
+              'shadow-sm',
+              'shadow-md',
+              'shadow-lg',
+              'shadow-xl',
+              'rounded',
+              'rounded-md',
+              'rounded-lg',
+              'rounded-xl'
+            );
+            panel.classList.add('admin-embedded-panel');
+          });
+        };
+
+        convertPanels();
       };
 
       if (document.readyState === 'loading') {
