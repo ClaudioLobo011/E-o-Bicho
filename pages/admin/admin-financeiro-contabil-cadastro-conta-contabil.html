@@ -30,124 +30,187 @@
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
           <div class="space-y-1">
-            <h2 class="text-lg font-semibold text-gray-800">Identificação da conta</h2>
-            <p class="text-sm text-gray-600">Defina código, nome e classificações da conta contábil.</p>
+            <h2 class="text-lg font-semibold text-gray-800" id="accounting-account-form-title">Configuração da conta contábil</h2>
+            <p class="text-sm text-gray-600" id="accounting-account-form-subtitle">Vincule as empresas e preencha os dados que serão utilizados nos lançamentos e relatórios.</p>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label for="account-code" class="block text-sm font-medium text-gray-700 mb-1">Código<span class="text-red-500"> *</span></label>
-              <input type="text" id="account-code" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.1.1.01" required>
-            </div>
-            <div class="md:col-span-2">
-              <label for="account-name" class="block text-sm font-medium text-gray-700 mb-1">Nome da conta<span class="text-red-500"> *</span></label>
-              <input type="text" id="account-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Caixa" required>
-            </div>
-          </div>
+          <form id="accounting-account-form" class="space-y-6">
+            <input type="hidden" id="accounting-account-id" name="accountId">
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label for="account-group" class="block text-sm font-medium text-gray-700 mb-1">Grupo contábil<span class="text-red-500"> *</span></label>
-              <select id="account-group" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="">Selecione um grupo</option>
-                <option value="ativo">Ativo Circulante</option>
-                <option value="passivo">Passivo Circulante</option>
-                <option value="receita">Receitas Operacionais</option>
-                <option value="despesa">Despesas Operacionais</option>
-              </select>
+              <label class="block text-sm font-medium text-gray-700 mb-2" for="">Empresas vinculadas<span class="text-red-500"> *</span></label>
+              <div id="accounting-account-companies" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2"></div>
+              <p id="accounting-account-company-status" class="mt-2 text-xs text-gray-500">Carregando empresas...</p>
             </div>
-            <div>
-              <label for="account-nature" class="block text-sm font-medium text-gray-700 mb-1">Natureza<span class="text-red-500"> *</span></label>
-              <div class="flex gap-3">
-                <label class="flex-1 inline-flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 has-[:checked]:border-primary has-[:checked]:text-primary">
-                  <span>Devedora</span>
-                  <input type="radio" name="account-nature" value="devedora" class="text-primary focus:ring-primary" checked>
-                </label>
-                <label class="flex-1 inline-flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 has-[:checked]:border-primary has-[:checked]:text-primary">
-                  <span>Credora</span>
-                  <input type="radio" name="account-nature" value="credora" class="text-primary focus:ring-primary">
-                </label>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div class="md:col-span-2">
+                    <label for="account-name" class="block text-sm font-medium text-gray-700 mb-1">Nome da conta<span class="text-red-500"> *</span></label>
+                    <input type="text" id="account-name" name="name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Caixa Geral" required>
+                  </div>
+                  <div>
+                    <label for="account-code" class="block text-sm font-medium text-gray-700 mb-1">Código contábil<span class="text-red-500"> *</span></label>
+                    <input type="text" id="account-code" name="code" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.1.1.01" required>
+                  </div>
+                  <div>
+                    <label for="sped-code" class="block text-sm font-medium text-gray-700 mb-1">Plano de Contas SPED</label>
+                    <input type="text" id="sped-code" name="spedCode" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.01.01.01">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <span class="block text-sm font-medium text-gray-700 mb-1">Tipo da conta<span class="text-red-500"> *</span></span>
+                    <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-labelledby="account-type-label">
+                      <label class="inline-flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:checked]:text-primary">
+                        <span>Analítica</span>
+                        <input type="radio" name="account-type" value="analitica" class="text-primary focus:ring-primary" checked>
+                      </label>
+                      <label class="inline-flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:checked]:text-primary">
+                        <span>Sintética</span>
+                        <input type="radio" name="account-type" value="sintetica" class="text-primary focus:ring-primary">
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <label for="payment-nature" class="block text-sm font-medium text-gray-700 mb-1">Natureza do pagamento</label>
+                    <select id="payment-nature" name="paymentNature" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="">Selecione</option>
+                      <option value="contas_pagar">Contas a Pagar</option>
+                      <option value="contas_receber">Contas a Receber</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label for="account-notes" class="block text-sm font-medium text-gray-700 mb-1">Observações internas</label>
+                  <textarea id="account-notes" name="notes" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" rows="4" placeholder="Detalhe como a conta deve ser utilizada, centros de custos envolvidos e particularidades de conciliação."></textarea>
+                </div>
+              </div>
+
+              <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label for="account-origin" class="block text-sm font-medium text-gray-700 mb-1">Origem contábil</label>
+                    <select id="account-origin" name="accountingOrigin" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="">Selecione</option>
+                      <option value="receita">Receita</option>
+                      <option value="despesa">Despesa</option>
+                      <option value="ativo">Ativo</option>
+                      <option value="passivo">Passivo</option>
+                      <option value="resultado">Resultado</option>
+                      <option value="encerramento">Encerramento</option>
+                      <option value="transferencia">Transferência</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="account-cost" class="block text-sm font-medium text-gray-700 mb-1">Classificação de custo</label>
+                    <select id="account-cost" name="costClassification" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="">Selecione</option>
+                      <option value="fixo">Fixo</option>
+                      <option value="variavel">Variável</option>
+                      <option value="cmv">CMV</option>
+                      <option value="impostos">Impostos</option>
+                      <option value="outros">Outros</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label for="account-source-system" class="block text-sm font-medium text-gray-700 mb-1">Origem (sistema)</label>
+                    <select id="account-source-system" name="systemOrigin" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="">Selecione</option>
+                      <option value="0">0 - Vendas</option>
+                      <option value="1">1 - Entrada de Produtos</option>
+                      <option value="2">2 - Contas a Pagar</option>
+                      <option value="3">3 - Contas a Receber</option>
+                      <option value="4">4 - Devoluções</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="account-status" class="block text-sm font-medium text-gray-700 mb-1">Situação</label>
+                    <select id="account-status" name="status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="ativa">Ativa</option>
+                      <option value="inativa">Inativa</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label for="account-parent" class="block text-sm font-medium text-gray-700 mb-1">Conta superior</label>
-              <select id="account-parent" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="">Conta raiz</option>
-                <option value="1.1">1.1 - Ativo Circulante</option>
-                <option value="2.1">2.1 - Passivo Circulante</option>
-              </select>
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div class="flex items-center gap-2 text-xs text-gray-500">
+                <i class="fas fa-clock text-gray-400"></i>
+                <span id="accounting-account-form-status">Preencha os dados e salve para registrar a conta contábil.</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" id="accounting-account-reset" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+                  <i class="fas fa-undo"></i>
+                  <span id="accounting-account-reset-label">Descartar alterações</span>
+                </button>
+                <button type="submit" id="accounting-account-submit" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                  <i class="fas fa-save"></i>
+                  <span id="accounting-account-submit-label">Salvar conta</span>
+                </button>
+              </div>
             </div>
-            <div>
-              <label for="account-status" class="block text-sm font-medium text-gray-700 mb-1">Situação</label>
-              <select id="account-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="ativa">Ativa</option>
-                <option value="inativa">Inativa</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label for="account-description" class="block text-sm font-medium text-gray-700 mb-1">Descrição interna</label>
-            <textarea id="account-description" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" rows="4" placeholder="Detalhe como a conta deve ser utilizada no plano contábil."></textarea>
-          </div>
-
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div class="flex items-center gap-2 text-xs text-gray-500">
-              <i class="fas fa-clock text-gray-400"></i>
-              Última atualização automática: há 5 minutos
-            </div>
-            <div class="flex items-center gap-2">
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-                <i class="fas fa-undo"></i>
-                Descartar alterações
-              </button>
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
-                <i class="fas fa-save"></i>
-                Salvar conta
-              </button>
-            </div>
-          </div>
+          </form>
         </section>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Histórico de alterações</h2>
-              <p class="text-sm text-gray-600">Acompanhe a evolução da conta e os ajustes realizados.</p>
+              <h2 class="text-lg font-semibold text-gray-800">Lista de contas contábeis cadastradas</h2>
+              <p class="text-sm text-gray-600">Visualize as contas existentes, empresas vinculadas e classificações principais.</p>
             </div>
-            <button type="button" class="text-sm font-medium text-primary hover:underline">Exportar</button>
+            <div class="flex flex-wrap items-center gap-2">
+              <input
+                type="file"
+                id="accounting-account-import-input"
+                accept=".xlsx,.xls,.csv"
+                class="hidden"
+              />
+              <button
+                type="button"
+                id="accounting-account-import-button"
+                class="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:border-primary hover:text-primary"
+              >
+                <i class="fas fa-file-import"></i>
+                <span id="accounting-account-import-label">Importar planilha</span>
+              </button>
+              <button type="button" class="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">
+                <i class="fas fa-file-export"></i>
+                Exportar lista
+              </button>
+            </div>
           </div>
 
-          <div class="overflow-hidden rounded-lg border border-gray-200">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-              <thead class="bg-gray-50 text-gray-600">
-                <tr>
-                  <th scope="col" class="px-4 py-2 text-left font-semibold">Data</th>
-                  <th scope="col" class="px-4 py-2 text-left font-semibold">Responsável</th>
-                  <th scope="col" class="px-4 py-2 text-left font-semibold">Resumo</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100 text-gray-700">
-                <tr>
-                  <td class="px-4 py-2">12/06/2024 14:32</td>
-                  <td class="px-4 py-2">Mariana Souza</td>
-                  <td class="px-4 py-2">Atualizou a natureza para devedora.</td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-2">05/05/2024 09:18</td>
-                  <td class="px-4 py-2">Lucas Andrade</td>
-                  <td class="px-4 py-2">Vinculou a conta ao grupo Ativo Circulante.</td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-2">22/04/2024 17:05</td>
-                  <td class="px-4 py-2">Sistema</td>
-                  <td class="px-4 py-2">Criação automática no plano de contas padrão.</td>
-                </tr>
-              </tbody>
-            </table>
+          <p id="accounting-account-import-status" class="text-xs text-gray-500">
+            Selecione uma planilha Excel (.xlsx) com as contas contábeis a importar.
+          </p>
+
+          <div class="space-y-3">
+            <div id="accounting-account-list-status" class="text-sm text-gray-500">Carregando contas contábeis...</div>
+            <div class="overflow-hidden rounded-lg border border-gray-200">
+              <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th scope="col" class="px-4 py-2 text-left font-semibold">Empresas</th>
+                    <th scope="col" class="px-4 py-2 text-left font-semibold">Conta</th>
+                    <th scope="col" class="px-4 py-2 text-left font-semibold">Código</th>
+                    <th scope="col" class="px-4 py-2 text-left font-semibold">Tipo</th>
+                    <th scope="col" class="px-4 py-2 text-left font-semibold">Origem</th>
+                    <th scope="col" class="px-4 py-2 text-left font-semibold">Custo</th>
+                    <th scope="col" class="px-4 py-2 text-left font-semibold">Origem (sistema)</th>
+                    <th scope="col" class="px-4 py-2 text-left font-semibold text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="accounting-account-table-body" class="divide-y divide-gray-100 text-gray-700"></tbody>
+              </table>
+            </div>
           </div>
         </section>
       </div>
@@ -163,5 +226,6 @@
   <script src="../../scripts/core/ui.js"></script>
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-financeiro-contabil-cadastro-conta-contabil.js"></script>
 </body>
 </html>
