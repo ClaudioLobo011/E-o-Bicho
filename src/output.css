@@ -515,6 +515,9 @@
       max-width: 96rem;
     }
   }
+  .-mx-4 {
+    margin-inline: calc(var(--spacing) * -4);
+  }
   .mx-2 {
     margin-inline: calc(var(--spacing) * 2);
   }
@@ -4062,6 +4065,11 @@
       padding-inline: calc(var(--spacing) * 4);
     }
   }
+  .md\:py-10 {
+    @media (width >= 48rem) {
+      padding-block: calc(var(--spacing) * 10);
+    }
+  }
   .md\:pr-16 {
     @media (width >= 48rem) {
       padding-right: calc(var(--spacing) * 16);
@@ -4157,6 +4165,11 @@
       flex-direction: row;
     }
   }
+  .lg\:flex-nowrap {
+    @media (width >= 64rem) {
+      flex-wrap: nowrap;
+    }
+  }
   .lg\:items-center {
     @media (width >= 64rem) {
       align-items: center;
@@ -4226,6 +4239,23 @@
     @media (width >= 80rem) {
       gap: calc(var(--spacing) * 5);
     }
+  }
+}
+@layer base {
+  html {
+    min-height: 100%;
+  }
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  body > main {
+    flex: 1 0 auto;
+  }
+  body > footer {
+    flex-shrink: 0;
   }
 }
 @layer components {
@@ -5218,11 +5248,16 @@
     max-width: min(1600px, 98vw);
   }
   .modal-shell {
-    height: clamp(640px, 85vh, 820px);
+    max-height: min(94vh, 960px);
+  }
+  @media (min-width: 1536px) {
+    .modal-shell {
+      max-height: min(92vh, 1040px);
+    }
   }
   @media (max-width: 768px) {
     .modal-shell {
-      height: calc(100vh - 2rem);
+      max-height: calc(100vh - 2rem);
     }
   }
   .modal-body-fixed {
