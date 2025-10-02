@@ -515,6 +515,9 @@
       max-width: 96rem;
     }
   }
+  .-mx-4 {
+    margin-inline: calc(var(--spacing) * -4);
+  }
   .mx-2 {
     margin-inline: calc(var(--spacing) * 2);
   }
@@ -4157,6 +4160,11 @@
       flex-direction: row;
     }
   }
+  .lg\:flex-nowrap {
+    @media (width >= 64rem) {
+      flex-wrap: nowrap;
+    }
+  }
   .lg\:items-center {
     @media (width >= 64rem) {
       align-items: center;
@@ -5235,10 +5243,18 @@
     max-width: min(1600px, 98vw);
   }
   .modal-shell {
-    height: clamp(640px, 85vh, 820px);
+    max-height: min(94vh, 960px);
+    height: min(94vh, 960px);
+  }
+  @media (min-width: 1536px) {
+    .modal-shell {
+      max-height: min(92vh, 1040px);
+      height: min(92vh, 1040px);
+    }
   }
   @media (max-width: 768px) {
     .modal-shell {
+      max-height: none;
       height: calc(100vh - 2rem);
     }
   }
