@@ -1243,16 +1243,10 @@
 
   body.admin-embedded {
     --admin-modal-extra-height: 0px;
+    padding-bottom: var(--admin-modal-extra-height, 0px);
   }
 
-  body.admin-embedded::after {
-    content: '';
-    display: block;
-    height: var(--admin-modal-extra-height, 0px);
-  }
-
-  body.admin-embedded:has(.fixed:not(.hidden)[data-admin-modal]),
-  body.admin-embedded:has(.fixed:not(.hidden) .modal-shell) {
+  body.admin-embedded.admin-modal-open {
     --admin-modal-extra-height: clamp(640px, 85vh, 820px);
   }
 

@@ -45,6 +45,81 @@ async function checkAdminAccess() {
     if (isEmbedded) {
       document.body.classList.add('admin-embedded');
 
+      const updateEmbeddedModalState = () => {
+        const modals = document.querySelectorAll('[data-admin-modal]');
+        const hasOpenModal = Array.from(modals).some((modal) => {
+          if (!(modal instanceof HTMLElement)) {
+            return false;
+          }
+
+          if (modal.classList.contains('hidden')) {
+            return false;
+          }
+
+          const style = window.getComputedStyle(modal);
+          if (style.display === 'none' || style.visibility === 'hidden') {
+            return false;
+          }
+
+          return true;
+        });
+
+        document.body.classList.toggle('admin-modal-open', hasOpenModal);
+      };
+
+      const modalObserver = new MutationObserver((mutations) => {
+        let shouldCheck = false;
+
+        for (const mutation of mutations) {
+          if (mutation.type === 'attributes') {
+            if (
+              mutation.target instanceof HTMLElement &&
+              mutation.target.hasAttribute('data-admin-modal')
+            ) {
+              shouldCheck = true;
+              break;
+            }
+          } else if (mutation.type === 'childList') {
+            const inspectNodes = (nodes) => {
+              for (const node of nodes) {
+                if (!(node instanceof HTMLElement)) {
+                  continue;
+                }
+
+                if (node.matches('[data-admin-modal]')) {
+                  shouldCheck = true;
+                  return true;
+                }
+
+                if (node.querySelector('[data-admin-modal]')) {
+                  shouldCheck = true;
+                  return true;
+                }
+              }
+
+              return false;
+            };
+
+            if (inspectNodes(mutation.addedNodes) || inspectNodes(mutation.removedNodes)) {
+              break;
+            }
+          }
+        }
+
+        if (shouldCheck) {
+          updateEmbeddedModalState();
+        }
+      });
+
+      modalObserver.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class'],
+        childList: true,
+      });
+
+      window.addEventListener('beforeunload', () => modalObserver.disconnect(), { once: true });
+
       const adjustLayout = () => {
         const headerPlaceholder = document.getElementById('admin-header-placeholder');
         if (headerPlaceholder) {
@@ -83,6 +158,8 @@ async function checkAdminAccess() {
       } else {
         adjustLayout();
       }
+
+      updateEmbeddedModalState();
     }
 
     document.body.style.visibility = 'visible';
