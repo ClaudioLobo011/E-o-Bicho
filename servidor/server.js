@@ -45,6 +45,7 @@ const routes = [
   { path: '/api/pdvs', file: './routes/pdvs' },
   { path: '/api/deposits', file: './routes/deposits' },
   { path: '/api/payment-methods', file: './routes/paymentMethods' },
+  { path: '/api/bank-accounts', file: './routes/bankAccounts' },
   { path: '/api/jobs', file: './routes/jobs' },
   { path: '/api/addresses', file: './routes/addresses' },
   { path: '/api/shipping', file: './routes/shipping' },
