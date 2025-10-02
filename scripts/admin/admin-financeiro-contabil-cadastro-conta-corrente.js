@@ -19,11 +19,16 @@
     status: '#bank-account-status',
     submitButton: '#bank-account-submit',
     submitLabel: '#bank-account-submit-label',
+    listStatus: '#bank-account-list-status',
+    table: '#bank-account-table',
+    tableBody: '#bank-account-table-body',
   };
 
   const state = {
     companies: [],
     saving: false,
+    accounts: [],
+    loadingAccounts: false,
   };
 
   const elements = {};
@@ -80,9 +85,30 @@
 
   const sanitizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 
+  const escapeHtml = (value) =>
+    String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
   const updateStatus = (message) => {
     if (elements.status) {
       elements.status.textContent = message || 'Nenhum envio realizado ainda.';
+    }
+  };
+
+  const setListStatus = (message, busy = false) => {
+    if (elements.listStatus) {
+      elements.listStatus.textContent = message || '';
+    }
+    if (elements.table) {
+      if (busy) {
+        elements.table.setAttribute('aria-busy', 'true');
+      } else {
+        elements.table.removeAttribute('aria-busy');
+      }
     }
   };
 
@@ -116,6 +142,111 @@
       return `${nome} (${documento})`;
     }
     return nome || documento || 'Empresa sem identificação';
+  };
+
+  const formatDocument = (documentNumber) => {
+    if (!documentNumber) return '—';
+    const digits = String(documentNumber).replace(/\D+/g, '');
+    if (digits.length === 14) {
+      return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+    }
+    if (digits.length === 11) {
+      return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    }
+    return documentNumber;
+  };
+
+  const renderAccounts = () => {
+    if (!elements.tableBody) return;
+
+    if (!Array.isArray(state.accounts) || !state.accounts.length) {
+      elements.tableBody.innerHTML =
+        '<tr><td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">Nenhuma conta cadastrada no momento.</td></tr>';
+      return;
+    }
+
+    const rows = state.accounts
+      .map((account) => {
+        const company = account.company && typeof account.company === 'object'
+          ? buildCompanyLabel(account.company)
+          : buildCompanyLabel({ nome: account.company });
+        const bankCode = account.bankCode || '—';
+        const bankName = account.bankName || 'Banco não informado';
+        const agency = account.agency || '—';
+        const accountNumber = account.accountDigit
+          ? `${account.accountNumber || '—'}-${account.accountDigit}`
+          : account.accountNumber || '—';
+        const pixKey = account.pixKey || '—';
+        const documentNumber = formatDocument(account.documentNumber);
+        const updatedAt = account.updatedAt ? new Date(account.updatedAt) : null;
+        const updatedAtLabel = updatedAt
+          ? updatedAt.toLocaleString('pt-BR', {
+              dateStyle: 'short',
+              timeStyle: 'short',
+            })
+          : '—';
+
+        return `
+          <tr class="hover:bg-gray-50 transition">
+            <td class="px-4 py-3 align-top">
+              <div class="font-medium text-gray-800">${escapeHtml(company)}</div>
+              ${account.alias ? `<div class="text-xs text-gray-500">${escapeHtml(account.alias)}</div>` : ''}
+            </td>
+            <td class="px-4 py-3 align-top">
+              <div class="font-medium text-gray-800">${escapeHtml(bankCode)}</div>
+              <div class="text-xs text-gray-500">${escapeHtml(bankName)}</div>
+            </td>
+            <td class="px-4 py-3 align-top">
+              <div class="font-medium text-gray-800">Agência ${escapeHtml(agency)}</div>
+              <div class="text-xs text-gray-500">Conta ${escapeHtml(accountNumber)}</div>
+            </td>
+            <td class="px-4 py-3 align-top text-gray-700">${escapeHtml(documentNumber)}</td>
+            <td class="px-4 py-3 align-top text-gray-700">${escapeHtml(pixKey)}</td>
+            <td class="px-4 py-3 align-top text-gray-700">${escapeHtml(updatedAtLabel)}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    elements.tableBody.innerHTML = rows;
+  };
+
+  const loadAccounts = async () => {
+    if (state.loadingAccounts) return;
+    state.loadingAccounts = true;
+    setListStatus('Carregando contas cadastradas...', true);
+
+    try {
+      const headers = {};
+      const token = getToken();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_BASE}/bank-accounts`, { headers });
+      if (!response.ok) {
+        throw new Error(`Falha ao carregar contas cadastradas (${response.status})`);
+      }
+
+      const data = await response.json();
+      state.accounts = Array.isArray(data?.accounts) ? data.accounts : [];
+
+      if (!state.accounts.length) {
+        setListStatus('Nenhuma conta cadastrada até o momento.');
+      } else {
+        setListStatus(`${state.accounts.length} conta(s) encontrada(s).`);
+      }
+      renderAccounts();
+    } catch (error) {
+      console.error('Erro ao carregar contas cadastradas:', error);
+      state.accounts = [];
+      renderAccounts();
+      setListStatus('Não foi possível carregar as contas cadastradas.', false);
+      notify('Não foi possível carregar as contas cadastradas. Tente novamente mais tarde.', 'error');
+    } finally {
+      state.loadingAccounts = false;
+      setListStatus(elements.listStatus?.textContent || '', false);
+    }
   };
 
   const loadCompanies = async () => {
@@ -323,6 +454,7 @@
       if (elements.bank) {
         elements.bank.value = '';
       }
+      loadAccounts();
     } catch (error) {
       notify(error?.message || 'Não foi possível salvar a conta bancária.', 'error');
     } finally {
@@ -341,6 +473,7 @@
 
     loadBanks();
     loadCompanies();
+    loadAccounts();
 
     elements.form.addEventListener('submit', handleSubmit);
     elements.form.addEventListener('reset', handleReset);

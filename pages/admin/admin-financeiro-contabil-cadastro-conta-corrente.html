@@ -117,6 +117,36 @@
             </div>
           </div>
         </form>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Contas cadastradas</h2>
+              <p class="text-sm text-gray-600">Visualize as contas correntes disponíveis para conciliação e operações financeiras.</p>
+            </div>
+            <div class="text-xs text-gray-500" id="bank-account-list-status">Carregando contas cadastradas...</div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm" aria-live="polite" aria-busy="true" id="bank-account-table">
+              <thead class="bg-gray-50">
+                <tr class="text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th scope="col" class="px-4 py-3">Empresa</th>
+                  <th scope="col" class="px-4 py-3">Banco</th>
+                  <th scope="col" class="px-4 py-3">Agência / Conta</th>
+                  <th scope="col" class="px-4 py-3">Documento</th>
+                  <th scope="col" class="px-4 py-3">Chave Pix</th>
+                  <th scope="col" class="px-4 py-3">Atualizado em</th>
+                </tr>
+              </thead>
+              <tbody id="bank-account-table-body" class="divide-y divide-gray-100">
+                <tr>
+                  <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">Nenhuma conta cadastrada no momento.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
   </main>
