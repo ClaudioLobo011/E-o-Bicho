@@ -12,6 +12,27 @@
   --color-icon: #f6874f;
 }
 
+@layer base {
+    html {
+        min-height: 100%;
+    }
+
+    body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    body > main {
+        flex: 1 0 auto;
+    }
+
+    body > footer {
+        flex-shrink: 0;
+    }
+}
+
 /* 3. Adiciona aqui os seus estilos de componentes personalizados. */
 @layer components {
     .carousel-container {

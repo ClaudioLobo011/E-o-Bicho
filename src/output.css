@@ -4228,6 +4228,23 @@
     }
   }
 }
+@layer base {
+  html {
+    min-height: 100%;
+  }
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  body > main {
+    flex: 1 0 auto;
+  }
+  body > footer {
+    flex-shrink: 0;
+  }
+}
 @layer components {
   .carousel-container {
     scroll-behavior: smooth;
