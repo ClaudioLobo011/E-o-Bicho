@@ -238,12 +238,30 @@
   const fetchAccountingAccounts = async (companyId) => {
     if (!elements.accountingAccountSelect) return;
 
+    const token = getToken();
+    if (!token) {
+      notify('Sua sessão expirou. Faça login novamente para carregar as contas contábeis.', 'error');
+      state.accountingAccounts = [];
+      state.filteredAccountingAccounts = [];
+      updateAccountingAccountOptions();
+      updateOverview();
+      return;
+    }
+
     setAccountingAccountLoading(true);
     try {
       const query = companyId ? `?company=${encodeURIComponent(companyId)}` : '';
-      const response = await fetch(`${API_BASE}/accounting-accounts${query}`);
+      const response = await fetch(`${API_BASE}/accounting-accounts${query}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       if (!response.ok) {
-        throw new Error('Não foi possível carregar as contas contábeis.');
+        const message = await parseErrorResponse(
+          response,
+          'Não foi possível carregar as contas contábeis.'
+        );
+        throw new Error(message);
       }
       const payload = await response.json();
       state.accountingAccounts = Array.isArray(payload?.accounts) ? payload.accounts : [];
