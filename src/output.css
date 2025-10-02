@@ -4065,6 +4065,11 @@
       padding-inline: calc(var(--spacing) * 4);
     }
   }
+  .md\:py-10 {
+    @media (width >= 48rem) {
+      padding-block: calc(var(--spacing) * 10);
+    }
+  }
   .md\:pr-16 {
     @media (width >= 48rem) {
       padding-right: calc(var(--spacing) * 16);
@@ -5244,18 +5249,15 @@
   }
   .modal-shell {
     max-height: min(94vh, 960px);
-    height: min(94vh, 960px);
   }
   @media (min-width: 1536px) {
     .modal-shell {
       max-height: min(92vh, 1040px);
-      height: min(92vh, 1040px);
     }
   }
   @media (max-width: 768px) {
     .modal-shell {
-      max-height: none;
-      height: calc(100vh - 2rem);
+      max-height: calc(100vh - 2rem);
     }
   }
   .modal-body-fixed {
