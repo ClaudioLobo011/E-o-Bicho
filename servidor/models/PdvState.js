@@ -70,6 +70,26 @@ const saleRecordSchema = new mongoose.Schema(
     cancellationReason: { type: String, trim: true },
     cancellationAt: { type: Date },
     cancellationAtLabel: { type: String, trim: true },
+    inventoryProcessed: { type: Boolean, default: false },
+    inventoryProcessedAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
+const inventoryMovementSchema = new mongoose.Schema(
+  {
+    saleId: { type: String, trim: true, required: true },
+    deposit: { type: mongoose.Schema.Types.ObjectId, ref: 'Deposit', required: true },
+    processedAt: { type: Date, default: Date.now },
+    items: {
+      type: [
+        {
+          product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+          quantity: { type: Number, default: 0 },
+        },
+      ],
+      default: [],
+    },
   },
   { _id: false }
 );
@@ -126,6 +146,7 @@ const pdvStateSchema = new mongoose.Schema(
       fechamento: { type: String, trim: true, default: 'PM' },
       venda: { type: String, trim: true, default: 'PM' },
     },
+    inventoryMovements: { type: [inventoryMovementSchema], default: [] },
   },
   { timestamps: true }
 );

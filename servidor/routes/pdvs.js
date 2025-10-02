@@ -5,6 +5,7 @@ const Pdv = require('../models/Pdv');
 const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
 const PdvState = require('../models/PdvState');
+const Product = require('../models/Product');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const { isDriveConfigured, uploadBufferToDrive } = require('../utils/googleDrive');
@@ -230,6 +231,217 @@ const safeDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const toObjectIdOrNull = (value) => {
+  if (!value) return null;
+  if (value instanceof mongoose.Types.ObjectId) {
+    return value;
+  }
+  const normalized = normalizeString(value);
+  if (!normalized || !mongoose.Types.ObjectId.isValid(normalized)) {
+    return null;
+  }
+  return new mongoose.Types.ObjectId(normalized);
+};
+
+const extractProductIdFromSnapshot = (item) => {
+  if (!item || typeof item !== 'object') return null;
+  const candidates = [
+    item.productId,
+    item.product_id,
+    item.produtoId,
+    item.produto_id,
+    item.product?.id,
+    item.product?.productId,
+    item.productSnapshot?._id,
+    item.productSnapshot?.id,
+    item.productSnapshot?.productId,
+  ];
+  for (const candidate of candidates) {
+    const objectId = toObjectIdOrNull(candidate);
+    if (objectId) {
+      return objectId;
+    }
+  }
+  return null;
+};
+
+const collectSaleProductQuantities = (sale) => {
+  const quantities = new Map();
+  if (!sale || typeof sale !== 'object') {
+    return quantities;
+  }
+  const source = Array.isArray(sale.fiscalItemsSnapshot)
+    ? sale.fiscalItemsSnapshot
+    : Array.isArray(sale.receiptSnapshot?.itens)
+    ? sale.receiptSnapshot.itens
+    : [];
+  for (const item of source) {
+    const productId = extractProductIdFromSnapshot(item);
+    if (!productId) continue;
+    const rawQuantity =
+      item?.quantity ??
+      item?.quantidade ??
+      item?.qtd ??
+      item?.amount ??
+      item?.totalQuantity ??
+      0;
+    let numericQuantity = 0;
+    if (typeof rawQuantity === 'string') {
+      const parsed = Number(rawQuantity.replace(',', '.'));
+      numericQuantity = Number.isFinite(parsed) ? Math.abs(parsed) : 0;
+    } else {
+      numericQuantity = Math.abs(safeNumber(rawQuantity, 0));
+    }
+    if (numericQuantity <= 0) continue;
+    const key = productId.toString();
+    const current = quantities.get(key) || 0;
+    quantities.set(key, current + numericQuantity);
+  }
+  return quantities;
+};
+
+const updateProductStockForDeposit = async ({ productId, depositId, quantity }) => {
+  if (!productId || !depositId || quantity <= 0) {
+    return false;
+  }
+
+  const product = await Product.findById(productId);
+  if (!product) {
+    console.warn('Produto não encontrado para baixa de estoque no PDV.', {
+      productId: productId.toString(),
+    });
+    return false;
+  }
+
+  const depositKey = depositId.toString();
+  if (!Array.isArray(product.estoques)) {
+    product.estoques = [];
+  }
+
+  let entry = product.estoques.find(
+    (stockEntry) => stockEntry?.deposito && stockEntry.deposito.toString() === depositKey
+  );
+
+  if (entry) {
+    let current = 0;
+    if (typeof entry.quantidade === 'string') {
+      const parsed = Number(entry.quantidade.replace(',', '.'));
+      current = Number.isFinite(parsed) ? parsed : 0;
+    } else {
+      current = safeNumber(entry.quantidade, 0);
+    }
+    entry.quantidade = current - quantity;
+  } else {
+    entry = {
+      deposito: depositId,
+      quantidade: -quantity,
+      unidade: product.unidade || 'UN',
+    };
+    product.estoques.push(entry);
+  }
+
+  product.markModified('estoques');
+  await product.save();
+  return true;
+};
+
+const applyInventoryMovementsToSales = async ({ sales, depositId }) => {
+  const result = { sales: Array.isArray(sales) ? sales : [], movements: [] };
+  if (!Array.isArray(result.sales) || !depositId) {
+    return result;
+  }
+
+  const depositObjectId = toObjectIdOrNull(depositId);
+  if (!depositObjectId) {
+    return result;
+  }
+
+  for (const sale of result.sales) {
+    if (!sale || typeof sale !== 'object') continue;
+    if (Boolean(sale.inventoryProcessed)) continue;
+    if (normalizeString(sale.status).toLowerCase() === 'cancelled') {
+      sale.inventoryProcessed = Boolean(sale.inventoryProcessed);
+      sale.inventoryProcessedAt = sale.inventoryProcessed ? safeDate(sale.inventoryProcessedAt) : null;
+      continue;
+    }
+
+    const productQuantities = collectSaleProductQuantities(sale);
+    if (!productQuantities.size) {
+      sale.inventoryProcessed = true;
+      sale.inventoryProcessedAt = sale.inventoryProcessedAt
+        ? safeDate(sale.inventoryProcessedAt)
+        : new Date();
+      continue;
+    }
+
+    const movementItems = [];
+    for (const [productKey, quantity] of productQuantities.entries()) {
+      const productObjectId = toObjectIdOrNull(productKey);
+      const numericQuantity = Number(quantity) || 0;
+      if (!productObjectId || numericQuantity <= 0) continue;
+      const updated = await updateProductStockForDeposit({
+        productId: productObjectId,
+        depositId: depositObjectId,
+        quantity: numericQuantity,
+      });
+      if (updated) {
+        movementItems.push({ product: productObjectId, quantity: numericQuantity });
+      }
+    }
+
+    if (movementItems.length) {
+      const processedAt = new Date();
+      sale.inventoryProcessed = true;
+      sale.inventoryProcessedAt = processedAt;
+      result.movements.push({
+        saleId: sale.id,
+        deposit: depositObjectId,
+        processedAt,
+        items: movementItems,
+      });
+    }
+  }
+
+  return result;
+};
+
+const mergeInventoryProcessingStatus = (sales, existingSales) => {
+  if (!Array.isArray(sales)) return [];
+  const existingMap = new Map();
+  if (Array.isArray(existingSales)) {
+    for (const sale of existingSales) {
+      if (sale && typeof sale === 'object' && sale.id) {
+        existingMap.set(sale.id, sale);
+      }
+    }
+  }
+
+  return sales.map((sale) => {
+    if (!sale || typeof sale !== 'object' || !sale.id) {
+      return sale;
+    }
+    const previous = existingMap.get(sale.id);
+    if (previous) {
+      const previousProcessed = Boolean(previous.inventoryProcessed);
+      const currentProcessed = Boolean(sale.inventoryProcessed);
+      sale.inventoryProcessed = previousProcessed || currentProcessed;
+      if (sale.inventoryProcessed) {
+        const previousDate = safeDate(previous.inventoryProcessedAt);
+        const currentDate = safeDate(sale.inventoryProcessedAt);
+        sale.inventoryProcessedAt = previousDate || currentDate || null;
+      } else {
+        sale.inventoryProcessedAt = null;
+      }
+    } else {
+      sale.inventoryProcessed = Boolean(sale.inventoryProcessed);
+      sale.inventoryProcessedAt = sale.inventoryProcessed
+        ? safeDate(sale.inventoryProcessedAt) || new Date()
+        : null;
+    }
+    return sale;
+  });
+};
+
 const escapeXml = (value) => {
   if (value === undefined || value === null) {
     return '';
@@ -387,6 +599,8 @@ const normalizeSaleRecordPayload = (record) => {
   const cancellationReason = normalizeString(record.cancellationReason);
   const cancellationAt = safeDate(record.cancellationAt);
   const cancellationAtLabel = normalizeString(record.cancellationAtLabel);
+  const inventoryProcessed = Boolean(record.inventoryProcessed);
+  const inventoryProcessedAt = inventoryProcessed ? safeDate(record.inventoryProcessedAt) : null;
   return {
     id,
     type,
@@ -425,6 +639,8 @@ const normalizeSaleRecordPayload = (record) => {
     cancellationReason,
     cancellationAt,
     cancellationAtLabel,
+    inventoryProcessed,
+    inventoryProcessedAt,
   };
 };
 
@@ -1385,6 +1601,31 @@ router.put('/:id/state', requireAuth, async (req, res) => {
       existingState: existingState || {},
       empresaId: pdv.empresa,
     });
+
+    updatePayload.completedSales = mergeInventoryProcessingStatus(
+      updatePayload.completedSales || [],
+      existingState?.completedSales || []
+    );
+
+    const depositConfig = pdv?.configuracoesEstoque?.depositoPadrao || null;
+    let newInventoryMovements = [];
+
+    if (depositConfig) {
+      const inventoryResult = await applyInventoryMovementsToSales({
+        sales: updatePayload.completedSales,
+        depositId: depositConfig,
+      });
+      updatePayload.completedSales = inventoryResult.sales;
+      newInventoryMovements = inventoryResult.movements || [];
+      if (newInventoryMovements.length) {
+        const existingMovements = Array.isArray(existingState?.inventoryMovements)
+          ? existingState.inventoryMovements.map((movement) =>
+              movement && typeof movement.toObject === 'function' ? movement.toObject() : movement
+            )
+          : [];
+        updatePayload.inventoryMovements = [...existingMovements, ...newInventoryMovements];
+      }
+    }
 
     const updatedState = await PdvState.findOneAndUpdate(
       { pdv: pdvId },
