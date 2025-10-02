@@ -161,16 +161,36 @@
         </section>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 class="text-lg font-semibold text-gray-800">Lista de contas contábeis cadastradas</h2>
               <p class="text-sm text-gray-600">Visualize as contas existentes, empresas vinculadas e classificações principais.</p>
             </div>
-            <button type="button" class="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">
-              <i class="fas fa-file-export"></i>
-              Exportar lista
-            </button>
+            <div class="flex flex-wrap items-center gap-2">
+              <input
+                type="file"
+                id="accounting-account-import-input"
+                accept=".xlsx,.xls,.csv"
+                class="hidden"
+              />
+              <button
+                type="button"
+                id="accounting-account-import-button"
+                class="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:border-primary hover:text-primary"
+              >
+                <i class="fas fa-file-import"></i>
+                <span id="accounting-account-import-label">Importar planilha</span>
+              </button>
+              <button type="button" class="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">
+                <i class="fas fa-file-export"></i>
+                Exportar lista
+              </button>
+            </div>
           </div>
+
+          <p id="accounting-account-import-status" class="text-xs text-gray-500">
+            Selecione uma planilha Excel (.xlsx) com as contas contábeis a importar.
+          </p>
 
           <div class="space-y-3">
             <div id="accounting-account-list-status" class="text-sm text-gray-500">Carregando contas contábeis...</div>

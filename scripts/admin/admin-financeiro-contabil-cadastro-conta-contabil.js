@@ -27,6 +27,10 @@
     resetLabel: '#accounting-account-reset-label',
     listStatus: '#accounting-account-list-status',
     tableBody: '#accounting-account-table-body',
+    importButton: '#accounting-account-import-button',
+    importInput: '#accounting-account-import-input',
+    importStatus: '#accounting-account-import-status',
+    importLabel: '#accounting-account-import-label',
   };
 
   const state = {
@@ -38,6 +42,7 @@
     accounts: [],
     editingId: null,
     pendingSelectedCompanies: new Set(),
+    importing: false,
   };
 
   const elements = {};
@@ -92,6 +97,31 @@
     elements.listStatus.textContent = message || '';
     elements.listStatus.classList.remove('text-red-600', 'text-gray-500');
     elements.listStatus.classList.add(isError ? 'text-red-600' : 'text-gray-500');
+  };
+
+  const setImportStatus = (message, type = 'info') => {
+    if (!elements.importStatus) return;
+    elements.importStatus.textContent = message || '';
+    elements.importStatus.classList.remove('text-red-600', 'text-emerald-600', 'text-gray-500');
+    if (type === 'error') {
+      elements.importStatus.classList.add('text-red-600');
+    } else if (type === 'success') {
+      elements.importStatus.classList.add('text-emerald-600');
+    } else {
+      elements.importStatus.classList.add('text-gray-500');
+    }
+  };
+
+  const setImporting = (importing) => {
+    state.importing = importing;
+    if (elements.importButton) {
+      elements.importButton.disabled = importing;
+      elements.importButton.classList.toggle('opacity-60', importing);
+      elements.importButton.classList.toggle('cursor-not-allowed', importing);
+    }
+    if (elements.importLabel) {
+      elements.importLabel.textContent = importing ? 'Importando...' : 'Importar planilha';
+    }
   };
 
   const escapeHtml = (value) =>
@@ -425,6 +455,133 @@
     }
   };
 
+  const buildImportSummaryMessage = (summary = {}) => {
+    const total = Number.isFinite(summary.totalRows) ? summary.totalRows : Number(summary.totalRows) || 0;
+    const imported = Number.isFinite(summary.imported) ? summary.imported : Number(summary.imported) || 0;
+    const skippedExisting = Number.isFinite(summary.skippedExisting)
+      ? summary.skippedExisting
+      : Number(summary.skippedExisting) || 0;
+    const skippedInvalid = Number.isFinite(summary.skippedInvalid)
+      ? summary.skippedInvalid
+      : Number(summary.skippedInvalid) || 0;
+    const skippedDuplicates = Number.isFinite(summary.skippedDuplicates)
+      ? summary.skippedDuplicates
+      : Number(summary.skippedDuplicates) || 0;
+
+    const parts = [];
+    if (total) {
+      const importLabel = imported === 1 ? 'conta importada' : 'contas importadas';
+      parts.push(`${imported} de ${total} ${importLabel}`);
+    } else {
+      parts.push(`${imported} conta${imported === 1 ? '' : 's'} importada${imported === 1 ? '' : 's'}`);
+    }
+
+    if (skippedExisting) {
+      parts.push(`${skippedExisting} já cadastrada${skippedExisting === 1 ? '' : 's'}`);
+    }
+    if (skippedDuplicates) {
+      parts.push(`${skippedDuplicates} duplicada${skippedDuplicates === 1 ? '' : 's'} na planilha`);
+    }
+    if (skippedInvalid) {
+      parts.push(`${skippedInvalid} linha${skippedInvalid === 1 ? '' : 's'} com dados inválidos`);
+    }
+
+    return parts.join(' · ');
+  };
+
+  const importAccounts = async (file) => {
+    if (!file || state.importing) return;
+
+    const companies = readSelectedCompanies();
+    if (!companies.length) {
+      notify('Selecione ao menos uma empresa antes de importar a planilha.', 'error');
+      if (elements.importInput) {
+        elements.importInput.value = '';
+      }
+      setImportStatus('Selecione as empresas que receberão as contas antes de importar.', 'error');
+      return;
+    }
+
+    setImporting(true);
+    setImportStatus('Importando contas contábeis da planilha selecionada...', 'info');
+
+    try {
+      const token = getToken();
+      if (!token) {
+        const error = new Error('Sessão expirada. Faça login novamente.');
+        error.status = 401;
+        throw error;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      companies.forEach((id) => formData.append('companies', id));
+
+      const response = await fetch(`${ACCOUNTING_ENDPOINT}/import`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const text = await response.text();
+      let data = null;
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (parseError) {
+          console.error('Não foi possível interpretar a resposta de importação.', parseError);
+        }
+      }
+
+      if (!response.ok) {
+        const error = new Error(data?.message || `Falha ao importar planilha (${response.status})`);
+        error.status = response.status;
+        error.data = data;
+        throw error;
+      }
+
+      if (Array.isArray(data?.errors) && data.errors.length) {
+        console.warn('Linhas ignoradas durante a importação:', data.errors);
+      }
+
+      const summaryMessage = buildImportSummaryMessage(data?.summary);
+      const toastMessage = summaryMessage
+        ? `Importação concluída: ${summaryMessage}.`
+        : 'Importação de contas contábeis concluída.';
+      setImportStatus(summaryMessage || 'Importação concluída.', 'success');
+      notify(toastMessage, 'success');
+
+      await loadAccounts();
+    } catch (error) {
+      console.error('Erro ao importar contas contábeis:', error);
+      if (error.status === 401) {
+        handleAuthError();
+      }
+      const message = error?.message || 'Não foi possível importar as contas contábeis.';
+      setImportStatus(message, 'error');
+      notify(message, 'error');
+    } finally {
+      setImporting(false);
+      if (elements.importInput) {
+        elements.importInput.value = '';
+      }
+    }
+  };
+
+  const handleImportChange = (event) => {
+    const file = event?.target?.files?.[0];
+    if (file) {
+      importAccounts(file);
+    }
+  };
+
+  const handleImportClick = () => {
+    if (state.importing) return;
+    if (elements.importInput) {
+      elements.importInput.click();
+    }
+  };
+
   const setFormSaving = (saving) => {
     state.saving = saving;
     if (elements.submitButton) {
@@ -698,11 +855,18 @@
         );
       });
     }
+    if (elements.importButton) {
+      elements.importButton.addEventListener('click', handleImportClick);
+    }
+    if (elements.importInput) {
+      elements.importInput.addEventListener('change', handleImportChange);
+    }
   };
 
   const init = async () => {
     initElements();
     setFormMode('create');
+    setImportStatus('Selecione uma planilha Excel (.xlsx) com as contas contábeis a importar.', 'info');
     registerEventListeners();
     await loadCompanies();
     await loadAccounts();
