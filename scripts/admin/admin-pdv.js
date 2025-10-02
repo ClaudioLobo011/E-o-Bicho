@@ -4275,29 +4275,83 @@
       .join(' + ');
   };
 
+  const methodAllowsChange = (method) => {
+    if (!method) return false;
+    const raw = method.raw || {};
+    if (typeof raw.permiteTroco === 'boolean') {
+      return raw.permiteTroco;
+    }
+    if (typeof raw.allowChange === 'boolean') {
+      return raw.allowChange;
+    }
+    const type = String(method.type || '').toLowerCase();
+    if (['dinheiro', 'cash', 'especie'].includes(type)) {
+      return true;
+    }
+    if (['credito', 'debito', 'pix', 'boleto', 'transferencia'].includes(type)) {
+      return false;
+    }
+    const normalize = (value) => String(value || '').toLowerCase();
+    const label = normalize(method.label);
+    const labelAllows = /(dinheiro|esp[eé]cie|cash|moeda)/.test(label);
+    if (labelAllows) {
+      return true;
+    }
+    const aliasAllows = Array.isArray(method.aliases)
+      ? method.aliases.some((alias) => /(dinheiro|esp[eé]cie|cash|moeda)/.test(normalize(alias)))
+      : false;
+    if (aliasAllows) {
+      return true;
+    }
+    const rawName = normalize(raw.nome || raw.name || raw.label || '');
+    return /(dinheiro|esp[eé]cie|cash|moeda)/.test(rawName);
+  };
+
   const registerSaleOnCaixa = (payments, total, saleCode = '') => {
     if (!state.caixaAberto || !payments.length) {
       return;
     }
+    const totalPaid = payments.reduce((sum, payment) => sum + safeNumber(payment.valor), 0);
+    let remainingChange = Math.max(0, totalPaid - safeNumber(total));
+    const processed = [];
     payments.forEach((payment) => {
-      const method = state.pagamentos.find((item) => item.id === payment.id);
-      if (method) {
-        method.valor += safeNumber(payment.valor);
+      const amount = safeNumber(payment.valor);
+      if (!(amount > 0)) {
         return;
       }
-      const fallback =
-        state.paymentMethods.find((item) => item.id === payment.id) ||
-        state.paymentMethods.find((item) => item.label === payment.label);
-      const base = fallback
-        ? { ...fallback }
-        : {
-            id: payment.id || createUid(),
-            label: payment.label || 'Pagamento',
-            type: 'avista',
-            aliases: [],
-          };
-      state.pagamentos.push({ ...base, valor: safeNumber(payment.valor) });
+      let method = state.pagamentos.find((item) => item.id === payment.id);
+      if (!method) {
+        const fallback =
+          state.paymentMethods.find((item) => item.id === payment.id) ||
+          state.paymentMethods.find((item) => item.label === payment.label);
+        const base = fallback
+          ? { ...fallback }
+          : {
+              id: payment.id || createUid(),
+              label: payment.label || 'Pagamento',
+              type: 'avista',
+              aliases: [],
+            };
+        method = { ...base, valor: 0 };
+        state.pagamentos.push(method);
+      }
+      let valueToRegister = amount;
+      if (remainingChange > 0 && methodAllowsChange(method)) {
+        const deduction = Math.min(remainingChange, valueToRegister);
+        valueToRegister -= deduction;
+        remainingChange -= deduction;
+      }
+      method.valor += valueToRegister;
+      processed.push(method);
     });
+    if (remainingChange > 0 && processed.length) {
+      const fallbackEntry = processed.find((method) => methodAllowsChange(method)) || processed[0];
+      if (fallbackEntry) {
+        const deduction = Math.min(remainingChange, fallbackEntry.valor);
+        fallbackEntry.valor = Math.max(0, fallbackEntry.valor - deduction);
+        remainingChange -= deduction;
+      }
+    }
     renderPayments();
     const paymentsSummary = describeSalePayments(payments);
     const historyPaymentLabel = [saleCode, paymentsSummary].filter(Boolean).join(' • ');
@@ -4523,8 +4577,8 @@
       closeFinalizeModal();
       return;
     }
-    if (Math.abs(total - pago) >= 0.01) {
-      notify('O valor pago deve ser igual ao total da venda.', 'warning');
+    if (total > 0 && pago + 0.009 < total) {
+      notify('O valor pago é insuficiente para finalizar a venda.', 'warning');
       return;
     }
     const budgetIdToFinalize = state.activeBudgetId || '';
@@ -4620,8 +4674,8 @@
       void openDeliveryAddressModal();
       return;
     }
-    if (Math.abs(total - pago) >= 0.01) {
-      notify('O valor pago deve ser igual ao total da entrega.', 'warning');
+    if (total > 0 && pago + 0.009 < total) {
+      notify('O valor pago é insuficiente para registrar o delivery.', 'warning');
       return;
     }
     const saleCode = state.currentSaleCode || '';
@@ -4700,8 +4754,8 @@
     }
     const total = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
-    if (Math.abs(total - pago) >= 0.01) {
-      notify('O valor pago deve ser igual ao total da entrega.', 'warning');
+    if (total > 0 && pago + 0.009 < total) {
+      notify('O valor pago é insuficiente para finalizar o delivery.', 'warning');
       return;
     }
     const saleCode = state.currentSaleCode || '';
@@ -4815,19 +4869,30 @@
       elements.salePaid.textContent = formatCurrency(pago);
     }
     if (elements.finalizeConfirm) {
-      const difference = Math.abs(totalLiquido - pago);
-      const canFinalize = totalLiquido > 0 && (isBudgetContext || difference < 0.01);
+      const tolerance = 0.009;
+      const remaining = totalLiquido - pago;
+      const hasInsufficient = totalLiquido > 0 && remaining > tolerance;
+      const hasChange = totalLiquido > 0 && pago - totalLiquido > tolerance;
+      const canFinalize = totalLiquido > 0 && (isBudgetContext || !hasInsufficient);
       elements.finalizeConfirm.disabled = !canFinalize;
       elements.finalizeConfirm.classList.toggle('opacity-60', !canFinalize);
       if (elements.finalizeDifference) {
         if (totalLiquido === 0) {
           elements.finalizeDifference.textContent = 'Adicione itens para finalizar a venda.';
-        } else if (!isBudgetContext && difference >= 0.01) {
-          const remaining = totalLiquido - pago;
-          const label = remaining > 0 ? `Faltam ${formatCurrency(remaining)}` : `Pago a maior ${formatCurrency(Math.abs(remaining))}`;
-          elements.finalizeDifference.textContent = label;
         } else if (isBudgetContext) {
-          elements.finalizeDifference.textContent = 'Pagamentos são opcionais para o orçamento.';
+          if (!state.vendaPagamentos.length) {
+            elements.finalizeDifference.textContent = 'Pagamentos são opcionais para o orçamento.';
+          } else if (hasInsufficient) {
+            elements.finalizeDifference.textContent = `Faltam ${formatCurrency(Math.max(remaining, 0))}`;
+          } else if (hasChange) {
+            elements.finalizeDifference.textContent = `Troco previsto ${formatCurrency(Math.max(pago - totalLiquido, 0))}`;
+          } else {
+            elements.finalizeDifference.textContent = '';
+          }
+        } else if (hasInsufficient) {
+          elements.finalizeDifference.textContent = `Faltam ${formatCurrency(Math.max(remaining, 0))}`;
+        } else if (hasChange) {
+          elements.finalizeDifference.textContent = `Troco ${formatCurrency(Math.max(pago - totalLiquido, 0))}`;
         } else {
           elements.finalizeDifference.textContent = '';
         }
