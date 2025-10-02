@@ -1498,6 +1498,14 @@
   const normalizeSaleRecordForPersist = (record) => {
     if (!record || typeof record !== 'object') return null;
     const createdAt = record.createdAt ? new Date(record.createdAt) : new Date();
+    const inventoryProcessed = Boolean(record.inventoryProcessed);
+    let inventoryProcessedAt = null;
+    if (record.inventoryProcessedAt) {
+      const processedAt = new Date(record.inventoryProcessedAt);
+      if (!Number.isNaN(processedAt.getTime())) {
+        inventoryProcessedAt = processedAt.toISOString();
+      }
+    }
     return {
       id: record.id ? String(record.id) : createUid(),
       type: record.type ? String(record.type) : 'venda',
@@ -1548,6 +1556,8 @@
       cancellationReason: record.cancellationReason ? String(record.cancellationReason) : '',
       cancellationAt: record.cancellationAt ? new Date(record.cancellationAt).toISOString() : null,
       cancellationAtLabel: record.cancellationAtLabel ? String(record.cancellationAtLabel) : '',
+      inventoryProcessed,
+      inventoryProcessedAt,
     };
   };
 
@@ -6756,6 +6766,8 @@
       cancellationReason: '',
       cancellationAt: null,
       cancellationAtLabel: '',
+      inventoryProcessed: false,
+      inventoryProcessedAt: null,
     };
   };
 
