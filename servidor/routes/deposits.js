@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Deposit = require('../models/Deposit');
+const Product = require('../models/Product');
 const Store = require('../models/Store');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
@@ -33,6 +35,18 @@ const generateNextSequentialCode = async () => {
     return String(highest + 1);
 };
 
+const sanitizePositiveInteger = (value, fallback) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    const floored = Math.floor(parsed);
+    return floored > 0 ? floored : fallback;
+};
+
+const escapeRegExp = (value) => {
+    if (typeof value !== 'string') return '';
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
 router.get('/', async (req, res) => {
     try {
         const { empresa } = req.query;
@@ -48,6 +62,270 @@ router.get('/', async (req, res) => {
     } catch (error) {
         console.error('Erro ao listar depósitos:', error);
         res.status(500).json({ message: 'Erro ao listar depósitos.' });
+    }
+});
+
+router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Depósito inválido.' });
+        }
+
+        const deposit = await Deposit.findById(id).lean();
+        if (!deposit) {
+            return res.status(404).json({ message: 'Depósito não encontrado.' });
+        }
+
+        const page = sanitizePositiveInteger(req.query.page, 1);
+        const requestedLimit = sanitizePositiveInteger(req.query.limit, 20);
+        const limit = Math.min(requestedLimit, 200);
+        const sortField = typeof req.query.sortField === 'string' ? req.query.sortField.trim() : 'nome';
+        const sortOrder = typeof req.query.sortOrder === 'string' && req.query.sortOrder.toLowerCase() === 'desc' ? -1 : 1;
+        const searchTerm = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+
+        const allowedSortFields = new Map([
+            ['codbarras', 'codbarras'],
+            ['nome', 'nome'],
+            ['quantidade', 'quantidade'],
+        ]);
+
+        const sortTarget = allowedSortFields.get(sortField) || 'nome';
+        const sortSpec = { [sortTarget]: sortOrder, _id: 1 };
+
+        const depositId = new mongoose.Types.ObjectId(id);
+
+        const matchStage = {
+            'estoques.deposito': depositId,
+        };
+
+        if (searchTerm) {
+            const regex = new RegExp(escapeRegExp(searchTerm), 'i');
+            matchStage.$or = [
+                { nome: regex },
+                { cod: regex },
+                { codbarras: regex },
+            ];
+        }
+
+        const basePipeline = [
+            { $match: matchStage },
+            {
+                $addFields: {
+                    estoqueSelecionado: {
+                        $first: {
+                            $filter: {
+                                input: '$estoques',
+                                as: 'item',
+                                cond: { $eq: ['$$item.deposito', depositId] },
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                $addFields: {
+                    quantidade: { $ifNull: ['$estoqueSelecionado.quantidade', 0] },
+                },
+            },
+            {
+                $project: {
+                    estoqueSelecionado: 0,
+                    estoques: 0,
+                    fornecedores: 0,
+                    imagens: 0,
+                    descricao: 0,
+                    searchableString: 0,
+                    fiscal: 0,
+                    fiscalPorEmpresa: 0,
+                },
+            },
+        ];
+
+        const sortedPipeline = [
+            ...basePipeline,
+            { $sort: sortSpec },
+        ];
+
+        const paginatedPipeline = [
+            ...sortedPipeline,
+            {
+                $facet: {
+                    data: [
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit },
+                    ],
+                    totalCount: [
+                        { $count: 'value' },
+                    ],
+                },
+            },
+        ];
+
+        const aggregated = await Product.aggregate(paginatedPipeline);
+        const [result = {}] = aggregated;
+        const totalCount = Array.isArray(result.totalCount) && result.totalCount.length > 0
+            ? result.totalCount[0].value
+            : 0;
+
+        const totalPages = totalCount > 0 ? Math.ceil(totalCount / limit) : 1;
+        let currentPage = page;
+        if (currentPage > totalPages) {
+            currentPage = totalPages;
+        }
+        if (currentPage < 1) {
+            currentPage = 1;
+        }
+
+        let items = Array.isArray(result.data) ? result.data : [];
+
+        if (!items.length && totalCount > 0 && page > totalPages) {
+            const skip = (currentPage - 1) * limit;
+            items = await Product.aggregate([
+                ...sortedPipeline,
+                { $skip: skip },
+                { $limit: limit },
+            ]);
+        }
+
+        res.json({
+            deposit: {
+                _id: deposit._id,
+                nome: deposit.nome,
+                codigo: deposit.codigo,
+            },
+            pagination: {
+                page: currentPage,
+                limit,
+                total: totalCount,
+                totalPages,
+            },
+            items,
+        });
+    } catch (error) {
+        console.error('Erro ao listar estoque do depósito:', error);
+        res.status(500).json({ message: 'Erro ao carregar itens do depósito.' });
+    }
+});
+
+router.post('/:id/zero-stock', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { productIds } = req.body || {};
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Depósito inválido.' });
+        }
+
+        if (!Array.isArray(productIds) || productIds.length === 0) {
+            return res.status(400).json({ message: 'Selecione ao menos um produto para zerar o estoque.' });
+        }
+
+        const deposit = await Deposit.findById(id).lean();
+        if (!deposit) {
+            return res.status(404).json({ message: 'Depósito não encontrado.' });
+        }
+
+        const uniqueProductIds = [...new Set(productIds)]
+            .filter((value) => mongoose.Types.ObjectId.isValid(value))
+            .map((value) => new mongoose.Types.ObjectId(value));
+
+        if (!uniqueProductIds.length) {
+            return res.status(400).json({ message: 'Nenhum produto válido foi informado.' });
+        }
+
+        const depositId = new mongoose.Types.ObjectId(id);
+
+        const products = await Product.find({
+            _id: { $in: uniqueProductIds },
+            'estoques.deposito': depositId,
+        }).lean();
+
+        if (!products.length) {
+            return res.json({ updated: 0, affectedProducts: [] });
+        }
+
+        const bulkOperations = [];
+        const affectedProducts = [];
+
+        products.forEach((product) => {
+            if (!Array.isArray(product?.estoques)) {
+                return;
+            }
+
+            let targetEntryFound = false;
+            let quantityChanged = false;
+
+            const updatedStocks = product.estoques.map((entry) => {
+                const current = entry && typeof entry === 'object' ? { ...entry } : {};
+                const isTarget = current?.deposito && current.deposito.toString() === id;
+                const currentQuantity = Number(current?.quantidade) || 0;
+                const baseEntry = {
+                    deposito: current?.deposito,
+                    quantidade: currentQuantity,
+                    unidade: current?.unidade || '',
+                };
+                if (current?._id) {
+                    baseEntry._id = current._id;
+                }
+                if (isTarget) {
+                    targetEntryFound = true;
+                    if (currentQuantity !== 0) {
+                        quantityChanged = true;
+                    }
+                    return { ...baseEntry, quantidade: 0 };
+                }
+                return baseEntry;
+            });
+
+            if (!targetEntryFound) {
+                return;
+            }
+
+            const totalStock = updatedStocks.reduce((sum, entry) => {
+                const quantity = Number(entry?.quantidade) || 0;
+                return sum + quantity;
+            }, 0);
+
+            const shouldUpdate = quantityChanged || Number(product?.stock) !== totalStock;
+
+            if (!shouldUpdate) {
+                return;
+            }
+
+            bulkOperations.push({
+                updateOne: {
+                    filter: { _id: product._id },
+                    update: {
+                        $set: {
+                            estoques: updatedStocks,
+                            stock: totalStock,
+                        },
+                    },
+                },
+            });
+
+            affectedProducts.push({
+                _id: product._id,
+                nome: product.nome,
+                codbarras: product.codbarras,
+            });
+        });
+
+        if (!bulkOperations.length) {
+            return res.json({ updated: 0, affectedProducts: [] });
+        }
+
+        await Product.bulkWrite(bulkOperations, { ordered: false });
+
+        res.json({
+            updated: bulkOperations.length,
+            affectedProducts,
+        });
+    } catch (error) {
+        console.error('Erro ao zerar estoque do depósito:', error);
+        res.status(500).json({ message: 'Erro ao zerar o estoque selecionado.' });
     }
 });
 

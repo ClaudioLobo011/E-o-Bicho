@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin: Zerar Depósito - E o Bicho</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+    <div id="admin-header-placeholder"></div>
+
+    <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <aside class="md:col-span-4">
+                <div id="admin-sidebar-placeholder"></div>
+            </aside>
+
+            <div class="md:col-span-4">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <div class="flex flex-col gap-2 mb-6">
+                        <h1 class="text-2xl font-bold text-gray-800">Zerar Depósito</h1>
+                        <p class="text-gray-600">Selecione a empresa, o depósito e os produtos que deseja zerar. O ajuste será aplicado somente aos produtos marcados.</p>
+                    </div>
+
+                    <section class="space-y-4">
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div>
+                                <label for="company-select" class="block text-sm font-medium text-gray-700">Empresa</label>
+                                <select id="company-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                                    <option value="">Selecione a empresa</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="deposit-select" class="block text-sm font-medium text-gray-700">Depósito</label>
+                                <select id="deposit-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" disabled>
+                                    <option value="">Selecione o depósito</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="page-size" class="block text-sm font-medium text-gray-700">Itens por página</label>
+                                <select id="page-size" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary">
+                                    <option value="20">20</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div class="relative w-full md:w-64">
+                                <label class="sr-only" for="product-search">Buscar produto</label>
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+                                    <i class="fas fa-search"></i>
+                                </span>
+                                <input id="product-search" type="search" placeholder="Buscar por nome, código ou código de barras" class="w-full rounded-md border border-gray-300 py-2 pl-10 pr-3 text-sm text-gray-700 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" autocomplete="off">
+                            </div>
+                            <button id="reset-filters" type="button" class="inline-flex items-center gap-2 self-start rounded-md border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:border-primary hover:text-primary">
+                                <i class="fas fa-rotate-left"></i>
+                                Limpar filtros
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="mt-6">
+                        <div class="flex items-center justify-between gap-4 mb-4">
+                            <h2 class="text-lg font-semibold text-gray-800">Produtos cadastrados</h2>
+                            <button id="zero-stock" type="button" class="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-400">
+                                <i class="fas fa-broom"></i>
+                                Zerar estoque
+                            </button>
+                        </div>
+
+                        <div class="overflow-x-auto rounded-lg border border-gray-200">
+                            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th scope="col" class="px-4 py-3">
+                                            <input type="checkbox" id="select-all" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" disabled>
+                                        </th>
+                                        <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">
+                                            <button type="button" class="inline-flex items-center gap-1 text-left font-semibold text-gray-700 transition hover:text-primary" data-sort-field="codbarras">
+                                                Código de barras
+                                                <i class="fas fa-sort text-xs opacity-70" data-sort-icon></i>
+                                            </button>
+                                        </th>
+                                        <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">
+                                            <button type="button" class="inline-flex items-center gap-1 text-left font-semibold text-gray-700 transition hover:text-primary" data-sort-field="nome">
+                                                Nome
+                                                <i class="fas fa-sort text-xs opacity-70" data-sort-icon></i>
+                                            </button>
+                                        </th>
+                                        <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">
+                                            <button type="button" class="inline-flex items-center gap-1 text-right font-semibold text-gray-700 transition hover:text-primary" data-sort-field="quantidade">
+                                                Quantidade
+                                                <i class="fas fa-sort text-xs opacity-70" data-sort-icon></i>
+                                            </button>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="products-table" class="divide-y divide-gray-100 bg-white"></tbody>
+                            </table>
+                        </div>
+
+                        <div id="empty-state" class="hidden rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-600 mt-6">
+                            Nenhum produto encontrado para o depósito selecionado.
+                        </div>
+
+                        <div id="pagination" class="mt-6 flex flex-wrap items-center justify-between gap-4"></div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="admin-footer-placeholder"></div>
+
+    <script>var basePath = '../../';</script>
+    <script src="../../scripts/core/config.js"></script>
+    <script src="../../scripts/core/ui.js"></script>
+    <script src="../../scripts/core/main.js"></script>
+    <script src="../../scripts/admin/admin.js"></script>
+    <script src="../../scripts/admin/admin-zerar-deposito.js"></script>
+</body>
+</html>
