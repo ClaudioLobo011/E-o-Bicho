@@ -97,6 +97,39 @@
     }
     /* Garante que o wrapper ocupe toda a linha */
     .awesomplete { width: 100%; }
+
+    .app {
+        @apply min-h-screen flex flex-col;
+    }
+
+    .app-main {
+        @apply flex-1 min-h-0 flex flex-col;
+    }
+
+    .tabs-root {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        height: 100%;
+        min-height: 0;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .tab-panels {
+        @apply flex-1 min-h-0 flex flex-col;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .tab-panel {
+        height: 100%;
+        overflow: auto;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        width: 100%;
+        max-width: none;
+    }
     @keyframes fillIndicator {
         from { width: 0; }
         to { width: 40px; }
@@ -1268,7 +1301,7 @@
     @apply min-h-0;
   }
 
-  .admin-tab-panel {
+  .tab-panel {
     @apply min-h-0;
   }
 

@@ -8,66 +8,83 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../src/output.css">
 </head>
-<body class="bg-gray-100" data-admin-tabs-root>
+<body class="app bg-gray-100" data-admin-tabs-root>
 
     <div id="admin-header-placeholder"></div>
 
-    <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-
-            <aside class="md:col-span-4">
+    <main class="app-main px-4 pb-8 pt-1">
+        <div class="flex flex-1 min-h-0 flex-col gap-6 lg:flex-row">
+            <aside class="lg:w-72 lg:flex-none">
                 <div id="admin-sidebar-placeholder"></div>
             </aside>
 
-            <div class="md:col-span-4">
-                <div class="relative" data-admin-tab-panels>
-                    <section id="admin-tab-dashboard" role="tabpanel" aria-labelledby="admin-tab-trigger-dashboard" data-tab-panel data-tab-id="dashboard" class="admin-tab-panel">
-                        <div class="rounded-2xl bg-white p-6 shadow">
-                            <h1 class="mb-6 text-2xl font-bold text-gray-800">Painel Principal</h1>
-
-                            <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-
-                                <a href="admin/admin-produtos.html" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                                    <div class="flex items-center space-x-4">
-                                        <div class="rounded-full bg-primary/10 p-3">
-                                            <i class="fas fa-box-open text-2xl text-primary"></i>
-                                        </div>
-                                        <div>
-                                            <h3 class="text-lg font-bold text-gray-800">Gerir Produtos</h3>
-                                            <p class="text-sm text-gray-600">Adicionar e editar produtos</p>
-                                        </div>
-                                    </div>
-                                </a>
-                                <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                                    <div class="flex items-center space-x-4">
-                                        <div class="rounded-full bg-primary/10 p-3">
-                                            <i class="fas fa-receipt text-2xl text-primary"></i>
-                                        </div>
-                                        <div>
-                                            <h3 class="text-lg font-bold text-gray-800">Ver Pedidos</h3>
-                                            <p class="text-sm text-gray-600">Visualizar pedidos dos clientes</p>
-                                        </div>
-                                    </div>
-                                </a>
-
-                                <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                                    <div class="flex items-center space-x-4">
-                                        <div class="rounded-full bg-primary/10 p-3">
-                                            <i class="fas fa-users text-2xl text-primary"></i>
-                                        </div>
-                                        <div>
-                                            <h3 class="text-lg font-bold text-gray-800">Gerir Clientes</h3>
-                                            <p class="text-sm text-gray-600">Consultar lista de clientes</p>
-                                        </div>
-                                    </div>
-                                </a>
-
-                            </div>
+            <div class="flex-1 min-h-0">
+                <div class="tabs-root">
+                    <div class="flex items-center gap-2 overflow-x-auto pb-4" data-admin-tab-list role="tablist" aria-label="Abas do painel administrativo">
+                        <div data-tab-item data-tab-id="dashboard">
+                            <button
+                              id="admin-tab-trigger-dashboard"
+                              type="button"
+                              role="tab"
+                              aria-selected="true"
+                              aria-controls="admin-tab-dashboard"
+                              data-tab-trigger
+                              data-tab-id="dashboard"
+                              class="tab-trigger inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold is-active"
+                            >
+                              <span class="truncate">Painel Principal</span>
+                            </button>
                         </div>
-                    </section>
+                    </div>
+
+                    <div class="tab-panels" data-admin-tab-panels>
+                        <section id="admin-tab-dashboard" role="tabpanel" aria-labelledby="admin-tab-trigger-dashboard" data-tab-panel data-tab-id="dashboard" class="tab-panel">
+                            <div class="rounded-2xl bg-white p-6 shadow">
+                                <h1 class="mb-6 text-2xl font-bold text-gray-800">Painel Principal</h1>
+
+                                <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+
+                                    <a href="admin/admin-produtos.html" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
+                                        <div class="flex items-center space-x-4">
+                                            <div class="rounded-full bg-primary/10 p-3">
+                                                <i class="fas fa-box-open text-2xl text-primary"></i>
+                                            </div>
+                                            <div>
+                                                <h3 class="text-lg font-bold text-gray-800">Gerir Produtos</h3>
+                                                <p class="text-sm text-gray-600">Adicionar e editar produtos</p>
+                                            </div>
+                                        </div>
+                                    </a>
+                                    <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
+                                        <div class="flex items-center space-x-4">
+                                            <div class="rounded-full bg-primary/10 p-3">
+                                                <i class="fas fa-receipt text-2xl text-primary"></i>
+                                            </div>
+                                            <div>
+                                                <h3 class="text-lg font-bold text-gray-800">Ver Pedidos</h3>
+                                                <p class="text-sm text-gray-600">Visualizar pedidos dos clientes</p>
+                                            </div>
+                                        </div>
+                                    </a>
+
+                                    <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
+                                        <div class="flex items-center space-x-4">
+                                            <div class="rounded-full bg-primary/10 p-3">
+                                                <i class="fas fa-users text-2xl text-primary"></i>
+                                            </div>
+                                            <div>
+                                                <h3 class="text-lg font-bold text-gray-800">Gerir Clientes</h3>
+                                                <p class="text-sm text-gray-600">Consultar lista de clientes</p>
+                                            </div>
+                                        </div>
+                                    </a>
+
+                                </div>
+                            </div>
+                        </section>
+                    </div>
                 </div>
             </div>
-
         </div>
     </main>
 
@@ -75,7 +92,7 @@
     <div id="confirm-modal-placeholder"></div>
 
     <div id="admin-footer-placeholder"></div>
-    
+
     <script>var basePath = '../';</script>
     <script src="../scripts/core/config.js"></script>
     <script src="../scripts/core/ui.js"></script>

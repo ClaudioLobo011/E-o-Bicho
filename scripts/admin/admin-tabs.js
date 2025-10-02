@@ -32,53 +32,9 @@
     let counter = 0;
     let persistReady = false;
 
-    const BASE_TRIGGER_CLASSES = [
-      'admin-tab-trigger',
-      'inline-flex',
-      'items-center',
-      'gap-2',
-      'rounded-lg',
-      'border',
-      'border-transparent',
-      'bg-white',
-      'px-3',
-      'py-2',
-      'text-xs',
-      'font-semibold',
-      'text-gray-600',
-      'shadow-sm',
-      'transition',
-      'hover:bg-primary/10',
-      'focus:outline-none',
-      'focus:ring-2',
-      'focus:ring-primary/20',
-    ];
-
-    const ACTIVE_TRIGGER_CLASSES = [
-      'border-primary/30',
-      'bg-primary/10',
-      'text-primary',
-      'shadow',
-    ];
-
-    const INACTIVE_TRIGGER_CLASSES = [
-      'border-transparent',
-      'bg-white',
-      'text-gray-600',
-      'shadow-sm',
-    ];
-
     function applyTriggerState(trigger, isActive) {
       if (!trigger) return;
-
-      ACTIVE_TRIGGER_CLASSES.forEach((cls) => {
-        trigger.classList.toggle(cls, isActive);
-      });
-
-      INACTIVE_TRIGGER_CLASSES.forEach((cls) => {
-        trigger.classList.toggle(cls, !isActive);
-      });
-
+      trigger.classList.toggle('is-active', isActive);
       trigger.setAttribute('aria-selected', isActive ? 'true' : 'false');
     }
 
@@ -158,11 +114,11 @@
 
       const trigger = document.createElement('button');
       trigger.type = 'button';
-      BASE_TRIGGER_CLASSES.forEach((cls) => trigger.classList.add(cls));
+      trigger.className = 'tab-trigger inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold';
       trigger.dataset.tabTrigger = 'true';
 
       const labelSpan = document.createElement('span');
-      labelSpan.className = 'max-w-[12rem] truncate';
+      labelSpan.className = 'truncate';
       labelSpan.textContent = safeLabel;
       trigger.appendChild(labelSpan);
 
@@ -287,7 +243,7 @@
       panel.dataset.tabId = id;
       panel.setAttribute('role', 'tabpanel');
       panel.setAttribute('aria-labelledby', `admin-tab-trigger-${id}`);
-      panel.className = 'admin-tab-panel hidden';
+      panel.className = 'tab-panel hidden';
       panel.dataset.embeddedPanel = 'true';
 
       const frameWrapper = document.createElement('div');

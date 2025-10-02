@@ -73,7 +73,7 @@ async function checkAdminAccess() {
 
         const mainElement = document.querySelector('main');
         if (mainElement) {
-          mainElement.classList.remove('container', 'mx-auto', 'px-4', 'py-8', 'min-h-screen');
+          mainElement.classList.remove('container', 'mx-auto', 'px-4', 'py-8', 'pb-8', 'pt-1', 'min-h-screen');
           mainElement.classList.add('admin-embedded-main');
         }
       };
