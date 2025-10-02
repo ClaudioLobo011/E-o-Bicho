@@ -11,6 +11,12 @@
     idInput: '#payment-method-id',
     companySelect: '#payment-company',
     companySummary: '#payment-company-summary',
+    accountingAccountSelect: '#payment-accounting-account',
+    accountingAccountSearch: '#payment-accounting-account-search',
+    accountingAccountStatus: '#payment-accounting-account-status',
+    bankAccountSelect: '#payment-bank-account',
+    bankAccountSearch: '#payment-bank-account-search',
+    bankAccountStatus: '#payment-bank-account-status',
     codeInput: '#payment-code',
     nameInput: '#payment-name',
     typeRadios: 'input[name="payment-type"]',
@@ -27,6 +33,11 @@
     creditoDays: '#credito-days',
     creditoDiscount: '#credito-discount',
     creditoPreviewList: '#credito-preview-list',
+    crediarioSection: '#crediario-section',
+    crediarioInstallments: '#crediario-installments',
+    crediarioDays: '#crediario-days',
+    crediarioInterest: '#crediario-interest',
+    crediarioPreview: '#crediario-preview',
     overview: '#payment-overview',
     methodsList: '#payment-methods-list',
     methodsEmptyState: '#payment-methods-empty',
@@ -39,8 +50,20 @@
     currentType: 'avista',
     methods: [],
     creditDiscounts: {},
+    accountingAccounts: [],
+    filteredAccountingAccounts: [],
+    accountingAccountSearchTerm: '',
+    selectedAccountingAccountId: '',
+    selectedAccountingAccount: null,
+    bankAccounts: [],
+    filteredBankAccounts: [],
+    bankAccountSearchTerm: '',
+    selectedBankAccountId: '',
+    selectedBankAccount: null,
     saving: false,
     loadingMethods: false,
+    loadingAccountingAccounts: false,
+    loadingBankAccounts: false,
     defaultEmptyStateHtml: '',
     editingId: '',
     editingCode: '',
@@ -66,6 +89,14 @@
     return Number.isFinite(parsed) ? parsed : fallback;
   };
 
+  const escapeHtml = (value) =>
+    String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
   const formatPercentage = (value) => {
     const normalized = Math.max(0, parseNumber(value, 0));
     return `${normalized.toFixed(2).replace('.', ',')}%`;
@@ -82,6 +113,395 @@
     const discount = Math.max(0, parseNumber(value, 0));
     if (discount === 0) return 'Sem desconto aplicado';
     return `Desconto de ${formatPercentage(discount)}`;
+  };
+
+  const formatRate = (value) => {
+    const rate = Math.max(0, parseNumber(value, 0));
+    if (rate === 0) return 'Sem juros adicionais';
+    return `Juros de ${formatPercentage(rate)}`;
+  };
+
+  const buildAccountingAccountLabel = (account) => {
+    if (!account) return 'Conta contábil não informada';
+    const code = account.code ? escapeHtml(account.code) : '';
+    const name = account.name ? escapeHtml(account.name) : '';
+    if (code && name) return `${code} • ${name}`;
+    return name || code || 'Conta contábil';
+  };
+
+  const buildBankAccountLabel = (account) => {
+    if (!account) return 'Conta corrente não informada';
+    const alias = account.alias ? escapeHtml(account.alias) : '';
+    const bankName = account.bankName ? escapeHtml(account.bankName) : '';
+    const agency = account.agency ? escapeHtml(account.agency) : '';
+    const number = account.accountNumber ? escapeHtml(account.accountNumber) : '';
+    const digit = account.accountDigit ? escapeHtml(account.accountDigit) : '';
+
+    const details = [];
+    if (agency) {
+      details.push(`Ag. ${agency}`);
+    }
+    if (number) {
+      details.push(`Conta ${number}${digit ? `-${digit}` : ''}`);
+    }
+
+    const parts = [];
+    if (alias) parts.push(alias);
+    if (bankName) parts.push(bankName);
+    if (details.length) parts.push(details.join(' • '));
+
+    return parts.join(' • ') || bankName || alias || 'Conta corrente';
+  };
+
+  const updateAccountingAccountStatus = () => {
+    if (!elements.accountingAccountStatus) return;
+
+    const statusEl = elements.accountingAccountStatus;
+    statusEl.classList.remove('text-amber-600');
+    statusEl.classList.add('text-gray-500');
+
+    if (state.loadingAccountingAccounts) {
+      statusEl.textContent = 'Carregando contas contábeis...';
+      return;
+    }
+
+    const total = Array.isArray(state.accountingAccounts) ? state.accountingAccounts.length : 0;
+    const filtered = Array.isArray(state.filteredAccountingAccounts)
+      ? state.filteredAccountingAccounts.length
+      : 0;
+
+    if (!total) {
+      statusEl.textContent = 'Nenhuma conta contábil encontrada.';
+      return;
+    }
+
+    if (!filtered) {
+      statusEl.textContent = 'Nenhuma conta corresponde à pesquisa.';
+      statusEl.classList.remove('text-gray-500');
+      statusEl.classList.add('text-amber-600');
+      return;
+    }
+
+    statusEl.textContent = `${filtered} conta(s) exibida(s).`;
+  };
+
+  const setAccountingAccountLoading = (loading) => {
+    state.loadingAccountingAccounts = loading;
+    if (elements.accountingAccountSelect) {
+      elements.accountingAccountSelect.disabled = loading;
+      elements.accountingAccountSelect.classList.toggle('opacity-60', loading);
+      elements.accountingAccountSelect.classList.toggle('pointer-events-none', loading);
+    }
+    updateAccountingAccountStatus();
+  };
+
+  const updateBankAccountStatus = () => {
+    if (!elements.bankAccountStatus) return;
+
+    const statusEl = elements.bankAccountStatus;
+    statusEl.classList.remove('text-amber-600');
+    statusEl.classList.add('text-gray-500');
+
+    if (!state.selectedCompanyId) {
+      statusEl.textContent = 'Selecione uma empresa para listar as contas correntes.';
+      return;
+    }
+
+    if (state.loadingBankAccounts) {
+      statusEl.textContent = 'Carregando contas correntes...';
+      return;
+    }
+
+    const total = Array.isArray(state.bankAccounts) ? state.bankAccounts.length : 0;
+    const filtered = Array.isArray(state.filteredBankAccounts) ? state.filteredBankAccounts.length : 0;
+
+    if (!total) {
+      statusEl.textContent = 'Nenhuma conta corrente encontrada.';
+      return;
+    }
+
+    if (!filtered) {
+      statusEl.textContent = 'Nenhuma conta corresponde à pesquisa.';
+      statusEl.classList.remove('text-gray-500');
+      statusEl.classList.add('text-amber-600');
+      return;
+    }
+
+    statusEl.textContent = `${filtered} conta(s) exibida(s).`;
+  };
+
+  const setBankAccountLoading = (loading) => {
+    state.loadingBankAccounts = loading;
+    if (elements.bankAccountSelect) {
+      elements.bankAccountSelect.disabled = loading;
+      elements.bankAccountSelect.classList.toggle('opacity-60', loading);
+      elements.bankAccountSelect.classList.toggle('pointer-events-none', loading);
+    }
+    updateBankAccountStatus();
+  };
+
+  const updateAccountingAccountOptions = () => {
+    if (!elements.accountingAccountSelect) return;
+
+    const accounts = Array.isArray(state.accountingAccounts) ? state.accountingAccounts : [];
+    const term = (state.accountingAccountSearchTerm || '').trim().toLowerCase();
+    const filtered = !term
+      ? accounts
+      : accounts.filter((account) => {
+          const name = (account?.name || '').toLowerCase();
+          const code = (account?.code || '').toLowerCase();
+          return name.includes(term) || code.includes(term);
+        });
+
+    state.filteredAccountingAccounts = filtered;
+
+    const options = [];
+    if (!filtered.length) {
+      options.push('<option value="">Nenhuma conta encontrada</option>');
+    } else {
+      options.push('<option value="">Selecione uma conta contábil</option>');
+      filtered.forEach((account) => {
+        options.push(`<option value="${escapeHtml(account._id)}">${buildAccountingAccountLabel(account)}</option>`);
+      });
+    }
+
+    const selectedId = state.selectedAccountingAccountId || '';
+    let selectedAccount = null;
+    if (selectedId) {
+      selectedAccount = accounts.find((account) => String(account._id) === String(selectedId)) || null;
+      if (selectedAccount) {
+        state.selectedAccountingAccount = selectedAccount;
+      }
+    }
+
+    const selectedInFiltered = filtered.some((account) => String(account._id) === String(selectedId));
+    if (selectedId && !selectedInFiltered) {
+      const fallback =
+        selectedAccount ||
+        state.selectedAccountingAccount ||
+        accounts.find((account) => String(account._id) === String(selectedId));
+      if (fallback) {
+        options.push(
+          `<option value="${escapeHtml(fallback._id)}">${buildAccountingAccountLabel(fallback)} (selecionada)</option>`
+        );
+      }
+    }
+
+    elements.accountingAccountSelect.innerHTML = options.join('');
+    elements.accountingAccountSelect.value = selectedId;
+    updateAccountingAccountStatus();
+  };
+
+  const updateBankAccountOptions = () => {
+    if (!elements.bankAccountSelect) return;
+
+    const accounts = Array.isArray(state.bankAccounts) ? state.bankAccounts : [];
+    const term = (state.bankAccountSearchTerm || '').trim().toLowerCase();
+
+    const filtered = !term
+      ? accounts
+      : accounts.filter((account) => {
+          const alias = (account?.alias || '').toLowerCase();
+          const bankName = (account?.bankName || '').toLowerCase();
+          const agency = (account?.agency || '').toLowerCase();
+          const number = (account?.accountNumber || '').toLowerCase();
+          const digit = (account?.accountDigit || '').toLowerCase();
+          const combined = `${number}${digit ? `-${digit}` : ''}`;
+          return (
+            alias.includes(term) ||
+            bankName.includes(term) ||
+            agency.includes(term) ||
+            combined.toLowerCase().includes(term)
+          );
+        });
+
+    state.filteredBankAccounts = filtered;
+
+    const options = [];
+    if (!state.selectedCompanyId) {
+      options.push('<option value="">Selecione uma empresa para carregar as contas</option>');
+    } else if (!filtered.length) {
+      options.push('<option value="">Nenhuma conta encontrada</option>');
+    } else {
+      options.push('<option value="">Selecione uma conta corrente</option>');
+      filtered.forEach((account) => {
+        options.push(`<option value="${escapeHtml(account._id)}">${buildBankAccountLabel(account)}</option>`);
+      });
+    }
+
+    const selectedId = state.selectedBankAccountId || '';
+    let selectedAccount = null;
+    if (selectedId) {
+      selectedAccount = accounts.find((account) => String(account._id) === String(selectedId)) || null;
+      if (selectedAccount) {
+        state.selectedBankAccount = selectedAccount;
+      }
+    }
+
+    const selectedInFiltered = filtered.some((account) => String(account._id) === String(selectedId));
+    if (selectedId && !selectedInFiltered) {
+      const fallback =
+        selectedAccount ||
+        state.selectedBankAccount ||
+        accounts.find((account) => String(account._id) === String(selectedId));
+      if (fallback) {
+        options.push(
+          `<option value="${escapeHtml(fallback._id)}">${buildBankAccountLabel(fallback)} (selecionada)</option>`
+        );
+      }
+    }
+
+    elements.bankAccountSelect.innerHTML = options.join('');
+    elements.bankAccountSelect.value = selectedId;
+    updateBankAccountStatus();
+  };
+
+  const handleAccountingAccountSearch = (event) => {
+    state.accountingAccountSearchTerm = event.target.value || '';
+    updateAccountingAccountOptions();
+  };
+
+  const handleAccountingAccountSelectChange = (event) => {
+    const selectedId = event.target.value || '';
+    state.selectedAccountingAccountId = selectedId;
+    if (!selectedId) {
+      state.selectedAccountingAccount = null;
+      updateOverview();
+      return;
+    }
+
+    const match = state.accountingAccounts.find((account) => String(account._id) === String(selectedId));
+    if (match) {
+      state.selectedAccountingAccount = match;
+    }
+    updateOverview();
+  };
+
+  const fetchAccountingAccounts = async (companyId) => {
+    if (!elements.accountingAccountSelect) return;
+
+    const token = getToken();
+    if (!token) {
+      notify('Sua sessão expirou. Faça login novamente para carregar as contas contábeis.', 'error');
+      state.accountingAccounts = [];
+      state.filteredAccountingAccounts = [];
+      updateAccountingAccountOptions();
+      updateOverview();
+      return;
+    }
+
+    setAccountingAccountLoading(true);
+    try {
+      const query = companyId ? `?company=${encodeURIComponent(companyId)}` : '';
+      const response = await fetch(`${API_BASE}/accounting-accounts${query}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        const message = await parseErrorResponse(
+          response,
+          'Não foi possível carregar as contas contábeis.'
+        );
+        throw new Error(message);
+      }
+      const payload = await response.json();
+      state.accountingAccounts = Array.isArray(payload?.accounts) ? payload.accounts : [];
+      if (state.selectedAccountingAccountId) {
+        const match = state.accountingAccounts.find(
+          (account) => String(account._id) === String(state.selectedAccountingAccountId)
+        );
+        if (match) {
+          state.selectedAccountingAccount = match;
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar contas contábeis:', error);
+      notify(error.message || 'Erro ao carregar contas contábeis.', 'error');
+      state.accountingAccounts = [];
+    } finally {
+      setAccountingAccountLoading(false);
+      updateAccountingAccountOptions();
+      updateOverview();
+    }
+  };
+
+  const handleBankAccountSearch = (event) => {
+    state.bankAccountSearchTerm = event.target.value || '';
+    updateBankAccountOptions();
+  };
+
+  const handleBankAccountSelectChange = (event) => {
+    const selectedId = event.target.value || '';
+    state.selectedBankAccountId = selectedId;
+    if (!selectedId) {
+      state.selectedBankAccount = null;
+      updateOverview();
+      return;
+    }
+
+    const match = state.bankAccounts.find((account) => String(account._id) === String(selectedId));
+    if (match) {
+      state.selectedBankAccount = match;
+    }
+    updateOverview();
+  };
+
+  const fetchBankAccounts = async (companyId) => {
+    if (!elements.bankAccountSelect) return;
+
+    if (!companyId) {
+      state.bankAccounts = [];
+      state.filteredBankAccounts = [];
+      state.selectedBankAccount = null;
+      state.selectedBankAccountId = '';
+      updateBankAccountOptions();
+      return;
+    }
+
+    const token = getToken();
+    if (!token) {
+      notify('Sua sessão expirou. Faça login novamente para carregar as contas correntes.', 'error');
+      state.bankAccounts = [];
+      state.filteredBankAccounts = [];
+      state.selectedBankAccount = null;
+      state.selectedBankAccountId = '';
+      updateBankAccountOptions();
+      updateOverview();
+      return;
+    }
+
+    setBankAccountLoading(true);
+    try {
+      const query = `?company=${encodeURIComponent(companyId)}`;
+      const response = await fetch(`${API_BASE}/bank-accounts${query}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        const message = await parseErrorResponse(response, 'Não foi possível carregar as contas correntes.');
+        throw new Error(message);
+      }
+      const payload = await response.json();
+      state.bankAccounts = Array.isArray(payload?.accounts) ? payload.accounts : [];
+      if (state.selectedBankAccountId) {
+        const match = state.bankAccounts.find(
+          (account) => String(account._id) === String(state.selectedBankAccountId)
+        );
+        if (match) {
+          state.selectedBankAccount = match;
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar contas correntes:', error);
+      notify(error.message || 'Erro ao carregar contas correntes.', 'error');
+      state.bankAccounts = [];
+    } finally {
+      setBankAccountLoading(false);
+      updateBankAccountOptions();
+      updateOverview();
+    }
   };
 
   const getSelectedCompany = () =>
@@ -204,6 +624,16 @@
 
     const company = getSelectedCompany();
     const companyName = company ? company.nome || company.nomeFantasia || 'Empresa selecionada' : '—';
+    const selectedAccount = state.selectedAccountingAccountId
+      ? state.accountingAccounts.find((account) => String(account._id) === String(state.selectedAccountingAccountId)) ||
+        state.selectedAccountingAccount
+      : null;
+    const accountLabel = selectedAccount ? buildAccountingAccountLabel(selectedAccount) : 'Não vinculada';
+    const selectedBankAccount = state.selectedBankAccountId
+      ? state.bankAccounts.find((account) => String(account._id) === String(state.selectedBankAccountId)) ||
+        state.selectedBankAccount
+      : null;
+    const bankAccountLabel = selectedBankAccount ? buildBankAccountLabel(selectedBankAccount) : 'Não vinculada';
 
     const buildRow = (label, value) => `
       <div class="flex items-start justify-between gap-4">
@@ -218,6 +648,8 @@
       elements.overview.innerHTML = `
         <div class="space-y-3">
           ${buildRow('Empresa', companyName)}
+          ${buildRow('Conta contábil', accountLabel)}
+          ${buildRow('Conta corrente', bankAccountLabel)}
           ${buildRow('Modalidade', 'À vista')}
           ${buildRow('Prazo', days)}
           ${buildRow('Desconto', discount)}
@@ -232,9 +664,29 @@
       elements.overview.innerHTML = `
         <div class="space-y-3">
           ${buildRow('Empresa', companyName)}
+          ${buildRow('Conta contábil', accountLabel)}
+          ${buildRow('Conta corrente', bankAccountLabel)}
           ${buildRow('Modalidade', 'Débito')}
           ${buildRow('Prazo', days)}
           ${buildRow('Desconto', discount)}
+        </div>
+      `;
+      return;
+    }
+
+    if (state.currentType === 'crediario') {
+      const installments = Math.max(1, parseNumber(elements.crediarioInstallments?.value, 1));
+      const days = formatDays(elements.crediarioDays?.value);
+      const rate = formatRate(elements.crediarioInterest?.value);
+      elements.overview.innerHTML = `
+        <div class="space-y-3">
+          ${buildRow('Empresa', companyName)}
+          ${buildRow('Conta contábil', accountLabel)}
+          ${buildRow('Conta corrente', bankAccountLabel)}
+          ${buildRow('Modalidade', 'Crediário')}
+          ${buildRow('Parcelas', `${installments}x`)}
+          ${buildRow('Prazo médio', days)}
+          ${buildRow('Juros', rate)}
         </div>
       `;
       return;
@@ -259,6 +711,8 @@
     elements.overview.innerHTML = `
       <div class="space-y-3">
         ${buildRow('Empresa', companyName)}
+        ${buildRow('Conta contábil', accountLabel)}
+        ${buildRow('Conta corrente', bankAccountLabel)}
         ${buildRow('Modalidade', 'Crédito')}
         ${buildRow('Parcelas', `${installments}x`)}
         ${buildRow('Prazo', days)}
@@ -331,11 +785,20 @@
     });
   };
 
+  const updateCrediarioPreview = () => {
+    if (!elements.crediarioPreview) return;
+    const installments = Math.max(1, parseNumber(elements.crediarioInstallments?.value, 1));
+    const days = formatDays(elements.crediarioDays?.value);
+    const rate = formatRate(elements.crediarioInterest?.value);
+    elements.crediarioPreview.textContent = `${installments}x • ${days} • ${rate}`;
+  };
+
   const toggleSections = () => {
     const mapping = {
       avista: elements.avistaSection,
       debito: elements.debitoSection,
       credito: elements.creditoSection,
+      crediario: elements.crediarioSection,
     };
 
     Object.entries(mapping).forEach(([type, section]) => {
@@ -420,9 +883,34 @@
     if (state.editingId && state.editingCompanyId && state.editingCompanyId !== state.selectedCompanyId) {
       resetForm({ preserveCompany: true });
     }
+    state.selectedAccountingAccountId = '';
+    state.selectedAccountingAccount = null;
+    state.accountingAccountSearchTerm = '';
+    if (elements.accountingAccountSelect) {
+      elements.accountingAccountSelect.value = '';
+    }
+    if (elements.accountingAccountSearch) {
+      elements.accountingAccountSearch.value = '';
+    }
+    updateAccountingAccountOptions();
+    state.selectedBankAccountId = '';
+    state.selectedBankAccount = null;
+    state.bankAccountSearchTerm = '';
+    if (elements.bankAccountSelect) {
+      elements.bankAccountSelect.value = '';
+    }
+    if (elements.bankAccountSearch) {
+      elements.bankAccountSearch.value = '';
+    }
+    updateBankAccountOptions();
     updateCompanySummary();
     updateOverview();
-    await fetchPaymentMethods(state.selectedCompanyId);
+    await Promise.all([
+      fetchPaymentMethods(state.selectedCompanyId),
+      fetchAccountingAccounts(state.selectedCompanyId),
+      fetchBankAccounts(state.selectedCompanyId),
+    ]);
+    updateOverview();
   };
 
   const handleTypeChange = (event) => {
@@ -431,6 +919,7 @@
     updateAvistaPreview();
     updateDebitoPreview();
     updateCreditoPreview();
+    updateCrediarioPreview();
     updateOverview();
   };
 
@@ -455,6 +944,27 @@
       elements.companySelect.value = selectedCompanyId || '';
     }
 
+    state.selectedAccountingAccountId = '';
+   state.selectedAccountingAccount = null;
+   state.accountingAccountSearchTerm = '';
+   if (elements.accountingAccountSelect) {
+     elements.accountingAccountSelect.value = '';
+   }
+   if (elements.accountingAccountSearch) {
+     elements.accountingAccountSearch.value = '';
+   }
+   updateAccountingAccountOptions();
+    state.selectedBankAccountId = '';
+    state.selectedBankAccount = null;
+    state.bankAccountSearchTerm = '';
+    if (elements.bankAccountSelect) {
+      elements.bankAccountSelect.value = '';
+    }
+    if (elements.bankAccountSearch) {
+      elements.bankAccountSearch.value = '';
+    }
+    updateBankAccountOptions();
+
     if (elements.avistaDays) elements.avistaDays.value = 0;
     if (elements.avistaDiscount) elements.avistaDiscount.value = 0;
     if (elements.debitoDays) elements.debitoDays.value = 1;
@@ -462,6 +972,9 @@
     if (elements.creditoInstallments) elements.creditoInstallments.value = 3;
     if (elements.creditoDays) elements.creditoDays.value = 30;
     if (elements.creditoDiscount) elements.creditoDiscount.value = 2.49;
+    if (elements.crediarioInstallments) elements.crediarioInstallments.value = 6;
+    if (elements.crediarioDays) elements.crediarioDays.value = 30;
+    if (elements.crediarioInterest) elements.crediarioInterest.value = 0;
 
     const radios = Array.from(document.querySelectorAll(selectors.typeRadios));
     radios.forEach((radio) => {
@@ -473,6 +986,7 @@
     updateAvistaPreview();
     updateDebitoPreview();
     updateCreditoPreview();
+    updateCrediarioPreview();
     updateCompanySummary();
     updateOverview();
   };
@@ -507,9 +1021,25 @@
           ? `Crédito • ${method.installments || 1}x`
           : method.type === 'debito'
           ? 'Débito'
+          : method.type === 'crediario'
+          ? `Crediário • ${method.installments || 1}x`
           : 'À vista';
 
       const details = [];
+      if (method.accountingAccount) {
+        const accountLabel = buildAccountingAccountLabel(method.accountingAccount);
+        details.push(
+          `<p class="text-xs text-gray-500"><span class="font-medium text-gray-600">Conta contábil:</span> ${accountLabel}</p>`
+        );
+      }
+
+      if (method.bankAccount) {
+        const bankLabel = buildBankAccountLabel(method.bankAccount);
+        details.push(
+          `<p class="text-xs text-gray-500"><span class="font-medium text-gray-600">Conta corrente:</span> ${bankLabel}</p>`
+        );
+      }
+
       if (method.type === 'credito') {
         const days = formatDays(method.days);
         const configs = Array.isArray(method.installmentConfigurations)
@@ -525,6 +1055,11 @@
         } else {
           details.push('<p class="text-xs text-gray-500">Sem desconto aplicado.</p>');
         }
+      } else if (method.type === 'crediario') {
+        const installments = Math.max(1, parseNumber(method.installments, 1));
+        const days = formatDays(method.days);
+        const rate = formatRate(method.discount);
+        details.push(`<p class="text-xs text-gray-500">${installments}x • ${days} • ${rate}</p>`);
       } else {
         const days = formatDays(method.days);
         const discount = formatDiscount(method.discount);
@@ -620,6 +1155,37 @@
       elements.companySelect.value = state.selectedCompanyId || '';
     }
 
+    const rawAccountingAccount =
+      typeof method.accountingAccount === 'object' && method.accountingAccount
+        ? method.accountingAccount._id || method.accountingAccount.id || method.accountingAccount.value
+        : method.accountingAccount;
+    state.selectedAccountingAccountId = rawAccountingAccount ? String(rawAccountingAccount) : '';
+    state.selectedAccountingAccount =
+      (typeof method.accountingAccount === 'object' && method.accountingAccount) || null;
+    state.accountingAccountSearchTerm = '';
+    if (elements.accountingAccountSearch) {
+      elements.accountingAccountSearch.value = '';
+    }
+    if (elements.accountingAccountSelect) {
+      elements.accountingAccountSelect.value = state.selectedAccountingAccountId;
+    }
+    updateAccountingAccountOptions();
+
+    const rawBankAccount =
+      typeof method.bankAccount === 'object' && method.bankAccount
+        ? method.bankAccount._id || method.bankAccount.id || method.bankAccount.value
+        : method.bankAccount;
+    state.selectedBankAccountId = rawBankAccount ? String(rawBankAccount) : '';
+    state.selectedBankAccount = (typeof method.bankAccount === 'object' && method.bankAccount) || null;
+    state.bankAccountSearchTerm = '';
+    if (elements.bankAccountSearch) {
+      elements.bankAccountSearch.value = '';
+    }
+    if (elements.bankAccountSelect) {
+      elements.bankAccountSelect.value = state.selectedBankAccountId;
+    }
+    updateBankAccountOptions();
+
     if (elements.nameInput) {
       elements.nameInput.value = method.name || '';
     }
@@ -637,11 +1203,31 @@
       if (elements.avistaDiscount) elements.avistaDiscount.value = Math.max(0, parseNumber(method.discount, 0));
       if (elements.debitoDays) elements.debitoDays.value = Math.max(0, parseNumber(method.days, 1));
       if (elements.debitoDiscount) elements.debitoDiscount.value = Math.max(0, parseNumber(method.discount, 0));
+      if (elements.crediarioInstallments) elements.crediarioInstallments.value = Math.max(1, parseNumber(method.installments, 1));
+      if (elements.crediarioDays) elements.crediarioDays.value = Math.max(0, parseNumber(method.days, 30));
+      if (elements.crediarioInterest) elements.crediarioInterest.value = Math.max(0, parseNumber(method.discount, 0));
     } else if (state.currentType === 'debito') {
       if (elements.debitoDays) elements.debitoDays.value = Math.max(0, parseNumber(method.days, 1));
       if (elements.debitoDiscount) elements.debitoDiscount.value = Math.max(0, parseNumber(method.discount, 0));
       if (elements.avistaDays) elements.avistaDays.value = Math.max(0, parseNumber(method.days, 0));
       if (elements.avistaDiscount) elements.avistaDiscount.value = Math.max(0, parseNumber(method.discount, 0));
+      if (elements.crediarioInstallments) elements.crediarioInstallments.value = Math.max(1, parseNumber(method.installments, 1));
+      if (elements.crediarioDays) elements.crediarioDays.value = Math.max(0, parseNumber(method.days, 30));
+      if (elements.crediarioInterest) elements.crediarioInterest.value = Math.max(0, parseNumber(method.discount, 0));
+    } else if (state.currentType === 'crediario') {
+      const installments = Math.max(1, parseNumber(method.installments, 1));
+      const crediarioDays = Math.max(0, parseNumber(method.days, 30));
+      const rate = Math.max(0, parseNumber(method.discount, 0));
+      if (elements.crediarioInstallments) elements.crediarioInstallments.value = installments;
+      if (elements.crediarioDays) elements.crediarioDays.value = crediarioDays;
+      if (elements.crediarioInterest) elements.crediarioInterest.value = rate;
+      if (elements.avistaDays) elements.avistaDays.value = Math.max(0, parseNumber(method.days, 0));
+      if (elements.avistaDiscount) elements.avistaDiscount.value = Math.max(0, parseNumber(method.discount, 0));
+      if (elements.debitoDays) elements.debitoDays.value = Math.max(0, parseNumber(method.days, 1));
+      if (elements.debitoDiscount) elements.debitoDiscount.value = Math.max(0, parseNumber(method.discount, 0));
+      if (elements.creditoInstallments) elements.creditoInstallments.value = installments;
+      if (elements.creditoDays) elements.creditoDays.value = crediarioDays;
+      if (elements.creditoDiscount) elements.creditoDiscount.value = rate;
     } else {
       const configs = Array.isArray(method.installmentConfigurations)
         ? method.installmentConfigurations
@@ -676,6 +1262,7 @@
     updateAvistaPreview();
     updateDebitoPreview();
     updateCreditoPreview();
+    updateCrediarioPreview();
     updateOverview();
     renderMethods();
   };
@@ -779,12 +1366,21 @@
       payload.code = baseCode;
     }
 
+    payload.accountingAccount = state.selectedAccountingAccountId || null;
+    payload.bankAccount = state.selectedBankAccountId || null;
+
     if (state.currentType === 'avista') {
       payload.days = Math.max(0, parseNumber(elements.avistaDays?.value, 0));
       payload.discount = Math.max(0, parseNumber(elements.avistaDiscount?.value, 0));
+      payload.installments = 1;
     } else if (state.currentType === 'debito') {
       payload.days = Math.max(0, parseNumber(elements.debitoDays?.value, 1));
       payload.discount = Math.max(0, parseNumber(elements.debitoDiscount?.value, 0));
+      payload.installments = 1;
+    } else if (state.currentType === 'crediario') {
+      payload.days = Math.max(0, parseNumber(elements.crediarioDays?.value, 30));
+      payload.discount = Math.max(0, parseNumber(elements.crediarioInterest?.value, 0));
+      payload.installments = Math.max(1, parseNumber(elements.crediarioInstallments?.value, 1));
     } else {
       updateCreditDiscountsStructure();
       const installments = Math.max(1, parseNumber(elements.creditoInstallments?.value, 1));
@@ -844,6 +1440,11 @@
       elements.companySelect.addEventListener('change', handleCompanyChange);
     }
 
+    elements.accountingAccountSearch?.addEventListener('input', handleAccountingAccountSearch);
+    elements.accountingAccountSelect?.addEventListener('change', handleAccountingAccountSelectChange);
+    elements.bankAccountSearch?.addEventListener('input', handleBankAccountSearch);
+    elements.bankAccountSelect?.addEventListener('change', handleBankAccountSelectChange);
+
     const radios = Array.from(document.querySelectorAll(selectors.typeRadios));
     radios.forEach((radio) => radio.addEventListener('change', handleTypeChange));
 
@@ -884,6 +1485,19 @@
       updateOverview();
     });
 
+    elements.crediarioInstallments?.addEventListener('input', () => {
+      updateCrediarioPreview();
+      updateOverview();
+    });
+    elements.crediarioDays?.addEventListener('input', () => {
+      updateCrediarioPreview();
+      updateOverview();
+    });
+    elements.crediarioInterest?.addEventListener('input', () => {
+      updateCrediarioPreview();
+      updateOverview();
+    });
+
     elements.resetButton?.addEventListener('click', (event) => {
       event.preventDefault();
       resetForm({ preserveCompany: true });
@@ -916,11 +1530,16 @@
     updateAvistaPreview();
     updateDebitoPreview();
     updateCreditoPreview();
+    updateCrediarioPreview();
     updateCompanySummary();
     updateOverview();
+    updateAccountingAccountOptions();
+    updateBankAccountOptions();
     renderMethods();
     bindEvents();
     fetchCompanies();
+    fetchAccountingAccounts();
+    fetchBankAccounts();
   };
 
   document.addEventListener('DOMContentLoaded', initialize);
