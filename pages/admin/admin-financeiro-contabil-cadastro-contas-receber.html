@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Cadastro de Contas a Receber - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-800">Cadastro de Contas a Receber</h1>
+            <p class="text-sm text-gray-600">Controle lançamentos de recebimento e acompanhe previsões de fluxo de caixa.</p>
+          </div>
+          <div class="flex items-center gap-2 text-xs font-semibold text-primary">
+            <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1">
+              <i class="fas fa-bolt"></i>
+              Nova versão
+            </span>
+          </div>
+        </header>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="md:col-span-2">
+              <label for="receivable-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa <span class="text-red-500">*</span></label>
+              <select id="receivable-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Selecione...</option>
+                <option value="matriz">E o Bicho Vila Mariana</option>
+                <option value="filial">E o Bicho Pinheiros</option>
+              </select>
+            </div>
+            <div>
+              <label for="receivable-issue" class="block text-sm font-medium text-gray-700 mb-1">Data de emissão</label>
+              <input type="date" id="receivable-issue" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div>
+              <label for="receivable-duedate" class="block text-sm font-medium text-gray-700 mb-1">Data de vencimento <span class="text-red-500">*</span></label>
+              <input type="date" id="receivable-duedate" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label for="receivable-document" class="block text-sm font-medium text-gray-700 mb-1">Documento</label>
+              <input type="text" id="receivable-document" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="NF 1254">
+            </div>
+            <div>
+              <label for="receivable-customer" class="block text-sm font-medium text-gray-700 mb-1">Cliente <span class="text-red-500">*</span></label>
+              <input type="text" id="receivable-customer" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome ou CPF/CNPJ" required>
+            </div>
+            <div>
+              <label for="receivable-value" class="block text-sm font-medium text-gray-700 mb-1">Valor original <span class="text-red-500">*</span></label>
+              <div class="relative">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">R$</span>
+                <input type="number" step="0.01" min="0" id="receivable-value" class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0,00" required>
+              </div>
+            </div>
+            <div>
+              <label for="receivable-cost-center" class="block text-sm font-medium text-gray-700 mb-1">Centro de custo</label>
+              <select id="receivable-cost-center" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Selecione...</option>
+                <option value="vendas">Vendas Loja</option>
+                <option value="banho">Banho e Tosa</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label for="receivable-account" class="block text-sm font-medium text-gray-700 mb-1">Conta contábil vinculada <span class="text-red-500">*</span></label>
+              <select id="receivable-account" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Selecione...</option>
+                <option value="1.1.1.01">1.1.1.01 - Clientes</option>
+                <option value="1.1.1.02">1.1.1.02 - Clientes a Receber Serviços</option>
+              </select>
+            </div>
+            <div>
+              <label for="receivable-payment" class="block text-sm font-medium text-gray-700 mb-1">Forma de recebimento</label>
+              <select id="receivable-payment" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Selecione...</option>
+                <option value="boleto">Boleto bancário</option>
+                <option value="pix">PIX</option>
+                <option value="cartao">Cartão de crédito</option>
+              </select>
+            </div>
+            <div>
+              <label for="receivable-split" class="block text-sm font-medium text-gray-700 mb-1">Parcelamento</label>
+              <select id="receivable-split" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="unica">Parcela única</option>
+                <option value="2x">2x mensais</option>
+                <option value="3x">3x mensais</option>
+                <option value="personalizado">Personalizado...</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label for="receivable-notes" class="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+            <textarea id="receivable-notes" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" rows="4" placeholder="Registre informações complementares ou instruções para cobrança."></textarea>
+          </div>
+
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex items-center gap-2 text-xs text-gray-500">
+              <i class="fas fa-info-circle text-gray-400"></i>
+              Após o salvamento é possível gerar lembretes automáticos via e-mail ou WhatsApp.
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+                <i class="fas fa-eraser"></i>
+                Limpar formulário
+              </button>
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                <i class="fas fa-save"></i>
+                Salvar lançamento
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-5">
+          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Previsão de recebimentos</h2>
+              <p class="text-sm text-gray-600">Visualize os valores a receber agrupados por período e status.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <select class="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="7">Próximos 7 dias</option>
+                <option value="30">Próximos 30 dias</option>
+                <option value="90">Próximos 90 dias</option>
+              </select>
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+                <i class="fas fa-file-export"></i>
+                Exportar
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+              <span class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Confirmados</span>
+              <p class="mt-2 text-2xl font-bold text-emerald-800">R$ 28.450,00</p>
+              <p class="text-xs text-emerald-700">12 lançamentos agendados</p>
+            </div>
+            <div class="rounded-xl border border-amber-100 bg-amber-50 p-4">
+              <span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Em aberto</span>
+              <p class="mt-2 text-2xl font-bold text-amber-800">R$ 12.980,00</p>
+              <p class="text-xs text-amber-700">8 lançamentos aguardando confirmação</p>
+            </div>
+            <div class="rounded-xl border border-rose-100 bg-rose-50 p-4">
+              <span class="text-xs font-semibold uppercase tracking-wide text-rose-700">Em atraso</span>
+              <p class="mt-2 text-2xl font-bold text-rose-800">R$ 3.420,00</p>
+              <p class="text-xs text-rose-700">3 lançamentos com mais de 10 dias</p>
+            </div>
+          </div>
+
+          <div class="overflow-hidden rounded-lg border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50 text-gray-600">
+                <tr>
+                  <th scope="col" class="px-4 py-2 text-left font-semibold">Cliente</th>
+                  <th scope="col" class="px-4 py-2 text-left font-semibold">Documento</th>
+                  <th scope="col" class="px-4 py-2 text-left font-semibold">Vencimento</th>
+                  <th scope="col" class="px-4 py-2 text-right font-semibold">Valor</th>
+                  <th scope="col" class="px-4 py-2 text-center font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 text-gray-700">
+                <tr>
+                  <td class="px-4 py-3">João Pereira</td>
+                  <td class="px-4 py-3">NF 1254</td>
+                  <td class="px-4 py-3">18/06/2024</td>
+                  <td class="px-4 py-3 text-right">R$ 1.280,00</td>
+                  <td class="px-4 py-3 text-center">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      <i class="fas fa-check-circle"></i>
+                      Confirmado
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3">Clínica Amigo Pet</td>
+                  <td class="px-4 py-3">NF 1259</td>
+                  <td class="px-4 py-3">22/06/2024</td>
+                  <td class="px-4 py-3 text-right">R$ 4.500,00</td>
+                  <td class="px-4 py-3 text-center">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                      <i class="fas fa-hourglass-half"></i>
+                      Aguardando
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3">Fernanda Lima</td>
+                  <td class="px-4 py-3">NF 1241</td>
+                  <td class="px-4 py-3">05/06/2024</td>
+                  <td class="px-4 py-3 text-right">R$ 720,00</td>
+                  <td class="px-4 py-3 text-center">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                      <i class="fas fa-circle-exclamation"></i>
+                      Em atraso
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/main.js" defer></script>
+  <script src="../../scripts/admin/admin.js" defer></script>
+</body>
+</html>
