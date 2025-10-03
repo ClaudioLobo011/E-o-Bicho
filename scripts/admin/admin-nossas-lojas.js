@@ -67,9 +67,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const contadorCelularInput = document.getElementById('store-contador-celular');
     const contadorEmailInput = document.getElementById('store-contador-email');
     const closeModalBtn = document.getElementById('close-store-modal');
-    const tabButtons = Array.from(document.querySelectorAll('#store-modal .tab-button'));
-    const tabPanels = Array.from(document.querySelectorAll('#store-modal .tab-panel'));
-
     // -- REFERÊNCIAS PARA O MAPA DE LOCALIZAÇÃO --
     let locationMap = null;
     let locationMarker = null;
@@ -388,32 +385,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return result;
     };
 
-    const activateTab = (target) => {
-        tabButtons.forEach((button) => {
-            const isActive = button.dataset.tabTarget === target;
-            button.classList.toggle('bg-emerald-50', isActive);
-            button.classList.toggle('text-emerald-700', isActive);
-            button.classList.toggle('text-gray-600', !isActive);
-            button.classList.toggle('hover:text-gray-800', !isActive);
-        });
-        tabPanels.forEach((panel) => {
-            panel.classList.toggle('hidden', panel.dataset.tabPanel !== target);
-        });
-        if (target === 'endereco') {
-            setTimeout(() => {
-                if (locationMap) {
-                    locationMap.invalidateSize();
-                }
-            }, 50);
-        }
-    };
-
-    tabButtons.forEach((button) => {
-        button.addEventListener('click', () => activateTab(button.dataset.tabTarget));
-    });
-
-    activateTab('endereco');
-
     // --- Dados e Constantes ---
     const diasDaSemana = [
         { key: 'domingo', label: 'Domingo' },
@@ -606,7 +577,6 @@ document.addEventListener('DOMContentLoaded', () => {
         form.reset();
         selectedServices = [];
         renderServiceTags();
-        activateTab('endereco');
         buildEnderecoCompleto();
 
         if (cnaeInput) cnaeInput.value = '';
@@ -773,8 +743,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             selectedServices = store.servicos || [];
             renderServiceTags();
-            activateTab('endereco');
-
+    
             diasDaSemana.forEach(({ key }) => {
                 const horarioDia = store.horario ? store.horario[key] : null;
                 const dayRow = horarioContainer.querySelector(`[data-day="${key}"]`);
@@ -856,7 +825,6 @@ document.addEventListener('DOMContentLoaded', () => {
         form.reset();
         selectedServices = [];
         renderServiceTags();
-        activateTab('endereco');
         buildEnderecoCompleto();
         imagePreview.src = '/public/image/placeholder.png';
         imageInput.value = '';

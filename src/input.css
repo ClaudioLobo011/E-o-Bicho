@@ -1021,29 +1021,6 @@
     min-height: 0;
   }
 
-  .form-compact {
-    font-size: 0.8125rem;
-  }
-
-  .form-compact label {
-    font-size: 0.6875rem;
-    color: var(--color-gray-600);
-  }
-
-  .form-compact input,
-  .form-compact select,
-  .form-compact textarea {
-    font-size: 0.8125rem;
-  }
-
-  .form-compact .tab-button {
-    font-size: 0.6875rem;
-  }
-
-  .form-compact .helper-text {
-    font-size: 0.6875rem;
-  }
-
   @media (width >= 48rem) {
     .md\:col-span-5 {
       grid-column: span 5 / span 5;

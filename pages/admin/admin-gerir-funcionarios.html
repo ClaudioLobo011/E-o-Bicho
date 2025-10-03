@@ -42,7 +42,7 @@
         </button>
       </div>
 
-      <form id="edit-funcionario-form" class="flex-1 px-4 py-3 space-y-4 overflow-y-auto form-compact modal-body-fixed">
+      <form id="edit-funcionario-form" class="flex-1 px-4 py-3 space-y-4 overflow-y-auto modal-body-fixed">
         <input type="hidden" id="edit-id"/>
 
         <div class="grid grid-cols-12 gap-2">
@@ -137,21 +137,12 @@
         </div>
 
         <div class="pt-4">
-          <div class="border-b border-gray-200 sticky top-0 bg-white z-20 -mx-4 px-4 py-2 shadow-sm">
-            <nav class="flex flex-wrap lg:flex-nowrap gap-2 overflow-x-auto pb-1" role="tablist">
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold bg-emerald-50 text-emerald-700" data-tab-target="dados">Dados</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="endereco">Endereço</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="contato">Contato</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="dados-complementares">Dados Complementares</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="informacoes-gerais">Informações Gerais</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="trabalhista">Trabalhista</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="cursos">Cursos</button>
-              <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="horarios">Horários</button>
-            </nav>
-          </div>
-
-          <div class="mt-3 space-y-4">
-            <div class="tab-panel space-y-2" data-tab-panel="dados">
+          <div class="mt-3 space-y-10">
+            <section id="secao-dados" class="space-y-2">
+              <header class="border-b pb-2">
+                <h3 class="text-lg font-semibold text-gray-800">Dados</h3>
+                <p class="text-sm text-gray-500">Informações gerais utilizadas para a identificação do funcionário.</p>
+              </header>
               <div>
                 <label for="edit-role" class="block font-medium mb-0.5">Cargo</label>
                 <select id="edit-role" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" required></select>
@@ -193,9 +184,13 @@
                   <p class="helper-text text-gray-500">Selecione uma ou mais empresas (lojas) para o funcionário.</p>
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div class="tab-panel hidden space-y-2" data-tab-panel="endereco">
+            <section id="secao-endereco" class="space-y-2">
+              <header class="border-b pb-2">
+                <h3 class="text-lg font-semibold text-gray-800">Endereço</h3>
+                <p class="text-sm text-gray-500">Cadastre os endereços associados ao funcionário.</p>
+              </header>
               <div class="grid grid-cols-12 gap-2">
                 <div class="col-span-12 md:col-span-3">
                   <label for="edit-endereco-cep" class="block font-medium mb-0.5">CEP</label>
@@ -236,9 +231,13 @@
               <div id="lista-enderecos" class="space-y-2">
                 <p class="helper-text text-gray-500">Nenhum endereço cadastrado.</p>
               </div>
-            </div>
+            </section>
 
-            <div class="tab-panel hidden space-y-2" data-tab-panel="contato">
+            <section id="secao-contato" class="space-y-2">
+              <header class="border-b pb-2">
+                <h3 class="text-lg font-semibold text-gray-800">Contato</h3>
+                <p class="text-sm text-gray-500">Dados para comunicação direta com o funcionário.</p>
+              </header>
               <div class="grid grid-cols-12 gap-2">
                 <div class="col-span-12 md:col-span-6">
                   <label for="edit-email" class="block font-medium mb-0.5">Email</label>
@@ -256,8 +255,13 @@
                   <p class="helper-text text-gray-500 mt-1">Opcional. Informe um telefone fixo, se houver.</p>
                 </div>
               </div>
-            </div>
-            <div class="tab-panel hidden space-y-2" data-tab-panel="dados-complementares">
+            </section>
+
+            <section id="secao-dados-complementares" class="space-y-2">
+              <header class="border-b pb-2">
+                <h3 class="text-lg font-semibold text-gray-800">Dados Complementares</h3>
+                <p class="text-sm text-gray-500">Informações adicionais para compor o histórico do funcionário.</p>
+              </header>
               <div class="grid grid-cols-12 gap-2">
                 <div class="col-span-12 md:col-span-4">
                   <label for="edit-periodo-experiencia-inicio" class="block font-medium mb-0.5">Período de Experiência (Início)</label>
@@ -348,8 +352,13 @@
                   <input id="edit-horas-mensais" type="number" min="0" step="0.1" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0" />
                 </div>
               </div>
-            </div>
-            <div class="tab-panel hidden space-y-2" data-tab-panel="informacoes-gerais">
+            </section>
+
+            <section id="secao-informacoes-gerais" class="space-y-2">
+              <header class="border-b pb-2">
+                <h3 class="text-lg font-semibold text-gray-800">Informações Gerais</h3>
+                <p class="text-sm text-gray-500">Dados financeiros e bancários do colaborador.</p>
+              </header>
               <div class="grid grid-cols-12 gap-2">
                 <div class="col-span-12 md:col-span-6">
                   <label for="edit-passagens-dia" class="block font-medium mb-0.5">Passagens por dia</label>
@@ -367,7 +376,7 @@
                   <input id="edit-banco" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nome do banco" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
-                  <label for="edit-tipo-conta-bancaria" class="block font-medium mb-0.5">Tipo de conta</label>
+                  <label for="edit-tipo-conta-bancaria" class="block font-medium mb-0.5">Tipo de Conta</label>
                   <select id="edit-tipo-conta-bancaria" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
                     <option value="">Selecione</option>
                     <option value="corrente">Corrente</option>
@@ -405,8 +414,13 @@
                   <input id="edit-chave-pix" type="text" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Informe a chave Pix" />
                 </div>
               </div>
-            </div>
-            <div class="tab-panel hidden space-y-2" data-tab-panel="trabalhista">
+            </section>
+
+            <section id="secao-trabalhista" class="space-y-2">
+              <header class="border-b pb-2">
+                <h3 class="text-lg font-semibold text-gray-800">Documentos e Identificação</h3>
+                <p class="text-sm text-gray-500">Registre os dados oficiais do colaborador.</p>
+              </header>
               <div class="grid grid-cols-12 gap-2">
                 <div class="col-span-12 md:col-span-3">
                   <label for="edit-emissao-rg" class="block font-medium mb-0.5">Emissão RG</label>
@@ -444,8 +458,13 @@
                   <input id="edit-habilitacao-validade" type="date" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                 </div>
               </div>
-            </div>
-            <div class="tab-panel hidden space-y-2" data-tab-panel="cursos">
+            </section>
+
+            <section id="secao-cursos" class="space-y-2">
+              <header class="border-b pb-2">
+                <h3 class="text-lg font-semibold text-gray-800">Cursos e Capacitações</h3>
+                <p class="text-sm text-gray-500">Acompanhe treinamentos realizados pelo funcionário.</p>
+              </header>
               <div class="grid grid-cols-12 gap-2">
                 <div class="col-span-12 md:col-span-6">
                   <label for="edit-curso-nome" class="block font-medium mb-0.5">Formação/Curso</label>
@@ -474,8 +493,13 @@
               <div id="lista-cursos" class="space-y-2">
                 <p class="helper-text text-gray-500">Nenhum curso cadastrado.</p>
               </div>
-            </div>
-            <div class="tab-panel hidden space-y-4" data-tab-panel="horarios">
+            </section>
+
+            <section id="secao-horarios" class="space-y-4">
+              <header class="border-b pb-2">
+                <h3 class="text-lg font-semibold text-gray-800">Horários</h3>
+                <p class="text-sm text-gray-500">Cadastre a jornada de trabalho do funcionário.</p>
+              </header>
               <div class="grid grid-cols-12 gap-2">
                 <div class="col-span-12 md:col-span-3">
                   <label for="edit-tipo-jornada" class="block font-medium mb-0.5">Tipo de Jornada</label>
@@ -513,10 +537,9 @@
                 <button type="button" id="btn-add-horario" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Adicionar horário</button>
               </div>
               <div id="grade-horarios" class="overflow-x-auto"></div>
-            </div>
+            </section>
           </div>
         </div>
-
         <div class="flex justify-end gap-3 pt-3">
           <button type="button" id="btn-cancelar" class="px-4 py-1.5 rounded-lg border">Cancelar</button>
           <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Salvar</button>
