@@ -1088,7 +1088,7 @@ function resolveAdminPanelUrl() {
 
   if (isLocalHost && port && port !== '5173') {
     const safeProtocol = protocol === 'file:' ? 'http:' : protocol;
-    return `${safeProtocol}//${hostname}:5173/`;
+    return `${safeProtocol}//${hostname}:5173${defaultPath}`;
   }
 
   return defaultPath;
