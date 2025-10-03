@@ -66,15 +66,32 @@ async function checkAdminAccess() {
           }
         }
 
-        const mainGrid = document.querySelector('main > .grid');
-        if (mainGrid) {
-          mainGrid.classList.add('admin-embedded-grid');
-        }
-
         const mainElement = document.querySelector('main');
         if (mainElement) {
           mainElement.classList.remove('container', 'mx-auto', 'px-4', 'py-8', 'min-h-screen');
           mainElement.classList.add('admin-embedded-main');
+          // Tornar grid mais compacta no embed
+          const mainGrid = document.querySelector('main > .grid');
+          if (mainGrid) mainGrid.classList.add('admin-embedded-grid');
+
+          // Remover aparência de card das seções de primeiro nível
+          const contentCol = document.querySelector('main .md\\:col-span-4');
+          if (contentCol) {
+            contentCol.classList.remove('space-y-4');
+            contentCol.classList.add('space-y-0');
+
+            contentCol.querySelectorAll(':scope > section').forEach((sec) => {
+              [
+                'bg-white','bg-gray-50',
+                'border','border-gray-100','border-gray-200',
+                'rounded','rounded-md','rounded-lg','rounded-xl','rounded-2xl',
+                'shadow','shadow-sm','shadow-md','shadow-lg',
+                'p-3','p-4','p-5','p-6','p-8'
+              ].forEach(cls => sec.classList.remove(cls));
+
+              sec.classList.add('p-0'); // conteúdo fluido
+            });
+          }
         }
       };
 

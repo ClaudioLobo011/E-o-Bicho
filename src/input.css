@@ -1280,3 +1280,26 @@
     border: 0;
   }
 }
+
+@layer utilities {
+  /* Em páginas embutidas, "container" vira largura total */
+  body.admin-embedded .container {
+    max-width: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Grid e main do embed: preencher a viewport sem “apertar” conteúdo */
+  body.admin-embedded .admin-embedded-main { min-height: 0; }
+  body.admin-embedded .admin-embedded-grid { gap: .5rem; }
+
+  /* Painéis/iframes precisam poder crescer */
+  .admin-tab-panel { min-height: 0; }
+  .admin-tab-iframe { display:block; width:100%; height:auto; min-height:0; border:0; }
+
+  /* Wrapper do iframe sem fundo/limites */
+  .admin-tab-iframe-wrapper { background: transparent; overflow: visible; }
+}

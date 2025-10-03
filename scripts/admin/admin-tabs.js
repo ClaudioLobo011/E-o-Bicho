@@ -296,7 +296,7 @@
       frameWrapper.style.minHeight = '480px';
 
       const loader = document.createElement('div');
-      loader.className = 'absolute inset-0 flex items-center justify-center bg-white/80';
+      loader.className = 'absolute inset-0 flex items-center justify-center';
       loader.innerHTML = `
         <div class="flex items-center gap-2 text-sm text-gray-500">
           <span class="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></span>
