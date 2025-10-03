@@ -84,7 +84,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const gradeHorariosContainer = document.getElementById('grade-horarios');
   const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
   const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
-
   // Modal Search
   const modalSearch = document.getElementById('modal-search-user');
   const searchInput = document.getElementById('search-term');
@@ -1388,6 +1387,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearCursoForm();
     clearHorarioForm(false);
     activateTab('dados');
+    if (form) form.scrollTop = 0;
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 

@@ -5,6 +5,7 @@
   }
 
   const pendingOpenCommands = [];
+  const winToIframe = new Map();
 
   if (!window.AdminTabs || typeof window.AdminTabs.open !== 'function') {
     window.AdminTabs = {
@@ -316,7 +317,16 @@
       iframe.addEventListener('load', () => {
         loader.classList.add('hidden');
         frameWrapper.style.minHeight = '0px';
+        if (iframe.contentWindow) {
+          winToIframe.set(iframe.contentWindow, iframe);
+        }
       }, { once: true });
+
+      iframe.addEventListener('load', () => {
+        if (iframe.contentWindow) {
+          winToIframe.set(iframe.contentWindow, iframe);
+        }
+      });
 
       frameWrapper.appendChild(iframe);
       frameWrapper.appendChild(loader);
@@ -331,6 +341,10 @@
 
       if (entry.item) entry.item.remove();
       if (entry.panel) entry.panel.remove();
+
+      if (entry.iframe && entry.iframe.contentWindow) {
+        winToIframe.delete(entry.iframe.contentWindow);
+      }
 
       if (entry.cleanupFns && Array.isArray(entry.cleanupFns)) {
         entry.cleanupFns.forEach((fn) => {
@@ -417,6 +431,75 @@
         applyPanelHeights();
       });
     }
+
+    window.addEventListener('message', (ev) => {
+      const data = ev.data || {};
+      if (data?.source !== 'eo-bicho') return;
+
+      const iframe = winToIframe.get(ev.source);
+      if (!iframe) return;
+
+      const panel = iframe.closest('.admin-tab-panel') || iframe.parentElement;
+
+      const minAvail = () => {
+        try {
+          return typeof computeAvailablePanelHeight === 'function'
+            ? computeAvailablePanelHeight()
+            : (window.innerHeight - 120);
+        } catch (err) {
+          return window.innerHeight - 120;
+        }
+      };
+
+      const BASE_MODAL_BUFFER = 96;
+      const MAX_MODAL_BUFFER = 256;
+
+      const setH = (h, { withClearance = false } = {}) => {
+        const raw = Number.isFinite(h) ? Math.ceil(h) : 0;
+        const minHeight = minAvail();
+        const buffer = withClearance && raw > 0
+          ? Math.min(
+              MAX_MODAL_BUFFER,
+              Math.max(BASE_MODAL_BUFFER, Math.ceil(raw * 0.08) + 32)
+            )
+          : 0;
+        const target = raw + buffer;
+        const height = Math.max(target, minHeight);
+        const value = `${height}px`;
+        iframe.style.minHeight = value;
+        iframe.style.height = value;
+
+        if (panel) {
+          if (withClearance) {
+            const clearance = Math.max(0, Math.min(buffer, Math.ceil(height - raw)));
+            panel.style.setProperty('--modal-clearance', `${clearance}px`);
+          } else if (!panel.classList.contains('modal-open')) {
+            panel.style.removeProperty('--modal-clearance');
+          }
+        }
+      };
+
+      switch (data.type) {
+        case 'MODAL_OPEN':
+          panel?.classList.add('modal-open');
+          setH(data.height, { withClearance: true });
+          break;
+        case 'MODAL_CLOSE':
+          panel?.classList.remove('modal-open');
+          panel?.style.removeProperty('--modal-clearance');
+          iframe.style.minHeight = '';
+          iframe.style.height = '';
+          if (typeof applyPanelHeights === 'function') {
+            applyPanelHeights();
+          }
+          break;
+        case 'TAB_CONTENT_RESIZE':
+          setH(data.height, { withClearance: panel?.classList.contains('modal-open') });
+          break;
+        default:
+          break;
+      }
+    });
 
     const tabHeaderElement = root.querySelector('[data-admin-tab-list]');
     let headerResizeObserver = null;

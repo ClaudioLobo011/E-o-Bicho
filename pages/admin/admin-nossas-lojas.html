@@ -54,15 +54,15 @@
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
     
-    <div id="store-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4 flex">
-        <div class="bg-white w-full max-w-modal-wide mx-2 rounded-lg shadow-lg flex flex-col modal-shell">
+    <div id="store-modal" class="fixed inset-0 bg-black/50 hidden flex items-stretch md:items-start justify-center z-50 px-0 md:px-4 py-0 md:py-10 overflow-visible">
+        <div class="bg-white w-full max-w-modal-wide mx-auto md:mx-2 rounded-none md:rounded-lg shadow-lg flex flex-col modal-shell">
             <div class="flex justify-between items-center px-4 py-3 border-b">
                 <h3 id="store-modal-title" class="text-base font-semibold text-gray-800">Adicionar Nova Loja</h3>
                 <button type="button" id="close-store-modal" class="text-gray-500 hover:text-gray-700" aria-label="Fechar modal">
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
-            <form id="store-form" class="flex-1 px-4 py-3 space-y-4 overflow-y-auto form-compact modal-body-fixed">
+            <form id="store-form" class="flex-1 px-4 py-3 space-y-4">
                 <input type="hidden" id="store-id">
                 <input type="hidden" id="store-endereco">
                 <div class="grid grid-cols-12 gap-3 items-start">
@@ -396,5 +396,6 @@
     <script src="../../scripts/admin/admin.js"></script> 
     <script src="../../scripts/admin/admin-nossas-lojas.js"></script> 
 
+  <script src="/scripts/common/modal-bridge.js"></script>
 </body>
 </html>

@@ -69,7 +69,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeModalBtn = document.getElementById('close-store-modal');
     const tabButtons = Array.from(document.querySelectorAll('#store-modal .tab-button'));
     const tabPanels = Array.from(document.querySelectorAll('#store-modal .tab-panel'));
-
     // -- REFERÊNCIAS PARA O MAPA DE LOCALIZAÇÃO --
     let locationMap = null;
     let locationMarker = null;
