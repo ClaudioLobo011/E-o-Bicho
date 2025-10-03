@@ -1,21 +1,58 @@
 var basePath = basePath || '';
 
+(function ensureGlobalBasePath() {
+  if (!window.__EOB_BASE_URL__) {
+    try {
+      const resolvedBase = new URL(basePath || './', window.location.href);
+      window.__EOB_BASE_URL__ = resolvedBase;
+      let normalizedPath = resolvedBase.pathname;
+      if (!normalizedPath.endsWith('/')) {
+        normalizedPath += '/';
+      }
+      window.__EOB_BASE_PATH__ = normalizedPath;
+      window.basePath = normalizedPath;
+      basePath = normalizedPath;
+    } catch (error) {
+      console.warn('Não foi possível normalizar basePath, usando valor padrão', error);
+      const fallback = '/';
+      window.__EOB_BASE_URL__ = new URL(fallback, window.location.origin);
+      window.__EOB_BASE_PATH__ = fallback;
+      window.basePath = fallback;
+      basePath = fallback;
+    }
+  } else {
+    const normalizedPath = window.__EOB_BASE_PATH__ || '/';
+    window.basePath = normalizedPath;
+    basePath = normalizedPath;
+  }
+})();
+
 async function loadComponents() {
+    const resolveComponentUrl = (path) => {
+        if (!path) return path;
+        if (/^(?:[a-z]+:)?\/\//i.test(path)) {
+            return path;
+        }
+        const baseUrl = window.__EOB_BASE_URL__ || new URL(basePath || './', window.location.href);
+        const sanitized = path.startsWith('/') ? path.slice(1) : path;
+        return new URL(sanitized, baseUrl).toString();
+    };
+
     try {
         const placeholders = {
-            'header-placeholder': `${basePath}components/shared/header.html`,
-            'admin-header-placeholder': `${basePath}components/admin/header.html`,
-            'footer-placeholder': `${basePath}components/shared/footer.html`,
-            'admin-footer-placeholder': `${basePath}components/admin/footer.html`,
-            'cart-placeholder': `${basePath}components/shared/cart.html`,
-            'modal-placeholder': `${basePath}components/shared/info-modal.html`,
-            'confirm-modal-placeholder': `${basePath}components/shared/confirm-modal.html`,
-            'admin-sidebar-placeholder': `${basePath}components/admin/sidebar.html`,
-            'account-sidebar-placeholder': `${basePath}components/account/account-sidebar.html`,
-            'func-header-placeholder': `${basePath}components/funcionarios/header.html`,
-            'func-sidebar-placeholder': `${basePath}components/funcionarios/sidebar.html`,
-            'func-footer-placeholder': `${basePath}components/funcionarios/footer.html`,
-            'nossas-lojas-sidebar-placeholder': `${basePath}components/store/nossas-lojas-sidebar.html`
+            'header-placeholder': resolveComponentUrl('/components/shared/header.html'),
+            'admin-header-placeholder': resolveComponentUrl('/components/admin/header.html'),
+            'footer-placeholder': resolveComponentUrl('/components/shared/footer.html'),
+            'admin-footer-placeholder': resolveComponentUrl('/components/admin/footer.html'),
+            'cart-placeholder': resolveComponentUrl('/components/shared/cart.html'),
+            'modal-placeholder': resolveComponentUrl('/components/shared/info-modal.html'),
+            'confirm-modal-placeholder': resolveComponentUrl('/components/shared/confirm-modal.html'),
+            'admin-sidebar-placeholder': resolveComponentUrl('/components/admin/sidebar.html'),
+            'account-sidebar-placeholder': resolveComponentUrl('/components/account/account-sidebar.html'),
+            'func-header-placeholder': resolveComponentUrl('/components/funcionarios/header.html'),
+            'func-sidebar-placeholder': resolveComponentUrl('/components/funcionarios/sidebar.html'),
+            'func-footer-placeholder': resolveComponentUrl('/components/funcionarios/footer.html'),
+            'nossas-lojas-sidebar-placeholder': resolveComponentUrl('/components/store/nossas-lojas-sidebar.html')
         };
         for (const id in placeholders) {
             const element = document.getElementById(id);
