@@ -453,7 +453,9 @@
 
       const setH = (h) => {
         const raw = Number.isFinite(h) ? Math.ceil(h) : 0;
-        const height = Math.max(raw, minAvail());
+        // Add a tiny clearance so shadows/borders from fixed modals are not clipped.
+        const EXTRA_CLEARANCE = 16;
+        const height = Math.max(raw + EXTRA_CLEARANCE, minAvail());
         const value = `${height}px`;
         iframe.style.minHeight = value;
         iframe.style.height = value;
