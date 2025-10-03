@@ -1037,6 +1037,21 @@
       grid-column: span 9 / span 9;
     }
   }
+
+  .admin-tab-panel.modal-open {
+    overflow: visible !important;
+  }
+
+  .admin-tab-iframe-wrapper {
+    background: transparent;
+    overflow: visible;
+  }
+
+  .admin-tab-iframe {
+    display: block;
+    width: 100%;
+    border: 0;
+  }
 }
 
 /* =========================================================

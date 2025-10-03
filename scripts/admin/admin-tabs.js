@@ -5,6 +5,7 @@
   }
 
   const pendingOpenCommands = [];
+  const winToIframe = new Map();
 
   if (!window.AdminTabs || typeof window.AdminTabs.open !== 'function') {
     window.AdminTabs = {
@@ -316,7 +317,16 @@
       iframe.addEventListener('load', () => {
         loader.classList.add('hidden');
         frameWrapper.style.minHeight = '0px';
+        if (iframe.contentWindow) {
+          winToIframe.set(iframe.contentWindow, iframe);
+        }
       }, { once: true });
+
+      iframe.addEventListener('load', () => {
+        if (iframe.contentWindow) {
+          winToIframe.set(iframe.contentWindow, iframe);
+        }
+      });
 
       frameWrapper.appendChild(iframe);
       frameWrapper.appendChild(loader);
@@ -331,6 +341,10 @@
 
       if (entry.item) entry.item.remove();
       if (entry.panel) entry.panel.remove();
+
+      if (entry.iframe && entry.iframe.contentWindow) {
+        winToIframe.delete(entry.iframe.contentWindow);
+      }
 
       if (entry.cleanupFns && Array.isArray(entry.cleanupFns)) {
         entry.cleanupFns.forEach((fn) => {
@@ -417,6 +431,50 @@
         applyPanelHeights();
       });
     }
+
+    window.addEventListener('message', (ev) => {
+      const data = ev.data || {};
+      if (data?.source !== 'eo-bicho') return;
+
+      const iframe = winToIframe.get(ev.source);
+      if (!iframe) return;
+
+      const panel = iframe.closest('.admin-tab-panel') || iframe.parentElement;
+
+      const minAvail = () => {
+        try {
+          return typeof computeAvailablePanelHeight === 'function'
+            ? computeAvailablePanelHeight()
+            : (window.innerHeight - 120);
+        } catch (err) {
+          return window.innerHeight - 120;
+        }
+      };
+
+      const setH = (h) => {
+        const height = Math.max(h, minAvail()) + 24;
+        iframe.style.minHeight = `${height}px`;
+      };
+
+      switch (data.type) {
+        case 'MODAL_OPEN':
+          panel?.classList.add('modal-open');
+          setH(data.height);
+          break;
+        case 'MODAL_CLOSE':
+          panel?.classList.remove('modal-open');
+          iframe.style.minHeight = '';
+          if (typeof applyPanelHeights === 'function') {
+            applyPanelHeights();
+          }
+          break;
+        case 'TAB_CONTENT_RESIZE':
+          setH(data.height);
+          break;
+        default:
+          break;
+      }
+    });
 
     const tabHeaderElement = root.querySelector('[data-admin-tab-list]');
     let headerResizeObserver = null;
