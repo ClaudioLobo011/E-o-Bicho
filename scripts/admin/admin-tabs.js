@@ -454,16 +454,20 @@
       const BASE_MODAL_BUFFER = 96;
       const MAX_MODAL_BUFFER = 256;
 
-      const setH = (h, { withClearance = false } = {}) => {
+      const setH = (h, { withClearance = false, modalHeight = 0 } = {}) => {
         const raw = Number.isFinite(h) ? Math.ceil(h) : 0;
+        const modalRaw = Number.isFinite(modalHeight) ? Math.ceil(modalHeight) : 0;
         const minHeight = minAvail();
-        const buffer = withClearance && raw > 0
+        const reference = withClearance && modalRaw > 0 ? modalRaw : raw;
+        const buffer = withClearance && reference > 0
           ? Math.min(
               MAX_MODAL_BUFFER,
-              Math.max(BASE_MODAL_BUFFER, Math.ceil(raw * 0.08) + 32)
+              Math.max(BASE_MODAL_BUFFER, Math.ceil(reference * 0.08) + 32)
             )
           : 0;
-        const target = raw + buffer;
+        const target = withClearance && modalRaw > 0
+          ? Math.max(raw, modalRaw + buffer)
+          : raw + buffer;
         const height = Math.max(target, minHeight);
         const value = `${height}px`;
         iframe.style.minHeight = value;
@@ -482,7 +486,7 @@
       switch (data.type) {
         case 'MODAL_OPEN':
           panel?.classList.add('modal-open');
-          setH(data.height, { withClearance: true });
+          setH(data.height, { withClearance: true, modalHeight: data.modalHeight });
           break;
         case 'MODAL_CLOSE':
           panel?.classList.remove('modal-open');
@@ -494,7 +498,10 @@
           }
           break;
         case 'TAB_CONTENT_RESIZE':
-          setH(data.height, { withClearance: panel?.classList.contains('modal-open') });
+          setH(data.height, {
+            withClearance: panel?.classList.contains('modal-open'),
+            modalHeight: data.modalHeight
+          });
           break;
         default:
           break;
