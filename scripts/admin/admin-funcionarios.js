@@ -82,6 +82,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnAddHorario = document.getElementById('btn-add-horario');
   const btnCancelarHorario = document.getElementById('btn-cancelar-horario');
   const gradeHorariosContainer = document.getElementById('grade-horarios');
+  const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
+  const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
   // Modal Search
   const modalSearch = document.getElementById('modal-search-user');
   const searchInput = document.getElementById('search-term');
@@ -866,6 +868,26 @@ document.addEventListener('DOMContentLoaded', () => {
       .filter(Boolean);
   }
 
+  function activateTab(target) {
+    tabButtons.forEach((btn) => {
+      const isActive = btn.dataset.tabTarget === target;
+      btn.classList.toggle('bg-emerald-50', isActive);
+      btn.classList.toggle('text-emerald-700', isActive);
+      btn.classList.toggle('text-gray-600', !isActive);
+    });
+    tabPanels.forEach((panel) => {
+      panel.classList.toggle('hidden', panel.dataset.tabPanel !== target);
+    });
+  }
+
+  tabButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tabTarget || 'dados';
+      activateTab(target);
+    });
+  });
+  activateTab('dados');
+
   horariosSemana = createDefaultHorarios();
   renderHorariosGrade();
   updateHorarioButtonLabel();
@@ -1364,6 +1386,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearEnderecoForm();
     clearCursoForm();
     clearHorarioForm(false);
+    activateTab('dados');
     if (form) form.scrollTop = 0;
     modal.classList.remove('hidden');
     modal.classList.add('flex');

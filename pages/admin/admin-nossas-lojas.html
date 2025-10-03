@@ -54,7 +54,7 @@
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
     
-    <div id="store-modal" class="fixed inset-0 bg-black/50 hidden items-stretch md:items-start justify-center z-50 px-0 md:px-4 py-0 md:py-10 flex overflow-y-auto">
+    <div id="store-modal" class="fixed inset-0 bg-black/50 hidden flex items-stretch md:items-start justify-center z-50 px-0 md:px-4 py-0 md:py-10 overflow-y-auto">
         <div class="bg-white w-full max-w-modal-wide mx-auto md:mx-2 rounded-none md:rounded-lg shadow-lg flex flex-col modal-shell">
             <div class="flex justify-between items-center px-4 py-3 border-b">
                 <h3 id="store-modal-title" class="text-base font-semibold text-gray-800">Adicionar Nova Loja</h3>
@@ -62,7 +62,7 @@
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
-            <form id="store-form" class="px-4 py-3 space-y-4">
+            <form id="store-form" class="flex-1 px-4 py-3 space-y-4">
                 <input type="hidden" id="store-id">
                 <input type="hidden" id="store-endereco">
                 <div class="grid grid-cols-12 gap-3 items-start">
@@ -119,17 +119,25 @@
                     </div>
                     <div class="col-span-12 md:col-span-3 flex flex-col items-center md:items-end gap-2">
                         <img id="image-preview" src="/public/image/placeholder.png" class="w-32 h-32 object-cover rounded-md bg-gray-100 border" alt="Pré-visualização da loja" />
-                        <p class="helper-text text-gray-500 text-center md:text-right">Atualize a imagem na seção Logo.</p>
+                        <p class="helper-text text-gray-500 text-center md:text-right">Atualize a imagem na aba Logo.</p>
                     </div>
                 </div>
 
                 <div class="pt-2">
-                    <div class="mt-3 space-y-10">
-                        <section id="secao-endereco" class="space-y-2">
-                            <header class="border-b pb-2">
-                                <h3 class="text-lg font-semibold text-gray-800">Endereço</h3>
-                                <p class="text-sm text-gray-500">Preencha os dados de localização da loja e confirme a posição no mapa.</p>
-                            </header>
+                    <div class="border-b border-gray-200">
+                        <nav class="flex flex-wrap gap-2" role="tablist">
+                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold bg-emerald-50 text-emerald-700" data-tab-target="endereco">Endereço</button>
+                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="contador">Contador</button>
+                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="logo">Logo</button>
+                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="filiais">Filiais</button>
+                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="funcionamento">Funcionamento</button>
+                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="atividade-economica">Atividade Econômica</button>
+                            <button type="button" class="tab-button px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-gray-600 hover:text-gray-800" data-tab-target="certificado">Certificado</button>
+                        </nav>
+                    </div>
+
+                    <div class="mt-3 space-y-4">
+                        <div class="tab-panel space-y-2" data-tab-panel="endereco">
                             <div class="grid grid-cols-12 gap-2">
                                 <div class="col-span-12 md:col-span-4">
                                     <label for="store-cep" class="block font-medium mb-0.5">CEP</label>
@@ -179,13 +187,9 @@
                                 <input type="hidden" id="store-latitude">
                                 <input type="hidden" id="store-longitude">
                             </div>
-                        </section>
+                        </div>
 
-                        <section id="secao-contador" class="space-y-2">
-                            <header class="border-b pb-2">
-                                <h3 class="text-lg font-semibold text-gray-800">Dados do Contador</h3>
-                                <p class="text-sm text-gray-500">Informe os dados do responsável contábil que atende a loja.</p>
-                            </header>
+                        <div class="tab-panel hidden space-y-2" data-tab-panel="contador">
                             <div class="grid grid-cols-12 gap-2">
                                 <div class="col-span-12 md:col-span-3">
                                     <label for="store-contador-nome" class="block font-medium mb-0.5">Nome</label>
@@ -205,10 +209,20 @@
                                 </div>
                             </div>
                             <div class="grid grid-cols-12 gap-2">
-                                <div class="col-span-12 md:col-span-6 space-y-1.5">
-                                    <label for="store-contador-endereco" class="block font-medium mb-0.5">Endereço</label>
-                                    <input type="text" id="store-contador-endereco" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-cep" class="block font-medium mb-0.5">CEP</label>
+                                    <input type="text" id="store-contador-cep" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="00000-000" />
                                 </div>
+                                <div class="col-span-12 md:col-span-6">
+                                    <label for="store-contador-endereco" class="block font-medium mb-0.5">Endereço</label>
+                                    <input type="text" id="store-contador-endereco" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Rua, avenida..." />
+                                </div>
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="store-contador-cidade" class="block font-medium mb-0.5">Cidade</label>
+                                    <input type="text" id="store-contador-cidade" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
                                 <div class="col-span-12 md:col-span-3">
                                     <label for="store-contador-numero" class="block font-medium mb-0.5">Número</label>
                                     <input type="text" id="store-contador-numero" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
@@ -217,21 +231,13 @@
                                     <label for="store-contador-bairro" class="block font-medium mb-0.5">Bairro</label>
                                     <input type="text" id="store-contador-bairro" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                                 </div>
-                            </div>
-                            <div class="grid grid-cols-12 gap-2">
-                                <div class="col-span-12 md:col-span-3">
+                                <div class="col-span-12 md:col-span-6">
                                     <label for="store-contador-complemento" class="block font-medium mb-0.5">Complemento</label>
                                     <input type="text" id="store-contador-complemento" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                                 </div>
-                                <div class="col-span-12 md:col-span-3">
-                                    <label for="store-contador-cidade" class="block font-medium mb-0.5">Cidade</label>
-                                    <input type="text" id="store-contador-cidade" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                                </div>
-                                <div class="col-span-12 md:col-span-3">
-                                    <label for="store-contador-cep" class="block font-medium mb-0.5">CEP</label>
-                                    <input type="text" id="store-contador-cep" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="00000-000" />
-                                </div>
-                                <div class="col-span-12 md:col-span-3">
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-12">
                                     <label for="store-contador-razao-social" class="block font-medium mb-0.5">Razão Social do Escritório</label>
                                     <input type="text" id="store-contador-razao-social" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                                 </div>
@@ -254,35 +260,24 @@
                                     <input type="email" id="store-contador-email" class="w-full border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="contador@empresa.com" />
                                 </div>
                             </div>
-                        </section>
+                        </div>
 
-                        <section id="secao-logo" class="space-y-2">
-                            <header class="border-b pb-2">
-                                <h3 class="text-lg font-semibold text-gray-800">Logo e Imagem</h3>
-                                <p class="text-sm text-gray-500">Atualize a imagem principal exibida no cadastro e nas vitrines.</p>
-                            </header>
+                        <div class="tab-panel hidden space-y-2" data-tab-panel="logo">
                             <div>
                                 <label for="store-image-input" class="block font-medium mb-0.5">Atualizar imagem/Logo da Loja</label>
                                 <input type="file" id="store-image-input" class="w-full text-sm" accept="image/*" />
                                 <p class="helper-text text-gray-500">A imagem selecionada aparecerá no topo deste modal e nas vitrines da loja.</p>
                             </div>
-                        </section>
+                        </div>
 
-                        <section id="secao-filiais" class="space-y-2">
-                            <header class="border-b pb-2">
-                                <h3 class="text-lg font-semibold text-gray-800">Filiais</h3>
-                                <p class="text-sm text-gray-500">Associe outras unidades vinculadas a esta loja.</p>
-                            </header>
+                        <div class="tab-panel hidden space-y-2" data-tab-panel="filiais">
+                            <p class="helper-text text-gray-500">Associe as filiais vinculadas a esta loja.</p>
                             <div id="store-filiais-list" class="border rounded-lg p-3 bg-gray-50">
                                 <p class="text-sm text-gray-600">Nenhuma filial selecionada.</p>
                             </div>
-                        </section>
+                        </div>
 
-                        <section id="secao-funcionamento" class="space-y-3">
-                            <header class="border-b pb-2">
-                                <h3 class="text-lg font-semibold text-gray-800">Funcionamento e Serviços</h3>
-                                <p class="text-sm text-gray-500">Informe horários de atendimento e serviços oferecidos.</p>
-                            </header>
+                        <div class="tab-panel hidden space-y-3" data-tab-panel="funcionamento">
                             <fieldset class="border rounded-lg p-3">
                                 <legend class="px-2 text-sm font-semibold">Horário de Funcionamento</legend>
                                 <div id="horario-inputs-container" class="space-y-3 mt-2"></div>
@@ -294,13 +289,9 @@
                                     <div id="service-tags-container" class="flex flex-wrap gap-2"></div>
                                 </div>
                             </div>
-                        </section>
+                        </div>
 
-                        <section id="secao-atividade-economica" class="space-y-2">
-                            <header class="border-b pb-2">
-                                <h3 class="text-lg font-semibold text-gray-800">Atividade Econômica</h3>
-                                <p class="text-sm text-gray-500">Registre os CNAEs principais e secundários da loja.</p>
-                            </header>
+                        <div class="tab-panel hidden space-y-2" data-tab-panel="atividade-economica">
                             <div class="grid grid-cols-12 gap-2">
                                 <div class="col-span-12 md:col-span-6 space-y-1.5">
                                     <div>
@@ -323,13 +314,9 @@
                                     </div>
                                 </div>
                             </div>
-                        </section>
+                        </div>
 
-                        <section id="secao-certificado" class="space-y-3">
-                            <header class="border-b pb-2">
-                                <h3 class="text-lg font-semibold text-gray-800">Certificado Digital e CSC</h3>
-                                <p class="text-sm text-gray-500">Gerencie certificados e tokens utilizados na emissão de documentos fiscais.</p>
-                            </header>
+                        <div class="tab-panel hidden space-y-3" data-tab-panel="certificado">
                             <div class="grid grid-cols-12 gap-2">
                                 <div class="col-span-12 md:col-span-6">
                                     <label for="store-certificado-arquivo" class="block font-medium mb-0.5">Arquivo do Certificado</label>
@@ -375,9 +362,10 @@
                                 </div>
                             </div>
                             <p id="store-certificado-status" class="helper-text text-gray-500"></p>
-                        </section>
+                        </div>
                     </div>
                 </div>
+            </form>
             <div class="px-4 py-3 bg-gray-50 border-t flex justify-end gap-2">
                 <button type="button" id="cancel-store-modal-btn" class="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancelar</button>
                 <button type="submit" form="store-form" id="save-store-modal-btn" class="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700">Salvar</button>
