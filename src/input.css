@@ -1021,26 +1021,6 @@
     }
   }
 
-  .admin-tab-panel.modal-open {
-    overflow: visible !important;
-  }
-
-  .admin-tab-panel.modal-open::after {
-    content: '';
-    display: block;
-    height: var(--modal-clearance, 0px);
-  }
-
-  .admin-tab-iframe-wrapper {
-    background: transparent;
-    overflow: visible;
-  }
-
-  .admin-tab-iframe {
-    display: block;
-    width: 100%;
-    border: 0;
-  }
 }
 
 /* =========================================================
@@ -1211,56 +1191,3 @@
   .ring-1, .ring-2 { box-shadow: none !important; }
 }
 
-@layer components {
-  body.admin-embedded {
-    @apply bg-transparent;
-  }
-
-  body.admin-embedded {
-    @apply min-h-screen;
-  }
-
-  body.admin-embedded main {
-    @apply mx-0 w-full max-w-none px-0 pt-0 pb-3;
-  }
-
-  body.admin-embedded main.container {
-    @apply max-w-none;
-  }
-
-  body.admin-embedded .admin-embedded-main {
-    @apply w-full max-w-none px-1.5 sm:px-2 lg:px-3 pt-1.5 pb-4 min-h-[calc(100vh-1rem)];
-  }
-
-  body.admin-embedded .admin-embedded-main > .admin-embedded-grid {
-    @apply w-full max-w-none;
-  }
-
-  body.admin-embedded .admin-embedded-main > .admin-embedded-grid > * {
-    @apply w-full max-w-none;
-  }
-
-  body.admin-embedded .admin-embedded-grid {
-    @apply gap-2 sm:gap-3;
-  }
-
-  body.admin-embedded .admin-tab-iframe-wrapper {
-    @apply bg-transparent overflow-visible;
-  }
-
-  body.admin-embedded[data-admin-tabs-root] {
-    @apply min-h-0;
-  }
-
-  .admin-tab-panel {
-    @apply min-h-0;
-  }
-
-  .admin-tab-iframe {
-    display: block;
-    width: 100%;
-    height: auto;
-    min-height: 0;
-    border: 0;
-  }
-}
