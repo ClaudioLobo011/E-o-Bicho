@@ -452,8 +452,11 @@
       };
 
       const setH = (h) => {
-        const height = Math.max(h, minAvail()) + 24;
-        iframe.style.minHeight = `${height}px`;
+        const raw = Number.isFinite(h) ? Math.ceil(h) : 0;
+        const height = Math.max(raw, minAvail());
+        const value = `${height}px`;
+        iframe.style.minHeight = value;
+        iframe.style.height = value;
       };
 
       switch (data.type) {
@@ -464,6 +467,7 @@
         case 'MODAL_CLOSE':
           panel?.classList.remove('modal-open');
           iframe.style.minHeight = '';
+          iframe.style.height = '';
           if (typeof applyPanelHeights === 'function') {
             applyPanelHeights();
           }
