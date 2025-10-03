@@ -467,12 +467,18 @@
         const extent = Number.isFinite(modalExtent) ? Math.ceil(modalExtent) : 0;
         const modalRaw = Number.isFinite(modalHeight) ? Math.ceil(modalHeight) : 0;
 
-        const raw = Math.max(base, extent, fallback);
+        const currentClearance = withClearance && panel
+          ? Number.parseFloat(panel.style.getPropertyValue('--modal-clearance') || '0') || 0
+          : 0;
+
+        const baseWithoutClearance = Math.max(0, base - currentClearance);
+        const raw = Math.max(baseWithoutClearance, extent, fallback);
         const minHeight = minAvail();
 
         let buffer = 0;
         if (withClearance) {
-          const reference = modalRaw || (extent > 0 ? Math.max(0, extent - base) : 0);
+          const reference = modalRaw
+            || (extent > 0 ? Math.max(0, extent - baseWithoutClearance) : 0);
           if (reference > 0) {
             buffer = Math.min(
               MAX_MODAL_BUFFER,
@@ -491,8 +497,11 @@
         iframe.style.height = value;
 
         if (panel) {
-          if (withClearance && heightValue > raw) {
-            const clearance = Math.max(0, Math.min(buffer, heightValue - raw));
+          if (withClearance && heightValue > baseWithoutClearance) {
+            const clearance = Math.max(
+              0,
+              Math.min(buffer, heightValue - baseWithoutClearance),
+            );
             panel.style.setProperty('--modal-clearance', `${clearance}px`);
           } else if (withClearance) {
             panel.style.setProperty('--modal-clearance', '0px');
