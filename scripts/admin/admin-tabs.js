@@ -451,22 +451,24 @@
         }
       };
 
-      const CLEARANCE = 8;
+      const BASE_MODAL_BUFFER = 12;
+      const MAX_MODAL_BUFFER = 20;
 
       const setH = (h, { withClearance = false } = {}) => {
         const raw = Number.isFinite(h) ? Math.ceil(h) : 0;
         const minHeight = minAvail();
-        const height = Math.max(raw, minHeight);
+        const buffer = withClearance && raw > 0
+          ? Math.min(MAX_MODAL_BUFFER, Math.max(BASE_MODAL_BUFFER, Math.ceil(raw * 0.01)))
+          : 0;
+        const target = raw + buffer;
+        const height = Math.max(target, minHeight);
         const value = `${height}px`;
         iframe.style.minHeight = value;
         iframe.style.height = value;
 
         if (panel) {
           if (withClearance) {
-            const clearance = Math.min(
-              CLEARANCE,
-              Math.max(0, Math.ceil(height - raw) + 4)
-            );
+            const clearance = Math.max(0, Math.min(buffer, Math.ceil(height - raw)));
             panel.style.setProperty('--modal-clearance', `${clearance}px`);
           } else if (!panel.classList.contains('modal-open')) {
             panel.style.removeProperty('--modal-clearance');
