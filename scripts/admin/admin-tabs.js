@@ -451,14 +451,14 @@
         }
       };
 
-      const BASE_MODAL_BUFFER = 18;
-      const MAX_MODAL_BUFFER = 36;
+      const BASE_MODAL_BUFFER = 32;
+      const MAX_MODAL_BUFFER = 64;
 
       const setH = (h, { withClearance = false } = {}) => {
         const raw = Number.isFinite(h) ? Math.ceil(h) : 0;
         const minHeight = minAvail();
         const buffer = withClearance && raw > 0
-          ? Math.min(MAX_MODAL_BUFFER, Math.max(BASE_MODAL_BUFFER, Math.ceil(raw * 0.015)))
+          ? Math.min(MAX_MODAL_BUFFER, Math.max(BASE_MODAL_BUFFER, Math.ceil(raw * 0.025)))
           : 0;
         const target = raw + buffer;
         const height = Math.max(target, minHeight);
