@@ -451,23 +451,32 @@
         }
       };
 
-      const setH = (h) => {
+      const CLEARANCE = 16;
+
+      const setH = (h, { withClearance = false } = {}) => {
         const raw = Number.isFinite(h) ? Math.ceil(h) : 0;
-        // Add a tiny clearance so shadows/borders from fixed modals are not clipped.
-        const EXTRA_CLEARANCE = 16;
-        const height = Math.max(raw + EXTRA_CLEARANCE, minAvail());
+        const height = Math.max(raw, minAvail());
         const value = `${height}px`;
         iframe.style.minHeight = value;
         iframe.style.height = value;
+
+        if (panel) {
+          if (withClearance) {
+            panel.style.setProperty('--modal-clearance', `${CLEARANCE}px`);
+          } else if (!panel.classList.contains('modal-open')) {
+            panel.style.removeProperty('--modal-clearance');
+          }
+        }
       };
 
       switch (data.type) {
         case 'MODAL_OPEN':
           panel?.classList.add('modal-open');
-          setH(data.height);
+          setH(data.height, { withClearance: true });
           break;
         case 'MODAL_CLOSE':
           panel?.classList.remove('modal-open');
+          panel?.style.removeProperty('--modal-clearance');
           iframe.style.minHeight = '';
           iframe.style.height = '';
           if (typeof applyPanelHeights === 'function') {
@@ -475,7 +484,7 @@
           }
           break;
         case 'TAB_CONTENT_RESIZE':
-          setH(data.height);
+          setH(data.height, { withClearance: panel?.classList.contains('modal-open') });
           break;
         default:
           break;

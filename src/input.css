@@ -1042,6 +1042,12 @@
     overflow: visible !important;
   }
 
+  .admin-tab-panel.modal-open::after {
+    content: '';
+    display: block;
+    height: var(--modal-clearance, 0px);
+  }
+
   .admin-tab-iframe-wrapper {
     background: transparent;
     overflow: visible;
