@@ -1002,31 +1002,26 @@
 
   .modal-shell {
     width: 100%;
-    max-height: calc(100vh - 1.5rem);
+    height: auto;
+    min-height: calc(100vh - 1.5rem);
   }
 
   @media (min-width: 768px) {
     .modal-shell {
-      max-height: calc(100vh - 4rem);
+      min-height: calc(100vh - 4rem);
     }
   }
 
   @media (min-width: 1536px) {
     .modal-shell {
-      max-height: calc(100vh - 6rem);
+      min-height: calc(100vh - 6rem);
     }
   }
 
   @media (max-width: 767px) {
     .modal-shell {
-      max-height: none;
       min-height: 100vh;
     }
-  }
-
-  .modal-body-fixed {
-    flex: 1;
-    min-height: 0;
   }
 
   @media (width >= 48rem) {
