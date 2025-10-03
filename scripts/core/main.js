@@ -20,9 +20,17 @@ async function loadComponents() {
         for (const id in placeholders) {
             const element = document.getElementById(id);
             if (element) {
+                if (element.dataset.componentLoaded === 'true') {
+                    if (id === 'admin-sidebar-placeholder') {
+                        updateActiveAdminLink();
+                    }
+                    continue;
+                }
+
                 const response = await fetch(placeholders[id]);
                 if (!response.ok) throw new Error(`Falha ao carregar ${placeholders[id]}`);
                 element.innerHTML = await response.text();
+                element.dataset.componentLoaded = 'true';
                 if (id === 'account-sidebar-placeholder') {
                     updateActiveAccountLink();
                     checkAdminLink();
@@ -823,6 +831,13 @@ function initializeAdminHeaderSearch() {
   document.addEventListener('click', (event) => {
     if (!root.contains(event.target)) {
       hidePanel();
+    }
+  });
+
+  root.addEventListener('admin:sidebar:updated', () => {
+    refreshScreens();
+    if (input === document.activeElement) {
+      filterScreens(input.value);
     }
   });
 }

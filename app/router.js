@@ -38,8 +38,21 @@ async function render(pathname) {
     app.innerHTML = '';
     app.appendChild(element);
 
+    if (typeof window.loadComponents === 'function') {
+      try {
+        await window.loadComponents();
+      } catch (componentError) {
+        console.error('Erro ao carregar componentes dinâmicos', componentError);
+      }
+    }
+
     if (typeof element.__legacyInit === 'function') {
       await element.__legacyInit();
+    }
+
+    const searchRoot = document.querySelector('[data-admin-screen-search]');
+    if (searchRoot) {
+      searchRoot.dispatchEvent(new CustomEvent('admin:sidebar:updated', { bubbles: true }));
     }
 
     document.querySelectorAll('a[data-spa]').forEach((link) => {
