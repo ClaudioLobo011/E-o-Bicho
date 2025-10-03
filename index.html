@@ -1,13 +1,180 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>E-o-Bicho Admin</title>
-  </head>
-  <body class="bg-slate-100 text-slate-900">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E o Bicho - Produtos para Animais</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="src/output.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div id="header-placeholder"></div>
+
+    <div id="mobile-menu" class="bg-white shadow-lg md:hidden absolute w-full z-40 hidden">
+        <div class="container mx-auto px-4 py-3">
+            <ul class="space-y-3">
+                <li><a href="#" class="block py-2 font-medium">Cachorro</a></li>
+                <li><a href="#" class="block py-2 font-medium">Gato</a></li>
+                <li><a href="#" class="block py-2 font-medium">Pássaros</a></li>
+                <li><a href="#" class="block py-2 font-medium">Peixes</a></li>
+                <li><a href="#" class="block py-2 font-medium">Roedores</a></li>
+                <li><a href="#" class="block py-2 font-medium">Ofertas</a></li>
+                <li><a href="#" class="block py-2 font-medium">Marcas</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <main data-header-offset="site">
+
+    <div class="bg-gray-200 text-black text-center py-3 text-sm">
+        <p>Frete grátis para compras acima de R$ 100,00</p>
+    </div>
+
+    <div class="py-8 bg-gray-100">
+        <div class="w-full">
+            <div id="carousel" class="relative w-full overflow-hidden">
+                <div class="carousel-container flex items-center h-full">
+                    </div>
+
+                <!-- BOTÃO ESQUERDA -->
+                <button id="prev" class="absolute left-4 top-1/2 transform -translate-y-1/2 bg-opacity-30 p-2 rounded-full hover:bg-opacity-50 transition">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+
+                <!-- BOTÃO DIREITA -->
+                <button id="next" class="absolute right-4 top-1/2 transform -translate-y-1/2 bg-opacity-30 p-2 rounded-full hover:bg-opacity-50 transition">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+                <!-- Indicadores sobrepostos no rodapé do banner -->
+                <div id="carousel-indicators" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center space-x-1 pointer-events-none">
+                    <div class="indicator"><span class="dot"></span><span class="pill"><span class="fill"></span></span></div>
+                    <div class="indicator"><span class="dot"></span><span class="pill"><span class="fill"></span></span></div>
+                    <div class="indicator"><span class="dot"></span><span class="pill"><span class="fill"></span></span></div>
+                    <div class="indicator"><span class="dot"></span><span class="pill"><span class="fill"></span></span></div>
+                    <div class="indicator"><span class="dot"></span><span class="pill"><span class="fill"></span></span></div>
+                </div>
+            </div>
+
+        </div>
+
+        <section class="py-10 bg-light">
+            <div class="container mx-auto px-4">
+                <h2 class="text-2xl font-bold text-center mb-8">Categorias</h2>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                    <div class="bg-white rounded-lg shadow p-4 text-center category-card border border-gray-200 transition duration-300">
+                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 mx-auto mb-3"></div>
+                        <h3 class="font-medium">Ração</h3>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 text-center category-card border border-gray-200 transition duration-300">
+                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 mx-auto mb-3"></div>
+                        <h3 class="font-medium">Brinquedos</h3>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 text-center category-card border border-gray-200 transition duration-300">
+                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 mx-auto mb-3"></div>
+                        <h3 class="font-medium">Higiene</h3>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 text-center category-card border border-gray-200 transition duration-300">
+                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 mx-auto mb-3"></div>
+                        <h3 class="font-medium">Acessórios</h3>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 text-center category-card border border-gray-200 transition duration-300">
+                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 mx-auto mb-3"></div>
+                        <h3 class="font-medium">Camas</h3>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="py-10">
+            <div class="container mx-auto px-4">
+                <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-2xl font-bold">Produtos em Destaque</h2>
+                    <div class="flex items-center space-x-2">
+                        <button id="prev-featured-btn" class="w-8 h-8 rounded-full bg-gray-200 text-gray-700 hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <button id="next-featured-btn" class="w-8 h-8 rounded-full bg-gray-200 text-gray-700 hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                        <a href="#" class="ml-4 text-primary font-medium hover:underline">Ver todos</a>
+                    </div>
+                </div>
+
+                <div id="featured-slider-wrapper" class="overflow-hidden relative">
+                    <div id="featured-products-container" class="flex space-x-6 transition-transform duration-500 ease-in-out">
+                        </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="py-10">
+            <div class="container mx-auto px-4">
+                <h2 class="text-2xl font-bold text-center mb-8">Nossas Marcas</h2>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
+                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
+                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
+                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
+                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
+                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 flex items-center justify-center border border-gray-200">
+                        <div class="bg-gray-200 border-2 border-dashed rounded-xl w-24 h-12"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="py-10 bg-light">
+            <div class="container mx-auto px-4">
+                <h2 class="text-2xl font-bold text-center mb-8">Por que comprar conosco?</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white rounded-lg shadow p-6 text-center benefit-card transition duration-300">
+                        <div class="text-primary text-4xl mb-4">
+                            <i class="fas fa-truck"></i>
+                        </div>
+                        <h3 class="font-bold text-lg mb-2">Entrega Rápida</h3>
+                        <p class="text-gray-600">Entregamos em até 24 horas para todo o Brasil</p>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-6 text-center benefit-card transition duration-300">
+                        <div class="text-primary text-4xl mb-4">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <h3 class="font-bold text-lg mb-2">Compra Segura</h3>
+                        <p class="text-gray-600">Ambiente seguro com criptografia SSL</p>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-6 text-center benefit-card transition duration-300">
+                        <div class="text-primary text-4xl mb-4">
+                            <i class="fas fa-sync-alt"></i>
+                        </div>
+                        <h3 class="font-bold text-lg mb-2">Devolução Grátis</h3>
+                        <p class="text-gray-600">Devoluções gratuitas em até 30 dias</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main> 
+
+    <div id="cart-placeholder"></div>
+    <div id="footer-placeholder"></div>
+    <div id="modal-placeholder"></div>
+    <div id="confirm-modal-placeholder"></div>
+
+    <script src="scripts/core/config.js"></script>
+    <script src="scripts/core/ui.js"></script>
+    <script src="scripts/cartManager.js"></script> 
+    <script src="scripts/cart.js"></script>
+    <script src="scripts/favoritesManager.js"></script>
+    <script src="scripts/core/main.js"></script>
+
+</body>
 </html>

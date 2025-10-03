@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-A aplicação estará disponível em `http://localhost:5173`. O servidor de desenvolvimento já faz o redirecionamento das rotas legadas para o shell da SPA.
+O shell do painel continua acessível em `http://localhost:5173/app` (ou `http://localhost:5173/admin.html`). Um plugin de desenvolvimento no `vite.config.ts` intercepta requisições que começam com `/app` e responde com `admin.html`, mantendo o site público original (`index.html`) intacto. Em produção, configure o servidor (Express, Nginx etc.) para servir `admin.html` sempre que a rota iniciar com `/app`, permitindo que o storefront tradicional permaneça no `index.html` original.
 
 ### Outros scripts
 
@@ -22,6 +22,7 @@ A aplicação estará disponível em `http://localhost:5173`. O servidor de dese
 ## Estrutura de pastas relevante
 
 ```
+admin.html
 src/
   App.tsx
   main.tsx
