@@ -1,4 +1,4 @@
-(() => {
+function initAdminPdv() {
   const API_BASE =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
   const SERVER_URL =
@@ -9798,5 +9798,20 @@
     }
   };
 
-  document.addEventListener('DOMContentLoaded', init);
-})();
+  init();
+}
+
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-pdv'] = initAdminPdv;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminPdv, { once: true });
+  } else {
+    initAdminPdv();
+  }
+}
+

@@ -1,6 +1,6 @@
 // CRUD de Serviços: nome, grupo (ServiceGroup), duração (min), custo, valor.
 
-(function () {
+function initAdminServicos() {
   const API = `${API_CONFIG.BASE_URL}/admin/servicos`;
   const API_GRUPOS = `${API_CONFIG.BASE_URL}/admin/servicos/grupos`;
 
@@ -224,4 +224,18 @@
     console.error(err);
     alert('Erro ao inicializar a página de serviços.\n' + err.message);
   });
-})();
+}
+
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-servicos'] = initAdminServicos;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminServicos, { once: true });
+  } else {
+    initAdminServicos();
+  }
+}

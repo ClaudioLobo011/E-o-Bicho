@@ -23,7 +23,7 @@
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
-  document.addEventListener('DOMContentLoaded', () => {
+  function initAdminFiscalIcmsSimples() {
     const form = selectElement('icms-simples-form');
     const codeInput = selectElement('icms-simples-code');
     const valueInput = selectElement('icms-simples-value');
@@ -285,5 +285,19 @@
     };
 
     initialize();
-  });
+  }
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-fiscal-icms-simples'] = initAdminFiscalIcmsSimples;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminFiscalIcmsSimples, { once: true });
+  } else {
+    initAdminFiscalIcmsSimples();
+  }
+}
+
 })();

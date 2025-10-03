@@ -1,4 +1,4 @@
-(function () {
+function initAdminCadastroPdv() {
   const API_BASE =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
 
@@ -1022,5 +1022,19 @@
     await fetchNextCode();
   };
 
-  document.addEventListener('DOMContentLoaded', initialize);
-})();
+  initialize();
+}
+
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-cadastro-pdv'] = initAdminCadastroPdv;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminCadastroPdv, { once: true });
+  } else {
+    initAdminCadastroPdv();
+  }
+}

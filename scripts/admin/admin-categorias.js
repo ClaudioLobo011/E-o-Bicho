@@ -1,6 +1,6 @@
 // Ficheiro: admin-categorias.js (VERSÃO COM CHAMADA DE FUNÇÃO CORRIGIDA)
 
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminCategorias() {
     // --- Referências ao DOM ---
     const tableBody = document.getElementById('categories-table-body');
     const addCategoryBtn = document.getElementById('add-category-btn');
@@ -285,4 +285,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Carga Inicial ---
     fetchAndDisplayCategories();
-});
+}
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-categorias'] = initAdminCategorias;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminCategorias, { once: true });
+  } else {
+    initAdminCategorias();
+  }
+}

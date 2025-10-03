@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminDestaques() {
     // Referências aos elementos do DOM
     const availableList = document.getElementById('available-products-list');
     const featuredList = document.getElementById('featured-products-list');
@@ -175,4 +175,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Carga Inicial ---
     initializePage();
-});
+}
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-destaques'] = initAdminDestaques;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminDestaques, { once: true });
+  } else {
+    initAdminDestaques();
+  }
+}

@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminNossasLojas() {
     // --- Referências ao DOM ---
     const tableBody = document.getElementById('stores-table-body');
     const addStoreBtn = document.getElementById('add-store-btn');
@@ -1187,4 +1187,17 @@ document.addEventListener('DOMContentLoaded', () => {
     createHorarioInputs();
     fetchAndDisplayStores();
     initializeLocationPicker();
-});
+}
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-nossas-lojas'] = initAdminNossasLojas;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminNossasLojas, { once: true });
+  } else {
+    initAdminNossasLojas();
+  }
+}

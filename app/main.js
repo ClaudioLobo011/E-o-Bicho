@@ -1,12 +1,9 @@
 import { registerRoute, render, navigate } from './router.js';
 import { ensureAdminAccess } from '../scripts/admin/admin-auth.js';
 
-const ROUTE_MAP = {
-  '/pages/admin.html': () => import('./views/dashboard.js'),
-  '/pages/admin/produtos': () => import('./views/produtos.js'),
-};
+import { ROUTES } from './routes.js';
 
-Object.entries(ROUTE_MAP).forEach(([path, loader]) => registerRoute(path, loader));
+Object.entries(ROUTES).forEach(([path, loader]) => registerRoute(path, loader));
 
 async function bootstrap() {
   try {

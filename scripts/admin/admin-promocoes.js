@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminPromocoes() {
     // =================================================
     // =========== LÓGICA GERAL DAS ABAS ===============
     // =================================================
@@ -524,4 +524,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if(document.getElementById('available-products-list-promo')) initializePromoTab();
     if(document.getElementById('available-products-list-condicional')) initializeCondicionalTab();
     if(document.getElementById('banner-list')) loadBanners();
-});
+}
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-promocoes'] = initAdminPromocoes;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminPromocoes, { once: true });
+  } else {
+    initAdminPromocoes();
+  }
+}

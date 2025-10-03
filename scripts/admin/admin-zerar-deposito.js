@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminZerarDeposito() {
     const companySelect = document.getElementById('company-select');
     const depositSelect = document.getElementById('deposit-select');
     const pageSizeSelect = document.getElementById('page-size');
@@ -491,4 +491,18 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTable();
     renderPagination();
     fetchStores();
-});
+}
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-zerar-deposito'] = initAdminZerarDeposito;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminZerarDeposito, { once: true });
+  } else {
+    initAdminZerarDeposito();
+  }
+}
+

@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminImportar() {
     const fileInput = document.getElementById('file-input');
     const fileNameLabel = document.getElementById('file-name');
     const previewTable = document.getElementById('preview-table');
@@ -563,4 +563,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Render inicial vazio
     renderPreview();
-});
+}
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-importar'] = initAdminImportar;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminImportar, { once: true });
+  } else {
+    initAdminImportar();
+  }
+}

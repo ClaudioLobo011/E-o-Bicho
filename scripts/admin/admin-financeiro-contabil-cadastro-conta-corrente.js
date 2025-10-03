@@ -1,4 +1,4 @@
-(function () {
+function initAdminFinanceiroContabilCadastroContaCorrente() {
   const API_BASE =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
   const BASE_PATH = typeof window.basePath === 'string' ? window.basePath : '../../';
@@ -878,4 +878,18 @@
   } else {
     init();
   }
-})();
+}
+
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-financeiro-contabil-cadastro-conta-corrente'] = initAdminFinanceiroContabilCadastroContaCorrente;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminFinanceiroContabilCadastroContaCorrente, { once: true });
+  } else {
+    initAdminFinanceiroContabilCadastroContaCorrente();
+  }
+}

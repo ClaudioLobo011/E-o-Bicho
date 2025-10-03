@@ -707,7 +707,9 @@ function initializeAdminHeaderSearch() {
     const match = matches[index];
     if (!match) return;
 
-    if (window.AdminTabs && typeof window.AdminTabs.open === 'function') {
+    if (window.AdminSPA && typeof window.AdminSPA.navigate === 'function') {
+      window.AdminSPA.navigate(match.href);
+    } else if (window.AdminTabs && typeof window.AdminTabs.open === 'function') {
       window.AdminTabs.open(match.href, match.label);
     } else {
       window.location.href = match.href;

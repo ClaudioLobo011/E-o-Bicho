@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminFuncionarios() {
   const tabela = document.getElementById('tabela-funcionarios');
   const btnAdd = document.getElementById('btn-add-funcionario');
 
@@ -1895,4 +1895,18 @@ document.addEventListener('DOMContentLoaded', () => {
     await loadEmpresasOptions();
     await loadFuncionarios();
   })()
-});
+}
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-funcionarios'] = initAdminFuncionarios;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminFuncionarios, { once: true });
+  } else {
+    initAdminFuncionarios();
+  }
+}
+

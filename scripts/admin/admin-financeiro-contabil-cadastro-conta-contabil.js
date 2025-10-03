@@ -1,4 +1,4 @@
-(function () {
+function initAdminFinanceiroContabilCadastroContaContabil() {
   const API_BASE =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
   const ACCOUNTING_ENDPOINT = `${API_BASE}/accounting-accounts`;
@@ -873,8 +873,22 @@
   };
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    init();
   } else {
     init();
   }
-})();
+}
+
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-financeiro-contabil-cadastro-conta-contabil'] = initAdminFinanceiroContabilCadastroContaContabil;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminFinanceiroContabilCadastroContaContabil, { once: true });
+  } else {
+    initAdminFinanceiroContabilCadastroContaContabil();
+  }
+}

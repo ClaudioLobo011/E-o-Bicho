@@ -1,4 +1,4 @@
-(function () {
+function initAdminFinanceiroMeiosPagamento() {
   const API_BASE =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
 
@@ -1542,5 +1542,19 @@
     fetchBankAccounts();
   };
 
-  document.addEventListener('DOMContentLoaded', initialize);
-})();
+  initialize();
+}
+
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-financeiro-meios-pagamento'] = initAdminFinanceiroMeiosPagamento;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminFinanceiroMeiosPagamento, { once: true });
+  } else {
+    initAdminFinanceiroMeiosPagamento();
+  }
+}

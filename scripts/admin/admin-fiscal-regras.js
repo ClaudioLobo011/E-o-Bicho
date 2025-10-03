@@ -909,9 +909,23 @@
     }
   };
 
-  document.addEventListener('DOMContentLoaded', () => {
+  function initAdminFiscalRegras() {
     setModalidadeButtonState();
     initEvents();
     fetchStores();
-  });
+  }
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-fiscal-regras'] = initAdminFiscalRegras;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminFiscalRegras, { once: true });
+  } else {
+    initAdminFiscalRegras();
+  }
+}
+
 })();

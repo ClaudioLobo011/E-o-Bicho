@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminProdutoForm() {
     
     // --- REFERÊNCIAS AO DOM ---
     const form = document.getElementById('edit-product-form');
@@ -1176,4 +1176,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     initializePage();
-});
+}
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-produto-form'] = initAdminProdutoForm;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminProdutoForm, { once: true });
+  } else {
+    initAdminProdutoForm();
+  }
+}
+

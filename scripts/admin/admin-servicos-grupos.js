@@ -1,4 +1,4 @@
-(function () {
+function initAdminServicosGrupos() {
   const API = `${API_CONFIG.BASE_URL}/admin/servicos/grupos`;
 
   const form = document.getElementById('grupo-form');
@@ -189,4 +189,18 @@
     console.error(err);
     alert('Erro ao carregar grupos.\n' + err.message);
   });
-})();
+}
+
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-servicos-grupos'] = initAdminServicosGrupos;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminServicosGrupos, { once: true });
+  } else {
+    initAdminServicosGrupos();
+  }
+}

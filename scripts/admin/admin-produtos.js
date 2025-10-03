@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminProdutos() {
     // --- Estado da Página ---
     let currentPage = 1;
     let currentLimit = 20;
@@ -325,4 +325,17 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchAndDisplayProducts();
     fetchCategoriesForDropdown();
     initializeEventListeners();
-});
+}
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-produtos'] = initAdminProdutos;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminProdutos, { once: true });
+  } else {
+    initAdminProdutos();
+  }
+}

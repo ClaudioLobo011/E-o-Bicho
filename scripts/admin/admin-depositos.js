@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminDepositos() {
     const form = document.getElementById('deposit-form');
     const idInput = document.getElementById('deposit-id');
     const codeInput = document.getElementById('deposit-code');
@@ -242,4 +242,18 @@ document.addEventListener('DOMContentLoaded', () => {
         await Promise.all([fetchStores(), fetchDeposits()]);
         fillNextCode();
     })();
-});
+}
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-depositos'] = initAdminDepositos;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminDepositos, { once: true });
+  } else {
+    initAdminDepositos();
+  }
+}
+

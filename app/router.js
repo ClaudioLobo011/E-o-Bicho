@@ -38,6 +38,10 @@ async function render(pathname) {
     app.innerHTML = '';
     app.appendChild(element);
 
+    if (typeof element.__legacyInit === 'function') {
+      await element.__legacyInit();
+    }
+
     document.querySelectorAll('a[data-spa]').forEach((link) => {
       const href = link.getAttribute('href');
       const linkPath = href ? normalizePath(href) : null;

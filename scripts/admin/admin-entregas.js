@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initAdminEntregas() {
     // --- REFERÊNCIAS GERAIS E LÓGICA DAS ABAS ---
     const tabs = document.querySelectorAll('.tab-link');
     const contents = {
@@ -617,4 +617,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if(vehiclesTableBody) {
         fetchAndRenderVehicles();
     }
-});
+}
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-entregas'] = initAdminEntregas;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminEntregas, { once: true });
+  } else {
+    initAdminEntregas();
+  }
+}
+

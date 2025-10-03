@@ -1,4 +1,4 @@
-(function () {
+function initAdminTabs() {
   const root = document.querySelector('[data-admin-tabs-root]');
   if (!root) {
     return;
@@ -669,4 +669,18 @@
 
     observer.observe(root, { childList: true, subtree: true });
   }
-})();
+}
+
+
+if (!window.__EOBICHO_ADMIN_VIEWS__) {
+  window.__EOBICHO_ADMIN_VIEWS__ = {};
+}
+window.__EOBICHO_ADMIN_VIEWS__['admin-tabs'] = initAdminTabs;
+
+if (!window.AdminSPA) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminTabs, { once: true });
+  } else {
+    initAdminTabs();
+  }
+}
