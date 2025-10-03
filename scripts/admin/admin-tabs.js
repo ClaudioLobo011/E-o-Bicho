@@ -451,18 +451,23 @@
         }
       };
 
-      const CLEARANCE = 16;
+      const CLEARANCE = 8;
 
       const setH = (h, { withClearance = false } = {}) => {
         const raw = Number.isFinite(h) ? Math.ceil(h) : 0;
-        const height = Math.max(raw, minAvail());
+        const minHeight = minAvail();
+        const height = Math.max(raw, minHeight);
         const value = `${height}px`;
         iframe.style.minHeight = value;
         iframe.style.height = value;
 
         if (panel) {
           if (withClearance) {
-            panel.style.setProperty('--modal-clearance', `${CLEARANCE}px`);
+            const clearance = Math.min(
+              CLEARANCE,
+              Math.max(0, Math.ceil(height - raw) + 4)
+            );
+            panel.style.setProperty('--modal-clearance', `${clearance}px`);
           } else if (!panel.classList.contains('modal-open')) {
             panel.style.removeProperty('--modal-clearance');
           }
