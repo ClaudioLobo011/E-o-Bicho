@@ -63,18 +63,37 @@
 
   // Mede a altura total do documento
   const measure = () => {
-    const d = document;
-    const b = d.body;
-    const e = d.documentElement;
-    const docHeight = Math.max(
-      e.scrollHeight, e.offsetHeight, e.clientHeight,
-      b ? b.scrollHeight : 0, b ? b.offsetHeight : 0
-    );
+    const scrollingElement = document.scrollingElement || document.documentElement;
+    const body = document.body;
+    const scrollHeights = [];
+
+    if (scrollingElement) {
+      if (typeof scrollingElement.scrollHeight === 'number') {
+        scrollHeights.push(scrollingElement.scrollHeight);
+      }
+      if (typeof scrollingElement.offsetHeight === 'number') {
+        scrollHeights.push(scrollingElement.offsetHeight);
+      }
+    }
+
+    if (body) {
+      if (typeof body.scrollHeight === 'number') {
+        scrollHeights.push(body.scrollHeight);
+      }
+      if (typeof body.offsetHeight === 'number') {
+        scrollHeights.push(body.offsetHeight);
+      }
+    }
+
+    const docHeight = scrollHeights.length ? Math.max(...scrollHeights) : 0;
     const { modalExtent, modalHeight } = computeModalMetrics();
 
+    const height = Math.max(docHeight, modalExtent);
+
     return {
-      height: Math.max(docHeight, modalExtent),
+      height,
       docHeight,
+      modalExtent,
       modalHeight
     };
   };
