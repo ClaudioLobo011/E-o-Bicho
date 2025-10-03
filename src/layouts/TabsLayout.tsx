@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import AdminHeader from "../components/AdminHeader";
 import TabBar from "../components/TabBar";
 import UnsavedGuard from "../components/UnsavedGuard";
 import { useTabs } from "../context/TabsContext";
@@ -82,23 +83,26 @@ export function TabsLayout() {
   }, [tabs, activeTabId, closeTab, setActiveTab]);
 
   return (
-    <div className="flex min-h-screen flex-col gap-4 p-4">
-      <TabBar />
-      <div className="flex-1 rounded-2xl bg-white p-6 shadow" role="presentation">
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          return (
-            <section
-              key={tab.id}
-              role="tabpanel"
-              hidden={!isActive}
-              aria-hidden={!isActive}
-              className={isActive ? "block" : "hidden"}
-            >
-              <UnsavedGuard>{tab.element}</UnsavedGuard>
-            </section>
-          );
-        })}
+    <div className="min-h-screen bg-slate-100">
+      <AdminHeader />
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6">
+        <TabBar />
+        <div className="flex-1 rounded-2xl bg-white p-6 shadow" role="presentation">
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            return (
+              <section
+                key={tab.id}
+                role="tabpanel"
+                hidden={!isActive}
+                aria-hidden={!isActive}
+                className={isActive ? "block" : "hidden"}
+              >
+                <UnsavedGuard>{tab.element}</UnsavedGuard>
+              </section>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
