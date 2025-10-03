@@ -451,8 +451,8 @@
         }
       };
 
-      const BASE_MODAL_BUFFER = 120;
-      const MAX_MODAL_BUFFER = 240;
+      const BASE_MODAL_BUFFER = 96;
+      const MAX_MODAL_BUFFER = 256;
 
       const setH = (h, { withClearance = false } = {}) => {
         const raw = Number.isFinite(h) ? Math.ceil(h) : 0;
@@ -460,7 +460,7 @@
         const buffer = withClearance && raw > 0
           ? Math.min(
               MAX_MODAL_BUFFER,
-              Math.max(BASE_MODAL_BUFFER, Math.ceil(raw * 0.1))
+              Math.max(BASE_MODAL_BUFFER, Math.ceil(raw * 0.08) + 32)
             )
           : 0;
         const target = raw + buffer;
