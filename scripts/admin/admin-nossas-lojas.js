@@ -75,6 +75,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const latInput = document.getElementById('store-latitude');
     const lonInput = document.getElementById('store-longitude');
 
+    const setModalOpenState = (element, isOpen) => {
+        if (!element) return;
+        if (isOpen) {
+            element.dataset.modalOpen = 'true';
+        } else {
+            delete element.dataset.modalOpen;
+        }
+    };
+
     // --- Utilidades de formulário ---
     const enderecoFields = [logradouroInput, numeroInput, complementoInput, bairroInput, municipioInput, ufInput];
 
@@ -469,8 +478,12 @@ document.addEventListener('DOMContentLoaded', () => {
             servicesCheckboxContainer.innerHTML += checkboxHtml;
         });
         servicesModal.classList.remove('hidden');
+        setModalOpenState(servicesModal, true);
     };
-    const closeServicesModal = () => servicesModal.classList.add('hidden');
+    const closeServicesModal = () => {
+        servicesModal.classList.add('hidden');
+        setModalOpenState(servicesModal, false);
+    };
     const saveServicesSelection = () => {
         selectedServices = Array.from(servicesCheckboxContainer.querySelectorAll('.service-checkbox:checked')).map(cb => cb.value);
         renderServiceTags();
@@ -645,6 +658,7 @@ document.addEventListener('DOMContentLoaded', () => {
         );
         updateCertificadoStatus('', 'muted');
         modal.classList.remove('hidden');
+        setModalOpenState(modal, true);
 
         setTimeout(() => {
             if (locationMap) {
@@ -805,6 +819,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (certificadoArquivoInput) certificadoArquivoInput.value = '';
 
             modal.classList.remove('hidden');
+            setModalOpenState(modal, true);
 
             setTimeout(async () => {
                 if (locationMap) {
@@ -852,6 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const closeModal = () => {
         modal.classList.add('hidden');
+        setModalOpenState(modal, false);
         form.reset();
         selectedServices = [];
         renderServiceTags();

@@ -454,26 +454,49 @@
       const BASE_MODAL_BUFFER = 96;
       const MAX_MODAL_BUFFER = 256;
 
-      const setH = (h, { withClearance = false } = {}) => {
-        const raw = Number.isFinite(h) ? Math.ceil(h) : 0;
+      const setH = (sizes = {}, { withClearance = false } = {}) => {
+        const {
+          height,
+          docHeight,
+          modalExtent,
+          modalHeight,
+        } = sizes;
+
+        const fallback = Number.isFinite(height) ? Math.ceil(height) : 0;
+        const base = Number.isFinite(docHeight) ? Math.ceil(docHeight) : 0;
+        const extent = Number.isFinite(modalExtent) ? Math.ceil(modalExtent) : 0;
+        const modalRaw = Number.isFinite(modalHeight) ? Math.ceil(modalHeight) : 0;
+
+        const raw = Math.max(base, extent, fallback);
         const minHeight = minAvail();
-        const buffer = withClearance && raw > 0
-          ? Math.min(
+
+        let buffer = 0;
+        if (withClearance) {
+          const reference = modalRaw || (extent > 0 ? Math.max(0, extent - base) : 0);
+          if (reference > 0) {
+            buffer = Math.min(
               MAX_MODAL_BUFFER,
-              Math.max(BASE_MODAL_BUFFER, Math.ceil(raw * 0.08) + 32)
-            )
-          : 0;
-        const target = raw + buffer;
-        const height = Math.max(target, minHeight);
-        const value = `${height}px`;
+              Math.max(BASE_MODAL_BUFFER, Math.ceil(reference * 0.08) + 32),
+            );
+          }
+        }
+
+        const target = withClearance && extent > 0
+          ? Math.max(raw, extent + buffer)
+          : raw;
+
+        const heightValue = Math.max(target, minHeight);
+        const value = `${heightValue}px`;
         iframe.style.minHeight = value;
         iframe.style.height = value;
 
         if (panel) {
-          if (withClearance) {
-            const clearance = Math.max(0, Math.min(buffer, Math.ceil(height - raw)));
+          if (withClearance && heightValue > raw) {
+            const clearance = Math.max(0, Math.min(buffer, heightValue - raw));
             panel.style.setProperty('--modal-clearance', `${clearance}px`);
-          } else if (!panel.classList.contains('modal-open')) {
+          } else if (withClearance) {
+            panel.style.setProperty('--modal-clearance', '0px');
+          } else {
             panel.style.removeProperty('--modal-clearance');
           }
         }
@@ -482,7 +505,7 @@
       switch (data.type) {
         case 'MODAL_OPEN':
           panel?.classList.add('modal-open');
-          setH(data.height, { withClearance: true });
+          setH(data, { withClearance: true });
           break;
         case 'MODAL_CLOSE':
           panel?.classList.remove('modal-open');
@@ -494,7 +517,9 @@
           }
           break;
         case 'TAB_CONTENT_RESIZE':
-          setH(data.height, { withClearance: panel?.classList.contains('modal-open') });
+          setH(data, {
+            withClearance: panel?.classList.contains('modal-open'),
+          });
           break;
         default:
           break;
