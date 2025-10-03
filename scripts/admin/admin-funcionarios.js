@@ -1364,7 +1364,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearEnderecoForm();
     clearCursoForm();
     clearHorarioForm(false);
-    activateTab('dados');
+    if (form) form.scrollTop = 0;
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 
