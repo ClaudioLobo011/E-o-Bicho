@@ -707,11 +707,7 @@ function initializeAdminHeaderSearch() {
     const match = matches[index];
     if (!match) return;
 
-    if (window.AdminTabs && typeof window.AdminTabs.open === 'function') {
-      window.AdminTabs.open(match.href, match.label);
-    } else {
-      window.location.href = match.href;
-    }
+    window.location.href = match.href;
 
     hidePanel();
   };

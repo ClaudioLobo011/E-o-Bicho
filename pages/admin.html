@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../src/output.css">
 </head>
-<body class="bg-gray-100" data-admin-tabs-root>
+<body class="bg-gray-100">
 
     <div id="admin-header-placeholder"></div>
 
@@ -20,52 +20,48 @@
             </aside>
 
             <div class="md:col-span-4">
-                <div class="relative" data-admin-tab-panels>
-                    <section id="admin-tab-dashboard" role="tabpanel" aria-labelledby="admin-tab-trigger-dashboard" data-tab-panel data-tab-id="dashboard" class="admin-tab-panel">
-                        <div class="rounded-2xl bg-white p-6 shadow">
-                            <h1 class="mb-6 text-2xl font-bold text-gray-800">Painel Principal</h1>
+                <section class="rounded-2xl bg-white p-6 shadow">
+                    <h1 class="mb-6 text-2xl font-bold text-gray-800">Painel Principal</h1>
 
-                            <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 
-                                <a href="admin/admin-produtos.html" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                                    <div class="flex items-center space-x-4">
-                                        <div class="rounded-full bg-primary/10 p-3">
-                                            <i class="fas fa-box-open text-2xl text-primary"></i>
-                                        </div>
-                                        <div>
-                                            <h3 class="text-lg font-bold text-gray-800">Gerir Produtos</h3>
-                                            <p class="text-sm text-gray-600">Adicionar e editar produtos</p>
-                                        </div>
-                                    </div>
-                                </a>
-                                <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                                    <div class="flex items-center space-x-4">
-                                        <div class="rounded-full bg-primary/10 p-3">
-                                            <i class="fas fa-receipt text-2xl text-primary"></i>
-                                        </div>
-                                        <div>
-                                            <h3 class="text-lg font-bold text-gray-800">Ver Pedidos</h3>
-                                            <p class="text-sm text-gray-600">Visualizar pedidos dos clientes</p>
-                                        </div>
-                                    </div>
-                                </a>
-
-                                <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
-                                    <div class="flex items-center space-x-4">
-                                        <div class="rounded-full bg-primary/10 p-3">
-                                            <i class="fas fa-users text-2xl text-primary"></i>
-                                        </div>
-                                        <div>
-                                            <h3 class="text-lg font-bold text-gray-800">Gerir Clientes</h3>
-                                            <p class="text-sm text-gray-600">Consultar lista de clientes</p>
-                                        </div>
-                                    </div>
-                                </a>
-
+                        <a href="admin/admin-produtos.html" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
+                            <div class="flex items-center space-x-4">
+                                <div class="rounded-full bg-primary/10 p-3">
+                                    <i class="fas fa-box-open text-2xl text-primary"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-800">Gerir Produtos</h3>
+                                    <p class="text-sm text-gray-600">Adicionar e editar produtos</p>
+                                </div>
                             </div>
-                        </div>
-                    </section>
-                </div>
+                        </a>
+                        <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
+                            <div class="flex items-center space-x-4">
+                                <div class="rounded-full bg-primary/10 p-3">
+                                    <i class="fas fa-receipt text-2xl text-primary"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-800">Ver Pedidos</h3>
+                                    <p class="text-sm text-gray-600">Visualizar pedidos dos clientes</p>
+                                </div>
+                            </div>
+                        </a>
+
+                        <a href="#" class="block rounded-lg border-2 border-transparent bg-gray-50 p-6 shadow-sm transition-all duration-300 hover:border-primary hover:shadow-lg">
+                            <div class="flex items-center space-x-4">
+                                <div class="rounded-full bg-primary/10 p-3">
+                                    <i class="fas fa-users text-2xl text-primary"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-800">Gerir Clientes</h3>
+                                    <p class="text-sm text-gray-600">Consultar lista de clientes</p>
+                                </div>
+                            </div>
+                        </a>
+
+                    </div>
+                </section>
             </div>
 
         </div>
@@ -81,6 +77,5 @@
     <script src="../scripts/core/ui.js"></script>
     <script src="../scripts/core/main.js"></script>
     <script src="../scripts/admin/admin.js"></script>
-    <script src="../scripts/admin/admin-tabs.js"></script>
 </body>
 </html>
