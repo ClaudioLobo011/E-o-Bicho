@@ -74,6 +74,8 @@ const firstNonEmptyString = (...values) => {
 const BRAZILIAN_CNPJ_OID = '2.16.76.1.3.3';
 const HOMOLOGATION_FIRST_ITEM_DESCRIPTION =
   'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
+const HOMOLOGATION_DEST_NAME =
+  'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
 
 const describeCertificate = (pem) => {
   if (!pem) {
@@ -1232,11 +1234,10 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     delivery?.nome
   );
 
-  const destName = sanitize(
-    isHomologation
-      ? HOMOLOGATION_FIRST_ITEM_DESCRIPTION
-      : (rawDestName || 'CONSUMIDOR').slice(0, 60)
-  );
+  const destNameSource = isHomologation
+    ? HOMOLOGATION_DEST_NAME
+    : rawDestName || 'CONSUMIDOR';
+  const destName = sanitize((destNameSource || '').slice(0, 60));
 
   if (hasCPF || hasCNPJ || hasIdE) {
     const dLgr = sanitize(delivery?.logradouro || cliente?.logradouro);
