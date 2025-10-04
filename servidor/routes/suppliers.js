@@ -5,6 +5,7 @@ const Store = require('../models/Store');
 const AccountingAccount = require('../models/AccountingAccount');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const { lookupDocument, DocumentLookupError } = require('../services/documentLookup');
 
 const router = express.Router();
 
@@ -335,6 +336,27 @@ const createSupplierWithSequentialCode = async (payload) => {
 };
 
 router.use(requireAuth, authorizeRoles('admin', 'admin_master', 'funcionario'));
+
+router.get('/lookup-document/:document', async (req, res) => {
+  try {
+    const lookup = await lookupDocument(req.params.document || '');
+    res.json({ lookup });
+  } catch (error) {
+    if (error instanceof DocumentLookupError) {
+      return res.status(error.statusCode || 400).json({
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      });
+    }
+
+    console.error('Erro ao consultar documento de fornecedor:', error);
+    return res.status(502).json({
+      message: 'Não foi possível consultar o documento informado.',
+      code: 'DOCUMENT_LOOKUP_UNEXPECTED_ERROR',
+    });
+  }
+});
 
 router.get('/next-code', async (req, res) => {
   try {

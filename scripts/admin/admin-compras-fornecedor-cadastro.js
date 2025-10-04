@@ -3,6 +3,7 @@
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.BASE_URL) || '/api';
   const SUPPLIERS_ENDPOINT = `${API_BASE}/suppliers`;
   const SUPPLIERS_NEXT_CODE_ENDPOINT = `${SUPPLIERS_ENDPOINT}/next-code`;
+  const SUPPLIERS_LOOKUP_ENDPOINT = `${SUPPLIERS_ENDPOINT}/lookup-document`;
   const STORES_ENDPOINT = `${API_BASE}/stores`;
   const ACCOUNTING_ENDPOINT = `${API_BASE}/accounting-accounts`;
   const BANKS_DATA_URL = '../../data/bancos.json';
@@ -24,6 +25,7 @@
     fantasyName: '#supplier-fantasy-name',
     cnpj: '#supplier-cnpj',
     documentLabel: '#supplier-document-label',
+    documentStatus: '#supplier-document-status',
     stateRegistration: '#supplier-ie',
     typeRadios: 'input[name="supplier-type"]',
     companiesSelect: '#supplier-companies',
@@ -90,6 +92,8 @@
     saving: false,
     currentCep: '',
     cepAbort: null,
+    currentDocumentLookupKey: '',
+    documentLookupAbort: null,
   };
 
   const elements = {};
@@ -137,12 +141,29 @@
     return digitsOnly(fallback);
   };
 
+  const setMaskedDigits = (key, element, value) => {
+    if (!element) return;
+    const digits = digitsOnly(value);
+    if (masks[key]) {
+      masks[key].unmaskedValue = digits;
+    } else {
+      element.value = digits;
+    }
+  };
+
   const getCurrentSupplierType = () => {
     const selected = elements.typeRadios?.find?.((radio) => radio.checked);
     return selected?.value || 'juridico';
   };
 
   const getDocumentLabel = (type) => (type === 'fisico' ? 'CPF' : 'CNPJ');
+
+  const getDocumentLookupKey = (type, digits) => `${type}:${digits}`;
+
+  const getDocumentInstruction = (type) =>
+    type === 'fisico'
+      ? 'Informe os 11 dígitos do CPF para preencher os dados automaticamente.'
+      : 'Informe os 14 dígitos do CNPJ para preencher os dados automaticamente.';
 
   const updateDocumentFieldForType = () => {
     const type = getCurrentSupplierType();
@@ -152,6 +173,7 @@
     }
     if (!elements.cnpj) return;
     const digits = digitsOnly(elements.cnpj.value);
+    const requiredDigits = type === 'fisico' ? 11 : 14;
     const limitedDigits = type === 'fisico' ? digits.slice(0, 11) : digits.slice(0, 14);
     const maskPattern = type === 'fisico' ? '000.000.000-00' : '00.000.000/0000-00';
     elements.cnpj.setAttribute('placeholder', maskPattern);
@@ -163,6 +185,9 @@
       mask.unmaskedValue = limitedDigits;
     } else {
       elements.cnpj.value = limitedDigits;
+    }
+    if (!limitedDigits || limitedDigits.length < requiredDigits) {
+      setDocumentStatus(getDocumentInstruction(type));
     }
   };
 
@@ -315,6 +340,21 @@
       elements.chartAccountStatus.classList.add('text-red-600');
     } else {
       elements.chartAccountStatus.classList.add('text-gray-500');
+    }
+  };
+
+  const setDocumentStatus = (message, type = 'info') => {
+    if (!elements.documentStatus) return;
+    elements.documentStatus.textContent = message || '';
+    elements.documentStatus.classList.remove('text-red-600', 'text-gray-500', 'text-emerald-600', 'text-amber-600');
+    if (type === 'error') {
+      elements.documentStatus.classList.add('text-red-600');
+    } else if (type === 'success') {
+      elements.documentStatus.classList.add('text-emerald-600');
+    } else if (type === 'warning') {
+      elements.documentStatus.classList.add('text-amber-600');
+    } else {
+      elements.documentStatus.classList.add('text-gray-500');
     }
   };
 
@@ -758,6 +798,19 @@
   const applyTypeSelectionUpdates = () => {
     updateTypeButtonsAppearance();
     updateDocumentFieldForType();
+    if (state.documentLookupAbort?.abort) {
+      state.documentLookupAbort.abort();
+      state.documentLookupAbort = null;
+    }
+    state.currentDocumentLookupKey = '';
+    const type = getCurrentSupplierType();
+    const digits = getMaskDigits('document', elements.cnpj?.value || '');
+    const required = type === 'fisico' ? 11 : 14;
+    if (!digits || digits.length < required) {
+      setDocumentStatus(getDocumentInstruction(type), 'info');
+    } else {
+      setDocumentStatus('Documento completo. Saia do campo para consultar automaticamente.', 'info');
+    }
   };
 
   const setupTypeButtons = () => {
@@ -979,6 +1032,214 @@
     }
   };
 
+  const applyLookupAddress = (address = {}) => {
+    if (!address || typeof address !== 'object') return;
+    if (address.cep && elements.cep) {
+      setMaskedDigits('cep', elements.cep, address.cep);
+      state.currentCep = digitsOnly(address.cep);
+      setCepStatus('Endereço preenchido automaticamente a partir do documento consultado.', 'success');
+    }
+    if (address.logradouro && elements.logradouro) {
+      elements.logradouro.value = address.logradouro;
+    }
+    if (address.numero && elements.numero) {
+      elements.numero.value = address.numero;
+    }
+    if (address.complemento && elements.complemento) {
+      elements.complemento.value = address.complemento;
+    }
+    if (address.bairro && elements.bairro) {
+      elements.bairro.value = address.bairro;
+    }
+    if (address.cidade && elements.cidade) {
+      elements.cidade.value = address.cidade;
+    }
+    if (address.uf && elements.uf) {
+      elements.uf.value = address.uf;
+    }
+  };
+
+  const applyLookupContact = (contact = {}) => {
+    if (!contact || typeof contact !== 'object') return;
+    if (contact.email && elements.email) {
+      elements.email.value = contact.email;
+    }
+    if (contact.phone && elements.phone) {
+      setMaskedDigits('phone', elements.phone, contact.phone);
+    }
+    if (contact.mobile && elements.mobile) {
+      setMaskedDigits('mobile', elements.mobile, contact.mobile);
+    }
+    if (contact.secondaryPhone && elements.secondaryPhone) {
+      setMaskedDigits('secondaryPhone', elements.secondaryPhone, contact.secondaryPhone);
+    }
+    if (contact.responsible && elements.responsible && !elements.responsible.value) {
+      elements.responsible.value = contact.responsible;
+    }
+  };
+
+  const applyLookupData = (lookup = {}) => {
+    if (!lookup || typeof lookup !== 'object') return;
+
+    if (lookup.document && elements.cnpj) {
+      setMaskedDigits('document', elements.cnpj, lookup.document);
+    }
+
+    if (lookup.country && elements.country) {
+      elements.country.value = lookup.country;
+    }
+
+    if (lookup.legalName && elements.legalName) {
+      elements.legalName.value = lookup.legalName;
+    }
+
+    if (lookup.fantasyName && elements.fantasyName) {
+      elements.fantasyName.value = lookup.fantasyName;
+    }
+
+    if (lookup.stateRegistration && elements.stateRegistration) {
+      elements.stateRegistration.value = lookup.stateRegistration;
+    }
+
+    applyLookupAddress(lookup.address || {});
+    applyLookupContact(lookup.contact || {});
+
+    if (elements.observation) {
+      const fragments = [];
+      if (lookup.status) {
+        fragments.push(`Situação cadastral: ${lookup.status}`);
+      }
+      if (lookup.cnae?.code || lookup.cnae?.description) {
+        const cnaeParts = [lookup.cnae?.code, lookup.cnae?.description].filter(Boolean).join(' - ');
+        if (cnaeParts) {
+          fragments.push(`Atividade principal: ${cnaeParts}`);
+        }
+      }
+      if (lookup.openingDate) {
+        fragments.push(`Início de atividade: ${lookup.openingDate}`);
+      }
+      if (!elements.observation.value && fragments.length) {
+        elements.observation.value = fragments.join('\n');
+      }
+    }
+
+    if (lookup.sourceName) {
+      setDocumentStatus(`Dados preenchidos automaticamente via ${lookup.sourceName}.`, 'success');
+    } else {
+      setDocumentStatus('Dados preenchidos automaticamente a partir do documento informado.', 'success');
+    }
+  };
+
+  const lookupDocumentData = async () => {
+    if (!elements.cnpj) return;
+    const type = getCurrentSupplierType();
+    const digits = getMaskDigits('document', elements.cnpj.value || '');
+    const required = type === 'fisico' ? 11 : 14;
+
+    if (!digits) {
+      setDocumentStatus(getDocumentInstruction(type), 'info');
+      return;
+    }
+
+    if (digits.length !== required) {
+      const missing = required - digits.length;
+      setDocumentStatus(
+        `Documento incompleto. Informe mais ${missing} dígito${missing > 1 ? 's' : ''} para realizar a consulta automática.`,
+        'info'
+      );
+      return;
+    }
+
+    const lookupKey = getDocumentLookupKey(type, digits);
+    if (state.currentDocumentLookupKey === lookupKey) {
+      return;
+    }
+
+    if (state.documentLookupAbort?.abort) {
+      state.documentLookupAbort.abort();
+      state.documentLookupAbort = null;
+    }
+
+    const controller = new AbortController();
+    state.documentLookupAbort = controller;
+    setDocumentStatus('Consultando dados oficiais do documento informado...', 'info');
+
+    try {
+      const data = await request(
+        `${SUPPLIERS_LOOKUP_ENDPOINT}/${digits}`,
+        { signal: controller.signal },
+        { requiresAuth: true }
+      );
+      state.documentLookupAbort = null;
+      state.currentDocumentLookupKey = lookupKey;
+      const lookup = data?.lookup;
+      if (!lookup) {
+        setDocumentStatus('Consulta concluída, porém nenhum dado foi retornado.', 'warning');
+        return;
+      }
+      applyLookupData(lookup);
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        state.documentLookupAbort = null;
+        return;
+      }
+      state.documentLookupAbort = null;
+      state.currentDocumentLookupKey = '';
+      if (error.status === 401) {
+        handleAuthError();
+      }
+      if (error.data?.code === 'CPF_LOOKUP_NOT_CONFIGURED') {
+        setDocumentStatus('Consulta automática de CPF não está disponível. Preencha os dados manualmente.', 'error');
+        return;
+      }
+      if (error.status === 404) {
+        setDocumentStatus('Documento não encontrado na base consultada.', 'error');
+        return;
+      }
+      if (error.status === 504 || error.data?.code === 'LOOKUP_TIMEOUT') {
+        setDocumentStatus('Tempo limite excedido ao consultar o documento. Tente novamente em instantes.', 'error');
+        return;
+      }
+      setDocumentStatus(error?.message || 'Não foi possível consultar o documento informado.', 'error');
+    }
+  };
+
+  const setupDocumentLookup = () => {
+    if (!elements.cnpj) return;
+
+    const handleInput = () => {
+      if (state.documentLookupAbort?.abort) {
+        state.documentLookupAbort.abort();
+        state.documentLookupAbort = null;
+      }
+      state.currentDocumentLookupKey = '';
+
+      const type = getCurrentSupplierType();
+      const digits = getMaskDigits('document', elements.cnpj.value || '');
+      const required = type === 'fisico' ? 11 : 14;
+
+      if (!digits) {
+        setDocumentStatus(getDocumentInstruction(type), 'info');
+        return;
+      }
+
+      if (digits.length < required) {
+        const missing = required - digits.length;
+        setDocumentStatus(
+          `Documento incompleto. Informe mais ${missing} dígito${missing > 1 ? 's' : ''} para realizar a consulta automática.`,
+          'info'
+        );
+        return;
+      }
+
+      setDocumentStatus('Documento completo. Saia do campo para consultar automaticamente.', 'info');
+    };
+
+    elements.cnpj.addEventListener('input', handleInput);
+    elements.cnpj.addEventListener('blur', lookupDocumentData);
+    elements.cnpj.addEventListener('change', lookupDocumentData);
+  };
+
   const lookupCep = async (cepValue) => {
     const digits = String(cepValue || '').replace(/\D+/g, '');
     if (digits.length !== 8) {
@@ -1029,6 +1290,7 @@
     setupRepresentatives();
     setupForm();
     setupFilters();
+    setupDocumentLookup();
     setupCepLookup();
     updateRetencoesHiddenField();
     renderSuppliers();
