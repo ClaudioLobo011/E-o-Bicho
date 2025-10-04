@@ -1,6 +1,36 @@
+import legacyConfigSource from "../../scripts/core/config.js?raw";
 import legacyUiSource from "../../scripts/core/ui.js?raw";
 
 let isLegacyUiReady = false;
+let isLegacyConfigReady = false;
+
+function runLegacyConfigBootstrap(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (isLegacyConfigReady) {
+    return;
+  }
+
+  if (window.API_CONFIG && typeof window.API_CONFIG === "object") {
+    isLegacyConfigReady = true;
+    return;
+  }
+
+  const normalizedSource = legacyConfigSource.replace(
+    /const\s+API_CONFIG\s*=\s*/u,
+    "window.API_CONFIG = window.API_CONFIG || "
+  );
+
+  try {
+    const factory = new Function("window", normalizedSource);
+    factory(window);
+    isLegacyConfigReady = true;
+  } catch (error) {
+    console.error("Erro ao inicializar configuração legada:", error);
+  }
+}
 
 function runLegacyUiBootstrap(): void {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -23,6 +53,7 @@ export function ensureLegacyUi(): void {
   if (isLegacyUiReady) {
     return;
   }
+  runLegacyConfigBootstrap();
   runLegacyUiBootstrap();
   isLegacyUiReady = true;
 }
@@ -30,5 +61,6 @@ export function ensureLegacyUi(): void {
 declare global {
   interface Window {
     basePath?: string;
+    API_CONFIG?: Record<string, unknown> | undefined;
   }
 }
