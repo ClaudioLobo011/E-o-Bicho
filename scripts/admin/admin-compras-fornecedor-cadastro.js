@@ -23,6 +23,7 @@
     legalName: '#supplier-legal-name',
     fantasyName: '#supplier-fantasy-name',
     cnpj: '#supplier-cnpj',
+    documentLabel: '#supplier-document-label',
     stateRegistration: '#supplier-ie',
     typeRadios: 'input[name="supplier-type"]',
     companiesSelect: '#supplier-companies',
@@ -92,6 +93,7 @@
   };
 
   const elements = {};
+  const masks = {};
 
   const initElements = () => {
     Object.entries(selectors).forEach(([key, selector]) => {
@@ -110,6 +112,94 @@
         elements[key] = document.querySelector(selector);
       }
     });
+  };
+
+  const destroyMask = (key) => {
+    if (masks[key] && typeof masks[key].destroy === 'function') {
+      masks[key].destroy();
+    }
+    masks[key] = null;
+  };
+
+  const applyMask = (key, element, options) => {
+    if (typeof IMask === 'undefined' || !element) {
+      return null;
+    }
+    destroyMask(key);
+    masks[key] = IMask(element, { ...options });
+    return masks[key];
+  };
+
+  const getMaskDigits = (key, fallback = '') => {
+    if (masks[key]) {
+      return masks[key].unmaskedValue || '';
+    }
+    return digitsOnly(fallback);
+  };
+
+  const getCurrentSupplierType = () => {
+    const selected = elements.typeRadios?.find?.((radio) => radio.checked);
+    return selected?.value || 'juridico';
+  };
+
+  const getDocumentLabel = (type) => (type === 'fisico' ? 'CPF' : 'CNPJ');
+
+  const updateDocumentFieldForType = () => {
+    const type = getCurrentSupplierType();
+    const label = getDocumentLabel(type);
+    if (elements.documentLabel) {
+      elements.documentLabel.textContent = label;
+    }
+    if (!elements.cnpj) return;
+    const digits = digitsOnly(elements.cnpj.value);
+    const limitedDigits = type === 'fisico' ? digits.slice(0, 11) : digits.slice(0, 14);
+    const maskPattern = type === 'fisico' ? '000.000.000-00' : '00.000.000/0000-00';
+    elements.cnpj.setAttribute('placeholder', maskPattern);
+    const mask = applyMask('document', elements.cnpj, {
+      mask: maskPattern,
+      lazy: true,
+    });
+    if (mask) {
+      mask.unmaskedValue = limitedDigits;
+    } else {
+      elements.cnpj.value = limitedDigits;
+    }
+  };
+
+  const createPhoneMaskOptions = () => ({
+    mask: [
+      { mask: '(00) 0000-0000' },
+      { mask: '(00) 00000-0000' },
+    ],
+    dispatch: function (appended, dynamicMasked) {
+      const number = (dynamicMasked.unmaskedValue + appended).replace(/\D+/g, '');
+      return dynamicMasked.compiledMasks[number.length > 10 ? 1 : 0];
+    },
+  });
+
+  const initializeMasks = () => {
+    if (typeof IMask === 'undefined') {
+      console.warn('Biblioteca IMask não carregada; os campos permanecerão sem máscara.');
+      return;
+    }
+    if (elements.cep) {
+      const digits = digitsOnly(elements.cep.value).slice(0, 8);
+      const mask = applyMask('cep', elements.cep, { mask: '00000-000', lazy: true });
+      if (mask) {
+        mask.unmaskedValue = digits;
+      }
+    }
+    const phoneMaskFactory = () => createPhoneMaskOptions();
+    ['phone', 'mobile', 'secondaryPhone', 'representativeMobile'].forEach((key) => {
+      const element = elements[key];
+      if (!element) return;
+      const digits = digitsOnly(element.value).slice(0, 11);
+      const mask = applyMask(key, element, phoneMaskFactory());
+      if (mask) {
+        mask.unmaskedValue = digits;
+      }
+    });
+    updateDocumentFieldForType();
   };
 
   const getToken = () => {
@@ -173,20 +263,37 @@
     return data;
   };
 
+  const digitsOnly = (value) => String(value ?? '').replace(/\D+/g, '');
+
   const normalizeString = (value) =>
     String(value ?? '')
       .normalize('NFD')
       .replace(/\p{Diacritic}/gu, '')
       .toLowerCase();
 
-  const formatCnpj = (value) => {
-    const digits = String(value ?? '')
-      .replace(/[^0-9]/g, '')
-      .slice(0, 14);
-    if (digits.length !== 14) {
-      return digits;
+  const formatDocumentNumber = (value) => {
+    const digits = digitsOnly(value).slice(0, 14);
+    if (digits.length === 11) {
+      return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
     }
-    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+    if (digits.length === 14) {
+      return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+    }
+    return digits;
+  };
+
+  const formatPhoneNumber = (value) => {
+    const digits = digitsOnly(value);
+    if (digits.length === 11) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+    }
+    if (digits.length === 10) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+    if (digits.length === 9) {
+      return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+    }
+    return digits;
   };
 
   const setCompanyStatus = (message, type = 'info') => {
@@ -264,7 +371,7 @@
       legalName: supplier.legalName || '',
       fantasyName: supplier.fantasyName || '',
       cnpj: supplier.cnpj || '',
-      cnpjFormatted: formatCnpj(supplier.cnpj),
+      cnpjFormatted: formatDocumentNumber(supplier.cnpj),
       country: supplier.country || '',
       type: supplier.type || '',
       typeLabel: TYPE_LABELS[supplier.type] || supplier.type || '',
@@ -278,7 +385,11 @@
       codigo: (supplier) => supplier.code,
       razaoSocial: (supplier) => supplier.legalName,
       nomeFantasia: (supplier) => supplier.fantasyName,
-      cnpj: (supplier) => supplier.cnpjFormatted || supplier.cnpj,
+      cnpj: (supplier) => {
+        const formatted = supplier.cnpjFormatted || supplier.cnpj || '';
+        const rawDigits = digitsOnly(formatted);
+        return `${formatted} ${rawDigits}`.trim();
+      },
       pais: (supplier) => supplier.country,
       tipo: (supplier) => supplier.typeLabel,
       empresas: (supplier) => supplier.companyNames.join(', '),
@@ -563,7 +674,7 @@
       card.innerHTML = `
         <div>
           <p class="text-sm font-semibold text-gray-800">${rep.name || 'Nome não informado'}</p>
-          <p class="text-xs text-gray-600">${rep.mobile || 'Sem celular informado'} • ${rep.email || 'Sem e-mail informado'}</p>
+          <p class="text-xs text-gray-600">${formatPhoneNumber(rep.mobile) || 'Sem celular informado'} • ${rep.email || 'Sem e-mail informado'}</p>
         </div>
         <button type="button" class="text-xs text-red-600 font-semibold hover:underline" data-index="${index}">Remover</button>
       `;
@@ -586,7 +697,7 @@
     if (!elements.addRepresentative) return;
     elements.addRepresentative.addEventListener('click', () => {
       const name = elements.representativeName?.value.trim() || '';
-      const mobile = elements.representativeMobile?.value.trim() || '';
+      const mobile = getMaskDigits('representativeMobile', elements.representativeMobile?.value || '');
       const email = elements.representativeEmail?.value.trim() || '';
       if (!name && !mobile && !email) {
         notify('Informe ao menos um dado do representante para adicionar.', 'error');
@@ -594,7 +705,11 @@
       }
       state.representatives.push({ name, mobile, email });
       if (elements.representativeName) elements.representativeName.value = '';
-      if (elements.representativeMobile) elements.representativeMobile.value = '';
+      if (masks.representativeMobile) {
+        masks.representativeMobile.value = '';
+      } else if (elements.representativeMobile) {
+        elements.representativeMobile.value = '';
+      }
       if (elements.representativeEmail) elements.representativeEmail.value = '';
       renderRepresentatives();
     });
@@ -640,6 +755,11 @@
     });
   };
 
+  const applyTypeSelectionUpdates = () => {
+    updateTypeButtonsAppearance();
+    updateDocumentFieldForType();
+  };
+
   const setupTypeButtons = () => {
     if (!Array.isArray(elements.typeRadios)) return;
     elements.typeRadios.forEach((input) => {
@@ -647,21 +767,31 @@
       if (!label) return;
       label.addEventListener('click', () => {
         input.checked = true;
-        updateTypeButtonsAppearance();
+        applyTypeSelectionUpdates();
+      });
+      input.addEventListener('change', () => {
+        if (input.checked) {
+          applyTypeSelectionUpdates();
+        }
       });
     });
-    updateTypeButtonsAppearance();
+    applyTypeSelectionUpdates();
   };
 
   const resetForm = () => {
     if (elements.form) {
       elements.form.reset();
     }
+    Object.keys(masks).forEach((key) => {
+      if (masks[key] && typeof masks[key].value !== 'undefined') {
+        masks[key].value = '';
+      }
+    });
     state.retencoes.clear();
     updateRetencoesHiddenField();
     state.representatives = [];
     renderRepresentatives();
-    updateTypeButtonsAppearance();
+    applyTypeSelectionUpdates();
     state.currentCep = '';
     if (elements.supplierKind) {
       elements.supplierKind.value = 'distribuidora';
@@ -684,13 +814,16 @@
           .map((option) => option.value)
           .filter(Boolean)
       : [];
+    const type = typeInput?.value || 'juridico';
+    const documentDigits = getMaskDigits('document', elements.cnpj?.value || '');
+    const cepDigits = getMaskDigits('cep', elements.cep?.value || '');
     return {
       country: elements.country?.value?.trim() || '',
       legalName: elements.legalName?.value?.trim() || '',
       fantasyName: elements.fantasyName?.value?.trim() || '',
-      cnpj: elements.cnpj?.value?.trim() || '',
+      cnpj: type === 'fisico' ? documentDigits.slice(0, 11) : documentDigits.slice(0, 14),
       stateRegistration: elements.stateRegistration?.value?.trim() || '',
-      type: typeInput?.value || 'juridico',
+      type,
       companies: selectedCompanies,
       flags: {
         inactive: Boolean(elements.flagInactive?.checked),
@@ -698,7 +831,7 @@
         bankSupplier: Boolean(elements.flagBank?.checked),
       },
       address: {
-        cep: elements.cep?.value?.trim() || '',
+        cep: cepDigits,
         logradouro: elements.logradouro?.value?.trim() || '',
         numero: elements.numero?.value?.trim() || '',
         complemento: elements.complemento?.value?.trim() || '',
@@ -708,9 +841,9 @@
       },
       contact: {
         email: elements.email?.value?.trim() || '',
-        phone: elements.phone?.value?.trim() || '',
-        mobile: elements.mobile?.value?.trim() || '',
-        secondaryPhone: elements.secondaryPhone?.value?.trim() || '',
+        phone: getMaskDigits('phone', elements.phone?.value || ''),
+        mobile: getMaskDigits('mobile', elements.mobile?.value || ''),
+        secondaryPhone: getMaskDigits('secondaryPhone', elements.secondaryPhone?.value || ''),
         responsible: elements.responsible?.value?.trim() || '',
       },
       otherInfo: {
@@ -719,8 +852,8 @@
         icmsContribution: elements.icms?.value || '2',
         observation: elements.observation?.value?.trim() || '',
         bank: elements.bank?.value || '',
-        agency: elements.agency?.value?.trim() || '',
-        accountNumber: elements.account?.value?.trim() || '',
+        agency: digitsOnly(elements.agency?.value).slice(0, 10),
+        accountNumber: digitsOnly(elements.account?.value).slice(0, 20),
       },
       representatives: state.representatives.map((rep) => ({ ...rep })),
       retencoes: Array.from(state.retencoes),
@@ -749,7 +882,7 @@
       return;
     }
     if (!payload.cnpj) {
-      notify('Informe o CNPJ do fornecedor.', 'error');
+      notify(`Informe o ${getDocumentLabel(payload.type)} do fornecedor.`, 'error');
       return;
     }
     state.saving = true;
@@ -891,6 +1024,7 @@
     initElements();
     setupTabs();
     setupTypeButtons();
+    initializeMasks();
     setupRetentionButtons();
     setupRepresentatives();
     setupForm();

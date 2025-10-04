@@ -272,8 +272,11 @@
                   <input type="text" id="supplier-fantasy-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Pet Nordeste">
                 </div>
                 <div class="lg:col-span-1">
-                  <label for="supplier-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ <span class="text-red-500">*</span></label>
-                  <input type="text" id="supplier-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="04.252.011/0001-10" required>
+                  <label for="supplier-cnpj" class="block text-sm font-medium text-gray-700 mb-1 inline-flex items-center gap-1">
+                    <span id="supplier-document-label">CNPJ</span>
+                    <span class="text-red-500">*</span>
+                  </label>
+                  <input type="text" id="supplier-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="00.000.000/0000-00" required>
                   <p class="mt-1 text-xs text-gray-500">Dados oficiais consultados em <a href="https://www.nfe.fazenda.gov.br/portal/" target="_blank" rel="noopener" class="text-primary hover:underline">Portal Nacional da NF-e</a>.</p>
                 </div>
                 <div class="lg:col-span-1">
@@ -524,7 +527,7 @@
                   </th>
                   <th class="px-4 py-3 text-left font-semibold text-gray-700">
                     <button type="button" class="flex items-center gap-1 text-left sort-button" data-sort="cnpj">
-                      CNPJ
+                      Documento
                       <i class="fas fa-sort text-xs text-gray-400"></i>
                     </button>
                   </th>
@@ -587,6 +590,7 @@
   <script src="../../scripts/core/config.js"></script>
   <script src="../../scripts/core/ui.js"></script>
   <script src="../../scripts/core/main.js"></script>
+  <script src="https://unpkg.com/imask"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="../../scripts/admin/admin-compras-fornecedor-cadastro.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
