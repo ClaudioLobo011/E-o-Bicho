@@ -2,17 +2,29 @@ const TOKEN_PREFIX_PATTERN = /^bearer\s+/i;
 
 type UnknownRecord = Record<string, unknown>;
 
-function safeParseJson(value: string | null | undefined): UnknownRecord | null {
-  if (!value) {
+function isRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function safeParseJsonValue(value: string | null | undefined): unknown {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
     return null;
   }
   try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === "object" ? (parsed as UnknownRecord) : null;
+    return JSON.parse(trimmed);
   } catch (error) {
-    console.warn("Não foi possível interpretar dados de sessão legada:", error);
+    console.warn("Não foi possível interpretar dados legados como JSON:", error);
     return null;
   }
+}
+
+function safeParseJson(value: string | null | undefined): UnknownRecord | null {
+  const parsed = safeParseJsonValue(value);
+  return isRecord(parsed) ? parsed : null;
 }
 
 function normalizeToken(token: string | null | undefined): string {
@@ -26,39 +38,88 @@ function normalizeToken(token: string | null | undefined): string {
   return trimmed.replace(TOKEN_PREFIX_PATTERN, "");
 }
 
-function extractTokenFromRecord(record: UnknownRecord | null, depth = 0): string {
-  if (!record || depth > 3) {
+function extractTokenFromUnknown(value: unknown, depth = 0): string {
+  if (!value || depth > 5) {
     return "";
   }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return "";
+    }
+
+    const startsWithQuote = trimmed.startsWith("\"") || trimmed.startsWith("'");
+    const endsWithQuote = trimmed.endsWith("\"") || trimmed.endsWith("'");
+    if (startsWithQuote && endsWithQuote && trimmed.length > 1) {
+      return extractTokenFromUnknown(trimmed.slice(1, -1), depth + 1);
+    }
+
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      const parsed = safeParseJsonValue(trimmed);
+      if (parsed !== null && parsed !== undefined) {
+        const nested = extractTokenFromUnknown(parsed, depth + 1);
+        if (nested) {
+          return nested;
+        }
+      }
+    }
+
+    return normalizeToken(trimmed);
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const nested = extractTokenFromUnknown(entry, depth + 1);
+      if (nested) {
+        return nested;
+      }
+    }
+    return "";
+  }
+
+  if (!isRecord(value)) {
+    return "";
+  }
+
   const directCandidates = [
-    record.token,
-    record.authToken,
-    record.accessToken,
-    record.jwt,
-    record.sessionToken
+    value.token,
+    value.authToken,
+    value.accessToken,
+    value.access_token,
+    value.jwt,
+    value.sessionToken,
+    value.session_token
   ];
   for (const candidate of directCandidates) {
-    const normalized = normalizeToken(typeof candidate === "string" ? candidate : "");
-    if (normalized) {
-      return normalized;
+    const nested = extractTokenFromUnknown(candidate, depth + 1);
+    if (nested) {
+      return nested;
     }
   }
 
   const nestedCandidates = [
-    record.user,
-    record.usuario,
-    record.session,
-    record.auth,
-    record.data,
-    record.payload
+    value.user,
+    value.usuario,
+    value.session,
+    value.auth,
+    value.data,
+    value.payload,
+    value.perfil,
+    value.profile
   ];
 
   for (const nested of nestedCandidates) {
-    if (nested && typeof nested === "object") {
-      const nestedToken = extractTokenFromRecord(nested as UnknownRecord, depth + 1);
-      if (nestedToken) {
-        return nestedToken;
-      }
+    const nestedToken = extractTokenFromUnknown(nested, depth + 1);
+    if (nestedToken) {
+      return nestedToken;
+    }
+  }
+
+  for (const entry of Object.values(value)) {
+    const nested = extractTokenFromUnknown(entry, depth + 1);
+    if (nested) {
+      return nested;
     }
   }
 
@@ -151,62 +212,133 @@ export function ensureLegacyAuthSession(): void {
   }
 
   const storedLegacy = safeParseJson(localStorageRef.getItem("loggedInUser"));
-  const storedToken = extractTokenFromRecord(storedLegacy);
-  if (storedToken) {
-    const normalized = normalizeToken(storedToken);
-    if (storedLegacy && storedLegacy.token !== normalized) {
-      const merged = { ...storedLegacy, token: normalized };
-      localStorageRef.setItem("loggedInUser", JSON.stringify(merged));
+  const candidateRecords: UnknownRecord[] = [];
+  if (storedLegacy) {
+    candidateRecords.push(storedLegacy);
+  }
+
+  const storageRecordKeys = ["user", "authToken", "perfil", "session", "sessionUser", "session_user"];
+  for (const key of storageRecordKeys) {
+    const localRecord = safeParseJson(localStorageRef.getItem(key));
+    if (localRecord) {
+      candidateRecords.push(localRecord);
     }
-    return;
+    const sessionRecord = safeParseJson(sessionStorageRef?.getItem(key));
+    if (sessionRecord) {
+      candidateRecords.push(sessionRecord);
+    }
   }
 
-  const fallbackRecords: UnknownRecord[] = [];
-  const maybeUserRecord = safeParseJson(localStorageRef.getItem("user"));
-  if (maybeUserRecord) {
-    fallbackRecords.push(maybeUserRecord);
-  }
-  const sessionLogged = safeParseJson(sessionStorageRef?.getItem("loggedInUser"));
-  if (sessionLogged) {
-    fallbackRecords.push(sessionLogged);
-  }
-  const sessionUser = safeParseJson(sessionStorageRef?.getItem("user"));
-  if (sessionUser) {
-    fallbackRecords.push(sessionUser);
-  }
+  let normalizedToken = "";
+  let tokenSource: UnknownRecord | null = null;
 
-  let token = "";
-  let source: UnknownRecord | null = null;
-  for (const record of fallbackRecords) {
-    const candidate = extractTokenFromRecord(record);
+  for (const record of candidateRecords) {
+    const candidate = extractTokenFromUnknown(record);
     if (candidate) {
-      token = candidate;
-      source = record;
-      break;
+      normalizedToken = normalizeToken(candidate);
+      if (normalizedToken) {
+        tokenSource = record;
+        break;
+      }
     }
   }
 
-  if (!token) {
-    const authToken = localStorageRef.getItem("auth_token");
-    token = normalizeToken(authToken);
+  if (!normalizedToken) {
+    const directValueKeys = [
+      "auth_token",
+      "token",
+      "jwt",
+      "pdv_token",
+      "access_token",
+      "session_token",
+      "authToken"
+    ];
+    for (const key of directValueKeys) {
+      const directValues = [
+        localStorageRef.getItem(key),
+        sessionStorageRef?.getItem(key)
+      ];
+      for (const value of directValues) {
+        const candidate = extractTokenFromUnknown(value);
+        if (candidate) {
+          normalizedToken = normalizeToken(candidate);
+          if (normalizedToken) {
+            break;
+          }
+        }
+      }
+      if (normalizedToken) {
+        break;
+      }
+    }
   }
 
-  if (!token) {
-    token = readCookieToken();
+  if (!normalizedToken) {
+    normalizedToken = readCookieToken();
   }
 
-  const normalizedToken = normalizeToken(token);
   if (!normalizedToken) {
     return;
   }
 
-  const mergedRecord = mergeUserRecords(storedLegacy ?? undefined, source ?? undefined);
+  const mergedRecord = mergeUserRecords(storedLegacy ?? undefined, tokenSource ?? undefined, ...candidateRecords);
   mergedRecord.token = normalizedToken;
   ensureUserId(mergedRecord);
 
-  try {
-    localStorageRef.setItem("loggedInUser", JSON.stringify(mergedRecord));
-  } catch (error) {
-    console.warn("Não foi possível persistir sessão legada normalizada:", error);
+  const persistSafely = (storage: Storage | null, key: string, value: string) => {
+    if (!storage) {
+      return;
+    }
+    try {
+      if (storage.getItem(key) !== value) {
+        storage.setItem(key, value);
+      }
+    } catch (error) {
+      console.warn(`Não foi possível atualizar a chave "${key}" no storage legado:`, error);
+    }
+  };
+
+  const stringifiedLogged = JSON.stringify(mergedRecord);
+  persistSafely(localStorageRef, "loggedInUser", stringifiedLogged);
+
+  const userCandidates: Array<UnknownRecord | null | undefined> = [
+    mergedRecord.user as UnknownRecord,
+    mergedRecord.usuario as UnknownRecord,
+    tokenSource?.user as UnknownRecord,
+    tokenSource?.usuario as UnknownRecord
+  ];
+  let userPayload: UnknownRecord | null = null;
+  for (const candidate of userCandidates) {
+    if (isRecord(candidate)) {
+      userPayload = candidate;
+      break;
+    }
+  }
+  if (!userPayload) {
+    const fallbackUser: UnknownRecord = { ...mergedRecord };
+    delete fallbackUser.token;
+    if (Object.keys(fallbackUser).length > 0) {
+      userPayload = fallbackUser;
+    }
+  }
+
+  if (userPayload) {
+    persistSafely(localStorageRef, "user", JSON.stringify(userPayload));
+  }
+
+  persistSafely(localStorageRef, "auth_token", normalizedToken);
+  persistSafely(localStorageRef, "token", normalizedToken);
+
+  if (userPayload) {
+    const authTokenPayload: UnknownRecord = {
+      token: normalizedToken,
+      user: userPayload
+    };
+    if (isRecord(mergedRecord.perfil)) {
+      authTokenPayload.perfil = mergedRecord.perfil;
+    } else if (isRecord(tokenSource?.perfil)) {
+      authTokenPayload.perfil = tokenSource?.perfil;
+    }
+    persistSafely(localStorageRef, "authToken", JSON.stringify(authTokenPayload));
   }
 }
