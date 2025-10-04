@@ -1506,6 +1506,9 @@
         inventoryProcessedAt = processedAt.toISOString();
       }
     }
+    const rawFiscalStatus = record.fiscalStatus ? String(record.fiscalStatus) : '';
+    const normalizedFiscalStatus = rawFiscalStatus === 'emitting' ? 'pending' : rawFiscalStatus;
+
     return {
       id: record.id ? String(record.id) : createUid(),
       type: record.type ? String(record.type) : 'venda',
@@ -1524,7 +1527,7 @@
       createdAt: createdAt.toISOString(),
       createdAtLabel: record.createdAtLabel ? String(record.createdAtLabel) : '',
       receiptSnapshot: record.receiptSnapshot || null,
-      fiscalStatus: record.fiscalStatus ? String(record.fiscalStatus) : '',
+      fiscalStatus: normalizedFiscalStatus,
       fiscalEmittedAt: record.fiscalEmittedAt ? new Date(record.fiscalEmittedAt).toISOString() : null,
       fiscalEmittedAtLabel: record.fiscalEmittedAtLabel ? String(record.fiscalEmittedAtLabel) : '',
       fiscalDriveFileId: record.fiscalDriveFileId ? String(record.fiscalDriveFileId) : '',
@@ -4477,6 +4480,7 @@
       console.error('Erro ao emitir fiscal', error);
       sale.fiscalStatus = 'pending';
       renderSalesList();
+      scheduleStatePersist({ immediate: true });
       notify(error?.message || 'Não foi possível emitir a nota fiscal.', 'error');
       return { success: false, reason: 'error', error };
     }
@@ -6838,7 +6842,11 @@
       if (isCancelled || !sale.receiptSnapshot) {
         fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-500"><i class="fas fa-ban text-[11px]"></i><span>Fiscal indisponível</span></span>`;
       } else if (sale.fiscalStatus === 'emitting') {
-        fiscalControl = `<span class="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"><i class="fas fa-circle-notch fa-spin text-[11px]"></i><span>Emitindo...</span></span>`;
+        const emitindoBadge = `<span class="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"><i class="fas fa-circle-notch fa-spin text-[11px]"></i><span>Emitindo...</span></span>`;
+        const resetButton = `<button type="button" class="inline-flex items-center gap-2 rounded-full border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-600 transition hover:border-amber-300 hover:text-amber-700" data-sale-fiscal-reset data-sale-id="${escapeHtml(
+          saleId
+        )}"><i class="fas fa-rotate-left text-[11px]"></i><span>Reiniciar emissão</span></button>`;
+        fiscalControl = `<div class="flex flex-wrap items-center gap-2">${emitindoBadge}${resetButton}</div>`;
       } else if (sale.fiscalStatus === 'emitted') {
         const fiscalTooltip = [sale.fiscalEmittedAtLabel, sale.fiscalXmlName]
           .filter(Boolean)
@@ -8212,6 +8220,20 @@
 
   const handleSaleEmitFiscal = (saleId) => emitFiscalForSale(saleId);
 
+  const handleSaleResetFiscalStatus = (saleId) => {
+    const sale = findCompletedSaleById(saleId);
+    if (!sale) {
+      return;
+    }
+    if (sale.fiscalStatus !== 'emitting') {
+      notify('Esta venda não está com emissão em andamento.', 'info');
+      return;
+    }
+    updateCompletedSaleRecord(saleId, { fiscalStatus: 'pending' });
+    notify('Status da emissão fiscal redefinido. Tente emitir novamente.', 'info');
+    scheduleStatePersist({ immediate: true });
+  };
+
   const isModalActive = (modal) => Boolean(modal && !modal.classList.contains('hidden'));
 
   const clearSaleCancelError = () => {
@@ -8324,6 +8346,14 @@
       const saleId = printButton.getAttribute('data-sale-id');
       if (saleId) {
         handleSalePrint(saleId);
+      }
+      return;
+    }
+    const fiscalResetButton = event.target.closest('[data-sale-fiscal-reset]');
+    if (fiscalResetButton) {
+      const saleId = fiscalResetButton.getAttribute('data-sale-id');
+      if (saleId) {
+        handleSaleResetFiscalStatus(saleId);
       }
       return;
     }
@@ -8887,11 +8917,16 @@
     state.completedSales = vendasFonte
       .map((sale) => normalizeSaleRecordForPersist(sale))
       .filter(Boolean)
-      .map((sale) => ({
-        ...sale,
-        paymentTags: Array.isArray(sale.paymentTags) ? sale.paymentTags : [],
-        items: Array.isArray(sale.items) ? sale.items : [],
-      }));
+      .map((sale) => {
+        const normalizedFiscalStatus =
+          sale.fiscalStatus === 'emitting' || !sale.fiscalStatus ? 'pending' : sale.fiscalStatus;
+        return {
+          ...sale,
+          fiscalStatus: normalizedFiscalStatus,
+          paymentTags: Array.isArray(sale.paymentTags) ? sale.paymentTags : [],
+          items: Array.isArray(sale.items) ? sale.items : [],
+        };
+      });
     const budgetsFonte = Array.isArray(pdv?.budgets)
       ? pdv.budgets
       : Array.isArray(pdv?.orcamentos)
