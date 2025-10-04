@@ -405,9 +405,11 @@ router.post('/', async (req, res) => {
     }
 
     const supplier = await createSupplierWithSequentialCode(payload);
-    const populated = await supplier
-      .populate('companies', 'nome nomeFantasia razaoSocial cnpj')
-      .populate('otherInfo.accountingAccount', 'code name');
+    await supplier.populate([
+      { path: 'companies', select: 'nome nomeFantasia razaoSocial cnpj' },
+      { path: 'otherInfo.accountingAccount', select: 'code name' },
+    ]);
+    const populated = supplier;
 
     res.status(201).json({ supplier: buildPublicSupplier(populated) });
   } catch (error) {
@@ -482,9 +484,11 @@ router.put('/:id', async (req, res) => {
 
     await supplier.save();
 
-    const populated = await supplier
-      .populate('companies', 'nome nomeFantasia razaoSocial cnpj')
-      .populate('otherInfo.accountingAccount', 'code name');
+    await supplier.populate([
+      { path: 'companies', select: 'nome nomeFantasia razaoSocial cnpj' },
+      { path: 'otherInfo.accountingAccount', select: 'code name' },
+    ]);
+    const populated = supplier;
 
     res.json({ supplier: buildPublicSupplier(populated) });
   } catch (error) {
