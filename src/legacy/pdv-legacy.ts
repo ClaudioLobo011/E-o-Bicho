@@ -1,4 +1,5 @@
 import legacyPdvSource from "../../scripts/admin/admin-pdv.js?raw";
+import { ensureLegacyUi } from "./ensure-legacy-ui";
 
 type TrackedListener = {
   target: EventTarget;
@@ -131,6 +132,8 @@ export function initializeLegacyPdvPage() {
   if (typeof window === "undefined") {
     return () => {};
   }
+
+  ensureLegacyUi();
 
   activeCleanup?.();
 

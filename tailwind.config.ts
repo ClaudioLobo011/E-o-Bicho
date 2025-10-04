@@ -3,7 +3,10 @@ import type { Config } from "tailwindcss";
 export default {
   content: [
     "./index.html",
-    "./src/**/*.{ts,tsx}"
+    "./admin.html",
+    "./pages/**/*.{html,htm}",
+    "./scripts/**/*.{js,ts}",
+    "./src/**/*.{ts,tsx,js,jsx}"
   ],
   theme: {
     extend: {

@@ -76,29 +76,29 @@
                     </div>
 
                     <div id="pdv-workspace" class="hidden space-y-6">
-                        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                            <div class="space-y-2">
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span id="pdv-status-badge" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+                        <div class="grid gap-4 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)] lg:items-start">
+                            <div class="space-y-3">
+                                <div class="flex flex-wrap items-center justify-between gap-3">
+                                    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                                        <span id="pdv-status-badge" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-600">
                                             <i class="fas fa-lock"></i>
                                             Caixa fechado
                                         </span>
-                                        <span id="pdv-sale-code-wrapper" class="hidden items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary">
+                                        <span id="pdv-sale-code-wrapper" class="hidden items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                                             <i class="fas fa-hashtag text-[10px]"></i>
                                             <span id="pdv-sale-code">—</span>
                                         </span>
                                     </div>
-                                    <div id="pdv-print-controls" class="flex flex-wrap items-center gap-2">
-                                        <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Tipos de impressão</span>
-                                        <button type="button" class="inline-flex items-center justify-between gap-3 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-print-type="venda" aria-pressed="true">
+                                    <div id="pdv-print-controls" class="flex flex-wrap items-center justify-end gap-2 rounded-full border border-gray-200/80 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 shadow-sm">
+                                        <span class="hidden text-[10px] uppercase tracking-wide text-gray-400 lg:inline">Tipos de impressão</span>
+                                        <button type="button" class="inline-flex items-center justify-between gap-3 rounded-full border border-transparent px-3 py-1 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-print-type="venda" aria-pressed="true">
                                             <span class="flex items-center gap-1.5">
                                                 <i class="fas fa-receipt text-[10px]"></i>
                                                 <span class="uppercase tracking-wide text-[10px] text-gray-400">Venda</span>
                                             </span>
                                             <span data-print-mode-label="venda" class="text-xs font-semibold text-gray-700">Matricial</span>
                                         </button>
-                                        <button type="button" class="inline-flex items-center justify-between gap-3 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-print-confirmation="venda" aria-pressed="true">
+                                        <button type="button" class="inline-flex items-center justify-between gap-3 rounded-full border border-transparent px-3 py-1 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-print-confirmation="venda" aria-pressed="true">
                                             <span class="flex items-center gap-1.5">
                                                 <i class="fas fa-circle-question text-[10px]"></i>
                                                 <span class="uppercase tracking-wide text-[10px] text-gray-400">Pergunta</span>
@@ -107,15 +107,23 @@
                                         </button>
                                     </div>
                                 </div>
-                                <p id="pdv-selected-info" class="text-sm text-gray-500">Configure o caixa para iniciar as vendas.</p>
+                                <p id="pdv-selected-info" class="text-[13px] text-gray-500">Configure o caixa para iniciar as vendas.</p>
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
-                                <p><span class="font-semibold text-gray-700">Empresa:</span> <span id="pdv-company-label">—</span></p>
-                                <p><span class="font-semibold text-gray-700">PDV:</span> <span id="pdv-name-label">—</span></p>
+                            <div class="rounded-xl border border-gray-200 bg-white/70 p-3 text-sm text-gray-600 shadow-sm">
+                                <div class="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-6">
+                                    <div class="space-y-1">
+                                        <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Empresa</span>
+                                        <p class="text-sm font-semibold text-gray-700"><span id="pdv-company-label">—</span></p>
+                                    </div>
+                                    <div class="space-y-1">
+                                        <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">PDV</span>
+                                        <p class="text-sm font-semibold text-gray-700"><span id="pdv-name-label">—</span></p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <nav class="flex flex-wrap gap-2 border-b border-gray-200 pb-1" aria-label="Seções do PDV">
+                        <nav class="flex flex-wrap gap-2 border-b border-gray-200 pb-1 text-sm" aria-label="Seções do PDV">
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="pdv-tab" aria-disabled="true">PDV</button>
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-primary text-primary rounded-t" data-tab-target="caixa-tab">Caixa</button>
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="sales-tab">Vendas</button>
@@ -124,24 +132,24 @@
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="cliente-tab">Cliente</button>
                         </nav>
 
-                        <div class="space-y-5">
-                            <div data-tab-panel="pdv-tab" class="hidden space-y-5">
-                                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 xl:gap-5">
-                                    <div class="xl:col-span-2 space-y-5">
-                                        <div class="rounded-xl border border-gray-200 p-5 space-y-5">
-                                            <div class="space-y-4">
+                        <div class="space-y-4">
+                            <div data-tab-panel="pdv-tab" class="hidden space-y-4">
+                                <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
+                                    <div class="space-y-4">
+                                        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
+                                            <div class="space-y-3">
                                                 <div>
-                                                    <label for="pdv-product-search" class="block text-sm font-semibold text-gray-700 mb-1">Pesquisar produtos</label>
+                                                    <label for="pdv-product-search" class="mb-1 block text-sm font-semibold text-gray-700">Pesquisar produtos</label>
                                                     <div class="relative">
                                                         <input id="pdv-product-search" type="search" placeholder="Busque por código interno, código de barras ou nome" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
-                                                        <div id="pdv-product-results" class="absolute left-0 right-0 top-full z-20 mt-2 hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg"></div>
+                                                        <div id="pdv-product-results" class="absolute left-0 right-0 top-full z-20 mt-2 hidden max-h-80 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"></div>
                                                     </div>
-                                                    <p class="text-xs text-gray-500 mt-1">Os resultados são atualizados conforme a digitação, seguindo o mesmo critério de busca do site.</p>
+                                                    <p class="mt-1 text-xs text-gray-500">Os resultados são atualizados conforme a digitação, seguindo o mesmo critério de busca do site.</p>
                                                 </div>
                                             </div>
 
-                                            <div id="pdv-selected-preview" class="rounded-lg border border-gray-200 bg-gray-50 p-4 flex gap-4">
-                                                <div class="h-24 w-24 flex items-center justify-center rounded-md bg-white border border-gray-200 overflow-hidden">
+                                            <div id="pdv-selected-preview" class="flex gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 sm:gap-4">
+                                                <div class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-md border border-gray-200 bg-white sm:h-24 sm:w-24">
                                                     <img id="pdv-selected-image" src="" alt="Pré-visualização do produto" class="h-full w-full object-contain hidden">
                                                     <span id="pdv-selected-placeholder" class="text-xs text-gray-400">Sem imagem</span>
                                                 </div>
@@ -157,7 +165,7 @@
                                                 </div>
                                             </div>
 
-                                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                                 <div>
                                                     <span class="block text-sm font-medium text-gray-700">Valor do item</span>
                                                     <p id="pdv-item-value" class="text-lg font-semibold text-gray-800">R$ 0,00</p>
@@ -165,12 +173,12 @@
                                                 <div>
                                                     <label for="pdv-item-quantity" class="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
                                                     <div class="flex items-center gap-2">
-                                                        <button type="button" class="quantity-button h-9 w-9 rounded-lg border border-gray-200 text-gray-600 hover:border-primary hover:text-primary" data-quantity-change="-1">
+                                                        <button type="button" class="quantity-button h-9 w-9 rounded-lg border border-gray-200 text-gray-600 transition hover:border-primary hover:text-primary" data-quantity-change="-1">
                                                             <i class="fas fa-minus"></i>
                                                             <span class="sr-only">Diminuir quantidade</span>
                                                         </button>
-                                                        <input id="pdv-item-quantity" type="number" min="1" value="1" class="w-20 rounded-lg border border-gray-200 px-3 py-2 text-sm text-center focus:border-primary focus:ring-2 focus:ring-primary/20">
-                                                        <button type="button" class="quantity-button h-9 w-9 rounded-lg border border-gray-200 text-gray-600 hover:border-primary hover:text-primary" data-quantity-change="1">
+                                                        <input id="pdv-item-quantity" type="number" min="1" value="1" class="w-16 rounded-lg border border-gray-200 px-3 py-2 text-sm text-center focus:border-primary focus:ring-2 focus:ring-primary/20 sm:w-20">
+                                                        <button type="button" class="quantity-button h-9 w-9 rounded-lg border border-gray-200 text-gray-600 transition hover:border-primary hover:text-primary" data-quantity-change="1">
                                                             <i class="fas fa-plus"></i>
                                                             <span class="sr-only">Aumentar quantidade</span>
                                                         </button>
@@ -182,9 +190,9 @@
                                                 </div>
                                             </div>
 
-                                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                                 <p class="text-xs text-gray-500">Confirme os dados e adicione o item à pré-visualização antes de registrar o pagamento.</p>
-                                                <button id="pdv-add-item" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary">
+                                                <button id="pdv-add-item" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary">
                                                     <i class="fas fa-cart-plus"></i>
                                                     <span>Adicionar item</span>
                                                 </button>
@@ -192,11 +200,11 @@
                                         </div>
                                     </div>
 
-                                    <aside class="space-y-5">
-                                            <div class="rounded-xl border border-gray-200 bg-gray-50 p-5 space-y-4">
-                                                <div class="space-y-2">
-                                                    <span class="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">Ações da venda</span>
-                                                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <aside class="space-y-4 xl:sticky xl:top-4">
+                                            <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm space-y-3">
+                                                <div class="space-y-1">
+                                                    <span class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Ações da venda</span>
+                                                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                                         <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-sale-action="delivery">
                                                             <i class="fas fa-truck text-[10px]"></i>
                                                             <span class="text-xs font-semibold text-gray-700">Delivery</span>
@@ -219,11 +227,11 @@
                                                     <h3 class="text-base font-semibold text-gray-800">Itens da venda</h3>
                                                     <span id="pdv-items-count" class="text-xs font-semibold text-gray-500">0 itens</span>
                                                 </div>
-                                                <div class="space-y-3">
-                                                    <div id="pdv-customer-summary-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-xs text-gray-500">
-                                                        Vincule um cliente para aplicar promoções gerais e registrar o responsável pela compra.
-                                                    </div>
-                                                    <div id="pdv-customer-summary-info" class="hidden rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
+                                            <div class="space-y-3">
+                                                <div id="pdv-customer-summary-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-xs text-gray-500">
+                                                    Vincule um cliente para aplicar promoções gerais e registrar o responsável pela compra.
+                                                </div>
+                                                <div id="pdv-customer-summary-info" class="hidden rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
                                                         <div class="flex items-start justify-between gap-3">
                                                             <div class="space-y-1">
                                                                 <p id="pdv-customer-name" class="text-sm font-semibold text-gray-800">—</p>
@@ -236,13 +244,13 @@
                                                     </div>
                                                 </div>
                                                 <div id="pdv-items-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum item adicionado até o momento.</div>
-                                                <ul id="pdv-items-list" class="hidden divide-y divide-gray-200"></ul>
-                                                <div class="mt-4 border-t border-gray-200 pt-4">
+                                                <ul id="pdv-items-list" class="hidden max-h-64 overflow-y-auto divide-y divide-gray-200"></ul>
+                                                <div class="mt-3 border-t border-gray-200 pt-3">
                                                     <div class="flex items-center justify-between text-sm font-semibold text-gray-700">
                                                         <span>Total da venda</span>
                                                         <span id="pdv-items-total">R$ 0,00</span>
                                                     </div>
-                                                    <button id="pdv-finalize-sale" type="button" class="mt-4 w-full rounded-lg bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary/90 disabled:cursor-not-allowed disabled:opacity-60">
+                                                    <button id="pdv-finalize-sale" type="button" class="mt-3 w-full rounded-lg bg-secondary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary/90 disabled:cursor-not-allowed disabled:opacity-60">
                                                         Finalizar venda
                                                     </button>
                                                 </div>
@@ -251,10 +259,10 @@
                                     </div>
                                 </div>
 
-                            <div data-tab-panel="caixa-tab" class="space-y-5">
-                                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:gap-5">
-                                    <div class="space-y-5">
-                                        <div class="rounded-xl border border-gray-200 p-5 space-y-4">
+                            <div data-tab-panel="caixa-tab" class="space-y-4">
+                                <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                                    <div class="space-y-4">
+                                        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
                                             <div class="flex items-center justify-between">
                                                 <h3 class="text-base font-semibold text-gray-800">Situação do caixa</h3>
                                                 <span id="pdv-caixa-state-label" class="text-xs font-semibold text-gray-500">Caixa fechado</span>
@@ -288,7 +296,7 @@
                                             </div>
                                         </div>
 
-                                        <div class="rounded-xl border border-gray-200 p-5 space-y-4">
+                                        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
                                             <div class="flex items-center justify-between">
                                                 <h3 class="text-base font-semibold text-gray-800">Meios de pagamento</h3>
                                                 <button id="pdv-reset-payments" type="button" class="text-xs font-semibold text-primary hover:underline">Zerar valores</button>
@@ -298,8 +306,8 @@
                                         </div>
                                     </div>
 
-                                    <div class="space-y-6">
-                                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-6 space-y-4">
+                                    <div class="space-y-4">
+                                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-5 shadow-sm space-y-4">
                                             <div class="flex items-center justify-between gap-3">
                                                 <h3 class="text-base font-semibold text-gray-800">Resumo financeiro</h3>
                                                 <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Pré-visualização matricial</span>
@@ -310,7 +318,7 @@
                                             <p id="pdv-summary-last-move" class="text-xs text-gray-500">Nenhuma movimentação registrada.</p>
                                         </div>
 
-                                        <div class="rounded-xl border border-gray-200 p-6 space-y-4">
+                                        <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
                                             <div class="flex items-center justify-between">
                                                 <h3 class="text-base font-semibold text-gray-800">Histórico do caixa</h3>
                                                 <button id="pdv-clear-history" type="button" class="text-xs font-semibold text-primary hover:underline">Limpar histórico</button>
@@ -322,8 +330,8 @@
                                     </div>
                                 </div>
                             </div>
-                            <div data-tab-panel="orcamentos-tab" class="hidden space-y-5">
-                                <section class="rounded-xl border border-gray-200 bg-white p-6 space-y-6">
+                            <div data-tab-panel="orcamentos-tab" class="hidden space-y-4">
+                                <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-5">
                                     <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                                         <div>
                                             <h2 class="text-lg font-semibold text-gray-800">Orçamentos registrados</h2>
@@ -344,13 +352,13 @@
                                             </div>
                                         </div>
                                     </header>
-                                    <div class="grid grid-cols-1 gap-6 lg:grid-cols-5">
-                                        <section class="lg:col-span-2 space-y-4">
+                                    <div class="grid grid-cols-1 gap-5 lg:grid-cols-5">
+                                        <section class="space-y-4 lg:col-span-2">
                                             <div class="flex items-center justify-between">
                                                 <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Lista de orçamentos</h3>
                                                 <span id="pdv-budget-count" class="text-xs font-semibold text-gray-500">0 registros</span>
                                             </div>
-                                            <div class="rounded-xl border border-gray-200">
+                                            <div class="rounded-xl border border-gray-200 bg-white">
                                                 <table class="min-w-full divide-y divide-gray-200 text-sm">
                                                     <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                                                         <tr>
@@ -364,7 +372,7 @@
                                                 <div id="pdv-budget-empty" class="hidden px-4 py-6 text-sm text-gray-500">Nenhum orçamento encontrado para o filtro selecionado.</div>
                                             </div>
                                         </section>
-                                        <section class="lg:col-span-3 space-y-4">
+                                        <section class="space-y-4 lg:col-span-3">
                                             <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                                                 <div>
                                                     <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Detalhes do orçamento</h3>
@@ -404,8 +412,8 @@
                                     </div>
                                 </section>
                             </div>
-                            <div data-tab-panel="delivery-tab" class="hidden space-y-5">
-                                <div class="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
+                            <div data-tab-panel="delivery-tab" class="hidden space-y-4">
+                                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
                                             <h3 class="text-base font-semibold text-gray-800">Entregas registradas</h3>
@@ -416,28 +424,28 @@
                                             <span>Registrado • Em separação • Em rota • Finalizado</span>
                                         </div>
                                     </div>
-                                    <div id="pdv-delivery-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+                                    <div id="pdv-delivery-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-center text-sm text-gray-500">
                                         Nenhum delivery registrado até o momento.
                                     </div>
-                                    <ul id="pdv-delivery-list" class="hidden space-y-4"></ul>
+                                    <ul id="pdv-delivery-list" class="hidden space-y-3"></ul>
                                 </div>
                             </div>
-                            <div data-tab-panel="sales-tab" class="hidden space-y-5">
-                                <div class="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
+                            <div data-tab-panel="sales-tab" class="hidden space-y-4">
+                                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
                                             <h3 class="text-base font-semibold text-gray-800">Vendas finalizadas</h3>
                                             <p class="text-xs text-gray-500">Consulte as vendas encerradas e seus detalhes.</p>
                                         </div>
                                     </div>
-                                    <div id="pdv-sales-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+                                    <div id="pdv-sales-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-center text-sm text-gray-500">
                                         Nenhuma venda finalizada até o momento.
                                     </div>
-                                    <ul id="pdv-sales-list" class="hidden space-y-4"></ul>
+                                    <ul id="pdv-sales-list" class="hidden space-y-3"></ul>
                                 </div>
                             </div>
-                            <div data-tab-panel="cliente-tab" class="hidden space-y-5">
-                                <div class="rounded-xl border border-dashed border-gray-300 bg-white p-6">
+                            <div data-tab-panel="cliente-tab" class="hidden space-y-4">
+                                <div class="rounded-xl border border-dashed border-gray-300 bg-white p-5 shadow-sm">
                                     <div class="flex flex-col items-center justify-center gap-3 text-center text-gray-500">
                                         <i class="fas fa-user-friends text-2xl text-gray-400"></i>
                                         <p class="text-sm font-medium text-gray-600">Área do cliente em desenvolvimento.</p>
