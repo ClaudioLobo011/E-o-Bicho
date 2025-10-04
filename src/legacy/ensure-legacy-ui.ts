@@ -12,7 +12,6 @@ function runLegacyUiBootstrap(): void {
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
     const factory = new Function("window", "document", legacyUiSource);
     factory(window, document);
   } catch (error) {
