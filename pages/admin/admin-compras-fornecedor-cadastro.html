@@ -27,11 +27,11 @@
               <i class="fas fa-angle-right text-xs"></i>
               <span class="font-medium text-gray-600">Fornecedor</span>
               <i class="fas fa-angle-right text-xs"></i>
-              <span class="font-semibold text-gray-800">Cadastro de Fornecedores</span>
+              <span class="font-semibold text-gray-800">Cadastro</span>
             </div>
             <div>
               <h1 class="text-2xl font-bold text-gray-800">Cadastro de Fornecedores</h1>
-              <p class="text-sm text-gray-600">Centralize dados fiscais, financeiros e históricos de relacionamento com distribuidores e prestadores de serviço.</p>
+              <p class="text-sm text-gray-600">Organize dados cadastrais, fiscais e financeiros conforme exigências de NF-e, NFC-e e NFS-e.</p>
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -46,465 +46,482 @@
           </div>
         </header>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
-            <div class="lg:col-span-2 space-y-4">
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <form class="space-y-8">
+            <div class="space-y-6">
               <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold text-gray-800">Informações gerais</h2>
+                <h2 class="text-lg font-semibold text-gray-800">Informações cadastrais</h2>
                 <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
                   <i class="fas fa-circle-check"></i>
-                  Ativo
+                  Cadastro ativo
                 </span>
               </div>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label for="supplier-name" class="block text-sm font-medium text-gray-700 mb-1">Razão social <span class="text-red-500">*</span></label>
-                  <input type="text" id="supplier-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Distribuidora Pet Nordeste Ltda." required>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div class="lg:col-span-1">
+                  <label for="supplier-code" class="block text-sm font-medium text-gray-700 mb-1">Código</label>
+                  <input type="text" id="supplier-code" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-gray-50 text-gray-500" value="Gerado automaticamente" disabled>
+                  <p class="mt-1 text-xs text-gray-500">Gerado pelo sistema após salvar o cadastro.</p>
                 </div>
-                <div>
-                  <label for="supplier-fantasy" class="block text-sm font-medium text-gray-700 mb-1">Nome fantasia</label>
-                  <input type="text" id="supplier-fantasy" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Pet Nordeste">
+                <div class="lg:col-span-1">
+                  <label for="supplier-country" class="block text-sm font-medium text-gray-700 mb-1">País <span class="text-red-500">*</span></label>
+                  <input list="countries" id="supplier-country" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Brasil" required>
+                  <datalist id="countries">
+                    <option value="Afeganistão">
+                    <option value="África do Sul">
+                    <option value="Albânia">
+                    <option value="Alemanha">
+                    <option value="Andorra">
+                    <option value="Angola">
+                    <option value="Antígua e Barbuda">
+                    <option value="Arábia Saudita">
+                    <option value="Argélia">
+                    <option value="Argentina">
+                    <option value="Armênia">
+                    <option value="Austrália">
+                    <option value="Áustria">
+                    <option value="Azerbaijão">
+                    <option value="Bahamas">
+                    <option value="Bahrein">
+                    <option value="Bangladesh">
+                    <option value="Barbados">
+                    <option value="Belarus">
+                    <option value="Bélgica">
+                    <option value="Belize">
+                    <option value="Benin">
+                    <option value="Butão">
+                    <option value="Bolívia">
+                    <option value="Bósnia e Herzegovina">
+                    <option value="Botsuana">
+                    <option value="Brasil">
+                    <option value="Brunei">
+                    <option value="Bulgária">
+                    <option value="Burkina Faso">
+                    <option value="Burundi">
+                    <option value="Cabo Verde">
+                    <option value="Camarões">
+                    <option value="Camboja">
+                    <option value="Canadá">
+                    <option value="Catar">
+                    <option value="Cazaquistão">
+                    <option value="Chade">
+                    <option value="Chile">
+                    <option value="China">
+                    <option value="Chipre">
+                    <option value="Colômbia">
+                    <option value="Comores">
+                    <option value="Congo">
+                    <option value="Coreia do Norte">
+                    <option value="Coreia do Sul">
+                    <option value="Costa do Marfim">
+                    <option value="Costa Rica">
+                    <option value="Croácia">
+                    <option value="Cuba">
+                    <option value="Dinamarca">
+                    <option value="Dominica">
+                    <option value="Egito">
+                    <option value="El Salvador">
+                    <option value="Emirados Árabes Unidos">
+                    <option value="Equador">
+                    <option value="Eritreia">
+                    <option value="Eslováquia">
+                    <option value="Eslovênia">
+                    <option value="Espanha">
+                    <option value="Estados Unidos">
+                    <option value="Estônia">
+                    <option value="Eswatini">
+                    <option value="Etiópia">
+                    <option value="Fiji">
+                    <option value="Filipinas">
+                    <option value="Finlândia">
+                    <option value="França">
+                    <option value="Gabão">
+                    <option value="Gâmbia">
+                    <option value="Gana">
+                    <option value="Geórgia">
+                    <option value="Granada">
+                    <option value="Grécia">
+                    <option value="Guatemala">
+                    <option value="Guiana">
+                    <option value="Guiné">
+                    <option value="Guiné-Bissau">
+                    <option value="Guiné Equatorial">
+                    <option value="Haiti">
+                    <option value="Holanda">
+                    <option value="Honduras">
+                    <option value="Hungria">
+                    <option value="Iêmen">
+                    <option value="Ilhas Marshall">
+                    <option value="Ilhas Maurício">
+                    <option value="Ilhas Salomão">
+                    <option value="Índia">
+                    <option value="Indonésia">
+                    <option value="Irã">
+                    <option value="Iraque">
+                    <option value="Irlanda">
+                    <option value="Islândia">
+                    <option value="Israel">
+                    <option value="Itália">
+                    <option value="Jamaica">
+                    <option value="Japão">
+                    <option value="Jordânia">
+                    <option value="Kiribati">
+                    <option value="Kosovo">
+                    <option value="Kuwait">
+                    <option value="Laos">
+                    <option value="Lesoto">
+                    <option value="Letônia">
+                    <option value="Líbano">
+                    <option value="Libéria">
+                    <option value="Líbia">
+                    <option value="Liechtenstein">
+                    <option value="Lituânia">
+                    <option value="Luxemburgo">
+                    <option value="Macedônia do Norte">
+                    <option value="Madagascar">
+                    <option value="Malásia">
+                    <option value="Malávi">
+                    <option value="Maldivas">
+                    <option value="Mali">
+                    <option value="Malta">
+                    <option value="Marrocos">
+                    <option value="Mauritânia">
+                    <option value="México">
+                    <option value="Mianmar">
+                    <option value="Micronésia">
+                    <option value="Moçambique">
+                    <option value="Moldávia">
+                    <option value="Mônaco">
+                    <option value="Mongólia">
+                    <option value="Montenegro">
+                    <option value="Namíbia">
+                    <option value="Nauru">
+                    <option value="Nepal">
+                    <option value="Nicarágua">
+                    <option value="Níger">
+                    <option value="Nigéria">
+                    <option value="Noruega">
+                    <option value="Nova Zelândia">
+                    <option value="Omã">
+                    <option value="Palau">
+                    <option value="Panamá">
+                    <option value="Papua-Nova Guiné">
+                    <option value="Paquistão">
+                    <option value="Paraguai">
+                    <option value="Peru">
+                    <option value="Polônia">
+                    <option value="Portugal">
+                    <option value="Quênia">
+                    <option value="Quirguistão">
+                    <option value="Reino Unido">
+                    <option value="República Centro-Africana">
+                    <option value="República Democrática do Congo">
+                    <option value="República Dominicana">
+                    <option value="Romênia">
+                    <option value="Ruanda">
+                    <option value="Rússia">
+                    <option value="Samoa">
+                    <option value="San Marino">
+                    <option value="Santa Lúcia">
+                    <option value="São Cristóvão e Névis">
+                    <option value="São Tomé e Príncipe">
+                    <option value="São Vicente e Granadinas">
+                    <option value="Seicheles">
+                    <option value="Senegal">
+                    <option value="Serra Leoa">
+                    <option value="Sérvia">
+                    <option value="Singapura">
+                    <option value="Síria">
+                    <option value="Somália">
+                    <option value="Sri Lanka">
+                    <option value="Sudão">
+                    <option value="Sudão do Sul">
+                    <option value="Suécia">
+                    <option value="Suíça">
+                    <option value="Suriname">
+                    <option value="Tailândia">
+                    <option value="Taiwan">
+                    <option value="Tajiquistão">
+                    <option value="Tanzânia">
+                    <option value="Timor-Leste">
+                    <option value="Togo">
+                    <option value="Tonga">
+                    <option value="Trinidad e Tobago">
+                    <option value="Tunísia">
+                    <option value="Turcomenistão">
+                    <option value="Turquia">
+                    <option value="Tuvalu">
+                    <option value="Ucrânia">
+                    <option value="Uganda">
+                    <option value="Uruguai">
+                    <option value="Uzbequistão">
+                    <option value="Vanuatu">
+                    <option value="Vaticano">
+                    <option value="Venezuela">
+                    <option value="Vietnã">
+                    <option value="Zâmbia">
+                    <option value="Zimbábue">
+                  </datalist>
+                  <p class="mt-1 text-xs text-gray-500">Campo com busca rápida; utilize digitação parcial para localizar o país.</p>
                 </div>
-                <div>
-                  <label for="supplier-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo de pessoa <span class="text-red-500">*</span></label>
-                  <select id="supplier-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                    <option value="">Selecione...</option>
-                    <option value="pj">Pessoa Jurídica</option>
-                    <option value="pf">Pessoa Física</option>
+                <div class="lg:col-span-1">
+                  <label for="supplier-legal-name" class="block text-sm font-medium text-gray-700 mb-1">Razão social <span class="text-red-500">*</span></label>
+                  <input type="text" id="supplier-legal-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Distribuidora Pet Nordeste Ltda." required>
+                </div>
+                <div class="lg:col-span-1">
+                  <label for="supplier-fantasy-name" class="block text-sm font-medium text-gray-700 mb-1">Nome fantasia</label>
+                  <input type="text" id="supplier-fantasy-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Pet Nordeste">
+                </div>
+                <div class="lg:col-span-1">
+                  <label for="supplier-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ <span class="text-red-500">*</span></label>
+                  <input type="text" id="supplier-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="04.252.011/0001-10" required>
+                  <p class="mt-1 text-xs text-gray-500">Dados oficiais consultados em <a href="https://www.nfe.fazenda.gov.br/portal/" target="_blank" rel="noopener" class="text-primary hover:underline">Portal Nacional da NF-e</a>.</p>
+                </div>
+                <div class="lg:col-span-1">
+                  <label for="supplier-ie" class="block text-sm font-medium text-gray-700 mb-1">Inscrição Estadual</label>
+                  <input type="text" id="supplier-ie" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="123456789110">
+                </div>
+                <div class="lg:col-span-1">
+                  <fieldset>
+                    <legend class="block text-sm font-medium text-gray-700 mb-2">Tipo de fornecedor <span class="text-red-500">*</span></legend>
+                    <div class="grid grid-cols-2 gap-2">
+                      <label class="flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 cursor-pointer hover:border-primary" data-type-button>
+                        <input type="radio" name="supplier-type" value="fisico" class="hidden" checked>
+                        <span>Físico</span>
+                      </label>
+                      <label class="flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 cursor-pointer hover:border-primary" data-type-button>
+                        <input type="radio" name="supplier-type" value="juridico" class="hidden">
+                        <span>Jurídico</span>
+                      </label>
+                      <label class="flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 cursor-pointer hover:border-primary" data-type-button>
+                        <input type="radio" name="supplier-type" value="mei" class="hidden">
+                        <span>MEI</span>
+                      </label>
+                      <label class="flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 cursor-pointer hover:border-primary" data-type-button>
+                        <input type="radio" name="supplier-type" value="produtor-rural" class="hidden">
+                        <span>Produtor Rural</span>
+                      </label>
+                    </div>
+                  </fieldset>
+                </div>
+                <div class="lg:col-span-1">
+                  <label for="supplier-companies" class="block text-sm font-medium text-gray-700 mb-1">Empresas vinculadas</label>
+                  <select id="supplier-companies" multiple class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20 h-28">
+                    <option value="matriz">E o Bicho Matriz</option>
+                    <option value="filial-sul">E o Bicho Distribuição Sul</option>
+                    <option value="filial-nordeste">E o Bicho Nordeste</option>
+                    <option value="clinicas">Clínicas Parceiras</option>
+                    <option value="marketplace">Marketplace E o Bicho</option>
                   </select>
+                  <p class="mt-1 text-xs text-gray-500">Selecione todas as unidades em que o fornecedor atua.</p>
                 </div>
-                <div>
-                  <label for="supplier-segment" class="block text-sm font-medium text-gray-700 mb-1">Segmento principal</label>
-                  <select id="supplier-segment" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="">Selecione...</option>
-                    <option value="medicamentos">Medicamentos veterinários</option>
-                    <option value="alimentacao">Nutrição animal</option>
-                    <option value="servicos">Serviços terceirizados</option>
-                    <option value="equipamentos">Equipamentos e instrumentos</option>
-                  </select>
+                <div class="lg:col-span-1">
+                  <fieldset class="space-y-2">
+                    <legend class="block text-sm font-medium text-gray-700">Classificações</legend>
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                      Inativo
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                      ONG
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                      Fornecedor bancário
+                    </label>
+                  </fieldset>
                 </div>
               </div>
             </div>
 
-            <div class="lg:col-span-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <label for="supplier-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ/CPF <span class="text-red-500">*</span></label>
-                <input type="text" id="supplier-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="04.252.011/0001-10" required>
-                <p class="mt-1 text-xs text-gray-500">Utilize dados oficiais consultados no Portal Nacional da NF-e.</p>
-              </div>
-              <div>
-                <label for="supplier-ie" class="block text-sm font-medium text-gray-700 mb-1">Inscrição estadual</label>
-                <input type="text" id="supplier-ie" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="123456789110">
-                <p class="mt-1 text-xs text-gray-500">Valide na SEFAZ estadual para fornecedores de mercadorias.</p>
-              </div>
-              <div>
-                <label for="supplier-im" class="block text-sm font-medium text-gray-700 mb-1">Inscrição municipal</label>
-                <input type="text" id="supplier-im" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1234567-8">
-              </div>
-              <div>
-                <label for="supplier-legal-rep" class="block text-sm font-medium text-gray-700 mb-1">Responsável legal</label>
-                <input type="text" id="supplier-legal-rep" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ana Beatriz Martins">
-              </div>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div class="space-y-4">
-              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Endereço fiscal</h3>
-              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div class="sm:col-span-2">
-                  <label for="supplier-address" class="block text-sm font-medium text-gray-700 mb-1">Logradouro <span class="text-red-500">*</span></label>
-                  <input type="text" id="supplier-address" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Av. Alberto Bins, 760" required>
-                </div>
-                <div>
-                  <label for="supplier-number" class="block text-sm font-medium text-gray-700 mb-1">Número</label>
-                  <input type="text" id="supplier-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="760">
-                </div>
-                <div>
-                  <label for="supplier-complement" class="block text-sm font-medium text-gray-700 mb-1">Complemento</label>
-                  <input type="text" id="supplier-complement" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Bloco B, Sala 1203">
-                </div>
-                <div>
-                  <label for="supplier-neighborhood" class="block text-sm font-medium text-gray-700 mb-1">Bairro <span class="text-red-500">*</span></label>
-                  <input type="text" id="supplier-neighborhood" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Centro" required>
-                </div>
-                <div>
-                  <label for="supplier-city" class="block text-sm font-medium text-gray-700 mb-1">Município <span class="text-red-500">*</span></label>
-                  <input type="text" id="supplier-city" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Porto Alegre" required>
-                </div>
-                <div>
-                  <label for="supplier-state" class="block text-sm font-medium text-gray-700 mb-1">UF <span class="text-red-500">*</span></label>
-                  <select id="supplier-state" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                    <option value="">UF</option>
-                    <option value="AC">AC</option>
-                    <option value="AL">AL</option>
-                    <option value="AM">AM</option>
-                    <option value="AP">AP</option>
-                    <option value="BA">BA</option>
-                    <option value="CE">CE</option>
-                    <option value="DF">DF</option>
-                    <option value="ES">ES</option>
-                    <option value="GO">GO</option>
-                    <option value="MA">MA</option>
-                    <option value="MG">MG</option>
-                    <option value="MS">MS</option>
-                    <option value="MT">MT</option>
-                    <option value="PA">PA</option>
-                    <option value="PB">PB</option>
-                    <option value="PE">PE</option>
-                    <option value="PI">PI</option>
-                    <option value="PR">PR</option>
-                    <option value="RJ">RJ</option>
-                    <option value="RN">RN</option>
-                    <option value="RO">RO</option>
-                    <option value="RR">RR</option>
-                    <option value="RS">RS</option>
-                    <option value="SC">SC</option>
-                    <option value="SE">SE</option>
-                    <option value="SP">SP</option>
-                    <option value="TO">TO</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="supplier-cep" class="block text-sm font-medium text-gray-700 mb-1">CEP <span class="text-red-500">*</span></label>
-                  <input type="text" id="supplier-cep" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="90030-141" required>
-                </div>
-              </div>
-            </div>
+              <nav class="flex flex-wrap gap-2 border-b border-gray-200 pb-2" role="tablist">
+                <button type="button" class="tab-button active" data-tab-target="tab-endereco">Endereço</button>
+                <button type="button" class="tab-button" data-tab-target="tab-contato">Contato</button>
+                <button type="button" class="tab-button" data-tab-target="tab-outras">Outras informações</button>
+                <button type="button" class="tab-button" data-tab-target="tab-representante">Representante</button>
+                <button type="button" class="tab-button" data-tab-target="tab-retencoes">Retenções</button>
+              </nav>
 
-            <div class="space-y-4">
-              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Contato e atendimento</h3>
-              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div id="tab-endereco" class="tab-panel grid grid-cols-1 gap-4 md:grid-cols-2" data-tab-panel>
                 <div>
-                  <label for="supplier-phone" class="block text-sm font-medium text-gray-700 mb-1">Telefone principal</label>
-                  <input type="text" id="supplier-phone" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="(51) 3333-4455">
+                  <label for="supplier-cep" class="block text-sm font-medium text-gray-700 mb-1">CEP</label>
+                  <input type="text" id="supplier-cep" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="60175-320">
                 </div>
                 <div>
-                  <label for="supplier-mobile" class="block text-sm font-medium text-gray-700 mb-1">WhatsApp comercial</label>
-                  <input type="text" id="supplier-mobile" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="(51) 98888-2233">
+                  <label for="supplier-logradouro" class="block text-sm font-medium text-gray-700 mb-1">Logradouro <span class="text-red-500">*</span></label>
+                  <input type="text" id="supplier-logradouro" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Rua Tibúrcio Cavalcante" required>
                 </div>
-                <div class="sm:col-span-2">
-                  <label for="supplier-email" class="block text-sm font-medium text-gray-700 mb-1">E-mail fiscal <span class="text-red-500">*</span></label>
-                  <input type="email" id="supplier-email" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="nfse@petnordeste.com.br" required>
+                <div>
+                  <label for="supplier-numero" class="block text-sm font-medium text-gray-700 mb-1">Número</label>
+                  <input type="text" id="supplier-numero" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="2121">
                 </div>
-                <div class="sm:col-span-2">
-                  <label for="supplier-support" class="block text-sm font-medium text-gray-700 mb-1">SLA de atendimento</label>
-                  <select id="supplier-support" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="">Selecione...</option>
-                    <option value="same-day">Mesmo dia útil</option>
-                    <option value="48h">Até 48 horas</option>
-                    <option value="72h">Até 72 horas</option>
-                    <option value="custom">Personalizado</option>
-                  </select>
+                <div>
+                  <label for="supplier-complemento" class="block text-sm font-medium text-gray-700 mb-1">Complemento</label>
+                  <input type="text" id="supplier-complemento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Bloco B, Sala 1203">
+                </div>
+                <div>
+                  <label for="supplier-bairro" class="block text-sm font-medium text-gray-700 mb-1">Bairro <span class="text-red-500">*</span></label>
+                  <input type="text" id="supplier-bairro" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Aldeota" required>
+                </div>
+                <div>
+                  <label for="supplier-cidade" class="block text-sm font-medium text-gray-700 mb-1">Cidade <span class="text-red-500">*</span></label>
+                  <input type="text" id="supplier-cidade" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Fortaleza" required>
                 </div>
               </div>
+
+              <div id="tab-contato" class="tab-panel hidden grid grid-cols-1 gap-4 md:grid-cols-2" data-tab-panel>
+                <div>
+                  <label for="supplier-email" class="block text-sm font-medium text-gray-700 mb-1">E-mail <span class="text-red-500">*</span></label>
+                  <input type="email" id="supplier-email" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="fiscal@fornecedor.com.br" required>
+                </div>
+                <div>
+                  <label for="supplier-phone" class="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
+                  <input type="text" id="supplier-phone" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="(85) 3333-4455">
+                </div>
+                <div>
+                  <label for="supplier-mobile" class="block text-sm font-medium text-gray-700 mb-1">Celular <span class="text-red-500">*</span></label>
+                  <input type="text" id="supplier-mobile" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="(85) 9 8888-1122" required>
+                </div>
+                <div>
+                  <label for="supplier-secondary-phone" class="block text-sm font-medium text-gray-700 mb-1">Telefone secundário</label>
+                  <input type="text" id="supplier-secondary-phone" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="(11) 4002-8922">
+                </div>
+                <div class="md:col-span-2">
+                  <label for="supplier-responsible" class="block text-sm font-medium text-gray-700 mb-1">Pessoa responsável</label>
+                  <input type="text" id="supplier-responsible" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ana Beatriz Martins">
+                </div>
+              </div>
+
+              <div id="tab-outras" class="tab-panel hidden space-y-4" data-tab-panel>
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label for="supplier-kind" class="block text-sm font-medium text-gray-700 mb-1">Tipo de fornecedor</label>
+                    <select id="supplier-kind" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="fabricante">Fabricante</option>
+                      <option value="distribuidora" selected>Distribuidora</option>
+                      <option value="representante">Representante Comercial</option>
+                      <option value="servico">Prestador de Serviço</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="supplier-chart-account" class="block text-sm font-medium text-gray-700 mb-1">Conta contábil</label>
+                    <input type="text" id="supplier-chart-account" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="3.01.02.001">
+                  </div>
+                  <div>
+                    <label for="supplier-icms" class="block text-sm font-medium text-gray-700 mb-1">Contribuinte ICMS</label>
+                    <select id="supplier-icms" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="1">1 - Contribuinte</option>
+                      <option value="2">2 - Contribuinte Isento</option>
+                      <option value="9">9 - Não Contribuinte</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="supplier-bank" class="block text-sm font-medium text-gray-700 mb-1">Banco</label>
+                    <select id="supplier-bank" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="">Carregando bancos...</option>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">Lista baseada na relação oficial do Banco Central do Brasil.</p>
+                  </div>
+                  <div>
+                    <label for="supplier-agency" class="block text-sm font-medium text-gray-700 mb-1">Agência</label>
+                    <input type="text" id="supplier-agency" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1234">
+                  </div>
+                  <div>
+                    <label for="supplier-account" class="block text-sm font-medium text-gray-700 mb-1">Conta corrente</label>
+                    <input type="text" id="supplier-account" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="123456-7">
+                  </div>
+                </div>
+                <div>
+                  <label for="supplier-observation" class="block text-sm font-medium text-gray-700 mb-1">Observação</label>
+                  <textarea id="supplier-observation" rows="3" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe condições comerciais, SLA e exigências fiscais."></textarea>
+                </div>
+              </div>
+
+              <div id="tab-representante" class="tab-panel hidden space-y-4" data-tab-panel>
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div>
+                    <label for="representative-name" class="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                    <input type="text" id="representative-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Marcos Andrade">
+                  </div>
+                  <div>
+                    <label for="representative-mobile" class="block text-sm font-medium text-gray-700 mb-1">Celular</label>
+                    <input type="text" id="representative-mobile" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="(85) 9 9999-0000">
+                  </div>
+                  <div>
+                    <label for="representative-email" class="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+                    <input type="email" id="representative-email" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="representante@empresa.com">
+                  </div>
+                </div>
+                <div class="flex justify-end">
+                  <button type="button" id="add-representative" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                    <i class="fas fa-user-plus"></i>
+                    Adicionar representante
+                  </button>
+                </div>
+                <div id="representatives-list" class="space-y-3">
+                  <p class="text-sm text-gray-500">Nenhum representante cadastrado até o momento.</p>
+                </div>
+              </div>
+
+              <div id="tab-retencoes" class="tab-panel hidden space-y-4" data-tab-panel>
+                <p class="text-sm text-gray-600">Selecione os tributos que exigem retenção para este fornecedor.</p>
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  <button type="button" class="retencao-button" data-retencao="IR">IR</button>
+                  <button type="button" class="retencao-button" data-retencao="CSLL">CSLL</button>
+                  <button type="button" class="retencao-button" data-retencao="COFINS">COFINS</button>
+                  <button type="button" class="retencao-button" data-retencao="PIS">PIS</button>
+                  <button type="button" class="retencao-button" data-retencao="ISS">ISS</button>
+                  <button type="button" class="retencao-button" data-retencao="CPRB">CPRB</button>
+                  <button type="button" class="retencao-button" data-retencao="INSS">INSS</button>
+                </div>
+                <div>
+                  <label for="retencoes-observacoes" class="block text-sm font-medium text-gray-700 mb-1">Observações de retenção</label>
+                  <textarea id="retencoes-observacoes" rows="3" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: INSS retido conforme Lei 8.212/91."></textarea>
+                </div>
+                <input type="hidden" id="retencoes-selecionadas" value="">
+              </div>
             </div>
-          </div>
+          </form>
         </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Integração fiscal e obrigações</h2>
-              <p class="text-sm text-gray-600">Garanta que o fornecedor esteja habilitado para emitir documentos eletrônicos e receber XML automaticamente.</p>
-            </div>
-            <div class="flex items-center gap-2 text-xs text-gray-500">
-              <i class="fas fa-file-signature"></i>
-              Última atualização em 12/07/2024 às 09:18 por João Silva
-            </div>
-          </div>
-
+        <section class="bg-gradient-to-r from-primary/5 to-secondary/5 border border-primary/10 rounded-xl p-6">
           <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div class="rounded-xl border border-sky-100 bg-sky-50 p-4 space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="inline-flex items-center gap-2 text-sm font-semibold text-sky-700">
+            <div class="rounded-lg bg-white/80 border border-primary/20 p-4 shadow-sm">
+              <div class="flex items-start gap-3">
+                <span class="h-10 w-10 flex items-center justify-center rounded-full bg-primary/10 text-primary">
                   <i class="fas fa-file-invoice"></i>
-                  NF-e
                 </span>
-                <label class="inline-flex items-center gap-2 text-xs font-semibold text-sky-700">
-                  <input type="checkbox" class="rounded border-sky-300 text-sky-600 focus:ring-sky-500" checked>
-                  Habilitado
-                </label>
-              </div>
-              <p class="text-xs text-sky-700 leading-relaxed">Chave de acesso mais recente: <span class="font-semibold">35240788778219000133550020000058981000058980</span>. Emitida em ambiente autorizado SEFAZ-SP.</p>
-              <div class="rounded-lg bg-white p-3 text-xs text-gray-600 border border-sky-100">
-                <p>Agendamento de recebimento de XML ativo via e-mail <span class="font-semibold">xml@petnordeste.com.br</span>.</p>
+                <div>
+                  <h3 class="text-sm font-semibold text-gray-800">NF-e modelo 55</h3>
+                  <p class="text-xs text-gray-600">Use chaves oficiais para conferência, como a NF-e nº 5323 série 1 da SEFAZ-SP (chave 35210379142157000140550010000053231000053232).</p>
+                  <a href="https://www.nfe.fazenda.gov.br/portal/" target="_blank" rel="noopener" class="text-xs text-primary font-semibold hover:underline">Portal Nacional da NF-e</a>
+                </div>
               </div>
             </div>
-
-            <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700">
+            <div class="rounded-lg bg-white/80 border border-primary/20 p-4 shadow-sm">
+              <div class="flex items-start gap-3">
+                <span class="h-10 w-10 flex items-center justify-center rounded-full bg-primary/10 text-primary">
                   <i class="fas fa-receipt"></i>
-                  NFC-e
                 </span>
-                <label class="inline-flex items-center gap-2 text-xs font-semibold text-emerald-700">
-                  <input type="checkbox" class="rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" checked>
-                  Habilitado
-                </label>
-              </div>
-              <p class="text-xs text-emerald-700 leading-relaxed">Extrato da autorização: série <span class="font-semibold">1</span>, última NFC-e nº <span class="font-semibold">2843</span> aprovada na SEFAZ-CE.</p>
-              <div class="rounded-lg bg-white p-3 text-xs text-gray-600 border border-emerald-100">
-                <p>Certificado digital A1 válido até 18/11/2025 e CSC vigente para QR-Code.</p>
+                <div>
+                  <h3 class="text-sm font-semibold text-gray-800">NFC-e modelo 65</h3>
+                  <p class="text-xs text-gray-600">Consulta pública disponível para notas como a NFC-e nº 9871 série 1 do SEFAZ-AM (chave 13230302338879000132650010000098711111198710).</p>
+                  <a href="https://nfce.sefaz.am.gov.br" target="_blank" rel="noopener" class="text-xs text-primary font-semibold hover:underline">Portal NFC-e AM</a>
+                </div>
               </div>
             </div>
-
-            <div class="rounded-xl border border-amber-100 bg-amber-50 p-4 space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="inline-flex items-center gap-2 text-sm font-semibold text-amber-700">
-                  <i class="fas fa-file-contract"></i>
-                  NFS-e
+            <div class="rounded-lg bg-white/80 border border-primary/20 p-4 shadow-sm">
+              <div class="flex items-start gap-3">
+                <span class="h-10 w-10 flex items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <i class="fas fa-file-signature"></i>
                 </span>
-                <label class="inline-flex items-center gap-2 text-xs font-semibold text-amber-700">
-                  <input type="checkbox" class="rounded border-amber-300 text-amber-600 focus:ring-amber-500">
-                  Em validação
-                </label>
-              </div>
-              <p class="text-xs text-amber-700 leading-relaxed">Prefeitura de Fortaleza homologou a última RPS nº <span class="font-semibold">000045</span> em 28/06/2024. Aguardando liberação definitiva do ambiente de produção.</p>
-              <div class="rounded-lg bg-white p-3 text-xs text-gray-600 border border-amber-100">
-                <p>Enviar carta de exclusividade assinada para <span class="font-semibold">nfse@fortaleza.ce.gov.br</span>.</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div class="lg:col-span-2 space-y-4">
-              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Regras fiscais e integrações</h3>
-              <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <span class="text-sm font-semibold text-gray-800">Participa do Simples Nacional</span>
-                    <input type="checkbox" class="mt-0.5 h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary/70">
-                  </div>
-                  <p class="text-xs text-gray-600">Configurar CSOSN padrão para entradas interestaduais.</p>
-                </div>
-                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <span class="text-sm font-semibold text-gray-800">Exige pedido de compra</span>
-                    <input type="checkbox" class="mt-0.5 h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary/70" checked>
-                  </div>
-                  <p class="text-xs text-gray-600">Bloqueia lançamento manual de NF sem pedido aprovado.</p>
-                </div>
-                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <span class="text-sm font-semibold text-gray-800">Integração com Sefaz Virtual</span>
-                    <input type="checkbox" class="mt-0.5 h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary/70" checked>
-                  </div>
-                  <p class="text-xs text-gray-600">Consulta automática da situação cadastral antes da emissão.</p>
-                </div>
-                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <span class="text-sm font-semibold text-gray-800">Recebe XML por Webhook</span>
-                    <input type="checkbox" class="mt-0.5 h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary/70">
-                  </div>
-                  <p class="text-xs text-gray-600">Configure endpoint seguro para integração com o ERP do fornecedor.</p>
-                </div>
-              </div>
-            </div>
-
-            <div class="space-y-4">
-              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Referências oficiais</h3>
-              <div class="space-y-3">
-                <a href="https://www.nfe.fazenda.gov.br/portal/" class="block rounded-xl border border-sky-100 bg-sky-50 p-4 hover:border-sky-300 transition" target="_blank" rel="noopener">
-                  <div class="flex items-center justify-between text-sky-700">
-                    <span class="inline-flex items-center gap-2 text-sm font-semibold"><i class="fas fa-globe"></i>Portal Nacional da NF-e</span>
-                    <i class="fas fa-arrow-up-right-from-square text-xs"></i>
-                  </div>
-                  <p class="mt-2 text-xs text-sky-800 leading-relaxed">Consulte chaves de acesso oficiais e acompanhe schemas atualizados para validação.</p>
-                </a>
-                <a href="https://www.sefaz.ce.gov.br/nfce/" class="block rounded-xl border border-emerald-100 bg-emerald-50 p-4 hover:border-emerald-300 transition" target="_blank" rel="noopener">
-                  <div class="flex items-center justify-between text-emerald-700">
-                    <span class="inline-flex items-center gap-2 text-sm font-semibold"><i class="fas fa-barcode"></i>Portal NFC-e Ceará</span>
-                    <i class="fas fa-arrow-up-right-from-square text-xs"></i>
-                  </div>
-                  <p class="mt-2 text-xs text-emerald-800 leading-relaxed">Acesso oficial a exemplos de DANFE NFC-e, CSC e QR-Code autorizados.</p>
-                </a>
-                <a href="https://nfse.fortaleza.ce.gov.br/" class="block rounded-xl border border-amber-100 bg-amber-50 p-4 hover:border-amber-300 transition" target="_blank" rel="noopener">
-                  <div class="flex items-center justify-between text-amber-700">
-                    <span class="inline-flex items-center gap-2 text-sm font-semibold"><i class="fas fa-city"></i>Fortaleza NFS-e</span>
-                    <i class="fas fa-arrow-up-right-from-square text-xs"></i>
-                  </div>
-                  <p class="mt-2 text-xs text-amber-800 leading-relaxed">Documentação e exemplos oficiais para geração de RPS e conversão em NFS-e.</p>
-                </a>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Condições comerciais</h2>
-              <p class="text-sm text-gray-600">Registre limites de crédito, bancos e acordos personalizados.</p>
-            </div>
-            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-              <i class="fas fa-plus"></i>
-              Nova condição
-            </button>
-          </div>
-
-          <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div class="lg:col-span-2 space-y-4">
-              <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <label for="supplier-credit-limit" class="block text-sm font-medium text-gray-700 mb-1">Limite de crédito (R$)</label>
-                  <input type="number" id="supplier-credit-limit" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="50000">
-                </div>
-                <div>
-                  <label for="supplier-payment-deadline" class="block text-sm font-medium text-gray-700 mb-1">Prazo padrão</label>
-                  <select id="supplier-payment-deadline" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="">Selecione...</option>
-                    <option value="15">15 dias</option>
-                    <option value="21">21 dias</option>
-                    <option value="28">28 dias</option>
-                    <option value="30">30 dias</option>
-                    <option value="45">45 dias</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="supplier-bank" class="block text-sm font-medium text-gray-700 mb-1">Banco principal</label>
-                  <select id="supplier-bank" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="">Selecione...</option>
-                    <option value="001">001 - Banco do Brasil</option>
-                    <option value="237">237 - Bradesco</option>
-                    <option value="341">341 - Itaú Unibanco</option>
-                    <option value="104">104 - Caixa Econômica Federal</option>
-                    <option value="260">260 - Nubank</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="supplier-bank-agency" class="block text-sm font-medium text-gray-700 mb-1">Agência / Conta</label>
-                  <input type="text" id="supplier-bank-agency" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1234-5 / 98765-0">
+                  <h3 class="text-sm font-semibold text-gray-800">NFS-e padrão nacional</h3>
+                  <p class="text-xs text-gray-600">Conferir RPS como o nº 2458 série Única emitido em Curitiba para CNPJ 76.535.764/0001-43 na base nacional.</p>
+                  <a href="https://www.gov.br/nfse" target="_blank" rel="noopener" class="text-xs text-primary font-semibold hover:underline">Gov.br - NFSe Nacional</a>
                 </div>
               </div>
-
-              <div>
-                <label for="supplier-payment-notes" class="block text-sm font-medium text-gray-700 mb-1">Observações comerciais</label>
-                <textarea id="supplier-payment-notes" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" rows="4" placeholder="Registrar descontos progressivos, contratos vigentes e cláusulas de reajuste."></textarea>
-              </div>
-            </div>
-
-            <div class="space-y-4">
-              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Documentos anexados</h3>
-              <ul class="space-y-2 text-sm text-gray-600">
-                <li class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-                  <span class="inline-flex items-center gap-2"><i class="fas fa-file-pdf text-primary"></i>Contrato fornecimento 2024.pdf</span>
-                  <button type="button" class="text-xs font-semibold text-primary hover:underline">Visualizar</button>
-                </li>
-                <li class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-                  <span class="inline-flex items-center gap-2"><i class="fas fa-file-pdf text-primary"></i>Certificado digital A1.pdf</span>
-                  <button type="button" class="text-xs font-semibold text-primary hover:underline">Baixar</button>
-                </li>
-                <li class="flex items-center justify-between rounded-lg border border-dashed border-gray-300 px-3 py-2 text-gray-500">
-                  <span class="inline-flex items-center gap-2"><i class="fas fa-upload"></i>Adicionar novo documento</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Histórico de relacionamento</h2>
-              <p class="text-sm text-gray-600">Acompanhe pedidos recentes, divergências e indicadores de entrega.</p>
-            </div>
-            <div class="flex flex-wrap items-center gap-2 text-xs font-semibold text-amber-600">
-              <span class="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1">
-                <i class="fas fa-seedling"></i>
-                Inteligência em desenvolvimento
-              </span>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div class="lg:col-span-2 overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead>
-                  <tr class="bg-gray-50">
-                    <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Pedido</th>
-                    <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Emissão NF</th>
-                    <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Valor</th>
-                    <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Status</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100 text-gray-600">
-                  <tr>
-                    <td class="px-4 py-3">
-                      <div class="font-semibold text-gray-800">PC-2024/089</div>
-                      <div class="text-xs text-gray-500">NF-e 35240788778219000133550020000058981000058980</div>
-                    </td>
-                    <td class="px-4 py-3">05/07/2024</td>
-                    <td class="px-4 py-3">R$ 18.450,00</td>
-                    <td class="px-4 py-3">
-                      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                        <i class="fas fa-circle-check"></i>
-                        Entregue
-                      </span>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="px-4 py-3">
-                      <div class="font-semibold text-gray-800">PC-2024/072</div>
-                      <div class="text-xs text-gray-500">NFC-e 43240788778219000133650010000028431000028430</div>
-                    </td>
-                    <td class="px-4 py-3">22/06/2024</td>
-                    <td class="px-4 py-3">R$ 4.890,00</td>
-                    <td class="px-4 py-3">
-                      <span class="inline-flex items-center gap-1 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
-                        <i class="fas fa-truck"></i>
-                        Em transporte</span>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="px-4 py-3">
-                      <div class="font-semibold text-gray-800">PC-2024/061</div>
-                      <div class="text-xs text-gray-500">NFS-e Fortaleza RPS 000045</div>
-                    </td>
-                    <td class="px-4 py-3">28/05/2024</td>
-                    <td class="px-4 py-3">R$ 2.130,00</td>
-                    <td class="px-4 py-3">
-                      <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                        <i class="fas fa-hourglass-half"></i>
-                        Aguardando NFS-e
-                      </span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="space-y-4">
-              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Alertas recentes</h3>
-              <ul class="space-y-3 text-sm text-gray-600">
-                <li class="rounded-xl border border-amber-200 bg-amber-50 p-3">
-                  <div class="flex items-start gap-2">
-                    <i class="fas fa-exclamation-triangle text-amber-500 mt-0.5"></i>
-                    <div>
-                      <p class="font-semibold text-amber-700">Divergência de CST</p>
-                      <p class="text-xs text-amber-700">Verificar ajuste da NF-e PC-2024/089 para CFOP 2.101.</p>
-                    </div>
-                  </div>
-                </li>
-                <li class="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                  <div class="flex items-start gap-2">
-                    <i class="fas fa-circle-check text-emerald-500 mt-0.5"></i>
-                    <div>
-                      <p class="font-semibold text-emerald-700">Certificado válido</p>
-                      <p class="text-xs text-emerald-700">Certificado digital A1 validado na SEFAZ-CE.</p>
-                    </div>
-                  </div>
-                </li>
-                <li class="rounded-xl border border-sky-200 bg-sky-50 p-3">
-                  <div class="flex items-start gap-2">
-                    <i class="fas fa-envelope-open-text text-sky-500 mt-0.5"></i>
-                    <div>
-                      <p class="font-semibold text-sky-700">Recepção XML ativa</p>
-                      <p class="text-xs text-sky-700">Webhook configurado para notas de entrada NFC-e.</p>
-                    </div>
-                  </div>
-                </li>
-              </ul>
             </div>
           </div>
         </section>
@@ -522,5 +539,146 @@
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const tabButtons = document.querySelectorAll('.tab-button');
+      const tabPanels = document.querySelectorAll('[data-tab-panel]');
+
+      const activateTab = (targetId) => {
+        tabButtons.forEach((button) => {
+          const isActive = button.dataset.tabTarget === targetId;
+          button.classList.toggle('active', isActive);
+          button.classList.toggle('bg-primary', isActive);
+          button.classList.toggle('text-white', isActive);
+          button.classList.toggle('border', true);
+          button.classList.toggle('border-primary', isActive);
+          button.classList.toggle('border-gray-200', !isActive);
+          button.classList.toggle('bg-gray-50', !isActive);
+          button.classList.toggle('text-gray-700', !isActive);
+        });
+
+        tabPanels.forEach((panel) => {
+          panel.classList.toggle('hidden', panel.id !== targetId);
+        });
+      };
+
+      tabButtons.forEach((button) => {
+        if (!button.classList.contains('tab-button-styled')) {
+          button.classList.add('tab-button-styled', 'rounded-lg', 'px-4', 'py-2', 'text-sm', 'font-semibold', 'transition-colors');
+        }
+
+        button.addEventListener('click', () => activateTab(button.dataset.tabTarget));
+      });
+
+      activateTab('tab-endereco');
+
+      const typeButtons = document.querySelectorAll('[data-type-button]');
+      typeButtons.forEach((label) => {
+        const input = label.querySelector('input[type="radio"]');
+        const updateAppearance = () => {
+          const isChecked = input.checked;
+          label.classList.toggle('bg-primary', isChecked);
+          label.classList.toggle('text-white', isChecked);
+          label.classList.toggle('border-primary', isChecked);
+          label.classList.toggle('border-gray-200', !isChecked);
+        };
+
+        updateAppearance();
+
+        label.addEventListener('click', () => {
+          input.checked = true;
+          typeButtons.forEach((otherLabel) => {
+            const otherInput = otherLabel.querySelector('input[type="radio"]');
+            const otherChecked = otherInput.checked;
+            otherLabel.classList.toggle('bg-primary', otherChecked);
+            otherLabel.classList.toggle('text-white', otherChecked);
+            otherLabel.classList.toggle('border-primary', otherChecked);
+            otherLabel.classList.toggle('border-gray-200', !otherChecked);
+          });
+        });
+      });
+
+      const retentionButtons = document.querySelectorAll('.retencao-button');
+      const hiddenRetencoes = document.getElementById('retencoes-selecionadas');
+
+      const updateRetencoesValue = () => {
+        const values = Array.from(retentionButtons)
+          .filter((button) => button.classList.contains('active'))
+          .map((button) => button.dataset.retencao);
+        hiddenRetencoes.value = values.join(',');
+      };
+
+      retentionButtons.forEach((button) => {
+        button.classList.add('rounded-lg', 'border', 'px-4', 'py-2', 'text-sm', 'font-semibold', 'transition-colors', 'border-gray-200', 'text-gray-700', 'bg-gray-50');
+        button.addEventListener('click', () => {
+          button.classList.toggle('active');
+          button.classList.toggle('bg-primary');
+          button.classList.toggle('text-white');
+          button.classList.toggle('border-primary');
+          button.classList.toggle('border-gray-200');
+          updateRetencoesValue();
+        });
+      });
+
+      const representativesList = document.getElementById('representatives-list');
+      const addRepresentativeButton = document.getElementById('add-representative');
+
+      addRepresentativeButton.addEventListener('click', () => {
+        const name = document.getElementById('representative-name').value.trim();
+        const mobile = document.getElementById('representative-mobile').value.trim();
+        const email = document.getElementById('representative-email').value.trim();
+
+        if (!name && !mobile && !email) {
+          return;
+        }
+
+        if (representativesList.firstElementChild && representativesList.firstElementChild.tagName.toLowerCase() === 'p') {
+          representativesList.innerHTML = '';
+        }
+
+        const card = document.createElement('div');
+        card.className = 'rounded-lg border border-gray-200 bg-white p-4 shadow-sm flex flex-col gap-2 md:flex-row md:items-center md:justify-between';
+        card.innerHTML = `
+          <div>
+            <p class="text-sm font-semibold text-gray-800">${name || 'Nome não informado'}</p>
+            <p class="text-xs text-gray-600">${mobile || 'Sem celular informado'} • ${email || 'Sem e-mail informado'}</p>
+          </div>
+          <button type="button" class="text-xs text-red-600 font-semibold hover:underline">Remover</button>
+        `;
+
+        card.querySelector('button').addEventListener('click', () => {
+          card.remove();
+          if (!representativesList.children.length) {
+            representativesList.innerHTML = '<p class="text-sm text-gray-500">Nenhum representante cadastrado até o momento.</p>';
+          }
+        });
+
+        representativesList.appendChild(card);
+
+        document.getElementById('representative-name').value = '';
+        document.getElementById('representative-mobile').value = '';
+        document.getElementById('representative-email').value = '';
+      });
+
+      fetch('../../data/bancos.json')
+        .then((response) => response.json())
+        .then((banks) => {
+          const bankSelect = document.getElementById('supplier-bank');
+          bankSelect.innerHTML = '<option value="">Selecione um banco</option>';
+          banks.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+          banks.forEach((bank) => {
+            const option = document.createElement('option');
+            const code = bank.code ? String(bank.code).padStart(3, '0') : '---';
+            option.value = bank.ispb || bank.code || bank.name;
+            option.textContent = `${code} - ${bank.name}`;
+            bankSelect.appendChild(option);
+          });
+        })
+        .catch(() => {
+          const bankSelect = document.getElementById('supplier-bank');
+          bankSelect.innerHTML = '<option value="">Não foi possível carregar os bancos</option>';
+        });
+    });
+  </script>
 </body>
 </html>
