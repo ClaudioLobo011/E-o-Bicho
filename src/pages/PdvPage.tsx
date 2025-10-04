@@ -8,8 +8,8 @@ type LegacyMarkup = {
 };
 
 function extractLegacyMarkup(html: string): LegacyMarkup {
-  const match = html.match(/<main[^>]*class=["']([^"']*)["'][^>]*>([\s\S]*?)<\/main>/i);
-  if (!match) {
+  const mainMatch = html.match(/<main[^>]*class=["']([^"']*)["'][^>]*>([\s\S]*?)<\/main>/i);
+  if (!mainMatch) {
     return {
       className: "container mx-auto px-4 py-6",
       innerHtml:
@@ -17,18 +17,27 @@ function extractLegacyMarkup(html: string): LegacyMarkup {
     };
   }
 
-  const [, rawClassName, rawInnerHtml] = match;
+  const [, rawClassName, rawInnerHtml] = mainMatch;
   const className = rawClassName.replace(/\s+/g, " ").trim();
   let innerHtml = rawInnerHtml
     .replace(/<div id=["']admin-header-placeholder["']><\/div>/gi, "")
     .replace(
       /<aside[^>]*>\s*<div id=["']admin-sidebar-placeholder["']><\/div>\s*<\/aside>/gi,
       ""
-    );
+    )
+    .trim();
+
+  const modalsMatch = html.match(/<\/main>([\s\S]*?)(?=<script\b|<\/body>)/i);
+  if (modalsMatch) {
+    const modalsMarkup = modalsMatch[1].trim();
+    if (modalsMarkup) {
+      innerHtml = `${innerHtml}\n${modalsMarkup}`;
+    }
+  }
 
   return {
     className,
-    innerHtml: innerHtml.trim()
+    innerHtml
   };
 }
 
