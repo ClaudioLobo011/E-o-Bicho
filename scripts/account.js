@@ -1,3 +1,36 @@
+function getLoggedInUserSafe() {
+    let raw = null;
+    try {
+        raw = localStorage.getItem('loggedInUser');
+    } catch (error) {
+        console.warn('Não foi possível acessar o storage para recuperar loggedInUser:', error);
+        return null;
+    }
+
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+
+    try {
+        return JSON.parse(trimmed);
+    } catch (error) {
+        console.warn('Não foi possível interpretar loggedInUser como JSON:', error);
+        try {
+            if (typeof window.syncLegacyAuthSession === 'function') {
+                window.syncLegacyAuthSession();
+                const retried = localStorage.getItem('loggedInUser');
+                if (typeof retried === 'string' && retried.trim()) {
+                    return JSON.parse(retried);
+                }
+            }
+        } catch (syncError) {
+            console.warn('Não foi possível normalizar a sessão legada:', syncError);
+        }
+    }
+
+    return null;
+}
+
 function initializeAccountPage() {
     // --- Elementos Globais da Página ---
     const tabPf = document.getElementById('tab-pf');
@@ -33,7 +66,7 @@ function initializeAccountPage() {
 
     // --- Lógica para Popular os Dados do Utilizador ---
     async function populateUserData() {
-        const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+        const loggedInUser = getLoggedInUserSafe();
 
         if (!loggedInUser || !loggedInUser.id || !loggedInUser.token) {
             showModal({
@@ -150,7 +183,7 @@ function initializeAccountPage() {
     // --- Lógica para Salvar as Alterações ---
     function initializeSaveButtons() {
         const handleSave = async (formId, button) => {
-            const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+            const loggedInUser = getLoggedInUserSafe();
             if (!loggedInUser) return;
             const originalButtonHtml = button.innerHTML;
             button.disabled = true;
@@ -201,10 +234,17 @@ function initializeAccountPage() {
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.message);
                 localStorage.setItem('loggedInUser', JSON.stringify({
-                ...result.user,
-                id: loggedInUser.id,
-                token: loggedInUser.token
+                    ...result.user,
+                    id: loggedInUser.id,
+                    token: loggedInUser.token
                 }));
+                try {
+                    if (typeof window.syncLegacyAuthSession === 'function') {
+                        window.syncLegacyAuthSession();
+                    }
+                } catch (syncError) {
+                    console.warn('Não foi possível sincronizar a sessão legada após atualizar o usuário:', syncError);
+                }
                 showModal({ title: 'Sucesso!', message: 'Os seus dados foram atualizados.', confirmText: 'OK', onConfirm: () => window.location.reload() });
             } catch (error) {
                 showModal({ title: 'Erro', message: `Não foi possível salvar as alterações: ${error.message}`, confirmText: 'Tentar Novamente' });

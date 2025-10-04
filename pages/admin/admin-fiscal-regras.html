@@ -1,6 +1,28 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+    <!-- data-spa-redirect start -->
+    <meta http-equiv="refresh" content="0; url=/app/fiscal-regras" />
+    <script data-spa-redirect>
+      (function () {
+        var url = new URL(window.location.origin + "/app/fiscal-regras");
+        url.searchParams.set("tab", "fiscal-regras");
+        var legacySearch = window.location.search;
+        if (legacySearch && legacySearch.length > 1) {
+          var legacyParams = new URLSearchParams(legacySearch);
+          legacyParams.forEach(function (value, key) {
+            if (key === "tab") {
+              return;
+            }
+            url.searchParams.append(key, value);
+          });
+        }
+        var hash = window.location.hash || "";
+        window.location.replace(url.pathname + url.search + hash);
+      })();
+    </script>
+    <!-- data-spa-redirect end -->
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin: Regras Fiscais Automáticas</title>

@@ -115,6 +115,13 @@ async function handleLoginSubmit(event) {
       token: result.token,
       ...result.user
     }));
+    try {
+      if (typeof window.syncLegacyAuthSession === 'function') {
+        window.syncLegacyAuthSession();
+      }
+    } catch (error) {
+      console.warn('Não foi possível sincronizar a sessão legada após o login:', error);
+    }
 
     // >>> ADIÇÃO: lembrar (ou apagar) o identificador
     const rememberEl = document.getElementById('remember-me');
