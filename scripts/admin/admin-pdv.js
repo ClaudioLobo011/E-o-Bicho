@@ -1843,6 +1843,48 @@
     return base;
   };
 
+  const lockBodyScroll = () => {
+    if (typeof document === 'undefined' || !document.body) return;
+    const current = Number.parseInt(document.body.dataset.pdvScrollLocks || '0', 10) || 0;
+    if (current === 0) {
+      document.body.dataset.pdvOriginalOverflow = document.body.style.overflow || '';
+      document.body.style.overflow = 'hidden';
+    }
+    document.body.dataset.pdvScrollLocks = String(current + 1);
+  };
+
+  const unlockBodyScroll = () => {
+    if (typeof document === 'undefined' || !document.body) return;
+    const current = Number.parseInt(document.body.dataset.pdvScrollLocks || '0', 10) || 0;
+    const next = Math.max(0, current - 1);
+    if (next === 0) {
+      const previous = document.body.dataset.pdvOriginalOverflow || '';
+      document.body.style.overflow = previous;
+      delete document.body.dataset.pdvOriginalOverflow;
+    }
+    document.body.dataset.pdvScrollLocks = String(next);
+  };
+
+  const showElement = (element, displayFallback = 'block') => {
+    if (!element) return;
+    element.classList.remove('hidden');
+    if (element.style.display === 'none') {
+      element.style.display = '';
+    }
+    if (typeof window !== 'undefined' && window.getComputedStyle) {
+      const computed = window.getComputedStyle(element);
+      if (computed && computed.display === 'none') {
+        element.style.display = displayFallback;
+      }
+    }
+  };
+
+  const hideElement = (element) => {
+    if (!element) return;
+    element.classList.add('hidden');
+    element.style.display = 'none';
+  };
+
   const queryElements = () => {
     elements.companySelect = document.getElementById('company-select');
     elements.pdvSelect = document.getElementById('pdv-select');
@@ -2370,14 +2412,22 @@
     }
     const hasCustomer = Boolean(state.vendaCliente);
     if (elements.customerSummaryEmpty) {
-      elements.customerSummaryEmpty.classList.toggle('hidden', hasCustomer);
+      if (hasCustomer) {
+        hideElement(elements.customerSummaryEmpty);
+      } else {
+        showElement(elements.customerSummaryEmpty);
+      }
     }
     if (elements.customerSummaryInfo) {
-      elements.customerSummaryInfo.classList.toggle('hidden', !hasCustomer);
+      if (hasCustomer) {
+        showElement(elements.customerSummaryInfo);
+      } else {
+        hideElement(elements.customerSummaryInfo);
+      }
     }
     if (!hasCustomer) {
       if (elements.customerPet) {
-        elements.customerPet.classList.add('hidden');
+        hideElement(elements.customerPet);
       }
       return;
     }
@@ -2400,9 +2450,9 @@
         const details = [state.vendaPet.tipo, state.vendaPet.raca].filter(Boolean).join(' • ');
         const detailText = details ? ` (${details})` : '';
         elements.customerPet.textContent = `Pet: ${state.vendaPet.nome || 'Pet sem nome'}${detailText}`;
-        elements.customerPet.classList.remove('hidden');
+        showElement(elements.customerPet);
       } else {
-        elements.customerPet.classList.add('hidden');
+        hideElement(elements.customerPet);
       }
     }
   };
@@ -2482,7 +2532,11 @@
     });
     panels.forEach((panel) => {
       const tab = panel.getAttribute('data-pdv-customer-panel');
-      panel.classList.toggle('hidden', tab !== state.modalActiveTab);
+      if (tab === state.modalActiveTab) {
+        showElement(panel);
+      } else {
+        hideElement(panel);
+      }
     });
   };
 
@@ -2505,25 +2559,27 @@
     if (!elements.customerResultsList || !elements.customerResultsEmpty || !elements.customerResultsLoading) {
       return;
     }
-    elements.customerResultsList.innerHTML = '';
+    if (elements.customerResultsList) {
+      elements.customerResultsList.innerHTML = '';
+    }
     if (state.customerSearchLoading) {
-      elements.customerResultsLoading.classList.remove('hidden');
-      elements.customerResultsEmpty.classList.add('hidden');
+      showElement(elements.customerResultsLoading);
+      hideElement(elements.customerResultsEmpty);
       return;
     }
-    elements.customerResultsLoading.classList.add('hidden');
+    hideElement(elements.customerResultsLoading);
     const query = state.customerSearchQuery.trim();
     if (!query) {
       elements.customerResultsEmpty.textContent = 'Digite para buscar clientes.';
-      elements.customerResultsEmpty.classList.remove('hidden');
+      showElement(elements.customerResultsEmpty);
       return;
     }
     if (!state.customerSearchResults.length) {
       elements.customerResultsEmpty.textContent = 'Nenhum cliente encontrado para a busca informada.';
-      elements.customerResultsEmpty.classList.remove('hidden');
+      showElement(elements.customerResultsEmpty);
       return;
     }
-    elements.customerResultsEmpty.classList.add('hidden');
+    hideElement(elements.customerResultsEmpty);
     const fragment = document.createDocumentFragment();
     state.customerSearchResults.forEach((cliente) => {
       const isSelected = Boolean(state.modalSelectedCliente && state.modalSelectedCliente._id === cliente._id);
@@ -2552,25 +2608,27 @@
     if (!elements.customerPetsList || !elements.customerPetsEmpty || !elements.customerPetsLoading) {
       return;
     }
-    elements.customerPetsList.innerHTML = '';
+    if (elements.customerPetsList) {
+      elements.customerPetsList.innerHTML = '';
+    }
     if (!state.modalSelectedCliente) {
-      elements.customerPetsLoading.classList.add('hidden');
+      hideElement(elements.customerPetsLoading);
       elements.customerPetsEmpty.textContent = 'Selecione um cliente para visualizar os pets vinculados.';
-      elements.customerPetsEmpty.classList.remove('hidden');
+      showElement(elements.customerPetsEmpty);
       return;
     }
     if (state.customerPetsLoading) {
-      elements.customerPetsLoading.classList.remove('hidden');
-      elements.customerPetsEmpty.classList.add('hidden');
+      showElement(elements.customerPetsLoading);
+      hideElement(elements.customerPetsEmpty);
       return;
     }
-    elements.customerPetsLoading.classList.add('hidden');
+    hideElement(elements.customerPetsLoading);
     if (!state.customerPets.length) {
       elements.customerPetsEmpty.textContent = 'Nenhum pet cadastrado para este cliente.';
-      elements.customerPetsEmpty.classList.remove('hidden');
+      showElement(elements.customerPetsEmpty);
       return;
     }
-    elements.customerPetsEmpty.classList.add('hidden');
+    hideElement(elements.customerPetsEmpty);
     const fragment = document.createDocumentFragment();
     state.customerPets.forEach((pet) => {
       const isSelected = Boolean(state.modalSelectedPet && state.modalSelectedPet._id === pet._id);
@@ -2769,8 +2827,9 @@
       renderCustomerPets();
       updateCustomerModalActions();
     }
-    elements.customerModal.classList.remove('hidden');
+    showElement(elements.customerModal);
     document.body.classList.add('overflow-hidden');
+    lockBodyScroll();
     updateCustomerModalTabs();
     renderCustomerSearchResults();
     renderCustomerPets();
@@ -2782,11 +2841,12 @@
 
   const closeCustomerModal = () => {
     if (!elements.customerModal) return;
-    elements.customerModal.classList.add('hidden');
-    if (
-      (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) &&
-      (!elements.paymentValueModal || elements.paymentValueModal.classList.contains('hidden'))
-    ) {
+    hideElement(elements.customerModal);
+    const preserveScroll =
+      (elements.finalizeModal && !elements.finalizeModal.classList.contains('hidden')) ||
+      (elements.paymentValueModal && !elements.paymentValueModal.classList.contains('hidden'));
+    unlockBodyScroll();
+    if (!preserveScroll) {
       document.body.classList.remove('overflow-hidden');
     }
     if (customerSearchTimeout) {
@@ -3242,14 +3302,18 @@
     setDeliveryAddressFormVisible(false);
     resetDeliveryAddressForm();
     await loadDeliveryAddresses();
-    elements.deliveryAddressModal.classList.remove('hidden');
+    showElement(elements.deliveryAddressModal);
     document.body.classList.add('overflow-hidden');
+    lockBodyScroll();
   };
 
   const closeDeliveryAddressModal = () => {
     if (!elements.deliveryAddressModal) return;
-    elements.deliveryAddressModal.classList.add('hidden');
-    if (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) {
+    hideElement(elements.deliveryAddressModal);
+    const preserveScroll =
+      elements.finalizeModal && !elements.finalizeModal.classList.contains('hidden');
+    unlockBodyScroll();
+    if (!preserveScroll) {
       document.body.classList.remove('overflow-hidden');
     }
   };
@@ -3799,8 +3863,9 @@
     renderSalePaymentsPreview();
     updateSaleSummary();
     if (elements.finalizeModal) {
-      elements.finalizeModal.classList.remove('hidden');
+      showElement(elements.finalizeModal);
       document.body.classList.add('overflow-hidden');
+      lockBodyScroll();
     }
   };
 
@@ -3817,8 +3882,11 @@
   };
 
   const closePaymentValueModal = (preserveBodyScroll = false) => {
+    const hadScrollLock =
+      elements.paymentValueModal?.dataset.pdvScrollLocked === '1';
     if (elements.paymentValueModal) {
-      elements.paymentValueModal.classList.add('hidden');
+      hideElement(elements.paymentValueModal);
+      delete elements.paymentValueModal.dataset.pdvScrollLocked;
     }
     if (elements.paymentValueInput) {
       elements.paymentValueInput.value = '';
@@ -3827,6 +3895,9 @@
       elements.paymentValueHint.textContent = '';
     }
     paymentModalState = null;
+    if (hadScrollLock) {
+      unlockBodyScroll();
+    }
     if (!preserveBodyScroll) {
       document.body.classList.remove('overflow-hidden');
     }
@@ -3835,9 +3906,12 @@
   const closeFinalizeModal = () => {
     if (!elements.finalizeModal) return;
     const context = state.activeFinalizeContext;
-    elements.finalizeModal.classList.add('hidden');
+    hideElement(elements.finalizeModal);
     closePaymentValueModal(true);
-    if (!elements.deliveryAddressModal || elements.deliveryAddressModal.classList.contains('hidden')) {
+    const preserveScroll =
+      elements.deliveryAddressModal && !elements.deliveryAddressModal.classList.contains('hidden');
+    unlockBodyScroll();
+    if (!preserveScroll) {
       document.body.classList.remove('overflow-hidden');
     }
     if (context === 'orcamento') {
@@ -3967,8 +4041,9 @@
   const openFiscalEmissionModal = (initialStep = fiscalEmissionStepOrder[0]) => {
     state.fiscalEmissionModalOpen = true;
     if (!elements.fiscalStatusModal) return;
-    elements.fiscalStatusModal.classList.remove('hidden');
+    showElement(elements.fiscalStatusModal);
     document.body.classList.add('overflow-hidden');
+    lockBodyScroll();
     if (elements.fiscalStatusTitle) {
       elements.fiscalStatusTitle.textContent = 'Emitindo nota fiscal...';
     }
@@ -3979,8 +4054,11 @@
     if (!state.fiscalEmissionModalOpen) return;
     state.fiscalEmissionModalOpen = false;
     if (!elements.fiscalStatusModal) return;
-    elements.fiscalStatusModal.classList.add('hidden');
-    if (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) {
+    hideElement(elements.fiscalStatusModal);
+    const preserveScroll =
+      elements.finalizeModal && !elements.finalizeModal.classList.contains('hidden');
+    unlockBodyScroll();
+    if (!preserveScroll) {
       document.body.classList.remove('overflow-hidden');
     }
   };
@@ -4003,14 +4081,18 @@
         elements.paymentValueSubtitle.textContent = `Pagamento ${parcelasLabel}.`;
       }
       if (elements.paymentValueHint) {
-        elements.paymentValueHint.textContent = restante > 0
-          ? `Restante sugerido: ${formatCurrency(restante)}.`
-          : 'Informe o valor recebido para este pagamento.';
+      elements.paymentValueHint.textContent = restante > 0
+        ? `Restante sugerido: ${formatCurrency(restante)}.`
+        : 'Informe o valor recebido para este pagamento.';
       }
       elements.paymentValueInput.value = restante > 0 ? restante.toFixed(2) : '';
       paymentModalState = { resolve, reject, method, parcelas };
-      elements.paymentValueModal.classList.remove('hidden');
+      showElement(elements.paymentValueModal);
       document.body.classList.add('overflow-hidden');
+      lockBodyScroll();
+      if (elements.paymentValueModal) {
+        elements.paymentValueModal.dataset.pdvScrollLocked = '1';
+      }
       setTimeout(() => elements.paymentValueInput?.focus(), 60);
     });
   };
@@ -4131,13 +4213,14 @@
     if (elements.budgetModalError) {
       elements.budgetModalError.classList.add('hidden');
     }
-    elements.budgetModal.classList.remove('hidden');
+    showElement(elements.budgetModal);
     document.body.classList.add('overflow-hidden');
+    lockBodyScroll();
   };
 
   const closeBudgetModal = ({ preserveValidity = false } = {}) => {
     if (!elements.budgetModal) return;
-    elements.budgetModal.classList.add('hidden');
+    hideElement(elements.budgetModal);
     if (!preserveValidity) {
       state.pendingBudgetValidityDays = null;
     }
@@ -4145,6 +4228,7 @@
       elements.budgetModalError.classList.add('hidden');
     }
     document.body.classList.remove('overflow-hidden');
+    unlockBodyScroll();
   };
 
   const confirmBudgetValidity = () => {
@@ -8242,8 +8326,9 @@
       elements.saleCancelReason.value = '';
     }
     clearSaleCancelError();
-    elements.saleCancelModal.classList.remove('hidden');
+    showElement(elements.saleCancelModal);
     document.body.classList.add('overflow-hidden');
+    lockBodyScroll();
     window.setTimeout(() => {
       elements.saleCancelReason?.focus();
     }, 50);
@@ -8251,19 +8336,20 @@
 
   const closeSaleCancelModal = () => {
     if (elements.saleCancelModal) {
-      elements.saleCancelModal.classList.add('hidden');
+      hideElement(elements.saleCancelModal);
     }
     state.activeSaleCancellationId = '';
     if (elements.saleCancelReason) {
       elements.saleCancelReason.value = '';
     }
     clearSaleCancelError();
-    if (
-      !isModalActive(elements.finalizeModal) &&
-      !isModalActive(elements.paymentValueModal) &&
-      !isModalActive(elements.deliveryAddressModal) &&
-      !isModalActive(elements.customerModal)
-    ) {
+    const otherModalOpen =
+      isModalActive(elements.finalizeModal) ||
+      isModalActive(elements.paymentValueModal) ||
+      isModalActive(elements.deliveryAddressModal) ||
+      isModalActive(elements.customerModal);
+    unlockBodyScroll();
+    if (!otherModalOpen) {
       document.body.classList.remove('overflow-hidden');
     }
   };
