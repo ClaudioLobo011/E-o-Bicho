@@ -27,7 +27,12 @@ function normalize(value: string): string {
     .trim();
 }
 
-export default function AdminHeader() {
+interface AdminHeaderProps {
+  onToggleSidebar: () => void;
+  isSidebarOpen: boolean;
+}
+
+export default function AdminHeader({ onToggleSidebar, isSidebarOpen }: AdminHeaderProps) {
   const { openTab } = useTabs();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -161,9 +166,13 @@ export default function AdminHeader() {
             type="button"
             className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-700"
             aria-label="Menu do painel"
-            disabled
+            aria-expanded={isSidebarOpen}
+            aria-controls="admin-sidebar"
+            onClick={onToggleSidebar}
           >
-            <span aria-hidden>☰</span>
+            <span aria-hidden>
+              <i className="fas fa-bars"></i>
+            </span>
           </button>
           <a href="/" className="inline-flex">
             <img src="/image/logo.svg" alt="Logotipo E o Bicho" className="h-16 w-auto" />
