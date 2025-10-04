@@ -389,6 +389,47 @@ router.post(
 
       const code = await generateSequentialCode();
 
+      const rawInstallments = Array.isArray(req.body.installmentsData)
+        ? req.body.installmentsData
+        : [];
+
+      const detailsMap = new Map();
+      rawInstallments.forEach((item) => {
+        const number = Number.parseInt(item?.number, 10);
+        if (!Number.isFinite(number) || number < 1 || number > installmentsCount) return;
+        const dueOverride = parseDate(item?.dueDate || item?.due);
+        const bankOverride = normalizeString(item?.bankAccount || item?.bank);
+        const normalizedBank = bankOverride && mongoose.Types.ObjectId.isValid(bankOverride) ? bankOverride : null;
+        detailsMap.set(number, {
+          dueDate: dueOverride && !Number.isNaN(dueOverride.getTime()) ? dueOverride : null,
+          bankAccount: normalizedBank,
+        });
+      });
+
+      const bankAccountsMap = new Map();
+      bankAccountsMap.set(String(bankAccount._id), bankAccount);
+
+      const overrideBankAccountIds = [...new Set(
+        Array.from(detailsMap.values())
+          .map((detail) => detail.bankAccount)
+          .filter((id) => id && id !== bankAccountId),
+      )];
+
+      if (overrideBankAccountIds.length) {
+        const overrideAccounts = await BankAccount.find({ _id: { $in: overrideBankAccountIds } });
+        if (overrideAccounts.length !== overrideBankAccountIds.length) {
+          return res.status(404).json({ message: 'Algumas contas correntes informadas nas parcelas não foram encontradas.' });
+        }
+        for (const account of overrideAccounts) {
+          if (String(account.company) !== company) {
+            return res.status(400).json({
+              message: 'Uma das contas correntes informadas nas parcelas não pertence à empresa selecionada.',
+            });
+          }
+          bankAccountsMap.set(String(account._id), account);
+        }
+      }
+
       const installments = [];
       const centsTotal = Math.round(totalValue * 100);
       const baseCents = Math.floor(centsTotal / installmentsCount);
@@ -397,14 +438,18 @@ router.post(
       for (let index = 0; index < installmentsCount; index += 1) {
         const amountCents = baseCents + (index < remainder ? 1 : 0);
         const installmentValue = formatCurrency(amountCents / 100);
-        const installmentDue = addMonths(dueDate, index);
-        const installmentIssue = addMonths(issueDate, index);
+        const number = index + 1;
+        const details = detailsMap.get(number) || {};
+        const installmentDue = details.dueDate || addMonths(dueDate, index);
+        const bankAccountForInstallment = details.bankAccount && bankAccountsMap.has(details.bankAccount)
+          ? details.bankAccount
+          : bankAccountId;
         installments.push({
-          number: index + 1,
-          issueDate: installmentIssue,
+          number,
+          issueDate,
           dueDate: installmentDue,
           value: installmentValue,
-          bankAccount: bankAccountId,
+          bankAccount: bankAccountForInstallment,
           accountingAccount: accountingAccountId,
         });
       }

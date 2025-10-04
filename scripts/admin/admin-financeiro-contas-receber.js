@@ -22,6 +22,7 @@
     employees: [],
     activeCompany: '',
     previewInstallments: [],
+    bankAccountOptions: [],
     lastCreatedCode: null,
     receivables: [],
   };
@@ -104,6 +105,27 @@
     return dateFormatter.format(date);
   }
 
+  function formatDateInputValue(value) {
+    if (!value) return '';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function parseDateInputValue(value) {
+    if (!value) return null;
+    const parts = String(value).split('-');
+    if (parts.length !== 3) return null;
+    const [year, month, day] = parts.map((part) => Number.parseInt(part, 10));
+    if (!year || !month || !day) return null;
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (Number.isNaN(date.getTime())) return null;
+    return date;
+  }
+
   function clearSelect(select, placeholder) {
     if (!select) return;
     select.innerHTML = '';
@@ -138,8 +160,8 @@
   function buildInstallmentsPreview() {
     const totalValue = Number.parseFloat(elements.totalValue?.value || '0');
     const installmentsCount = Math.max(1, Number.parseInt(elements.installments?.value || '1', 10) || 1);
-    const issueDate = elements.issue?.value ? new Date(elements.issue.value) : null;
-    const dueDate = elements.due?.value ? new Date(elements.due.value) : null;
+    const issueDate = parseDateInputValue(elements.issue?.value);
+    const dueDate = parseDateInputValue(elements.due?.value);
 
     if (!issueDate || Number.isNaN(issueDate.getTime()) || !dueDate || Number.isNaN(dueDate.getTime())) {
       return [];
@@ -153,17 +175,21 @@
     const baseCents = Math.floor(centsTotal / installmentsCount);
     const remainder = centsTotal - baseCents * installmentsCount;
 
+    const bankAccountId = elements.bankAccount?.value || '';
+    const accountingAccountId = elements.accountingAccount?.value || '';
+
     const result = [];
     for (let index = 0; index < installmentsCount; index += 1) {
       const amountCents = baseCents + (index < remainder ? 1 : 0);
       const value = amountCents / 100;
-      const installmentIssue = addMonths(issueDate, index);
       const installmentDue = addMonths(dueDate, index);
       result.push({
         number: index + 1,
         value,
-        issueDate: installmentIssue,
+        issueDate,
         dueDate: installmentDue,
+        bankAccount: bankAccountId,
+        accountingAccount: accountingAccountId,
       });
     }
 
@@ -195,26 +221,84 @@
 
     const total = installments.length;
     const displayCode = code || state.lastCreatedCode || 'Prévia';
+    const isPreview = !code;
 
-    installments.forEach((installment) => {
+    installments.forEach((installment, index) => {
       const row = document.createElement('tr');
 
-      const cells = [
-        displayCode,
-        `${installment.number}/${total}`,
-        formatDateBR(installment.issueDate),
-        formatDateBR(installment.dueDate),
-        formatCurrencyBR(installment.value),
-        installment.bankAccount?.label || bankLabel || '—',
-        installment.accountingAccount?.label || accountingLabel || '—',
-      ];
+      const codeCell = document.createElement('td');
+      codeCell.className = 'px-4 py-3';
+      codeCell.textContent = displayCode;
+      row.appendChild(codeCell);
 
-      cells.forEach((value, index) => {
-        const cell = document.createElement('td');
-        cell.className = `px-4 py-3${index === 4 ? ' text-right' : ''}`;
-        cell.textContent = value;
-        row.appendChild(cell);
-      });
+      const installmentCell = document.createElement('td');
+      installmentCell.className = 'px-4 py-3';
+      installmentCell.textContent = `${installment.number || index + 1}/${total}`;
+      row.appendChild(installmentCell);
+
+      const issueCell = document.createElement('td');
+      issueCell.className = 'px-4 py-3';
+      const issueValue = installment.issueDate || parseDateInputValue(elements.issue?.value);
+      issueCell.textContent = formatDateBR(issueValue);
+      row.appendChild(issueCell);
+
+      const dueCell = document.createElement('td');
+      dueCell.className = 'px-4 py-3';
+      if (isPreview) {
+        const dueInput = document.createElement('input');
+        dueInput.type = 'date';
+        dueInput.className = 'w-full rounded-lg border border-gray-200 px-2 py-1 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20';
+        dueInput.value = formatDateInputValue(installment.dueDate);
+        dueInput.addEventListener('change', (event) => {
+          const newDate = parseDateInputValue(event.target.value);
+          if (newDate) {
+            installment.dueDate = newDate;
+          }
+        });
+        dueCell.appendChild(dueInput);
+      } else {
+        dueCell.textContent = formatDateBR(installment.dueDate);
+      }
+      row.appendChild(dueCell);
+
+      const valueCell = document.createElement('td');
+      valueCell.className = 'px-4 py-3 text-right';
+      valueCell.textContent = formatCurrencyBR(installment.value);
+      row.appendChild(valueCell);
+
+      const bankCell = document.createElement('td');
+      bankCell.className = 'px-4 py-3';
+      if (isPreview) {
+        const select = document.createElement('select');
+        select.className = 'w-full rounded-lg border border-gray-200 px-2 py-1 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20';
+        clearSelect(select, 'Selecione...');
+        state.bankAccountOptions.forEach((option) => {
+          const opt = document.createElement('option');
+          opt.value = option.value;
+          opt.textContent = option.label;
+          select.appendChild(opt);
+        });
+        if (state.bankAccountOptions.length === 0) {
+          select.disabled = true;
+        }
+        if (installment.bankAccount) {
+          select.value = installment.bankAccount;
+        } else if (elements.bankAccount?.value) {
+          select.value = elements.bankAccount.value;
+        }
+        select.addEventListener('change', () => {
+          installment.bankAccount = select.value;
+        });
+        bankCell.appendChild(select);
+      } else {
+        bankCell.textContent = installment.bankAccount?.label || bankLabel || '—';
+      }
+      row.appendChild(bankCell);
+
+      const accountingCell = document.createElement('td');
+      accountingCell.className = 'px-4 py-3';
+      accountingCell.textContent = installment.accountingAccount?.label || accountingLabel || '—';
+      row.appendChild(accountingCell);
 
       tbody.appendChild(row);
     });
@@ -451,6 +535,7 @@
     if (!companyId) {
       setSelectOptions(elements.bankAccount, [], 'Selecione uma empresa');
       elements.bankAccount.disabled = true;
+      state.bankAccountOptions = [];
       return;
     }
     const currentCompany = companyId;
@@ -466,6 +551,7 @@
       const data = await response.json();
       if (state.activeCompany !== currentCompany) return;
       const accounts = Array.isArray(data.accounts) ? data.accounts : [];
+      const previousSelection = elements.bankAccount?.value || '';
       const options = accounts.map((account) => ({
         value: account._id,
         label: account.alias
@@ -477,11 +563,27 @@
       }));
       setSelectOptions(elements.bankAccount, options, options.length ? 'Selecione...' : 'Nenhuma conta cadastrada');
       elements.bankAccount.disabled = options.length === 0;
+      if (previousSelection && options.some((option) => option.value === previousSelection)) {
+        elements.bankAccount.value = previousSelection;
+      }
+      state.bankAccountOptions = options;
+      const defaultBank = elements.bankAccount?.value || '';
+      state.previewInstallments.forEach((installment) => {
+        if (!options.some((option) => option.value === installment.bankAccount)) {
+          installment.bankAccount = defaultBank;
+        }
+      });
+      if (state.previewInstallments.length) {
+        const bankLabel = getSelectedOptionLabel(elements.bankAccount);
+        const accountingLabel = getSelectedOptionLabel(elements.accountingAccount);
+        updateInstallmentsTable(state.previewInstallments, null, bankLabel, accountingLabel);
+      }
     } catch (error) {
       console.error('accounts-receivable:loadBankAccounts', error);
       notify(error.message || 'Erro ao carregar as contas correntes.', 'error');
       setSelectOptions(elements.bankAccount, [], 'Não foi possível carregar');
       elements.bankAccount.disabled = true;
+      state.bankAccountOptions = [];
     }
   }
 
@@ -626,6 +728,14 @@
         protest: readCheckbox(elements.protest),
       };
 
+      if (state.previewInstallments.length) {
+        payload.installmentsData = state.previewInstallments.map((installment, index) => ({
+          number: installment.number || index + 1,
+          dueDate: formatDateInputValue(installment.dueDate) || '',
+          bankAccount: installment.bankAccount || '',
+        }));
+      }
+
       const response = await fetch(RECEIVABLES_API, {
         method: 'POST',
         headers: {
@@ -651,6 +761,7 @@
 
       const bankLabel = created.bankAccount?.label || getSelectedOptionLabel(elements.bankAccount);
       const accountingLabel = created.accountingAccount?.label || getSelectedOptionLabel(elements.accountingAccount);
+      state.previewInstallments = [];
       updateInstallmentsTable(created.installments || [], created.code, bankLabel, accountingLabel);
 
       await loadReceivables();
