@@ -1216,22 +1216,27 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const hasCNPJ = /^\d{14}$/.test(destCNPJ);
   const hasIdE = !!destIdE;
 
-  const xNome = sanitize(
-    firstNonEmptyString(
-      cliente?.nome,
-      cliente?.razaoSocial,
-      cliente?.fantasia,
-      sale?.customerName,
-      sale?.customer?.nome,
-      sale?.customer?.razaoSocial,
-      sale?.customer?.fantasia,
-      sale?.cliente?.nome,
-      sale?.cliente?.razaoSocial,
-      sale?.cliente?.fantasia,
-      delivery?.nome
-    )
+  const isHomologation = tpAmb === '2';
+
+  const rawDestName = firstNonEmptyString(
+    cliente?.nome,
+    cliente?.razaoSocial,
+    cliente?.fantasia,
+    sale?.customerName,
+    sale?.customer?.nome,
+    sale?.customer?.razaoSocial,
+    sale?.customer?.fantasia,
+    sale?.cliente?.nome,
+    sale?.cliente?.razaoSocial,
+    sale?.cliente?.fantasia,
+    delivery?.nome
   );
-  const xNome60 = (xNome || 'CONSUMIDOR').slice(0, 60);
+
+  const destName = sanitize(
+    isHomologation
+      ? HOMOLOGATION_FIRST_ITEM_DESCRIPTION
+      : (rawDestName || 'CONSUMIDOR').slice(0, 60)
+  );
 
   if (hasCPF || hasCNPJ || hasIdE) {
     const dLgr = sanitize(delivery?.logradouro || cliente?.logradouro);
@@ -1259,7 +1264,7 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
     else if (hasCPF) infNfeLines.push(`      <CPF>${destCPF}</CPF>`);
     else infNfeLines.push(`      <idEstrangeiro>${destIdE}</idEstrangeiro>`);
 
-    if (xNome60) infNfeLines.push(`      <xNome>${xNome60}</xNome>`);
+    if (destName) infNfeLines.push(`      <xNome>${destName}</xNome>`);
 
     if (hasAddr) {
       infNfeLines.push('      <enderDest>');
@@ -1283,8 +1288,6 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
   let totalPis = 0;
   let totalCofins = 0;
-
-  const isHomologation = tpAmb === '2';
 
   fiscalItems.forEach((item, index) => {
     const product = item.productId ? productsMap.get(String(item.productId)) : null;
