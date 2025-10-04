@@ -39,7 +39,7 @@
               <i class="fas fa-qrcode"></i>
               Ler XML de NF-e
             </button>
-            <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+            <button type="button" id="supplier-save-button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
               <i class="fas fa-save"></i>
               Salvar cadastro
             </button>
@@ -47,7 +47,7 @@
         </header>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <form class="space-y-8">
+          <form id="supplier-form" class="space-y-8">
             <div class="space-y-6">
               <div class="flex items-center justify-between">
                 <h2 class="text-lg font-semibold text-gray-800">Informações cadastrais</h2>
@@ -59,8 +59,8 @@
               <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <div class="lg:col-span-1">
                   <label for="supplier-code" class="block text-sm font-medium text-gray-700 mb-1">Código</label>
-                  <input type="text" id="supplier-code" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-gray-50 text-gray-500" value="Gerado automaticamente" disabled>
-                  <p class="mt-1 text-xs text-gray-500">Gerado pelo sistema após salvar o cadastro.</p>
+                  <input type="text" id="supplier-code" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-gray-50 text-gray-700" value="Gerado automaticamente" readonly>
+                  <p id="supplier-code-status" class="mt-1 text-xs text-gray-500">Gerado automaticamente após salvar o cadastro.</p>
                 </div>
                 <div class="lg:col-span-1">
                   <label for="supplier-country" class="block text-sm font-medium text-gray-700 mb-1">País <span class="text-red-500">*</span></label>
@@ -306,27 +306,23 @@
                 <div class="lg:col-span-1">
                   <label for="supplier-companies" class="block text-sm font-medium text-gray-700 mb-1">Empresas vinculadas</label>
                   <select id="supplier-companies" multiple class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20 h-28">
-                    <option value="matriz">E o Bicho Matriz</option>
-                    <option value="filial-sul">E o Bicho Distribuição Sul</option>
-                    <option value="filial-nordeste">E o Bicho Nordeste</option>
-                    <option value="clinicas">Clínicas Parceiras</option>
-                    <option value="marketplace">Marketplace E o Bicho</option>
+                    <option value="" disabled>Carregando empresas...</option>
                   </select>
-                  <p class="mt-1 text-xs text-gray-500">Selecione todas as unidades em que o fornecedor atua.</p>
+                  <p id="supplier-companies-status" class="mt-1 text-xs text-gray-500">Carregando empresas cadastradas...</p>
                 </div>
                 <div class="lg:col-span-1">
                   <fieldset class="space-y-2">
                     <legend class="block text-sm font-medium text-gray-700">Classificações</legend>
-                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                      <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700" for="supplier-flag-inactive">
+                      <input type="checkbox" id="supplier-flag-inactive" class="rounded border-gray-300 text-primary focus:ring-primary/30">
                       Inativo
                     </label>
-                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                      <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700" for="supplier-flag-ong">
+                      <input type="checkbox" id="supplier-flag-ong" class="rounded border-gray-300 text-primary focus:ring-primary/30">
                       ONG
                     </label>
-                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                      <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700" for="supplier-flag-bank">
+                      <input type="checkbox" id="supplier-flag-bank" class="rounded border-gray-300 text-primary focus:ring-primary/30">
                       Fornecedor bancário
                     </label>
                   </fieldset>
@@ -347,6 +343,7 @@
                 <div>
                   <label for="supplier-cep" class="block text-sm font-medium text-gray-700 mb-1">CEP</label>
                   <input type="text" id="supplier-cep" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="60175-320">
+                  <p id="supplier-cep-status" class="mt-1 text-xs text-gray-500"></p>
                 </div>
                 <div>
                   <label for="supplier-logradouro" class="block text-sm font-medium text-gray-700 mb-1">Logradouro <span class="text-red-500">*</span></label>
@@ -368,6 +365,7 @@
                   <label for="supplier-cidade" class="block text-sm font-medium text-gray-700 mb-1">Cidade <span class="text-red-500">*</span></label>
                   <input type="text" id="supplier-cidade" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Fortaleza" required>
                 </div>
+                <input type="hidden" id="supplier-uf" value="">
               </div>
 
               <div id="tab-contato" class="tab-panel hidden grid grid-cols-1 gap-4 md:grid-cols-2" data-tab-panel>
@@ -406,7 +404,10 @@
                   </div>
                   <div>
                     <label for="supplier-chart-account" class="block text-sm font-medium text-gray-700 mb-1">Conta contábil</label>
-                    <input type="text" id="supplier-chart-account" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="3.01.02.001">
+                    <select id="supplier-chart-account" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="">Selecione uma conta contábil</option>
+                    </select>
+                    <p id="supplier-chart-account-status" class="mt-1 text-xs text-gray-500">Carregando contas contábeis...</p>
                   </div>
                   <div>
                     <label for="supplier-icms" class="block text-sm font-medium text-gray-700 mb-1">Contribuinte ICMS</label>
@@ -497,6 +498,8 @@
             </div>
           </div>
 
+          <div id="suppliers-table-status" class="text-sm text-gray-500 mb-3">Carregando fornecedores cadastrados...</div>
+
           <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm" id="suppliers-table">
               <thead class="bg-gray-50">
@@ -585,339 +588,7 @@
   <script src="../../scripts/core/ui.js"></script>
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-compras-fornecedor-cadastro.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const tabButtons = document.querySelectorAll('.tab-button');
-      const tabPanels = document.querySelectorAll('[data-tab-panel]');
-
-      const activateTab = (targetId) => {
-        tabButtons.forEach((button) => {
-          const isActive = button.dataset.tabTarget === targetId;
-          button.classList.toggle('active', isActive);
-          button.classList.toggle('bg-primary', isActive);
-          button.classList.toggle('text-white', isActive);
-          button.classList.toggle('border', true);
-          button.classList.toggle('border-primary', isActive);
-          button.classList.toggle('border-gray-200', !isActive);
-          button.classList.toggle('bg-gray-50', !isActive);
-          button.classList.toggle('text-gray-700', !isActive);
-        });
-
-        tabPanels.forEach((panel) => {
-          panel.classList.toggle('hidden', panel.id !== targetId);
-        });
-      };
-
-      tabButtons.forEach((button) => {
-        if (!button.classList.contains('tab-button-styled')) {
-          button.classList.add('tab-button-styled', 'rounded-lg', 'px-4', 'py-2', 'text-sm', 'font-semibold', 'transition-colors');
-        }
-
-        button.addEventListener('click', () => activateTab(button.dataset.tabTarget));
-      });
-
-      activateTab('tab-endereco');
-
-      const typeButtons = document.querySelectorAll('[data-type-button]');
-      typeButtons.forEach((label) => {
-        const input = label.querySelector('input[type="radio"]');
-        const updateAppearance = () => {
-          const isChecked = input.checked;
-          label.classList.toggle('bg-primary', isChecked);
-          label.classList.toggle('text-white', isChecked);
-          label.classList.toggle('border-primary', isChecked);
-          label.classList.toggle('border-gray-200', !isChecked);
-        };
-
-        updateAppearance();
-
-        label.addEventListener('click', () => {
-          input.checked = true;
-          typeButtons.forEach((otherLabel) => {
-            const otherInput = otherLabel.querySelector('input[type="radio"]');
-            const otherChecked = otherInput.checked;
-            otherLabel.classList.toggle('bg-primary', otherChecked);
-            otherLabel.classList.toggle('text-white', otherChecked);
-            otherLabel.classList.toggle('border-primary', otherChecked);
-            otherLabel.classList.toggle('border-gray-200', !otherChecked);
-          });
-        });
-      });
-
-      const retentionButtons = document.querySelectorAll('.retencao-button');
-      const hiddenRetencoes = document.getElementById('retencoes-selecionadas');
-
-      const updateRetencoesValue = () => {
-        const values = Array.from(retentionButtons)
-          .filter((button) => button.classList.contains('active'))
-          .map((button) => button.dataset.retencao);
-        hiddenRetencoes.value = values.join(',');
-      };
-
-      retentionButtons.forEach((button) => {
-        button.classList.add('rounded-lg', 'border', 'px-4', 'py-2', 'text-sm', 'font-semibold', 'transition-colors', 'border-gray-200', 'text-gray-700', 'bg-gray-50');
-        button.addEventListener('click', () => {
-          button.classList.toggle('active');
-          button.classList.toggle('bg-primary');
-          button.classList.toggle('text-white');
-          button.classList.toggle('border-primary');
-          button.classList.toggle('border-gray-200');
-          updateRetencoesValue();
-        });
-      });
-
-      const representativesList = document.getElementById('representatives-list');
-      const addRepresentativeButton = document.getElementById('add-representative');
-
-      addRepresentativeButton.addEventListener('click', () => {
-        const name = document.getElementById('representative-name').value.trim();
-        const mobile = document.getElementById('representative-mobile').value.trim();
-        const email = document.getElementById('representative-email').value.trim();
-
-        if (!name && !mobile && !email) {
-          return;
-        }
-
-        if (representativesList.firstElementChild && representativesList.firstElementChild.tagName.toLowerCase() === 'p') {
-          representativesList.innerHTML = '';
-        }
-
-        const card = document.createElement('div');
-        card.className = 'rounded-lg border border-gray-200 bg-white p-4 shadow-sm flex flex-col gap-2 md:flex-row md:items-center md:justify-between';
-        card.innerHTML = `
-          <div>
-            <p class="text-sm font-semibold text-gray-800">${name || 'Nome não informado'}</p>
-            <p class="text-xs text-gray-600">${mobile || 'Sem celular informado'} • ${email || 'Sem e-mail informado'}</p>
-          </div>
-          <button type="button" class="text-xs text-red-600 font-semibold hover:underline">Remover</button>
-        `;
-
-        card.querySelector('button').addEventListener('click', () => {
-          card.remove();
-          if (!representativesList.children.length) {
-            representativesList.innerHTML = '<p class="text-sm text-gray-500">Nenhum representante cadastrado até o momento.</p>';
-          }
-        });
-
-        representativesList.appendChild(card);
-
-        document.getElementById('representative-name').value = '';
-        document.getElementById('representative-mobile').value = '';
-        document.getElementById('representative-email').value = '';
-      });
-
-      fetch('../../data/bancos.json')
-        .then((response) => response.json())
-        .then((banks) => {
-          const bankSelect = document.getElementById('supplier-bank');
-          bankSelect.innerHTML = '<option value="">Selecione um banco</option>';
-          banks.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-          banks.forEach((bank) => {
-            const option = document.createElement('option');
-            const code = bank.code ? String(bank.code).padStart(3, '0') : '---';
-            option.value = bank.ispb || bank.code || bank.name;
-            option.textContent = `${code} - ${bank.name}`;
-            bankSelect.appendChild(option);
-          });
-        })
-        .catch(() => {
-          const bankSelect = document.getElementById('supplier-bank');
-          bankSelect.innerHTML = '<option value="">Não foi possível carregar os bancos</option>';
-        });
-
-      const suppliersTableBody = document.getElementById('suppliers-table-body');
-      const filterInputs = document.querySelectorAll('.filter-input');
-      const sortButtons = document.querySelectorAll('.sort-button');
-
-      if (suppliersTableBody && filterInputs.length && sortButtons.length) {
-        const suppliersData = [
-          {
-            codigo: '1001',
-            razaoSocial: 'Cooperativa Agroindustrial Aurora LTDA',
-            nomeFantasia: 'Aurora Alimentos',
-            cnpj: '83.631.225/0001-08',
-            pais: 'Brasil',
-            tipo: 'Jurídico',
-            empresas: ['E o Bicho Matriz', 'E o Bicho Filial Sul'],
-          },
-          {
-            codigo: '1002',
-            razaoSocial: 'JBS S.A.',
-            nomeFantasia: 'Seara Alimentos',
-            cnpj: '02.916.265/0001-60',
-            pais: 'Brasil',
-            tipo: 'Jurídico',
-            empresas: ['E o Bicho Matriz'],
-          },
-          {
-            codigo: '1003',
-            razaoSocial: 'Bunge Alimentos S.A.',
-            nomeFantasia: 'Bunge Brasil',
-            cnpj: '84.039.168/0001-60',
-            pais: 'Brasil',
-            tipo: 'Jurídico',
-            empresas: ['E o Bicho Matriz', 'E o Bicho Nordeste'],
-          },
-          {
-            codigo: '1004',
-            razaoSocial: 'DSM Produtos Nutricionais Brasil S.A.',
-            nomeFantasia: 'DSM Nutrição Animal',
-            cnpj: '43.319.158/0001-85',
-            pais: 'Holanda',
-            tipo: 'Jurídico',
-            empresas: ['E o Bicho Matriz'],
-          },
-          {
-            codigo: '1005',
-            razaoSocial: 'Distribuidora Petix Ltda.',
-            nomeFantasia: 'Petix',
-            cnpj: '89.456.123/0001-77',
-            pais: 'Brasil',
-            tipo: 'MEI',
-            empresas: ['E o Bicho Interior'],
-          },
-          {
-            codigo: '1006',
-            razaoSocial: 'Zoetis Indústria de Produtos Veterinários Ltda.',
-            nomeFantasia: 'Zoetis Brasil',
-            cnpj: '03.840.559/0001-15',
-            pais: 'Estados Unidos',
-            tipo: 'Jurídico',
-            empresas: ['E o Bicho Matriz', 'E o Bicho Filial Sul', 'E o Bicho Interior'],
-          },
-        ];
-
-        const currentFilters = {
-          codigo: '',
-          razaoSocial: '',
-          nomeFantasia: '',
-          cnpj: '',
-          pais: '',
-          tipo: '',
-          empresas: '',
-        };
-
-        const currentSort = {
-          column: 'codigo',
-          direction: 'asc',
-        };
-
-        const normalizeValue = (value) => {
-          if (Array.isArray(value)) {
-            value = value.join(', ');
-          }
-
-          return String(value ?? '')
-            .normalize('NFD')
-            .replace(/\p{Diacritic}/gu, '')
-            .toLowerCase();
-        };
-
-        const getDisplayValue = (supplier, column) => {
-          if (column === 'empresas') {
-            return supplier.empresas.join(', ');
-          }
-
-          return supplier[column];
-        };
-
-        const renderTable = (data) => {
-          const rows = data
-            .map((supplier) => {
-              const empresas = supplier.empresas.join(', ');
-              return `
-                <tr class="hover:bg-gray-50 transition">
-                  <td class="px-4 py-3 whitespace-nowrap font-semibold text-gray-700">${supplier.codigo}</td>
-                  <td class="px-4 py-3 text-gray-700">${supplier.razaoSocial}</td>
-                  <td class="px-4 py-3 text-gray-600">${supplier.nomeFantasia}</td>
-                  <td class="px-4 py-3 text-gray-700">${supplier.cnpj}</td>
-                  <td class="px-4 py-3 text-gray-600">${supplier.pais}</td>
-                  <td class="px-4 py-3 text-gray-600">${supplier.tipo}</td>
-                  <td class="px-4 py-3 text-gray-600">${empresas}</td>
-                </tr>
-              `;
-            })
-            .join('');
-
-          suppliersTableBody.innerHTML = rows || '<tr><td colspan="7" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum fornecedor encontrado com os filtros aplicados.</td></tr>';
-        };
-
-        const applyFiltersAndSort = () => {
-          const filtered = suppliersData.filter((supplier) =>
-            Object.entries(currentFilters).every(([column, query]) => {
-              if (!query) {
-                return true;
-              }
-
-              const value = getDisplayValue(supplier, column);
-              return normalizeValue(value).includes(normalizeValue(query));
-            })
-          );
-
-          const sorted = [...filtered].sort((a, b) => {
-            const { column, direction } = currentSort;
-
-            if (column === 'codigo') {
-              const valueA = Number(a[column]);
-              const valueB = Number(b[column]);
-              return direction === 'asc' ? valueA - valueB : valueB - valueA;
-            }
-
-            const valueA = normalizeValue(getDisplayValue(a, column));
-            const valueB = normalizeValue(getDisplayValue(b, column));
-
-            if (valueA === valueB) {
-              return 0;
-            }
-
-            const comparison = valueA > valueB ? 1 : -1;
-            return direction === 'asc' ? comparison : -comparison;
-          });
-
-          renderTable(sorted);
-        };
-
-        const updateSortIndicators = () => {
-          sortButtons.forEach((button) => {
-            const icon = button.querySelector('i');
-            icon.classList.remove('fa-sort-up', 'fa-sort-down', 'text-primary');
-            icon.classList.add('fa-sort', 'text-gray-400');
-
-            if (button.dataset.sort === currentSort.column) {
-              icon.classList.remove('fa-sort', 'text-gray-400');
-              icon.classList.add(currentSort.direction === 'asc' ? 'fa-sort-up' : 'fa-sort-down', 'text-primary');
-            }
-          });
-        };
-
-        filterInputs.forEach((input) => {
-          input.addEventListener('input', (event) => {
-            const { filter } = event.target.dataset;
-            currentFilters[filter] = event.target.value;
-            applyFiltersAndSort();
-          });
-        });
-
-        sortButtons.forEach((button) => {
-          button.addEventListener('click', () => {
-            const column = button.dataset.sort;
-            if (currentSort.column === column) {
-              currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-            } else {
-              currentSort.column = column;
-              currentSort.direction = 'asc';
-            }
-
-            updateSortIndicators();
-            applyFiltersAndSort();
-          });
-        });
-
-        updateSortIndicators();
-        applyFiltersAndSort();
-      }
-    });
-  </script>
 </body>
 </html>
