@@ -65,3 +65,95 @@ label {
 .toast-error {
   @apply rounded-md bg-danger-500/10 px-4 py-2 text-danger-700;
 }
+
+@layer components {
+  .carousel-container {
+    @apply relative h-full w-full;
+  }
+
+  .slide {
+    @apply absolute inset-0 mx-auto w-full rounded-3xl opacity-0 transition-all duration-500 ease-in-out md:w-4/5;
+    transform: translateX(210%);
+  }
+
+  .slide.is-active {
+    @apply opacity-100;
+    transform: translateX(0%);
+    z-index: 10;
+  }
+
+  .slide.is-prev {
+    @apply opacity-100;
+    transform: translateX(-105%);
+    z-index: 5;
+  }
+
+  .slide.is-next {
+    @apply opacity-100;
+    transform: translateX(105%);
+    z-index: 5;
+  }
+
+  .slide.is-hidden-left {
+    transform: translateX(-210%);
+  }
+
+  .slide.is-hidden-right {
+    transform: translateX(210%);
+  }
+
+  .indicator {
+    @apply relative flex h-2.5 w-2.5 items-center justify-center;
+  }
+
+  .indicator .dot {
+    @apply h-2.5 w-2.5 rounded-full bg-gray-300;
+  }
+
+  .indicator .pill {
+    @apply hidden h-2.5 w-7 items-center overflow-hidden rounded-full border border-gray-700 bg-white;
+  }
+
+  .indicator .fill {
+    @apply h-full bg-primary;
+    width: 0%;
+  }
+
+  .indicator.active {
+    @apply w-7;
+  }
+
+  .indicator.active .dot {
+    display: none;
+  }
+
+  .indicator.active .pill {
+    @apply flex;
+  }
+
+  .indicator.active .fill {
+    animation: indicator-fill 5s linear forwards;
+  }
+
+  .category-card:hover {
+    @apply border-primary shadow-lg;
+  }
+
+  .benefit-card:hover {
+    @apply -translate-y-1 transform shadow-lg;
+  }
+
+  .product-card:hover {
+    @apply -translate-y-1 transform shadow-lg;
+  }
+}
+
+@keyframes indicator-fill {
+  from {
+    width: 0%;
+  }
+
+  to {
+    width: 100%;
+  }
+}
