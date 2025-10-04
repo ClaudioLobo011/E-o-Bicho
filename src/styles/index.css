@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-gray-50 text-gray-800 antialiased;
+}
+
+a {
+  @apply text-primary underline-offset-2 hover:underline;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 font-medium text-white shadow-sm transition hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-md bg-secondary px-4 py-2 font-medium text-white shadow-sm transition hover:bg-secondary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary;
+}
+
+.card {
+  @apply rounded-2xl border border-gray-200 bg-white shadow-sm;
+}
+
+.section-title {
+  @apply text-2xl font-bold text-gray-900;
+}
+
+input, select, textarea {
+  @apply rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary;
+}
+
+label {
+  @apply font-medium text-gray-700;
+}
+
+.table-head {
+  @apply bg-gray-100 text-left text-sm font-semibold uppercase tracking-wide text-gray-600;
+}
+
+.table-cell {
+  @apply whitespace-nowrap px-4 py-3 text-sm text-gray-700;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase text-primary;
+}
+
+.modal-backdrop {
+  @apply fixed inset-0 z-40 bg-black/50 backdrop-blur-sm;
+}
+
+.modal-panel {
+  @apply relative z-50 w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl;
+}
+
+.toast-success {
+  @apply rounded-md bg-success-500/10 px-4 py-2 text-success-700;
+}
+
+.toast-error {
+  @apply rounded-md bg-danger-500/10 px-4 py-2 text-danger-700;
+}
