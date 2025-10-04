@@ -207,11 +207,13 @@ export function ensureLegacyAuthSession(): void {
     console.warn("sessionStorage indisponível para sessão legada:", error);
   }
 
-  if (!localStorageRef) {
+  if (!localStorageRef && !sessionStorageRef) {
     return;
   }
 
-  const storedLegacy = safeParseJson(localStorageRef.getItem("loggedInUser"));
+  const storedLegacy =
+    safeParseJson(localStorageRef?.getItem("loggedInUser")) ||
+    safeParseJson(sessionStorageRef?.getItem("loggedInUser"));
   const candidateRecords: UnknownRecord[] = [];
   if (storedLegacy) {
     candidateRecords.push(storedLegacy);
@@ -219,7 +221,7 @@ export function ensureLegacyAuthSession(): void {
 
   const storageRecordKeys = ["user", "authToken", "perfil", "session", "sessionUser", "session_user"];
   for (const key of storageRecordKeys) {
-    const localRecord = safeParseJson(localStorageRef.getItem(key));
+    const localRecord = safeParseJson(localStorageRef?.getItem(key));
     if (localRecord) {
       candidateRecords.push(localRecord);
     }
@@ -285,21 +287,46 @@ export function ensureLegacyAuthSession(): void {
   mergedRecord.token = normalizedToken;
   ensureUserId(mergedRecord);
 
-  const persistSafely = (storage: Storage | null, key: string, value: string) => {
-    if (!storage) {
+  const storages: Storage[] = [];
+  if (localStorageRef) {
+    storages.push(localStorageRef);
+  }
+  if (sessionStorageRef) {
+    storages.push(sessionStorageRef);
+  }
+
+  const persistSafely = (key: string, value: string) => {
+    for (const storage of storages) {
+      try {
+        if (storage.getItem(key) !== value) {
+          storage.setItem(key, value);
+        }
+      } catch (error) {
+        console.warn(
+          `Não foi possível atualizar a chave "${key}" no storage legado:`,
+          error
+        );
+      }
+    }
+  };
+
+  const persistCookie = (name: string, value: string) => {
+    if (typeof document === "undefined") {
       return;
     }
     try {
-      if (storage.getItem(key) !== value) {
-        storage.setItem(key, value);
-      }
+      const encoded = `${encodeURIComponent(name)}=${encodeURIComponent(value)}`;
+      document.cookie = `${encoded}; path=/; SameSite=Lax; Max-Age=86400`;
     } catch (error) {
-      console.warn(`Não foi possível atualizar a chave "${key}" no storage legado:`, error);
+      console.warn(
+        `Não foi possível atualizar o cookie "${name}" para sessão legada:`,
+        error
+      );
     }
   };
 
   const stringifiedLogged = JSON.stringify(mergedRecord);
-  persistSafely(localStorageRef, "loggedInUser", stringifiedLogged);
+  persistSafely("loggedInUser", stringifiedLogged);
 
   const userCandidates: Array<UnknownRecord | null | undefined> = [
     mergedRecord.user as UnknownRecord,
@@ -323,11 +350,15 @@ export function ensureLegacyAuthSession(): void {
   }
 
   if (userPayload) {
-    persistSafely(localStorageRef, "user", JSON.stringify(userPayload));
+    persistSafely("user", JSON.stringify(userPayload));
   }
 
-  persistSafely(localStorageRef, "auth_token", normalizedToken);
-  persistSafely(localStorageRef, "token", normalizedToken);
+  persistSafely("auth_token", normalizedToken);
+  persistSafely("token", normalizedToken);
+  persistSafely("jwt", normalizedToken);
+  persistCookie("auth_token", normalizedToken);
+  persistCookie("token", normalizedToken);
+  persistCookie("jwt", normalizedToken);
 
   if (userPayload) {
     const authTokenPayload: UnknownRecord = {
@@ -339,6 +370,6 @@ export function ensureLegacyAuthSession(): void {
     } else if (isRecord(tokenSource?.perfil)) {
       authTokenPayload.perfil = tokenSource?.perfil;
     }
-    persistSafely(localStorageRef, "authToken", JSON.stringify(authTokenPayload));
+    persistSafely("authToken", JSON.stringify(authTokenPayload));
   }
 }
