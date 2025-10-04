@@ -18,6 +18,7 @@
   const selectors = {
     form: '#supplier-form',
     saveButton: '#supplier-save-button',
+    saveButtonLabel: '#supplier-save-button-label',
     codeInput: '#supplier-code',
     codeStatus: '#supplier-code-status',
     country: '#supplier-country',
@@ -73,6 +74,13 @@
     retencoes: new Set(),
     representatives: [],
     suppliers: [],
+    editingSupplierId: null,
+    editingSupplier: null,
+    pendingCompanies: null,
+    pendingAccountingAccount: null,
+    pendingBank: null,
+    nextSuggestedCode: '',
+    deletingSupplierId: null,
     filters: {
       codigo: '',
       razaoSocial: '',
@@ -405,8 +413,9 @@
   const mapSupplierToTable = (supplier = {}) => {
     const companies = Array.isArray(supplier.companies) ? supplier.companies : [];
     const companyNames = companies.map(mapCompanyName).filter(Boolean);
+    const identifier = supplier._id || supplier.id || supplier.code || '';
     return {
-      id: supplier._id,
+      id: identifier ? String(identifier) : '',
       code: supplier.code || '',
       legalName: supplier.legalName || '',
       fantasyName: supplier.fantasyName || '',
@@ -416,6 +425,7 @@
       type: supplier.type || '',
       typeLabel: TYPE_LABELS[supplier.type] || supplier.type || '',
       companyNames,
+      raw: supplier,
     };
   };
 
@@ -461,15 +471,68 @@
     });
 
     if (!sorted.length) {
-      elements.suppliersTableBody.innerHTML =
-        '<tr><td colspan="7" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum fornecedor encontrado com os filtros aplicados.</td></tr>';
-      setSuppliersTableStatus('Nenhum fornecedor cadastrado até o momento.', 'info');
+      const hasFilters = Object.values(state.filters).some((value) => value);
+      const emptyMessage = hasFilters
+        ? 'Nenhum fornecedor encontrado com os filtros aplicados.'
+        : 'Nenhum fornecedor cadastrado até o momento.';
+      elements.suppliersTableBody.innerHTML = `
+        <tr>
+          <td colspan="8" class="px-4 py-6 text-center text-sm text-gray-500">${emptyMessage}</td>
+        </tr>
+      `;
+      setSuppliersTableStatus(emptyMessage, 'info');
       return;
     }
 
     const rows = sorted
       .map((supplier) => {
         const companies = supplier.companyNames.join(', ');
+        const isDeleting = state.deletingSupplierId === supplier.id;
+        const actionDisabled = !supplier.id || isDeleting;
+        const disabledClass = actionDisabled
+          ? isDeleting
+            ? 'opacity-60 cursor-wait'
+            : 'opacity-50 cursor-not-allowed'
+          : '';
+        const editButtonClasses = [
+          'inline-flex',
+          'items-center',
+          'gap-1',
+          'rounded-lg',
+          'border',
+          'border-gray-200',
+          'px-2.5',
+          'py-1',
+          'text-xs',
+          'font-semibold',
+          'text-gray-600',
+          'hover:bg-gray-100',
+          'transition',
+          disabledClass,
+        ]
+          .filter(Boolean)
+          .join(' ');
+        const deleteButtonClasses = [
+          'inline-flex',
+          'items-center',
+          'gap-1',
+          'rounded-lg',
+          'border',
+          'border-red-200',
+          'px-2.5',
+          'py-1',
+          'text-xs',
+          'font-semibold',
+          'text-red-600',
+          'hover:bg-red-50',
+          'transition',
+          disabledClass,
+        ]
+          .filter(Boolean)
+          .join(' ');
+        const actionAttributes = supplier.id
+          ? `data-id="${supplier.id}"${actionDisabled ? ' disabled aria-disabled="true"' : ''}`
+          : 'disabled aria-disabled="true"';
         return `
           <tr class="hover:bg-gray-50 transition">
             <td class="px-4 py-3 whitespace-nowrap font-semibold text-gray-700">${supplier.code || '—'}</td>
@@ -479,6 +542,18 @@
             <td class="px-4 py-3 text-gray-600">${supplier.country || '—'}</td>
             <td class="px-4 py-3 text-gray-600">${supplier.typeLabel || '—'}</td>
             <td class="px-4 py-3 text-gray-600">${companies || '—'}</td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              <div class="flex items-center justify-end gap-2">
+                <button type="button" class="${editButtonClasses}" data-action="edit" ${actionAttributes}>
+                  <i class="fas fa-pen-to-square"></i>
+                  Editar
+                </button>
+                <button type="button" class="${deleteButtonClasses}" data-action="delete" ${actionAttributes}>
+                  <i class="fas fa-trash-can"></i>
+                  Excluir
+                </button>
+              </div>
+            </td>
           </tr>
         `;
       })
@@ -521,7 +596,7 @@
       state.suppliers = suppliers.map(mapSupplierToTable);
       if (!suppliers.length) {
         elements.suppliersTableBody.innerHTML =
-          '<tr><td colspan="7" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum fornecedor cadastrado até o momento.</td></tr>';
+          '<tr><td colspan="8" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum fornecedor cadastrado até o momento.</td></tr>';
         setSuppliersTableStatus('Nenhum fornecedor cadastrado até o momento.', 'info');
       } else {
         applyFiltersAndSort();
@@ -532,7 +607,7 @@
         handleAuthError();
       }
       elements.suppliersTableBody.innerHTML =
-        '<tr><td colspan="7" class="px-4 py-6 text-center text-sm text-red-600">Erro ao carregar os fornecedores cadastrados.</td></tr>';
+        '<tr><td colspan="8" class="px-4 py-6 text-center text-sm text-red-600">Erro ao carregar os fornecedores cadastrados.</td></tr>';
       setSuppliersTableStatus(error?.message || 'Não foi possível carregar os fornecedores cadastrados.', 'error');
     } finally {
       state.loadingSuppliers = false;
@@ -542,15 +617,23 @@
   const loadNextSupplierCode = async () => {
     try {
       const data = await request(SUPPLIERS_NEXT_CODE_ENDPOINT, { method: 'GET' }, { requiresAuth: true });
-      if (data?.nextCode) {
-        setSupplierCode(data.nextCode, { pending: true });
+      state.nextSuggestedCode = data?.nextCode || '';
+      if (!state.editingSupplierId) {
+        if (state.nextSuggestedCode) {
+          setSupplierCode(state.nextSuggestedCode, { pending: true });
+        } else {
+          setSupplierCode('', { pending: true });
+        }
       }
     } catch (error) {
       console.error('Erro ao buscar próximo código de fornecedor:', error);
       if (error.status === 401) {
         handleAuthError();
       }
-      setSupplierCode('Gerado automaticamente', { pending: true });
+      state.nextSuggestedCode = '';
+      if (!state.editingSupplierId) {
+        setSupplierCode('', { pending: true });
+      }
     }
   };
 
@@ -574,6 +657,7 @@
         if (!stores.length) {
           elements.companiesSelect.innerHTML = '<option value="" disabled>Nenhuma empresa cadastrada</option>';
           setCompanyStatus('Cadastre empresas para vinculá-las aos fornecedores.', 'info');
+          state.pendingCompanies = null;
         } else {
           const options = stores
             .map((store) => {
@@ -583,6 +667,10 @@
             .join('');
           elements.companiesSelect.innerHTML = options;
           setCompanyStatus('Selecione todas as empresas nas quais o fornecedor atua.', 'info');
+          if (Array.isArray(state.pendingCompanies)) {
+            const pending = [...state.pendingCompanies];
+            setCompaniesSelection(pending);
+          }
         }
       }
     } catch (error) {
@@ -611,6 +699,7 @@
           elements.chartAccount.innerHTML = '<option value="">Nenhuma conta contábil cadastrada</option>';
         }
         setChartAccountStatus('Cadastre uma conta contábil para vinculá-la ao fornecedor.', 'info');
+        state.pendingAccountingAccount = null;
       } else if (elements.chartAccount) {
         const options = [
           '<option value="">Selecione uma conta contábil</option>',
@@ -621,6 +710,10 @@
         ].join('');
         elements.chartAccount.innerHTML = options;
         setChartAccountStatus('Selecione a conta contábil vinculada ao fornecedor.', 'info');
+        if (state.pendingAccountingAccount) {
+          const pendingAccount = state.pendingAccountingAccount;
+          setChartAccountValue(pendingAccount);
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar contas contábeis:', error);
@@ -655,6 +748,10 @@
         option.textContent = `${code} - ${bank.name}`;
         elements.bank.appendChild(option);
       });
+      if (state.pendingBank) {
+        const pendingBank = state.pendingBank;
+        setBankValue(pendingBank);
+      }
     } catch (error) {
       console.error('Erro ao carregar bancos:', error);
       elements.bank.innerHTML = '<option value="">Não foi possível carregar os bancos</option>';
@@ -665,6 +762,36 @@
     if (elements.retencoesHidden) {
       elements.retencoesHidden.value = Array.from(state.retencoes).join(',');
     }
+  };
+
+  const syncRetentionButtons = () => {
+    if (!Array.isArray(elements.retencaoButtons)) return;
+    elements.retencaoButtons.forEach((button) => {
+      const value = String(button.dataset.retencao || '').toUpperCase();
+      const isActive = value && state.retencoes.has(value);
+      button.classList.toggle('bg-primary', Boolean(isActive));
+      button.classList.toggle('text-white', Boolean(isActive));
+      button.classList.toggle('border-primary', Boolean(isActive));
+      button.classList.toggle('border-gray-200', !isActive);
+    });
+  };
+
+  const setRetencoes = (values = []) => {
+    state.retencoes.clear();
+    const entries = Array.isArray(values)
+      ? values
+      : String(values || '')
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
+    entries.forEach((entry) => {
+      const normalized = String(entry).toUpperCase();
+      if (RETENTION_TYPES.includes(normalized)) {
+        state.retencoes.add(normalized);
+      }
+    });
+    updateRetencoesHiddenField();
+    syncRetentionButtons();
   };
 
   const setupRetentionButtons = () => {
@@ -683,20 +810,109 @@
         'bg-gray-50'
       );
       button.addEventListener('click', () => {
-        const value = button.dataset.retencao;
+        const value = String(button.dataset.retencao || '').toUpperCase();
         if (!value || !RETENTION_TYPES.includes(value)) return;
         if (state.retencoes.has(value)) {
           state.retencoes.delete(value);
-          button.classList.remove('bg-primary', 'text-white', 'border-primary');
-          button.classList.add('border-gray-200');
         } else {
           state.retencoes.add(value);
-          button.classList.add('bg-primary', 'text-white', 'border-primary');
-          button.classList.remove('border-gray-200');
         }
         updateRetencoesHiddenField();
+        syncRetentionButtons();
       });
     });
+    syncRetentionButtons();
+  };
+
+  const setCompaniesSelection = (companyIds = []) => {
+    const ids = Array.isArray(companyIds)
+      ? Array.from(
+          new Set(
+            companyIds
+              .map((value) => String(value || '').trim())
+              .filter(Boolean)
+          )
+        )
+      : [];
+    if (!elements.companiesSelect) {
+      state.pendingCompanies = ids;
+      return;
+    }
+    const options = Array.from(elements.companiesSelect.options || []);
+    if (!options.length) {
+      state.pendingCompanies = ids;
+      return;
+    }
+    const selection = new Set(ids);
+    options.forEach((option) => {
+      option.selected = selection.has(option.value);
+    });
+    state.pendingCompanies = null;
+  };
+
+  const setChartAccountValue = (accountId = '') => {
+    const value = accountId ? String(accountId) : '';
+    if (!elements.chartAccount) {
+      state.pendingAccountingAccount = value || null;
+      return;
+    }
+    if (!value) {
+      elements.chartAccount.value = '';
+      state.pendingAccountingAccount = null;
+      return;
+    }
+    const options = Array.from(elements.chartAccount.options || []);
+    if (!options.length || !options.some((option) => option.value === value)) {
+      state.pendingAccountingAccount = value;
+      return;
+    }
+    elements.chartAccount.value = value;
+    state.pendingAccountingAccount = null;
+  };
+
+  const setBankValue = (bankValue = '') => {
+    const value = bankValue ? String(bankValue) : '';
+    if (!elements.bank) {
+      state.pendingBank = value || null;
+      return;
+    }
+    if (!value) {
+      elements.bank.value = '';
+      state.pendingBank = null;
+      return;
+    }
+    const options = Array.from(elements.bank.options || []);
+    if (!options.length || !options.some((option) => option.value === value)) {
+      state.pendingBank = value;
+      return;
+    }
+    elements.bank.value = value;
+    state.pendingBank = null;
+  };
+
+  const setFormMode = (mode, supplier = null) => {
+    const normalized = mode === 'edit' ? 'edit' : 'create';
+    if (normalized === 'edit') {
+      const identifier = supplier?._id || supplier?.id || null;
+      state.editingSupplierId = identifier ? String(identifier) : null;
+      state.editingSupplier = supplier;
+    } else {
+      state.editingSupplierId = null;
+      state.editingSupplier = null;
+    }
+    if (elements.form) {
+      elements.form.dataset.mode = normalized;
+    }
+    if (elements.saveButtonLabel) {
+      elements.saveButtonLabel.textContent =
+        normalized === 'edit' ? 'Atualizar fornecedor' : 'Salvar cadastro';
+    }
+    if (elements.saveButton) {
+      elements.saveButton.setAttribute(
+        'aria-label',
+        normalized === 'edit' ? 'Atualizar fornecedor' : 'Salvar cadastro'
+      );
+    }
   };
 
   const renderRepresentatives = () => {
@@ -836,28 +1052,47 @@
       elements.form.reset();
     }
     Object.keys(masks).forEach((key) => {
-      if (masks[key] && typeof masks[key].value !== 'undefined') {
-        masks[key].value = '';
+      if (masks[key]) {
+        if (typeof masks[key].unmaskedValue !== 'undefined') {
+          masks[key].unmaskedValue = '';
+        } else if (typeof masks[key].value !== 'undefined') {
+          masks[key].value = '';
+        }
       }
     });
-    state.retencoes.clear();
-    updateRetencoesHiddenField();
+
+    if (state.documentLookupAbort?.abort) {
+      state.documentLookupAbort.abort();
+      state.documentLookupAbort = null;
+    }
+    state.currentDocumentLookupKey = '';
+    state.currentCep = '';
+
+    setFormMode('create');
+
+    setRetencoes([]);
     state.representatives = [];
     renderRepresentatives();
-    applyTypeSelectionUpdates();
-    state.currentCep = '';
+
+    setCompaniesSelection([]);
+    setChartAccountValue('');
+    setBankValue('');
+
+    state.pendingCompanies = null;
+    state.pendingAccountingAccount = null;
+    state.pendingBank = null;
+
     if (elements.supplierKind) {
       elements.supplierKind.value = 'distribuidora';
     }
     if (elements.icms) {
       elements.icms.value = '2';
     }
-    if (elements.chartAccount) {
-      elements.chartAccount.value = '';
-    }
-    if (elements.bank) {
-      elements.bank.value = '';
-    }
+
+    setSupplierCode(state.nextSuggestedCode || '', { pending: true });
+
+    setCepStatus('Informe os 8 dígitos do CEP para buscar o endereço automaticamente.', 'info');
+    applyTypeSelectionUpdates();
   };
 
   const gatherFormData = () => {
@@ -924,6 +1159,242 @@
     applyFiltersAndSort();
   };
 
+  const removeSupplierFromState = (supplierId) => {
+    const id = supplierId ? String(supplierId) : '';
+    if (!id) return;
+    const index = state.suppliers.findIndex((item) => item.id === id);
+    if (index >= 0) {
+      state.suppliers.splice(index, 1);
+      applyFiltersAndSort();
+    }
+  };
+
+  const populateFormWithSupplier = (supplier = {}) => {
+    if (!supplier || typeof supplier !== 'object') return;
+
+    if (elements.form && typeof elements.form.reset === 'function') {
+      elements.form.reset();
+    }
+
+    if (state.documentLookupAbort?.abort) {
+      state.documentLookupAbort.abort();
+      state.documentLookupAbort = null;
+    }
+
+    state.currentDocumentLookupKey = '';
+
+    const type = supplier.type || 'juridico';
+    if (Array.isArray(elements.typeRadios)) {
+      elements.typeRadios.forEach((radio) => {
+        radio.checked = radio.value === type;
+      });
+    }
+    applyTypeSelectionUpdates();
+
+    if (elements.cnpj) {
+      setMaskedDigits('document', elements.cnpj, supplier.cnpj || '');
+      if (supplier.cnpj) {
+        setDocumentStatus('Documento carregado do cadastro existente. Atualize se necessário.', 'info');
+      } else {
+        setDocumentStatus(getDocumentInstruction(type), 'info');
+      }
+    }
+
+    if (elements.country) {
+      elements.country.value = supplier.country || '';
+    }
+    if (elements.legalName) {
+      elements.legalName.value = supplier.legalName || '';
+    }
+    if (elements.fantasyName) {
+      elements.fantasyName.value = supplier.fantasyName || '';
+    }
+    if (elements.stateRegistration) {
+      elements.stateRegistration.value = supplier.stateRegistration || '';
+    }
+
+    if (elements.flagInactive) {
+      elements.flagInactive.checked = Boolean(supplier.flags?.inactive);
+    }
+    if (elements.flagOng) {
+      elements.flagOng.checked = Boolean(supplier.flags?.ong);
+    }
+    if (elements.flagBank) {
+      elements.flagBank.checked = Boolean(supplier.flags?.bankSupplier);
+    }
+
+    const companies = Array.isArray(supplier.companies)
+      ? supplier.companies
+          .map((company) => company?._id || company?.id || company)
+          .filter(Boolean)
+          .map((value) => String(value))
+      : [];
+    setCompaniesSelection(companies);
+
+    const address = supplier.address || {};
+    if (elements.cep) {
+      setMaskedDigits('cep', elements.cep, address.cep || '');
+    }
+    if (elements.logradouro) {
+      elements.logradouro.value = address.logradouro || '';
+    }
+    if (elements.numero) {
+      elements.numero.value = address.numero || '';
+    }
+    if (elements.complemento) {
+      elements.complemento.value = address.complemento || '';
+    }
+    if (elements.bairro) {
+      elements.bairro.value = address.bairro || '';
+    }
+    if (elements.cidade) {
+      elements.cidade.value = address.cidade || '';
+    }
+    if (elements.uf) {
+      elements.uf.value = address.uf || '';
+    }
+    state.currentCep = digitsOnly(address.cep || '');
+    const hasAddressInfo = Boolean(
+      address.cep ||
+        address.logradouro ||
+        address.numero ||
+        address.complemento ||
+        address.bairro ||
+        address.cidade ||
+        address.uf
+    );
+    if (hasAddressInfo) {
+      setCepStatus('Endereço carregado do cadastro existente.', 'info');
+    } else {
+      setCepStatus('Informe os 8 dígitos do CEP para buscar o endereço automaticamente.', 'info');
+    }
+
+    const contact = supplier.contact || {};
+    if (elements.email) {
+      elements.email.value = contact.email || '';
+    }
+    if (elements.phone) {
+      setMaskedDigits('phone', elements.phone, contact.phone || '');
+    }
+    if (elements.mobile) {
+      setMaskedDigits('mobile', elements.mobile, contact.mobile || '');
+    }
+    if (elements.secondaryPhone) {
+      setMaskedDigits('secondaryPhone', elements.secondaryPhone, contact.secondaryPhone || '');
+    }
+    if (elements.responsible) {
+      elements.responsible.value = contact.responsible || '';
+    }
+
+    const otherInfo = supplier.otherInfo || {};
+    if (elements.supplierKind) {
+      elements.supplierKind.value = otherInfo.supplierKind || 'distribuidora';
+    }
+    const accountingAccountId =
+      otherInfo.accountingAccount?._id || otherInfo.accountingAccount?.id || otherInfo.accountingAccount || '';
+    setChartAccountValue(accountingAccountId);
+    if (elements.icms) {
+      elements.icms.value = otherInfo.icmsContribution || '2';
+    }
+    if (elements.observation) {
+      elements.observation.value = otherInfo.observation || '';
+    }
+    setBankValue(otherInfo.bank || '');
+    if (elements.agency) {
+      elements.agency.value = otherInfo.agency || '';
+    }
+    if (elements.account) {
+      elements.account.value = otherInfo.accountNumber || '';
+    }
+
+    const representatives = Array.isArray(supplier.representatives)
+      ? supplier.representatives.map((rep) => ({
+          name: rep.name || '',
+          mobile: digitsOnly(rep.mobile || '').slice(0, 11),
+          email: rep.email || '',
+        }))
+      : [];
+    state.representatives = representatives;
+    renderRepresentatives();
+
+    setRetencoes(Array.isArray(supplier.retentions) ? supplier.retentions : []);
+
+    setSupplierCode(supplier.code || '', { pending: false });
+  };
+
+  const enterEditMode = (supplier = {}) => {
+    setFormMode('edit', supplier);
+    populateFormWithSupplier(supplier);
+    notify('Fornecedor carregado para edição.', 'info');
+    if (elements.form && typeof elements.form.scrollIntoView === 'function') {
+      elements.form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const deleteSupplier = async (supplierId) => {
+    const id = supplierId ? String(supplierId) : '';
+    if (!id || state.deletingSupplierId === id) return;
+
+    state.deletingSupplierId = id;
+    applyFiltersAndSort();
+    try {
+      await request(`${SUPPLIERS_ENDPOINT}/${id}`, { method: 'DELETE' }, { requiresAuth: true });
+      notify('Fornecedor excluído com sucesso!', 'success');
+      removeSupplierFromState(id);
+      if (state.editingSupplierId === id) {
+        resetForm();
+        await loadNextSupplierCode();
+      } else {
+        await loadNextSupplierCode();
+      }
+    } catch (error) {
+      console.error('Erro ao excluir fornecedor:', error);
+      if (error.status === 401) {
+        handleAuthError();
+      }
+      notify(error?.message || 'Não foi possível excluir o fornecedor. Tente novamente.', 'error');
+    } finally {
+      state.deletingSupplierId = null;
+      applyFiltersAndSort();
+    }
+  };
+
+  const confirmDeleteSupplier = (supplierId) => {
+    const id = supplierId ? String(supplierId) : '';
+    if (!id) return;
+    const supplierEntry = state.suppliers.find((item) => item.id === id);
+    const supplierName = supplierEntry?.legalName || supplierEntry?.fantasyName || '';
+    const message = supplierName
+      ? `Deseja excluir o fornecedor "${supplierName}"? Essa ação não pode ser desfeita.`
+      : 'Deseja excluir este fornecedor? Essa ação não pode ser desfeita.';
+    if (window.confirm(message)) {
+      deleteSupplier(id);
+    }
+  };
+
+  const setupSuppliersTableActions = () => {
+    if (!elements.suppliersTableBody) return;
+    elements.suppliersTableBody.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      if (button.disabled) return;
+      const action = button.dataset.action;
+      const id = button.dataset.id;
+      if (!action || !id) return;
+      event.preventDefault();
+      if (action === 'edit') {
+        const supplierEntry = state.suppliers.find((item) => item.id === id);
+        if (!supplierEntry?.raw) {
+          notify('Não foi possível localizar os dados completos do fornecedor.', 'error');
+          return;
+        }
+        enterEditMode(supplierEntry.raw);
+      } else if (action === 'delete') {
+        confirmDeleteSupplier(id);
+      }
+    });
+  };
+
   const submitForm = async (event) => {
     if (event) {
       event.preventDefault();
@@ -943,30 +1414,45 @@
       elements.saveButton.disabled = true;
       elements.saveButton.classList.add('opacity-60', 'cursor-not-allowed');
     }
+    const isEditing = Boolean(state.editingSupplierId);
+    const endpoint = isEditing ? `${SUPPLIERS_ENDPOINT}/${state.editingSupplierId}` : SUPPLIERS_ENDPOINT;
+    const method = isEditing ? 'PUT' : 'POST';
+    const successMessage = isEditing
+      ? 'Fornecedor atualizado com sucesso!'
+      : 'Fornecedor cadastrado com sucesso!';
+    const unexpectedMessage = isEditing
+      ? 'Fornecedor atualizado, mas resposta inesperada do servidor.'
+      : 'Fornecedor cadastrado, mas resposta inesperada do servidor.';
+    const errorMessage = isEditing
+      ? 'Não foi possível atualizar o fornecedor. Tente novamente.'
+      : 'Não foi possível salvar o fornecedor. Tente novamente.';
+
     try {
       const data = await request(
-        SUPPLIERS_ENDPOINT,
+        endpoint,
         {
-          method: 'POST',
+          method,
           body: JSON.stringify(payload),
         },
         { requiresAuth: true }
       );
       if (data?.supplier) {
-        notify('Fornecedor cadastrado com sucesso!', 'success');
+        notify(successMessage, 'success');
         addSupplierToTable(data.supplier);
-        setSupplierCode(data.supplier.code || '', { pending: false });
+        if (!isEditing) {
+          setSupplierCode(data.supplier.code || '', { pending: false });
+        }
         resetForm();
         await loadNextSupplierCode();
       } else {
-        notify('Fornecedor cadastrado, mas resposta inesperada do servidor.', 'warning');
+        notify(unexpectedMessage, 'warning');
       }
     } catch (error) {
       console.error('Erro ao salvar fornecedor:', error);
       if (error.status === 401) {
         handleAuthError();
       }
-      notify(error?.message || 'Não foi possível salvar o fornecedor. Tente novamente.', 'error');
+      notify(error?.message || errorMessage, 'error');
     } finally {
       state.saving = false;
       if (elements.saveButton) {
@@ -1283,6 +1769,7 @@
 
   const init = async () => {
     initElements();
+    setFormMode('create');
     setupTabs();
     setupTypeButtons();
     initializeMasks();
@@ -1290,6 +1777,7 @@
     setupRepresentatives();
     setupForm();
     setupFilters();
+    setupSuppliersTableActions();
     setupDocumentLookup();
     setupCepLookup();
     updateRetencoesHiddenField();
