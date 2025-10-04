@@ -55,6 +55,22 @@ const sanitizeDigits = (value, { fallback = '' } = {}) => {
   return digits || fallback;
 };
 
+const firstNonEmptyString = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+      continue;
+    }
+    if (typeof value === 'number') {
+      const trimmed = String(value).trim();
+      if (trimmed) return trimmed;
+    }
+  }
+  return '';
+};
+
 const BRAZILIAN_CNPJ_OID = '2.16.76.1.3.3';
 const HOMOLOGATION_FIRST_ITEM_DESCRIPTION =
   'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
@@ -1002,9 +1018,6 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       ];
   const troco = safeNumber(snapshot?.totais?.trocoValor ?? snapshot?.totais?.troco ?? 0, 0);
 
-  const delivery = snapshot?.delivery || null;
-  const cliente = snapshot?.cliente || null;
-
   const encryptedCertificate = storeObject?.certificadoArquivoCriptografado;
   if (!encryptedCertificate) {
     throw new Error('O certificado digital da empresa não está configurado.');
@@ -1146,15 +1159,78 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   infNfeLines.push('      <CRT>1</CRT>');
   infNfeLines.push('    </emit>');
 
-  const destCPF = onlyDigits(cliente?.cpf || delivery?.cpf);
-  const destCNPJ = onlyDigits(cliente?.cnpj);
-  const destIdE = sanitize(cliente?.idEstrangeiro);
+  const delivery = snapshot?.delivery && typeof snapshot.delivery === 'object' ? snapshot.delivery : null;
+  const clienteSources = [sale?.customer, sale?.cliente, snapshot?.cliente].filter(
+    (entry) => entry && typeof entry === 'object'
+  );
+  const cliente = clienteSources.reduce((acc, entry) => Object.assign(acc, entry), {});
+
+  const documentCandidates = [
+    cliente?.cpf,
+    cliente?.cnpj,
+    cliente?.documento,
+    cliente?.document,
+    cliente?.cpfCnpj,
+    cliente?.cpf_cnpj,
+    cliente?.cpfcnpj,
+    cliente?.cpfOuCnpj,
+    cliente?.cpf_ou_cnpj,
+    sale?.customerDocument,
+    sale?.customerCpf,
+    sale?.customerCnpj,
+    sale?.clienteDocumento,
+    sale?.documentoCliente,
+    delivery?.cpf,
+    delivery?.cnpj,
+    delivery?.documento,
+    delivery?.document,
+    delivery?.cpfCnpj,
+    delivery?.cpf_cnpj,
+    delivery?.cpfcnpj,
+  ];
+
+  let destCPF = '';
+  let destCNPJ = '';
+  for (const candidate of documentCandidates) {
+    const digits = onlyDigits(candidate);
+    if (!digits) continue;
+    if (digits.length === 11 && !destCPF) {
+      destCPF = digits;
+    } else if (digits.length === 14 && !destCNPJ) {
+      destCNPJ = digits;
+    }
+    if (destCPF && destCNPJ) break;
+  }
+
+  const destIdE = sanitize(
+    firstNonEmptyString(
+      cliente?.idEstrangeiro,
+      cliente?.idEstrangeira,
+      cliente?.id_estrangeiro,
+      cliente?.idEstrangeiroCliente,
+      cliente?.idEstrangeiroFiscal
+    )
+  );
 
   const hasCPF = /^\d{11}$/.test(destCPF);
   const hasCNPJ = /^\d{14}$/.test(destCNPJ);
   const hasIdE = !!destIdE;
 
-  const xNome = sanitize(cliente?.nome || cliente?.razaoSocial || delivery?.nome || '');
+  const xNome = sanitize(
+    firstNonEmptyString(
+      cliente?.nome,
+      cliente?.razaoSocial,
+      cliente?.fantasia,
+      sale?.customerName,
+      sale?.customer?.nome,
+      sale?.customer?.razaoSocial,
+      sale?.customer?.fantasia,
+      sale?.cliente?.nome,
+      sale?.cliente?.razaoSocial,
+      sale?.cliente?.fantasia,
+      delivery?.nome
+    )
+  );
   const xNome60 = (xNome || 'CONSUMIDOR').slice(0, 60);
 
   if (hasCPF || hasCNPJ || hasIdE) {
