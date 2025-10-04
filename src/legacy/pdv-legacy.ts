@@ -7,6 +7,33 @@ type TrackedListener = {
   options?: boolean | AddEventListenerOptions;
 };
 
+const scheduleMicrotask =
+  typeof queueMicrotask === "function"
+    ? queueMicrotask
+    : (callback: () => void) => {
+        Promise.resolve()
+          .then(callback)
+          .catch((error) => {
+            console.error("Erro ao agendar microtask para o PDV legado:", error);
+          });
+      };
+
+function invokeDomContentLoadedListener(
+  listener: EventListenerOrEventListenerObject,
+  target: EventTarget
+) {
+  const event = new Event("DOMContentLoaded", { bubbles: false, cancelable: false });
+
+  if (typeof listener === "function") {
+    listener.call(target, event);
+    return;
+  }
+
+  if (listener && typeof (listener as EventListenerObject).handleEvent === "function") {
+    (listener as EventListenerObject).handleEvent.call(target, event);
+  }
+}
+
 declare global {
   interface Window {
     __LEGACY_PDV_CLEANUP?: () => void;
@@ -27,7 +54,28 @@ function bootstrapLegacyPdv(): () => void {
       });
     }
 
-    return originalAddEventListener.call(this, type, listener, options);
+    const result = originalAddEventListener.call(this, type, listener, options);
+
+    const isDomContentLoadedListener =
+      String(type).toLowerCase() === "domcontentloaded" &&
+      this === document &&
+      document.readyState !== "loading" &&
+      Boolean(listener);
+
+    if (isDomContentLoadedListener) {
+      // Garante que o script legado inicialize mesmo quando injetado após o DOM pronto.
+      scheduleMicrotask(() => {
+        if (listener) {
+          try {
+            invokeDomContentLoadedListener(listener, this);
+          } catch (error) {
+            console.error("Erro ao disparar DOMContentLoaded para o PDV legado:", error);
+          }
+        }
+      });
+    }
+
+    return result;
   };
 
   let scriptCleanup: (() => void) | null = null;
