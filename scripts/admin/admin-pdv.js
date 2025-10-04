@@ -8950,6 +8950,65 @@
       elements.searchResults.innerHTML = `<div class="p-4 text-sm text-gray-500">Nenhum produto encontrado para "${term}".</div>`;
       return;
     }
+    const buttonInlineStyle = [
+      "display:flex",
+      "align-items:center",
+      "gap:0.75rem",
+      "width:100%",
+      "padding:0.75rem 1rem",
+      "text-align:left"
+    ].join(";");
+    const thumbnailInlineStyle = [
+      "width:56px",
+      "height:56px",
+      "flex-shrink:0",
+      "display:flex",
+      "align-items:center",
+      "justify-content:center",
+      "border-radius:0.75rem",
+      "border:1px solid rgba(229,231,235,1)",
+      "background-color:#fff",
+      "overflow:hidden"
+    ].join(";");
+    const imageInlineStyle = [
+      "max-width:100%",
+      "max-height:100%",
+      "object-fit:contain"
+    ].join(";");
+    const infoInlineStyle = [
+      "flex:1 1 auto",
+      "min-width:0"
+    ].join(";");
+    const titleInlineStyle = [
+      "display:block",
+      "font-size:0.875rem",
+      "font-weight:600",
+      "color:#1f2937",
+      "overflow:hidden",
+      "text-overflow:ellipsis",
+      "white-space:nowrap"
+    ].join(";");
+    const metaInlineStyle = [
+      "margin-top:0.25rem",
+      "display:flex",
+      "flex-wrap:wrap",
+      "align-items:center",
+      "gap:0.5rem",
+      "font-size:0.75rem",
+      "color:#6b7280"
+    ].join(";");
+    const noticeInlineStyle = [
+      "display:block",
+      "margin-top:0.25rem",
+      "font-size:0.6875rem",
+      "color:#b45309"
+    ].join(";");
+    const codeInlineStyle = [
+      "display:block",
+      "margin-top:0.25rem",
+      "font-size:0.6875rem",
+      "color:#9ca3af"
+    ].join(";");
     const toReais = (value) => formatCurrency(value).replace('R$', '').trim();
     const html = results
       .map((product, index) => {
@@ -8972,18 +9031,25 @@
           ? '<span class="block text-[11px] text-amber-600 mt-1">Vincule um cliente para aplicar a promoção geral.</span>'
           : '';
         return `
-          <button type="button" class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-primary/5" data-result-index="${index}">
-            <span class="h-14 w-14 flex items-center justify-center rounded border border-gray-200 bg-white overflow-hidden">
-              ${image ? `<img src="${image}" alt="${product.nome}" class="h-full w-full object-contain">` : '<i class="fas fa-image text-gray-300"></i>'}
+          <button type="button" class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-primary/5" data-result-index="${index}" style="${buttonInlineStyle}">
+            <span class="h-14 w-14 flex items-center justify-center rounded border border-gray-200 bg-white overflow-hidden" style="${thumbnailInlineStyle}">
+              ${image ? `<img src="${image}" alt="${product.nome}" class="h-full w-full object-contain" style="${imageInlineStyle}">` : '<i class="fas fa-image text-gray-300"></i>'}
             </span>
-            <span class="flex-1 min-w-0">
-              <span class="block text-sm font-semibold text-gray-800 truncate">${product.nome || 'Produto sem nome'}</span>
-              <span class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <span class="flex-1 min-w-0" style="${infoInlineStyle}">
+              <span class="block text-sm font-semibold text-gray-800 truncate" style="${titleInlineStyle}">${product.nome || 'Produto sem nome'}</span>
+              <span class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500" style="${metaInlineStyle}">
                 ${priceLine}
                 ${badges}
               </span>
-              ${extraNotice}
-              <span class="block text-[11px] text-gray-400 mt-1">Cód: ${getProductCode(product) || '—'} • Barras: ${getProductBarcode(product) || '—'}</span>
+              ${
+                extraNotice
+                  ? extraNotice.replace(
+                      '<span class="block text-[11px] text-amber-600 mt-1">',
+                      `<span class="block text-[11px] text-amber-600 mt-1" style="${noticeInlineStyle}">`
+                    )
+                  : ''
+              }
+              <span class="block text-[11px] text-gray-400 mt-1" style="${codeInlineStyle}">Cód: ${getProductCode(product) || '—'} • Barras: ${getProductBarcode(product) || '—'}</span>
             </span>
           </button>
         `;
