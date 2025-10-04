@@ -1234,6 +1234,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
   let sale = null;
   let emissionDate = null;
   let saleCodeForName = '';
+  let state = null;
 
   try {
     const pdvId = req.params.id;
@@ -1303,7 +1304,7 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
         .json({ message: `A empresa não possui CSC configurado para ${ambienteLabel}.` });
     }
 
-    const state = await PdvState.findOne({ pdv: pdvId });
+    state = await PdvState.findOne({ pdv: pdvId });
 
     if (!state) {
       return res
@@ -1478,6 +1479,89 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Erro ao emitir nota fiscal do PDV:', error);
+
+    if (state && sale) {
+      const fallbackStatus = sale.fiscalStatus === 'emitted' ? 'emitted' : 'pending';
+      const shouldResetEmissionData = fallbackStatus !== 'emitted';
+      let changed = false;
+
+      if (sale.fiscalStatus !== fallbackStatus) {
+        sale.fiscalStatus = fallbackStatus;
+        changed = true;
+      }
+
+      if (shouldResetEmissionData) {
+        const previousSnapshot = {
+          emittedAt: sale.fiscalEmittedAt,
+          emittedAtLabel: sale.fiscalEmittedAtLabel,
+          driveFileId: sale.fiscalDriveFileId,
+          xmlUrl: sale.fiscalXmlUrl,
+          xmlName: sale.fiscalXmlName,
+          xmlContent: sale.fiscalXmlContent,
+          qrCodeData: sale.fiscalQrCodeData,
+          qrCodeImage: sale.fiscalQrCodeImage,
+          accessKey: sale.fiscalAccessKey,
+          digest: sale.fiscalDigestValue,
+          signature: sale.fiscalSignature,
+          protocol: sale.fiscalProtocol,
+          receiptNumber: sale.fiscalReceiptNumber,
+          sefazStatus: sale.fiscalSefazStatus,
+          sefazMessage: sale.fiscalSefazMessage,
+          sefazProcessedAt: sale.fiscalSefazProcessedAt,
+          sefazProcessedAtLabel: sale.fiscalSefazProcessedAtLabel,
+        };
+
+        sale.fiscalEmittedAt = null;
+        sale.fiscalEmittedAtLabel = '';
+        sale.fiscalDriveFileId = '';
+        sale.fiscalXmlUrl = '';
+        sale.fiscalXmlName = '';
+        sale.fiscalXmlContent = '';
+        sale.fiscalQrCodeData = '';
+        sale.fiscalQrCodeImage = '';
+        sale.fiscalAccessKey = '';
+        sale.fiscalDigestValue = '';
+        sale.fiscalSignature = '';
+        sale.fiscalProtocol = '';
+        sale.fiscalReceiptNumber = '';
+        sale.fiscalSefazStatus = '';
+        sale.fiscalSefazMessage = '';
+        sale.fiscalSefazProcessedAt = null;
+        sale.fiscalSefazProcessedAtLabel = '';
+
+        changed =
+          changed ||
+          Boolean(
+            previousSnapshot.emittedAt ||
+              previousSnapshot.emittedAtLabel ||
+              previousSnapshot.driveFileId ||
+              previousSnapshot.xmlUrl ||
+              previousSnapshot.xmlName ||
+              previousSnapshot.xmlContent ||
+              previousSnapshot.qrCodeData ||
+              previousSnapshot.qrCodeImage ||
+              previousSnapshot.accessKey ||
+              previousSnapshot.digest ||
+              previousSnapshot.signature ||
+              previousSnapshot.protocol ||
+              previousSnapshot.receiptNumber ||
+              previousSnapshot.sefazStatus ||
+              previousSnapshot.sefazMessage ||
+              previousSnapshot.sefazProcessedAt ||
+              previousSnapshot.sefazProcessedAtLabel
+          );
+      }
+
+      if (changed) {
+        try {
+          state.markModified('completedSales');
+          await state.save();
+        } catch (persistError) {
+          console.error('Falha ao restaurar status fiscal após rejeição:', persistError);
+        }
+      }
+    }
+
     const message =
       error?.message && typeof error.message === 'string'
         ? error.message
