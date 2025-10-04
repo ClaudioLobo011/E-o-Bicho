@@ -592,13 +592,35 @@
     return '';
   };
 
+  const hasMeaningfulValue = (value) => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') {
+      return value.trim().length > 0;
+    }
+    return true;
+  };
+
   const mergeRecords = (...records) => {
     const merged = {};
     records.forEach((record) => {
       if (!isPlainObject(record)) return;
       Object.entries(record).forEach(([key, value]) => {
-        if (value === undefined || key in merged) return;
-        merged[key] = value;
+        if (value === undefined) return;
+        if (!(key in merged)) {
+          merged[key] = value;
+          return;
+        }
+        const current = merged[key];
+        if (isPlainObject(current) && isPlainObject(value)) {
+          if (current === value) {
+            return;
+          }
+          merged[key] = mergeRecords(current, value);
+          return;
+        }
+        if (!hasMeaningfulValue(current) && hasMeaningfulValue(value)) {
+          merged[key] = value;
+        }
       });
     });
     return merged;
@@ -721,6 +743,18 @@
     })();
     if (cookieToken) {
       return cookieToken;
+    }
+    try {
+      const raw = window?.localStorage?.getItem('loggedInUser');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const fallbackToken = normalizeToken(parsed?.token);
+        if (fallbackToken) {
+          return fallbackToken;
+        }
+      }
+    } catch (error) {
+      console.warn('Fallback direto não encontrou o token do usuário logado.', error);
     }
     return '';
   };
