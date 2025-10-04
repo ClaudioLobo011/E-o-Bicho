@@ -5,6 +5,7 @@ const { DOMParser, XMLSerializer } = require('@xmldom/xmldom');
 const xpath = require('xpath');
 const { SignedXml } = require('xml-crypto');
 const Product = require('../models/Product');
+const municipalitiesDataset = require('../data/ibge-municipios.json');
 const {
   computeMissingFields,
   describeMissingFields,
@@ -53,6 +54,66 @@ const sanitizeDigits = (value, { fallback = '' } = {}) => {
   if (!value) return fallback;
   const digits = String(value).replace(/\D+/g, '');
   return digits || fallback;
+};
+
+const normalizeMunicipalityNameForLookup = (value, uf) => {
+  if (!value && value !== 0) {
+    return '';
+  }
+  const normalized = String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^0-9a-zA-Z]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  if (!normalized) {
+    return '';
+  }
+  if (uf) {
+    const suffix = uf.toLowerCase();
+    const suffixPattern = new RegExp(`\\b${suffix}$`);
+    return normalized.replace(suffixPattern, '').trim();
+  }
+  return normalized;
+};
+
+const MUNICIPALITIES_BY_UF = new Map();
+const MUNICIPALITIES_BY_CODE = new Map();
+
+for (const entry of municipalitiesDataset) {
+  if (!entry || typeof entry !== 'object') continue;
+  const uf = String(entry.uf || '').trim().toUpperCase();
+  const code = sanitizeDigits(entry.codigo);
+  const name = typeof entry.municipio === 'string' ? entry.municipio.trim() : '';
+  if (!uf || !code || code.length !== 7 || !name) continue;
+
+  const normalizedName = normalizeMunicipalityNameForLookup(name);
+  if (!normalizedName) continue;
+
+  if (!MUNICIPALITIES_BY_UF.has(uf)) {
+    MUNICIPALITIES_BY_UF.set(uf, new Map());
+  }
+
+  const municipalityRecord = { code, name, uf };
+  MUNICIPALITIES_BY_UF.get(uf).set(normalizedName, municipalityRecord);
+  MUNICIPALITIES_BY_CODE.set(code, municipalityRecord);
+}
+
+const resolveMunicipalityByName = (name, uf) => {
+  if (!name || !uf) {
+    return null;
+  }
+  const normalizedUf = String(uf).trim().toUpperCase();
+  const index = MUNICIPALITIES_BY_UF.get(normalizedUf);
+  if (!index) {
+    return null;
+  }
+  const normalizedName = normalizeMunicipalityNameForLookup(name, normalizedUf);
+  if (!normalizedName) {
+    return null;
+  }
+  return index.get(normalizedName) || null;
 };
 
 const firstNonEmptyString = (...values) => {
@@ -1240,36 +1301,197 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const destName = sanitize((destNameSource || '').slice(0, 60));
 
   if (hasCPF || hasCNPJ || hasIdE) {
-    const dLgr = sanitize((delivery?.logradouro || cliente?.logradouro || '').slice(0, 60));
-    const dNro = onlyDigits(delivery?.numero ?? cliente?.numero);
-    const dCompl = sanitize((delivery?.complemento || cliente?.complemento || '').slice(0, 60));
-    const dBairro = sanitize((delivery?.bairro || cliente?.bairro || '').slice(0, 60));
-    const dCMun = onlyDigits(
-      delivery?.cMun ??
-        delivery?.codigoIbgeMunicipio ??
-        cliente?.cMun ??
-        cliente?.codigoIbgeMunicipio
-    );
-    const rawCity = firstNonEmptyString(
-      delivery?.xMun,
-      delivery?.cidade,
-      cliente?.xMun,
-      cliente?.cidade
-    );
-    const dXMun = sanitize((rawCity || '').slice(0, 60));
-    const rawUf = (firstNonEmptyString(
-      delivery?.UF,
-      delivery?.uf,
-      cliente?.UF,
-      cliente?.uf
-    ) || '').trim();
-    const normalizedUf = rawUf.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
-    const dCEP = onlyDigits(delivery?.CEP ?? delivery?.cep ?? cliente?.CEP ?? cliente?.cep);
+    const addressCandidates = [];
+    const addAddressCandidate = (candidate) => {
+      if (!candidate) return;
+      if (Array.isArray(candidate)) {
+        candidate.forEach(addAddressCandidate);
+        return;
+      }
+      if (typeof candidate !== 'object') return;
+      addressCandidates.push(candidate);
+    };
 
+    addAddressCandidate(delivery);
+    addAddressCandidate(delivery?.address);
+    addAddressCandidate(delivery?.endereco);
+    addAddressCandidate(cliente);
+    addAddressCandidate(cliente?.endereco);
+    addAddressCandidate(cliente?.enderecos);
+    addAddressCandidate(cliente?.addresses);
+    addAddressCandidate(cliente?.enderecoEntrega);
+    addAddressCandidate(cliente?.enderecoEntrega?.endereco);
+    addAddressCandidate(cliente?.enderecoCobranca);
+    addAddressCandidate(cliente?.address);
+    addAddressCandidate(cliente?.billingAddress);
+    addAddressCandidate(cliente?.shippingAddress);
+    addAddressCandidate(sale?.customer);
+    addAddressCandidate(sale?.customer?.endereco);
+    addAddressCandidate(sale?.customer?.address);
+    addAddressCandidate(sale?.customer?.addresses);
+    addAddressCandidate(sale?.customer?.deliveryAddress);
+    addAddressCandidate(sale?.customer?.billingAddress);
+    addAddressCandidate(sale?.customer?.shippingAddress);
+    addAddressCandidate(sale?.customerAddress);
+    addAddressCandidate(sale?.customerEndereco);
+    addAddressCandidate(sale?.receiptSnapshot?.cliente);
+    addAddressCandidate(sale?.receiptSnapshot?.cliente?.endereco);
+    addAddressCandidate(snapshot?.cliente);
+    addAddressCandidate(snapshot?.cliente?.endereco);
+    addAddressCandidate(snapshot?.cliente?.enderecos);
+    addAddressCandidate(snapshot?.delivery);
+    addAddressCandidate(snapshot?.delivery?.endereco);
+
+    const extractAddressValue = (value) => {
+      if (value == null) return '';
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed ? trimmed : '';
+      }
+      if (typeof value === 'number') {
+        return String(value);
+      }
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const extracted = extractAddressValue(item);
+          if (extracted) return extracted;
+        }
+        return '';
+      }
+      if (typeof value === 'object') {
+        const candidateKeys = [
+          'nome',
+          'name',
+          'descricao',
+          'description',
+          'valor',
+          'value',
+          'text',
+          'municipio',
+          'cidade',
+          'localidade',
+          'cidadeNome',
+          'municipioNome',
+          'codigo',
+          'code',
+          'id',
+          'sigla',
+        ];
+        for (const key of candidateKeys) {
+          if (Object.prototype.hasOwnProperty.call(value, key)) {
+            const extracted = extractAddressValue(value[key]);
+            if (extracted) return extracted;
+          }
+        }
+      }
+      return '';
+    };
+
+    const pickAddressValue = (...keys) => {
+      for (const source of addressCandidates) {
+        const sourceKeys = Object.keys(source || {});
+        for (const key of keys) {
+          if (!key) continue;
+          let extracted = '';
+          if (Object.prototype.hasOwnProperty.call(source, key)) {
+            extracted = extractAddressValue(source[key]);
+            if (extracted) return extracted;
+          }
+          const lowerKey = key.toLowerCase();
+          for (const candidateKey of sourceKeys) {
+            if (candidateKey === key) continue;
+            if (candidateKey.toLowerCase() !== lowerKey) continue;
+            extracted = extractAddressValue(source[candidateKey]);
+            if (extracted) return extracted;
+          }
+        }
+      }
+      return '';
+    };
+
+    const streetRaw = pickAddressValue('logradouro', 'endereco', 'address', 'rua', 'street');
+    const numberRaw = pickAddressValue('numero', 'num', 'numeroEndereco', 'numeroResidencia', 'numeroCasa');
+    const complementRaw = pickAddressValue(
+      'complemento',
+      'compl',
+      'complement',
+      'complementoEndereco',
+      'complementoResidencia'
+    );
+    const neighborhoodRaw = pickAddressValue('bairro', 'district', 'bairroEndereco', 'bairroResidencia');
+    const cityCodeRaw = pickAddressValue(
+      'cMun',
+      'codigoIbgeMunicipio',
+      'codigoMunicipioIbge',
+      'codIbgeMunicipio',
+      'codigoIbgeCidade',
+      'codigoCidadeIbge',
+      'municipioIbge',
+      'codigoIbge',
+      'ibge'
+    );
+    const cityRaw = pickAddressValue(
+      'xMun',
+      'municipio',
+      'cidade',
+      'city',
+      'localidade',
+      'municipioNome',
+      'cidadeNome'
+    );
+    const ufRaw = pickAddressValue('UF', 'uf', 'estado', 'state', 'siglaUF');
+    const cepRaw = pickAddressValue('CEP', 'cep', 'zip', 'codigoPostal', 'postalCode');
+    const phoneRaw = pickAddressValue('fone', 'telefone', 'phone', 'celular', 'telefoneContato');
+
+    let dCMun = sanitizeDigits(cityCodeRaw);
+    if (dCMun.length > 7) {
+      dCMun = dCMun.slice(-7);
+    }
+    if (dCMun.length !== 7) {
+      dCMun = '';
+    }
+
+    let normalizedUf = (ufRaw || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+    if (!normalizedUf && dCMun) {
+      normalizedUf = UF_BY_CODE[dCMun.slice(0, 2)] || '';
+    }
+
+    let resolvedCityName = cityRaw;
+    let municipalityRecord = null;
+
+    if (!dCMun && normalizedUf && cityRaw) {
+      municipalityRecord = resolveMunicipalityByName(cityRaw, normalizedUf);
+      if (municipalityRecord) {
+        dCMun = municipalityRecord.code;
+        resolvedCityName = municipalityRecord.name;
+      }
+    }
+
+    if (!municipalityRecord && dCMun) {
+      municipalityRecord = MUNICIPALITIES_BY_CODE.get(dCMun) || null;
+      if (municipalityRecord) {
+        if (!normalizedUf) {
+          normalizedUf = municipalityRecord.uf;
+        }
+        if (!resolvedCityName) {
+          resolvedCityName = municipalityRecord.name;
+        }
+      }
+    }
+
+    const dLgr = sanitize((streetRaw || '').slice(0, 60));
+    const numberNormalized = (numberRaw || '').toString().trim() || 'S/N';
+    const dNro = sanitize(numberNormalized.slice(0, 60));
+    const dCompl = sanitize((complementRaw || '').slice(0, 60));
+    const dBairro = sanitize((neighborhoodRaw || '').slice(0, 60));
+    const dXMun = sanitize(((resolvedCityName || cityRaw || '').slice(0, 60)));
+    const dCEP = onlyDigits(cepRaw);
+    const dFone = sanitizeDigits(phoneRaw);
+
+    const hasMandatoryStreet = !!streetRaw;
+    const hasMandatoryNeighborhood = !!neighborhoodRaw;
     const hasMandatoryMunicipality = /^\d{7}$/.test(dCMun) && !!dXMun;
     const hasMandatoryUf = normalizedUf.length === 2;
-    const hasMandatoryStreet = !!dLgr;
-    const hasMandatoryNeighborhood = !!dBairro;
     const hasAddr =
       hasMandatoryStreet &&
       hasMandatoryNeighborhood &&
@@ -1285,20 +1507,31 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
 
     if (hasAddr) {
       infNfeLines.push('      <enderDest>');
-      pushTagIf(infNfeLines, 'xLgr', dLgr, '        ');
-      infNfeLines.push(`        <nro>${dNro || '0'}</nro>`);
+      infNfeLines.push(`        <xLgr>${dLgr}</xLgr>`);
+      infNfeLines.push(`        <nro>${dNro || 'S/N'}</nro>`);
       pushTagIf(infNfeLines, 'xCpl', dCompl, '        ');
-      pushTagIf(infNfeLines, 'xBairro', dBairro, '        ');
+      infNfeLines.push(`        <xBairro>${dBairro}</xBairro>`);
       infNfeLines.push(`        <cMun>${dCMun}</cMun>`);
-      pushTagIf(infNfeLines, 'xMun', dXMun, '        ');
+      infNfeLines.push(`        <xMun>${dXMun}</xMun>`);
       infNfeLines.push(`        <UF>${sanitize(normalizedUf)}</UF>`);
       if (/^\d{8}$/.test(dCEP)) infNfeLines.push(`        <CEP>${dCEP}</CEP>`);
+      if (dFone.length >= 6 && dFone.length <= 14) {
+        infNfeLines.push(`        <fone>${dFone}</fone>`);
+      }
       infNfeLines.push('      </enderDest>');
     }
 
     infNfeLines.push('      <indIEDest>9</indIEDest>');
-    if (cliente?.email) {
-      infNfeLines.push(`      <email>${sanitize(cliente.email)}</email>`);
+    const destEmail = firstNonEmptyString(
+      cliente?.email,
+      sale?.customer?.email,
+      sale?.customerEmail,
+      sale?.email,
+      snapshot?.cliente?.email,
+      delivery?.email
+    );
+    if (destEmail) {
+      infNfeLines.push(`      <email>${sanitize(destEmail)}</email>`);
     }
     infNfeLines.push('    </dest>');
   }
