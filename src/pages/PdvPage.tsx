@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo } from "react";
 import rawLegacyHtml from "../../pages/admin/admin-pdv.html?raw";
 import { initializeLegacyPdvPage } from "../legacy/pdv-legacy";
 
@@ -58,13 +58,33 @@ export default function PdvPage() {
         className={legacyMarkup.className}
         dangerouslySetInnerHTML={{ __html: legacyMarkup.mainHtml }}
       />
-      {legacyMarkup.afterMainHtml ? (
-        <div
-          data-legacy-after-main
-          style={{ display: "contents" }}
-          dangerouslySetInnerHTML={{ __html: legacyMarkup.afterMainHtml }}
-        />
-      ) : null}
+      <LegacyAfterMainMarkup html={legacyMarkup.afterMainHtml} />
     </>
   );
+}
+
+type LegacyAfterMainMarkupProps = {
+  html: string;
+};
+
+function LegacyAfterMainMarkup({ html }: LegacyAfterMainMarkupProps) {
+  useLayoutEffect(() => {
+    if (!html || typeof document === "undefined") {
+      return;
+    }
+
+    const container = document.createElement("div");
+    container.dataset.legacyAfterMain = "true";
+    container.style.display = "contents";
+    container.innerHTML = html;
+
+    document.body.appendChild(container);
+
+    return () => {
+      container.innerHTML = "";
+      container.remove();
+    };
+  }, [html]);
+
+  return null;
 }
