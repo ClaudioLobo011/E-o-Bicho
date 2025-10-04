@@ -1,0 +1,146 @@
+[
+  {
+    "path": "/pages/admin.html",
+    "route": "/app",
+    "tab": "home",
+    "title": "Painel de Administração - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-cadastro-pdv.html",
+    "route": "/app/cadastro-pdv",
+    "tab": "cadastro-pdv",
+    "title": "Admin: Cadastro de PDV - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-categorias.html",
+    "route": "/app/categorias",
+    "tab": "categorias",
+    "title": "Admin: Categorias - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-depositos.html",
+    "route": "/app/depositos",
+    "tab": "depositos",
+    "title": "Admin: Depósitos - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-destaques.html",
+    "route": "/app/destaques",
+    "tab": "destaques",
+    "title": "Admin: Produtos em Destaque - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-empresa-configuracoes-pdv.html",
+    "route": "/app/empresa-configuracoes-pdv",
+    "tab": "empresa-configuracoes-pdv",
+    "title": "Admin: Configurações do PDV - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-entregas.html",
+    "route": "/app/entregas",
+    "tab": "entregas",
+    "title": "Admin: Entregas - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-financeiro-contabil-cadastro-conta-contabil.html",
+    "route": "/app/financeiro-contabil-cadastro-conta-contabil",
+    "tab": "financeiro-contabil-cadastro-conta-contabil",
+    "title": "Admin: Cadastro de Conta Contábil - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-financeiro-contabil-cadastro-conta-corrente.html",
+    "route": "/app/financeiro-contabil-cadastro-conta-corrente",
+    "tab": "financeiro-contabil-cadastro-conta-corrente",
+    "title": "Admin: Cadastro de Conta Corrente - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-financeiro-contabil-cadastro-contas-pagar.html",
+    "route": "/app/financeiro-contabil-cadastro-contas-pagar",
+    "tab": "financeiro-contabil-cadastro-contas-pagar",
+    "title": "Admin: Cadastro de Contas a Pagar - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-financeiro-contabil-cadastro-contas-receber.html",
+    "route": "/app/financeiro-contabil-cadastro-contas-receber",
+    "tab": "financeiro-contabil-cadastro-contas-receber",
+    "title": "Admin: Cadastro de Contas a Receber - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-financeiro-meios-pagamento.html",
+    "route": "/app/financeiro-meios-pagamento",
+    "tab": "financeiro-meios-pagamento",
+    "title": "Admin: Meios de Pagamento - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-fiscal-icms-simples.html",
+    "route": "/app/fiscal-icms-simples",
+    "tab": "fiscal-icms-simples",
+    "title": "Admin: Cadastro de ICMS - Simples Nacional"
+  },
+  {
+    "path": "/pages/admin/admin-fiscal-regras.html",
+    "route": "/app/fiscal-regras",
+    "tab": "fiscal-regras",
+    "title": "Admin: Regras Fiscais Automáticas"
+  },
+  {
+    "path": "/pages/admin/admin-gerir-funcionarios.html",
+    "route": "/app/gerir-funcionarios",
+    "tab": "gerir-funcionarios",
+    "title": "Gerir Funcionários - Admin"
+  },
+  {
+    "path": "/pages/admin/admin-importar.html",
+    "route": "/app/importar",
+    "tab": "importar",
+    "title": "Admin: Importar Produtos - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-nossas-lojas.html",
+    "route": "/app/nossas-lojas",
+    "tab": "nossas-lojas",
+    "title": "Admin: Nossas Lojas - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-pdv.html",
+    "route": "/app/pdv",
+    "tab": "pdv",
+    "title": "Admin: PDV - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-produto-editar.html",
+    "route": "/app/produto-editar",
+    "tab": "produto-editar",
+    "title": "Admin: Editar Produto - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-produtos.html",
+    "route": "/app/produtos",
+    "tab": "produtos",
+    "title": "Admin: Produtos - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-promocoes.html",
+    "route": "/app/promocoes",
+    "tab": "promocoes",
+    "title": "Admin: Promoções - E o Bicho"
+  },
+  {
+    "path": "/pages/admin/admin-servicos-grupos.html",
+    "route": "/app/servicos-grupos",
+    "tab": "servicos-grupos",
+    "title": "Admin — Cadastro de Grupo de Serviço"
+  },
+  {
+    "path": "/pages/admin/admin-servicos.html",
+    "route": "/app/servicos",
+    "tab": "servicos",
+    "title": "Admin — Cadastro de Serviço"
+  },
+  {
+    "path": "/pages/admin/admin-zerar-deposito.html",
+    "route": "/app/zerar-deposito",
+    "tab": "zerar-deposito",
+    "title": "Admin: Zerar Depósito - E o Bicho"
+  }
+]

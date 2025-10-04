@@ -1081,6 +1081,19 @@ function checkAdminLink() {
   return checkRoleLink('admin-link', ['funcionario','admin','admin_master']);
 }
 
+function resolveAdminPanelUrl() {
+  const defaultPath = '/app';
+  const { hostname, port, protocol } = window.location;
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
+
+  if (isLocalHost && port && port !== '5173') {
+    const safeProtocol = protocol === 'file:' ? 'http:' : protocol;
+    return `${safeProtocol}//${hostname}:5173${defaultPath}`;
+  }
+
+  return defaultPath;
+}
+
 let __roleCachePromise = null;
 async function __getUserRoleOnce() {
   if (__roleCachePromise) return __roleCachePromise;
@@ -1112,7 +1125,17 @@ async function checkRoleLink(linkId, allowedRoles) {
   const toggle = (ok) => el.classList.toggle('hidden', !ok);
   try {
     const role = await __getUserRoleOnce();
-    toggle(allowedRoles.includes(role));
+    const isAllowed = allowedRoles.includes(role);
+    toggle(isAllowed);
+
+    if (isAllowed) {
+      const resolvedUrl = resolveAdminPanelUrl();
+      if (resolvedUrl) {
+        el.href = resolvedUrl;
+        el.target = '_blank';
+        el.rel = 'noopener noreferrer';
+      }
+    }
   } catch (e) {
     console.error('checkRoleLink:', e);
     toggle(false);
