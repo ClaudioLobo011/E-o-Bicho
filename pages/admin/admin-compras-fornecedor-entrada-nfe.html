@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Entrada de NF-e - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div class="space-y-2">
+            <div class="flex items-center gap-2 text-sm text-gray-500">
+              <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                <i class="fas fa-shopping-basket"></i>
+                Compras
+              </span>
+              <i class="fas fa-angle-right text-xs"></i>
+              <span class="font-medium text-gray-600">Fornecedores</span>
+              <i class="fas fa-angle-right text-xs"></i>
+              <span class="font-semibold text-gray-800">Entrada de NF-e</span>
+            </div>
+            <div>
+              <h1 class="text-2xl font-bold text-gray-800">Entrada de NF-e</h1>
+              <p class="text-sm text-gray-600">Registre notas fiscais eletrônicas modelo 55 com base no layout 4.00 do Manual de Orientação do Contribuinte (Ajuste SINIEF 07/05) e garanta conformidade com o Portal Nacional da NF-e.</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-file-upload"></i>
+              Importar XML autorizado
+            </button>
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+              <i class="fas fa-barcode"></i>
+              Consultar chave na SEFAZ
+            </button>
+          </div>
+        </header>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Dados do documento</h2>
+              <p class="text-sm text-gray-500">Informe os campos obrigatórios previstos no MOC 4.0: chave de acesso de 44 dígitos, série, número e datas de emissão e entrada.</p>
+            </div>
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+              <i class="fas fa-circle-check"></i>
+              Manifestação pendente
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="lg:col-span-2">
+              <label for="nfe-access-key" class="block text-sm font-medium text-gray-700 mb-1">Chave de acesso (44 dígitos) <span class="text-red-500">*</span></label>
+              <input type="text" id="nfe-access-key" maxlength="44" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="35190730290856000160550010000100011000100018" required>
+              <p class="mt-1 text-xs text-gray-500">Valide a estrutura: cUF + AAMM + CNPJ + modelo (55) + série + número + tpEmis + cNF + DV.</p>
+            </div>
+            <div>
+              <label for="nfe-model" class="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
+              <select id="nfe-model" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="55" selected>55 - NF-e</option>
+                <option value="65">65 - NFC-e</option>
+              </select>
+            </div>
+            <div>
+              <label for="nfe-series" class="block text-sm font-medium text-gray-700 mb-1">Série <span class="text-red-500">*</span></label>
+              <input type="text" id="nfe-series" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1" required>
+            </div>
+            <div>
+              <label for="nfe-number" class="block text-sm font-medium text-gray-700 mb-1">Número da NF-e <span class="text-red-500">*</span></label>
+              <input type="text" id="nfe-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="10245" required>
+            </div>
+            <div>
+              <label for="nfe-issue-date" class="block text-sm font-medium text-gray-700 mb-1">Data de emissão <span class="text-red-500">*</span></label>
+              <input type="datetime-local" id="nfe-issue-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+            </div>
+            <div>
+              <label for="nfe-entry-date" class="block text-sm font-medium text-gray-700 mb-1">Data de entrada <span class="text-red-500">*</span></label>
+              <input type="datetime-local" id="nfe-entry-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+            </div>
+            <div>
+              <label for="nfe-operation" class="block text-sm font-medium text-gray-700 mb-1">Natureza da operação (CFOP)</label>
+              <input type="text" id="nfe-operation" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.102 - Compra para comercialização">
+              <p class="mt-1 text-xs text-gray-500">CFOP conforme Tabelas do Ajuste SINIEF 07/05; para entradas interestaduais utilize códigos 2.xxx.</p>
+            </div>
+            <div>
+              <label for="nfe-protocol" class="block text-sm font-medium text-gray-700 mb-1">Protocolo de autorização</label>
+              <input type="text" id="nfe-protocol" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="152240000000000">
+              <p class="mt-1 text-xs text-gray-500">Recibo emitido pela SEFAZ após a autorização (Ex.: 152240000000000, conforme portal.sefaz.rs.gov.br).</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Fornecedor emissor</h2>
+              <p class="text-sm text-gray-500">Dados do emitente conforme cadastro sincronizado e conforme validação do Cadastro Sincronizado Nacional (CNPJ/IE).</p>
+            </div>
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-sync"></i>
+              Buscar dados via CNPJ</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label for="issuer-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ <span class="text-red-500">*</span></label>
+              <input type="text" id="issuer-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="30.290.856/0001-60" required>
+            </div>
+            <div>
+              <label for="issuer-ie" class="block text-sm font-medium text-gray-700 mb-1">Inscrição estadual</label>
+              <input type="text" id="issuer-ie" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="244/0178792">
+              <p class="mt-1 text-xs text-gray-500">Obrigatória para contribuintes do ICMS, conforme art. 19 do RICMS de cada UF.</p>
+            </div>
+            <div>
+              <label for="issuer-state" class="block text-sm font-medium text-gray-700 mb-1">UF</label>
+              <select id="issuer-state" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Selecione</option>
+                <option value="SP">SP - São Paulo</option>
+                <option value="RJ">RJ - Rio de Janeiro</option>
+                <option value="MG">MG - Minas Gerais</option>
+                <option value="RS">RS - Rio Grande do Sul</option>
+                <option value="PR">PR - Paraná</option>
+                <option value="SC">SC - Santa Catarina</option>
+                <option value="BA">BA - Bahia</option>
+                <option value="PE">PE - Pernambuco</option>
+                <option value="CE">CE - Ceará</option>
+                <option value="DF">DF - Distrito Federal</option>
+              </select>
+            </div>
+            <div class="md:col-span-2 lg:col-span-3">
+              <label for="issuer-name" class="block text-sm font-medium text-gray-700 mb-1">Razão social</label>
+              <input type="text" id="issuer-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Distribuidora Nacional de Produtos Veterinários Ltda">
+            </div>
+            <div class="lg:col-span-2">
+              <label for="issuer-address" class="block text-sm font-medium text-gray-700 mb-1">Endereço completo</label>
+              <input type="text" id="issuer-address" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Av. Paulista, 1800 - Bela Vista, São Paulo - SP, 01310-200">
+            </div>
+            <div>
+              <label for="issuer-email" class="block text-sm font-medium text-gray-700 mb-1">E-mail fiscal</label>
+              <input type="email" id="issuer-email" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="nfe@distribuidora.com.br">
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Itens da NF-e</h2>
+              <p class="text-sm text-gray-500">Itens importados do XML com códigos NCM e CEST de acordo com a Tabela TIPI (Decreto 11.182/2022) e Nota Técnica 2023.001.</p>
+            </div>
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-plus-circle"></i>
+              Adicionar item manualmente
+            </button>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">#</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Descrição</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">NCM</th>
+                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">CFOP</th>
+                  <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Qtde</th>
+                  <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Vlr. unitário</th>
+                  <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Total</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 bg-white">
+                <tr>
+                  <td class="px-4 py-3 text-gray-600">1</td>
+                  <td class="px-4 py-3 text-gray-700">
+                    Vacina Polivalente V8 50ml
+                    <p class="text-xs text-gray-500">CEST 13.001.00 · Código ANVISA 10218010911</p>
+                  </td>
+                  <td class="px-4 py-3 text-gray-600">3002.20.29</td>
+                  <td class="px-4 py-3 text-gray-600">1.102</td>
+                  <td class="px-4 py-3 text-right text-gray-600">12</td>
+                  <td class="px-4 py-3 text-right text-gray-600">R$ 48,90</td>
+                  <td class="px-4 py-3 text-right text-gray-800 font-semibold">R$ 586,80</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3 text-gray-600">2</td>
+                  <td class="px-4 py-3 text-gray-700">
+                    Ração Premium Cães Adultos 15kg
+                    <p class="text-xs text-gray-500">CEST 07.002.00 · NCM conforme TIPI</p>
+                  </td>
+                  <td class="px-4 py-3 text-gray-600">2309.10.90</td>
+                  <td class="px-4 py-3 text-gray-600">1.403</td>
+                  <td class="px-4 py-3 text-right text-gray-600">8</td>
+                  <td class="px-4 py-3 text-right text-gray-600">R$ 126,50</td>
+                  <td class="px-4 py-3 text-right text-gray-800 font-semibold">R$ 1.012,00</td>
+                </tr>
+              </tbody>
+              <tfoot class="bg-gray-50">
+                <tr>
+                  <th colspan="6" class="px-4 py-3 text-right font-semibold text-gray-700">Total da NF-e</th>
+                  <th class="px-4 py-3 text-right text-gray-900 font-bold">R$ 1.598,80</th>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-blue-100 bg-blue-50 p-4">
+              <div class="flex items-start gap-3">
+                <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <i class="fas fa-info"></i>
+                </span>
+                <div class="space-y-2">
+                  <h3 class="text-sm font-semibold text-gray-800">Tributação ICMS conforme Nota Técnica 2023.003</h3>
+                  <p class="text-sm text-gray-600">Revisado o tratamento de CST 00, 20, 40 e 60 com partilha do DIFAL prevista pela Emenda Constitucional 87/2015. Utilize o campo "ICMS partilha" ao importar XML de operações interestaduais.</p>
+                </div>
+              </div>
+            </div>
+            <div class="rounded-lg border border-emerald-100 bg-emerald-50 p-4">
+              <div class="flex items-start gap-3">
+                <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                  <i class="fas fa-shield-alt"></i>
+                </span>
+                <div class="space-y-2">
+                  <h3 class="text-sm font-semibold text-gray-800">Eventos da NF-e</h3>
+                  <p class="text-sm text-gray-600">Registre ciência, confirmação ou desconhecimento conforme o Manual de Orientação do Contribuinte - Eventos da NF-e (versão 1.03). Os eventos ficam vinculados ao protocolo de autorização retornado pela SEFAZ.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <h2 class="text-lg font-semibold text-gray-800">Referências oficiais</h2>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <article class="rounded-lg border border-gray-200 p-4">
+              <h3 class="text-sm font-semibold text-gray-800">Portal Nacional da NF-e</h3>
+              <p class="mt-2 text-sm text-gray-600">Base oficial para consulta de notas fiscais eletrônicas e download de esquemas XML.</p>
+              <a href="https://www.nfe.fazenda.gov.br/portal" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
+                <i class="fas fa-external-link-alt"></i>
+                Acessar portal
+              </a>
+            </article>
+            <article class="rounded-lg border border-gray-200 p-4">
+              <h3 class="text-sm font-semibold text-gray-800">Manual de Orientação do Contribuinte 4.0</h3>
+              <p class="mt-2 text-sm text-gray-600">Documento que define os campos obrigatórios da NF-e, eventos e regras de validação vigentes.</p>
+              <a href="https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=j6Nz6xH3O9E=" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
+                <i class="fas fa-external-link-alt"></i>
+                Baixar MOC</a>
+            </article>
+            <article class="rounded-lg border border-gray-200 p-4">
+              <h3 class="text-sm font-semibold text-gray-800">Nota Técnica 2023.003</h3>
+              <p class="mt-2 text-sm text-gray-600">Atualiza regras para ICMS, DIFAL e campos de combustíveis, com vigência nacional publicada pela SEFAZ.</p>
+              <a href="https://www.nfe.fazenda.gov.br/portal/notasTecnicas.aspx" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
+                <i class="fas fa-external-link-alt"></i>
+                Consultar NT
+              </a>
+            </article>
+          </div>
+        </section>
+
+        <div class="flex flex-col gap-3 md:flex-row md:justify-end">
+          <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+            <i class="fas fa-file-archive"></i>
+            Salvar rascunho
+          </button>
+          <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+            <i class="fas fa-save"></i>
+            Registrar entrada da NF-e
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="/scripts/common/modal-bridge.js"></script>
+</body>
+</html>
