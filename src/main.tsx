@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
+import { ensureLegacyAuthSession } from "./legacy/ensure-legacy-auth";
 import { ensureLegacyApiConfig } from "./legacy/ensure-api-config";
 import "./styles/globals.css";
 
@@ -13,6 +14,7 @@ if (!rootElement) {
   throw new Error("Elemento raiz não encontrado");
 }
 
+ensureLegacyAuthSession();
 ensureLegacyApiConfig();
 
 createRoot(rootElement).render(
