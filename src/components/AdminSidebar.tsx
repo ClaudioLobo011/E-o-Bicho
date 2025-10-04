@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useTabs } from "../context/TabsContext";
 import type { TabId } from "../routes/tab-registry";
+import { useIsDesktop } from "../hooks/useMediaQuery";
 
 interface AdminSidebarProps {
   isOpen: boolean;
@@ -443,28 +444,6 @@ const SIDEBAR_STRUCTURE: SidebarNode[] = [
   }
 ];
 
-function useIsDesktop(): boolean {
-  const [matches, setMatches] = useState<boolean>(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    return window.matchMedia("(min-width: 768px)").matches;
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const media = window.matchMedia("(min-width: 768px)");
-    const handler = (event: MediaQueryListEvent) => setMatches(event.matches);
-    setMatches(media.matches);
-    media.addEventListener("change", handler);
-    return () => media.removeEventListener("change", handler);
-  }, []);
-
-  return matches;
-}
-
 function collectActivePath(nodes: SidebarNode[], tabId: TabId): string[] | null {
   for (const node of nodes) {
     if (node.kind === "tab" && node.tabId === tabId) {
@@ -564,7 +543,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     const paddingClass = depth > 0 ? "pl-4" : "";
 
     if (node.kind === "section") {
-      const isExpanded = expandedSections[node.id] ?? depth === 0;
+      const isExpanded = Boolean(expandedSections[node.id]);
       return (
         <div key={node.id} className={clsx("space-y-2", depth > 0 && "mt-2")}> 
           <button
@@ -694,7 +673,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   };
 
   return (
-    <div className="relative md:w-72 lg:w-80">
+    <div className="relative h-full w-full">
       <div
         role="presentation"
         onClick={() => {
@@ -712,10 +691,10 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         className={clsx(
           "fixed left-0 top-0 z-50 flex h-full w-72 max-w-full transform flex-col overflow-hidden bg-white shadow-2xl transition-transform duration-300",
           "md:static md:h-auto md:max-h-[calc(100vh-8rem)] md:rounded-2xl md:border md:border-slate-200 md:shadow",
-          isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+          isOpen ? "translate-x-0 md:translate-x-0" : "-translate-x-full md:-translate-x-full"
         )}
         aria-label="Menu administrativo"
-        aria-hidden={!isDesktop && !isOpen}
+        aria-hidden={!isOpen}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 md:hidden">
           <span className="text-base font-semibold text-slate-800">Menu Administrativo</span>

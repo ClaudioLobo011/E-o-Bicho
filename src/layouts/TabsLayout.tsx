@@ -6,12 +6,21 @@ import TabBar from "../components/TabBar";
 import UnsavedGuard from "../components/UnsavedGuard";
 import { useTabs } from "../context/TabsContext";
 import { isTabId, routeToTab, tabRegistry, type TabId } from "../routes/tab-registry";
+import { useIsDesktop } from "../hooks/useMediaQuery";
+
+function getInitialSidebarState(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.matchMedia("(min-width: 768px)").matches;
+}
 
 export function TabsLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { tabs, activeTabId, openTab, setActiveTab, closeTab } = useTabs();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(getInitialSidebarState);
+  const isDesktop = useIsDesktop();
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -45,8 +54,10 @@ export function TabsLayout() {
       navigate(nextUrl, { replace: true });
     }
     document.title = definition.title;
-    setIsSidebarOpen(false);
-  }, [activeTabId, location.pathname, location.search, navigate]);
+    if (!isDesktop) {
+      setIsSidebarOpen(false);
+    }
+  }, [activeTabId, location.pathname, location.search, navigate, isDesktop]);
 
   useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
@@ -85,20 +96,24 @@ export function TabsLayout() {
     return () => window.removeEventListener("keydown", handleKeydown);
   }, [tabs, activeTabId, closeTab, setActiveTab]);
 
+  const sidebarWidthClass = isDesktop && isSidebarOpen ? "w-0 md:w-72 lg:w-80" : "w-0 md:w-0";
+
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="flex min-h-screen flex-col bg-slate-100">
       <AdminHeader
         onToggleSidebar={() => setIsSidebarOpen((current) => !current)}
         isSidebarOpen={isSidebarOpen}
       />
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:flex-row">
-        <div className="md:sticky md:top-28 md:h-fit md:flex-shrink-0">
+      <div className="flex flex-1 overflow-hidden">
+        <div
+          className={`relative flex-shrink-0 overflow-hidden transition-[width] duration-300 ${sidebarWidthClass}`}
+        >
           <AdminSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
         </div>
-        <div className="flex-1">
-          <div className="flex flex-col gap-4">
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
             <TabBar />
-            <div className="rounded-2xl bg-white p-6 shadow" role="presentation">
+            <div className="min-h-0 flex-1 rounded-2xl bg-white p-4 shadow sm:p-6" role="presentation">
               {tabs.map((tab) => {
                 const isActive = tab.id === activeTabId;
                 return (
@@ -107,7 +122,7 @@ export function TabsLayout() {
                     role="tabpanel"
                     hidden={!isActive}
                     aria-hidden={!isActive}
-                    className={isActive ? "block" : "hidden"}
+                    className={isActive ? "block h-full" : "hidden"}
                   >
                     <UnsavedGuard>{tab.element}</UnsavedGuard>
                   </section>

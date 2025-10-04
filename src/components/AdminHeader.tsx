@@ -160,7 +160,7 @@ export default function AdminHeader({ onToggleSidebar, isSidebarOpen }: AdminHea
 
   return (
     <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:gap-6">
+      <div className="flex w-full flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:gap-6 lg:px-8">
         <div className="flex items-center gap-4 md:w-auto">
           <button
             type="button"
