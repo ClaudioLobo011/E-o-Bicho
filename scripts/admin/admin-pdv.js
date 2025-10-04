@@ -144,6 +144,13 @@
   };
 
   const elements = {};
+  const REQUIRED_DOM_SELECTORS = [
+    '#pdv-open-customer',
+    '#pdv-customer-modal',
+    '#pdv-product-search',
+  ];
+  let domReadyObserver = null;
+  let waitingForDom = false;
   let budgetImportDefaultLabel = 'Importar orçamento';
   const BUDGET_IMPORT_FINALIZED_LABEL = 'Orçamento finalizado';
   const customerPetsCache = new Map();
@@ -9950,13 +9957,175 @@
     }
   };
 
+  const hasEssentialDom = () => {
+    if (typeof document === 'undefined') {
+      return false;
+    }
+    try {
+      return REQUIRED_DOM_SELECTORS.every((selector) =>
+        Boolean(document.querySelector(selector))
+      );
+    } catch (error) {
+      console.error('Erro ao verificar elementos essenciais do PDV:', error);
+      return false;
+    }
+  };
+
+  const stopDomObserver = () => {
+    if (domReadyObserver) {
+      try {
+        domReadyObserver.disconnect();
+      } catch (error) {
+        console.error('Erro ao desconectar observer do PDV:', error);
+      }
+      domReadyObserver = null;
+    }
+    waitingForDom = false;
+  };
+
+  const resetBodyScrollState = () => {
+    if (typeof document === 'undefined' || !document.body) {
+      return;
+    }
+    const previousOverflow = document.body.dataset.pdvOriginalOverflow;
+    if (previousOverflow !== undefined) {
+      document.body.style.overflow = previousOverflow;
+    } else if (document.body.dataset.pdvScrollLocks) {
+      document.body.style.overflow = '';
+    }
+    document.body.classList.remove('overflow-hidden');
+    delete document.body.dataset.pdvScrollLocks;
+    delete document.body.dataset.pdvOriginalOverflow;
+  };
+
+  const abortPendingAsyncOperations = () => {
+    if (statePersistTimeout) {
+      window.clearTimeout(statePersistTimeout);
+      statePersistTimeout = null;
+    }
+    statePersistPending = false;
+    statePersistInFlight = false;
+    if (state.searchController) {
+      try {
+        state.searchController.abort();
+      } catch (error) {
+        console.error('Erro ao abortar busca de produtos do PDV:', error);
+      }
+      state.searchController = null;
+    }
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+      searchTimeout = null;
+    }
+    if (customerSearchTimeout) {
+      clearTimeout(customerSearchTimeout);
+      customerSearchTimeout = null;
+    }
+    if (customerSearchController) {
+      try {
+        customerSearchController.abort();
+      } catch (error) {
+        console.error('Erro ao abortar busca de clientes do PDV:', error);
+      }
+      customerSearchController = null;
+    }
+    if (customerPetsController) {
+      try {
+        customerPetsController.abort();
+      } catch (error) {
+        console.error('Erro ao abortar busca de pets do cliente no PDV:', error);
+      }
+      customerPetsController = null;
+    }
+    if (deliveryAddressesController) {
+      try {
+        deliveryAddressesController.abort();
+      } catch (error) {
+        console.error('Erro ao abortar carregamento de endereços de entrega no PDV:', error);
+      }
+      deliveryAddressesController = null;
+    }
+    if (deliveryCepLookupController) {
+      try {
+        deliveryCepLookupController.abort();
+      } catch (error) {
+        console.error('Erro ao abortar consulta de CEP para entrega no PDV:', error);
+      }
+      deliveryCepLookupController = null;
+    }
+    if (statePersistInFlight) {
+      lastPersistSignature = '';
+    }
+  };
+
+  const clearElementReferences = () => {
+    Object.keys(elements).forEach((key) => {
+      elements[key] = null;
+    });
+  };
+
   let hasInitialized = false;
-  const start = () => {
+
+  const beginInit = () => {
     if (hasInitialized) {
       return;
     }
+    stopDomObserver();
     hasInitialized = true;
     void init();
+  };
+
+  const ensureInit = () => {
+    if (hasInitialized) {
+      return;
+    }
+    if (hasEssentialDom()) {
+      beginInit();
+      return;
+    }
+    if (waitingForDom) {
+      return;
+    }
+    waitingForDom = true;
+    const root = document.body || document.documentElement;
+    if (!root) {
+      waitingForDom = false;
+      window.setTimeout(ensureInit, 60);
+      return;
+    }
+    try {
+      domReadyObserver = new MutationObserver(() => {
+        if (hasEssentialDom()) {
+          beginInit();
+        }
+      });
+      domReadyObserver.observe(root, { childList: true, subtree: true });
+    } catch (error) {
+      console.error('Erro ao observar DOM para inicialização do PDV:', error);
+      stopDomObserver();
+      beginInit();
+    }
+  };
+
+  const start = () => {
+    ensureInit();
+  };
+
+  window.__LEGACY_PDV_CLEANUP = () => {
+    abortPendingAsyncOperations();
+    resetBodyScrollState();
+    stopDomObserver();
+    clearElementReferences();
+    hasInitialized = false;
+    pendingActiveTabPreference = '';
+    lastPersistSignature = '';
+    if (typeof document !== 'undefined') {
+      try {
+        document.removeEventListener('DOMContentLoaded', start);
+      } catch (error) {
+        console.error('Erro ao remover listener de DOMContentLoaded do PDV:', error);
+      }
+    }
   };
 
   if (document.readyState === 'loading') {
