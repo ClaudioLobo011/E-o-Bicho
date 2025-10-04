@@ -480,36 +480,138 @@
     window.alert(message);
   };
 
-  const getToken = () => {
+  const readStorageItem = (storage, key) => {
+    if (!storage || typeof storage.getItem !== 'function') return null;
     try {
-      const raw = localStorage.getItem('loggedInUser');
-      if (!raw) return '';
-      const parsed = JSON.parse(raw);
-      return parsed?.token || '';
+      return storage.getItem(key);
     } catch (error) {
-      console.warn('Não foi possível obter o token do usuário logado.', error);
-      return '';
+      console.warn(`Não foi possível acessar a chave "${key}" no storage.`, error);
+      return null;
     }
   };
 
-  const getLoggedUserPayload = () => {
+  const parseJsonSafely = (raw) => {
+    if (!raw || typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (trimmed[0] !== '{' && trimmed[0] !== '[' && trimmed[0] !== '"') return null;
     try {
-      const raw = localStorage.getItem('loggedInUser');
-      if (!raw) return {};
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        if (parsed.user && typeof parsed.user === 'object') {
-          return parsed.user;
-        }
-        if (parsed.usuario && typeof parsed.usuario === 'object') {
-          return parsed.usuario;
-        }
-      }
-      return parsed || {};
+      return JSON.parse(trimmed);
     } catch (error) {
-      console.warn('Não foi possível obter os dados do usuário logado.', error);
+      console.warn('Não foi possível interpretar os dados armazenados como JSON.', error);
+      return null;
+    }
+  };
+
+  const extractTokenFromObject = (input, depth = 0) => {
+    if (!input || typeof input !== 'object' || depth > 3) return '';
+    const tokenKeys = ['token', 'authToken', 'accessToken', 'access_token'];
+    for (const key of tokenKeys) {
+      const value = input[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+    const nestedCandidates = [
+      input.user,
+      input.usuario,
+      input.data,
+      input.payload,
+      input.session,
+    ];
+    for (const candidate of nestedCandidates) {
+      const token = extractTokenFromObject(candidate, depth + 1);
+      if (token) return token;
+    }
+    for (const value of Object.values(input)) {
+      if (typeof value === 'object' && value) {
+        const token = extractTokenFromObject(value, depth + 1);
+        if (token) return token;
+      }
+    }
+    return '';
+  };
+
+  const extractTokenFromValue = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      if (trimmed[0] !== '{' && trimmed[0] !== '[') {
+        if (
+          (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+          (trimmed.startsWith("'") && trimmed.endsWith("'"))
+        ) {
+          const inner = trimmed.slice(1, -1).trim();
+          if (inner) return inner;
+        }
+        return trimmed;
+      }
+      const parsed = parseJsonSafely(trimmed);
+      if (parsed) {
+        if (typeof parsed === 'string') {
+          return extractTokenFromValue(parsed);
+        }
+        return extractTokenFromObject(parsed);
+      }
+      return '';
+    }
+    if (typeof value === 'object') {
+      return extractTokenFromObject(value);
+    }
+    return '';
+  };
+
+  const readLoggedUserRecord = () => {
+    const storages = [
+      () => parseJsonSafely(readStorageItem(localStorage, 'loggedInUser')),
+      () => parseJsonSafely(readStorageItem(sessionStorage, 'loggedInUser')),
+      () => parseJsonSafely(readStorageItem(localStorage, 'user')),
+      () => parseJsonSafely(readStorageItem(sessionStorage, 'user')),
+    ];
+    for (const getter of storages) {
+      try {
+        const record = getter();
+        if (record && typeof record === 'object') {
+          return record;
+        }
+      } catch (error) {
+        console.warn('Não foi possível obter os dados armazenados do usuário.', error);
+      }
+    }
+    return {};
+  };
+
+  const getToken = () => {
+    const valueCandidates = [
+      readStorageItem(localStorage, 'loggedInUser'),
+      readStorageItem(sessionStorage, 'loggedInUser'),
+      readStorageItem(localStorage, 'auth_token'),
+      readStorageItem(sessionStorage, 'auth_token'),
+      readStorageItem(localStorage, 'user'),
+      readStorageItem(sessionStorage, 'user'),
+    ];
+    for (const value of valueCandidates) {
+      const token = extractTokenFromValue(value);
+      if (token) {
+        return token;
+      }
+    }
+    return '';
+  };
+
+  const getLoggedUserPayload = () => {
+    const record = readLoggedUserRecord();
+    if (!record || typeof record !== 'object') {
       return {};
     }
+    if (record.user && typeof record.user === 'object') {
+      return record.user;
+    }
+    if (record.usuario && typeof record.usuario === 'object') {
+      return record.usuario;
+    }
+    return record;
   };
 
   const getLoggedUserName = () => {
