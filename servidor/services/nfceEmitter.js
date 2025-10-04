@@ -1250,10 +1250,19 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
         cliente?.cMun ??
         cliente?.codigoIbgeMunicipio
     );
-    const dXMun = sanitize(
-      (delivery?.xMun ?? delivery?.cidade ?? cliente?.xMun ?? cliente?.cidade || '').slice(0, 60)
+    const rawCity = firstNonEmptyString(
+      delivery?.xMun,
+      delivery?.cidade,
+      cliente?.xMun,
+      cliente?.cidade
     );
-    const rawUf = (delivery?.UF ?? delivery?.uf ?? cliente?.UF ?? cliente?.uf || '').trim();
+    const dXMun = sanitize((rawCity || '').slice(0, 60));
+    const rawUf = (firstNonEmptyString(
+      delivery?.UF,
+      delivery?.uf,
+      cliente?.UF,
+      cliente?.uf
+    ) || '').trim();
     const normalizedUf = rawUf.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
     const dCEP = onlyDigits(delivery?.CEP ?? delivery?.cep ?? cliente?.CEP ?? cliente?.cep);
 
