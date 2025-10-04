@@ -480,36 +480,297 @@
     window.alert(message);
   };
 
-  const getToken = () => {
+  const TOKEN_PREFIX_PATTERN = /^bearer\s+/i;
+  const normalizeToken = (token) => {
+    if (!token || typeof token !== 'string') return '';
+    const trimmed = token.trim();
+    if (!trimmed) return '';
+    return trimmed.replace(TOKEN_PREFIX_PATTERN, '');
+  };
+
+  const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+
+  const readStorageItem = (storage, key) => {
+    if (!storage || typeof storage.getItem !== 'function') return null;
     try {
-      const raw = localStorage.getItem('loggedInUser');
-      if (!raw) return '';
-      const parsed = JSON.parse(raw);
-      return parsed?.token || '';
+      return storage.getItem(key);
     } catch (error) {
-      console.warn('Não foi possível obter o token do usuário logado.', error);
-      return '';
+      console.warn(`Não foi possível acessar a chave "${key}" no storage.`, error);
+      return null;
     }
   };
 
-  const getLoggedUserPayload = () => {
+  const parseJsonSafely = (raw) => {
+    if (!raw || typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (trimmed[0] !== '{' && trimmed[0] !== '[' && trimmed[0] !== '"') return null;
     try {
-      const raw = localStorage.getItem('loggedInUser');
-      if (!raw) return {};
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        if (parsed.user && typeof parsed.user === 'object') {
-          return parsed.user;
-        }
-        if (parsed.usuario && typeof parsed.usuario === 'object') {
-          return parsed.usuario;
+      return JSON.parse(trimmed);
+    } catch (error) {
+      console.warn('Não foi possível interpretar os dados armazenados como JSON.', error);
+      return null;
+    }
+  };
+
+  const extractTokenFromObject = (input, depth = 0) => {
+    if (!isPlainObject(input) && !Array.isArray(input)) return '';
+    if (depth > 4) return '';
+    const tokenKeys = ['token', 'authToken', 'accessToken', 'access_token'];
+    if (isPlainObject(input)) {
+      for (const key of tokenKeys) {
+        const value = input[key];
+        if (typeof value === 'string' && value.trim()) {
+          const normalized = normalizeToken(value);
+          if (normalized) return normalized;
         }
       }
-      return parsed || {};
+    }
+    const nestedCandidates = [];
+    if (isPlainObject(input)) {
+      nestedCandidates.push(
+        input.user,
+        input.usuario,
+        input.data,
+        input.payload,
+        input.session,
+        input.auth,
+        input.usuarioAutenticado
+      );
+    }
+    if (Array.isArray(input)) {
+      nestedCandidates.push(...input);
+    }
+    for (const candidate of nestedCandidates) {
+      if (!candidate) continue;
+      if (typeof candidate === 'string') {
+        const normalized = normalizeToken(candidate);
+        if (normalized) return normalized;
+        continue;
+      }
+      const token = extractTokenFromObject(candidate, depth + 1);
+      if (token) return token;
+    }
+    if (isPlainObject(input)) {
+      for (const value of Object.values(input)) {
+        if (value && (isPlainObject(value) || Array.isArray(value))) {
+          const token = extractTokenFromObject(value, depth + 1);
+          if (token) return token;
+        }
+      }
+    }
+    return '';
+  };
+
+  const extractTokenFromValue = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      if (trimmed[0] !== '{' && trimmed[0] !== '[') {
+        if (
+          (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+          (trimmed.startsWith("'") && trimmed.endsWith("'"))
+        ) {
+          const inner = trimmed.slice(1, -1).trim();
+          if (inner) return normalizeToken(inner);
+        }
+        return normalizeToken(trimmed);
+      }
+      const parsed = parseJsonSafely(trimmed);
+      if (parsed) {
+        if (typeof parsed === 'string') {
+          return extractTokenFromValue(parsed);
+        }
+        return extractTokenFromObject(parsed);
+      }
+      return '';
+    }
+    if (typeof value === 'object') {
+      return extractTokenFromObject(value);
+    }
+    return '';
+  };
+
+  const hasMeaningfulValue = (value) => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') {
+      return value.trim().length > 0;
+    }
+    return true;
+  };
+
+  const mergeRecords = (...records) => {
+    const merged = {};
+    records.forEach((record) => {
+      if (!isPlainObject(record)) return;
+      Object.entries(record).forEach(([key, value]) => {
+        if (value === undefined) return;
+        if (!(key in merged)) {
+          merged[key] = value;
+          return;
+        }
+        const current = merged[key];
+        if (isPlainObject(current) && isPlainObject(value)) {
+          if (current === value) {
+            return;
+          }
+          merged[key] = mergeRecords(current, value);
+          return;
+        }
+        if (!hasMeaningfulValue(current) && hasMeaningfulValue(value)) {
+          merged[key] = value;
+        }
+      });
+    });
+    return merged;
+  };
+
+  const ensureRecordId = (record) => {
+    if (!isPlainObject(record)) return;
+    const candidateId =
+      typeof record.id === 'string' && record.id.trim()
+        ? record.id.trim()
+        : typeof record._id === 'string' && record._id.trim()
+        ? record._id.trim()
+        : typeof record.usuarioId === 'string' && record.usuarioId.trim()
+        ? record.usuarioId.trim()
+        : typeof record.userId === 'string' && record.userId.trim()
+        ? record.userId.trim()
+        : typeof record.usuario?.id === 'string' && record.usuario.id.trim()
+        ? record.usuario.id.trim()
+        : typeof record.usuario?._id === 'string' && record.usuario._id.trim()
+        ? record.usuario._id.trim()
+        : typeof record.user?.id === 'string' && record.user.id.trim()
+        ? record.user.id.trim()
+        : typeof record.user?._id === 'string' && record.user._id.trim()
+        ? record.user._id.trim()
+        : '';
+    if (candidateId) {
+      record.id = candidateId;
+    }
+  };
+
+  const collectStoredUserRecords = () => {
+    const records = [];
+    const getters = [
+      () => parseJsonSafely(readStorageItem(localStorage, 'loggedInUser')),
+      () => parseJsonSafely(readStorageItem(sessionStorage, 'loggedInUser')),
+      () => parseJsonSafely(readStorageItem(localStorage, 'user')),
+      () => parseJsonSafely(readStorageItem(sessionStorage, 'user')),
+    ];
+    for (const getter of getters) {
+      try {
+        const record = getter();
+        if (isPlainObject(record)) {
+          records.push(record);
+        }
+      } catch (error) {
+        console.warn('Não foi possível obter os dados armazenados do usuário.', error);
+      }
+    }
+    return records;
+  };
+
+  const readLoggedUserRecord = () => {
+    const records = collectStoredUserRecords();
+    if (!records.length) return {};
+    const merged = mergeRecords(...records);
+    if (!isPlainObject(merged)) return {};
+    const normalized = { ...merged };
+    const token = extractTokenFromObject(normalized);
+    if (token) {
+      normalized.token = normalizeToken(token);
+    }
+    ensureRecordId(normalized);
+    return normalized;
+  };
+
+  const getToken = () => {
+    const record = readLoggedUserRecord();
+    const directRecordToken = normalizeToken(record?.token);
+    if (directRecordToken) {
+      return directRecordToken;
+    }
+    const recordToken = extractTokenFromObject(record);
+    if (recordToken) {
+      return normalizeToken(recordToken);
+    }
+    const valueCandidates = [
+      readStorageItem(localStorage, 'loggedInUser'),
+      readStorageItem(sessionStorage, 'loggedInUser'),
+      readStorageItem(localStorage, 'auth_token'),
+      readStorageItem(sessionStorage, 'auth_token'),
+      readStorageItem(localStorage, 'token'),
+      readStorageItem(sessionStorage, 'token'),
+      readStorageItem(localStorage, 'jwt'),
+      readStorageItem(sessionStorage, 'jwt'),
+      readStorageItem(localStorage, 'user'),
+      readStorageItem(sessionStorage, 'user'),
+    ];
+    for (const value of valueCandidates) {
+      const token = extractTokenFromValue(value);
+      if (token) {
+        return normalizeToken(token);
+      }
+    }
+    const cookieToken = (() => {
+      if (typeof document === 'undefined') return '';
+      try {
+        const cookieSource = document.cookie || '';
+        if (!cookieSource) return '';
+        const entries = cookieSource.split(';');
+        for (const entry of entries) {
+          const [rawKey, ...rest] = entry.split('=');
+          const key = rawKey?.trim().toLowerCase();
+          if (!key || !rest.length) continue;
+          if (!['auth_token', 'token', 'jwt'].includes(key)) continue;
+          const rawValue = rest.join('=').trim();
+          if (!rawValue) continue;
+          try {
+            const decoded = decodeURIComponent(rawValue);
+            const normalized = normalizeToken(decoded);
+            if (normalized) return normalized;
+          } catch (decodeError) {
+            const normalized = normalizeToken(rawValue);
+            if (normalized) return normalized;
+          }
+        }
+      } catch (error) {
+        console.warn('Não foi possível ler cookies para localizar o token de autenticação.', error);
+      }
+      return '';
+    })();
+    if (cookieToken) {
+      return cookieToken;
+    }
+    try {
+      const raw = window?.localStorage?.getItem('loggedInUser');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const fallbackToken = normalizeToken(parsed?.token);
+        if (fallbackToken) {
+          return fallbackToken;
+        }
+      }
     } catch (error) {
-      console.warn('Não foi possível obter os dados do usuário logado.', error);
+      console.warn('Fallback direto não encontrou o token do usuário logado.', error);
+    }
+    return '';
+  };
+
+  const getLoggedUserPayload = () => {
+    const record = readLoggedUserRecord();
+    if (!record || typeof record !== 'object') {
       return {};
     }
+    if (record.user && typeof record.user === 'object') {
+      return record.user;
+    }
+    if (record.usuario && typeof record.usuario === 'object') {
+      return record.usuario;
+    }
+    return record;
   };
 
   const getLoggedUserName = () => {
