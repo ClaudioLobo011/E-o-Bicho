@@ -1240,10 +1240,10 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
   const destName = sanitize((destNameSource || '').slice(0, 60));
 
   if (hasCPF || hasCNPJ || hasIdE) {
-    const dLgr = sanitize(delivery?.logradouro || cliente?.logradouro);
+    const dLgr = sanitize((delivery?.logradouro || cliente?.logradouro || '').slice(0, 60));
     const dNro = onlyDigits(delivery?.numero ?? cliente?.numero);
-    const dCompl = sanitize(delivery?.complemento || cliente?.complemento);
-    const dBairro = sanitize(delivery?.bairro || cliente?.bairro);
+    const dCompl = sanitize((delivery?.complemento || cliente?.complemento || '').slice(0, 60));
+    const dBairro = sanitize((delivery?.bairro || cliente?.bairro || '').slice(0, 60));
     const dCMun = onlyDigits(
       delivery?.cMun ??
         delivery?.codigoIbgeMunicipio ??
@@ -1251,14 +1251,21 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
         cliente?.codigoIbgeMunicipio
     );
     const dXMun = sanitize(
-      delivery?.xMun ?? delivery?.cidade ?? cliente?.xMun ?? cliente?.cidade
+      (delivery?.xMun ?? delivery?.cidade ?? cliente?.xMun ?? cliente?.cidade || '').slice(0, 60)
     );
-    const dUF = sanitize(
-      (delivery?.UF ?? delivery?.uf ?? cliente?.UF ?? cliente?.uf) || ''
-    ).toUpperCase();
+    const rawUf = (delivery?.UF ?? delivery?.uf ?? cliente?.UF ?? cliente?.uf || '').trim();
+    const normalizedUf = rawUf.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
     const dCEP = onlyDigits(delivery?.CEP ?? delivery?.cep ?? cliente?.CEP ?? cliente?.cep);
 
-    const hasAddr = dLgr || dNro || dCompl || dBairro || dCMun || dXMun || dUF || dCEP;
+    const hasMandatoryMunicipality = /^\d{7}$/.test(dCMun) && !!dXMun;
+    const hasMandatoryUf = normalizedUf.length === 2;
+    const hasMandatoryStreet = !!dLgr;
+    const hasMandatoryNeighborhood = !!dBairro;
+    const hasAddr =
+      hasMandatoryStreet &&
+      hasMandatoryNeighborhood &&
+      hasMandatoryMunicipality &&
+      hasMandatoryUf;
 
     infNfeLines.push('    <dest>');
     if (hasCNPJ) infNfeLines.push(`      <CNPJ>${destCNPJ}</CNPJ>`);
@@ -1273,9 +1280,9 @@ const emitPdvSaleFiscal = async ({ sale, pdv, store, emissionDate, environment, 
       infNfeLines.push(`        <nro>${dNro || '0'}</nro>`);
       pushTagIf(infNfeLines, 'xCpl', dCompl, '        ');
       pushTagIf(infNfeLines, 'xBairro', dBairro, '        ');
-      if (dCMun) infNfeLines.push(`        <cMun>${dCMun}</cMun>`);
+      infNfeLines.push(`        <cMun>${dCMun}</cMun>`);
       pushTagIf(infNfeLines, 'xMun', dXMun, '        ');
-      if (/^[A-Z]{2}$/.test(dUF)) infNfeLines.push(`        <UF>${dUF}</UF>`);
+      infNfeLines.push(`        <UF>${sanitize(normalizedUf)}</UF>`);
       if (/^\d{8}$/.test(dCEP)) infNfeLines.push(`        <CEP>${dCEP}</CEP>`);
       infNfeLines.push('      </enderDest>');
     }
