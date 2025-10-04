@@ -15,7 +15,10 @@ export const products: Product[] = [
     brand: 'E o Bicho Nutrition',
     rating: 4.8,
     stock: 34,
-    highlights: ['Entrega em 24h', 'Assinatura com 15% OFF']
+    highlights: ['Entrega em 24h', 'Assinatura com 15% OFF'],
+    isFeatured: true,
+    clubPrice: 154.9,
+    discountPercentage: 16
   },
   {
     id: 'areia-granulada-01',
@@ -29,7 +32,8 @@ export const products: Product[] = [
     brand: 'CleanPet',
     rating: 4.6,
     stock: 87,
-    highlights: ['Fórmula hipoalergênica']
+    highlights: ['Fórmula hipoalergênica'],
+    isFeatured: true
   },
   {
     id: 'pet-bed-fofinho-01',
@@ -42,7 +46,8 @@ export const products: Product[] = [
     brand: 'CozyPets',
     rating: 4.9,
     stock: 12,
-    highlights: ['Capa impermeável', 'Espuma com memória']
+    highlights: ['Capa impermeável', 'Espuma com memória'],
+    isFeatured: true
   },
   {
     id: 'brinquedo-interativo-01',
@@ -55,7 +60,8 @@ export const products: Product[] = [
     brand: 'FunMind',
     rating: 4.7,
     stock: 53,
-    highlights: ['Material atóxico', 'Indicado por adestradores']
+    highlights: ['Material atóxico', 'Indicado por adestradores'],
+    isFeatured: true
   },
   {
     id: 'suplemento-omega-01',
@@ -68,7 +74,9 @@ export const products: Product[] = [
     brand: 'VitalPet',
     rating: 4.5,
     stock: 42,
-    highlights: ['Certificado IFOS']
+    highlights: ['Certificado IFOS'],
+    isFeatured: true,
+    conditionalPromotionLabel: 'Leve 3 Pague 2'
   }
 ];
 

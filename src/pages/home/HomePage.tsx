@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { useProductsQuery } from '../../features/products/useProductsQuery';
+import { useFeaturedProductsQuery } from '../../features/products/useFeaturedProductsQuery';
 import { useCartStore } from '../../features/cart/store';
 import { useBannersQuery } from '../../features/home/useBannersQuery';
 import type { Product } from '../../entities/product';
@@ -27,6 +27,7 @@ const benefits = [
 ];
 
 const brandPlaceholders = Array.from({ length: 6 });
+const FALLBACK_IMAGE = 'https://placehold.co/600x400?text=Produto';
 
 function getSlideClasses(index: number, current: number, total: number) {
   if (total === 0) return 'slide flex-shrink-0';
@@ -51,27 +52,26 @@ function getSlideClasses(index: number, current: number, total: number) {
 }
 
 function resolvePrice(product: Product) {
-  if (product.promotionalPrice && product.promotionalPrice < product.price) {
-    const percentage = Math.round(((product.price - product.promotionalPrice) / product.price) * 100);
-    return {
-      price: product.price,
-      promotionalPrice: product.promotionalPrice,
-      percentage
-    };
-  }
-
   return {
-    price: product.price
+    price: product.price,
+    promotionalPrice: product.promotionalPrice,
+    clubPrice: product.clubPrice,
+    discountPercentage: product.discountPercentage,
+    conditionalPromotionLabel: product.conditionalPromotionLabel
   };
 }
 
+function formatPrice(value: number) {
+  return value.toFixed(2).replace('.', ',');
+}
+
 export function HomePage() {
-  const { data: productsResponse } = useProductsQuery();
+  const { data: featuredResponse } = useFeaturedProductsQuery();
   const { data: bannersResponse } = useBannersQuery();
   const addItem = useCartStore((state) => state.addItem);
 
   const banners = bannersResponse?.data ?? [];
-  const products = productsResponse?.data ?? [];
+  const featuredProducts = featuredResponse?.data ?? [];
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [currentProductIndex, setCurrentProductIndex] = useState(0);
@@ -96,8 +96,6 @@ export function HomePage() {
 
     return () => window.clearInterval(interval);
   }, [banners.length]);
-
-  const featuredProducts = useMemo(() => products.slice(0, 12), [products]);
 
   const updateSliderMetrics = useCallback(() => {
     const wrapper = sliderWrapperRef.current;
@@ -143,7 +141,7 @@ export function HomePage() {
     const gap = 24;
     const moveDistance = (firstCard.offsetWidth + gap) * currentProductIndex;
     container.style.transform = `translateX(-${moveDistance}px)`;
-  }, [currentProductIndex]);
+  }, [currentProductIndex, featuredProducts.length]);
 
   return (
     <div className="space-y-0">
@@ -157,13 +155,27 @@ export function HomePage() {
             <div className="carousel-container flex h-full items-center">
               {banners.map((banner, index) => (
                 <div key={banner.id} className={getSlideClasses(index, currentSlide, banners.length)}>
-                  <Link to={banner.link} className="block h-full w-full overflow-hidden rounded-lg">
+                  <Link to={banner.link} className="relative block h-full w-full overflow-hidden rounded-3xl">
                     <img
                       src={banner.imageUrl}
                       alt={banner.title}
                       className="h-full w-full object-cover"
                       loading={index === 0 ? 'eager' : 'lazy'}
                     />
+                    <div className="absolute inset-0 flex flex-col justify-center gap-4 bg-gradient-to-r from-black/60 via-black/30 to-transparent p-8 text-white">
+                      <div className="max-w-xl">
+                        <p className="text-xs uppercase tracking-[0.35em] text-white/70">Campanha exclusiva</p>
+                        <h2 className="mt-2 text-3xl font-bold leading-tight md:text-4xl">{banner.title}</h2>
+                        {banner.subtitle ? (
+                          <p className="mt-3 text-base text-white/85 md:text-lg">{banner.subtitle}</p>
+                        ) : null}
+                      </div>
+                      {banner.buttonText ? (
+                        <span className="mt-4 inline-flex w-fit items-center">
+                          <span className="btn btn-primary btn-lg">{banner.buttonText}</span>
+                        </span>
+                      ) : null}
+                    </div>
                   </Link>
                 </div>
               ))}
@@ -248,7 +260,7 @@ export function HomePage() {
               >
                 <i className="fas fa-chevron-right" aria-hidden />
               </button>
-              <Link to="/produtos" className="ml-4 font-medium text-primary hover:underline">
+              <Link to="/produtos" className="btn btn-outline btn-sm ml-4 hidden sm:inline-flex">
                 Ver todos
               </Link>
             </div>
@@ -267,16 +279,16 @@ export function HomePage() {
                     key={product.id}
                     className="product-card group relative flex w-60 flex-shrink-0 flex-col overflow-hidden rounded-lg bg-white shadow transition duration-300 sm:w-64"
                   >
-                    {price.percentage ? (
+                    {price.discountPercentage ? (
                       <div className="absolute left-0 top-3 z-10 rounded-r bg-primary px-2 py-1 text-xs font-bold text-white">
-                        -{price.percentage}% DE DESCONTO
+                        -{price.discountPercentage}% DE DESCONTO
                       </div>
                     ) : null}
                     <div className="product-info flex h-full flex-col p-4">
                       <div className="relative mb-4 h-48 w-full">
                         <Link to={`/produtos/${product.id}`} className="block h-full w-full">
                           <img
-                            src={product.images?.[0] ?? 'https://via.placeholder.com/256'}
+                            src={product.imageUrl ?? product.images?.[0] ?? FALLBACK_IMAGE}
                             alt={product.name}
                             className="h-full w-full rounded-md object-cover"
                           />
@@ -297,26 +309,54 @@ export function HomePage() {
                       </div>
                       <div className="product-details flex flex-grow flex-col">
                         <h3 className="line-clamp-2 h-12 text-base font-normal">{product.name}</h3>
-                        <div className="product-price mt-auto flex min-h-[2.5rem] items-center">
-                          {price.promotionalPrice ? (
-                            <div>
-                              <span className="block text-lg font-bold text-gray-950">
-                                R$ {price.price.toFixed(2).replace('.', ',')}
-                              </span>
-                              <div className="flex items-center">
-                                <span className="text-lg font-bold text-primary">
-                                  R$ {price.promotionalPrice.toFixed(2).replace('.', ',')}
+                        <div className="product-price mt-auto flex min-h-[2.5rem] items-center justify-between gap-3">
+                          <div className="space-y-1">
+                            {price.discountPercentage && price.promotionalPrice ? (
+                              <div>
+                                <span className="block text-sm text-gray-500 line-through">
+                                  R$ {formatPrice(price.price)}
                                 </span>
-                                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-white">
-                                  Club
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg font-bold text-primary">
+                                    R$ {formatPrice(price.promotionalPrice)}
+                                  </span>
+                                  <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-white">
+                                    -{price.discountPercentage}% OFF
+                                  </span>
+                                </div>
+                              </div>
+                            ) : price.clubPrice ? (
+                              <div>
+                                <span className="block text-sm text-gray-500 line-through">
+                                  R$ {formatPrice(price.price)}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg font-bold text-primary">
+                                    R$ {formatPrice(price.clubPrice)}
+                                  </span>
+                                  <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-white">Club</span>
+                                </div>
+                              </div>
+                            ) : price.promotionalPrice ? (
+                              <div>
+                                <span className="block text-sm text-gray-500 line-through">
+                                  R$ {formatPrice(price.price)}
+                                </span>
+                                <span className="text-lg font-bold text-primary">
+                                  R$ {formatPrice(price.promotionalPrice)}
                                 </span>
                               </div>
-                            </div>
-                          ) : (
-                            <span className="block text-lg font-bold text-gray-950">
-                              R$ {price.price.toFixed(2).replace('.', ',')}
+                            ) : (
+                              <span className="block text-lg font-bold text-gray-950">
+                                R$ {formatPrice(price.price)}
+                              </span>
+                            )}
+                          </div>
+                          {price.conditionalPromotionLabel ? (
+                            <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-white">
+                              {price.conditionalPromotionLabel}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -324,6 +364,9 @@ export function HomePage() {
                 );
               })}
             </div>
+            {featuredProducts.length === 0 ? (
+              <p className="py-10 text-center text-sm text-gray-500">Nenhum produto em destaque no momento.</p>
+            ) : null}
           </div>
         </div>
       </section>

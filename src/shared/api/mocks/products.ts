@@ -16,6 +16,13 @@ export const productsMock = [
   },
   {
     method: 'GET' as const,
+    test: (url: string) => url === '/products/destaques',
+    handler: async () => ({
+      data: products.filter((product) => product.isFeatured !== false)
+    })
+  },
+  {
+    method: 'GET' as const,
     test: (url: string) => url?.startsWith('/products/'),
     handler: async (config: AxiosRequestConfig) => {
       const productId = config.url?.split('/').pop();

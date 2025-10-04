@@ -3,5 +3,7 @@ export interface Banner {
   title: string;
   imageUrl: string;
   link: string;
+  subtitle?: string;
+  buttonText?: string;
   description?: string;
 }

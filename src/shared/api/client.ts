@@ -24,27 +24,27 @@ function createClient(): AxiosInstance {
         console.warn('[api] sessão inválida', error);
       }
     }
-
-    if (config.baseURL === '/mock') {
-      return config;
-    }
-
-    if (BASE_URL === '/api' && import.meta.env.DEV) {
-      return { ...config, baseURL: '/mock' };
-    }
-
     return config;
   });
 
   instance.interceptors.response.use(
     (response) => response,
     async (error) => {
-      if (error.config?.baseURL === '/mock') {
-        const handler = mockHandlers.find((mock) => mock.method === error.config.method?.toUpperCase() && mock.test(error.config?.url ?? ''));
-        if (handler) {
-          const result = await handler.handler(error.config as AxiosRequestConfig);
-          return { data: result, status: 200, statusText: 'OK', headers: {}, config: error.config };
-        }
+      const originalConfig = error.config as (AxiosRequestConfig & { __isMockFallback?: boolean }) | undefined;
+
+      if (!originalConfig || originalConfig.__isMockFallback) {
+        return Promise.reject(error);
+      }
+
+      const method = originalConfig.method?.toUpperCase() ?? 'GET';
+      const url = originalConfig.url ?? '';
+
+      const handler = mockHandlers.find((mock) => mock.method === method && mock.test(url));
+
+      if (handler && import.meta.env.DEV) {
+        originalConfig.__isMockFallback = true;
+        const result = await handler.handler(originalConfig);
+        return { data: result, status: 200, statusText: 'OK', headers: {}, config: originalConfig };
       }
 
       return Promise.reject(error);
