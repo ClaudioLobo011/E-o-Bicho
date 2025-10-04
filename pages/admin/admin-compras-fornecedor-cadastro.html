@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Cadastro de Fornecedores - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div class="space-y-2">
+            <div class="flex items-center gap-2 text-sm text-gray-500">
+              <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                <i class="fas fa-shopping-basket"></i>
+                Compras
+              </span>
+              <i class="fas fa-angle-right text-xs"></i>
+              <span class="font-medium text-gray-600">Fornecedor</span>
+              <i class="fas fa-angle-right text-xs"></i>
+              <span class="font-semibold text-gray-800">Cadastro de Fornecedores</span>
+            </div>
+            <div>
+              <h1 class="text-2xl font-bold text-gray-800">Cadastro de Fornecedores</h1>
+              <p class="text-sm text-gray-600">Centralize dados fiscais, financeiros e históricos de relacionamento com distribuidores e prestadores de serviço.</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-qrcode"></i>
+              Ler XML de NF-e
+            </button>
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+              <i class="fas fa-save"></i>
+              Salvar cadastro
+            </button>
+          </div>
+        </header>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
+            <div class="lg:col-span-2 space-y-4">
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-gray-800">Informações gerais</h2>
+                <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  <i class="fas fa-circle-check"></i>
+                  Ativo
+                </span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label for="supplier-name" class="block text-sm font-medium text-gray-700 mb-1">Razão social <span class="text-red-500">*</span></label>
+                  <input type="text" id="supplier-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Distribuidora Pet Nordeste Ltda." required>
+                </div>
+                <div>
+                  <label for="supplier-fantasy" class="block text-sm font-medium text-gray-700 mb-1">Nome fantasia</label>
+                  <input type="text" id="supplier-fantasy" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Pet Nordeste">
+                </div>
+                <div>
+                  <label for="supplier-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo de pessoa <span class="text-red-500">*</span></label>
+                  <select id="supplier-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                    <option value="">Selecione...</option>
+                    <option value="pj">Pessoa Jurídica</option>
+                    <option value="pf">Pessoa Física</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="supplier-segment" class="block text-sm font-medium text-gray-700 mb-1">Segmento principal</label>
+                  <select id="supplier-segment" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione...</option>
+                    <option value="medicamentos">Medicamentos veterinários</option>
+                    <option value="alimentacao">Nutrição animal</option>
+                    <option value="servicos">Serviços terceirizados</option>
+                    <option value="equipamentos">Equipamentos e instrumentos</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="lg:col-span-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label for="supplier-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ/CPF <span class="text-red-500">*</span></label>
+                <input type="text" id="supplier-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="04.252.011/0001-10" required>
+                <p class="mt-1 text-xs text-gray-500">Utilize dados oficiais consultados no Portal Nacional da NF-e.</p>
+              </div>
+              <div>
+                <label for="supplier-ie" class="block text-sm font-medium text-gray-700 mb-1">Inscrição estadual</label>
+                <input type="text" id="supplier-ie" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="123456789110">
+                <p class="mt-1 text-xs text-gray-500">Valide na SEFAZ estadual para fornecedores de mercadorias.</p>
+              </div>
+              <div>
+                <label for="supplier-im" class="block text-sm font-medium text-gray-700 mb-1">Inscrição municipal</label>
+                <input type="text" id="supplier-im" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1234567-8">
+              </div>
+              <div>
+                <label for="supplier-legal-rep" class="block text-sm font-medium text-gray-700 mb-1">Responsável legal</label>
+                <input type="text" id="supplier-legal-rep" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ana Beatriz Martins">
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div class="space-y-4">
+              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Endereço fiscal</h3>
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div class="sm:col-span-2">
+                  <label for="supplier-address" class="block text-sm font-medium text-gray-700 mb-1">Logradouro <span class="text-red-500">*</span></label>
+                  <input type="text" id="supplier-address" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Av. Alberto Bins, 760" required>
+                </div>
+                <div>
+                  <label for="supplier-number" class="block text-sm font-medium text-gray-700 mb-1">Número</label>
+                  <input type="text" id="supplier-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="760">
+                </div>
+                <div>
+                  <label for="supplier-complement" class="block text-sm font-medium text-gray-700 mb-1">Complemento</label>
+                  <input type="text" id="supplier-complement" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Bloco B, Sala 1203">
+                </div>
+                <div>
+                  <label for="supplier-neighborhood" class="block text-sm font-medium text-gray-700 mb-1">Bairro <span class="text-red-500">*</span></label>
+                  <input type="text" id="supplier-neighborhood" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Centro" required>
+                </div>
+                <div>
+                  <label for="supplier-city" class="block text-sm font-medium text-gray-700 mb-1">Município <span class="text-red-500">*</span></label>
+                  <input type="text" id="supplier-city" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Porto Alegre" required>
+                </div>
+                <div>
+                  <label for="supplier-state" class="block text-sm font-medium text-gray-700 mb-1">UF <span class="text-red-500">*</span></label>
+                  <select id="supplier-state" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                    <option value="">UF</option>
+                    <option value="AC">AC</option>
+                    <option value="AL">AL</option>
+                    <option value="AM">AM</option>
+                    <option value="AP">AP</option>
+                    <option value="BA">BA</option>
+                    <option value="CE">CE</option>
+                    <option value="DF">DF</option>
+                    <option value="ES">ES</option>
+                    <option value="GO">GO</option>
+                    <option value="MA">MA</option>
+                    <option value="MG">MG</option>
+                    <option value="MS">MS</option>
+                    <option value="MT">MT</option>
+                    <option value="PA">PA</option>
+                    <option value="PB">PB</option>
+                    <option value="PE">PE</option>
+                    <option value="PI">PI</option>
+                    <option value="PR">PR</option>
+                    <option value="RJ">RJ</option>
+                    <option value="RN">RN</option>
+                    <option value="RO">RO</option>
+                    <option value="RR">RR</option>
+                    <option value="RS">RS</option>
+                    <option value="SC">SC</option>
+                    <option value="SE">SE</option>
+                    <option value="SP">SP</option>
+                    <option value="TO">TO</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="supplier-cep" class="block text-sm font-medium text-gray-700 mb-1">CEP <span class="text-red-500">*</span></label>
+                  <input type="text" id="supplier-cep" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="90030-141" required>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Contato e atendimento</h3>
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label for="supplier-phone" class="block text-sm font-medium text-gray-700 mb-1">Telefone principal</label>
+                  <input type="text" id="supplier-phone" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="(51) 3333-4455">
+                </div>
+                <div>
+                  <label for="supplier-mobile" class="block text-sm font-medium text-gray-700 mb-1">WhatsApp comercial</label>
+                  <input type="text" id="supplier-mobile" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="(51) 98888-2233">
+                </div>
+                <div class="sm:col-span-2">
+                  <label for="supplier-email" class="block text-sm font-medium text-gray-700 mb-1">E-mail fiscal <span class="text-red-500">*</span></label>
+                  <input type="email" id="supplier-email" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="nfse@petnordeste.com.br" required>
+                </div>
+                <div class="sm:col-span-2">
+                  <label for="supplier-support" class="block text-sm font-medium text-gray-700 mb-1">SLA de atendimento</label>
+                  <select id="supplier-support" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione...</option>
+                    <option value="same-day">Mesmo dia útil</option>
+                    <option value="48h">Até 48 horas</option>
+                    <option value="72h">Até 72 horas</option>
+                    <option value="custom">Personalizado</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Integração fiscal e obrigações</h2>
+              <p class="text-sm text-gray-600">Garanta que o fornecedor esteja habilitado para emitir documentos eletrônicos e receber XML automaticamente.</p>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-gray-500">
+              <i class="fas fa-file-signature"></i>
+              Última atualização em 12/07/2024 às 09:18 por João Silva
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div class="rounded-xl border border-sky-100 bg-sky-50 p-4 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="inline-flex items-center gap-2 text-sm font-semibold text-sky-700">
+                  <i class="fas fa-file-invoice"></i>
+                  NF-e
+                </span>
+                <label class="inline-flex items-center gap-2 text-xs font-semibold text-sky-700">
+                  <input type="checkbox" class="rounded border-sky-300 text-sky-600 focus:ring-sky-500" checked>
+                  Habilitado
+                </label>
+              </div>
+              <p class="text-xs text-sky-700 leading-relaxed">Chave de acesso mais recente: <span class="font-semibold">35240788778219000133550020000058981000058980</span>. Emitida em ambiente autorizado SEFAZ-SP.</p>
+              <div class="rounded-lg bg-white p-3 text-xs text-gray-600 border border-sky-100">
+                <p>Agendamento de recebimento de XML ativo via e-mail <span class="font-semibold">xml@petnordeste.com.br</span>.</p>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700">
+                  <i class="fas fa-receipt"></i>
+                  NFC-e
+                </span>
+                <label class="inline-flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                  <input type="checkbox" class="rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" checked>
+                  Habilitado
+                </label>
+              </div>
+              <p class="text-xs text-emerald-700 leading-relaxed">Extrato da autorização: série <span class="font-semibold">1</span>, última NFC-e nº <span class="font-semibold">2843</span> aprovada na SEFAZ-CE.</p>
+              <div class="rounded-lg bg-white p-3 text-xs text-gray-600 border border-emerald-100">
+                <p>Certificado digital A1 válido até 18/11/2025 e CSC vigente para QR-Code.</p>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-amber-100 bg-amber-50 p-4 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="inline-flex items-center gap-2 text-sm font-semibold text-amber-700">
+                  <i class="fas fa-file-contract"></i>
+                  NFS-e
+                </span>
+                <label class="inline-flex items-center gap-2 text-xs font-semibold text-amber-700">
+                  <input type="checkbox" class="rounded border-amber-300 text-amber-600 focus:ring-amber-500">
+                  Em validação
+                </label>
+              </div>
+              <p class="text-xs text-amber-700 leading-relaxed">Prefeitura de Fortaleza homologou a última RPS nº <span class="font-semibold">000045</span> em 28/06/2024. Aguardando liberação definitiva do ambiente de produção.</p>
+              <div class="rounded-lg bg-white p-3 text-xs text-gray-600 border border-amber-100">
+                <p>Enviar carta de exclusividade assinada para <span class="font-semibold">nfse@fortaleza.ce.gov.br</span>.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div class="lg:col-span-2 space-y-4">
+              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Regras fiscais e integrações</h3>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <span class="text-sm font-semibold text-gray-800">Participa do Simples Nacional</span>
+                    <input type="checkbox" class="mt-0.5 h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary/70">
+                  </div>
+                  <p class="text-xs text-gray-600">Configurar CSOSN padrão para entradas interestaduais.</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <span class="text-sm font-semibold text-gray-800">Exige pedido de compra</span>
+                    <input type="checkbox" class="mt-0.5 h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary/70" checked>
+                  </div>
+                  <p class="text-xs text-gray-600">Bloqueia lançamento manual de NF sem pedido aprovado.</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <span class="text-sm font-semibold text-gray-800">Integração com Sefaz Virtual</span>
+                    <input type="checkbox" class="mt-0.5 h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary/70" checked>
+                  </div>
+                  <p class="text-xs text-gray-600">Consulta automática da situação cadastral antes da emissão.</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <span class="text-sm font-semibold text-gray-800">Recebe XML por Webhook</span>
+                    <input type="checkbox" class="mt-0.5 h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary/70">
+                  </div>
+                  <p class="text-xs text-gray-600">Configure endpoint seguro para integração com o ERP do fornecedor.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Referências oficiais</h3>
+              <div class="space-y-3">
+                <a href="https://www.nfe.fazenda.gov.br/portal/" class="block rounded-xl border border-sky-100 bg-sky-50 p-4 hover:border-sky-300 transition" target="_blank" rel="noopener">
+                  <div class="flex items-center justify-between text-sky-700">
+                    <span class="inline-flex items-center gap-2 text-sm font-semibold"><i class="fas fa-globe"></i>Portal Nacional da NF-e</span>
+                    <i class="fas fa-arrow-up-right-from-square text-xs"></i>
+                  </div>
+                  <p class="mt-2 text-xs text-sky-800 leading-relaxed">Consulte chaves de acesso oficiais e acompanhe schemas atualizados para validação.</p>
+                </a>
+                <a href="https://www.sefaz.ce.gov.br/nfce/" class="block rounded-xl border border-emerald-100 bg-emerald-50 p-4 hover:border-emerald-300 transition" target="_blank" rel="noopener">
+                  <div class="flex items-center justify-between text-emerald-700">
+                    <span class="inline-flex items-center gap-2 text-sm font-semibold"><i class="fas fa-barcode"></i>Portal NFC-e Ceará</span>
+                    <i class="fas fa-arrow-up-right-from-square text-xs"></i>
+                  </div>
+                  <p class="mt-2 text-xs text-emerald-800 leading-relaxed">Acesso oficial a exemplos de DANFE NFC-e, CSC e QR-Code autorizados.</p>
+                </a>
+                <a href="https://nfse.fortaleza.ce.gov.br/" class="block rounded-xl border border-amber-100 bg-amber-50 p-4 hover:border-amber-300 transition" target="_blank" rel="noopener">
+                  <div class="flex items-center justify-between text-amber-700">
+                    <span class="inline-flex items-center gap-2 text-sm font-semibold"><i class="fas fa-city"></i>Fortaleza NFS-e</span>
+                    <i class="fas fa-arrow-up-right-from-square text-xs"></i>
+                  </div>
+                  <p class="mt-2 text-xs text-amber-800 leading-relaxed">Documentação e exemplos oficiais para geração de RPS e conversão em NFS-e.</p>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Condições comerciais</h2>
+              <p class="text-sm text-gray-600">Registre limites de crédito, bancos e acordos personalizados.</p>
+            </div>
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-plus"></i>
+              Nova condição
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div class="lg:col-span-2 space-y-4">
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label for="supplier-credit-limit" class="block text-sm font-medium text-gray-700 mb-1">Limite de crédito (R$)</label>
+                  <input type="number" id="supplier-credit-limit" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="50000">
+                </div>
+                <div>
+                  <label for="supplier-payment-deadline" class="block text-sm font-medium text-gray-700 mb-1">Prazo padrão</label>
+                  <select id="supplier-payment-deadline" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione...</option>
+                    <option value="15">15 dias</option>
+                    <option value="21">21 dias</option>
+                    <option value="28">28 dias</option>
+                    <option value="30">30 dias</option>
+                    <option value="45">45 dias</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="supplier-bank" class="block text-sm font-medium text-gray-700 mb-1">Banco principal</label>
+                  <select id="supplier-bank" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione...</option>
+                    <option value="001">001 - Banco do Brasil</option>
+                    <option value="237">237 - Bradesco</option>
+                    <option value="341">341 - Itaú Unibanco</option>
+                    <option value="104">104 - Caixa Econômica Federal</option>
+                    <option value="260">260 - Nubank</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="supplier-bank-agency" class="block text-sm font-medium text-gray-700 mb-1">Agência / Conta</label>
+                  <input type="text" id="supplier-bank-agency" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1234-5 / 98765-0">
+                </div>
+              </div>
+
+              <div>
+                <label for="supplier-payment-notes" class="block text-sm font-medium text-gray-700 mb-1">Observações comerciais</label>
+                <textarea id="supplier-payment-notes" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" rows="4" placeholder="Registrar descontos progressivos, contratos vigentes e cláusulas de reajuste."></textarea>
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Documentos anexados</h3>
+              <ul class="space-y-2 text-sm text-gray-600">
+                <li class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+                  <span class="inline-flex items-center gap-2"><i class="fas fa-file-pdf text-primary"></i>Contrato fornecimento 2024.pdf</span>
+                  <button type="button" class="text-xs font-semibold text-primary hover:underline">Visualizar</button>
+                </li>
+                <li class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+                  <span class="inline-flex items-center gap-2"><i class="fas fa-file-pdf text-primary"></i>Certificado digital A1.pdf</span>
+                  <button type="button" class="text-xs font-semibold text-primary hover:underline">Baixar</button>
+                </li>
+                <li class="flex items-center justify-between rounded-lg border border-dashed border-gray-300 px-3 py-2 text-gray-500">
+                  <span class="inline-flex items-center gap-2"><i class="fas fa-upload"></i>Adicionar novo documento</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Histórico de relacionamento</h2>
+              <p class="text-sm text-gray-600">Acompanhe pedidos recentes, divergências e indicadores de entrega.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs font-semibold text-amber-600">
+              <span class="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1">
+                <i class="fas fa-seedling"></i>
+                Inteligência em desenvolvimento
+              </span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div class="lg:col-span-2 overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead>
+                  <tr class="bg-gray-50">
+                    <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Pedido</th>
+                    <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Emissão NF</th>
+                    <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Valor</th>
+                    <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 text-gray-600">
+                  <tr>
+                    <td class="px-4 py-3">
+                      <div class="font-semibold text-gray-800">PC-2024/089</div>
+                      <div class="text-xs text-gray-500">NF-e 35240788778219000133550020000058981000058980</div>
+                    </td>
+                    <td class="px-4 py-3">05/07/2024</td>
+                    <td class="px-4 py-3">R$ 18.450,00</td>
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        <i class="fas fa-circle-check"></i>
+                        Entregue
+                      </span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">
+                      <div class="font-semibold text-gray-800">PC-2024/072</div>
+                      <div class="text-xs text-gray-500">NFC-e 43240788778219000133650010000028431000028430</div>
+                    </td>
+                    <td class="px-4 py-3">22/06/2024</td>
+                    <td class="px-4 py-3">R$ 4.890,00</td>
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center gap-1 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
+                        <i class="fas fa-truck"></i>
+                        Em transporte</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">
+                      <div class="font-semibold text-gray-800">PC-2024/061</div>
+                      <div class="text-xs text-gray-500">NFS-e Fortaleza RPS 000045</div>
+                    </td>
+                    <td class="px-4 py-3">28/05/2024</td>
+                    <td class="px-4 py-3">R$ 2.130,00</td>
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                        <i class="fas fa-hourglass-half"></i>
+                        Aguardando NFS-e
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="space-y-4">
+              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Alertas recentes</h3>
+              <ul class="space-y-3 text-sm text-gray-600">
+                <li class="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <div class="flex items-start gap-2">
+                    <i class="fas fa-exclamation-triangle text-amber-500 mt-0.5"></i>
+                    <div>
+                      <p class="font-semibold text-amber-700">Divergência de CST</p>
+                      <p class="text-xs text-amber-700">Verificar ajuste da NF-e PC-2024/089 para CFOP 2.101.</p>
+                    </div>
+                  </div>
+                </li>
+                <li class="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                  <div class="flex items-start gap-2">
+                    <i class="fas fa-circle-check text-emerald-500 mt-0.5"></i>
+                    <div>
+                      <p class="font-semibold text-emerald-700">Certificado válido</p>
+                      <p class="text-xs text-emerald-700">Certificado digital A1 validado na SEFAZ-CE.</p>
+                    </div>
+                  </div>
+                </li>
+                <li class="rounded-xl border border-sky-200 bg-sky-50 p-3">
+                  <div class="flex items-start gap-2">
+                    <i class="fas fa-envelope-open-text text-sky-500 mt-0.5"></i>
+                    <div>
+                      <p class="font-semibold text-sky-700">Recepção XML ativa</p>
+                      <p class="text-xs text-sky-700">Webhook configurado para notas de entrada NFC-e.</p>
+                    </div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="/scripts/common/modal-bridge.js"></script>
+</body>
+</html>
