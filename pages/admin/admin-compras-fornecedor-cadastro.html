@@ -485,44 +485,91 @@
           </form>
         </section>
 
-        <section class="bg-gradient-to-r from-primary/5 to-secondary/5 border border-primary/10 rounded-xl p-6">
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div class="rounded-lg bg-white/80 border border-primary/20 p-4 shadow-sm">
-              <div class="flex items-start gap-3">
-                <span class="h-10 w-10 flex items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <i class="fas fa-file-invoice"></i>
-                </span>
-                <div>
-                  <h3 class="text-sm font-semibold text-gray-800">NF-e modelo 55</h3>
-                  <p class="text-xs text-gray-600">Use chaves oficiais para conferência, como a NF-e nº 5323 série 1 da SEFAZ-SP (chave 35210379142157000140550010000053231000053232).</p>
-                  <a href="https://www.nfe.fazenda.gov.br/portal/" target="_blank" rel="noopener" class="text-xs text-primary font-semibold hover:underline">Portal Nacional da NF-e</a>
-                </div>
-              </div>
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Fornecedores cadastrados</h2>
+              <p class="text-sm text-gray-600">Visualize, filtre e ordene os fornecedores já registrados na base.</p>
             </div>
-            <div class="rounded-lg bg-white/80 border border-primary/20 p-4 shadow-sm">
-              <div class="flex items-start gap-3">
-                <span class="h-10 w-10 flex items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <i class="fas fa-receipt"></i>
-                </span>
-                <div>
-                  <h3 class="text-sm font-semibold text-gray-800">NFC-e modelo 65</h3>
-                  <p class="text-xs text-gray-600">Consulta pública disponível para notas como a NFC-e nº 9871 série 1 do SEFAZ-AM (chave 13230302338879000132650010000098711111198710).</p>
-                  <a href="https://nfce.sefaz.am.gov.br" target="_blank" rel="noopener" class="text-xs text-primary font-semibold hover:underline">Portal NFC-e AM</a>
-                </div>
-              </div>
+            <div class="flex items-center gap-2 text-xs text-gray-500">
+              <i class="fas fa-circle-info text-primary"></i>
+              <span>Use os campos de busca abaixo dos títulos para filtrar por palavra ou número.</span>
             </div>
-            <div class="rounded-lg bg-white/80 border border-primary/20 p-4 shadow-sm">
-              <div class="flex items-start gap-3">
-                <span class="h-10 w-10 flex items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <i class="fas fa-file-signature"></i>
-                </span>
-                <div>
-                  <h3 class="text-sm font-semibold text-gray-800">NFS-e padrão nacional</h3>
-                  <p class="text-xs text-gray-600">Conferir RPS como o nº 2458 série Única emitido em Curitiba para CNPJ 76.535.764/0001-43 na base nacional.</p>
-                  <a href="https://www.gov.br/nfse" target="_blank" rel="noopener" class="text-xs text-primary font-semibold hover:underline">Gov.br - NFSe Nacional</a>
-                </div>
-              </div>
-            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm" id="suppliers-table">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">
+                    <button type="button" class="flex items-center gap-1 text-left sort-button" data-sort="codigo">
+                      Código
+                      <i class="fas fa-sort text-xs text-gray-400"></i>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">
+                    <button type="button" class="flex items-center gap-1 text-left sort-button" data-sort="razaoSocial">
+                      Razão Social
+                      <i class="fas fa-sort text-xs text-gray-400"></i>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">
+                    <button type="button" class="flex items-center gap-1 text-left sort-button" data-sort="nomeFantasia">
+                      Nome Fantasia
+                      <i class="fas fa-sort text-xs text-gray-400"></i>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">
+                    <button type="button" class="flex items-center gap-1 text-left sort-button" data-sort="cnpj">
+                      CNPJ
+                      <i class="fas fa-sort text-xs text-gray-400"></i>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">
+                    <button type="button" class="flex items-center gap-1 text-left sort-button" data-sort="pais">
+                      País
+                      <i class="fas fa-sort text-xs text-gray-400"></i>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">
+                    <button type="button" class="flex items-center gap-1 text-left sort-button" data-sort="tipo">
+                      Tipo
+                      <i class="fas fa-sort text-xs text-gray-400"></i>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">
+                    <button type="button" class="flex items-center gap-1 text-left sort-button" data-sort="empresas">
+                      Empresas
+                      <i class="fas fa-sort text-xs text-gray-400"></i>
+                    </button>
+                  </th>
+                </tr>
+                <tr class="bg-white border-t border-gray-200 text-xs text-gray-600">
+                  <th class="px-4 py-2 font-medium">
+                    <input type="text" class="w-full rounded border border-gray-200 px-2 py-1 filter-input" data-filter="codigo" placeholder="Buscar...">
+                  </th>
+                  <th class="px-4 py-2 font-medium">
+                    <input type="text" class="w-full rounded border border-gray-200 px-2 py-1 filter-input" data-filter="razaoSocial" placeholder="Buscar...">
+                  </th>
+                  <th class="px-4 py-2 font-medium">
+                    <input type="text" class="w-full rounded border border-gray-200 px-2 py-1 filter-input" data-filter="nomeFantasia" placeholder="Buscar...">
+                  </th>
+                  <th class="px-4 py-2 font-medium">
+                    <input type="text" class="w-full rounded border border-gray-200 px-2 py-1 filter-input" data-filter="cnpj" placeholder="Buscar...">
+                  </th>
+                  <th class="px-4 py-2 font-medium">
+                    <input type="text" class="w-full rounded border border-gray-200 px-2 py-1 filter-input" data-filter="pais" placeholder="Buscar...">
+                  </th>
+                  <th class="px-4 py-2 font-medium">
+                    <input type="text" class="w-full rounded border border-gray-200 px-2 py-1 filter-input" data-filter="tipo" placeholder="Buscar...">
+                  </th>
+                  <th class="px-4 py-2 font-medium">
+                    <input type="text" class="w-full rounded border border-gray-200 px-2 py-1 filter-input" data-filter="empresas" placeholder="Buscar...">
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100" id="suppliers-table-body"></tbody>
+            </table>
           </div>
         </section>
       </div>
@@ -678,6 +725,198 @@
           const bankSelect = document.getElementById('supplier-bank');
           bankSelect.innerHTML = '<option value="">Não foi possível carregar os bancos</option>';
         });
+
+      const suppliersTableBody = document.getElementById('suppliers-table-body');
+      const filterInputs = document.querySelectorAll('.filter-input');
+      const sortButtons = document.querySelectorAll('.sort-button');
+
+      if (suppliersTableBody && filterInputs.length && sortButtons.length) {
+        const suppliersData = [
+          {
+            codigo: '1001',
+            razaoSocial: 'Cooperativa Agroindustrial Aurora LTDA',
+            nomeFantasia: 'Aurora Alimentos',
+            cnpj: '83.631.225/0001-08',
+            pais: 'Brasil',
+            tipo: 'Jurídico',
+            empresas: ['E o Bicho Matriz', 'E o Bicho Filial Sul'],
+          },
+          {
+            codigo: '1002',
+            razaoSocial: 'JBS S.A.',
+            nomeFantasia: 'Seara Alimentos',
+            cnpj: '02.916.265/0001-60',
+            pais: 'Brasil',
+            tipo: 'Jurídico',
+            empresas: ['E o Bicho Matriz'],
+          },
+          {
+            codigo: '1003',
+            razaoSocial: 'Bunge Alimentos S.A.',
+            nomeFantasia: 'Bunge Brasil',
+            cnpj: '84.039.168/0001-60',
+            pais: 'Brasil',
+            tipo: 'Jurídico',
+            empresas: ['E o Bicho Matriz', 'E o Bicho Nordeste'],
+          },
+          {
+            codigo: '1004',
+            razaoSocial: 'DSM Produtos Nutricionais Brasil S.A.',
+            nomeFantasia: 'DSM Nutrição Animal',
+            cnpj: '43.319.158/0001-85',
+            pais: 'Holanda',
+            tipo: 'Jurídico',
+            empresas: ['E o Bicho Matriz'],
+          },
+          {
+            codigo: '1005',
+            razaoSocial: 'Distribuidora Petix Ltda.',
+            nomeFantasia: 'Petix',
+            cnpj: '89.456.123/0001-77',
+            pais: 'Brasil',
+            tipo: 'MEI',
+            empresas: ['E o Bicho Interior'],
+          },
+          {
+            codigo: '1006',
+            razaoSocial: 'Zoetis Indústria de Produtos Veterinários Ltda.',
+            nomeFantasia: 'Zoetis Brasil',
+            cnpj: '03.840.559/0001-15',
+            pais: 'Estados Unidos',
+            tipo: 'Jurídico',
+            empresas: ['E o Bicho Matriz', 'E o Bicho Filial Sul', 'E o Bicho Interior'],
+          },
+        ];
+
+        const currentFilters = {
+          codigo: '',
+          razaoSocial: '',
+          nomeFantasia: '',
+          cnpj: '',
+          pais: '',
+          tipo: '',
+          empresas: '',
+        };
+
+        const currentSort = {
+          column: 'codigo',
+          direction: 'asc',
+        };
+
+        const normalizeValue = (value) => {
+          if (Array.isArray(value)) {
+            value = value.join(', ');
+          }
+
+          return String(value ?? '')
+            .normalize('NFD')
+            .replace(/\p{Diacritic}/gu, '')
+            .toLowerCase();
+        };
+
+        const getDisplayValue = (supplier, column) => {
+          if (column === 'empresas') {
+            return supplier.empresas.join(', ');
+          }
+
+          return supplier[column];
+        };
+
+        const renderTable = (data) => {
+          const rows = data
+            .map((supplier) => {
+              const empresas = supplier.empresas.join(', ');
+              return `
+                <tr class="hover:bg-gray-50 transition">
+                  <td class="px-4 py-3 whitespace-nowrap font-semibold text-gray-700">${supplier.codigo}</td>
+                  <td class="px-4 py-3 text-gray-700">${supplier.razaoSocial}</td>
+                  <td class="px-4 py-3 text-gray-600">${supplier.nomeFantasia}</td>
+                  <td class="px-4 py-3 text-gray-700">${supplier.cnpj}</td>
+                  <td class="px-4 py-3 text-gray-600">${supplier.pais}</td>
+                  <td class="px-4 py-3 text-gray-600">${supplier.tipo}</td>
+                  <td class="px-4 py-3 text-gray-600">${empresas}</td>
+                </tr>
+              `;
+            })
+            .join('');
+
+          suppliersTableBody.innerHTML = rows || '<tr><td colspan="7" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum fornecedor encontrado com os filtros aplicados.</td></tr>';
+        };
+
+        const applyFiltersAndSort = () => {
+          const filtered = suppliersData.filter((supplier) =>
+            Object.entries(currentFilters).every(([column, query]) => {
+              if (!query) {
+                return true;
+              }
+
+              const value = getDisplayValue(supplier, column);
+              return normalizeValue(value).includes(normalizeValue(query));
+            })
+          );
+
+          const sorted = [...filtered].sort((a, b) => {
+            const { column, direction } = currentSort;
+
+            if (column === 'codigo') {
+              const valueA = Number(a[column]);
+              const valueB = Number(b[column]);
+              return direction === 'asc' ? valueA - valueB : valueB - valueA;
+            }
+
+            const valueA = normalizeValue(getDisplayValue(a, column));
+            const valueB = normalizeValue(getDisplayValue(b, column));
+
+            if (valueA === valueB) {
+              return 0;
+            }
+
+            const comparison = valueA > valueB ? 1 : -1;
+            return direction === 'asc' ? comparison : -comparison;
+          });
+
+          renderTable(sorted);
+        };
+
+        const updateSortIndicators = () => {
+          sortButtons.forEach((button) => {
+            const icon = button.querySelector('i');
+            icon.classList.remove('fa-sort-up', 'fa-sort-down', 'text-primary');
+            icon.classList.add('fa-sort', 'text-gray-400');
+
+            if (button.dataset.sort === currentSort.column) {
+              icon.classList.remove('fa-sort', 'text-gray-400');
+              icon.classList.add(currentSort.direction === 'asc' ? 'fa-sort-up' : 'fa-sort-down', 'text-primary');
+            }
+          });
+        };
+
+        filterInputs.forEach((input) => {
+          input.addEventListener('input', (event) => {
+            const { filter } = event.target.dataset;
+            currentFilters[filter] = event.target.value;
+            applyFiltersAndSort();
+          });
+        });
+
+        sortButtons.forEach((button) => {
+          button.addEventListener('click', () => {
+            const column = button.dataset.sort;
+            if (currentSort.column === column) {
+              currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+              currentSort.column = column;
+              currentSort.direction = 'asc';
+            }
+
+            updateSortIndicators();
+            applyFiltersAndSort();
+          });
+        });
+
+        updateSortIndicators();
+        applyFiltersAndSort();
+      }
     });
   </script>
 </body>
