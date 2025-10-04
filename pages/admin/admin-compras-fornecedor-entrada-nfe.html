@@ -31,219 +31,768 @@
             </div>
             <div>
               <h1 class="text-2xl font-bold text-gray-800">Entrada de NF-e</h1>
-              <p class="text-sm text-gray-600">Registre notas fiscais eletrônicas modelo 55 com base no layout 4.00 do Manual de Orientação do Contribuinte (Ajuste SINIEF 07/05) e garanta conformidade com o Portal Nacional da NF-e.</p>
+              <p class="text-sm text-gray-600">Cadastre entradas modelo 55 com dados exigidos pelo Manual de Orientação do Contribuinte 4.0 e notas técnicas vigentes para NFC-e, NF-e e NFSe.</p>
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
               <i class="fas fa-file-upload"></i>
-              Importar XML autorizado
+              Importar XML
             </button>
             <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
               <i class="fas fa-barcode"></i>
-              Consultar chave na SEFAZ
+              Consultar SEFAZ
             </button>
           </div>
         </header>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="flex items-start justify-between gap-4">
+          <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Dados do documento</h2>
-              <p class="text-sm text-gray-500">Informe os campos obrigatórios previstos no MOC 4.0: chave de acesso de 44 dígitos, série, número e datas de emissão e entrada.</p>
+              <h2 class="text-lg font-semibold text-gray-800">Cabeçalho da Nota</h2>
+              <p class="text-sm text-gray-500">Preencha o identificador da nota, dados do fornecedor e referência numérica conforme layout nacional da NF-e/NFC-e.</p>
             </div>
-            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-              <i class="fas fa-circle-check"></i>
-              Manifestação pendente
-            </span>
+            <div class="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-2 text-right">
+              <span class="text-xs font-medium text-emerald-700 block">Total da Nota</span>
+              <span class="text-xl font-bold text-emerald-900">R$ 15.487,32</span>
+              <p class="text-[11px] text-emerald-700">Somatório automático dos itens</p>
+            </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div class="lg:col-span-2">
-              <label for="nfe-access-key" class="block text-sm font-medium text-gray-700 mb-1">Chave de acesso (44 dígitos) <span class="text-red-500">*</span></label>
-              <input type="text" id="nfe-access-key" maxlength="44" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="35190730290856000160550010000100011000100018" required>
-              <p class="mt-1 text-xs text-gray-500">Valide a estrutura: cUF + AAMM + CNPJ + modelo (55) + série + número + tpEmis + cNF + DV.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label for="nfe-code" class="block text-sm font-medium text-gray-700 mb-1">Código</label>
+              <div class="relative">
+                <input type="text" id="nfe-code" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500" value="Gerado automaticamente" readonly>
+                <span class="absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">AUTO</span>
+              </div>
             </div>
             <div>
-              <label for="nfe-model" class="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
-              <select id="nfe-model" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="55" selected>55 - NF-e</option>
-                <option value="65">65 - NFC-e</option>
-              </select>
-            </div>
-            <div>
-              <label for="nfe-series" class="block text-sm font-medium text-gray-700 mb-1">Série <span class="text-red-500">*</span></label>
-              <input type="text" id="nfe-series" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1" required>
-            </div>
-            <div>
-              <label for="nfe-number" class="block text-sm font-medium text-gray-700 mb-1">Número da NF-e <span class="text-red-500">*</span></label>
+              <label for="nfe-number" class="block text-sm font-medium text-gray-700 mb-1">NF* (número da nota)</label>
               <input type="text" id="nfe-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="10245" required>
             </div>
             <div>
-              <label for="nfe-issue-date" class="block text-sm font-medium text-gray-700 mb-1">Data de emissão <span class="text-red-500">*</span></label>
-              <input type="datetime-local" id="nfe-issue-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-            </div>
-            <div>
-              <label for="nfe-entry-date" class="block text-sm font-medium text-gray-700 mb-1">Data de entrada <span class="text-red-500">*</span></label>
-              <input type="datetime-local" id="nfe-entry-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-            </div>
-            <div>
-              <label for="nfe-operation" class="block text-sm font-medium text-gray-700 mb-1">Natureza da operação (CFOP)</label>
-              <input type="text" id="nfe-operation" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.102 - Compra para comercialização">
-              <p class="mt-1 text-xs text-gray-500">CFOP conforme Tabelas do Ajuste SINIEF 07/05; para entradas interestaduais utilize códigos 2.xxx.</p>
-            </div>
-            <div>
-              <label for="nfe-protocol" class="block text-sm font-medium text-gray-700 mb-1">Protocolo de autorização</label>
-              <input type="text" id="nfe-protocol" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="152240000000000">
-              <p class="mt-1 text-xs text-gray-500">Recibo emitido pela SEFAZ após a autorização (Ex.: 152240000000000, conforme portal.sefaz.rs.gov.br).</p>
-            </div>
-          </div>
-        </section>
-
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Fornecedor emissor</h2>
-              <p class="text-sm text-gray-500">Dados do emitente conforme cadastro sincronizado e conforme validação do Cadastro Sincronizado Nacional (CNPJ/IE).</p>
-            </div>
-            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-              <i class="fas fa-sync"></i>
-              Buscar dados via CNPJ</button>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label for="issuer-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ <span class="text-red-500">*</span></label>
-              <input type="text" id="issuer-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="30.290.856/0001-60" required>
-            </div>
-            <div>
-              <label for="issuer-ie" class="block text-sm font-medium text-gray-700 mb-1">Inscrição estadual</label>
-              <input type="text" id="issuer-ie" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="244/0178792">
-              <p class="mt-1 text-xs text-gray-500">Obrigatória para contribuintes do ICMS, conforme art. 19 do RICMS de cada UF.</p>
-            </div>
-            <div>
-              <label for="issuer-state" class="block text-sm font-medium text-gray-700 mb-1">UF</label>
-              <select id="issuer-state" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="">Selecione</option>
-                <option value="SP">SP - São Paulo</option>
-                <option value="RJ">RJ - Rio de Janeiro</option>
-                <option value="MG">MG - Minas Gerais</option>
-                <option value="RS">RS - Rio Grande do Sul</option>
-                <option value="PR">PR - Paraná</option>
-                <option value="SC">SC - Santa Catarina</option>
-                <option value="BA">BA - Bahia</option>
-                <option value="PE">PE - Pernambuco</option>
-                <option value="CE">CE - Ceará</option>
-                <option value="DF">DF - Distrito Federal</option>
+              <label for="nfe-supplier" class="block text-sm font-medium text-gray-700 mb-1">Fornecedor*</label>
+              <select id="nfe-supplier" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                <option value="">Selecione o fornecedor</option>
+                <option value="30090856000160">30290856000160 - Distribuidora Nacional de Produtos Veterinários Ltda</option>
+                <option value="06117473000150">06117473000150 - MSD Saúde Animal Comércio de Produtos Veterinários Ltda</option>
+                <option value="07404231000110">07404231000110 - Ourofino Saúde Animal Ltda</option>
               </select>
             </div>
-            <div class="md:col-span-2 lg:col-span-3">
-              <label for="issuer-name" class="block text-sm font-medium text-gray-700 mb-1">Razão social</label>
-              <input type="text" id="issuer-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Distribuidora Nacional de Produtos Veterinários Ltda">
+            <div>
+              <label for="nfe-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+              <select id="nfe-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="NF" selected>NF</option>
+                <option value="NFCe">NFC-e</option>
+                <option value="NFSe">NFS-e</option>
+              </select>
+            </div>
+            <div>
+              <label for="nfe-series" class="block text-sm font-medium text-gray-700 mb-1">Série</label>
+              <input type="text" id="nfe-series" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1">
+            </div>
+            <div>
+              <label for="nfe-protocol" class="block text-sm font-medium text-gray-700 mb-1">Protocolo SEFAZ</label>
+              <input type="text" id="nfe-protocol" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="35240784593211000160550010004273341431819234">
+              <p class="mt-1 text-xs text-gray-500">Número conforme retorno da autorização na SEFAZ.</p>
             </div>
             <div class="lg:col-span-2">
-              <label for="issuer-address" class="block text-sm font-medium text-gray-700 mb-1">Endereço completo</label>
-              <input type="text" id="issuer-address" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Av. Paulista, 1800 - Bela Vista, São Paulo - SP, 01310-200">
-            </div>
-            <div>
-              <label for="issuer-email" class="block text-sm font-medium text-gray-700 mb-1">E-mail fiscal</label>
-              <input type="email" id="issuer-email" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="nfe@distribuidora.com.br">
+              <label for="nfe-reference" class="block text-sm font-medium text-gray-700 mb-1">Referência Fiscal</label>
+              <input type="text" id="nfe-reference" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="NF-e emitida pela SEFAZ/SP em ambiente de produção">
             </div>
           </div>
         </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Itens da NF-e</h2>
-              <p class="text-sm text-gray-500">Itens importados do XML com códigos NCM e CEST de acordo com a Tabela TIPI (Decreto 11.182/2022) e Nota Técnica 2023.001.</p>
-            </div>
-            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-              <i class="fas fa-plus-circle"></i>
-              Adicionar item manualmente
-            </button>
-          </div>
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100">
+          <nav class="flex flex-wrap gap-2 border-b border-gray-100 px-6 pt-6">
+            <button type="button" class="tab-button active" data-tab="dados">Dados da Nota</button>
+            <button type="button" class="tab-button" data-tab="totais">Totais da Nota</button>
+            <button type="button" class="tab-button" data-tab="observacoes">Obs / Outras Informações</button>
+            <button type="button" class="tab-button" data-tab="produtos">Produtos</button>
+            <button type="button" class="tab-button" data-tab="transportadora">Transportadora</button>
+            <button type="button" class="tab-button" data-tab="duplicatas">Duplicatas</button>
+            <button type="button" class="tab-button" data-tab="ajustes">Débitos e Créditos</button>
+            <button type="button" class="tab-button" data-tab="documentos">Documentos Vinculados</button>
+          </nav>
 
-          <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">#</th>
-                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Descrição</th>
-                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">NCM</th>
-                  <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">CFOP</th>
-                  <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Qtde</th>
-                  <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Vlr. unitário</th>
-                  <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Total</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100 bg-white">
-                <tr>
-                  <td class="px-4 py-3 text-gray-600">1</td>
-                  <td class="px-4 py-3 text-gray-700">
-                    Vacina Polivalente V8 50ml
-                    <p class="text-xs text-gray-500">CEST 13.001.00 · Código ANVISA 10218010911</p>
-                  </td>
-                  <td class="px-4 py-3 text-gray-600">3002.20.29</td>
-                  <td class="px-4 py-3 text-gray-600">1.102</td>
-                  <td class="px-4 py-3 text-right text-gray-600">12</td>
-                  <td class="px-4 py-3 text-right text-gray-600">R$ 48,90</td>
-                  <td class="px-4 py-3 text-right text-gray-800 font-semibold">R$ 586,80</td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-3 text-gray-600">2</td>
-                  <td class="px-4 py-3 text-gray-700">
-                    Ração Premium Cães Adultos 15kg
-                    <p class="text-xs text-gray-500">CEST 07.002.00 · NCM conforme TIPI</p>
-                  </td>
-                  <td class="px-4 py-3 text-gray-600">2309.10.90</td>
-                  <td class="px-4 py-3 text-gray-600">1.403</td>
-                  <td class="px-4 py-3 text-right text-gray-600">8</td>
-                  <td class="px-4 py-3 text-right text-gray-600">R$ 126,50</td>
-                  <td class="px-4 py-3 text-right text-gray-800 font-semibold">R$ 1.012,00</td>
-                </tr>
-              </tbody>
-              <tfoot class="bg-gray-50">
-                <tr>
-                  <th colspan="6" class="px-4 py-3 text-right font-semibold text-gray-700">Total da NF-e</th>
-                  <th class="px-4 py-3 text-right text-gray-900 font-bold">R$ 1.598,80</th>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          <div class="p-6 space-y-6">
+            <div class="tab-panel" data-tab-panel="dados">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label for="issue-date" class="block text-sm font-medium text-gray-700 mb-1">Data Emissão*</label>
+                  <input type="date" id="issue-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                </div>
+                <div>
+                  <label for="company" class="block text-sm font-medium text-gray-700 mb-1">Empresa*</label>
+                  <select id="company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                    <option value="">Selecione</option>
+                    <option value="vila-bicho">VILA E O BICHO LTDA - CNPJ 11.222.333/0001-44</option>
+                    <option value="vilabicho-filial">VILA E O BICHO VAREJO LTDA - CNPJ 33.444.555/0001-66</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="nfe-model" class="block text-sm font-medium text-gray-700 mb-1">Modelo da Nota Fiscal*</label>
+                  <select id="nfe-model" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                    <option value="55" selected>55 – Nota Fiscal Eletrônica (NF-e)</option>
+                    <option value="65">65 – Nota Fiscal de Consumidor Eletrônica (NFC-e)</option>
+                    <option value="57">57 – Conhecimento de Transporte Eletrônico (CT-e)</option>
+                    <option value="nfs-e">NFS-e – Nota Fiscal de Serviços Eletrônica</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="access-key" class="block text-sm font-medium text-gray-700 mb-1">Chave da NFe (44 dígitos)</label>
+                  <input type="text" id="access-key" maxlength="44" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="35240730290856000160550010000100011999999999">
+                  <p class="mt-1 text-xs text-gray-500">Composição: cUF + AAMM + CNPJ + modelo + série + número + tpEmis + cNF + DV.</p>
+                </div>
+                <div>
+                  <label for="entry-date" class="block text-sm font-medium text-gray-700 mb-1">Data Entrada*</label>
+                  <input type="date" id="entry-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                </div>
+                <div>
+                  <label for="deposit" class="block text-sm font-medium text-gray-700 mb-1">Depósito*</label>
+                  <select id="deposit" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                    <option value="">Selecione</option>
+                    <option value="loja-vila-isabel">Loja Vila Isabel</option>
+                    <option value="cd-niteroi">Centro de Distribuição Niterói</option>
+                    <option value="cd-jacarepagua">CD Jacarepaguá</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="entry-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo de Entrada*</label>
+                  <select id="entry-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                    <option value="">Selecione</option>
+                    <option value="revenda">Compra para Revenda</option>
+                    <option value="industrializacao">Industrialização</option>
+                    <option value="consumo">Uso e Consumo</option>
+                    <option value="imobilizado">Ativo Imobilizado</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="natureza-operacao" class="block text-sm font-medium text-gray-700 mb-1">Natureza da Operação (NatOp)</label>
+                  <input type="text" id="natureza-operacao" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.102 - Compra para comercialização">
+                </div>
+                <div>
+                  <label for="cfop" class="block text-sm font-medium text-gray-700 mb-1">CFOP padrão da entrada</label>
+                  <input type="text" id="cfop" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.102">
+                </div>
+                <div>
+                  <label for="finalidade" class="block text-sm font-medium text-gray-700 mb-1">Finalidade da NFe</label>
+                  <select id="finalidade" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="normal" selected>Normal</option>
+                    <option value="devolucao">Devolução</option>
+                    <option value="ajuste">Ajuste</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="indicador-presenca" class="block text-sm font-medium text-gray-700 mb-1">Indicador de Presença (indPres)</label>
+                  <select id="indicador-presenca" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="0">0 – Não se aplica (NF-e)</option>
+                    <option value="1">1 – Operação presencial</option>
+                    <option value="2">2 – Internet</option>
+                    <option value="3">3 – Teleatendimento</option>
+                    <option value="4">4 – Entrega em domicílio</option>
+                    <option value="5">5 – Operação presencial fora do estabelecimento</option>
+                    <option value="9">9 – Operação não presencial, outros</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="tipo-emissao" class="block text-sm font-medium text-gray-700 mb-1">Tipo de Emissão (tpEmis)</label>
+                  <select id="tipo-emissao" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="1" selected>1 – Emissão normal</option>
+                    <option value="2">2 – Contingência FS-IA</option>
+                    <option value="3">3 – Contingência SCAN</option>
+                    <option value="4">4 – Contingência DPEC</option>
+                    <option value="5">5 – Contingência FS-DA</option>
+                    <option value="6">6 – Contingência SVC-AN</option>
+                    <option value="7">7 – Contingência SVC-RS</option>
+                    <option value="9">9 – Contingência off-line da NFC-e</option>
+                  </select>
+                </div>
+              </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="rounded-lg border border-blue-100 bg-blue-50 p-4">
-              <div class="flex items-start gap-3">
-                <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <i class="fas fa-info"></i>
-                </span>
-                <div class="space-y-2">
-                  <h3 class="text-sm font-semibold text-gray-800">Tributação ICMS conforme Nota Técnica 2023.003</h3>
-                  <p class="text-sm text-gray-600">Revisado o tratamento de CST 00, 20, 40 e 60 com partilha do DIFAL prevista pela Emenda Constitucional 87/2015. Utilize o campo "ICMS partilha" ao importar XML de operações interestaduais.</p>
+              <div class="mt-6 border-t border-gray-100 pt-6">
+                <h3 class="text-sm font-semibold text-gray-700 mb-4">Dados do Fornecedor</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <label for="supplier-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ / CPF</label>
+                    <input type="text" id="supplier-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="30.290.856/0001-60">
+                  </div>
+                  <div>
+                    <label for="supplier-ie" class="block text-sm font-medium text-gray-700 mb-1">Inscrição Estadual</label>
+                    <input type="text" id="supplier-ie" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="244/0178792">
+                  </div>
+                  <div>
+                    <label for="supplier-uf" class="block text-sm font-medium text-gray-700 mb-1">UF</label>
+                    <select id="supplier-uf" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                      <option value="">Selecione</option>
+                      <option value="SP">SP - São Paulo</option>
+                      <option value="RJ">RJ - Rio de Janeiro</option>
+                      <option value="MG">MG - Minas Gerais</option>
+                      <option value="RS">RS - Rio Grande do Sul</option>
+                      <option value="PR">PR - Paraná</option>
+                      <option value="SC">SC - Santa Catarina</option>
+                      <option value="BA">BA - Bahia</option>
+                      <option value="PE">PE - Pernambuco</option>
+                      <option value="CE">CE - Ceará</option>
+                      <option value="DF">DF - Distrito Federal</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="supplier-email" class="block text-sm font-medium text-gray-700 mb-1">E-mail fiscal</label>
+                    <input type="email" id="supplier-email" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="nfe@distribuidora.com.br">
+                  </div>
+                  <div class="md:col-span-2 lg:col-span-4">
+                    <label for="supplier-address" class="block text-sm font-medium text-gray-700 mb-1">Endereço completo</label>
+                    <input type="text" id="supplier-address" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Av. Paulista, 1800 - Bela Vista, São Paulo - SP, 01310-200">
+                  </div>
                 </div>
               </div>
             </div>
-            <div class="rounded-lg border border-emerald-100 bg-emerald-50 p-4">
-              <div class="flex items-start gap-3">
-                <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                  <i class="fas fa-shield-alt"></i>
-                </span>
-                <div class="space-y-2">
-                  <h3 class="text-sm font-semibold text-gray-800">Eventos da NF-e</h3>
-                  <p class="text-sm text-gray-600">Registre ciência, confirmação ou desconhecimento conforme o Manual de Orientação do Contribuinte - Eventos da NF-e (versão 1.03). Os eventos ficam vinculados ao protocolo de autorização retornado pela SEFAZ.</p>
+
+            <div class="tab-panel hidden" data-tab-panel="totais">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                  <div>
+                    <label for="valor-produtos" class="block text-sm font-medium text-gray-700 mb-1">Valor Produtos (R$)</label>
+                    <input type="number" step="0.01" id="valor-produtos" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="14000.00">
+                  </div>
+                  <div>
+                    <label for="base-icms" class="block text-sm font-medium text-gray-700 mb-1">Base ICMS (R$)</label>
+                    <input type="number" step="0.01" id="base-icms" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
+                  <div>
+                    <label for="valor-icms" class="block text-sm font-medium text-gray-700 mb-1">Valor ICMS (R$)</label>
+                    <input type="number" step="0.01" id="valor-icms" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
+                  <div>
+                    <label for="icms-st" class="block text-sm font-medium text-gray-700 mb-1">ICMS Subst. (R$)</label>
+                    <input type="number" step="0.01" id="icms-st" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
+                  <div>
+                    <label for="valor-fcp-st" class="block text-sm font-medium text-gray-700 mb-1">Valor FCP ST (R$)</label>
+                    <input type="number" step="0.01" id="valor-fcp-st" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
+                  <div>
+                    <label for="total-servicos" class="block text-sm font-medium text-gray-700 mb-1">Total Serviços (R$)</label>
+                    <input type="number" step="0.01" id="total-servicos" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
+                  <div>
+                    <label for="valor-ajuste-esquerda" class="block text-sm font-medium text-gray-700 mb-1">Valor do Ajuste (R$)</label>
+                    <input type="number" step="0.01" id="valor-ajuste-esquerda" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
                 </div>
+
+                <div class="space-y-4">
+                  <div>
+                    <label for="desconto" class="block text-sm font-medium text-gray-700 mb-1">Desconto (R$)</label>
+                    <input type="number" step="0.01" id="desconto" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
+                  <div>
+                    <label for="outras-despesas" class="block text-sm font-medium text-gray-700 mb-1">Outras Despesas (R$)</label>
+                    <input type="number" step="0.01" id="outras-despesas" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
+                  <div>
+                    <label for="valor-frete" class="block text-sm font-medium text-gray-700 mb-1">Valor Frete (R$)</label>
+                    <input type="number" step="0.01" id="valor-frete" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
+                  <div>
+                    <label for="valor-ipi" class="block text-sm font-medium text-gray-700 mb-1">Valor IPI (R$)</label>
+                    <input type="number" step="0.01" id="valor-ipi" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
+                  <div>
+                    <label for="desconto-unitario" class="block text-sm font-medium text-gray-700 mb-1">Desconto Unitário (R$)</label>
+                    <input type="number" step="0.01" id="desconto-unitario" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
+                  <div>
+                    <label for="valor-seguro" class="block text-sm font-medium text-gray-700 mb-1">Valor Seguro (R$)</label>
+                    <input type="number" step="0.01" id="valor-seguro" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  </div>
+                  <div>
+                    <label for="valor-dolar" class="block text-sm font-medium text-gray-700 mb-1">Valor da NF em Dólar</label>
+                    <input type="number" step="0.01" id="valor-dolar" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="2974.55">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-panel hidden" data-tab-panel="observacoes">
+              <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                    Pagar Frete
+                  </label>
+                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                    Não Alterar Estoque
+                  </label>
+                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                    Valor Seguro
+                  </label>
+                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                    Não escriturar o valor de ICMS
+                  </label>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label for="condicao-pagamento" class="block text-sm font-medium text-gray-700 mb-1">Condição de Pagamento</label>
+                    <input type="text" id="condicao-pagamento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="30/60/90 dias">
+                  </div>
+                  <div>
+                    <label for="cliente-retorno" class="block text-sm font-medium text-gray-700 mb-1">Cliente para retorno parcial (F2)</label>
+                    <input type="text" id="cliente-retorno" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Pesquisar cliente">
+                  </div>
+                  <div>
+                    <label for="centro-custo" class="block text-sm font-medium text-gray-700 mb-1">Centro de Custo (F2)</label>
+                    <input type="text" id="centro-custo" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="01.02.03 - Comercial">
+                  </div>
+                  <div>
+                    <label for="forma-pagamento" class="block text-sm font-medium text-gray-700 mb-1">Forma de Pagamento</label>
+                    <input type="text" id="forma-pagamento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="À Vista">
+                  </div>
+                </div>
+
+                <div>
+                  <label for="observacao" class="block text-sm font-medium text-gray-700 mb-1">Observação</label>
+                  <textarea id="observacao" rows="4" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informações complementares sobre a operação."></textarea>
+                </div>
+                <div>
+                  <label for="informacoes-complementares" class="block text-sm font-medium text-gray-700 mb-1">Informações Complementares ao Fisco/Contribuinte</label>
+                  <textarea id="informacoes-complementares" rows="3" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Referência à legislação municipal ou mensagens obrigatórias da SEFAZ."></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-panel hidden" data-tab-panel="produtos">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-gray-700">Itens da nota</h3>
+                <div class="flex flex-wrap gap-2">
+                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                    <i class="fas fa-plus-circle"></i>
+                    Adicionar Produto
+                  </button>
+                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                    <i class="fas fa-exchange-alt"></i>
+                    Alterar Fornecedor por Produto
+                  </button>
+                </div>
+              </div>
+
+              <div class="mt-4 overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Item</th>
+                      <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Não escriturar o valor de ICMS</th>
+                      <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Código</th>
+                      <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Descrição</th>
+                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Qtde.</th>
+                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Multiplicador</th>
+                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Unitário (R$)</th>
+                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Desc (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 bg-white">
+                    <tr>
+                      <td class="px-4 py-3 text-gray-600">1</td>
+                      <td class="px-4 py-3">
+                        <label class="inline-flex items-center gap-2 text-xs text-gray-600">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                          Não
+                        </label>
+                      </td>
+                      <td class="px-4 py-3 text-gray-600">PROD-0001</td>
+                      <td class="px-4 py-3 text-gray-700">
+                        Vacina Polivalente V8 50ml
+                        <p class="text-xs text-gray-500">UN: FR · NCM 3002.20.29 · CEST 13.001.00</p>
+                        <p class="text-xs text-gray-500">CFOP 1.102 · CST 00 · ICMS 18% · IPI 0%</p>
+                        <p class="text-xs text-gray-500">PIS/COFINS: CST 01 · Alíquotas 1,65% / 7,60%</p>
+                      </td>
+                      <td class="px-4 py-3 text-right text-gray-600">12</td>
+                      <td class="px-4 py-3 text-right text-gray-600">1,000</td>
+                      <td class="px-4 py-3 text-right text-gray-600">48,90</td>
+                      <td class="px-4 py-3 text-right text-gray-600">0,00</td>
+                    </tr>
+                    <tr>
+                      <td class="px-4 py-3 text-gray-600">2</td>
+                      <td class="px-4 py-3">
+                        <label class="inline-flex items-center gap-2 text-xs text-gray-600">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                          Sim
+                        </label>
+                      </td>
+                      <td class="px-4 py-3 text-gray-600">PROD-0002</td>
+                      <td class="px-4 py-3 text-gray-700">
+                        Ração Premium Cães Adultos 15kg
+                        <p class="text-xs text-gray-500">UN: SC · NCM 2309.10.90 · CEST 07.002.00</p>
+                        <p class="text-xs text-gray-500">CFOP 1.403 · CST 20 · ICMS 12% (BC R$ 960,00)</p>
+                        <p class="text-xs text-gray-500">Frete R$ 120,00 · Seguro R$ 45,00</p>
+                      </td>
+                      <td class="px-4 py-3 text-right text-gray-600">8</td>
+                      <td class="px-4 py-3 text-right text-gray-600">1,000</td>
+                      <td class="px-4 py-3 text-right text-gray-600">126,50</td>
+                      <td class="px-4 py-3 text-right text-gray-600">3,00</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="tab-panel hidden" data-tab-panel="transportadora">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label for="transportadora-cnpj" class="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
+                  <input type="text" id="transportadora-cnpj" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="12.345.678/0001-99">
+                </div>
+                <div>
+                  <label for="transportadora-ie" class="block text-sm font-medium text-gray-700 mb-1">IE – Transportadora</label>
+                  <input type="text" id="transportadora-ie" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="111.222.333.444">
+                </div>
+                <div>
+                  <label for="transportadora-uf" class="block text-sm font-medium text-gray-700 mb-1">UF – Transportadora</label>
+                  <select id="transportadora-uf" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione</option>
+                    <option value="SP">SP - São Paulo</option>
+                    <option value="RJ">RJ - Rio de Janeiro</option>
+                    <option value="MG">MG - Minas Gerais</option>
+                    <option value="ES">ES - Espírito Santo</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="transportadora-placa" class="block text-sm font-medium text-gray-700 mb-1">Placa – Transportadora</label>
+                  <input type="text" id="transportadora-placa" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="RIO1A23">
+                </div>
+                <div>
+                  <label for="transportadora-uf-placa" class="block text-sm font-medium text-gray-700 mb-1">UF Placa – Transportadora</label>
+                  <select id="transportadora-uf-placa" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione</option>
+                    <option value="SP">SP</option>
+                    <option value="RJ">RJ</option>
+                    <option value="MG">MG</option>
+                    <option value="ES">ES</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="peso-bruto" class="block text-sm font-medium text-gray-700 mb-1">Peso Bruto</label>
+                  <input type="number" step="0.001" id="peso-bruto" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="185.750">
+                </div>
+                <div>
+                  <label for="peso-liquido" class="block text-sm font-medium text-gray-700 mb-1">Peso Líquido</label>
+                  <input type="number" step="0.001" id="peso-liquido" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="172.300">
+                </div>
+                <div>
+                  <label for="modalidade-frete" class="block text-sm font-medium text-gray-700 mb-1">Modalidade do Frete (modFrete)</label>
+                  <select id="modalidade-frete" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="0" selected>0 – Por conta do emitente</option>
+                    <option value="1">1 – Por conta do destinatário/remetente</option>
+                    <option value="2">2 – Por conta de terceiros</option>
+                    <option value="3">3 – Transporte próprio por conta do remetente</option>
+                    <option value="4">4 – Transporte próprio por conta do destinatário</option>
+                    <option value="9">9 – Sem frete</option>
+                  </select>
+                </div>
+                <div class="md:col-span-2">
+                  <label for="transportadora-razao" class="block text-sm font-medium text-gray-700 mb-1">Razão Social / Nome</label>
+                  <input type="text" id="transportadora-razao" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Transportes RodoVia Ltda">
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-panel hidden" data-tab-panel="duplicatas">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label for="conta-contabil" class="block text-sm font-medium text-gray-700 mb-1">Conta Contábil (F2)*</label>
+                  <input type="text" id="conta-contabil" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.1.3.01 - Fornecedores Nacionais" required>
+                </div>
+                <div>
+                  <label for="forma-pagamento-duplicata" class="block text-sm font-medium text-gray-700 mb-1">Forma de Pagamento</label>
+                  <select id="forma-pagamento-duplicata" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="boleto">Boleto</option>
+                    <option value="transferencia">Transferência</option>
+                    <option value="pix">PIX</option>
+                    <option value="dinheiro">Dinheiro</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="conta-corrente" class="block text-sm font-medium text-gray-700 mb-1">Conta Corrente* </label>
+                  <select id="conta-corrente" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                    <option value="">Selecione</option>
+                    <option value="001-12345-6">Banco do Brasil 001 - Ag. 1234 - C/C 56789-0</option>
+                    <option value="104-98765-4">Caixa 104 - Ag. 2222 - C/C 33333-3</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 mt-7">
+                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                    Considerar Inativos
+                  </label>
+                </div>
+                <div>
+                  <label for="duplicata-data-emissao" class="block text-sm font-medium text-gray-700 mb-1">Data Emissão</label>
+                  <input type="date" id="duplicata-data-emissao" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500" value="2024-07-05" readonly>
+                </div>
+                <div>
+                  <label for="doc-mercantil" class="block text-sm font-medium text-gray-700 mb-1">Doc. Mercantil</label>
+                  <select id="doc-mercantil" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="boleto" selected>BOLETO</option>
+                    <option value="dup">DUPLICATA</option>
+                    <option value="nf">Nota Fiscal</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="numero-doc-bancario" class="block text-sm font-medium text-gray-700 mb-1">Nº Doc. Bancário</label>
+                  <input type="text" id="numero-doc-bancario" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0001234567">
+                </div>
+                <div>
+                  <label for="parcelas" class="block text-sm font-medium text-gray-700 mb-1">Parcelas*</label>
+                  <input type="number" id="parcelas" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" min="1" value="3" required>
+                </div>
+                <div>
+                  <label for="dias-vencimento" class="block text-sm font-medium text-gray-700 mb-1">Dias Vencimento Inicial</label>
+                  <input type="number" id="dias-vencimento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="30">
+                </div>
+                <div>
+                  <label for="vencimento-inicial" class="block text-sm font-medium text-gray-700 mb-1">Vencimento Inicial</label>
+                  <input type="date" id="vencimento-inicial" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div>
+                  <label for="tipo-dias" class="block text-sm font-medium text-gray-700 mb-1">Tipo dias</label>
+                  <select id="tipo-dias" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="dias" selected>Nº de dias</option>
+                    <option value="data">Data fixa</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="dias" class="block text-sm font-medium text-gray-700 mb-1">Dias</label>
+                  <input type="number" id="dias" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="30">
+                </div>
+                <div>
+                  <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 mt-7">
+                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
+                    Previsão
+                  </label>
+                </div>
+              </div>
+
+              <div class="mt-6 flex flex-wrap items-center gap-3">
+                <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                  <i class="fas fa-calculator"></i>
+                  Gerar
+                </button>
+              </div>
+
+              <div class="mt-4 overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Parcela</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Dias</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Vencimento Inicial</th>
+                      <th class="px-4 py-3 text-right font-semibold text-gray-700">Valor (R$)</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Observação</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Conta Contábil</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Código Conta Contábil</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Doc. Mercantil</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Conta Corrente</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 bg-white">
+                    <tr>
+                      <td class="px-4 py-3 text-gray-600">1/3</td>
+                      <td class="px-4 py-3 text-gray-600">30</td>
+                      <td class="px-4 py-3 text-gray-600">05/08/2024</td>
+                      <td class="px-4 py-3 text-right text-gray-800 font-semibold">R$ 5.162,44</td>
+                      <td class="px-4 py-3 text-gray-600">Pagamento via boleto</td>
+                      <td class="px-4 py-3 text-gray-600">Fornecedores Nacionais</td>
+                      <td class="px-4 py-3 text-gray-600">1.1.3.01</td>
+                      <td class="px-4 py-3 text-gray-600">BOLETO</td>
+                      <td class="px-4 py-3 text-gray-600">001-12345-6</td>
+                    </tr>
+                    <tr>
+                      <td class="px-4 py-3 text-gray-600">2/3</td>
+                      <td class="px-4 py-3 text-gray-600">60</td>
+                      <td class="px-4 py-3 text-gray-600">04/09/2024</td>
+                      <td class="px-4 py-3 text-right text-gray-800 font-semibold">R$ 5.162,44</td>
+                      <td class="px-4 py-3 text-gray-600">Pagamento via boleto</td>
+                      <td class="px-4 py-3 text-gray-600">Fornecedores Nacionais</td>
+                      <td class="px-4 py-3 text-gray-600">1.1.3.01</td>
+                      <td class="px-4 py-3 text-gray-600">BOLETO</td>
+                      <td class="px-4 py-3 text-gray-600">001-12345-6</td>
+                    </tr>
+                    <tr>
+                      <td class="px-4 py-3 text-gray-600">3/3</td>
+                      <td class="px-4 py-3 text-gray-600">90</td>
+                      <td class="px-4 py-3 text-gray-600">04/10/2024</td>
+                      <td class="px-4 py-3 text-right text-gray-800 font-semibold">R$ 5.162,44</td>
+                      <td class="px-4 py-3 text-gray-600">Pagamento via boleto</td>
+                      <td class="px-4 py-3 text-gray-600">Fornecedores Nacionais</td>
+                      <td class="px-4 py-3 text-gray-600">1.1.3.01</td>
+                      <td class="px-4 py-3 text-gray-600">BOLETO</td>
+                      <td class="px-4 py-3 text-gray-600">001-12345-6</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="tab-panel hidden" data-tab-panel="ajustes">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label for="origem" class="block text-sm font-medium text-gray-700 mb-1">Origem</label>
+                  <select id="origem" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="nacional" selected>Nacional</option>
+                    <option value="importada-direta">Importada - Adquirida no exterior</option>
+                    <option value="importada-interna">Importada - Adquirida no mercado interno</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="cst" class="block text-sm font-medium text-gray-700 mb-1">CST</label>
+                  <input type="text" id="cst" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="090">
+                </div>
+                <div>
+                  <label for="base-calculo" class="block text-sm font-medium text-gray-700 mb-1">Base de Cálculo (R$)</label>
+                  <input type="number" step="0.01" id="base-calculo" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div>
+                  <label for="aliquota" class="block text-sm font-medium text-gray-700 mb-1">Alíquota (%)</label>
+                  <input type="number" step="0.01" id="aliquota" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div>
+                  <label for="valor-ajuste" class="block text-sm font-medium text-gray-700 mb-1">Valor do Ajuste (R$)</label>
+                  <input type="number" step="0.01" id="valor-ajuste" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div>
+                  <label for="motivo-ajuste" class="block text-sm font-medium text-gray-700 mb-1">Motivo</label>
+                  <input type="text" id="motivo-ajuste" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Táxi">
+                </div>
+                <div>
+                  <label for="codigo-ajuste" class="block text-sm font-medium text-gray-700 mb-1">Código do Ajuste (F2)</label>
+                  <input type="text" id="codigo-ajuste" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="RJ090000">
+                </div>
+              </div>
+
+              <div class="mt-6 flex flex-wrap gap-3">
+                <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                  <i class="fas fa-plus"></i>
+                  Adicionar
+                </button>
+                <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+                  <i class="fas fa-eraser"></i>
+                  Limpar
+                </button>
+              </div>
+
+              <div class="mt-4 overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Origem</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">CST</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Base de Cálculo (R$)</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Alíquota (%)</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Valor do Ajuste (R$)</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Motivo</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Código do Ajuste</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 bg-white">
+                    <tr>
+                      <td class="px-4 py-3 text-gray-600">Nacional</td>
+                      <td class="px-4 py-3 text-gray-600">090</td>
+                      <td class="px-4 py-3 text-gray-600">R$ 1.500,00</td>
+                      <td class="px-4 py-3 text-gray-600">18%</td>
+                      <td class="px-4 py-3 text-gray-600">R$ 270,00</td>
+                      <td class="px-4 py-3 text-gray-600">Táxi</td>
+                      <td class="px-4 py-3 text-gray-600">RJ090000</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="tab-panel hidden" data-tab-panel="documentos">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-gray-700">Documentos vinculados</h3>
+                <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                  <i class="fas fa-link"></i>
+                  Adicionar NF
+                </button>
+              </div>
+
+              <div class="mt-4 overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Tipo</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Modelo</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Número da Nota</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Chave de Acesso</th>
+                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Data Emissão</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 bg-white">
+                    <tr>
+                      <td class="px-4 py-3 text-gray-600">Pedido de Compra</td>
+                      <td class="px-4 py-3 text-gray-600">55</td>
+                      <td class="px-4 py-3 text-gray-600">45001234</td>
+                      <td class="px-4 py-3 text-gray-600">35240730290856000160550010000100011999999999</td>
+                      <td class="px-4 py-3 text-gray-600">02/07/2024</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                  <i class="fas fa-file-import"></i>
+                  Importar XML
+                </button>
+                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                  <i class="fas fa-eye"></i>
+                  Visualizar Lotes
+                </button>
+                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                  <i class="fas fa-tags"></i>
+                  Alterar Preços
+                </button>
+                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                  <i class="fas fa-clipboard-list"></i>
+                  Pedidos
+                </button>
+              </div>
+
+              <div class="mt-4 flex flex-wrap gap-2 text-xs text-gray-500">
+                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
+                  <i class="fas fa-file-excel"></i>
+                  Excel
+                </button>
+                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
+                  <i class="fas fa-file-pdf"></i>
+                  PDF
+                </button>
+                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
+                  <i class="fas fa-table"></i>
+                  Layout
+                </button>
+                <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
+                  <i class="fas fa-expand"></i>
+                  Tela Cheia
+                </button>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
           <h2 class="text-lg font-semibold text-gray-800">Referências oficiais</h2>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <article class="rounded-lg border border-gray-200 p-4">
               <h3 class="text-sm font-semibold text-gray-800">Portal Nacional da NF-e</h3>
-              <p class="mt-2 text-sm text-gray-600">Base oficial para consulta de notas fiscais eletrônicas e download de esquemas XML.</p>
+              <p class="mt-2 text-sm text-gray-600">Consulta autorizada e download de esquemas para NF-e, NFC-e e eventos vinculados.</p>
               <a href="https://www.nfe.fazenda.gov.br/portal" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
                 <i class="fas fa-external-link-alt"></i>
                 Acessar portal
@@ -251,21 +800,21 @@
             </article>
             <article class="rounded-lg border border-gray-200 p-4">
               <h3 class="text-sm font-semibold text-gray-800">Manual de Orientação do Contribuinte 4.0</h3>
-              <p class="mt-2 text-sm text-gray-600">Documento que define os campos obrigatórios da NF-e, eventos e regras de validação vigentes.</p>
+              <p class="mt-2 text-sm text-gray-600">Layout nacional de NF-e (modelo 55) e NFC-e (modelo 65) atualizado com NT 2023.</p>
               <a href="https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=j6Nz6xH3O9E=" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
                 <i class="fas fa-external-link-alt"></i>
-                Baixar MOC</a>
-            </article>
-            <article class="rounded-lg border border-gray-200 p-4">
-              <h3 class="text-sm font-semibold text-gray-800">Nota Técnica 2023.003</h3>
-              <p class="mt-2 text-sm text-gray-600">Atualiza regras para ICMS, DIFAL e campos de combustíveis, com vigência nacional publicada pela SEFAZ.</p>
-              <a href="https://www.nfe.fazenda.gov.br/portal/notasTecnicas.aspx" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
-                <i class="fas fa-external-link-alt"></i>
-                Consultar NT
+                Baixar MOC
               </a>
             </article>
+            <article class="rounded-lg border border-gray-200 p-4">
+              <h3 class="text-sm font-semibold text-gray-800">Portal de NFSe Nacional</h3>
+              <p class="mt-2 text-sm text-gray-600">Documentação oficial da ABRASF e padrão nacional de serviços eletrônicos.</p>
+              <a href="https://www.gov.br/nfse/pt-br" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
+                <i class="fas fa-external-link-alt"></i>
+                Consultar NFSe</a>
+            </article>
           </div>
-        </section>
+        </div>
 
         <div class="flex flex-col gap-3 md:flex-row md:justify-end">
           <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
@@ -289,5 +838,41 @@
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const tabButtons = document.querySelectorAll('.tab-button');
+      const tabPanels = document.querySelectorAll('.tab-panel');
+
+      function activateTab(tabId) {
+        tabButtons.forEach((button) => {
+          const isActive = button.dataset.tab === tabId;
+          button.classList.toggle('active', isActive);
+          button.classList.toggle('bg-primary/10', isActive);
+          button.classList.toggle('text-primary', isActive);
+          button.classList.toggle('border', true);
+          button.classList.toggle('border-transparent', isActive);
+          button.classList.toggle('border-gray-200', !isActive);
+          button.classList.toggle('text-gray-600', !isActive);
+        });
+
+        tabPanels.forEach((panel) => {
+          panel.classList.toggle('hidden', panel.dataset.tabPanel !== tabId);
+        });
+      }
+
+      tabButtons.forEach((button) => {
+        button.classList.add('inline-flex', 'items-center', 'gap-2', 'rounded-lg', 'px-3', 'py-2', 'text-xs', 'font-semibold', 'transition');
+        if (!button.classList.contains('active')) {
+          button.classList.add('text-gray-600', 'border', 'border-gray-200');
+        } else {
+          button.classList.add('bg-primary/10', 'text-primary', 'border', 'border-transparent');
+        }
+
+        button.addEventListener('click', () => {
+          activateTab(button.dataset.tab);
+        });
+      });
+    });
+  </script>
 </body>
 </html>
