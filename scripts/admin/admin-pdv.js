@@ -9950,5 +9950,18 @@
     }
   };
 
-  document.addEventListener('DOMContentLoaded', init);
+  let hasInitialized = false;
+  const start = () => {
+    if (hasInitialized) {
+      return;
+    }
+    hasInitialized = true;
+    void init();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else {
+    start();
+  }
 })();
