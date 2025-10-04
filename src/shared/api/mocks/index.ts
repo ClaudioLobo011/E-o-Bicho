@@ -5,6 +5,7 @@ import { accountMock } from './account';
 import { cartMock } from './cart';
 import { ordersMock } from './orders';
 import { fiscalDocumentsMock } from './fiscal-documents';
+import { bannersMock } from './banners';
 
 interface MockHandler {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -18,5 +19,6 @@ export const mockHandlers: MockHandler[] = [
   ...accountMock,
   ...cartMock,
   ...ordersMock,
-  ...fiscalDocumentsMock
+  ...fiscalDocumentsMock,
+  ...bannersMock
 ];

@@ -10,6 +10,10 @@ body {
   @apply bg-gray-50 text-gray-800 antialiased;
 }
 
+.bg-light {
+  @apply bg-gray-100;
+}
+
 a {
   @apply text-primary underline-offset-2 hover:underline;
 }
@@ -76,29 +80,34 @@ label {
     transform: translateX(210%);
   }
 
-  .slide.is-active {
+  .slide.is-active,
+  .slide-ativo {
     @apply opacity-100;
     transform: translateX(0%);
     z-index: 10;
   }
 
-  .slide.is-prev {
+  .slide.is-prev,
+  .slide-anterior {
     @apply opacity-100;
     transform: translateX(-105%);
     z-index: 5;
   }
 
-  .slide.is-next {
+  .slide.is-next,
+  .slide-proximo {
     @apply opacity-100;
     transform: translateX(105%);
     z-index: 5;
   }
 
-  .slide.is-hidden-left {
+  .slide.is-hidden-left,
+  .slide-escondido-esquerda {
     transform: translateX(-210%);
   }
 
-  .slide.is-hidden-right {
+  .slide.is-hidden-right,
+  .slide-escondido-direita {
     transform: translateX(210%);
   }
 

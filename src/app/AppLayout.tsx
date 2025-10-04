@@ -21,9 +21,8 @@ export function AppLayout() {
     <div className="flex min-h-screen flex-col">
       <header className="bg-white shadow-sm">
         <div className="container mx-auto flex items-center justify-between px-4 py-4">
-          <NavLink to="/" className="flex items-center gap-2 text-2xl font-bold text-secondary">
-            <span className="rounded-full bg-primary px-3 py-1 text-white">E</span>
-            <span>o Bicho</span>
+          <NavLink to="/" className="flex items-center" aria-label="Página inicial">
+            <img src="/public/image/logo.svg" alt="Logotipo E o Bicho" className="h-20 w-auto" />
           </NavLink>
           <nav className="hidden items-center gap-6 md:flex">
             {navLinks.map((link) => (
@@ -66,9 +65,6 @@ export function AppLayout() {
               </span>
             </NavLink>
           </div>
-        </div>
-        <div className="bg-gray-100 py-2 text-center text-sm text-gray-700">
-          Frete grátis para compras acima de R$ 100,00
         </div>
       </header>
       <main className="flex-1">
