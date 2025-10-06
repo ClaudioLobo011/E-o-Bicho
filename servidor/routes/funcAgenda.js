@@ -63,22 +63,6 @@ async function generateCodigoCliente() {
   return fallback;
 }
 
-async function resolveCodigoCliente(rawCodigo, ignoreId = null) {
-  const trimmed = sanitizeString(rawCodigo);
-  if (!trimmed) {
-    return generateCodigoCliente();
-  }
-  const filter = { codigoCliente: trimmed };
-  if (ignoreId && mongoose.Types.ObjectId.isValid(ignoreId)) {
-    filter._id = { $ne: ignoreId };
-  }
-  const exists = await User.exists(filter);
-  if (exists) {
-    throw new Error('Já existe um cliente com este código.');
-  }
-  return trimmed;
-}
-
 function sanitizeTelefone(value = '') {
   const digits = onlyDigits(value);
   return digits || '';
@@ -118,7 +102,13 @@ async function buildClientePayload(body = {}, opts = {}) {
 
   const pais = sanitizeString(body.pais || currentUser?.pais || 'Brasil') || 'Brasil';
   const apelido = sanitizeString(body.apelido || (tipoConta === 'pessoa_fisica' ? currentUser?.apelido : currentUser?.nomeFantasia) || '');
-  const codigoCliente = await resolveCodigoCliente(body.codigoCliente, currentUser?._id);
+  let codigoCliente = '';
+  if (isUpdate && currentUser?.codigoCliente) {
+    codigoCliente = sanitizeString(currentUser.codigoCliente);
+  }
+  if (!codigoCliente) {
+    codigoCliente = await generateCodigoCliente();
+  }
 
   const empresaPrincipal = await ensureEmpresaExists(body.empresaId || body.empresa || body.empresaPrincipal || currentUser?.empresaPrincipal);
 

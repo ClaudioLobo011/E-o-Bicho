@@ -450,7 +450,6 @@
       const tipoConta = elements.selectTipo.value === 'pessoa_juridica' ? 'pessoa_juridica' : 'pessoa_fisica';
       const payload = {
         tipoConta,
-        codigoCliente: elements.inputCodigo.value.trim(),
         pais: elements.inputPais.value.trim() || 'Brasil',
         empresaId: elements.selectEmpresa.value || '',
         email: elements.contato.email.value.trim(),
