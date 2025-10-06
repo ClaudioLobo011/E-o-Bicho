@@ -467,24 +467,28 @@
       breeds = breeds.map((item) => fixEncoding(item)).sort((a, b) => a.localeCompare(b));
 
       if (racaInput) {
-        racaInput.setAttribute('data-list', breeds.join(','));
         racaInput.setAttribute('autocomplete', 'off');
       }
 
-      if (typeof Awesomplete !== 'undefined' && Awesomplete) {
-        const existing = racaInput.awesomplete || petAutocomplete.instance;
-        if (existing && existing.input === racaInput) {
-          existing.list = breeds;
-          if (typeof existing.evaluate === 'function') {
-            existing.evaluate();
-          }
-          petAutocomplete.instance = existing;
-        } else if (typeof Awesomplete === 'function') {
+      if (typeof Awesomplete === 'function') {
+        if (!petAutocomplete.instance || petAutocomplete.instance.input !== racaInput) {
           petAutocomplete.instance = new Awesomplete(racaInput, {
             minChars: 1,
             list: breeds,
             autoFirst: true,
           });
+        } else {
+          petAutocomplete.instance.list = breeds;
+        }
+
+        if (petAutocomplete.instance) {
+          if (typeof petAutocomplete.instance.evaluate === 'function') {
+            petAutocomplete.instance.evaluate();
+          }
+          if (document.activeElement === racaInput
+            && typeof petAutocomplete.instance.open === 'function') {
+            petAutocomplete.instance.open();
+          }
         }
       }
     }
@@ -1008,13 +1012,18 @@
       elements.pets.raca.addEventListener('awesomplete-selectcomplete', () => setTimeout(setPorteFromBreedIfDog, 0));
       elements.pets.raca.addEventListener('focus', () => {
         updateBreedOptions();
-        if (petAutocomplete.instance && typeof petAutocomplete.instance.evaluate === 'function') {
-          petAutocomplete.instance.evaluate();
+        if (petAutocomplete.instance && typeof petAutocomplete.instance.open === 'function') {
+          petAutocomplete.instance.open();
         }
       });
       elements.pets.raca.addEventListener('input', () => {
-        if (petAutocomplete.instance && typeof petAutocomplete.instance.evaluate === 'function') {
-          petAutocomplete.instance.evaluate();
+        if (petAutocomplete.instance) {
+          if (typeof petAutocomplete.instance.evaluate === 'function') {
+            petAutocomplete.instance.evaluate();
+          }
+          if (typeof petAutocomplete.instance.open === 'function') {
+            petAutocomplete.instance.open();
+          }
         }
       });
     }
