@@ -219,6 +219,214 @@ function summarizeReceivables(receivables, referenceDate = new Date()) {
   return summary;
 }
 
+const RECEIVABLE_POPULATE = [
+  { path: 'company', select: 'nome nomeFantasia razaoSocial cnpj' },
+  { path: 'customer', select: 'nomeCompleto razaoSocial email cpf cnpj' },
+  { path: 'bankAccount', select: 'alias bankName bankCode agency accountNumber accountDigit' },
+  { path: 'accountingAccount', select: 'name code' },
+  { path: 'paymentMethod', select: 'name type' },
+  { path: 'responsible', select: 'nomeCompleto razaoSocial email' },
+  { path: 'installments.bankAccount', select: 'alias bankName bankCode agency accountNumber accountDigit' },
+  { path: 'installments.accountingAccount', select: 'name code' },
+];
+
+async function assembleReceivablePayload(body, { existing = null } = {}) {
+  const company = normalizeString(body.company) || (existing ? String(existing.company) : '');
+  if (!company || !mongoose.Types.ObjectId.isValid(company)) {
+    throw Object.assign(new Error('Selecione a empresa responsável pelo lançamento.'), { status: 400 });
+  }
+
+  const customer = normalizeString(body.customer) || (existing ? String(existing.customer) : '');
+  if (!customer || !mongoose.Types.ObjectId.isValid(customer)) {
+    throw Object.assign(new Error('Selecione o cliente vinculado à conta a receber.'), { status: 400 });
+  }
+
+  const bankAccountId = normalizeString(body.bankAccount) || (existing ? String(existing.bankAccount) : '');
+  if (!bankAccountId || !mongoose.Types.ObjectId.isValid(bankAccountId)) {
+    throw Object.assign(new Error('Selecione a conta corrente para o recebimento.'), { status: 400 });
+  }
+
+  const accountingAccountId = normalizeString(body.accountingAccount) || (existing ? String(existing.accountingAccount) : '');
+  if (!accountingAccountId || !mongoose.Types.ObjectId.isValid(accountingAccountId)) {
+    throw Object.assign(new Error('Selecione a conta contábil do lançamento.'), { status: 400 });
+  }
+
+  const installmentsCountRaw =
+    body.installments ?? body.installmentsCount ?? existing?.installmentsCount ?? 1;
+  const installmentsCount = Math.max(1, parseInt(installmentsCountRaw, 10) || 1);
+
+  const issueDate = parseDate(body.issueDate || body.issue || existing?.issueDate);
+  if (!issueDate) {
+    throw Object.assign(new Error('Informe a data de emissão.'), { status: 400 });
+  }
+
+  const dueDate = parseDate(body.dueDate || body.due || existing?.dueDate);
+  if (!dueDate) {
+    throw Object.assign(new Error('Informe a data de vencimento.'), { status: 400 });
+  }
+
+  const totalValue = formatCurrency(
+    parseLocaleNumber(body.totalValue || body.value || existing?.totalValue || 0)
+  );
+  if (!(totalValue > 0)) {
+    throw Object.assign(new Error('Informe um valor total maior que zero.'), { status: 400 });
+  }
+
+  const paymentMethodId = normalizeString(body.paymentMethod || body.paymentMethodId);
+  const responsibleId = normalizeString(body.responsible || body.responsibleId);
+  const document = normalizeString(body.document || existing?.document);
+  const documentNumber = normalizeString(body.documentNumber || existing?.documentNumber);
+  const notes = normalizeString(body.notes || existing?.notes);
+
+  const [companyExists, customerExists] = await Promise.all([
+    Store.exists({ _id: company }),
+    User.exists({ _id: customer }),
+  ]);
+
+  if (!companyExists) {
+    throw Object.assign(new Error('Empresa selecionada não foi encontrada.'), { status: 404 });
+  }
+
+  if (!customerExists) {
+    throw Object.assign(new Error('Cliente selecionado não foi encontrado.'), { status: 404 });
+  }
+
+  const [bankAccount, accountingAccount] = await Promise.all([
+    BankAccount.findById(bankAccountId),
+    AccountingAccount.findById(accountingAccountId),
+  ]);
+
+  if (!bankAccount) {
+    throw Object.assign(new Error('Conta corrente selecionada não foi encontrada.'), { status: 404 });
+  }
+  if (String(bankAccount.company) !== company) {
+    throw Object.assign(new Error('A conta corrente informada não pertence à empresa selecionada.'), {
+      status: 400,
+    });
+  }
+
+  if (!accountingAccount) {
+    throw Object.assign(new Error('Conta contábil selecionada não foi encontrada.'), { status: 404 });
+  }
+  const accountingCompanies = Array.isArray(accountingAccount.companies)
+    ? accountingAccount.companies.map((value) => String(value))
+    : [];
+  if (!accountingCompanies.includes(company)) {
+    throw Object.assign(
+      new Error('A conta contábil informada não está vinculada à empresa selecionada.'),
+      { status: 400 }
+    );
+  }
+
+  if (paymentMethodId) {
+    const paymentMethodExists = await PaymentMethod.exists({ _id: paymentMethodId, company });
+    if (!paymentMethodExists) {
+      throw Object.assign(
+        new Error('Meio de pagamento selecionado não foi encontrado para a empresa informada.'),
+        { status: 404 }
+      );
+    }
+  }
+
+  if (responsibleId) {
+    const responsibleExists = await User.exists({ _id: responsibleId, role: 'funcionario' });
+    if (!responsibleExists) {
+      throw Object.assign(new Error('Funcionário responsável não foi encontrado.'), { status: 404 });
+    }
+  }
+
+  const forecast = parseBoolean(
+    Object.prototype.hasOwnProperty.call(body, 'forecast') ? body.forecast : existing?.forecast
+  );
+  const uncollectible = parseBoolean(
+    Object.prototype.hasOwnProperty.call(body, 'uncollectible')
+      ? body.uncollectible
+      : existing?.uncollectible
+  );
+  const protest = parseBoolean(
+    Object.prototype.hasOwnProperty.call(body, 'protest') ? body.protest : existing?.protest
+  );
+
+  const rawInstallments = Array.isArray(body.installmentsData) ? body.installmentsData : [];
+  const detailsMap = new Map();
+  const overrideBankIds = new Set();
+
+  rawInstallments.forEach((item) => {
+    const number = Number.parseInt(item?.number, 10);
+    if (!Number.isFinite(number) || number < 1 || number > installmentsCount) return;
+    const dueOverride = parseDate(item?.dueDate || item?.due);
+    const bankOverride = normalizeString(item?.bankAccount || item?.bank);
+    if (bankOverride && mongoose.Types.ObjectId.isValid(bankOverride)) {
+      overrideBankIds.add(bankOverride);
+    }
+    detailsMap.set(number, {
+      dueDate: dueOverride || null,
+      bankAccount: bankOverride || null,
+    });
+  });
+
+  if (overrideBankIds.size > 0) {
+    const overrideList = Array.from(overrideBankIds);
+    const validBanks = await BankAccount.find({
+      _id: { $in: overrideList },
+      company,
+    }).select('_id');
+    const validSet = new Set(validBanks.map((account) => String(account._id)));
+    overrideList.forEach((id) => {
+      if (!validSet.has(id)) {
+        throw Object.assign(
+          new Error('Conta corrente informada em uma das parcelas não foi encontrada.'),
+          { status: 404 }
+        );
+      }
+    });
+  }
+
+  const centsTotal = Math.round(totalValue * 100);
+  const baseCents = Math.floor(centsTotal / installmentsCount);
+  const remainder = centsTotal - baseCents * installmentsCount;
+
+  const installments = [];
+  for (let index = 0; index < installmentsCount; index += 1) {
+    const amountCents = baseCents + (index < remainder ? 1 : 0);
+    const value = amountCents / 100;
+    const baseDueDate = addMonths(dueDate, index);
+    const override = detailsMap.get(index + 1) || {};
+    installments.push({
+      number: index + 1,
+      issueDate,
+      dueDate: override.dueDate || baseDueDate,
+      value,
+      bankAccount: override.bankAccount || bankAccountId,
+      accountingAccount: accountingAccountId,
+    });
+  }
+
+  const providedCode = normalizeString(body.code);
+  const code = providedCode || existing?.code || (await generateSequentialCode());
+
+  return {
+    code,
+    company,
+    customer,
+    installmentsCount: installments.length,
+    issueDate,
+    dueDate,
+    totalValue,
+    bankAccount: bankAccountId,
+    accountingAccount: accountingAccountId,
+    paymentMethod: paymentMethodId || undefined,
+    responsible: responsibleId || undefined,
+    document,
+    documentNumber,
+    notes,
+    forecast,
+    uncollectible,
+    protest,
+    installments,
+  };
+}
+
 router.get(
   '/options',
   requireAuth,
@@ -261,22 +469,19 @@ router.get(
   authorizeRoles(...AUTH_ROLES),
   async (req, res) => {
     try {
-      const { company } = req.query;
+      const { company, customer, party } = req.query;
       const filter = {};
       if (company && mongoose.Types.ObjectId.isValid(company)) {
         filter.company = company;
       }
+      const customerParam = normalizeString(customer || party);
+      if (customerParam && mongoose.Types.ObjectId.isValid(customerParam)) {
+        filter.customer = customerParam;
+      }
 
       const receivables = await AccountReceivable.find(filter)
         .sort({ createdAt: -1 })
-        .populate('company', 'nome nomeFantasia razaoSocial cnpj')
-        .populate('customer', 'nomeCompleto razaoSocial email cpf cnpj')
-        .populate('bankAccount', 'alias bankName bankCode agency accountNumber accountDigit')
-        .populate('accountingAccount', 'name code')
-        .populate('paymentMethod', 'name type')
-        .populate('responsible', 'nomeCompleto razaoSocial email')
-        .populate('installments.bankAccount', 'alias bankName bankCode agency accountNumber accountDigit')
-        .populate('installments.accountingAccount', 'name code');
+        .populate(RECEIVABLE_POPULATE);
 
       const payload = receivables.map((item) => buildPublicReceivable(item));
       const summary = summarizeReceivables(payload);
@@ -289,206 +494,173 @@ router.get(
   }
 );
 
+router.get(
+  '/:id',
+  requireAuth,
+  authorizeRoles(...AUTH_ROLES),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Identificador inválido.' });
+      }
+
+      const receivable = await AccountReceivable.findById(id).populate(RECEIVABLE_POPULATE);
+      if (!receivable) {
+        return res.status(404).json({ message: 'Conta a receber não encontrada.' });
+      }
+
+      res.json(buildPublicReceivable(receivable));
+    } catch (error) {
+      console.error('Erro ao carregar conta a receber:', error);
+      res.status(500).json({ message: 'Erro ao carregar a conta a receber.' });
+    }
+  }
+);
+
+router.put(
+  '/:id',
+  requireAuth,
+  authorizeRoles(...AUTH_ROLES),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Identificador inválido.' });
+      }
+
+      const existing = await AccountReceivable.findById(id);
+      if (!existing) {
+        return res.status(404).json({ message: 'Conta a receber não encontrada.' });
+      }
+
+      const payload = await assembleReceivablePayload(req.body, { existing });
+      if (payload.code && payload.code !== existing.code) {
+        const duplicate = await AccountReceivable.findOne({ code: payload.code, _id: { $ne: id } }).lean();
+        if (duplicate) {
+          return res.status(409).json({ message: 'Já existe um lançamento com o código informado.' });
+        }
+      }
+
+      const shouldUnsetPaymentMethod =
+        Object.prototype.hasOwnProperty.call(req.body, 'paymentMethod') &&
+        !normalizeString(req.body.paymentMethod);
+
+      const setPayload = { ...payload };
+      if (shouldUnsetPaymentMethod) {
+        delete setPayload.paymentMethod;
+      }
+
+      Object.keys(setPayload).forEach((key) => {
+        if (setPayload[key] === undefined) {
+          delete setPayload[key];
+        }
+      });
+
+      const updateQuery = shouldUnsetPaymentMethod
+        ? { $set: setPayload, $unset: { paymentMethod: 1 } }
+        : { $set: setPayload };
+
+      const updated = await AccountReceivable.findByIdAndUpdate(id, updateQuery, {
+        new: true,
+        runValidators: true,
+      });
+
+      if (!updated) {
+        return res.status(404).json({ message: 'Conta a receber não encontrada.' });
+      }
+
+      await updated.populate(RECEIVABLE_POPULATE);
+      res.json(buildPublicReceivable(updated));
+    } catch (error) {
+      if (error?.status) {
+        return res.status(error.status).json({ message: error.message });
+      }
+      if (error?.code === 11000) {
+        return res.status(409).json({ message: 'Já existe um lançamento com o código informado.' });
+      }
+      console.error('Erro ao atualizar conta a receber:', error);
+      res.status(500).json({ message: 'Erro ao atualizar a conta a receber.' });
+    }
+  }
+);
+
+router.delete(
+  '/:id',
+  requireAuth,
+  authorizeRoles(...AUTH_ROLES),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Identificador inválido.' });
+      }
+
+      const installmentParam = normalizeString(req.query.installmentNumber);
+      const installmentNumber = installmentParam ? Number.parseInt(installmentParam, 10) : null;
+
+      const receivable = await AccountReceivable.findById(id);
+      if (!receivable) {
+        return res.status(404).json({ message: 'Conta a receber não encontrada.' });
+      }
+
+      const installmentsArray = Array.isArray(receivable.installments) ? receivable.installments : [];
+
+      if (installmentNumber && installmentsArray.length > 1) {
+        const filtered = installmentsArray.filter((installment) => installment.number !== installmentNumber);
+        if (filtered.length === installmentsArray.length) {
+          return res.status(404).json({ message: 'Parcela informada não foi encontrada.' });
+        }
+
+        receivable.installments = filtered;
+        receivable.markModified('installments');
+        receivable.installmentsCount = filtered.length;
+        receivable.totalValue = formatCurrency(
+          filtered.reduce((acc, installment) => acc + Number(installment.value || 0), 0)
+        );
+
+        const latestDue = filtered.reduce((latest, installment) => {
+          const due = parseDate(installment.dueDate);
+          if (!due) return latest;
+          if (!latest || due > latest) return due;
+          return latest;
+        }, null);
+
+        if (latestDue) {
+          receivable.dueDate = latestDue;
+        }
+
+        await receivable.save();
+        await receivable.populate(RECEIVABLE_POPULATE);
+        return res.json(buildPublicReceivable(receivable));
+      }
+
+      await receivable.deleteOne();
+      return res.status(204).send();
+    } catch (error) {
+      console.error('Erro ao excluir conta a receber:', error);
+      res.status(500).json({ message: 'Erro ao excluir a conta a receber.' });
+    }
+  }
+);
+
 router.post(
   '/',
   requireAuth,
   authorizeRoles(...AUTH_ROLES),
   async (req, res) => {
     try {
-      const company = normalizeString(req.body.company);
-      const customer = normalizeString(req.body.customer);
-      const bankAccountId = normalizeString(req.body.bankAccount);
-      const accountingAccountId = normalizeString(req.body.accountingAccount);
-      const paymentMethodId = normalizeString(req.body.paymentMethod);
-      const responsibleId = normalizeString(req.body.responsible);
-      const document = normalizeString(req.body.document);
-      const documentNumber = normalizeString(req.body.documentNumber);
-      const notes = normalizeString(req.body.notes);
-
-      if (!company || !mongoose.Types.ObjectId.isValid(company)) {
-        return res.status(400).json({ message: 'Selecione a empresa responsável pelo lançamento.' });
-      }
-
-      if (!customer || !mongoose.Types.ObjectId.isValid(customer)) {
-        return res.status(400).json({ message: 'Selecione o cliente vinculado à conta a receber.' });
-      }
-
-      if (!bankAccountId || !mongoose.Types.ObjectId.isValid(bankAccountId)) {
-        return res.status(400).json({ message: 'Selecione a conta corrente para o recebimento.' });
-      }
-
-      if (!accountingAccountId || !mongoose.Types.ObjectId.isValid(accountingAccountId)) {
-        return res.status(400).json({ message: 'Selecione a conta contábil do lançamento.' });
-      }
-
-      const installmentsCount = Math.max(1, parseInt(req.body.installments, 10) || 1);
-      const issueDate = parseDate(req.body.issueDate || req.body.issue);
-      const dueDate = parseDate(req.body.dueDate || req.body.due);
-      const totalValue = formatCurrency(parseLocaleNumber(req.body.totalValue || req.body.value, 0));
-
-      if (!issueDate) {
-        return res.status(400).json({ message: 'Informe a data de emissão.' });
-      }
-
-      if (!dueDate) {
-        return res.status(400).json({ message: 'Informe a data de vencimento.' });
-      }
-
-      if (!(totalValue > 0)) {
-        return res.status(400).json({ message: 'Informe um valor total maior que zero.' });
-      }
-
-      const [companyExists, customerExists] = await Promise.all([
-        Store.exists({ _id: company }),
-        User.exists({ _id: customer }),
-      ]);
-
-      if (!companyExists) {
-        return res.status(404).json({ message: 'Empresa selecionada não foi encontrada.' });
-      }
-
-      if (!customerExists) {
-        return res.status(404).json({ message: 'Cliente selecionado não foi encontrado.' });
-      }
-
-      const bankAccount = await BankAccount.findById(bankAccountId);
-      if (!bankAccount) {
-        return res.status(404).json({ message: 'Conta corrente selecionada não foi encontrada.' });
-      }
-      if (String(bankAccount.company) !== company) {
-        return res.status(400).json({ message: 'A conta corrente informada não pertence à empresa selecionada.' });
-      }
-
-      const accountingAccount = await AccountingAccount.findById(accountingAccountId);
-      if (!accountingAccount) {
-        return res.status(404).json({ message: 'Conta contábil selecionada não foi encontrada.' });
-      }
-      if (!accountingAccount.companies?.some?.((companyId) => String(companyId) === company)) {
-        return res.status(400).json({ message: 'A conta contábil informada não está vinculada à empresa selecionada.' });
-      }
-
-      let paymentMethod = null;
-      if (paymentMethodId) {
-        paymentMethod = await PaymentMethod.findOne({ _id: paymentMethodId, company });
-        if (!paymentMethod) {
-          return res.status(404).json({ message: 'Meio de pagamento selecionado não foi encontrado para a empresa informada.' });
-        }
-      }
-
-      let responsible = null;
-      if (responsibleId) {
-        responsible = await User.findOne({ _id: responsibleId, role: 'funcionario' });
-        if (!responsible) {
-          return res.status(404).json({ message: 'Funcionário responsável não foi encontrado.' });
-        }
-      }
-
-      const forecast = parseBoolean(req.body.forecast);
-      const uncollectible = parseBoolean(req.body.uncollectible);
-      const protest = parseBoolean(req.body.protest);
-
-      const code = await generateSequentialCode();
-
-      const rawInstallments = Array.isArray(req.body.installmentsData)
-        ? req.body.installmentsData
-        : [];
-
-      const detailsMap = new Map();
-      rawInstallments.forEach((item) => {
-        const number = Number.parseInt(item?.number, 10);
-        if (!Number.isFinite(number) || number < 1 || number > installmentsCount) return;
-        const dueOverride = parseDate(item?.dueDate || item?.due);
-        const bankOverride = normalizeString(item?.bankAccount || item?.bank);
-        const normalizedBank = bankOverride && mongoose.Types.ObjectId.isValid(bankOverride) ? bankOverride : null;
-        detailsMap.set(number, {
-          dueDate: dueOverride && !Number.isNaN(dueOverride.getTime()) ? dueOverride : null,
-          bankAccount: normalizedBank,
-        });
-      });
-
-      const bankAccountsMap = new Map();
-      bankAccountsMap.set(String(bankAccount._id), bankAccount);
-
-      const overrideBankAccountIds = [...new Set(
-        Array.from(detailsMap.values())
-          .map((detail) => detail.bankAccount)
-          .filter((id) => id && id !== bankAccountId),
-      )];
-
-      if (overrideBankAccountIds.length) {
-        const overrideAccounts = await BankAccount.find({ _id: { $in: overrideBankAccountIds } });
-        if (overrideAccounts.length !== overrideBankAccountIds.length) {
-          return res.status(404).json({ message: 'Algumas contas correntes informadas nas parcelas não foram encontradas.' });
-        }
-        for (const account of overrideAccounts) {
-          if (String(account.company) !== company) {
-            return res.status(400).json({
-              message: 'Uma das contas correntes informadas nas parcelas não pertence à empresa selecionada.',
-            });
-          }
-          bankAccountsMap.set(String(account._id), account);
-        }
-      }
-
-      const installments = [];
-      const centsTotal = Math.round(totalValue * 100);
-      const baseCents = Math.floor(centsTotal / installmentsCount);
-      const remainder = centsTotal - baseCents * installmentsCount;
-
-      for (let index = 0; index < installmentsCount; index += 1) {
-        const amountCents = baseCents + (index < remainder ? 1 : 0);
-        const installmentValue = formatCurrency(amountCents / 100);
-        const number = index + 1;
-        const details = detailsMap.get(number) || {};
-        const installmentDue = details.dueDate || addMonths(dueDate, index);
-        const bankAccountForInstallment = details.bankAccount && bankAccountsMap.has(details.bankAccount)
-          ? details.bankAccount
-          : bankAccountId;
-        installments.push({
-          number,
-          issueDate,
-          dueDate: installmentDue,
-          value: installmentValue,
-          bankAccount: bankAccountForInstallment,
-          accountingAccount: accountingAccountId,
-        });
-      }
-
-      const payload = {
-        code,
-        company,
-        customer,
-        installmentsCount,
-        issueDate,
-        dueDate,
-        totalValue,
-        bankAccount: bankAccountId,
-        accountingAccount: accountingAccountId,
-        paymentMethod: paymentMethodId || undefined,
-        responsible: responsibleId || undefined,
-        document,
-        documentNumber,
-        notes,
-        forecast,
-        uncollectible,
-        protest,
-        installments,
-      };
-
+      const payload = await assembleReceivablePayload(req.body);
       const created = await AccountReceivable.create(payload);
-      const populated = await created.populate([
-        { path: 'company', select: 'nome nomeFantasia razaoSocial cnpj' },
-        { path: 'customer', select: 'nomeCompleto razaoSocial email cpf cnpj' },
-        { path: 'bankAccount', select: 'alias bankName bankCode agency accountNumber accountDigit' },
-        { path: 'accountingAccount', select: 'name code' },
-        { path: 'paymentMethod', select: 'name type' },
-        { path: 'responsible', select: 'nomeCompleto razaoSocial email' },
-        { path: 'installments.bankAccount', select: 'alias bankName bankCode agency accountNumber accountDigit' },
-        { path: 'installments.accountingAccount', select: 'name code' },
-      ]);
-
-      res.status(201).json(buildPublicReceivable(populated));
+      await created.populate(RECEIVABLE_POPULATE);
+      res.status(201).json(buildPublicReceivable(created));
     } catch (error) {
+      if (error?.status) {
+        return res.status(error.status).json({ message: error.message });
+      }
+      if (error?.code === 11000) {
+        return res.status(409).json({ message: 'Já existe um lançamento com o código informado.' });
+      }
       console.error('Erro ao criar conta a receber:', error);
       res.status(500).json({ message: 'Erro ao criar conta a receber.' });
     }

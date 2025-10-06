@@ -30,92 +30,164 @@
           </div>
         </header>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div class="md:col-span-2">
-              <label for="payable-supplier" class="block text-sm font-medium text-gray-700 mb-1">Fornecedor <span class="text-red-500">*</span></label>
-              <input type="text" id="payable-supplier" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome, CPF ou CNPJ" required>
-            </div>
+        <form id="payable-form" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <div>
-              <label for="payable-invoice" class="block text-sm font-medium text-gray-700 mb-1">Documento</label>
-              <input type="text" id="payable-invoice" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="NF-e, fatura, contrato">
+              <label for="payable-code" class="block text-sm font-medium text-gray-700 mb-1">Código</label>
+              <input type="text" id="payable-code" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: CP-2024-00001">
             </div>
-            <div>
-              <label for="payable-competence" class="block text-sm font-medium text-gray-700 mb-1">Competência</label>
-              <input type="month" id="payable-competence" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label for="payable-emission" class="block text-sm font-medium text-gray-700 mb-1">Data de emissão</label>
-              <input type="date" id="payable-emission" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-            </div>
-            <div>
-              <label for="payable-due" class="block text-sm font-medium text-gray-700 mb-1">Data de vencimento <span class="text-red-500">*</span></label>
-              <input type="date" id="payable-due" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-            </div>
-            <div>
-              <label for="payable-amount" class="block text-sm font-medium text-gray-700 mb-1">Valor original <span class="text-red-500">*</span></label>
+            <div class="lg:col-span-2">
+              <label for="payable-party" class="block text-sm font-medium text-gray-700 mb-1">Cliente / Fornecedor <span class="text-red-500">*</span></label>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">R$</span>
-                <input type="number" step="0.01" min="0" id="payable-amount" class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0,00" required>
+                <input type="search" id="payable-party" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Buscar por CPF, CNPJ, nome, celular ou e-mail" autocomplete="off" required>
+                <input type="hidden" id="payable-party-id">
+                <input type="hidden" id="payable-party-type">
+                <div id="payable-party-suggestions" class="absolute inset-x-0 top-full z-20 mt-1 hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                  <div class="py-3 text-center text-xs text-gray-500">Digite ao menos 3 caracteres para buscar.</div>
+                </div>
               </div>
             </div>
             <div>
-              <label for="payable-cost-center" class="block text-sm font-medium text-gray-700 mb-1">Centro de custo</label>
-              <select id="payable-cost-center" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="">Selecione...</option>
-                <option value="administrativo">Administrativo</option>
-                <option value="operacional">Operacional</option>
-                <option value="marketing">Marketing</option>
-              </select>
+              <label for="payable-issue-date" class="block text-sm font-medium text-gray-700 mb-1">Emissão</label>
+              <input type="date" id="payable-issue-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
             <div>
-              <label for="payable-account" class="block text-sm font-medium text-gray-700 mb-1">Conta contábil vinculada <span class="text-red-500">*</span></label>
-              <select id="payable-account" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="">Selecione...</option>
-                <option value="2.1.1.01">2.1.1.01 - Fornecedores</option>
-                <option value="2.1.2.05">2.1.2.05 - Obrigações trabalhistas</option>
-                <option value="2.1.3.02">2.1.3.02 - Serviços recorrentes</option>
+              <label for="payable-installments" class="block text-sm font-medium text-gray-700 mb-1">Parcelas</label>
+              <input type="number" id="payable-installments" min="1" value="1" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div>
+              <label for="payable-due-date" class="block text-sm font-medium text-gray-700 mb-1">Vencimento</label>
+              <input type="date" id="payable-due-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div>
+              <label for="payable-amount" class="block text-sm font-medium text-gray-700 mb-1">Valor</label>
+              <div class="relative">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">R$</span>
+                <input type="number" step="0.01" min="0" id="payable-amount" class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0,00">
+              </div>
+            </div>
+            <div>
+              <label for="payable-bank-account" class="block text-sm font-medium text-gray-700 mb-1">Conta corrente</label>
+              <select id="payable-bank-account" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" disabled>
+                <option value="">Selecione uma empresa para carregar as contas</option>
               </select>
             </div>
             <div>
-              <label for="payable-payment" class="block text-sm font-medium text-gray-700 mb-1">Forma de pagamento</label>
-              <select id="payable-payment" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="">Selecione...</option>
-                <option value="transferencia">Transferência bancária</option>
-                <option value="boleto">Boleto</option>
-                <option value="pix">PIX</option>
-                <option value="dinheiro">Dinheiro</option>
+              <label for="payable-ledger-account" class="block text-sm font-medium text-gray-700 mb-1">Conta contábil</label>
+              <select id="payable-ledger-account" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" disabled>
+                <option value="">Selecione uma empresa para listar as contas a pagar</option>
               </select>
-            </div>
-            <div>
-              <label for="payable-installments" class="block text-sm font-medium text-gray-700 mb-1">Parcelamento</label>
-              <select id="payable-installments" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="unica">Parcela única</option>
-                <option value="2x">2x quinzenal</option>
-                <option value="3x">3x mensal</option>
-                <option value="personalizado">Personalizado...</option>
-              </select>
+              <p class="mt-1 text-xs text-gray-500">Listando apenas contas vinculadas à natureza Contas a Pagar.</p>
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label for="payable-status" class="block text-sm font-medium text-gray-700 mb-1">Status do lançamento</label>
-              <select id="payable-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="previsto">Previsto</option>
-                <option value="aprovado">Aprovado</option>
-                <option value="pago">Pago</option>
+          <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <div class="lg:col-span-2">
+              <label for="payable-origin-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de origem <span class="text-red-500">*</span></label>
+              <select id="payable-origin-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                <option value="">Carregando empresas...</option>
               </select>
             </div>
-            <div>
-              <label for="payable-notes" class="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-              <textarea id="payable-notes" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" rows="3" placeholder="Descreva condições especiais ou anexos necessários."></textarea>
+            <div class="lg:col-span-2 flex items-end justify-end">
+              <button type="button" id="payable-generate" class="inline-flex w-full lg:w-auto items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
+                <i class="fas fa-calculator"></i>
+                Gerar parcelas
+              </button>
+            </div>
+          </div>
+
+          <div class="border-t border-gray-100 pt-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" data-tab="informacoes" class="tab-trigger inline-flex items-center gap-2 rounded-full border border-transparent bg-primary/10 px-4 py-2 text-sm font-semibold text-primary shadow-sm transition hover:bg-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/40">
+                <i class="fas fa-circle-info"></i>
+                Informações
+              </button>
+              <button type="button" data-tab="pre-visualizacao" class="tab-trigger inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/20">
+                <i class="fas fa-table-list"></i>
+                Pré-visualização
+              </button>
+              <button type="button" data-tab="historico" class="tab-trigger inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/20">
+                <i class="fas fa-clock-rotate-left"></i>
+                Histórico
+              </button>
+            </div>
+
+            <div class="mt-6 space-y-6">
+              <div id="tab-informacoes" class="tab-panel space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label for="bank-document-number" class="block text-sm font-medium text-gray-700 mb-1">Nº documento bancário</label>
+                    <input type="text" id="bank-document-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 186/2024">
+                  </div>
+                  <div>
+                    <label for="document-carrier" class="block text-sm font-medium text-gray-700 mb-1">Portador</label>
+                    <input type="search" id="document-carrier" list="carrier-bank-list" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite para buscar o banco">
+                  </div>
+                  <div>
+                    <label for="payment-method" class="block text-sm font-medium text-gray-700 mb-1">Meio de pagamento</label>
+                    <select id="payment-method" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" disabled>
+                      <option value="">Selecione uma empresa para listar os meios de pagamento</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label for="interest-fee" class="block text-sm font-medium text-gray-700 mb-1">Taxa de juros</label>
+                    <div class="relative">
+                      <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">R$</span>
+                      <input type="number" step="0.01" min="0" id="interest-fee" class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0,00">
+                    </div>
+                  </div>
+                  <div>
+                    <label for="monthly-interest" class="block text-sm font-medium text-gray-700 mb-1">Taxa de juros a.m (%)</label>
+                    <input type="number" step="0.01" min="0" id="monthly-interest" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0,00">
+                  </div>
+                  <div>
+                    <label for="interest-percent" class="block text-sm font-medium text-gray-700 mb-1">Juros (%)</label>
+                    <input type="number" step="0.01" min="0" id="interest-percent" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0,00">
+                  </div>
+                </div>
+              </div>
+
+              <div id="tab-pre-visualizacao" class="tab-panel hidden">
+                <div class="overflow-hidden rounded-lg border border-gray-200">
+                  <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th scope="col" class="px-4 py-2 text-left font-semibold">Parcela</th>
+                        <th scope="col" class="px-4 py-2 text-left font-semibold">Vencimento</th>
+                        <th scope="col" class="px-4 py-2 text-left font-semibold">Valor</th>
+                        <th scope="col" class="px-4 py-2 text-left font-semibold">Situação</th>
+                        <th scope="col" class="px-4 py-2 text-center font-semibold">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="payable-preview-body" class="divide-y divide-gray-100 text-gray-700"></tbody>
+                  </table>
+                </div>
+                <p id="payable-preview-empty" class="mt-3 text-xs text-gray-500">Informe valor, vencimento e clique em &ldquo;Gerar parcelas&rdquo; para distribuir o pagamento.</p>
+              </div>
+
+              <div id="tab-historico" class="tab-panel hidden">
+                <div class="overflow-hidden rounded-lg border border-gray-200">
+                  <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th scope="col" class="px-4 py-2 text-left font-semibold">Descrição</th>
+                        <th scope="col" class="px-4 py-2 text-left font-semibold">Documento</th>
+                        <th scope="col" class="px-4 py-2 text-left font-semibold">Vencimento</th>
+                        <th scope="col" class="px-4 py-2 text-left font-semibold">Valor</th>
+                        <th scope="col" class="px-4 py-2 text-left font-semibold">Status</th>
+                        <th scope="col" class="px-4 py-2 text-center font-semibold">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="payable-history-body" class="divide-y divide-gray-100 text-gray-700"></tbody>
+                  </table>
+                </div>
+                <p id="payable-history-empty" class="mt-3 text-xs text-gray-500">Busque um cliente ou fornecedor para visualizar o histórico de contas a pagar.</p>
+              </div>
             </div>
           </div>
 
@@ -124,18 +196,24 @@
               <i class="fas fa-shield-check text-gray-400"></i>
               Pagamentos acima de R$ 5.000 exigem aprovação dupla.
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" id="payable-clear" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+                <i class="fas fa-eraser"></i>
+                Limpar
+              </button>
               <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
                 <i class="fas fa-clipboard-check"></i>
                 Enviar para aprovação
               </button>
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+              <button type="button" id="payable-save" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
                 <i class="fas fa-save"></i>
                 Salvar lançamento
               </button>
             </div>
           </div>
-        </section>
+        </form>
+        <datalist id="carrier-bank-list"></datalist>
+
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-5">
           <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -144,7 +222,7 @@
               <p class="text-sm text-gray-600">Priorize compromissos e acompanhe pagamentos críticos.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-              <select class="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              <select id="agenda-range" class="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
                 <option value="7">Próximos 7 dias</option>
                 <option value="15">Próximos 15 dias</option>
                 <option value="30">Próximos 30 dias</option>
@@ -158,21 +236,23 @@
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="rounded-xl border border-sky-100 bg-sky-50 p-4">
-              <span class="text-xs font-semibold uppercase tracking-wide text-sky-700">Pagamentos da semana</span>
-              <p class="mt-2 text-2xl font-bold text-sky-800">R$ 18.940,00</p>
-              <p class="text-xs text-sky-700">9 lançamentos previstos</p>
+              <span id="agenda-period-label" class="text-xs font-semibold uppercase tracking-wide text-sky-700">Pagamentos nos próximos 7 dias</span>
+              <p id="agenda-upcoming-value" class="mt-2 text-2xl font-bold text-sky-800">R$ 0,00</p>
+              <p id="agenda-upcoming-count" class="text-xs text-sky-700">0 parcelas previstas</p>
             </div>
             <div class="rounded-xl border border-amber-100 bg-amber-50 p-4">
-              <span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Aguardando aprovação</span>
-              <p class="mt-2 text-2xl font-bold text-amber-800">R$ 6.730,00</p>
-              <p class="text-xs text-amber-700">4 lançamentos pendentes</p>
+              <span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Pendentes</span>
+              <p id="agenda-pending-value" class="mt-2 text-2xl font-bold text-amber-800">R$ 0,00</p>
+              <p id="agenda-pending-count" class="text-xs text-amber-700">0 parcelas aguardando pagamento</p>
             </div>
             <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
               <span class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Quitados no mês</span>
-              <p class="mt-2 text-2xl font-bold text-emerald-800">R$ 42.510,00</p>
-              <p class="text-xs text-emerald-700">15 lançamentos liquidados</p>
+              <p id="agenda-paid-value" class="mt-2 text-2xl font-bold text-emerald-800">R$ 0,00</p>
+              <p id="agenda-paid-count" class="text-xs text-emerald-700">0 parcelas liquidadas</p>
             </div>
           </div>
+
+          <div id="agenda-status-filters" class="flex flex-wrap items-center gap-2"></div>
 
           <div class="overflow-hidden rounded-lg border border-gray-200">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -183,48 +263,13 @@
                   <th scope="col" class="px-4 py-2 text-left font-semibold">Vencimento</th>
                   <th scope="col" class="px-4 py-2 text-right font-semibold">Valor</th>
                   <th scope="col" class="px-4 py-2 text-center font-semibold">Status</th>
+                  <th scope="col" class="px-4 py-2 text-center font-semibold">Ações</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-100 text-gray-700">
-                <tr>
-                  <td class="px-4 py-3">Fornecedor PetVet</td>
-                  <td class="px-4 py-3">NF-e 9875</td>
-                  <td class="px-4 py-3">16/06/2024</td>
-                  <td class="px-4 py-3 text-right">R$ 2.380,00</td>
-                  <td class="px-4 py-3 text-center">
-                    <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                      <i class="fas fa-circle-check"></i>
-                      Pago
-                    </span>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-3">Distribuidora Saúde Animal</td>
-                  <td class="px-4 py-3">Fatura 4568</td>
-                  <td class="px-4 py-3">20/06/2024</td>
-                  <td class="px-4 py-3 text-right">R$ 5.740,00</td>
-                  <td class="px-4 py-3 text-center">
-                    <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                      <i class="fas fa-circle-pause"></i>
-                      Aguardando
-                    </span>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-3">Serviços Limpeza Total</td>
-                  <td class="px-4 py-3">Contrato 2024/06</td>
-                  <td class="px-4 py-3">02/07/2024</td>
-                  <td class="px-4 py-3 text-right">R$ 1.290,00</td>
-                  <td class="px-4 py-3 text-center">
-                    <span class="inline-flex items-center gap-1 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
-                      <i class="fas fa-flag"></i>
-                      Programado
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
+              <tbody id="agenda-table-body" class="divide-y divide-gray-100 text-gray-700"></tbody>
             </table>
           </div>
+          <p id="agenda-empty" class="mt-3 text-xs text-gray-500 hidden">Nenhum pagamento previsto para o período selecionado.</p>
         </section>
       </div>
     </div>
@@ -233,12 +278,12 @@
   <div id="admin-footer-placeholder"></div>
   <div id="modal-placeholder"></div>
   <div id="confirm-modal-placeholder"></div>
-
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js"></script>
   <script src="../../scripts/core/ui.js"></script>
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-financeiro-contabil-contas-pagar.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
 </body>
 </html>

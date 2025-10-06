@@ -239,9 +239,15 @@ router.use(requireAuth, authorizeRoles('admin', 'admin_master', 'funcionario'));
 router.get('/', async (req, res) => {
   try {
     const { company } = req.query;
+    const natureRaw = req.query?.nature || req.query?.paymentNature;
     const filter = {};
     if (company && mongoose.Types.ObjectId.isValid(company)) {
       filter.companies = company;
+    }
+
+    const paymentNature = normalizeString(natureRaw).toLowerCase();
+    if (paymentNature && PAYMENT_NATURES.has(paymentNature)) {
+      filter.paymentNature = paymentNature;
     }
 
     const accounts = await AccountingAccount.find(filter)
