@@ -341,7 +341,7 @@
           const contato = [cliente.email, cliente.celular ? formatPhone(cliente.celular) : ''].filter(Boolean).join('<br>');
           return `
             <tr class="hover:bg-gray-50">
-              <td class="px-4 py-3 align-top text-sm text-gray-700">${cliente.codigoCliente || '—'}</td>
+              <td class="px-4 py-3 align-top text-sm text-gray-700">${cliente.codigo || cliente._id || '—'}</td>
               <td class="px-4 py-3 align-top text-sm text-gray-900 font-medium">${cliente.nome || '—'}</td>
               <td class="px-4 py-3 align-top text-sm text-gray-700">${tipo}</td>
               <td class="px-4 py-3 align-top text-sm text-gray-700">${formatDocumento(cliente.documento) || '—'}</td>
@@ -403,7 +403,7 @@
         const data = await apiFetch(`/func/clientes/${id}`);
         state.currentClienteId = data._id;
         elements.inputId.value = data._id;
-        elements.inputCodigo.value = data.codigoCliente || '';
+        elements.inputCodigo.value = data.codigo || data._id || '';
         elements.selectTipo.value = data.tipoConta || 'pessoa_fisica';
         switchTipo(elements.selectTipo.value);
         elements.inputPais.value = data.pais || 'Brasil';

@@ -52,17 +52,6 @@ async function ensureEmpresaExists(empresaId) {
   return store ? store._id : null;
 }
 
-async function generateCodigoCliente() {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const random = randomBytes(3).toString('hex').toUpperCase();
-    const candidate = `CL-${random}`;
-    const exists = await User.exists({ codigoCliente: candidate });
-    if (!exists) return candidate;
-  }
-  const fallback = `CL-${Date.now().toString(16).slice(-8).toUpperCase()}`;
-  return fallback;
-}
-
 function sanitizeTelefone(value = '') {
   const digits = onlyDigits(value);
   return digits || '';
@@ -102,13 +91,6 @@ async function buildClientePayload(body = {}, opts = {}) {
 
   const pais = sanitizeString(body.pais || currentUser?.pais || 'Brasil') || 'Brasil';
   const apelido = sanitizeString(body.apelido || (tipoConta === 'pessoa_fisica' ? currentUser?.apelido : currentUser?.nomeFantasia) || '');
-  let codigoCliente = '';
-  if (isUpdate && currentUser?.codigoCliente) {
-    codigoCliente = sanitizeString(currentUser.codigoCliente);
-  }
-  if (!codigoCliente) {
-    codigoCliente = await generateCodigoCliente();
-  }
 
   const empresaPrincipal = await ensureEmpresaExists(body.empresaId || body.empresa || body.empresaPrincipal || currentUser?.empresaPrincipal);
 
@@ -121,7 +103,6 @@ async function buildClientePayload(body = {}, opts = {}) {
     celularSecundario: celular2 || '',
     pais,
     apelido,
-    codigoCliente,
   };
 
   if (empresaPrincipal) {
@@ -395,7 +376,9 @@ router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
         or.push({ cnpj: new RegExp(only) });
         or.push({ celular: new RegExp(only) });
         or.push({ telefone: new RegExp(only) });
-        or.push({ codigoCliente: new RegExp(only) });
+      }
+      if (mongoose.Types.ObjectId.isValid(search)) {
+        or.push({ _id: new mongoose.Types.ObjectId(search) });
       }
       filter.$or = or;
     }
@@ -403,7 +386,7 @@ router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
       User.find(filter)
-        .select('_id nomeCompleto nomeContato razaoSocial nomeFantasia email tipoConta cpf cnpj inscricaoEstadual celular telefone codigoCliente empresaPrincipal pais apelido role telefoneSecundario celularSecundario')
+        .select('_id nomeCompleto nomeContato razaoSocial nomeFantasia email tipoConta cpf cnpj inscricaoEstadual celular telefone empresaPrincipal pais apelido role telefoneSecundario celularSecundario')
         .sort({ criadoEm: -1 })
         .skip(skip)
         .limit(limit)
@@ -430,7 +413,7 @@ router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
         _id: doc._id,
         nome: userDisplayName(doc),
         tipoConta: doc.tipoConta,
-        codigoCliente: doc.codigoCliente || '',
+        codigo: String(doc._id),
         email: doc.email || '',
         celular: doc.celular || '',
         telefone: doc.telefone || '',
@@ -505,7 +488,7 @@ router.put('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'ID inválido.' });
     }
-    const current = await User.findById(id).select('role tipoConta nomeCompleto razaoSocial nomeFantasia nomeContato email celular telefone codigoCliente apelido pais cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE empresaPrincipal empresas telefoneSecundario celularSecundario').lean();
+    const current = await User.findById(id).select('role tipoConta nomeCompleto razaoSocial nomeFantasia nomeContato email celular telefone apelido pais cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE empresaPrincipal empresas telefoneSecundario celularSecundario').lean();
     await ensureClienteEhEditavel(current);
 
     const payload = await buildClientePayload(req.body, { isUpdate: true, currentUser: current });
@@ -1277,7 +1260,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'ID inválido.' });
     }
     const u = await User.findById(id)
-      .select('_id role tipoConta nomeCompleto nomeContato razaoSocial nomeFantasia email celular telefone celularSecundario telefoneSecundario cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE codigoCliente apelido pais empresaPrincipal empresas')
+      .select('_id role tipoConta nomeCompleto nomeContato razaoSocial nomeFantasia email celular telefone celularSecundario telefoneSecundario cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE apelido pais empresaPrincipal empresas')
       .lean();
     if (!u) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
@@ -1314,7 +1297,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       _id: u._id,
       nome,
       tipoConta: u.tipoConta,
-      codigoCliente: u.codigoCliente || '',
+      codigo: String(u._id),
       apelido: u.apelido || '',
       pais: u.pais || 'Brasil',
       empresaPrincipal: empresa,
