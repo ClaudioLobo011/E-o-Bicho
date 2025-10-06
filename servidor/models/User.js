@@ -39,6 +39,7 @@ const userSchema = new Schema({
   celularSecundario: { type: String, trim: true },
   telefoneSecundario: { type: String, trim: true },
   empresaPrincipal: { type: Schema.Types.ObjectId, ref: 'Store' },
+  limiteCredito: { type: Number, default: 0 },
 
   // --- Campos Específicos de Pessoa Física ---
   nomeCompleto: { type: String },
