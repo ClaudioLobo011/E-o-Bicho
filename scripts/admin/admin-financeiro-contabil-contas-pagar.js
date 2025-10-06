@@ -24,6 +24,8 @@
     selectedParty: null,
     partySearchTimeout: null,
     history: [],
+    payablesCache: new Map(),
+    currentEditing: null,
     isSaving: false,
     agenda: {
       rangeDays: 7,
@@ -37,6 +39,7 @@
       },
       items: [],
       emptyMessage: 'Nenhum pagamento previsto para o período selecionado.',
+      filterStatus: 'all',
     },
   };
 
@@ -77,6 +80,7 @@
     agendaPaidCount: document.getElementById('agenda-paid-count'),
     agendaTableBody: document.getElementById('agenda-table-body'),
     agendaEmpty: document.getElementById('agenda-empty'),
+    agendaFilters: document.getElementById('agenda-status-filters'),
   };
 
   const STATUS_BADGES = {
@@ -84,6 +88,16 @@
     paid: { icon: 'fa-circle-check', classes: 'bg-emerald-100 text-emerald-700', label: 'Pago' },
     cancelled: { icon: 'fa-circle-xmark', classes: 'bg-gray-200 text-gray-600', label: 'Cancelado' },
   };
+
+  const AGENDA_FILTERS = [
+    { key: 'all', label: 'Todos' },
+    { key: 'pending', label: 'Pendentes' },
+    { key: 'overdue', label: 'Vencidos' },
+    { key: 'paid', label: 'Quitados' },
+    { key: 'cancelled', label: 'Cancelados' },
+  ];
+
+  const originalSaveButtonHTML = elements.saveButton ? elements.saveButton.innerHTML : '';
 
   function notify(message, type = 'info') {
     const text = String(message || '').trim();
@@ -191,6 +205,213 @@
     return `${safeCount} ${safeCount === 1 ? singular : plural}`;
   }
 
+  function updateSaveButtonMode(isEditing) {
+    if (!elements.saveButton) return;
+    if (isEditing) {
+      elements.saveButton.innerHTML =
+        '<i class="fas fa-pen-to-square"></i> Atualizar lançamento';
+    } else if (originalSaveButtonHTML) {
+      elements.saveButton.innerHTML = originalSaveButtonHTML;
+    }
+  }
+
+  function toDate(value) {
+    if (!value) return null;
+    if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  function isAgendaItemOverdue(item) {
+    if (!item) return false;
+    const due = toDate(item.dueDate);
+    if (!due) return false;
+    const status = (item.status || '').toLowerCase();
+    if (status !== 'pending') return false;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return due < today;
+  }
+
+  function computeAgendaFilterCounts(items) {
+    const counts = {
+      all: 0,
+      pending: 0,
+      overdue: 0,
+      paid: 0,
+      cancelled: 0,
+    };
+    items.forEach((item) => {
+      counts.all += 1;
+      const status = (item.status || '').toLowerCase();
+      if (status === 'pending') counts.pending += 1;
+      if (status === 'paid') counts.paid += 1;
+      if (status === 'cancelled') counts.cancelled += 1;
+      if (isAgendaItemOverdue(item)) counts.overdue += 1;
+    });
+    return counts;
+  }
+
+  function getAgendaFilterPredicate(filterKey) {
+    switch (filterKey) {
+      case 'pending':
+        return (item) => (item.status || '').toLowerCase() === 'pending';
+      case 'paid':
+        return (item) => (item.status || '').toLowerCase() === 'paid';
+      case 'cancelled':
+        return (item) => (item.status || '').toLowerCase() === 'cancelled';
+      case 'overdue':
+        return (item) => isAgendaItemOverdue(item);
+      default:
+        return () => true;
+    }
+  }
+
+  function getFilteredAgendaItems() {
+    const items = Array.isArray(state.agenda.items) ? state.agenda.items : [];
+    const predicate = getAgendaFilterPredicate(state.agenda.filterStatus || 'all');
+    return items.filter(predicate);
+  }
+
+  function renderAgendaFilters() {
+    if (!elements.agendaFilters) return;
+    elements.agendaFilters.innerHTML = '';
+    const items = Array.isArray(state.agenda.items) ? state.agenda.items : [];
+    const counts = computeAgendaFilterCounts(items);
+    AGENDA_FILTERS.forEach((filter) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.filter = filter.key;
+      button.className =
+        'inline-flex items-center gap-2 rounded-full border px-4 py-1 text-xs font-semibold transition';
+      const isActive = state.agenda.filterStatus === filter.key;
+      if (isActive) {
+        button.classList.add('border-primary', 'bg-primary', 'text-white', 'shadow-sm');
+      } else {
+        button.classList.add('border-gray-200', 'bg-white', 'text-gray-600', 'hover:bg-gray-50');
+      }
+      const label = document.createElement('span');
+      label.textContent = filter.label;
+      const badge = document.createElement('span');
+      badge.className = isActive
+        ? 'inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-full bg-white/20 px-2 text-[0.7rem]'
+        : 'inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-full bg-gray-100 px-2 text-[0.7rem] text-gray-600';
+      badge.textContent = counts[filter.key] ?? 0;
+      button.appendChild(label);
+      button.appendChild(badge);
+      elements.agendaFilters.appendChild(button);
+    });
+  }
+
+  function normalizePayable(raw) {
+    if (!raw) return null;
+    const normalized = {
+      ...raw,
+      issueDate: toDate(raw.issueDate),
+      dueDate: toDate(raw.dueDate),
+      totalValue: parseCurrency(raw.totalValue),
+    };
+    if (raw.bankAccount && raw.bankAccount._id) {
+      normalized.bankAccount = { ...raw.bankAccount };
+    }
+    if (raw.accountingAccount && raw.accountingAccount._id) {
+      normalized.accountingAccount = { ...raw.accountingAccount };
+    }
+    if (raw.paymentMethod && raw.paymentMethod._id) {
+      normalized.paymentMethod = { ...raw.paymentMethod };
+    }
+    normalized.installments = Array.isArray(raw.installments)
+      ? raw.installments.map((installment, index) => ({
+          ...installment,
+          number: installment?.number || index + 1,
+          issueDate: toDate(installment?.issueDate) || toDate(raw.issueDate),
+          dueDate: toDate(installment?.dueDate) || toDate(raw.dueDate),
+          value: parseCurrency(installment?.value),
+          bankAccount: installment?.bankAccount && installment.bankAccount._id
+            ? { ...installment.bankAccount }
+            : installment?.bankAccount || null,
+          accountingAccount: installment?.accountingAccount && installment.accountingAccount._id
+            ? { ...installment.accountingAccount }
+            : installment?.accountingAccount || null,
+          status: installment?.status || 'pending',
+        }))
+      : [];
+    normalized.installmentsCount = normalized.installments.length || normalized.installmentsCount || 0;
+    return normalized;
+  }
+
+  function ensurePayablesCache() {
+    if (!(state.payablesCache instanceof Map)) {
+      state.payablesCache = new Map();
+    }
+    return state.payablesCache;
+  }
+
+  function storePayableInCache(payable) {
+    const cache = ensurePayablesCache();
+    if (payable?._id) {
+      cache.set(payable._id, payable);
+    }
+  }
+
+  function removePayableFromCache(id) {
+    const cache = ensurePayablesCache();
+    if (id && cache.has(id)) {
+      cache.delete(id);
+    }
+  }
+
+  function confirmDialog({ title, message, confirmText = 'Confirmar', cancelText = 'Cancelar' }) {
+    return new Promise((resolve) => {
+      if (typeof window !== 'undefined' && typeof window.showModal === 'function') {
+        window.showModal({
+          title,
+          message,
+          confirmText,
+          cancelText,
+          onConfirm: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      } else {
+        // eslint-disable-next-line no-alert
+        const result = window.confirm(message || 'Deseja prosseguir?');
+        resolve(result);
+      }
+    });
+  }
+
+  async function fetchPayableById(id, { force = false } = {}) {
+    if (!id) return null;
+    const cache = ensurePayablesCache();
+    if (!force && cache.has(id)) {
+      return cache.get(id);
+    }
+    try {
+      const response = await fetch(`${PAYABLES_API}/${id}`, {
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+      });
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Conta a pagar não encontrada.');
+        }
+        if (response.status === 401) {
+          notify('Sua sessão expirou. Faça login novamente para continuar.', 'error');
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.message || `Erro ao carregar o lançamento (${response.status}).`);
+      }
+      const data = await response.json();
+      const normalized = normalizePayable(data);
+      if (normalized) {
+        storePayableInCache(normalized);
+      }
+      return normalized;
+    } catch (error) {
+      console.error('accounts-payable:fetchPayableById', error);
+      throw error;
+    }
+  }
+
   function updateAgendaPeriodLabel() {
     if (!elements.agendaPeriodLabel) return;
     const { periodStart, periodEnd, rangeDays } = state.agenda;
@@ -248,17 +469,24 @@
     if (state.agenda.loading) {
       const loadingRow = document.createElement('tr');
       loadingRow.innerHTML =
-        '<td colspan="5" class="px-4 py-6 text-center text-sm text-gray-500">Carregando agenda de pagamentos...</td>';
+        '<td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">Carregando agenda de pagamentos...</td>';
       elements.agendaTableBody.appendChild(loadingRow);
       elements.agendaEmpty?.classList.add('hidden');
       return;
     }
 
-    const items = Array.isArray(state.agenda.items) ? state.agenda.items : [];
-    if (!items.length) {
+    const filteredItems = getFilteredAgendaItems();
+    const hasAnyItems = Array.isArray(state.agenda.items) && state.agenda.items.length > 0;
+
+    if (!filteredItems.length) {
       if (elements.agendaEmpty) {
-        elements.agendaEmpty.textContent =
-          state.agenda.emptyMessage || 'Nenhum pagamento previsto para o período selecionado.';
+        if (hasAnyItems && (state.agenda.filterStatus || 'all') !== 'all') {
+          elements.agendaEmpty.textContent =
+            'Nenhum pagamento encontrado para o filtro selecionado.';
+        } else {
+          elements.agendaEmpty.textContent =
+            state.agenda.emptyMessage || 'Nenhum pagamento previsto para o período selecionado.';
+        }
         elements.agendaEmpty.classList.remove('hidden');
       }
       return;
@@ -266,9 +494,15 @@
 
     elements.agendaEmpty?.classList.add('hidden');
 
-    items.forEach((item) => {
+    filteredItems.forEach((item) => {
       const row = document.createElement('tr');
       row.className = 'bg-white';
+      if (item.payableId) {
+        row.dataset.payableId = item.payableId;
+      }
+      if (item.installmentNumber) {
+        row.dataset.installmentNumber = item.installmentNumber;
+      }
 
       const partyCell = document.createElement('td');
       partyCell.className = 'px-4 py-3 text-sm text-gray-700';
@@ -299,6 +533,25 @@
       statusCell.appendChild(badge);
       row.appendChild(statusCell);
 
+      const actionsCell = document.createElement('td');
+      actionsCell.className = 'px-4 py-3 text-sm text-center';
+      const payableIdAttr = item.payableId || '';
+      const installmentAttr = item.installmentNumber != null ? item.installmentNumber : '';
+      actionsCell.innerHTML = `
+        <div class="flex items-center justify-center gap-2">
+          <button type="button" class="agenda-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
+            data-action="edit-agenda" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
+            <i class="fas fa-pen"></i>
+            Editar
+          </button>
+          <button type="button" class="agenda-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+            data-action="delete-agenda" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
+            <i class="fas fa-trash"></i>
+            Excluir
+          </button>
+        </div>`;
+      row.appendChild(actionsCell);
+
       elements.agendaTableBody.appendChild(row);
     });
   }
@@ -306,6 +559,7 @@
   function renderAgenda() {
     updateAgendaPeriodLabel();
     renderAgendaSummary();
+    renderAgendaFilters();
     renderAgendaTable();
   }
 
@@ -600,6 +854,7 @@
         value,
         bankAccount,
         accountingAccount: ledgerAccount,
+        status: 'pending',
       });
     }
 
@@ -620,13 +875,16 @@
     if (!elements.previewBody) return;
     elements.previewBody.innerHTML = '';
 
+    const totalInstallments = state.previewInstallments.length;
+
     state.previewInstallments.forEach((installment, index) => {
       const row = document.createElement('tr');
       row.className = 'bg-white';
 
       const numberCell = document.createElement('td');
       numberCell.className = 'px-4 py-3 font-medium text-gray-800';
-      numberCell.textContent = `${installment.number}/${state.previewInstallments.length}`;
+      const displayNumber = installment.number || index + 1;
+      numberCell.textContent = `${displayNumber}/${totalInstallments || 1}`;
       row.appendChild(numberCell);
 
       const dueCell = document.createElement('td');
@@ -669,9 +927,26 @@
       row.appendChild(valueCell);
 
       const statusCell = document.createElement('td');
-      statusCell.className = 'px-4 py-3 text-sm text-gray-500';
-      statusCell.textContent = 'Prevista';
+      statusCell.className = 'px-4 py-3 text-sm text-center';
+      const badge = document.createElement('span');
+      const badgeConfig = getStatusBadgeConfig(installment.status || 'pending');
+      badge.className = `inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${badgeConfig.classes}`;
+      badge.innerHTML = `<i class="fas ${badgeConfig.icon}"></i> ${badgeConfig.label}`;
+      statusCell.appendChild(badge);
       row.appendChild(statusCell);
+
+      const actionsCell = document.createElement('td');
+      actionsCell.className = 'px-4 py-3 text-sm text-center';
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className =
+        'inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
+      removeButton.innerHTML = '<i class="fas fa-times"></i> Remover';
+      removeButton.addEventListener('click', () => {
+        removePreviewInstallment(index);
+      });
+      actionsCell.appendChild(removeButton);
+      row.appendChild(actionsCell);
 
       elements.previewBody.appendChild(row);
     });
@@ -679,11 +954,236 @@
     updatePreviewEmptyState();
   }
 
+  function removePreviewInstallment(index) {
+    if (!Array.isArray(state.previewInstallments)) return;
+    if (index < 0 || index >= state.previewInstallments.length) return;
+    state.previewInstallments.splice(index, 1);
+    state.previewInstallments.forEach((installment, idx) => {
+      if (installment && typeof installment === 'object') {
+        // Garante numeração sequencial após remoções
+        // eslint-disable-next-line no-param-reassign
+        installment.number = idx + 1;
+      }
+    });
+    if (elements.installments) {
+      const newLength = state.previewInstallments.length;
+      elements.installments.value = String(newLength > 0 ? newLength : 1);
+    }
+    renderPreview();
+    updatePreviewEmptyState();
+  }
+
+  function resetFormFields({ preserveCompany = true } = {}) {
+    const companyValue = preserveCompany && elements.company ? elements.company.value : '';
+    if (elements.code) elements.code.value = '';
+    if (elements.partyInput) elements.partyInput.value = '';
+    if (elements.partyId) elements.partyId.value = '';
+    if (elements.partyType) elements.partyType.value = '';
+    state.selectedParty = null;
+
+    if (elements.issueDate) elements.issueDate.value = '';
+    if (elements.dueDate) elements.dueDate.value = '';
+    if (elements.totalAmount) elements.totalAmount.value = '';
+    if (elements.installments) elements.installments.value = '1';
+    if (elements.bankAccount) elements.bankAccount.value = '';
+    if (elements.ledgerAccount) elements.ledgerAccount.value = '';
+    if (elements.paymentMethod) elements.paymentMethod.value = '';
+    if (elements.documentNumber) elements.documentNumber.value = '';
+    if (elements.carrier) elements.carrier.value = '';
+    if (elements.interestFee) elements.interestFee.value = '';
+    if (elements.monthlyInterest) elements.monthlyInterest.value = '';
+    if (elements.interestPercent) elements.interestPercent.value = '';
+
+    state.previewInstallments = [];
+    renderPreview();
+    updatePreviewEmptyState();
+
+    if (elements.company) {
+      elements.company.value = companyValue || '';
+    }
+
+    setDefaultIssueDate();
+  }
+
+  function exitEditMode(clearFields = false) {
+    state.currentEditing = null;
+    updateSaveButtonMode(false);
+    if (clearFields) {
+      resetFormFields({ preserveCompany: true });
+    }
+  }
+
+  async function enterEditMode(payable, { focusInstallmentNumber = null } = {}) {
+    if (!payable) return;
+    const previousPartyId = state.selectedParty?.id;
+    const previousPartyType = state.selectedParty?.type;
+
+    state.currentEditing = { id: payable._id, installmentNumber: focusInstallmentNumber };
+    updateSaveButtonMode(true);
+
+    const companyId = payable.company?._id || '';
+    if (elements.company && companyId) {
+      if (elements.company.value !== companyId) {
+        elements.company.value = companyId;
+        await loadCompanyResources(companyId);
+        await loadAgenda();
+      } else {
+        await loadCompanyResources(companyId);
+      }
+    }
+
+    if (payable.party?._id) {
+      const partyLabel = payable.party.name || payable.party.document || '';
+      state.selectedParty = {
+        id: payable.party._id,
+        type: payable.partyType || payable.party.type || '',
+        label: partyLabel,
+      };
+      if (elements.partyInput) elements.partyInput.value = partyLabel;
+      if (elements.partyId) elements.partyId.value = payable.party._id;
+      if (elements.partyType) elements.partyType.value = state.selectedParty.type;
+    }
+
+    if (elements.code) elements.code.value = payable.code || '';
+    if (elements.issueDate) elements.issueDate.value = formatDateInputValue(payable.issueDate) || '';
+    if (elements.dueDate) elements.dueDate.value = formatDateInputValue(payable.dueDate) || '';
+    if (elements.totalAmount) {
+      const total = parseCurrency(payable.totalValue);
+      elements.totalAmount.value = Number.isFinite(total) ? total.toFixed(2) : '';
+    }
+    if (elements.bankAccount) elements.bankAccount.value = payable.bankAccount?._id || '';
+    if (elements.ledgerAccount) elements.ledgerAccount.value = payable.accountingAccount?._id || '';
+    if (elements.paymentMethod) elements.paymentMethod.value = payable.paymentMethod?._id || '';
+    if (elements.documentNumber) elements.documentNumber.value = payable.bankDocumentNumber || '';
+    if (elements.carrier) elements.carrier.value = payable.carrier || '';
+    if (elements.interestFee) {
+      const value = parseCurrency(payable.interestFeeValue);
+      elements.interestFee.value = Number.isFinite(value) && value !== 0 ? value.toFixed(2) : '';
+    }
+    if (elements.monthlyInterest) {
+      const value = parseCurrency(payable.monthlyInterestPercent);
+      elements.monthlyInterest.value = Number.isFinite(value) && value !== 0 ? value.toFixed(2) : '';
+    }
+    if (elements.interestPercent) {
+      const value = parseCurrency(payable.interestPercent);
+      elements.interestPercent.value = Number.isFinite(value) && value !== 0 ? value.toFixed(2) : '';
+    }
+
+    state.previewInstallments = Array.isArray(payable.installments)
+      ? payable.installments.map((installment) => ({
+          number: installment.number,
+          issueDate: installment.issueDate || payable.issueDate,
+          dueDate: installment.dueDate || payable.dueDate,
+          dueDateInput: formatDateInputValue(installment.dueDate || payable.dueDate),
+          value: parseCurrency(installment.value),
+          bankAccount:
+            installment.bankAccount?._id || installment.bankAccount || payable.bankAccount?._id || '',
+          accountingAccount:
+            installment.accountingAccount?._id || installment.accountingAccount || payable.accountingAccount?._id || '',
+          status: installment.status || 'pending',
+        }))
+      : [];
+
+    if (elements.installments) {
+      const count = state.previewInstallments.length || payable.installmentsCount || 1;
+      elements.installments.value = String(count);
+    }
+
+    renderPreview();
+    updatePreviewEmptyState();
+
+    if (
+      state.selectedParty?.id &&
+      (state.selectedParty.id !== previousPartyId || state.selectedParty.type !== previousPartyType)
+    ) {
+      await loadHistory();
+    }
+  }
+
   function renderHistory() {
     if (!elements.historyBody) return;
     elements.historyBody.innerHTML = '';
 
-    if (!state.history.length) {
+    const payables = Array.isArray(state.history) ? state.history : [];
+    let hasRows = false;
+
+    payables.forEach((payable) => {
+      const installments = Array.isArray(payable.installments) && payable.installments.length
+        ? payable.installments
+        : [
+            {
+              number: null,
+              dueDate: payable.dueDate,
+              value: payable.totalValue,
+              status: payable.status || 'pending',
+            },
+          ];
+
+      installments.forEach((installment) => {
+        hasRows = true;
+        const row = document.createElement('tr');
+        row.className = 'bg-white';
+        if (payable._id) {
+          row.dataset.payableId = payable._id;
+        }
+        if (installment.number != null) {
+          row.dataset.installmentNumber = installment.number;
+        }
+
+        const descriptionCell = document.createElement('td');
+        descriptionCell.className = 'px-4 py-3 text-sm text-gray-700';
+        const installmentLabel = installment.number ? ` • Parcela ${installment.number}` : '';
+        descriptionCell.textContent = `${payable.code || 'Título'}${installmentLabel}`;
+        row.appendChild(descriptionCell);
+
+        const documentCell = document.createElement('td');
+        documentCell.className = 'px-4 py-3 text-sm text-gray-600';
+        documentCell.textContent = payable.bankDocumentNumber || '--';
+        row.appendChild(documentCell);
+
+        const dueCell = document.createElement('td');
+        dueCell.className = 'px-4 py-3 text-sm text-gray-600';
+        dueCell.textContent = formatDateBR(installment.dueDate || payable.dueDate);
+        row.appendChild(dueCell);
+
+        const valueCell = document.createElement('td');
+        valueCell.className = 'px-4 py-3 text-sm text-right text-gray-800';
+        valueCell.textContent = formatCurrencyBR(installment.value || payable.totalValue);
+        row.appendChild(valueCell);
+
+        const statusCell = document.createElement('td');
+        statusCell.className = 'px-4 py-3 text-sm text-center';
+        const badge = document.createElement('span');
+        const badgeConfig = getStatusBadgeConfig(installment.status || payable.status || 'pending');
+        badge.className = `inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${badgeConfig.classes}`;
+        badge.innerHTML = `<i class="fas ${badgeConfig.icon}"></i> ${badgeConfig.label}`;
+        statusCell.appendChild(badge);
+        row.appendChild(statusCell);
+
+        const actionsCell = document.createElement('td');
+        actionsCell.className = 'px-4 py-3 text-sm text-center';
+        const payableIdAttr = payable._id || '';
+        const installmentAttr = installment.number != null ? installment.number : '';
+        actionsCell.innerHTML = `
+          <div class="flex items-center justify-center gap-2">
+            <button type="button" class="history-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
+              data-action="edit-history" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
+              <i class="fas fa-pen"></i>
+              Editar
+            </button>
+            <button type="button" class="history-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+              data-action="delete-history" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
+              <i class="fas fa-trash"></i>
+              Excluir
+            </button>
+          </div>`;
+        row.appendChild(actionsCell);
+
+        elements.historyBody.appendChild(row);
+      });
+    });
+
+    if (!hasRows) {
       if (elements.historyEmpty) {
         elements.historyEmpty.classList.remove('hidden');
       }
@@ -693,41 +1193,166 @@
     if (elements.historyEmpty) {
       elements.historyEmpty.classList.add('hidden');
     }
+  }
 
-    state.history.forEach((item) => {
-      const row = document.createElement('tr');
-      row.className = 'bg-white';
+  async function handleEditPayable(payableId, installmentNumber) {
+    if (!payableId) {
+      notify('Não foi possível identificar o lançamento selecionado.', 'warning');
+      return;
+    }
+    try {
+      const payable = await fetchPayableById(payableId, { force: true });
+      if (!payable) {
+        notify('Conta a pagar não encontrada.', 'error');
+        return;
+      }
+      await enterEditMode(payable, { focusInstallmentNumber: installmentNumber || null });
+      notify('Lançamento carregado para edição.', 'info');
+    } catch (error) {
+      notify(error.message || 'Não foi possível carregar o lançamento selecionado.', 'error');
+    }
+  }
 
-      const descriptionCell = document.createElement('td');
-      descriptionCell.className = 'px-4 py-3 text-sm text-gray-700';
-      descriptionCell.textContent = item.code || 'Título';
-      row.appendChild(descriptionCell);
-
-      const documentCell = document.createElement('td');
-      documentCell.className = 'px-4 py-3 text-sm text-gray-600';
-      documentCell.textContent = item.bankDocumentNumber || '--';
-      row.appendChild(documentCell);
-
-      const dueCell = document.createElement('td');
-      dueCell.className = 'px-4 py-3 text-sm text-gray-600';
-      dueCell.textContent = formatDateBR(item.dueDate);
-      row.appendChild(dueCell);
-
-      const valueCell = document.createElement('td');
-      valueCell.className = 'px-4 py-3 text-sm text-right text-gray-800';
-      valueCell.textContent = formatCurrencyBR(item.totalValue);
-      row.appendChild(valueCell);
-
-      const statusCell = document.createElement('td');
-      statusCell.className = 'px-4 py-3 text-sm text-center';
-      const badge = document.createElement('span');
-      badge.className = 'inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700';
-      badge.innerHTML = '<i class="fas fa-circle"></i> Registrado';
-      statusCell.appendChild(badge);
-      row.appendChild(statusCell);
-
-      elements.historyBody.appendChild(row);
+  async function performDeletePayable(payableId, { deleteAll = false, installmentNumber = null } = {}) {
+    if (!payableId) return null;
+    let url = `${PAYABLES_API}/${payableId}`;
+    if (!deleteAll && installmentNumber) {
+      const params = new URLSearchParams();
+      params.set('installmentNumber', String(installmentNumber));
+      url += `?${params.toString()}`;
+    }
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
     });
+    if (response.status === 204) {
+      return null;
+    }
+    if (!response.ok) {
+      if (response.status === 401) {
+        notify('Sua sessão expirou. Faça login novamente para excluir o lançamento.', 'error');
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData?.message || `Erro ao excluir o lançamento (${response.status}).`);
+    }
+    const data = await response.json();
+    return data;
+  }
+
+  async function handleDeletePayable(payableId, installmentNumber) {
+    if (!payableId) {
+      notify('Não foi possível identificar o lançamento selecionado.', 'warning');
+      return;
+    }
+    try {
+      const payable = await fetchPayableById(payableId, { force: false });
+      if (!payable) {
+        notify('Conta a pagar não encontrada.', 'error');
+        return;
+      }
+
+      const confirmRemoval = await confirmDialog({
+        title: 'Excluir lançamento',
+        message: 'Deseja realmente excluir este lançamento de contas a pagar?',
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar',
+      });
+      if (!confirmRemoval) return;
+
+        const totalInstallments = Array.isArray(payable.installments) ? payable.installments.length : 0;
+        let deleted = null;
+
+        if (totalInstallments > 1 && installmentNumber) {
+          const deleteAll = await confirmDialog({
+            title: 'Excluir parcelas',
+            message: 'Excluir todas as parcelas deste lançamento? Escolha "Excluir todas" para remover o título completo ou "Somente esta" para remover apenas a parcela atual.',
+            confirmText: 'Excluir todas',
+            cancelText: 'Somente esta',
+          });
+          if (deleteAll) {
+            deleted = await performDeletePayable(payableId, { deleteAll: true });
+          removePayableFromCache(payableId);
+          exitEditMode(state.currentEditing?.id === payableId);
+          notify('Lançamento excluído com sucesso.', 'success');
+        } else {
+          const confirmSingle = await confirmDialog({
+            title: 'Excluir parcela',
+            message: `Deseja excluir a parcela ${installmentNumber}?`,
+            confirmText: 'Excluir',
+            cancelText: 'Cancelar',
+          });
+          if (!confirmSingle) return;
+          const updated = await performDeletePayable(payableId, {
+            deleteAll: false,
+            installmentNumber,
+          });
+          if (updated && updated._id) {
+            const normalized = normalizePayable(updated);
+            storePayableInCache(normalized);
+            if (state.currentEditing?.id === payableId) {
+              await enterEditMode(normalized, { focusInstallmentNumber: null });
+            }
+            notify('Parcela excluída com sucesso.', 'success');
+          } else {
+            removePayableFromCache(payableId);
+            exitEditMode(state.currentEditing?.id === payableId);
+            notify('Lançamento excluído.', 'success');
+          }
+        }
+      } else {
+        await performDeletePayable(payableId, { deleteAll: true });
+        removePayableFromCache(payableId);
+        exitEditMode(state.currentEditing?.id === payableId);
+        notify('Lançamento excluído com sucesso.', 'success');
+      }
+
+      await loadAgenda();
+      await loadHistory();
+    } catch (error) {
+      console.error('accounts-payable:handleDeletePayable', error);
+      notify(error.message || 'Não foi possível excluir o lançamento selecionado.', 'error');
+    }
+  }
+
+  function handleAgendaFilterClick(event) {
+    const button = event.target.closest('button[data-filter]');
+    if (!button) return;
+    const filterKey = button.dataset.filter || 'all';
+    if (state.agenda.filterStatus === filterKey) return;
+    state.agenda.filterStatus = filterKey;
+    renderAgenda();
+  }
+
+  function extractActionContext(target) {
+    const button = target.closest('button[data-action]');
+    if (!button) return null;
+    const installmentRaw = button.dataset.installment;
+    const installmentNumber = installmentRaw ? Number.parseInt(installmentRaw, 10) : null;
+    return {
+      action: button.dataset.action,
+      payableId: button.dataset.id || button.getAttribute('data-payable-id') || '',
+      installmentNumber: Number.isFinite(installmentNumber) ? installmentNumber : null,
+    };
+  }
+
+  function handleAgendaTableClick(event) {
+    const context = extractActionContext(event.target);
+    if (!context || !context.payableId) return;
+    if (context.action === 'edit-agenda') {
+      handleEditPayable(context.payableId, context.installmentNumber);
+    } else if (context.action === 'delete-agenda') {
+      handleDeletePayable(context.payableId, context.installmentNumber);
+    }
+  }
+
+  function handleHistoryTableClick(event) {
+    const context = extractActionContext(event.target);
+    if (!context || !context.payableId) return;
+    if (context.action === 'edit-history') {
+      handleEditPayable(context.payableId, context.installmentNumber);
+    } else if (context.action === 'delete-history') {
+      handleDeletePayable(context.payableId, context.installmentNumber);
+    }
   }
 
   async function loadHistory() {
@@ -753,7 +1378,9 @@
         throw new Error(errorData?.message || `Erro ao carregar histórico (${response.status})`);
       }
       const data = await response.json();
-      state.history = Array.isArray(data?.payables) ? data.payables : [];
+      const payables = Array.isArray(data?.payables) ? data.payables.map(normalizePayable) : [];
+      state.history = payables;
+      payables.forEach((payable) => storePayableInCache(payable));
       renderHistory();
     } catch (error) {
       console.error('accounts-payable:loadHistory', error);
@@ -774,6 +1401,7 @@
       state.agenda.periodStart = null;
       state.agenda.periodEnd = null;
       state.agenda.emptyMessage = 'Selecione uma empresa para visualizar a agenda de pagamentos.';
+      state.agenda.filterStatus = 'all';
       renderAgenda();
       return;
     }
@@ -875,12 +1503,13 @@
 
   function collectInstallmentsPayload() {
     return state.previewInstallments.map((item, index) => ({
-      number: index + 1,
+      number: item.number || index + 1,
       issueDate: formatDateInputValue(item.issueDate || parseDateInputValue(elements.issueDate?.value)),
       dueDate: item.dueDateInput || formatDateInputValue(item.dueDate),
       value: item.value,
       bankAccount: item.bankAccount || elements.bankAccount?.value || '',
       accountingAccount: item.accountingAccount || elements.ledgerAccount?.value || '',
+      status: item.status || 'pending',
     }));
   }
 
@@ -947,8 +1576,11 @@
     elements.saveButton?.classList.add('opacity-70', 'pointer-events-none');
 
     try {
-      const response = await fetch(PAYABLES_API, {
-        method: 'POST',
+      const isEditing = Boolean(state.currentEditing?.id);
+      const endpoint = isEditing ? `${PAYABLES_API}/${state.currentEditing.id}` : PAYABLES_API;
+      const method = isEditing ? 'PUT' : 'POST';
+      const response = await fetch(endpoint, {
+        method,
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
       });
@@ -957,15 +1589,31 @@
           notify('Sua sessão expirou. Faça login novamente para salvar o lançamento.', 'error');
         }
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData?.message || `Erro ao salvar a conta a pagar (${response.status})`);
+        throw new Error(
+          errorData?.message ||
+            (isEditing
+              ? `Erro ao atualizar a conta a pagar (${response.status})`
+              : `Erro ao salvar a conta a pagar (${response.status})`)
+        );
       }
-      const created = await response.json();
-      notify('Conta a pagar salva com sucesso!', 'success');
-      if (created?.code && elements.code && !elements.code.value) {
-        elements.code.value = created.code;
+      const saved = await response.json();
+      const normalized = normalizePayable(saved);
+      if (normalized) {
+        storePayableInCache(normalized);
       }
-      loadHistory();
-      loadAgenda();
+      notify(isEditing ? 'Conta a pagar atualizada com sucesso!' : 'Conta a pagar salva com sucesso!', 'success');
+      if (normalized?.code && elements.code) {
+        elements.code.value = normalized.code;
+      }
+      if (isEditing && normalized) {
+        await enterEditMode(normalized, {
+          focusInstallmentNumber: state.currentEditing?.installmentNumber || null,
+        });
+      } else if (!isEditing && normalized?._id) {
+        await enterEditMode(normalized, { focusInstallmentNumber: null });
+      }
+      await loadHistory();
+      await loadAgenda();
     } catch (error) {
       console.error('accounts-payable:handleSave', error);
       notify(error.message || 'Não foi possível salvar a conta a pagar.', 'error');
@@ -1020,6 +1668,7 @@
       if (state.selectedParty) {
         loadHistory();
       }
+      state.agenda.filterStatus = 'all';
       loadAgenda();
     });
     elements.bankAccount?.addEventListener('change', () => {
@@ -1037,6 +1686,9 @@
     elements.agendaRange?.addEventListener('change', () => {
       loadAgenda();
     });
+    elements.agendaFilters?.addEventListener('click', handleAgendaFilterClick);
+    elements.agendaTableBody?.addEventListener('click', handleAgendaTableClick);
+    elements.historyBody?.addEventListener('click', handleHistoryTableClick);
   }
 
   async function initialize() {
