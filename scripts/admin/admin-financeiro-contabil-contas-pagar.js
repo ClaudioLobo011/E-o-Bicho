@@ -1427,19 +1427,6 @@
     const rangeDays = Number.isFinite(selectedRange) && selectedRange > 0 ? selectedRange : state.agenda.rangeDays || 7;
     state.agenda.rangeDays = rangeDays;
 
-    const companyId = elements.company?.value;
-    if (!companyId) {
-      state.agenda.loading = false;
-      state.agenda.summary = createEmptyAgendaSummary();
-      state.agenda.items = [];
-      state.agenda.periodStart = null;
-      state.agenda.periodEnd = null;
-      state.agenda.emptyMessage = 'Selecione uma empresa para visualizar a agenda de pagamentos.';
-      state.agenda.filterStatus = 'all';
-      renderAgenda();
-      return;
-    }
-
     state.agenda.loading = true;
     state.agenda.emptyMessage = 'Nenhum pagamento previsto para o período selecionado.';
     renderAgenda();
@@ -1447,7 +1434,10 @@
     try {
       const params = new URLSearchParams();
       params.set('range', String(rangeDays));
-      params.set('company', companyId);
+      const companyId = elements.company?.value;
+      if (companyId) {
+        params.set('company', companyId);
+      }
       const response = await fetch(`${PAYABLES_API}/agenda?${params.toString()}`, {
         headers: authHeaders({ 'Content-Type': 'application/json' }),
       });
