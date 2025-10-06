@@ -243,8 +243,36 @@
                 </div>
 
                 <div class="tab-panel hidden" data-tab-panel="pendencias">
-                  <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
-                    Pendências em construção.
+                  <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="text-sm font-medium text-gray-600">Valor pendente</span>
+                        <span id="pendencias-valor-pendente-status" class="text-xs font-semibold uppercase tracking-wide text-gray-500"></span>
+                      </div>
+                      <p id="pendencias-valor-pendente" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
+                      <p class="mt-2 text-xs text-gray-500">Saldo em aberto considerando todos os lançamentos financeiros.</p>
+                    </div>
+
+                    <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                      <label for="pendencias-limite-credito" class="text-sm font-medium text-gray-600">Limite de crédito</label>
+                      <div class="relative mt-2">
+                        <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm text-gray-500">R$</span>
+                        <input id="pendencias-limite-credito" type="text" inputmode="decimal" class="block w-full rounded-md border-gray-300 py-2 pl-12 pr-3 text-base focus:border-indigo-500 focus:ring-indigo-500" placeholder="0,00" />
+                      </div>
+                      <p class="mt-2 text-xs text-gray-500">Defina o limite de compras a prazo permitido para o cliente.</p>
+                    </div>
+
+                    <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                      <span class="text-sm font-medium text-gray-600">Saldo disponível</span>
+                      <p id="pendencias-saldo-disponivel" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
+                      <p class="mt-2 text-xs text-gray-500">Calculado automaticamente a partir do limite e do saldo utilizado.</p>
+                    </div>
+
+                    <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                      <span class="text-sm font-medium text-gray-600">Saldo usado</span>
+                      <p id="pendencias-saldo-usado" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
+                      <p class="mt-2 text-xs text-gray-500">Total já comprometido dentro do limite de crédito do cliente.</p>
+                    </div>
                   </div>
                 </div>
 

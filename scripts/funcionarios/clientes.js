@@ -11,6 +11,45 @@
     return String(value || '').replace(/\D/g, '');
   }
 
+  const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  const currencyInputFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  function parseCurrency(value, fallback = 0) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value !== 'string') return fallback;
+    const trimmed = value.trim();
+    if (!trimmed) return fallback;
+    const cleaned = trimmed
+      .replace(/\s+/g, '')
+      .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+      .replace(',', '.')
+      .replace(/[^\d.-]/g, '')
+      .replace(/(?!^)-/g, '');
+    if (!cleaned || cleaned === '-' || cleaned === '.') return fallback;
+    const parsed = Number.parseFloat(cleaned);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  function formatCurrencyBRL(value = 0) {
+    const numeric = Number.isFinite(value) ? value : 0;
+    return currencyFormatter.format(numeric);
+  }
+
+  function formatCurrencyInput(value = 0) {
+    const numeric = Number.isFinite(value) ? value : 0;
+    return currencyInputFormatter.format(numeric);
+  }
+
+  function toSafeNumber(value, fallback = 0) {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : fallback;
+    }
+    if (typeof value === 'string') {
+      return parseCurrency(value, fallback);
+    }
+    return fallback;
+  }
+
   function formatCpf(value = '') {
     const digits = onlyDigits(value).slice(0, 11);
     if (!digits) return '';
@@ -100,6 +139,13 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    const defaultPendencias = () => ({
+      valorPendente: 0,
+      limiteCredito: 0,
+      saldoUsado: 0,
+      saldoDisponivel: 0,
+    });
+
     const state = {
       currentClienteId: null,
       enderecos: [],
@@ -111,6 +157,7 @@
       busca: '',
       empresas: [],
       cepAbort: null,
+      pendencias: defaultPendencias(),
     };
 
     const elements = {
@@ -183,6 +230,13 @@
       info: document.getElementById('clientes-info'),
       btnPrev: document.getElementById('clientes-prev'),
       btnNext: document.getElementById('clientes-next'),
+      pendencias: {
+        valorPendente: document.getElementById('pendencias-valor-pendente'),
+        valorStatus: document.getElementById('pendencias-valor-pendente-status'),
+        limiteCredito: document.getElementById('pendencias-limite-credito'),
+        saldoDisponivel: document.getElementById('pendencias-saldo-disponivel'),
+        saldoUsado: document.getElementById('pendencias-saldo-usado'),
+      },
     };
 
     const petAutocomplete = {
@@ -389,6 +443,112 @@
       }
     }
 
+    function updatePendenciasUI(options = {}) {
+      const { preserveInput = false } = options;
+      const {
+        valorPendente = 0,
+        limiteCredito = 0,
+        saldoDisponivel = 0,
+        saldoUsado = 0,
+      } = state.pendencias || defaultPendencias();
+
+      if (elements.pendencias.valorPendente) {
+        const valueEl = elements.pendencias.valorPendente;
+        valueEl.textContent = formatCurrencyBRL(valorPendente);
+        valueEl.classList.remove('text-red-600', 'text-sky-600', 'text-gray-700');
+        let statusText = '';
+        const statusEl = elements.pendencias.valorStatus;
+        if (valorPendente < 0) {
+          valueEl.classList.add('text-red-600');
+          statusText = 'Em aberto';
+          if (statusEl) {
+            statusEl.classList.remove('text-sky-600', 'text-gray-500', 'text-emerald-600');
+            statusEl.classList.add('text-red-600');
+          }
+        } else if (valorPendente > 0) {
+          valueEl.classList.add('text-sky-600');
+          statusText = 'Crédito';
+          if (statusEl) {
+            statusEl.classList.remove('text-red-600', 'text-gray-500', 'text-emerald-600');
+            statusEl.classList.add('text-sky-600');
+          }
+        } else {
+          valueEl.classList.add('text-gray-700');
+          statusText = 'Em dia';
+          if (statusEl) {
+            statusEl.classList.remove('text-red-600', 'text-sky-600');
+            statusEl.classList.add('text-gray-500');
+          }
+        }
+        if (statusEl) {
+          statusEl.textContent = statusText;
+        }
+      }
+
+      if (elements.pendencias.saldoDisponivel) {
+        const disponivel = Number.isFinite(saldoDisponivel)
+          ? saldoDisponivel
+          : limiteCredito - saldoUsado;
+        elements.pendencias.saldoDisponivel.textContent = formatCurrencyBRL(disponivel);
+      }
+
+      if (elements.pendencias.saldoUsado) {
+        const usado = Number.isFinite(saldoUsado) ? saldoUsado : 0;
+        elements.pendencias.saldoUsado.textContent = formatCurrencyBRL(usado);
+      }
+
+      if (!preserveInput && elements.pendencias.limiteCredito) {
+        elements.pendencias.limiteCredito.value = formatCurrencyInput(limiteCredito);
+      }
+    }
+
+    function resetPendencias() {
+      state.pendencias = defaultPendencias();
+      updatePendenciasUI();
+    }
+
+    function applyPendenciasFromCliente(cliente = {}) {
+      const financeiro = cliente.financeiro || cliente.pendencias || {};
+      const valorPendente = toSafeNumber(
+        financeiro.valorPendente ?? cliente.valorPendente,
+        0,
+      );
+      const limiteCredito = toSafeNumber(
+        financeiro.limiteCredito ?? cliente.limiteCredito,
+        0,
+      );
+      const saldoUsado = toSafeNumber(
+        financeiro.saldoUsado ?? cliente.saldoUsado,
+        0,
+      );
+      const saldoDisponivelRaw = financeiro.saldoDisponivel ?? cliente.saldoDisponivel;
+      const saldoDisponivel = saldoDisponivelRaw == null
+        ? limiteCredito - saldoUsado
+        : toSafeNumber(saldoDisponivelRaw, limiteCredito - saldoUsado);
+
+      state.pendencias = {
+        valorPendente,
+        limiteCredito,
+        saldoUsado,
+        saldoDisponivel,
+      };
+      updatePendenciasUI();
+    }
+
+    function handleLimiteCreditoInput() {
+      if (!elements.pendencias.limiteCredito) return;
+      const raw = elements.pendencias.limiteCredito.value;
+      const novoLimite = parseCurrency(raw, state.pendencias.limiteCredito || 0);
+      state.pendencias.limiteCredito = novoLimite;
+      state.pendencias.saldoDisponivel = novoLimite - (state.pendencias.saldoUsado || 0);
+      updatePendenciasUI({ preserveInput: true });
+    }
+
+    function handleLimiteCreditoBlur() {
+      handleLimiteCreditoInput();
+      updatePendenciasUI();
+    }
+
     function setSelectValue(select, value) {
       if (!select) return;
       const raw = value == null ? '' : String(value);
@@ -571,6 +731,7 @@
       renderPets();
       clearEnderecoForm();
       clearPetForm();
+      resetPendencias();
     }
 
     async function loadEmpresas() {
@@ -765,6 +926,7 @@
         elements.contato.telefone.value = formatPhone(data.telefone || '');
         elements.contato.celular2.value = formatPhone(data.celularSecundario || '');
         elements.contato.telefone2.value = formatPhone(data.telefoneSecundario || '');
+        applyPendenciasFromCliente(data);
         state.enderecos = Array.isArray(data.enderecos) ? data.enderecos : [];
         renderEnderecos();
         await loadPets();
@@ -787,6 +949,9 @@
         telefone: onlyDigits(elements.contato.telefone.value),
         celular2: onlyDigits(elements.contato.celular2.value),
         telefone2: onlyDigits(elements.contato.telefone2.value),
+        limiteCredito: Number.isFinite(state.pendencias?.limiteCredito)
+          ? state.pendencias.limiteCredito
+          : 0,
       };
 
       if (tipoConta === 'pessoa_fisica') {
@@ -1119,6 +1284,11 @@
     elements.endereco.cep.addEventListener('blur', () => {
       consultarCep(elements.endereco.cep.value);
     });
+
+    if (elements.pendencias.limiteCredito) {
+      elements.pendencias.limiteCredito.addEventListener('input', handleLimiteCreditoInput);
+      elements.pendencias.limiteCredito.addEventListener('blur', handleLimiteCreditoBlur);
+    }
 
     clearForm();
     loadEmpresas();
