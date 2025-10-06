@@ -69,6 +69,7 @@
     historyBody: document.getElementById('payable-history-body'),
     historyEmpty: document.getElementById('payable-history-empty'),
     saveButton: document.getElementById('payable-save'),
+    clearButton: document.getElementById('payable-clear'),
     carrierList: document.getElementById('carrier-bank-list'),
     agendaRange: document.getElementById('agenda-range'),
     agendaPeriodLabel: document.getElementById('agenda-period-label'),
@@ -1013,6 +1014,39 @@
     }
   }
 
+  async function handleClearForm(event) {
+    if (event) {
+      event.preventDefault();
+    }
+    if (state.isSaving) {
+      notify('Aguarde o término do salvamento antes de limpar o formulário.', 'warning');
+      return;
+    }
+
+    exitEditMode(false);
+    state.selectedParty = null;
+    state.partySuggestions = [];
+    if (elements.partySuggestions) {
+      elements.partySuggestions.innerHTML =
+        '<div class="py-3 text-center text-xs text-gray-500">Digite ao menos 3 caracteres para buscar.</div>';
+      elements.partySuggestions.classList.add('hidden');
+    }
+
+    resetFormFields({ preserveCompany: false });
+    state.history = [];
+    renderHistory();
+
+    try {
+      await loadCompanyResources('');
+      state.agenda.filterStatus = 'all';
+      await loadAgenda();
+      notify('Formulário limpo para um novo lançamento.', 'info');
+    } catch (error) {
+      console.error('accounts-payable:handleClearForm', error);
+      notify('Formulário limpo, mas não foi possível recarregar todos os dados auxiliares.', 'warning');
+    }
+  }
+
   async function enterEditMode(payable, { focusInstallmentNumber = null } = {}) {
     if (!payable) return;
     const previousPartyId = state.selectedParty?.id;
@@ -1662,6 +1696,7 @@
   function setupEventListeners() {
     elements.generateButton?.addEventListener('click', handleGeneratePreview);
     elements.saveButton?.addEventListener('click', handleSave);
+    elements.clearButton?.addEventListener('click', handleClearForm);
     elements.company?.addEventListener('change', () => {
       loadCompanyResources(elements.company.value);
       resetPreview();
