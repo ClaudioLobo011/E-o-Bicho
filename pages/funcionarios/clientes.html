@@ -2,10 +2,11 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Funcionários — Clientes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Funcionários — Cadastro de Cliente</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.css" integrity="sha512-YQ2GZWlznImPi0tLxe3LjXLp8dkUBaRdOy+nK8BPVKx/aRV+7Y6AmTAPGY7d8IvFcl1l0I/+ZZOco2wnBbUdeg==" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="../../src/output.css">
 </head>
 <body class="bg-gray-100">
@@ -13,18 +14,362 @@
 
   <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
     <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-
       <aside class="md:col-span-4">
         <div id="admin-sidebar-placeholder"></div>
       </aside>
 
-      <section class="md:col-span-4">
+      <section class="md:col-span-4 space-y-6">
         <div class="bg-white rounded-lg shadow p-6">
-          <div class="flex items-center gap-3 mb-4">
-            <i class="fas fa-users text-gray-400 text-2xl"></i>
-            <h1 class="text-2xl font-bold text-gray-800">Clientes</h1>
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <span class="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
+                <i class="fas fa-user-plus text-xl"></i>
+              </span>
+              <div>
+                <h1 class="text-2xl font-bold text-gray-800">Cadastro de Cliente</h1>
+                <p class="text-gray-500">Gerencie os dados dos clientes da empresa.</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btn-novo-cliente" type="button" class="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition">Novo Cliente</button>
+              <button form="cliente-form" id="btn-salvar-cliente" type="submit" class="px-4 py-2 rounded bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition">Salvar</button>
+            </div>
           </div>
-          <p class="text-gray-600">Em breve: listagem e ferramentas de clientes.</p>
+
+          <form id="cliente-form" class="mt-6 space-y-6">
+            <input type="hidden" id="cliente-id" />
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label for="cliente-codigo" class="block text-sm font-medium text-gray-700">Código</label>
+                <input id="cliente-codigo" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 focus:border-indigo-500 focus:ring-indigo-500" placeholder="Gerado automaticamente" readonly />
+              </div>
+              <div>
+                <label for="cliente-tipo" class="block text-sm font-medium text-gray-700">Tipo</label>
+                <select id="cliente-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                  <option value="pessoa_fisica">Pessoa Física</option>
+                  <option value="pessoa_juridica">Pessoa Jurídica</option>
+                </select>
+              </div>
+              <div>
+                <label for="cliente-pais" class="block text-sm font-medium text-gray-700">País</label>
+                <input id="cliente-pais" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" value="Brasil" />
+              </div>
+              <div>
+                <label for="cliente-empresa" class="block text-sm font-medium text-gray-700">Empresa</label>
+                <select id="cliente-empresa" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                  <option value="">Selecione uma empresa</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="pf-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label for="cliente-nome" class="block text-sm font-medium text-gray-700">Nome completo</label>
+                <input id="cliente-nome" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label for="cliente-apelido" class="block text-sm font-medium text-gray-700">Apelido</label>
+                <input id="cliente-apelido" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label for="cliente-cpf" class="block text-sm font-medium text-gray-700">CPF</label>
+                <input id="cliente-cpf" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="000.000.000-00" />
+              </div>
+              <div>
+                <label for="cliente-rg" class="block text-sm font-medium text-gray-700">RG</label>
+                <input id="cliente-rg" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label for="cliente-nascimento" class="block text-sm font-medium text-gray-700">Nascimento</label>
+                <input id="cliente-nascimento" type="date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label for="cliente-sexo" class="block text-sm font-medium text-gray-700">Sexo</label>
+                <select id="cliente-sexo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                  <option value="">Selecione</option>
+                  <option value="masculino">Masculino</option>
+                  <option value="feminino">Feminino</option>
+                  <option value="outro">Outro</option>
+                  <option value="nao_informado">Prefere não informar</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="pj-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+              <div>
+                <label for="cliente-razao-social" class="block text-sm font-medium text-gray-700">Razão Social</label>
+                <input id="cliente-razao-social" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label for="cliente-nome-fantasia" class="block text-sm font-medium text-gray-700">Nome Fantasia</label>
+                <input id="cliente-nome-fantasia" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label for="cliente-nome-contato" class="block text-sm font-medium text-gray-700">Nome do contato</label>
+                <input id="cliente-nome-contato" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label for="cliente-inscricao-estadual" class="block text-sm font-medium text-gray-700">Inscrição Estadual</label>
+                <input id="cliente-inscricao-estadual" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              </div>
+              <div class="flex items-center gap-2 mt-2 md:mt-6">
+                <input id="cliente-isento-ie" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                <label for="cliente-isento-ie" class="text-sm text-gray-700">Isento de IE</label>
+              </div>
+              <div>
+                <label for="cliente-estado-ie" class="block text-sm font-medium text-gray-700">Estado da IE</label>
+                <select id="cliente-estado-ie" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                  <option value="">Selecione o estado</option>
+                  <option value="AC">Acre</option>
+                  <option value="AL">Alagoas</option>
+                  <option value="AM">Amazonas</option>
+                  <option value="AP">Amapá</option>
+                  <option value="BA">Bahia</option>
+                  <option value="CE">Ceará</option>
+                  <option value="DF">Distrito Federal</option>
+                  <option value="ES">Espírito Santo</option>
+                  <option value="GO">Goiás</option>
+                  <option value="MA">Maranhão</option>
+                  <option value="MG">Minas Gerais</option>
+                  <option value="MS">Mato Grosso do Sul</option>
+                  <option value="MT">Mato Grosso</option>
+                  <option value="PA">Pará</option>
+                  <option value="PB">Paraíba</option>
+                  <option value="PE">Pernambuco</option>
+                  <option value="PI">Piauí</option>
+                  <option value="PR">Paraná</option>
+                  <option value="RJ">Rio de Janeiro</option>
+                  <option value="RN">Rio Grande do Norte</option>
+                  <option value="RO">Rondônia</option>
+                  <option value="RR">Roraima</option>
+                  <option value="RS">Rio Grande do Sul</option>
+                  <option value="SC">Santa Catarina</option>
+                  <option value="SE">Sergipe</option>
+                  <option value="SP">São Paulo</option>
+                  <option value="TO">Tocantins</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="border-t pt-4">
+              <div class="flex flex-wrap items-center gap-2 border-b pb-3">
+                <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium bg-indigo-100 text-indigo-700" data-tab="endereco">Endereço</button>
+                <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100" data-tab="contato">Contato</button>
+                <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100" data-tab="pendencias">Pendências</button>
+                <button type="button" class="tab-button px-4 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100" data-tab="animais">Animais</button>
+              </div>
+
+              <div class="mt-4 space-y-6">
+                <div class="tab-panel" data-tab-panel="endereco">
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label for="endereco-cep" class="block text-sm font-medium text-gray-700">CEP</label>
+                      <input id="endereco-cep" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="00000-000" />
+                    </div>
+                    <div>
+                      <label for="endereco-logradouro" class="block text-sm font-medium text-gray-700">Logradouro</label>
+                      <input id="endereco-logradouro" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="endereco-numero" class="block text-sm font-medium text-gray-700">Número</label>
+                      <input id="endereco-numero" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="endereco-complemento" class="block text-sm font-medium text-gray-700">Complemento</label>
+                      <input id="endereco-complemento" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="endereco-bairro" class="block text-sm font-medium text-gray-700">Bairro</label>
+                      <input id="endereco-bairro" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="endereco-cidade" class="block text-sm font-medium text-gray-700">Cidade</label>
+                      <input id="endereco-cidade" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="endereco-apelido" class="block text-sm font-medium text-gray-700">Apelido</label>
+                      <input id="endereco-apelido" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Principal, Cobrança, etc." />
+                    </div>
+                    <div>
+                      <label for="endereco-cod-ibge" class="block text-sm font-medium text-gray-700">Cod. IBGE Município</label>
+                      <input id="endereco-cod-ibge" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="endereco-cod-uf" class="block text-sm font-medium text-gray-700">Cod. UF (IBGE/SEFAZ)</label>
+                      <input id="endereco-cod-uf" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="endereco-pais" class="block text-sm font-medium text-gray-700">País</label>
+                      <input id="endereco-pais" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" value="Brasil" />
+                    </div>
+                  </div>
+
+                  <div class="mt-4 flex flex-wrap items-center gap-2">
+                    <button id="btn-endereco-salvar" type="button" class="px-4 py-2 rounded bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition">Salvar endereço</button>
+                    <button id="btn-endereco-cancelar" type="button" class="px-4 py-2 rounded border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-50 transition hidden">Cancelar</button>
+                  </div>
+
+                  <div class="mt-6">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-3">Endereços cadastrados</h3>
+                    <div id="enderecos-lista" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                    <p id="enderecos-vazio" class="text-sm text-gray-500 hidden">Nenhum endereço cadastrado.</p>
+                  </div>
+                </div>
+
+                <div class="tab-panel hidden" data-tab-panel="contato">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label for="cliente-email" class="block text-sm font-medium text-gray-700">Email</label>
+                      <input id="cliente-email" type="email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="cliente-celular" class="block text-sm font-medium text-gray-700">Celular</label>
+                      <input id="cliente-celular" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="(00) 00000-0000" />
+                    </div>
+                    <div>
+                      <label for="cliente-telefone" class="block text-sm font-medium text-gray-700">Telefone</label>
+                      <input id="cliente-telefone" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="(00) 0000-0000" />
+                    </div>
+                    <div>
+                      <label for="cliente-celular2" class="block text-sm font-medium text-gray-700">Celular 2</label>
+                      <input id="cliente-celular2" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="cliente-telefone2" class="block text-sm font-medium text-gray-700">Telefone 2</label>
+                      <input id="cliente-telefone2" type="text" inputmode="tel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="tab-panel hidden" data-tab-panel="pendencias">
+                  <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                    Pendências em construção.
+                  </div>
+                </div>
+
+                <div class="tab-panel hidden" data-tab-panel="animais">
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label for="pet-nome" class="block text-sm font-medium text-gray-700">Nome do Pet</label>
+                      <input id="pet-nome" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="pet-tipo" class="block text-sm font-medium text-gray-700">Tipo do Pet</label>
+                      <select id="pet-tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Selecione</option>
+                        <option value="cachorro">Cachorro</option>
+                        <option value="gato">Gato</option>
+                        <option value="passaro">Pássaro</option>
+                        <option value="peixe">Peixe</option>
+                        <option value="roedor">Roedor</option>
+                        <option value="lagarto">Lagarto</option>
+                        <option value="tartaruga">Tartaruga</option>
+                        <option value="outro">Outro</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="pet-porte" class="block text-sm font-medium text-gray-700">Porte</label>
+                      <select id="pet-porte" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Selecione</option>
+                        <option value="Sem porte definido">Sem porte definido</option>
+                        <option value="Mini">Mini</option>
+                        <option value="Pequeno">Pequeno</option>
+                        <option value="Médio">Médio</option>
+                        <option value="Grande">Grande</option>
+                        <option value="Gigante">Gigante</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="pet-raca" class="block text-sm font-medium text-gray-700">Raça</label>
+                      <input id="pet-raca" type="text" class="awesomplete mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Comece a digitar a raça..." />
+                    </div>
+                    <div>
+                      <label for="pet-pelagem" class="block text-sm font-medium text-gray-700">Pelagem/Cor</label>
+                      <input id="pet-pelagem" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="pet-nascimento" class="block text-sm font-medium text-gray-700">Nascimento</label>
+                      <input id="pet-nascimento" type="date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="pet-peso" class="block text-sm font-medium text-gray-700">Peso</label>
+                      <input id="pet-peso" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Ex.: 8.5 kg" />
+                    </div>
+                    <div>
+                      <label for="pet-sexo" class="block text-sm font-medium text-gray-700">Sexo</label>
+                      <select id="pet-sexo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Selecione</option>
+                        <option value="macho">Macho</option>
+                        <option value="femea">Fêmea</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="pet-rga" class="block text-sm font-medium text-gray-700">RGA</label>
+                      <input id="pet-rga" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label for="pet-microchip" class="block text-sm font-medium text-gray-700">Microchip</label>
+                      <input id="pet-microchip" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    </div>
+                  </div>
+
+                  <div class="mt-4 flex flex-wrap items-center gap-2">
+                    <button id="btn-pet-salvar" type="button" class="px-4 py-2 rounded bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition">Adicionar pet</button>
+                    <button id="btn-pet-cancelar" type="button" class="px-4 py-2 rounded border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-50 transition hidden">Cancelar edição</button>
+                  </div>
+
+                  <div class="mt-6">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-3">Animais cadastrados</h3>
+                    <div id="pets-lista" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                    <p id="pets-vazio" class="text-sm text-gray-500 hidden">Nenhum pet cadastrado.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+            <div>
+              <h2 class="text-xl font-semibold text-gray-800">Clientes cadastrados</h2>
+              <p class="text-sm text-gray-500">Somente clientes (usuários não marcados como funcionários).</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <input id="cliente-busca" type="text" class="w-full md:w-64 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Buscar por nome, documento ou email" />
+              <button id="btn-busca-cliente" type="button" class="px-3 py-2 rounded bg-gray-800 text-white hover:bg-gray-900 transition"><i class="fas fa-search"></i></button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Código</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Nome</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Tipo</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Documento</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Empresa</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide">Contato</th>
+                  <th class="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody id="clientes-tbody" class="divide-y divide-gray-200">
+                <tr>
+                  <td colspan="7" class="px-4 py-6 text-center text-gray-500 text-sm">Carregando clientes...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-4 flex items-center justify-between text-sm text-gray-500">
+            <div id="clientes-info">&nbsp;</div>
+            <div class="flex items-center gap-2">
+              <button id="clientes-prev" type="button" class="px-3 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition">Anterior</button>
+              <button id="clientes-next" type="button" class="px-3 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition">Próximo</button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
@@ -40,5 +385,7 @@
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.js" integrity="sha512-6Z6/Dr7guPmyAnbcW2CYwiVdc+GqOR/mdrIW6DCeU44yWiNysGEKMluSleqrs9jwELyhl725LLJoPLD114F8ZA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="../../scripts/funcionarios/clientes.js"></script>
 </body>
 </html>

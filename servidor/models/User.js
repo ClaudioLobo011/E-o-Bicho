@@ -32,6 +32,14 @@ const userSchema = new Schema({
     type: String // Opcional
   },
 
+  // Dados adicionais comuns a todos os clientes
+  codigoCliente: { type: String, trim: true },
+  apelido: { type: String, trim: true },
+  pais: { type: String, trim: true, default: 'Brasil' },
+  celularSecundario: { type: String, trim: true },
+  telefoneSecundario: { type: String, trim: true },
+  empresaPrincipal: { type: Schema.Types.ObjectId, ref: 'Store' },
+
   // --- Campos Específicos de Pessoa Física ---
   nomeCompleto: { type: String },
   cpf: { type: String, unique: true, sparse: true },
@@ -159,6 +167,7 @@ const userSchema = new Schema({
   razaoSocial: { type: String },
   cnpj: { type: String, unique: true, sparse: true },
   nomeContato: { type: String },
+  nomeFantasia: { type: String },
   inscricaoEstadual: { type: String },
   estadoIE: { type: String },
   isentoIE: { type: Boolean, default: false },
