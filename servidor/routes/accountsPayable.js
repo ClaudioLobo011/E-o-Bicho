@@ -687,16 +687,23 @@ router.post(
       };
 
       const created = await AccountPayable.create(payload);
-      const populated = await created
-        .populate('company', 'nome nomeFantasia razaoSocial cnpj')
-        .populate('party')
-        .populate('bankAccount', 'alias bankName bankCode agency accountNumber accountDigit')
-        .populate('accountingAccount', 'name code')
-        .populate('paymentMethod', 'name type')
-        .populate('installments.bankAccount', 'alias bankName bankCode agency accountNumber accountDigit')
-        .populate('installments.accountingAccount', 'name code');
+      await created.populate([
+        { path: 'company', select: 'nome nomeFantasia razaoSocial cnpj' },
+        { path: 'party' },
+        {
+          path: 'bankAccount',
+          select: 'alias bankName bankCode agency accountNumber accountDigit',
+        },
+        { path: 'accountingAccount', select: 'name code' },
+        { path: 'paymentMethod', select: 'name type' },
+        {
+          path: 'installments.bankAccount',
+          select: 'alias bankName bankCode agency accountNumber accountDigit',
+        },
+        { path: 'installments.accountingAccount', select: 'name code' },
+      ]);
 
-      res.status(201).json(buildPublicPayable(populated));
+      res.status(201).json(buildPublicPayable(created));
     } catch (error) {
       if (error?.code === 11000) {
         return res.status(409).json({ message: 'Já existe um lançamento com o código informado.' });
