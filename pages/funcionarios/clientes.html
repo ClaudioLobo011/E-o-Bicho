@@ -6,6 +6,7 @@
   <title>Funcionários — Cadastro de Cliente</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.css" integrity="sha512-YQ2GZWlznImPi0tLxe3LjXLp8dkUBaRdOy+nK8BPVKx/aRV+7Y6AmTAPGY7d8IvFcl1l0I/+ZZOco2wnBbUdeg==" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="../../src/output.css">
 </head>
 <body class="bg-gray-100">
@@ -259,10 +260,11 @@
                         <option value="">Selecione</option>
                         <option value="cachorro">Cachorro</option>
                         <option value="gato">Gato</option>
-                        <option value="ave">Ave</option>
-                        <option value="roedor">Roedor</option>
+                        <option value="passaro">Pássaro</option>
                         <option value="peixe">Peixe</option>
-                        <option value="reptil">Réptil</option>
+                        <option value="roedor">Roedor</option>
+                        <option value="lagarto">Lagarto</option>
+                        <option value="tartaruga">Tartaruga</option>
                         <option value="outro">Outro</option>
                       </select>
                     </div>
@@ -270,14 +272,17 @@
                       <label for="pet-porte" class="block text-sm font-medium text-gray-700">Porte</label>
                       <select id="pet-porte" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">Selecione</option>
-                        <option value="pequeno">Pequeno</option>
-                        <option value="medio">Médio</option>
-                        <option value="grande">Grande</option>
+                        <option value="Sem porte definido">Sem porte definido</option>
+                        <option value="Mini">Mini</option>
+                        <option value="Pequeno">Pequeno</option>
+                        <option value="Médio">Médio</option>
+                        <option value="Grande">Grande</option>
+                        <option value="Gigante">Gigante</option>
                       </select>
                     </div>
                     <div>
                       <label for="pet-raca" class="block text-sm font-medium text-gray-700">Raça</label>
-                      <input id="pet-raca" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                      <input id="pet-raca" type="text" class="awesomplete mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Comece a digitar a raça..." />
                     </div>
                     <div>
                       <label for="pet-pelagem" class="block text-sm font-medium text-gray-700">Pelagem/Cor</label>
@@ -380,6 +385,7 @@
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.js" integrity="sha512-6Z6/Dr7guPmyAnbcW2CYwiVdc+GqOR/mdrIW6DCeU44yWiNysGEKMluSleqrs9jwELyhl725LLJoPLD114F8ZA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="../../scripts/funcionarios/clientes.js"></script>
 </body>
 </html>

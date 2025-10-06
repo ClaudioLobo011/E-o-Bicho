@@ -185,6 +185,309 @@
       btnNext: document.getElementById('clientes-next'),
     };
 
+    const petAutocomplete = {
+      instance: null,
+      speciesMap: null,
+    };
+
+    const normalizeText = (value) => String(value || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .trim().toLowerCase();
+
+    const normalizePorteLabel = (value) => {
+      const key = normalizeText(value);
+      if (key.startsWith('mini')) return 'mini';
+      if (key.startsWith('peq')) return 'pequeno';
+      if (key.startsWith('med')) return 'medio';
+      if (key.startsWith('gra')) return 'grande';
+      if (key.startsWith('gig')) return 'gigante';
+      return 'medio';
+    };
+
+    function fixEncoding(value) {
+      if (value == null) return value;
+      const text = String(value);
+      try {
+        if (typeof escape === 'function') {
+          return decodeURIComponent(escape(text));
+        }
+      } catch (_) {
+        return text;
+      }
+      return text;
+    }
+
+    async function loadSpeciesMap() {
+      if (petAutocomplete.speciesMap) return petAutocomplete.speciesMap;
+      const base = window.basePath || '../';
+      const jsonUrl = `${base}data/racas.json`;
+      const legacyUrl = `${base}data/Racas-leitura.js`;
+
+      const cleanList = (body) => body.split(/\n+/)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith('//') && line !== '...')
+        .map((line) => line.replace(/\*.*?\*/g, ''))
+        .map((line) => line.replace(/\s*\(duplicata.*$/i, ''))
+        .map((line) => line.replace(/\s*[—-].*$/, '').replace(/\s*-\s*registro.*$/i, ''));
+
+      const buildFromJson = (payload) => {
+        if (!payload || typeof payload !== 'object') throw new Error('payload inválido');
+        const species = {};
+        const dogPayload = payload.cachorro || {};
+        const portes = dogPayload.portes || {};
+        const dogMap = {
+          mini: Array.from(new Set(portes.mini || [])),
+          pequeno: Array.from(new Set(portes.pequeno || [])),
+          medio: Array.from(new Set(portes.medio || [])),
+          grande: Array.from(new Set(portes.grande || [])),
+          gigante: Array.from(new Set(portes.gigante || [])),
+        };
+        const dogAll = Array.from(new Set(dogPayload.all || [
+          ...dogMap.mini, ...dogMap.pequeno, ...dogMap.medio, ...dogMap.grande, ...dogMap.gigante,
+        ]));
+        const dogLookup = {};
+        const dogMapPayload = dogPayload.map || {};
+        dogAll.forEach((nome) => {
+          const normalized = normalizeText(nome);
+          const porte = dogMapPayload[normalized] || dogMapPayload[nome]
+            || (dogMap.mini.includes(nome) ? 'mini'
+              : dogMap.pequeno.includes(nome) ? 'pequeno'
+                : dogMap.medio.includes(nome) ? 'medio'
+                  : dogMap.grande.includes(nome) ? 'grande'
+                    : 'gigante');
+          dogLookup[normalized] = porte;
+        });
+        species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
+
+        const simples = ['gato', 'passaro', 'peixe', 'roedor', 'lagarto', 'tartaruga'];
+        simples.forEach((tipo) => {
+          const arr = Array.isArray(payload[tipo]) ? payload[tipo] : [];
+          species[tipo] = Array.from(new Set(arr.filter(Boolean)));
+        });
+        return species;
+      };
+
+      const buildFromLegacy = (text) => {
+        if (!text) throw new Error('conteúdo vazio');
+        const species = {};
+        const dogMap = { mini: [], pequeno: [], medio: [], grande: [], gigante: [] };
+        const reDogGlobal = /porte[_\s-]?(mini|pequeno|medio|grande|gigante)\s*{([\s\S]*?)}\s*/gi;
+        let match;
+        while ((match = reDogGlobal.exec(text))) {
+          const key = match[1].toLowerCase();
+          const list = cleanList(match[2]);
+          dogMap[key] = Array.from(new Set(list));
+        }
+        const dogAll = Array.from(new Set([
+          ...dogMap.mini, ...dogMap.pequeno, ...dogMap.medio, ...dogMap.grande, ...dogMap.gigante,
+        ]));
+        const dogLookup = {};
+        dogAll.forEach((nome) => {
+          const normalized = normalizeText(nome);
+          dogLookup[normalized] = dogMap.mini.includes(nome) ? 'mini'
+            : dogMap.pequeno.includes(nome) ? 'pequeno'
+              : dogMap.medio.includes(nome) ? 'medio'
+                : dogMap.grande.includes(nome) ? 'grande'
+                  : 'gigante';
+        });
+        species.cachorro = { portes: dogMap, all: dogAll, map: dogLookup };
+
+        const simpleSpecies = ['gatos', 'gato', 'passaros', 'passaro', 'peixes', 'peixe', 'roedores', 'roedor', 'lagartos', 'lagarto', 'tartarugas', 'tartaruga'];
+        simpleSpecies.forEach((sp) => {
+          const result = new RegExp(`${sp}\\s*{([\\s\\S]*?)}`, 'i').exec(text);
+          if (!result) return;
+          const list = cleanList(result[1]);
+          const singular = /roedores$/i.test(sp) ? 'roedor'
+            : /gatos$/i.test(sp) ? 'gato'
+              : /passaros$/i.test(sp) ? 'passaro'
+                : /peixes$/i.test(sp) ? 'peixe'
+                  : /lagartos$/i.test(sp) ? 'lagarto'
+                    : /tartarugas$/i.test(sp) ? 'tartaruga'
+                      : sp.replace(/s$/, '');
+          species[singular] = Array.from(new Set(list));
+        });
+        return species;
+      };
+
+      try {
+        const response = await fetch(jsonUrl, { headers: { Accept: 'application/json' } });
+        if (response.ok) {
+          petAutocomplete.speciesMap = buildFromJson(await response.json());
+          return petAutocomplete.speciesMap;
+        }
+        if (response.status && response.status !== 404) {
+          console.warn('clientes: falha ao obter racas.json', response.status);
+        }
+      } catch (error) {
+        console.warn('clientes: erro ao ler racas.json', error);
+      }
+
+      try {
+        const response = await fetch(legacyUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        petAutocomplete.speciesMap = buildFromLegacy(text);
+        return petAutocomplete.speciesMap;
+      } catch (error) {
+        console.warn('clientes: falha ao carregar Racas-leitura.js', error);
+        petAutocomplete.speciesMap = null;
+        return null;
+      }
+    }
+
+    function ensurePetTypeOptions() {
+      const select = elements.pets.tipo;
+      if (!select) return;
+      const desired = [
+        ['cachorro', 'Cachorro'],
+        ['gato', 'Gato'],
+        ['passaro', 'Pássaro'],
+        ['peixe', 'Peixe'],
+        ['roedor', 'Roedor'],
+        ['lagarto', 'Lagarto'],
+        ['tartaruga', 'Tartaruga'],
+      ];
+      const existing = new Set(Array.from(select.options).map((opt) => (opt.value || '').toLowerCase()));
+      desired.forEach(([value, label]) => {
+        if (!existing.has(value)) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = label;
+          select.appendChild(option);
+        }
+      });
+      Array.from(select.options).forEach((opt) => {
+        if ((opt.value || '').toLowerCase() === 'passaro') {
+          opt.textContent = 'Pássaro';
+        }
+      });
+    }
+
+    function normalizePetStaticLabels() {
+      const sexoSelect = elements.pets.sexo;
+      if (sexoSelect) {
+        Array.from(sexoSelect.options).forEach((opt) => {
+          if (/f[eê]mea/i.test(opt.textContent || '')) {
+            opt.textContent = 'Fêmea';
+          }
+        });
+      }
+      const porteSelect = elements.pets.porte;
+      if (porteSelect) {
+        let noneOption = Array.from(porteSelect.options).find((opt) => (opt.textContent || '').toLowerCase().includes('sem porte'));
+        if (!noneOption) {
+          noneOption = document.createElement('option');
+          noneOption.textContent = 'Sem porte definido';
+          noneOption.value = 'Sem porte definido';
+          porteSelect.insertBefore(noneOption, porteSelect.firstChild);
+        }
+        Array.from(porteSelect.options).forEach((opt) => {
+          if (/m[eê]dio/i.test(opt.textContent || '')) {
+            opt.textContent = 'Médio';
+          }
+        });
+      }
+    }
+
+    function setSelectValue(select, value) {
+      if (!select) return;
+      const raw = value == null ? '' : String(value);
+      const options = Array.from(select.options || []);
+      const exact = options.find((opt) => (opt.value || '') === raw);
+      if (exact) {
+        select.value = exact.value;
+        return;
+      }
+      const lower = raw.toLowerCase();
+      const match = options.find((opt) => (opt.value || '').toLowerCase() === lower);
+      if (match) {
+        select.value = match.value;
+        return;
+      }
+      const normalizedRaw = normalizeText(raw);
+      const normalized = options.find((opt) => normalizeText(opt.value || opt.textContent || '') === normalizedRaw);
+      if (normalized) {
+        select.value = normalized.value || normalized.textContent;
+        return;
+      }
+      select.value = raw;
+    }
+
+    function setPorteFromBreedIfDog() {
+      const porteSelect = elements.pets.porte;
+      const tipoSelect = elements.pets.tipo;
+      const racaInput = elements.pets.raca;
+      if (!porteSelect || !tipoSelect || !racaInput) return;
+      const isDog = normalizeText(tipoSelect.value) === 'cachorro';
+      if (!isDog) return;
+      const map = petAutocomplete.speciesMap?.cachorro?.map;
+      if (!map) return;
+      const breedKey = normalizeText(racaInput.value);
+      const desired = map[breedKey] || 'medio';
+      const match = Array.from(porteSelect.options).find((opt) => normalizePorteLabel(opt.textContent) === desired);
+      if (match) {
+        porteSelect.value = match.value || match.textContent;
+      }
+    }
+
+    function syncPorteDisabled() {
+      const porteSelect = elements.pets.porte;
+      const tipoSelect = elements.pets.tipo;
+      if (!porteSelect || !tipoSelect) return;
+      const isDog = normalizeText(tipoSelect.value) === 'cachorro';
+      porteSelect.disabled = true;
+      if (isDog) {
+        setPorteFromBreedIfDog();
+      } else {
+        const noneOption = Array.from(porteSelect.options).find((opt) => (opt.textContent || '').toLowerCase().includes('sem porte'));
+        if (noneOption && !porteSelect.value) {
+          porteSelect.value = noneOption.value || noneOption.textContent;
+        }
+      }
+    }
+
+    async function updateBreedOptions() {
+      const tipoSelect = elements.pets.tipo;
+      const racaInput = elements.pets.raca;
+      if (!tipoSelect || !racaInput) return;
+      const selectedType = normalizeText(tipoSelect.value);
+      await loadSpeciesMap().catch(() => {});
+      let breeds = [];
+      if (selectedType === 'cachorro') {
+        breeds = (petAutocomplete.speciesMap?.cachorro?.all || []).slice();
+      } else if (selectedType === 'gato') {
+        breeds = (petAutocomplete.speciesMap?.gato || petAutocomplete.speciesMap?.gatos || []).slice();
+      } else if (selectedType === 'passaro') {
+        breeds = (petAutocomplete.speciesMap?.passaro || petAutocomplete.speciesMap?.passaros || []).slice();
+      } else if (['peixe', 'roedor', 'lagarto', 'tartaruga'].includes(selectedType)) {
+        breeds = (petAutocomplete.speciesMap?.[selectedType] || []).slice();
+      } else {
+        breeds = [];
+      }
+      breeds = breeds.map((item) => fixEncoding(item)).sort((a, b) => a.localeCompare(b));
+
+      if (typeof Awesomplete !== 'undefined' && Awesomplete) {
+        if (petAutocomplete.instance && petAutocomplete.instance.input === racaInput) {
+          petAutocomplete.instance.list = breeds;
+        } else if (typeof Awesomplete === 'function') {
+          petAutocomplete.instance = new Awesomplete(racaInput, {
+            minChars: 1,
+            list: breeds,
+            autoFirst: true,
+          });
+        }
+      }
+    }
+
+    function refreshPetFormOptions() {
+      ensurePetTypeOptions();
+      normalizePetStaticLabels();
+      updateBreedOptions().then(() => {
+        syncPorteDisabled();
+        setPorteFromBreedIfDog();
+      });
+    }
+
     function switchTipo(tipo) {
       const isPJ = tipo === 'pessoa_juridica';
       elements.selectTipo.value = tipo;
@@ -221,6 +524,10 @@
       });
       elements.btnPetCancelar.classList.add('hidden');
       elements.btnPetSalvar.textContent = 'Adicionar pet';
+      if (elements.pets.porte) {
+        elements.pets.porte.disabled = true;
+      }
+      refreshPetFormOptions();
     }
 
     function clearForm() {
@@ -307,20 +614,29 @@
         const card = document.createElement('div');
         card.className = 'rounded-lg border border-gray-200 p-4 shadow-sm bg-white';
         const nascimento = pet.dataNascimento ? toISODateInput(pet.dataNascimento) : '';
+        const nome = fixEncoding(pet.nome || '');
+        const tipo = fixEncoding(pet.tipo || '');
+        const raca = fixEncoding(pet.raca || '');
+        const porte = fixEncoding(pet.porte || '');
+        const pelagem = fixEncoding(pet.pelagemCor || pet.pelagem || '');
+        const sexo = fixEncoding(pet.sexo || '');
+        const peso = fixEncoding(pet.peso || '');
+        const rga = fixEncoding(pet.rga || '');
+        const microchip = fixEncoding(pet.microchip || '');
         const detalhes = [
-          pet.tipo ? `Tipo: ${pet.tipo}` : '',
-          pet.raca ? `Raça: ${pet.raca}` : '',
-          pet.porte ? `Porte: ${pet.porte}` : '',
-          pet.pelagemCor ? `Pelagem: ${pet.pelagemCor}` : '',
+          tipo ? `Tipo: ${tipo}` : '',
+          raca ? `Raça: ${raca}` : '',
+          porte ? `Porte: ${porte}` : '',
+          pelagem ? `Pelagem: ${pelagem}` : '',
           nascimento ? `Nascimento: ${nascimento.split('-').reverse().join('/')}` : '',
-          pet.peso ? `Peso: ${pet.peso}` : '',
-          pet.sexo ? `Sexo: ${pet.sexo}` : '',
-          pet.rga ? `RGA: ${pet.rga}` : '',
-          pet.microchip ? `Microchip: ${pet.microchip}` : '',
+          peso ? `Peso: ${peso}` : '',
+          sexo ? `Sexo: ${sexo}` : '',
+          rga ? `RGA: ${rga}` : '',
+          microchip ? `Microchip: ${microchip}` : '',
         ].filter(Boolean);
         card.innerHTML = `
           <div class="flex flex-col gap-1 text-sm text-gray-700">
-            <div class="text-base font-semibold text-gray-800">${pet.nome}</div>
+            <div class="text-base font-semibold text-gray-800">${nome || 'Sem nome'}</div>
             ${detalhes.map((linha) => `<div>${linha}</div>`).join('')}
           </div>
           <div class="mt-3 flex items-center gap-2">
@@ -667,6 +983,21 @@
       clearPetForm();
     });
 
+    if (elements.pets.tipo) {
+      elements.pets.tipo.addEventListener('change', async () => {
+        await updateBreedOptions();
+        syncPorteDisabled();
+        setPorteFromBreedIfDog();
+      });
+    }
+
+    if (elements.pets.raca) {
+      ['change', 'blur'].forEach((evt) => {
+        elements.pets.raca.addEventListener(evt, () => setTimeout(setPorteFromBreedIfDog, 0));
+      });
+      elements.pets.raca.addEventListener('awesomplete-selectcomplete', () => setTimeout(setPorteFromBreedIfDog, 0));
+    }
+
     elements.enderecosLista.addEventListener('click', (event) => {
       const button = event.target.closest('button[data-action]');
       if (!button) return;
@@ -693,7 +1024,7 @@
       }
     });
 
-    elements.petsLista.addEventListener('click', (event) => {
+    elements.petsLista.addEventListener('click', async (event) => {
       const button = event.target.closest('button[data-action]');
       if (!button) return;
       const id = button.dataset.id;
@@ -701,18 +1032,21 @@
       const pet = state.pets.find((item) => item._id === id);
       if (action === 'editar-pet' && pet) {
         state.petEditandoId = id;
-        elements.pets.nome.value = pet.nome || '';
-        elements.pets.tipo.value = pet.tipo || '';
-        elements.pets.porte.value = pet.porte || '';
-        elements.pets.raca.value = pet.raca || '';
-        elements.pets.pelagem.value = pet.pelagemCor || '';
+        elements.pets.nome.value = fixEncoding(pet.nome || '');
+        setSelectValue(elements.pets.tipo, pet.tipo || '');
+        await updateBreedOptions();
+        elements.pets.raca.value = fixEncoding(pet.raca || '');
+        setSelectValue(elements.pets.porte, pet.porte || '');
+        elements.pets.pelagem.value = fixEncoding(pet.pelagemCor || pet.pelagem || '');
         elements.pets.nascimento.value = toISODateInput(pet.dataNascimento);
-        elements.pets.peso.value = pet.peso || '';
-        elements.pets.sexo.value = pet.sexo || '';
-        elements.pets.rga.value = pet.rga || '';
-        elements.pets.microchip.value = pet.microchip || '';
+        elements.pets.peso.value = fixEncoding(pet.peso || '');
+        setSelectValue(elements.pets.sexo, pet.sexo || '');
+        elements.pets.rga.value = fixEncoding(pet.rga || '');
+        elements.pets.microchip.value = fixEncoding(pet.microchip || '');
         elements.btnPetCancelar.classList.remove('hidden');
         elements.btnPetSalvar.textContent = 'Atualizar pet';
+        syncPorteDisabled();
+        setPorteFromBreedIfDog();
         switchTab('animais');
       } else if (action === 'remover-pet') {
         removerPet(id);
