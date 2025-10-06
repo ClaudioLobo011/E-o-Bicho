@@ -267,7 +267,14 @@ router.get(
               digits ? { cnpj: new RegExp(digits) } : null,
             ].filter(Boolean),
           },
-          'legalName fantasyName contact email contact.mobile contact.phone cnpj'
+          {
+            legalName: 1,
+            fantasyName: 1,
+            cnpj: 1,
+            'contact.email': 1,
+            'contact.mobile': 1,
+            'contact.phone': 1,
+          }
         )
           .sort({ legalName: 1, fantasyName: 1 })
           .limit(10),
