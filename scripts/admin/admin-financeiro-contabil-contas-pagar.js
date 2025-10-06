@@ -25,6 +25,19 @@
     partySearchTimeout: null,
     history: [],
     isSaving: false,
+    agenda: {
+      rangeDays: 7,
+      loading: false,
+      periodStart: null,
+      periodEnd: null,
+      summary: {
+        upcoming: { totalValue: 0, installments: 0 },
+        pending: { totalValue: 0, installments: 0 },
+        paidThisMonth: { totalValue: 0, installments: 0 },
+      },
+      items: [],
+      emptyMessage: 'Nenhum pagamento previsto para o período selecionado.',
+    },
   };
 
   const elements = {
@@ -54,6 +67,22 @@
     historyEmpty: document.getElementById('payable-history-empty'),
     saveButton: document.getElementById('payable-save'),
     carrierList: document.getElementById('carrier-bank-list'),
+    agendaRange: document.getElementById('agenda-range'),
+    agendaPeriodLabel: document.getElementById('agenda-period-label'),
+    agendaUpcomingValue: document.getElementById('agenda-upcoming-value'),
+    agendaUpcomingCount: document.getElementById('agenda-upcoming-count'),
+    agendaPendingValue: document.getElementById('agenda-pending-value'),
+    agendaPendingCount: document.getElementById('agenda-pending-count'),
+    agendaPaidValue: document.getElementById('agenda-paid-value'),
+    agendaPaidCount: document.getElementById('agenda-paid-count'),
+    agendaTableBody: document.getElementById('agenda-table-body'),
+    agendaEmpty: document.getElementById('agenda-empty'),
+  };
+
+  const STATUS_BADGES = {
+    pending: { icon: 'fa-circle-pause', classes: 'bg-amber-100 text-amber-700', label: 'Pendente' },
+    paid: { icon: 'fa-circle-check', classes: 'bg-emerald-100 text-emerald-700', label: 'Pago' },
+    cancelled: { icon: 'fa-circle-xmark', classes: 'bg-gray-200 text-gray-600', label: 'Cancelado' },
   };
 
   function notify(message, type = 'info') {
@@ -135,6 +164,149 @@
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return '--';
     return dateFormatter.format(date);
+  }
+
+  function createEmptyAgendaSummary() {
+    return {
+      upcoming: { totalValue: 0, installments: 0 },
+      pending: { totalValue: 0, installments: 0 },
+      paidThisMonth: { totalValue: 0, installments: 0 },
+    };
+  }
+
+  function getStatusBadgeConfig(status) {
+    if (!status || typeof status !== 'string') {
+      return { icon: 'fa-circle-info', classes: 'bg-slate-100 text-slate-700', label: 'Indefinido' };
+    }
+    const normalized = status.toLowerCase();
+    if (STATUS_BADGES[normalized]) {
+      return STATUS_BADGES[normalized];
+    }
+    const label = `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+    return { icon: 'fa-circle-info', classes: 'bg-slate-100 text-slate-700', label };
+  }
+
+  function formatInstallmentsText(count, singular, plural) {
+    const safeCount = Number.isFinite(count) ? count : 0;
+    return `${safeCount} ${safeCount === 1 ? singular : plural}`;
+  }
+
+  function updateAgendaPeriodLabel() {
+    if (!elements.agendaPeriodLabel) return;
+    const { periodStart, periodEnd, rangeDays } = state.agenda;
+    if (periodStart instanceof Date && periodEnd instanceof Date) {
+      const startValid = !Number.isNaN(periodStart.getTime());
+      const endValid = !Number.isNaN(periodEnd.getTime());
+      if (startValid && endValid) {
+        elements.agendaPeriodLabel.textContent = `Pagamentos de ${formatDateBR(periodStart)} a ${formatDateBR(periodEnd)}`;
+        return;
+      }
+    }
+    const range = Number.isFinite(rangeDays) && rangeDays > 0
+      ? rangeDays
+      : Number.parseInt(elements.agendaRange?.value || '7', 10) || 7;
+    elements.agendaPeriodLabel.textContent = `Pagamentos nos próximos ${range} dias`;
+  }
+
+  function renderAgendaSummary() {
+    if (elements.agendaUpcomingValue) {
+      elements.agendaUpcomingValue.textContent = formatCurrencyBR(state.agenda.summary.upcoming.totalValue);
+    }
+    if (elements.agendaUpcomingCount) {
+      elements.agendaUpcomingCount.textContent = formatInstallmentsText(
+        state.agenda.summary.upcoming.installments,
+        'parcela prevista',
+        'parcelas previstas'
+      );
+    }
+    if (elements.agendaPendingValue) {
+      elements.agendaPendingValue.textContent = formatCurrencyBR(state.agenda.summary.pending.totalValue);
+    }
+    if (elements.agendaPendingCount) {
+      elements.agendaPendingCount.textContent = formatInstallmentsText(
+        state.agenda.summary.pending.installments,
+        'parcela aguardando pagamento',
+        'parcelas aguardando pagamento'
+      );
+    }
+    if (elements.agendaPaidValue) {
+      elements.agendaPaidValue.textContent = formatCurrencyBR(state.agenda.summary.paidThisMonth.totalValue);
+    }
+    if (elements.agendaPaidCount) {
+      elements.agendaPaidCount.textContent = formatInstallmentsText(
+        state.agenda.summary.paidThisMonth.installments,
+        'parcela liquidada',
+        'parcelas liquidadas'
+      );
+    }
+  }
+
+  function renderAgendaTable() {
+    if (!elements.agendaTableBody) return;
+    elements.agendaTableBody.innerHTML = '';
+
+    if (state.agenda.loading) {
+      const loadingRow = document.createElement('tr');
+      loadingRow.innerHTML =
+        '<td colspan="5" class="px-4 py-6 text-center text-sm text-gray-500">Carregando agenda de pagamentos...</td>';
+      elements.agendaTableBody.appendChild(loadingRow);
+      elements.agendaEmpty?.classList.add('hidden');
+      return;
+    }
+
+    const items = Array.isArray(state.agenda.items) ? state.agenda.items : [];
+    if (!items.length) {
+      if (elements.agendaEmpty) {
+        elements.agendaEmpty.textContent =
+          state.agenda.emptyMessage || 'Nenhum pagamento previsto para o período selecionado.';
+        elements.agendaEmpty.classList.remove('hidden');
+      }
+      return;
+    }
+
+    elements.agendaEmpty?.classList.add('hidden');
+
+    items.forEach((item) => {
+      const row = document.createElement('tr');
+      row.className = 'bg-white';
+
+      const partyCell = document.createElement('td');
+      partyCell.className = 'px-4 py-3 text-sm text-gray-700';
+      partyCell.textContent = item.partyName || '---';
+      row.appendChild(partyCell);
+
+      const documentCell = document.createElement('td');
+      documentCell.className = 'px-4 py-3 text-sm text-gray-600';
+      documentCell.textContent = item.document || item.payableCode || '--';
+      row.appendChild(documentCell);
+
+      const dueCell = document.createElement('td');
+      dueCell.className = 'px-4 py-3 text-sm text-gray-600';
+      dueCell.textContent = formatDateBR(item.dueDate);
+      row.appendChild(dueCell);
+
+      const valueCell = document.createElement('td');
+      valueCell.className = 'px-4 py-3 text-sm text-right text-gray-800';
+      valueCell.textContent = formatCurrencyBR(item.value);
+      row.appendChild(valueCell);
+
+      const statusCell = document.createElement('td');
+      statusCell.className = 'px-4 py-3 text-sm text-center';
+      const badge = document.createElement('span');
+      const badgeConfig = getStatusBadgeConfig(item.status);
+      badge.className = `inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${badgeConfig.classes}`;
+      badge.innerHTML = `<i class="fas ${badgeConfig.icon}"></i> ${badgeConfig.label}`;
+      statusCell.appendChild(badge);
+      row.appendChild(statusCell);
+
+      elements.agendaTableBody.appendChild(row);
+    });
+  }
+
+  function renderAgenda() {
+    updateAgendaPeriodLabel();
+    renderAgendaSummary();
+    renderAgendaTable();
   }
 
   function clearSelect(select, placeholder) {
@@ -589,6 +761,102 @@
     }
   }
 
+  async function loadAgenda() {
+    const selectedRange = Number.parseInt(elements.agendaRange?.value || '', 10);
+    const rangeDays = Number.isFinite(selectedRange) && selectedRange > 0 ? selectedRange : state.agenda.rangeDays || 7;
+    state.agenda.rangeDays = rangeDays;
+
+    const companyId = elements.company?.value;
+    if (!companyId) {
+      state.agenda.loading = false;
+      state.agenda.summary = createEmptyAgendaSummary();
+      state.agenda.items = [];
+      state.agenda.periodStart = null;
+      state.agenda.periodEnd = null;
+      state.agenda.emptyMessage = 'Selecione uma empresa para visualizar a agenda de pagamentos.';
+      renderAgenda();
+      return;
+    }
+
+    state.agenda.loading = true;
+    state.agenda.emptyMessage = 'Nenhum pagamento previsto para o período selecionado.';
+    renderAgenda();
+
+    try {
+      const params = new URLSearchParams();
+      params.set('range', String(rangeDays));
+      params.set('company', companyId);
+      const response = await fetch(`${PAYABLES_API}/agenda?${params.toString()}`, {
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          notify('Sua sessão expirou. Faça login novamente para visualizar a agenda de pagamentos.', 'error');
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.message || `Erro ao carregar a agenda de pagamentos (${response.status})`);
+      }
+
+      const data = await response.json();
+      const summary = data?.summary || {};
+      state.agenda.summary = {
+        upcoming: summary.upcoming || { totalValue: 0, installments: 0 },
+        pending: summary.pending || { totalValue: 0, installments: 0 },
+        paidThisMonth: summary.paidThisMonth || { totalValue: 0, installments: 0 },
+      };
+
+      state.agenda.items = Array.isArray(data?.items)
+        ? data.items
+            .map((item) => ({
+              ...item,
+              dueDate: item?.dueDate ? new Date(item.dueDate) : null,
+              value: typeof item?.value === 'number' ? item.value : parseCurrency(item?.value),
+              status: item?.status || 'pending',
+              partyName: item?.partyName || item?.party || '',
+              document: item?.document || '',
+              payableCode: item?.payableCode || item?.code || '',
+              installmentNumber: item?.installmentNumber || item?.number || null,
+            }))
+            .sort((a, b) => {
+              const aTime = a.dueDate instanceof Date && !Number.isNaN(a.dueDate.getTime()) ? a.dueDate.getTime() : 0;
+              const bTime = b.dueDate instanceof Date && !Number.isNaN(b.dueDate.getTime()) ? b.dueDate.getTime() : 0;
+              if (aTime !== bTime) {
+                return aTime - bTime;
+              }
+              return (a.installmentNumber || 0) - (b.installmentNumber || 0);
+            })
+        : [];
+
+      if (Number.isFinite(data?.rangeDays) && data.rangeDays > 0) {
+        state.agenda.rangeDays = data.rangeDays;
+        if (elements.agendaRange) {
+          const matchingOption = Array.from(elements.agendaRange.options || []).find(
+            (option) => Number.parseInt(option.value, 10) === data.rangeDays
+          );
+          if (matchingOption) {
+            elements.agendaRange.value = matchingOption.value;
+          }
+        }
+      }
+
+      state.agenda.periodStart = data?.periodStart ? new Date(data.periodStart) : null;
+      state.agenda.periodEnd = data?.periodEnd ? new Date(data.periodEnd) : null;
+      renderAgenda();
+    } catch (error) {
+      console.error('accounts-payable:loadAgenda', error);
+      notify(error.message || 'Não foi possível carregar a agenda de pagamentos.', 'error');
+      state.agenda.summary = createEmptyAgendaSummary();
+      state.agenda.items = [];
+      state.agenda.periodStart = null;
+      state.agenda.periodEnd = null;
+      state.agenda.emptyMessage = 'Não foi possível carregar a agenda de pagamentos.';
+      renderAgenda();
+    } finally {
+      state.agenda.loading = false;
+      renderAgenda();
+    }
+  }
+
   function resetPreview() {
     state.previewInstallments = [];
     renderPreview();
@@ -697,6 +965,7 @@
         elements.code.value = created.code;
       }
       loadHistory();
+      loadAgenda();
     } catch (error) {
       console.error('accounts-payable:handleSave', error);
       notify(error.message || 'Não foi possível salvar a conta a pagar.', 'error');
@@ -751,6 +1020,7 @@
       if (state.selectedParty) {
         loadHistory();
       }
+      loadAgenda();
     });
     elements.bankAccount?.addEventListener('change', () => {
       const selected = elements.bankAccount.value;
@@ -764,6 +1034,9 @@
         installment.accountingAccount = selected;
       });
     });
+    elements.agendaRange?.addEventListener('change', () => {
+      loadAgenda();
+    });
   }
 
   async function initialize() {
@@ -773,10 +1046,12 @@
     setupEventListeners();
     setDefaultIssueDate();
     updatePreviewEmptyState();
+    renderAgenda();
     await Promise.all([loadBanks(), loadCompanies()]);
     if (elements.company?.value) {
-      loadCompanyResources(elements.company.value);
+      await loadCompanyResources(elements.company.value);
     }
+    await loadAgenda();
   }
 
   document.addEventListener('DOMContentLoaded', initialize);

@@ -49,6 +49,12 @@ const parseDate = (value) => {
 
 const formatCurrency = (value) => Math.round(Number(value || 0) * 100) / 100;
 
+const clampAgendaRange = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 7;
+  return Math.min(parsed, 90);
+};
+
 async function generateSequentialCode() {
   const now = new Date();
   const year = now.getUTCFullYear();
@@ -305,6 +311,138 @@ router.get(
     } catch (error) {
       console.error('Erro ao buscar clientes/fornecedores:', error);
       res.status(500).json({ message: 'Erro ao buscar clientes ou fornecedores.' });
+    }
+  }
+);
+
+router.get(
+  '/agenda',
+  requireAuth,
+  authorizeRoles(...AUTH_ROLES),
+  async (req, res) => {
+    try {
+      const rangeDays = clampAgendaRange(req.query.range);
+      const match = {};
+      const { company } = req.query;
+
+      if (company && mongoose.Types.ObjectId.isValid(company)) {
+        match.company = company;
+      }
+
+      const now = new Date();
+      const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const periodEndExclusive = new Date(periodStart);
+      periodEndExclusive.setUTCDate(periodEndExclusive.getUTCDate() + rangeDays);
+
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      const monthEndExclusive = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+      const [upcomingDocs, pendingDocs, paidDocs] = await Promise.all([
+        AccountPayable.find({
+          ...match,
+          'installments.dueDate': { $gte: periodStart, $lt: periodEndExclusive },
+        })
+          .select('code party partyType bankDocumentNumber installments')
+          .populate('party', 'nomeCompleto razaoSocial legalName fantasyName email'),
+        AccountPayable.find({
+          ...match,
+          'installments.status': 'pending',
+        }).select('installments'),
+        AccountPayable.find({
+          ...match,
+          'installments.status': 'paid',
+          'installments.dueDate': { $gte: monthStart, $lt: monthEndExclusive },
+        }).select('installments'),
+      ]);
+
+      const agendaItems = [];
+      let upcomingTotal = 0;
+      let upcomingCount = 0;
+
+      upcomingDocs.forEach((doc) => {
+        const plain = typeof doc.toObject === 'function' ? doc.toObject({ virtuals: true }) : doc;
+        const partyName = buildPartyName(plain.party);
+        const documentNumber = plain.bankDocumentNumber || '';
+        const payableCode = plain.code || '';
+        (plain.installments || []).forEach((installment) => {
+          if (!installment || !installment.dueDate) return;
+          const dueDate = new Date(installment.dueDate);
+          if (Number.isNaN(dueDate.getTime())) return;
+          if (dueDate < periodStart || dueDate >= periodEndExclusive) return;
+          const rawValue = Number(installment.value || 0);
+          upcomingTotal += rawValue;
+          upcomingCount += 1;
+          agendaItems.push({
+            payableId: plain._id,
+            installmentNumber: installment.number || null,
+            partyName,
+            document: documentNumber,
+            payableCode,
+            dueDate,
+            value: formatCurrency(rawValue),
+            status: installment.status || 'pending',
+          });
+        });
+      });
+
+      agendaItems.sort((a, b) => {
+        const aTime = a.dueDate instanceof Date ? a.dueDate.getTime() : 0;
+        const bTime = b.dueDate instanceof Date ? b.dueDate.getTime() : 0;
+        if (aTime !== bTime) return aTime - bTime;
+        return (a.installmentNumber || 0) - (b.installmentNumber || 0);
+      });
+
+      let pendingTotal = 0;
+      let pendingCount = 0;
+      pendingDocs.forEach((doc) => {
+        const plain = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+        (plain.installments || []).forEach((installment) => {
+          if (!installment || installment.status !== 'pending') return;
+          pendingTotal += Number(installment.value || 0);
+          pendingCount += 1;
+        });
+      });
+
+      let paidTotal = 0;
+      let paidCount = 0;
+      paidDocs.forEach((doc) => {
+        const plain = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+        (plain.installments || []).forEach((installment) => {
+          if (!installment || installment.status !== 'paid' || !installment.dueDate) return;
+          const dueDate = new Date(installment.dueDate);
+          if (Number.isNaN(dueDate.getTime())) return;
+          if (dueDate < monthStart || dueDate >= monthEndExclusive) return;
+          paidTotal += Number(installment.value || 0);
+          paidCount += 1;
+        });
+      });
+
+      const inclusiveEnd = new Date(periodEndExclusive);
+      inclusiveEnd.setUTCDate(inclusiveEnd.getUTCDate() - 1);
+
+      res.json({
+        rangeDays,
+        periodStart,
+        periodEnd: inclusiveEnd,
+        summary: {
+          upcoming: {
+            totalValue: formatCurrency(upcomingTotal),
+            installments: upcomingCount,
+          },
+          pending: {
+            totalValue: formatCurrency(pendingTotal),
+            installments: pendingCount,
+          },
+          paidThisMonth: {
+            totalValue: formatCurrency(paidTotal),
+            installments: paidCount,
+          },
+        },
+        items: agendaItems,
+      });
+    } catch (error) {
+      console.error('Erro ao carregar agenda de pagamentos:', error);
+      res.status(500).json({ message: 'Erro ao carregar a agenda de pagamentos.' });
     }
   }
 );
