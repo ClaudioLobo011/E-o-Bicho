@@ -114,6 +114,10 @@
                   <i class="fas fa-table"></i>
                   Contas
                 </button>
+                <button type="button" data-tab-target="history" class="receivable-tab-button inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100">
+                  <i class="fas fa-clock-rotate-left"></i>
+                  Histórico
+                </button>
               </div>
 
               <div class="mt-4 space-y-6">
@@ -169,15 +173,35 @@
                           <th scope="col" class="px-4 py-2 text-right font-semibold">Valor</th>
                           <th scope="col" class="px-4 py-2 text-left font-semibold">Conta corrente</th>
                           <th scope="col" class="px-4 py-2 text-left font-semibold">Conta contábil</th>
+                          <th scope="col" class="px-4 py-2 text-center font-semibold">Ações</th>
                         </tr>
                       </thead>
                       <tbody id="receivable-installments-body" class="divide-y divide-gray-100 text-gray-700">
                         <tr>
-                          <td colspan="7" class="px-4 py-6 text-center text-sm text-gray-500">Gere as parcelas para visualizar a distribuição.</td>
+                          <td colspan="8" class="px-4 py-6 text-center text-sm text-gray-500">Gere as parcelas para visualizar a distribuição.</td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
+                </div>
+
+                <div data-tab-content="history" class="receivable-tab-content hidden">
+                  <div class="overflow-hidden rounded-lg border border-gray-200">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead class="bg-gray-50 text-gray-600">
+                        <tr>
+                          <th scope="col" class="px-4 py-2 text-left font-semibold">Cliente</th>
+                          <th scope="col" class="px-4 py-2 text-left font-semibold">Documento</th>
+                          <th scope="col" class="px-4 py-2 text-left font-semibold">Vencimento</th>
+                          <th scope="col" class="px-4 py-2 text-right font-semibold">Valor</th>
+                          <th scope="col" class="px-4 py-2 text-center font-semibold">Status</th>
+                          <th scope="col" class="px-4 py-2 text-center font-semibold">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody id="receivable-history-body" class="divide-y divide-gray-100 text-gray-700"></tbody>
+                    </table>
+                  </div>
+                  <p id="receivable-history-empty" class="mt-3 text-xs text-gray-500">Nenhum lançamento encontrado no histórico.</p>
                 </div>
               </div>
             </div>
@@ -188,11 +212,11 @@
                 Após o salvamento é possível gerar lembretes automáticos via e-mail ou WhatsApp.
               </div>
               <div class="flex items-center gap-2">
-                <button type="reset" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+                <button type="button" id="receivable-clear" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
                   <i class="fas fa-eraser"></i>
                   Limpar formulário
                 </button>
-                <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                <button type="submit" id="receivable-save" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
                   <i class="fas fa-save"></i>
                   Salvar lançamento
                 </button>
@@ -247,11 +271,12 @@
                   <th scope="col" class="px-4 py-2 text-left font-semibold">Vencimento</th>
                   <th scope="col" class="px-4 py-2 text-right font-semibold">Valor</th>
                   <th scope="col" class="px-4 py-2 text-center font-semibold">Status</th>
+                  <th scope="col" class="px-4 py-2 text-center font-semibold">Ações</th>
                 </tr>
               </thead>
               <tbody id="receivable-forecast-body" class="divide-y divide-gray-100 text-gray-700">
                 <tr>
-                  <td colspan="5" class="px-4 py-6 text-center text-sm text-gray-500">Cadastre contas a receber para acompanhar a previsão.</td>
+                  <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">Cadastre contas a receber para acompanhar a previsão.</td>
                 </tr>
               </tbody>
             </table>

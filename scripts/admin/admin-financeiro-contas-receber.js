@@ -25,6 +25,10 @@
     bankAccountOptions: [],
     lastCreatedCode: null,
     receivables: [],
+    history: [],
+    receivableCache: new Map(),
+    currentEditing: null,
+    isSaving: false,
   };
 
   const elements = {
@@ -55,7 +59,13 @@
     summaryOpenCount: document.getElementById('receivable-summary-open-count'),
     summaryOverdueTotal: document.getElementById('receivable-summary-overdue-total'),
     summaryOverdueCount: document.getElementById('receivable-summary-overdue-count'),
+    historyBody: document.getElementById('receivable-history-body'),
+    historyEmpty: document.getElementById('receivable-history-empty'),
+    saveButton: document.getElementById('receivable-save'),
+    clearButton: document.getElementById('receivable-clear'),
   };
+
+  const originalSaveButtonHTML = elements.saveButton ? elements.saveButton.innerHTML : '';
 
   function notify(message, type = 'info') {
     const text = String(message || '').trim();
@@ -188,8 +198,10 @@
         value,
         issueDate,
         dueDate: installmentDue,
-        bankAccount: bankAccountId,
-        accountingAccount: accountingAccountId,
+        bankAccountId,
+        bankAccountLabel: null,
+        accountingAccountId,
+        accountingAccountLabel: null,
       });
     }
 
@@ -203,7 +215,14 @@
     return option ? option.textContent.trim() : '';
   }
 
-  function updateInstallmentsTable(installments, code, bankLabel, accountingLabel) {
+  function updateInstallmentsTable(installments, options = {}) {
+    const {
+      code = null,
+      bankLabel = null,
+      accountingLabel = null,
+      editable = false,
+    } = options;
+
     const tbody = elements.installmentsBody;
     if (!tbody) return;
     tbody.innerHTML = '';
@@ -211,7 +230,7 @@
     if (!Array.isArray(installments) || installments.length === 0) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 7;
+      cell.colSpan = 8;
       cell.className = 'px-4 py-6 text-center text-sm text-gray-500';
       cell.textContent = 'Gere as parcelas para visualizar a distribuição.';
       row.appendChild(cell);
@@ -221,7 +240,6 @@
 
     const total = installments.length;
     const displayCode = code || state.lastCreatedCode || 'Prévia';
-    const isPreview = !code;
 
     installments.forEach((installment, index) => {
       const row = document.createElement('tr');
@@ -244,7 +262,7 @@
 
       const dueCell = document.createElement('td');
       dueCell.className = 'px-4 py-3';
-      if (isPreview) {
+      if (editable) {
         const dueInput = document.createElement('input');
         dueInput.type = 'date';
         dueInput.className = 'w-full rounded-lg border border-gray-200 px-2 py-1 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20';
@@ -268,7 +286,7 @@
 
       const bankCell = document.createElement('td');
       bankCell.className = 'px-4 py-3';
-      if (isPreview) {
+      if (editable) {
         const select = document.createElement('select');
         select.className = 'w-full rounded-lg border border-gray-200 px-2 py-1 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20';
         clearSelect(select, 'Selecione...');
@@ -281,26 +299,206 @@
         if (state.bankAccountOptions.length === 0) {
           select.disabled = true;
         }
-        if (installment.bankAccount) {
-          select.value = installment.bankAccount;
-        } else if (elements.bankAccount?.value) {
-          select.value = elements.bankAccount.value;
+        const currentValue =
+          installment.bankAccountId
+          || (typeof installment.bankAccount === 'string' ? installment.bankAccount : installment.bankAccount?._id)
+          || elements.bankAccount?.value
+          || '';
+        if (currentValue) {
+          select.value = currentValue;
         }
-        select.addEventListener('change', () => {
-          installment.bankAccount = select.value;
-        });
+        const syncLabel = () => {
+          const option = select.options[select.selectedIndex];
+          // eslint-disable-next-line no-param-reassign
+          installment.bankAccountId = select.value;
+          // eslint-disable-next-line no-param-reassign
+          installment.bankAccountLabel = option ? option.textContent : '';
+        };
+        syncLabel();
+        select.addEventListener('change', syncLabel);
         bankCell.appendChild(select);
       } else {
-        bankCell.textContent = installment.bankAccount?.label || bankLabel || '—';
+        const label =
+          installment.bankAccountLabel
+          || installment.bankAccount?.label
+          || bankLabel
+          || '—';
+        bankCell.textContent = label;
       }
       row.appendChild(bankCell);
 
       const accountingCell = document.createElement('td');
       accountingCell.className = 'px-4 py-3';
-      accountingCell.textContent = installment.accountingAccount?.label || accountingLabel || '—';
+      const accountingLabelValue =
+        installment.accountingAccountLabel
+        || installment.accountingAccount?.label
+        || accountingLabel
+        || '—';
+      accountingCell.textContent = accountingLabelValue;
       row.appendChild(accountingCell);
 
+      const actionsCell = document.createElement('td');
+      actionsCell.className = 'px-4 py-3 text-center';
+      if (editable) {
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
+        removeButton.innerHTML = '<i class="fas fa-times"></i> Remover';
+        removeButton.addEventListener('click', () => {
+          removePreviewInstallment(index);
+        });
+        actionsCell.appendChild(removeButton);
+      } else {
+        actionsCell.textContent = '—';
+      }
+      row.appendChild(actionsCell);
+
       tbody.appendChild(row);
+    });
+  }
+
+  function removePreviewInstallment(index) {
+    if (!Array.isArray(state.previewInstallments)) return;
+    if (index < 0 || index >= state.previewInstallments.length) return;
+    state.previewInstallments.splice(index, 1);
+    state.previewInstallments.forEach((installment, idx) => {
+      if (installment && typeof installment === 'object') {
+        // eslint-disable-next-line no-param-reassign
+        installment.number = idx + 1;
+      }
+    });
+    if (elements.installments) {
+      const newLength = state.previewInstallments.length;
+      elements.installments.value = String(newLength > 0 ? newLength : 1);
+    }
+    updateInstallmentsTable(state.previewInstallments, { editable: true });
+  }
+
+  function ensureSelectOption(select, value, label) {
+    if (!select || !value) return;
+    const exists = Array.from(select.options).some((option) => option.value === value);
+    if (!exists) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label || value;
+      select.appendChild(option);
+    }
+  }
+
+  function resetFormFields({ preserveCompany = true } = {}) {
+    const companyValue = preserveCompany && elements.company ? elements.company.value : '';
+    if (elements.form) {
+      elements.form.reset();
+    }
+    if (elements.company) {
+      elements.company.value = companyValue;
+    }
+    if (elements.code) {
+      elements.code.value = 'Gerado automaticamente';
+    }
+    if (elements.issue) {
+      elements.issue.value = formatDateInputValue(new Date());
+    }
+    if (elements.due) {
+      elements.due.value = '';
+    }
+    if (elements.totalValue) {
+      elements.totalValue.value = '';
+    }
+    if (elements.generateButton) {
+      elements.generateButton.disabled = false;
+    }
+    state.previewInstallments = [];
+    updateInstallmentsTable([], { editable: true });
+
+    const companyId = elements.company?.value || '';
+    state.activeCompany = companyId;
+    loadBankAccounts(companyId);
+    loadAccountingAccounts(companyId);
+    loadPaymentMethods(companyId);
+
+    if (elements.saveButton) {
+      elements.saveButton.innerHTML = originalSaveButtonHTML;
+      elements.saveButton.disabled = false;
+    }
+  }
+
+  function normalizeReceivable(receivable) {
+    if (!receivable) return null;
+    const normalized = { ...receivable };
+    normalized.id = receivable._id || receivable.id || '';
+    normalized.code = receivable.code || '';
+    normalized.company = receivable.company || null;
+    normalized.customer = receivable.customer || null;
+    normalized.totalValue = Number(receivable.totalValue || 0);
+    normalized.installments = Array.isArray(receivable.installments)
+      ? receivable.installments.map((installment, index) => ({
+          number: installment.number || index + 1,
+          issueDate: installment.issueDate || receivable.issueDate || null,
+          dueDate: installment.dueDate || receivable.dueDate || null,
+          value: Number(installment.value || 0),
+          bankAccountId:
+            (installment.bankAccount && typeof installment.bankAccount === 'object'
+              ? installment.bankAccount._id
+              : installment.bankAccount) || '',
+          bankAccountLabel:
+            (installment.bankAccount && typeof installment.bankAccount === 'object'
+              ? installment.bankAccount.label
+              : '') || '',
+          accountingAccountId:
+            (installment.accountingAccount && typeof installment.accountingAccount === 'object'
+              ? installment.accountingAccount._id
+              : installment.accountingAccount) || '',
+          accountingAccountLabel:
+            (installment.accountingAccount && typeof installment.accountingAccount === 'object'
+              ? installment.accountingAccount.label
+              : '') || '',
+          status: installment.status || computeStatus(receivable, installment),
+        }))
+      : [];
+    normalized.installmentsCount =
+      receivable.installmentsCount || (Array.isArray(normalized.installments) ? normalized.installments.length : 0) || 1;
+    normalized.status = receivable.status || computeStatus(receivable);
+    normalized.forecast = !!receivable.forecast;
+    normalized.uncollectible = !!receivable.uncollectible;
+    normalized.protest = !!receivable.protest;
+    normalized.document = receivable.document || '';
+    normalized.documentNumber = receivable.documentNumber || '';
+    normalized.notes = receivable.notes || '';
+    return normalized;
+  }
+
+  function storeReceivableInCache(receivable) {
+    if (!receivable || !receivable.id) return;
+    state.receivableCache.set(receivable.id, receivable);
+  }
+
+  function getReceivableFromCache(id) {
+    if (!id) return null;
+    return state.receivableCache.get(id) || null;
+  }
+
+  function removeReceivableFromCache(id) {
+    if (!id) return;
+    state.receivableCache.delete(id);
+  }
+
+  function confirmDialog({ title, message, confirmText = 'Confirmar', cancelText = 'Cancelar' }) {
+    return new Promise((resolve) => {
+      if (typeof window !== 'undefined' && typeof window.showModal === 'function') {
+        window.showModal({
+          title,
+          message,
+          confirmText,
+          cancelText,
+          onConfirm: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      } else {
+        // eslint-disable-next-line no-alert
+        const result = window.confirm(message || 'Deseja prosseguir?');
+        resolve(result);
+      }
     });
   }
 
@@ -360,91 +558,6 @@
     };
 
     return map[status] || map.open;
-  }
-
-  function updateForecastTable(receivables) {
-    const tbody = elements.forecastBody;
-    if (!tbody) return;
-    tbody.innerHTML = '';
-
-    const rows = [];
-    receivables.forEach((receivable) => {
-      const installments = Array.isArray(receivable.installments) && receivable.installments.length
-        ? receivable.installments
-        : [{
-            number: 1,
-            dueDate: receivable.dueDate,
-            value: receivable.totalValue,
-          }];
-
-      installments.forEach((installment) => {
-        const status = computeStatus(receivable, installment);
-        rows.push({
-          customer: receivable.customer?.name || '—',
-          document: receivable.documentNumber || receivable.document || receivable.code || '—',
-          dueDate: installment.dueDate || receivable.dueDate,
-          value: installment.value || receivable.totalValue,
-          status,
-        });
-      });
-    });
-
-    if (!rows.length) {
-      const row = document.createElement('tr');
-      const cell = document.createElement('td');
-      cell.colSpan = 5;
-      cell.className = 'px-4 py-6 text-center text-sm text-gray-500';
-      cell.textContent = 'Cadastre contas a receber para acompanhar a previsão.';
-      row.appendChild(cell);
-      tbody.appendChild(row);
-      return;
-    }
-
-    rows.sort((a, b) => {
-      const dateA = new Date(a.dueDate).getTime();
-      const dateB = new Date(b.dueDate).getTime();
-      return dateA - dateB;
-    });
-
-    rows.forEach((rowData) => {
-      const row = document.createElement('tr');
-
-      const customerCell = document.createElement('td');
-      customerCell.className = 'px-4 py-3';
-      customerCell.textContent = rowData.customer;
-      row.appendChild(customerCell);
-
-      const docCell = document.createElement('td');
-      docCell.className = 'px-4 py-3';
-      docCell.textContent = rowData.document;
-      row.appendChild(docCell);
-
-      const dueCell = document.createElement('td');
-      dueCell.className = 'px-4 py-3';
-      dueCell.textContent = formatDateBR(rowData.dueDate);
-      row.appendChild(dueCell);
-
-      const valueCell = document.createElement('td');
-      valueCell.className = 'px-4 py-3 text-right';
-      valueCell.textContent = formatCurrencyBR(rowData.value);
-      row.appendChild(valueCell);
-
-      const statusCell = document.createElement('td');
-      statusCell.className = 'px-4 py-3 text-center';
-      const badge = buildStatusBadge(rowData.status);
-      const span = document.createElement('span');
-      span.className = `inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${badge.classes}`;
-      const icon = document.createElement('i');
-      icon.className = `fas ${badge.icon}`;
-      span.appendChild(icon);
-      const text = document.createElement('span');
-      text.textContent = badge.label;
-      span.appendChild(text);
-      statusCell.appendChild(span);
-      row.appendChild(statusCell);
-
-      tbody.appendChild(row);
-    });
   }
 
   function updateSummary(summary = {}) {
@@ -576,7 +689,11 @@
       if (state.previewInstallments.length) {
         const bankLabel = getSelectedOptionLabel(elements.bankAccount);
         const accountingLabel = getSelectedOptionLabel(elements.accountingAccount);
-        updateInstallmentsTable(state.previewInstallments, null, bankLabel, accountingLabel);
+        updateInstallmentsTable(state.previewInstallments, {
+          bankLabel,
+          accountingLabel,
+          editable: true,
+        });
       }
     } catch (error) {
       console.error('accounts-receivable:loadBankAccounts', error);
@@ -653,9 +770,305 @@
     }
   }
 
+  async function fetchReceivableById(id, { force = false } = {}) {
+    if (!id) return null;
+    if (!force) {
+      const cached = getReceivableFromCache(id);
+      if (cached) {
+        return cached;
+      }
+    }
+    const response = await fetch(`${RECEIVABLES_API}/${id}`, {
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+    });
+    if (!response.ok) {
+      if (await handleUnauthorized(response)) return null;
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData?.message || `Erro ao carregar a conta a receber (${response.status}).`);
+    }
+    const data = await response.json();
+    const normalized = normalizeReceivable(data.receivable || data);
+    if (normalized) {
+      storeReceivableInCache(normalized);
+    }
+    return normalized;
+  }
+
+  function renderForecast() {
+    if (!elements.forecastBody) return;
+    const tbody = elements.forecastBody;
+    tbody.innerHTML = '';
+
+    const receivables = Array.isArray(state.receivables) ? state.receivables : [];
+    if (!receivables.length) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 6;
+      cell.className = 'px-4 py-6 text-center text-sm text-gray-500';
+      cell.textContent = 'Cadastre contas a receber para acompanhar a previsão.';
+      row.appendChild(cell);
+      tbody.appendChild(row);
+      return;
+    }
+
+    const rows = [];
+    receivables.forEach((receivable) => {
+      const installments = Array.isArray(receivable.installments) && receivable.installments.length
+        ? receivable.installments
+        : [
+            {
+              number: 1,
+              dueDate: receivable.dueDate,
+              value: receivable.totalValue,
+              status: receivable.status || computeStatus(receivable),
+            },
+          ];
+
+      installments.forEach((installment) => {
+        rows.push({
+          receivableId: receivable.id || receivable._id,
+          customer: receivable.customer?.name || '—',
+          document: receivable.documentNumber || receivable.document || receivable.code || '—',
+          dueDate: installment.dueDate || receivable.dueDate,
+          value: installment.value || receivable.totalValue,
+          status: installment.status || computeStatus(receivable, installment),
+          installmentNumber: installment.number || null,
+        });
+      });
+    });
+
+    rows.sort((a, b) => {
+      const timeA = new Date(a.dueDate || 0).getTime();
+      const timeB = new Date(b.dueDate || 0).getTime();
+      return timeA - timeB;
+    });
+
+    rows.forEach((item) => {
+      const row = document.createElement('tr');
+
+      const customerCell = document.createElement('td');
+      customerCell.className = 'px-4 py-3';
+      customerCell.textContent = item.customer;
+      row.appendChild(customerCell);
+
+      const docCell = document.createElement('td');
+      docCell.className = 'px-4 py-3';
+      docCell.textContent = item.document;
+      row.appendChild(docCell);
+
+      const dueCell = document.createElement('td');
+      dueCell.className = 'px-4 py-3';
+      dueCell.textContent = formatDateBR(item.dueDate);
+      row.appendChild(dueCell);
+
+      const valueCell = document.createElement('td');
+      valueCell.className = 'px-4 py-3 text-right';
+      valueCell.textContent = formatCurrencyBR(item.value);
+      row.appendChild(valueCell);
+
+      const statusCell = document.createElement('td');
+      statusCell.className = 'px-4 py-3 text-center';
+      const badge = buildStatusBadge(item.status);
+      const span = document.createElement('span');
+      span.className = `inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${badge.classes}`;
+      span.innerHTML = `<i class="fas ${badge.icon}"></i> ${badge.label}`;
+      statusCell.appendChild(span);
+      row.appendChild(statusCell);
+
+      const actionsCell = document.createElement('td');
+      actionsCell.className = 'px-4 py-3 text-center';
+      const actionsWrapper = document.createElement('div');
+      actionsWrapper.className = 'inline-flex items-center justify-center gap-2';
+
+      const editButton = document.createElement('button');
+      editButton.type = 'button';
+      editButton.className = 'forecast-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10';
+      editButton.dataset.action = 'edit-forecast';
+      editButton.dataset.id = item.receivableId || '';
+      if (item.installmentNumber) {
+        editButton.dataset.installment = String(item.installmentNumber);
+      }
+      editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
+      actionsWrapper.appendChild(editButton);
+
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'forecast-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
+      deleteButton.dataset.action = 'delete-forecast';
+      deleteButton.dataset.id = item.receivableId || '';
+      if (item.installmentNumber) {
+        deleteButton.dataset.installment = String(item.installmentNumber);
+      }
+      deleteButton.innerHTML = '<i class="fas fa-trash"></i> Excluir';
+      actionsWrapper.appendChild(deleteButton);
+
+      actionsCell.appendChild(actionsWrapper);
+
+      row.appendChild(actionsCell);
+      tbody.appendChild(row);
+    });
+  }
+
+  function renderHistory() {
+    if (!elements.historyBody) return;
+    const tbody = elements.historyBody;
+    tbody.innerHTML = '';
+
+    const historyItems = Array.isArray(state.history) ? state.history : [];
+    const hasCustomerFilter = !!(elements.customer?.value);
+
+    if (!historyItems.length) {
+      if (elements.historyEmpty) {
+        elements.historyEmpty.textContent = hasCustomerFilter
+          ? 'Nenhum lançamento encontrado para o cliente selecionado.'
+          : 'Nenhum lançamento encontrado no histórico.';
+        elements.historyEmpty.classList.remove('hidden');
+      }
+      return;
+    }
+
+    if (elements.historyEmpty) {
+      elements.historyEmpty.classList.add('hidden');
+    }
+
+    const rows = [];
+    historyItems.forEach((receivable) => {
+      const installments = Array.isArray(receivable.installments) && receivable.installments.length
+        ? receivable.installments
+        : [
+            {
+              number: 1,
+              dueDate: receivable.dueDate,
+              value: receivable.totalValue,
+              status: receivable.status || computeStatus(receivable),
+            },
+          ];
+
+      installments.forEach((installment) => {
+        rows.push({
+          receivableId: receivable.id || receivable._id,
+          customer: receivable.customer?.name || '—',
+          document: receivable.documentNumber || receivable.document || receivable.code || '—',
+          dueDate: installment.dueDate || receivable.dueDate,
+          value: installment.value || receivable.totalValue,
+          status: installment.status || computeStatus(receivable, installment),
+          installmentNumber: installment.number || null,
+        });
+      });
+    });
+
+    rows.sort((a, b) => {
+      const timeA = new Date(a.dueDate || 0).getTime();
+      const timeB = new Date(b.dueDate || 0).getTime();
+      return timeA - timeB;
+    });
+
+    rows.forEach((item) => {
+      const row = document.createElement('tr');
+
+      const customerCell = document.createElement('td');
+      customerCell.className = 'px-4 py-3';
+      customerCell.textContent = item.customer;
+      row.appendChild(customerCell);
+
+      const docCell = document.createElement('td');
+      docCell.className = 'px-4 py-3';
+      docCell.textContent = item.document;
+      row.appendChild(docCell);
+
+      const dueCell = document.createElement('td');
+      dueCell.className = 'px-4 py-3';
+      dueCell.textContent = formatDateBR(item.dueDate);
+      row.appendChild(dueCell);
+
+      const valueCell = document.createElement('td');
+      valueCell.className = 'px-4 py-3 text-right';
+      valueCell.textContent = formatCurrencyBR(item.value);
+      row.appendChild(valueCell);
+
+      const statusCell = document.createElement('td');
+      statusCell.className = 'px-4 py-3 text-center';
+      const badge = buildStatusBadge(item.status);
+      const span = document.createElement('span');
+      span.className = `inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${badge.classes}`;
+      span.innerHTML = `<i class="fas ${badge.icon}"></i> ${badge.label}`;
+      statusCell.appendChild(span);
+      row.appendChild(statusCell);
+
+      const actionsCell = document.createElement('td');
+      actionsCell.className = 'px-4 py-3 text-center';
+      const actionsWrapper = document.createElement('div');
+      actionsWrapper.className = 'inline-flex items-center justify-center gap-2';
+
+      const editButton = document.createElement('button');
+      editButton.type = 'button';
+      editButton.className = 'history-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10';
+      editButton.dataset.action = 'edit-history';
+      editButton.dataset.id = item.receivableId || '';
+      if (item.installmentNumber) {
+        editButton.dataset.installment = String(item.installmentNumber);
+      }
+      editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
+      actionsWrapper.appendChild(editButton);
+
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'history-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
+      deleteButton.dataset.action = 'delete-history';
+      deleteButton.dataset.id = item.receivableId || '';
+      if (item.installmentNumber) {
+        deleteButton.dataset.installment = String(item.installmentNumber);
+      }
+      deleteButton.innerHTML = '<i class="fas fa-trash"></i> Excluir';
+      actionsWrapper.appendChild(deleteButton);
+
+      actionsCell.appendChild(actionsWrapper);
+
+      row.appendChild(actionsCell);
+      tbody.appendChild(row);
+    });
+  }
+
+  function extractActionContext(target) {
+    const button = target.closest('button[data-action]');
+    if (!button) return null;
+    const installmentRaw = button.dataset.installment;
+    const installmentNumber = installmentRaw ? Number.parseInt(installmentRaw, 10) : null;
+    return {
+      action: button.dataset.action,
+      receivableId: button.dataset.id || '',
+      installmentNumber: Number.isFinite(installmentNumber) ? installmentNumber : null,
+    };
+  }
+
+  function handleForecastTableClick(event) {
+    const context = extractActionContext(event.target);
+    if (!context || !context.receivableId) return;
+    if (context.action === 'edit-forecast') {
+      handleEditReceivable(context.receivableId, context.installmentNumber);
+    } else if (context.action === 'delete-forecast') {
+      handleDeleteReceivable(context.receivableId, context.installmentNumber);
+    }
+  }
+
+  function handleHistoryTableClick(event) {
+    const context = extractActionContext(event.target);
+    if (!context || !context.receivableId) return;
+    if (context.action === 'edit-history') {
+      handleEditReceivable(context.receivableId, context.installmentNumber);
+    } else if (context.action === 'delete-history') {
+      handleDeleteReceivable(context.receivableId, context.installmentNumber);
+    }
+  }
+
   async function loadReceivables() {
     try {
-      const response = await fetch(RECEIVABLES_API, {
+      const params = new URLSearchParams();
+      if (state.activeCompany) {
+        params.set('company', state.activeCompany);
+      }
+      const url = params.toString() ? `${RECEIVABLES_API}?${params.toString()}` : RECEIVABLES_API;
+      const response = await fetch(url, {
         headers: authHeaders(),
       });
       if (!response.ok) {
@@ -663,33 +1076,373 @@
         throw new Error('Não foi possível carregar as contas a receber.');
       }
       const data = await response.json();
-      state.receivables = Array.isArray(data.receivables) ? data.receivables : [];
+      const receivables = Array.isArray(data.receivables)
+        ? data.receivables.map(normalizeReceivable)
+        : [];
+      state.receivables = receivables;
+      receivables.forEach(storeReceivableInCache);
       updateSummary(data.summary || {});
-      updateForecastTable(state.receivables);
+      renderForecast();
     } catch (error) {
       console.error('accounts-receivable:loadReceivables', error);
       notify(error.message || 'Erro ao carregar a previsão de recebimentos.', 'error');
+      if (elements.forecastBody) {
+        elements.forecastBody.innerHTML = '';
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 6;
+        cell.className = 'px-4 py-6 text-center text-sm text-gray-500';
+        cell.textContent = 'Não foi possível carregar os dados.';
+        row.appendChild(cell);
+        elements.forecastBody.appendChild(row);
+      }
+    }
+  }
+
+  async function loadHistory() {
+    try {
+      const params = new URLSearchParams();
+      const customerId = elements.customer?.value || '';
+      if (customerId) {
+        params.set('customer', customerId);
+      }
+      if (state.activeCompany) {
+        params.set('company', state.activeCompany);
+      }
+      const url = params.toString() ? `${RECEIVABLES_API}?${params.toString()}` : RECEIVABLES_API;
+      const response = await fetch(url, {
+        headers: authHeaders(),
+      });
+      if (!response.ok) {
+        if (await handleUnauthorized(response)) return;
+        throw new Error('Não foi possível carregar o histórico de contas a receber.');
+      }
+      const data = await response.json();
+      const historyItems = Array.isArray(data.receivables)
+        ? data.receivables.map(normalizeReceivable)
+        : [];
+      state.history = historyItems;
+      historyItems.forEach(storeReceivableInCache);
+      renderHistory();
+    } catch (error) {
+      console.error('accounts-receivable:loadHistory', error);
+      notify(error.message || 'Erro ao carregar o histórico de contas a receber.', 'error');
+      state.history = [];
+      renderHistory();
+    }
+  }
+
+  async function enterEditMode(receivable, { focusInstallmentNumber = null } = {}) {
+    if (!receivable) return;
+    const companyId = receivable.company?._id || receivable.company?.id || receivable.company || '';
+    if (elements.company) {
+      ensureSelectOption(
+        elements.company,
+        companyId,
+        receivable.company?.name || receivable.company?.nomeFantasia || receivable.company?.razaoSocial || 'Empresa'
+      );
+      elements.company.value = companyId;
+    }
+    state.activeCompany = companyId;
+
+    await Promise.all([
+      loadBankAccounts(companyId),
+      loadAccountingAccounts(companyId),
+      loadPaymentMethods(companyId),
+    ]);
+
+    const customerId = receivable.customer?._id || receivable.customer?.id || receivable.customer || '';
+    if (elements.customer) {
+      ensureSelectOption(elements.customer, customerId, receivable.customer?.name || 'Cliente');
+      elements.customer.value = customerId;
+    }
+
+    const bankAccountId = receivable.bankAccount?._id || receivable.bankAccount || '';
+    const bankLabel = receivable.bankAccount?.label || receivable.bankAccount?.name || '';
+    if (elements.bankAccount && bankAccountId) {
+      ensureSelectOption(elements.bankAccount, bankAccountId, bankLabel || 'Conta corrente');
+      elements.bankAccount.value = bankAccountId;
+    }
+
+    const accountingAccountId = receivable.accountingAccount?._id || receivable.accountingAccount || '';
+    const accountingLabel = receivable.accountingAccount?.label || '';
+    if (elements.accountingAccount && accountingAccountId) {
+      ensureSelectOption(elements.accountingAccount, accountingAccountId, accountingLabel || 'Conta contábil');
+      elements.accountingAccount.value = accountingAccountId;
+    }
+
+    if (elements.paymentMethod) {
+      const paymentMethodId = receivable.paymentMethod?._id || receivable.paymentMethod || '';
+      if (paymentMethodId) {
+        ensureSelectOption(elements.paymentMethod, paymentMethodId, receivable.paymentMethod?.name || 'Meio de pagamento');
+        elements.paymentMethod.value = paymentMethodId;
+      } else {
+        elements.paymentMethod.value = '';
+      }
+    }
+
+    if (elements.responsible) {
+      const responsibleId = receivable.responsible?._id || receivable.responsible || '';
+      if (responsibleId) {
+        ensureSelectOption(elements.responsible, responsibleId, receivable.responsible?.name || 'Responsável');
+        elements.responsible.value = responsibleId;
+      } else {
+        elements.responsible.value = '';
+      }
+    }
+
+    if (elements.code) {
+      elements.code.value = receivable.code || 'Gerado automaticamente';
+    }
+    if (elements.installments) {
+      elements.installments.value = String(receivable.installmentsCount || receivable.installments?.length || 1);
+    }
+    if (elements.issue) {
+      elements.issue.value = formatDateInputValue(receivable.issueDate) || '';
+    }
+    if (elements.due) {
+      elements.due.value = formatDateInputValue(receivable.dueDate) || '';
+    }
+    if (elements.totalValue) {
+      elements.totalValue.value = Number(receivable.totalValue || 0).toFixed(2);
+    }
+    if (elements.document) {
+      elements.document.value = receivable.document || '';
+    }
+    if (elements.documentNumber) {
+      elements.documentNumber.value = receivable.documentNumber || '';
+    }
+    if (elements.notes) {
+      elements.notes.value = receivable.notes || '';
+    }
+    if (elements.forecast) {
+      elements.forecast.checked = !!receivable.forecast;
+    }
+    if (elements.uncollectible) {
+      elements.uncollectible.checked = !!receivable.uncollectible;
+    }
+    if (elements.protest) {
+      elements.protest.checked = !!receivable.protest;
+    }
+
+    const installments = Array.isArray(receivable.installments) && receivable.installments.length
+      ? receivable.installments
+      : [
+          {
+            number: 1,
+            issueDate: receivable.issueDate,
+            dueDate: receivable.dueDate,
+            value: receivable.totalValue,
+            bankAccountId,
+            bankAccountLabel: bankLabel,
+            accountingAccountId,
+            accountingAccountLabel: accountingLabel,
+            status: receivable.status || 'pending',
+          },
+        ];
+
+    state.previewInstallments = installments.map((installment) => ({
+      number: installment.number || 1,
+      issueDate: installment.issueDate || receivable.issueDate || null,
+      dueDate: installment.dueDate || receivable.dueDate || null,
+      value: Number(installment.value || 0),
+      bankAccountId: installment.bankAccountId || installment.bankAccount?._id || bankAccountId || '',
+      bankAccountLabel:
+        installment.bankAccountLabel
+        || installment.bankAccount?.label
+        || bankLabel
+        || '',
+      accountingAccountId:
+        installment.accountingAccountId
+        || installment.accountingAccount?._id
+        || accountingAccountId
+        || '',
+      accountingAccountLabel:
+        installment.accountingAccountLabel
+        || installment.accountingAccount?.label
+        || accountingLabel
+        || '',
+      status: installment.status || receivable.status || 'pending',
+    }));
+
+    updateInstallmentsTable(state.previewInstallments, {
+      code: receivable.code,
+      bankLabel,
+      accountingLabel,
+      editable: true,
+    });
+
+    state.currentEditing = {
+      id: receivable.id,
+      focusInstallmentNumber: Number.isFinite(focusInstallmentNumber) ? focusInstallmentNumber : null,
+    };
+
+    if (elements.saveButton) {
+      elements.saveButton.innerHTML = '<i class="fas fa-save"></i> Atualizar lançamento';
+    }
+  }
+
+  function exitEditMode({ preserveCompany = true } = {}) {
+    state.currentEditing = null;
+    state.lastCreatedCode = null;
+    resetFormFields({ preserveCompany });
+  }
+
+  async function handleEditReceivable(receivableId, installmentNumber) {
+    if (!receivableId) {
+      notify('Não foi possível identificar o lançamento selecionado.', 'warning');
+      return;
+    }
+    try {
+      const receivable = await fetchReceivableById(receivableId, { force: false });
+      if (!receivable) {
+        notify('Conta a receber não encontrada.', 'error');
+        return;
+      }
+      await enterEditMode(receivable, { focusInstallmentNumber: installmentNumber });
+    } catch (error) {
+      console.error('accounts-receivable:handleEditReceivable', error);
+      notify(error.message || 'Erro ao carregar o lançamento para edição.', 'error');
+    }
+  }
+
+  async function performDeleteReceivable(receivableId, { deleteAll = false, installmentNumber = null } = {}) {
+    let url = `${RECEIVABLES_API}/${receivableId}`;
+    if (!deleteAll && installmentNumber) {
+      const params = new URLSearchParams();
+      params.set('installmentNumber', String(installmentNumber));
+      url += `?${params.toString()}`;
+    }
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+    });
+    if (response.status === 204) {
+      return null;
+    }
+    if (!response.ok) {
+      if (await handleUnauthorized(response)) return null;
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData?.message || `Erro ao excluir o lançamento (${response.status}).`);
+    }
+    const data = await response.json();
+    const normalized = normalizeReceivable(data.receivable || data);
+    if (normalized) {
+      storeReceivableInCache(normalized);
+    }
+    return normalized;
+  }
+
+  async function handleDeleteReceivable(receivableId, installmentNumber) {
+    if (!receivableId) {
+      notify('Não foi possível identificar o lançamento selecionado.', 'warning');
+      return;
+    }
+    try {
+      const receivable = await fetchReceivableById(receivableId, { force: false });
+      if (!receivable) {
+        notify('Conta a receber não encontrada.', 'error');
+        return;
+      }
+
+      const confirmRemoval = await confirmDialog({
+        title: 'Excluir lançamento',
+        message: 'Deseja realmente excluir este lançamento de contas a receber?',
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar',
+      });
+      if (!confirmRemoval) return;
+
+      const totalInstallments = Array.isArray(receivable.installments) ? receivable.installments.length : 0;
+      if (totalInstallments > 1 && installmentNumber) {
+        const deleteAll = await confirmDialog({
+          title: 'Excluir parcelas',
+          message:
+            'Excluir todas as parcelas deste lançamento? Escolha "Excluir todas" para remover o título completo ou "Somente esta" para remover apenas a parcela selecionada.',
+          confirmText: 'Excluir todas',
+          cancelText: 'Somente esta',
+        });
+        if (deleteAll) {
+          await performDeleteReceivable(receivableId, { deleteAll: true });
+          removeReceivableFromCache(receivableId);
+          if (state.currentEditing?.id === receivableId) {
+            exitEditMode({ preserveCompany: true });
+          }
+          notify('Lançamento excluído com sucesso.', 'success');
+        } else {
+          const confirmSingle = await confirmDialog({
+            title: 'Excluir parcela',
+            message: `Deseja excluir a parcela ${installmentNumber}?`,
+            confirmText: 'Excluir',
+            cancelText: 'Cancelar',
+          });
+          if (!confirmSingle) return;
+          const updated = await performDeleteReceivable(receivableId, {
+            deleteAll: false,
+            installmentNumber,
+          });
+          if (updated) {
+            storeReceivableInCache(updated);
+            if (state.currentEditing?.id === receivableId) {
+              await enterEditMode(updated, { focusInstallmentNumber: null });
+            }
+            notify('Parcela excluída com sucesso.', 'success');
+          } else {
+            removeReceivableFromCache(receivableId);
+            if (state.currentEditing?.id === receivableId) {
+              exitEditMode({ preserveCompany: true });
+            }
+            notify('Lançamento excluído.', 'success');
+          }
+        }
+      } else {
+        await performDeleteReceivable(receivableId, { deleteAll: true });
+        removeReceivableFromCache(receivableId);
+        if (state.currentEditing?.id === receivableId) {
+          exitEditMode({ preserveCompany: true });
+        }
+        notify('Lançamento excluído com sucesso.', 'success');
+      }
+
+      await loadReceivables();
+      await loadHistory();
+    } catch (error) {
+      console.error('accounts-receivable:handleDeleteReceivable', error);
+      notify(error.message || 'Não foi possível excluir o lançamento selecionado.', 'error');
     }
   }
 
   function handleCompanyChange(event) {
     const companyId = event.target?.value || '';
     state.activeCompany = companyId;
+    if (state.currentEditing?.id) {
+      exitEditMode({ preserveCompany: true });
+    }
     loadBankAccounts(companyId);
     loadAccountingAccounts(companyId);
     loadPaymentMethods(companyId);
+    loadReceivables();
+    loadHistory();
+  }
+
+  function handleCustomerChange() {
+    loadHistory();
   }
 
   function handleGeneratePreview() {
     const installments = buildInstallmentsPreview();
     if (!installments.length) {
       notify('Informe valor, datas e parcelas para gerar a pré-visualização.', 'warning');
-      updateInstallmentsTable([], null, null, null);
+      updateInstallmentsTable([], { editable: true });
       return;
     }
     const bankLabel = getSelectedOptionLabel(elements.bankAccount);
     const accountingLabel = getSelectedOptionLabel(elements.accountingAccount);
-    updateInstallmentsTable(installments, null, bankLabel, accountingLabel);
+    updateInstallmentsTable(installments, {
+      bankLabel,
+      accountingLabel,
+      editable: true,
+    });
     const installmentsTab = document.querySelector('[data-tab-target="installments"]');
     if (installmentsTab) installmentsTab.click();
   }
@@ -698,15 +1451,21 @@
     return checkbox?.checked ? '1' : '0';
   }
 
+  function handleClear() {
+    exitEditMode({ preserveCompany: true });
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
-    if (!elements.form) return;
+    if (!elements.form || state.isSaving) return;
 
-    const submitButton = elements.form.querySelector('button[type="submit"]');
-    if (submitButton) {
-      submitButton.disabled = true;
-      submitButton.classList.add('opacity-60', 'cursor-not-allowed');
+    state.isSaving = true;
+    if (elements.saveButton) {
+      elements.saveButton.disabled = true;
+      elements.saveButton.classList.add('opacity-60', 'cursor-not-allowed');
     }
+
+    const isEditing = !!state.currentEditing?.id;
 
     try {
       const payload = {
@@ -732,12 +1491,15 @@
         payload.installmentsData = state.previewInstallments.map((installment, index) => ({
           number: installment.number || index + 1,
           dueDate: formatDateInputValue(installment.dueDate) || '',
-          bankAccount: installment.bankAccount || '',
+          bankAccount: installment.bankAccountId || installment.bankAccount || '',
         }));
       }
 
-      const response = await fetch(RECEIVABLES_API, {
-        method: 'POST',
+      const url = isEditing ? `${RECEIVABLES_API}/${state.currentEditing.id}` : RECEIVABLES_API;
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           ...authHeaders(),
@@ -751,27 +1513,40 @@
         throw new Error(errorData.message || 'Não foi possível salvar a conta a receber.');
       }
 
-      const created = await response.json();
-      state.lastCreatedCode = created.code;
-      notify('Conta a receber salva com sucesso.', 'success');
-
-      if (elements.code && created.code) {
-        elements.code.value = created.code;
+      const data = await response.json();
+      const normalized = normalizeReceivable(data.receivable || data);
+      if (normalized) {
+        storeReceivableInCache(normalized);
       }
 
-      const bankLabel = created.bankAccount?.label || getSelectedOptionLabel(elements.bankAccount);
-      const accountingLabel = created.accountingAccount?.label || getSelectedOptionLabel(elements.accountingAccount);
-      state.previewInstallments = [];
-      updateInstallmentsTable(created.installments || [], created.code, bankLabel, accountingLabel);
+      if (isEditing) {
+        notify('Conta a receber atualizada com sucesso.', 'success');
+        exitEditMode({ preserveCompany: true });
+      } else {
+        state.lastCreatedCode = normalized?.code || null;
+        if (elements.code && normalized?.code) {
+          elements.code.value = normalized.code;
+        }
+        state.previewInstallments = [];
+        updateInstallmentsTable(normalized?.installments || [], {
+          code: normalized?.code || null,
+          bankLabel: normalized?.bankAccount?.label || '',
+          accountingLabel: normalized?.accountingAccount?.label || '',
+          editable: false,
+        });
+        notify('Conta a receber salva com sucesso.', 'success');
+      }
 
       await loadReceivables();
+      await loadHistory();
     } catch (error) {
       console.error('accounts-receivable:handleSubmit', error);
       notify(error.message || 'Erro ao salvar a conta a receber.', 'error');
     } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.classList.remove('opacity-60', 'cursor-not-allowed');
+      state.isSaving = false;
+      if (elements.saveButton) {
+        elements.saveButton.disabled = false;
+        elements.saveButton.classList.remove('opacity-60', 'cursor-not-allowed');
       }
     }
   }
@@ -780,33 +1555,21 @@
     if (!elements.form) return;
     state.token = getAuthToken();
     elements.company?.addEventListener('change', handleCompanyChange);
+    elements.customer?.addEventListener('change', handleCustomerChange);
     elements.generateButton?.addEventListener('click', handleGeneratePreview);
+    elements.clearButton?.addEventListener('click', handleClear);
     elements.form.addEventListener('submit', handleSubmit);
-    elements.form.addEventListener('reset', () => {
-      setTimeout(() => {
-        state.previewInstallments = [];
-        state.lastCreatedCode = null;
-        if (elements.code) {
-          elements.code.value = 'Gerado automaticamente';
-        }
-        updateInstallmentsTable([], null, null, null);
-        const companyId = elements.company?.value || '';
-        state.activeCompany = companyId;
-        loadBankAccounts(companyId);
-        loadAccountingAccounts(companyId);
-        loadPaymentMethods(companyId);
-      }, 0);
-    });
+    elements.forecastBody?.addEventListener('click', handleForecastTableClick);
+    elements.historyBody?.addEventListener('click', handleHistoryTableClick);
 
     loadOptions().then(() => {
       if (elements.company?.value) {
         state.activeCompany = elements.company.value;
-        loadBankAccounts(elements.company.value);
-        loadAccountingAccounts(elements.company.value);
-        loadPaymentMethods(elements.company.value);
       }
+      resetFormFields({ preserveCompany: true });
+      loadReceivables();
+      loadHistory();
     });
-    loadReceivables();
   }
 
   if (document.readyState === 'loading') {
