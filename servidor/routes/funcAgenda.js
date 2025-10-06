@@ -10,11 +10,206 @@ const Pet = require('../models/Pet');
 const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
 const UserAddress = require('../models/UserAddress');
+const Store = require('../models/Store');
+const bcrypt = require('bcryptjs');
+const { randomBytes } = require('crypto');
 
 const requireStaff = authorizeRoles('funcionario', 'admin', 'admin_master');
 
 function escapeRegex(s) { return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function userDisplayName(u) { return u?.nomeCompleto || u?.nomeContato || u?.razaoSocial || u?.email; }
+
+function onlyDigits(value = '') {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function sanitizeString(value = '') {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
+
+function sanitizeEmail(value = '') {
+  return sanitizeString(value).toLowerCase();
+}
+
+function parseDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function normalizeTipoConta(value, fallback = 'pessoa_fisica') {
+  const raw = String(value || '').toLowerCase();
+  if (raw === 'pessoa_juridica' || raw === 'juridica' || raw === 'pj') return 'pessoa_juridica';
+  return 'pessoa_fisica';
+}
+
+async function ensureEmpresaExists(empresaId) {
+  if (!empresaId) return null;
+  if (!mongoose.Types.ObjectId.isValid(empresaId)) return null;
+  const store = await Store.findById(empresaId).select('_id nome').lean();
+  return store ? store._id : null;
+}
+
+async function generateCodigoCliente() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const random = randomBytes(3).toString('hex').toUpperCase();
+    const candidate = `CL-${random}`;
+    const exists = await User.exists({ codigoCliente: candidate });
+    if (!exists) return candidate;
+  }
+  const fallback = `CL-${Date.now().toString(16).slice(-8).toUpperCase()}`;
+  return fallback;
+}
+
+async function resolveCodigoCliente(rawCodigo, ignoreId = null) {
+  const trimmed = sanitizeString(rawCodigo);
+  if (!trimmed) {
+    return generateCodigoCliente();
+  }
+  const filter = { codigoCliente: trimmed };
+  if (ignoreId && mongoose.Types.ObjectId.isValid(ignoreId)) {
+    filter._id = { $ne: ignoreId };
+  }
+  const exists = await User.exists(filter);
+  if (exists) {
+    throw new Error('Já existe um cliente com este código.');
+  }
+  return trimmed;
+}
+
+function sanitizeTelefone(value = '') {
+  const digits = onlyDigits(value);
+  return digits || '';
+}
+
+function formatCep(value = '') {
+  const digits = onlyDigits(value).slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+function sanitizeCpf(value = '') {
+  const digits = onlyDigits(value);
+  if (!digits) return '';
+  return digits.padStart(11, '0').slice(-11);
+}
+
+function sanitizeCnpj(value = '') {
+  const digits = onlyDigits(value);
+  if (!digits) return '';
+  return digits.padStart(14, '0').slice(-14);
+}
+
+async function buildClientePayload(body = {}, opts = {}) {
+  const { isUpdate = false, currentUser = null } = opts;
+  const tipoConta = normalizeTipoConta(body.tipoConta || currentUser?.tipoConta);
+
+  const email = sanitizeEmail(body.email || currentUser?.email || '');
+  if (!email) throw new Error('Email é obrigatório.');
+
+  const celular = sanitizeTelefone(body.celular || currentUser?.celular || '');
+  if (!celular) throw new Error('Celular é obrigatório.');
+
+  const telefone = sanitizeTelefone(body.telefone);
+  const celular2 = sanitizeTelefone(body.celular2 || body.celularSecundario);
+  const telefone2 = sanitizeTelefone(body.telefone2 || body.telefoneSecundario);
+
+  const pais = sanitizeString(body.pais || currentUser?.pais || 'Brasil') || 'Brasil';
+  const apelido = sanitizeString(body.apelido || (tipoConta === 'pessoa_fisica' ? currentUser?.apelido : currentUser?.nomeFantasia) || '');
+  const codigoCliente = await resolveCodigoCliente(body.codigoCliente, currentUser?._id);
+
+  const empresaPrincipal = await ensureEmpresaExists(body.empresaId || body.empresa || body.empresaPrincipal || currentUser?.empresaPrincipal);
+
+  const payload = {
+    tipoConta,
+    email,
+    celular,
+    telefone: telefone || '',
+    telefoneSecundario: telefone2 || '',
+    celularSecundario: celular2 || '',
+    pais,
+    apelido,
+    codigoCliente,
+  };
+
+  if (empresaPrincipal) {
+    payload.empresaPrincipal = empresaPrincipal;
+    payload.empresas = [empresaPrincipal];
+  } else if (!isUpdate) {
+    payload.empresas = [];
+    payload.empresaPrincipal = undefined;
+  }
+
+  if (tipoConta === 'pessoa_fisica') {
+    const nomeCompleto = sanitizeString(body.nome || body.nomeCompleto);
+    if (!nomeCompleto && !currentUser?.nomeCompleto) {
+      throw new Error('Nome do cliente é obrigatório.');
+    }
+    const cpf = sanitizeCpf(body.cpf || currentUser?.cpf);
+    if (!cpf && !isUpdate) {
+      throw new Error('CPF é obrigatório para pessoa física.');
+    }
+    payload.nomeCompleto = nomeCompleto || currentUser?.nomeCompleto || '';
+    payload.cpf = cpf || '';
+    payload.genero = sanitizeString(body.sexo || body.genero || currentUser?.genero || '');
+    const dataNascimento = parseDate(body.nascimento || body.dataNascimento);
+    if (dataNascimento) payload.dataNascimento = dataNascimento;
+    payload.rgNumero = sanitizeString(body.rg || body.rgNumero || currentUser?.rgNumero || '');
+  } else {
+    const razaoSocial = sanitizeString(body.razaoSocial || currentUser?.razaoSocial || '');
+    if (!razaoSocial) {
+      throw new Error('Razão Social é obrigatória para pessoa jurídica.');
+    }
+    payload.razaoSocial = razaoSocial;
+    payload.nomeFantasia = sanitizeString(body.nomeFantasia || currentUser?.nomeFantasia || '');
+    payload.nomeContato = sanitizeString(body.nomeContato || currentUser?.nomeContato || '');
+    const cnpj = sanitizeCnpj(body.cnpj || currentUser?.cnpj);
+    payload.cnpj = cnpj || '';
+    let inscricaoEstadual = sanitizeString(body.inscricaoEstadual || currentUser?.inscricaoEstadual || '');
+    const isento = body.isentoIE === true || body.isentoIE === 'true' || body.isentoIE === 'on';
+    if (isento) {
+      inscricaoEstadual = 'ISENTO';
+    }
+    payload.inscricaoEstadual = inscricaoEstadual;
+    payload.isentoIE = !!isento;
+    payload.estadoIE = sanitizeString(body.estadoIE || currentUser?.estadoIE || '');
+  }
+
+  return payload;
+}
+
+async function ensureClienteEhEditavel(user) {
+  if (!user) {
+    throw new Error('Cliente não encontrado.');
+  }
+  if (user.role && user.role !== 'cliente') {
+    throw new Error('Este usuário não pode ser gerenciado como cliente.');
+  }
+  return user;
+}
+
+function mapAddressDoc(doc) {
+  if (!doc) return null;
+  const codIbge = sanitizeString(doc.codIbgeMunicipio || doc.ibge || '');
+  return {
+    _id: doc._id,
+    apelido: sanitizeString(doc.apelido || ''),
+    cep: formatCep(doc.cep || ''),
+    logradouro: sanitizeString(doc.logradouro || ''),
+    numero: sanitizeString(doc.numero || ''),
+    complemento: sanitizeString(doc.complemento || ''),
+    bairro: sanitizeString(doc.bairro || ''),
+    cidade: sanitizeString(doc.cidade || ''),
+    uf: sanitizeString(doc.uf || '').toUpperCase(),
+    ibge: codIbge,
+    codIbgeMunicipio: codIbge,
+    codUf: sanitizeString(doc.codUf || ''),
+    pais: sanitizeString(doc.pais || 'Brasil') || 'Brasil',
+    isDefault: !!doc.isDefault,
+  };
+}
 
 function extractAllowedStaffTypes(serviceDoc) {
   if (!serviceDoc) return [];
@@ -184,6 +379,425 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
   } catch (e) {
     console.error('PUT /func/agendamentos/:id', e);
     res.status(500).json({ message: 'Erro ao atualizar agendamento' });
+  }
+});
+
+// ---------- CLIENTES (GERENCIAMENTO) ----------
+router.get('/clientes', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 50);
+    const search = sanitizeString(req.query.search || req.query.q || '');
+
+    const filter = { role: 'cliente' };
+    if (search) {
+      const regex = new RegExp(escapeRegex(search), 'i');
+      const only = onlyDigits(search);
+      const or = [
+        { nomeCompleto: regex },
+        { nomeContato: regex },
+        { razaoSocial: regex },
+        { email: regex },
+        { apelido: regex },
+      ];
+      if (only.length >= 3) {
+        or.push({ cpf: new RegExp(only) });
+        or.push({ cnpj: new RegExp(only) });
+        or.push({ celular: new RegExp(only) });
+        or.push({ telefone: new RegExp(only) });
+        or.push({ codigoCliente: new RegExp(only) });
+      }
+      filter.$or = or;
+    }
+
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      User.find(filter)
+        .select('_id nomeCompleto nomeContato razaoSocial nomeFantasia email tipoConta cpf cnpj inscricaoEstadual celular telefone codigoCliente empresaPrincipal pais apelido role telefoneSecundario celularSecundario')
+        .sort({ criadoEm: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      User.countDocuments(filter),
+    ]);
+
+    const empresaIds = new Set();
+    items.forEach((doc) => {
+      if (doc.empresaPrincipal) empresaIds.add(String(doc.empresaPrincipal));
+    });
+    const empresas = empresaIds.size
+      ? await Store.find({ _id: { $in: Array.from(empresaIds) } })
+          .select('_id nome nomeFantasia razaoSocial')
+          .lean()
+      : [];
+    const empresaMap = new Map(empresas.map((e) => [String(e._id), e]));
+
+    const list = items.map((doc) => {
+      const empresaDoc = doc.empresaPrincipal ? empresaMap.get(String(doc.empresaPrincipal)) : null;
+      const empresaNome = empresaDoc?.nomeFantasia || empresaDoc?.nome || empresaDoc?.razaoSocial || '';
+      const documento = doc.cpf || doc.cnpj || doc.inscricaoEstadual || '';
+      return {
+        _id: doc._id,
+        nome: userDisplayName(doc),
+        tipoConta: doc.tipoConta,
+        codigoCliente: doc.codigoCliente || '',
+        email: doc.email || '',
+        celular: doc.celular || '',
+        telefone: doc.telefone || '',
+        documento,
+        empresa: empresaNome,
+        pais: doc.pais || 'Brasil',
+        apelido: doc.apelido || '',
+      };
+    });
+
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    res.json({
+      items: list,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    });
+  } catch (err) {
+    console.error('GET /func/clientes', err);
+    res.status(500).json({ message: 'Erro ao listar clientes.' });
+  }
+});
+
+router.post('/clientes', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const payload = await buildClientePayload(req.body, { isUpdate: false });
+    payload.role = 'cliente';
+
+    let plainPassword = sanitizeString(req.body.senha || req.body.password || '');
+    let senhaGerada = false;
+    if (!plainPassword || plainPassword.length < 8) {
+      plainPassword = randomBytes(8).toString('base64url').slice(0, 12);
+      senhaGerada = true;
+    }
+    const salt = await bcrypt.genSalt(10);
+    payload.senha = await bcrypt.hash(plainPassword, salt);
+
+    const created = await User.create(payload);
+    res.status(201).json({
+      message: 'Cliente criado com sucesso.',
+      id: created._id,
+      senhaTemporaria: senhaGerada ? plainPassword : undefined,
+    });
+  } catch (err) {
+    console.error('POST /func/clientes', err);
+    if (err?.code === 11000) {
+      const keys = Object.keys(err.keyPattern || err.keyValue || {});
+      if (keys.includes('email')) {
+        return res.status(409).json({ message: 'Já existe um cliente com este email.' });
+      }
+      if (keys.includes('celular')) {
+        return res.status(409).json({ message: 'Já existe um cliente com este celular.' });
+      }
+      if (keys.includes('cpf')) {
+        return res.status(409).json({ message: 'Já existe um cliente com este CPF.' });
+      }
+      if (keys.includes('cnpj')) {
+        return res.status(409).json({ message: 'Já existe um cliente com este CNPJ.' });
+      }
+      return res.status(409).json({ message: 'Dados duplicados encontrados para este cliente.' });
+    }
+    res.status(400).json({ message: err?.message || 'Erro ao criar cliente.' });
+  }
+});
+
+router.put('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+    const current = await User.findById(id).select('role tipoConta nomeCompleto razaoSocial nomeFantasia nomeContato email celular telefone codigoCliente apelido pais cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE empresaPrincipal empresas telefoneSecundario celularSecundario').lean();
+    await ensureClienteEhEditavel(current);
+
+    const payload = await buildClientePayload(req.body, { isUpdate: true, currentUser: current });
+    if (payload.tipoConta === 'pessoa_juridica') {
+      payload.nomeCompleto = '';
+      payload.cpf = '';
+      payload.genero = '';
+      if (!Object.prototype.hasOwnProperty.call(payload, 'dataNascimento')) {
+        payload.dataNascimento = null;
+      }
+      payload.rgNumero = '';
+    } else {
+      payload.razaoSocial = '';
+      payload.nomeFantasia = '';
+      payload.nomeContato = '';
+      payload.cnpj = '';
+      payload.inscricaoEstadual = '';
+      payload.estadoIE = '';
+      payload.isentoIE = false;
+    }
+
+    const updated = await User.findByIdAndUpdate(id, payload, { new: true, runValidators: true });
+    if (!updated) {
+      return res.status(404).json({ message: 'Cliente não encontrado.' });
+    }
+
+    res.json({ message: 'Cliente atualizado com sucesso.' });
+  } catch (err) {
+    console.error('PUT /func/clientes/:id', err);
+    if (err?.code === 11000) {
+      const keys = Object.keys(err.keyPattern || err.keyValue || {});
+      if (keys.includes('email')) {
+        return res.status(409).json({ message: 'Já existe um cliente com este email.' });
+      }
+      if (keys.includes('celular')) {
+        return res.status(409).json({ message: 'Já existe um cliente com este celular.' });
+      }
+      if (keys.includes('cpf')) {
+        return res.status(409).json({ message: 'Já existe um cliente com este CPF.' });
+      }
+      if (keys.includes('cnpj')) {
+        return res.status(409).json({ message: 'Já existe um cliente com este CNPJ.' });
+      }
+      return res.status(409).json({ message: 'Dados duplicados encontrados para este cliente.' });
+    }
+    res.status(400).json({ message: err?.message || 'Erro ao atualizar cliente.' });
+  }
+});
+
+router.get('/clientes/:id/enderecos', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+    const cliente = await User.findById(id).select('role').lean();
+    await ensureClienteEhEditavel(cliente);
+
+    const enderecosDocs = await UserAddress.find({ user: id })
+      .sort({ isDefault: -1, updatedAt: -1 })
+      .lean();
+    res.json(enderecosDocs.map(mapAddressDoc));
+  } catch (err) {
+    console.error('GET /func/clientes/:id/enderecos', err);
+    res.status(500).json({ message: 'Erro ao buscar endereços.' });
+  }
+});
+
+router.post('/clientes/:id/enderecos', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+    const cliente = await User.findById(id).select('role').lean();
+    await ensureClienteEhEditavel(cliente);
+
+    const apelido = sanitizeString(req.body.apelido || 'Principal');
+    const cepDigits = onlyDigits(req.body.cep);
+    if (cepDigits.length !== 8) {
+      return res.status(400).json({ message: 'Informe um CEP válido com 8 dígitos.' });
+    }
+
+    const doc = {
+      user: id,
+      apelido: apelido || 'Principal',
+      cep: formatCep(req.body.cep),
+      logradouro: sanitizeString(req.body.logradouro),
+      numero: sanitizeString(req.body.numero),
+      complemento: sanitizeString(req.body.complemento),
+      bairro: sanitizeString(req.body.bairro),
+      cidade: sanitizeString(req.body.cidade),
+      uf: sanitizeString(req.body.uf || '').toUpperCase(),
+      ibge: sanitizeString(req.body.ibge || req.body.codIbgeMunicipio || ''),
+      codIbgeMunicipio: sanitizeString(req.body.codIbgeMunicipio || req.body.ibge || ''),
+      codUf: sanitizeString(req.body.codUf || ''),
+      pais: sanitizeString(req.body.pais || 'Brasil') || 'Brasil',
+      isDefault: req.body.isDefault === true || req.body.isDefault === 'true',
+    };
+
+    const existingCount = await UserAddress.countDocuments({ user: id });
+    if (!existingCount) {
+      doc.isDefault = true;
+    }
+
+    const created = await UserAddress.create(doc);
+    if (doc.isDefault) {
+      await UserAddress.updateMany({ user: id, _id: { $ne: created._id } }, { $set: { isDefault: false } });
+    }
+
+    res.status(201).json(mapAddressDoc(created.toObject()));
+  } catch (err) {
+    console.error('POST /func/clientes/:id/enderecos', err);
+    res.status(400).json({ message: err?.message || 'Erro ao salvar endereço.' });
+  }
+});
+
+router.put('/clientes/:id/enderecos/:enderecoId', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const { id, enderecoId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(enderecoId)) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+    const cliente = await User.findById(id).select('role').lean();
+    await ensureClienteEhEditavel(cliente);
+
+    const apelido = sanitizeString(req.body.apelido || 'Principal');
+    const cepDigits = onlyDigits(req.body.cep);
+    if (cepDigits.length !== 8) {
+      return res.status(400).json({ message: 'Informe um CEP válido com 8 dígitos.' });
+    }
+
+    const update = {
+      apelido: apelido || 'Principal',
+      cep: formatCep(req.body.cep),
+      logradouro: sanitizeString(req.body.logradouro),
+      numero: sanitizeString(req.body.numero),
+      complemento: sanitizeString(req.body.complemento),
+      bairro: sanitizeString(req.body.bairro),
+      cidade: sanitizeString(req.body.cidade),
+      uf: sanitizeString(req.body.uf || '').toUpperCase(),
+      ibge: sanitizeString(req.body.ibge || req.body.codIbgeMunicipio || ''),
+      codIbgeMunicipio: sanitizeString(req.body.codIbgeMunicipio || req.body.ibge || ''),
+      codUf: sanitizeString(req.body.codUf || ''),
+      pais: sanitizeString(req.body.pais || 'Brasil') || 'Brasil',
+      isDefault: req.body.isDefault === true || req.body.isDefault === 'true',
+    };
+
+    const updated = await UserAddress.findOneAndUpdate({ _id: enderecoId, user: id }, update, { new: true });
+    if (!updated) {
+      return res.status(404).json({ message: 'Endereço não encontrado.' });
+    }
+
+    if (update.isDefault) {
+      await UserAddress.updateMany({ user: id, _id: { $ne: updated._id } }, { $set: { isDefault: false } });
+    }
+
+    res.json(mapAddressDoc(updated));
+  } catch (err) {
+    console.error('PUT /func/clientes/:id/enderecos/:enderecoId', err);
+    res.status(400).json({ message: err?.message || 'Erro ao atualizar endereço.' });
+  }
+});
+
+router.delete('/clientes/:id/enderecos/:enderecoId', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const { id, enderecoId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(enderecoId)) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+    const cliente = await User.findById(id).select('role').lean();
+    await ensureClienteEhEditavel(cliente);
+
+    const deleted = await UserAddress.findOneAndDelete({ _id: enderecoId, user: id });
+    if (!deleted) {
+      return res.status(404).json({ message: 'Endereço não encontrado.' });
+    }
+
+    res.json({ message: 'Endereço removido com sucesso.' });
+  } catch (err) {
+    console.error('DELETE /func/clientes/:id/enderecos/:enderecoId', err);
+    res.status(500).json({ message: 'Erro ao remover endereço.' });
+  }
+});
+
+router.post('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+    const cliente = await User.findById(id).select('role').lean();
+    await ensureClienteEhEditavel(cliente);
+
+    const nome = sanitizeString(req.body.nome || req.body.nomePet);
+    if (!nome) {
+      return res.status(400).json({ message: 'Informe o nome do pet.' });
+    }
+    const tipo = sanitizeString(req.body.tipo || req.body.tipoPet);
+    if (!tipo) {
+      return res.status(400).json({ message: 'Informe o tipo do pet.' });
+    }
+    const sexo = sanitizeString(req.body.sexo);
+    if (!sexo) {
+      return res.status(400).json({ message: 'Informe o sexo do pet.' });
+    }
+
+    const doc = {
+      owner: id,
+      nome,
+      tipo,
+      porte: sanitizeString(req.body.porte),
+      raca: sanitizeString(req.body.raca),
+      sexo,
+      dataNascimento: parseDate(req.body.nascimento || req.body.dataNascimento) || new Date(),
+      microchip: sanitizeString(req.body.microchip),
+      pelagemCor: sanitizeString(req.body.pelagem || req.body.pelagemCor || req.body.cor),
+      rga: sanitizeString(req.body.rga),
+      peso: sanitizeString(req.body.peso),
+    };
+
+    const created = await Pet.create(doc);
+    res.status(201).json(created);
+  } catch (err) {
+    console.error('POST /func/clientes/:id/pets', err);
+    res.status(400).json({ message: err?.message || 'Erro ao cadastrar pet.' });
+  }
+});
+
+router.put('/clientes/:id/pets/:petId', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const { id, petId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(petId)) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+    const cliente = await User.findById(id).select('role').lean();
+    await ensureClienteEhEditavel(cliente);
+
+    const pet = await Pet.findOne({ _id: petId, owner: id });
+    if (!pet) {
+      return res.status(404).json({ message: 'Pet não encontrado.' });
+    }
+
+    const update = {
+      nome: sanitizeString(req.body.nome || req.body.nomePet) || pet.nome,
+      tipo: sanitizeString(req.body.tipo || req.body.tipoPet) || pet.tipo,
+      porte: sanitizeString(req.body.porte),
+      raca: sanitizeString(req.body.raca) || pet.raca,
+      sexo: sanitizeString(req.body.sexo) || pet.sexo,
+      dataNascimento: parseDate(req.body.nascimento || req.body.dataNascimento) || pet.dataNascimento,
+      microchip: sanitizeString(req.body.microchip),
+      pelagemCor: sanitizeString(req.body.pelagem || req.body.pelagemCor || req.body.cor),
+      rga: sanitizeString(req.body.rga),
+      peso: sanitizeString(req.body.peso),
+    };
+
+    const updated = await Pet.findByIdAndUpdate(petId, update, { new: true });
+    res.json(updated);
+  } catch (err) {
+    console.error('PUT /func/clientes/:id/pets/:petId', err);
+    res.status(400).json({ message: err?.message || 'Erro ao atualizar pet.' });
+  }
+});
+
+router.delete('/clientes/:id/pets/:petId', authMiddleware, requireStaff, async (req, res) => {
+  try {
+    const { id, petId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(petId)) {
+      return res.status(400).json({ message: 'ID inválido.' });
+    }
+    const cliente = await User.findById(id).select('role').lean();
+    await ensureClienteEhEditavel(cliente);
+
+    const deleted = await Pet.findOneAndDelete({ _id: petId, owner: id });
+    if (!deleted) {
+      return res.status(404).json({ message: 'Pet não encontrado.' });
+    }
+
+    res.json({ message: 'Pet removido com sucesso.' });
+  } catch (err) {
+    console.error('DELETE /func/clientes/:id/pets/:petId', err);
+    res.status(500).json({ message: 'Erro ao remover pet.' });
   }
 });
 
@@ -673,11 +1287,13 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'ID inválido.' });
     }
     const u = await User.findById(id)
-      .select('_id nomeCompleto nomeContato razaoSocial email celular telefone cpf cnpj inscricaoEstadual')
+      .select('_id role tipoConta nomeCompleto nomeContato razaoSocial nomeFantasia email celular telefone celularSecundario telefoneSecundario cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE codigoCliente apelido pais empresaPrincipal empresas')
       .lean();
     if (!u) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
     }
+    await ensureClienteEhEditavel(u);
+
     const nome = u.nomeCompleto || u.nomeContato || u.razaoSocial || u.email || '';
     const celular = u.celular || u.telefone || '';
     const telefone = u.telefone || '';
@@ -686,40 +1302,55 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
     const inscricaoEstadual = typeof u.inscricaoEstadual === 'string' ? u.inscricaoEstadual : '';
     const documentoPrincipal = cpf || cnpj || inscricaoEstadual || '';
     const cpfCnpj = cpf || cnpj || '';
-    let address = null;
-    try {
-      const addrDoc = await UserAddress.findOne({ user: id })
-        .sort({ isDefault: -1, updatedAt: -1 })
-        .lean();
-      if (addrDoc) {
-        address = {
-          cep: addrDoc.cep || '',
-          logradouro: addrDoc.logradouro || '',
-          numero: addrDoc.numero || '',
-          complemento: addrDoc.complemento || '',
-          bairro: addrDoc.bairro || '',
-          cidade: addrDoc.cidade || '',
-          uf: addrDoc.uf || '',
+
+    const enderecosDocs = await UserAddress.find({ user: id })
+      .sort({ isDefault: -1, updatedAt: -1 })
+      .lean();
+    const enderecos = enderecosDocs.map(mapAddressDoc);
+    const address = enderecos.length ? enderecos[0] : null;
+
+    let empresa = null;
+    if (u.empresaPrincipal) {
+      const store = await Store.findById(u.empresaPrincipal).select('_id nome nomeFantasia razaoSocial').lean();
+      if (store) {
+        empresa = {
+          _id: store._id,
+          nome: store.nomeFantasia || store.nome || store.razaoSocial || '',
         };
       }
-    } catch (err) {
-      console.error('GET /func/clientes/:id -> endereço', err);
     }
 
     res.json({
       _id: u._id,
       nome,
+      tipoConta: u.tipoConta,
+      codigoCliente: u.codigoCliente || '',
+      apelido: u.apelido || '',
+      pais: u.pais || 'Brasil',
+      empresaPrincipal: empresa,
+      empresas: Array.isArray(u.empresas) ? u.empresas.map((empId) => String(empId)) : [],
       email: u.email || '',
       celular,
       telefone,
+      celularSecundario: u.celularSecundario || '',
+      telefoneSecundario: u.telefoneSecundario || '',
       cpf,
       cnpj,
       cpfCnpj,
       inscricaoEstadual,
+      genero: u.genero || '',
+      dataNascimento: u.dataNascimento ? new Date(u.dataNascimento).toISOString().slice(0, 10) : '',
+      rgNumero: u.rgNumero || '',
+      razaoSocial: u.razaoSocial || '',
+      nomeFantasia: u.nomeFantasia || '',
+      nomeContato: u.nomeContato || '',
+      estadoIE: u.estadoIE || '',
+      isentoIE: !!u.isentoIE,
       documento: documentoPrincipal,
       documentoPrincipal,
       doc: documentoPrincipal,
       address,
+      enderecos,
     });
   } catch (e) {
     console.error('GET /func/clientes/:id', e);

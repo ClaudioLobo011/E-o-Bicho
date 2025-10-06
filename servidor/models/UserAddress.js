@@ -15,6 +15,9 @@ const userAddressSchema = new mongoose.Schema({
   cidade:     { type: String, default: '' },
   uf:         { type: String, default: '' },
   ibge:       { type: String, default: '' },
+  codIbgeMunicipio: { type: String, default: '' },
+  codUf:      { type: String, default: '' },
+  pais:       { type: String, default: 'Brasil' },
 
   // Marcação de endereço principal
   isDefault: { type: Boolean, default: true }
