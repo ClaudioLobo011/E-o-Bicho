@@ -394,12 +394,12 @@ async function ensureFileIsPublic(fileId, token) {
   }
 }
 
-async function getFileMetadata(fileId, token) {
+async function getFileMetadata(fileId, token, fields = 'id,name,mimeType,size,webViewLink,webContentLink,parents') {
   const headers = {
     Authorization: `Bearer ${token}`,
   };
   const response = await requestGoogle({
-    url: `${FILES_URI}/${fileId}?supportsAllDrives=true&fields=id,name,mimeType,size,webViewLink,webContentLink`,
+    url: `${FILES_URI}/${fileId}?supportsAllDrives=true&fields=${encodeURIComponent(fields)}`,
     method: 'GET',
     headers,
   });
@@ -500,6 +500,83 @@ async function uploadBufferToDrive(buffer, options = {}) {
   return fileData;
 }
 
+async function moveFileToFolder(fileId, options = {}) {
+  if (!fileId) {
+    throw new Error('ID do arquivo inválido para mover no Google Drive.');
+  }
+
+  const credentials = getCredentials();
+  if (!credentials) {
+    throw new Error('Credenciais do Google Drive não configuradas.');
+  }
+
+  const token = await fetchAccessToken();
+
+  const folderSource =
+    typeof options.folderId !== 'undefined' ? options.folderId : credentials.folderId;
+  const baseFolderId = cleanEnvValue(
+    folderSource === null || folderSource === undefined
+      ? ''
+      : typeof folderSource === 'string'
+        ? folderSource
+        : String(folderSource),
+  );
+
+  const pathSegments = Array.isArray(options.folderPath) ? options.folderPath : [];
+
+  let destinationFolderId = baseFolderId || null;
+  if (pathSegments.length) {
+    destinationFolderId = await ensureFolderPath({
+      segments: pathSegments,
+      baseFolderId: destinationFolderId,
+      token,
+    });
+  }
+
+  if (!destinationFolderId) {
+    throw new Error('Não foi possível determinar a pasta destino no Google Drive.');
+  }
+
+  const metadata = await getFileMetadata(fileId, token, 'id,name,parents,webViewLink,webContentLink');
+  const existingParents = Array.isArray(metadata?.parents)
+    ? metadata.parents.filter((parent) => typeof parent === 'string' && parent)
+    : [];
+  const parentsToRemove = existingParents.filter((parent) => parent !== destinationFolderId);
+  const needsAddParent = !existingParents.includes(destinationFolderId);
+
+  if (!needsAddParent && parentsToRemove.length === 0) {
+    return metadata;
+  }
+
+  const bodyPayload = {};
+  if (needsAddParent) {
+    bodyPayload.addParents = destinationFolderId;
+  }
+  if (parentsToRemove.length) {
+    bodyPayload.removeParents = parentsToRemove.join(',');
+  }
+
+  const bodyString = JSON.stringify(bodyPayload);
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(bodyString),
+  };
+
+  const response = await requestGoogle({
+    url: `${FILES_URI}/${fileId}?supportsAllDrives=true&fields=id,name,parents,webViewLink,webContentLink`,
+    method: 'PATCH',
+    headers,
+    body: Buffer.from(bodyString, 'utf8'),
+  });
+
+  try {
+    return JSON.parse(response.body.toString('utf8'));
+  } catch (error) {
+    return metadata;
+  }
+}
+
 async function deleteFile(fileId) {
   if (!fileId) return;
   try {
@@ -522,4 +599,5 @@ module.exports = {
   uploadBufferToDrive,
   deleteFile,
   resetCredentialsCache,
+  moveFileToFolder,
 };

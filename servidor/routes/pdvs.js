@@ -12,6 +12,7 @@ const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const { isDriveConfigured, uploadBufferToDrive } = require('../utils/googleDrive');
 const { emitPdvSaleFiscal } = require('../services/nfceEmitter');
+const { buildFiscalDrivePath } = require('../utils/fiscalDrivePath');
 
 const ambientesPermitidos = ['homologacao', 'producao'];
 const ambientesSet = new Set(ambientesPermitidos);
@@ -467,14 +468,6 @@ const sanitizeFileName = (value, fallback = 'documento.xml') => {
     .trim();
   const trimmed = normalized || fallback;
   return trimmed.length > 120 ? trimmed.slice(0, 120) : trimmed;
-};
-
-const buildDrivePathSegments = (date) => {
-  const reference = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date();
-  const year = String(reference.getFullYear());
-  const month = String(reference.getMonth() + 1).padStart(2, '0');
-  const day = String(reference.getDate()).padStart(2, '0');
-  return ['Fiscal', 'XMLs', year, month, day];
 };
 
 const formatDateTimeLabel = (date) => {
@@ -1406,7 +1399,11 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     const uploadResult = await uploadBufferToDrive(Buffer.from(emissionResult.xml, 'utf8'), {
       name: fileName,
       mimeType: 'application/xml',
-      folderPath: buildDrivePathSegments(emissionDate),
+      folderPath: buildFiscalDrivePath({
+        store: storeForXml,
+        pdv,
+        emissionDate,
+      }),
     });
 
     sale.fiscalStatus = 'emitted';
