@@ -146,9 +146,19 @@
       };
     }
     if (btnOk) {
-      btnOk.onclick = () => {
+      btnOk.onclick = async () => {
+        try {
+          const callback = onConfirm || noop;
+          const result = callback();
+          const resolved = result instanceof Promise ? await result : result;
+          if (resolved === false) {
+            return;
+          }
+        } catch (err) {
+          console.error('ui:showModal confirm', err);
+          return;
+        }
         modal.classList.add('hidden');
-        (onConfirm || noop)();
       };
     }
   }

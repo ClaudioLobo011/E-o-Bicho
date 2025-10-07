@@ -1648,6 +1648,14 @@
       const paidValueInput = Number.isFinite(numericValue) ? numericValue.toFixed(2) : '0.00';
       const paymentDocumentValue = context.document || context.code || '';
       const notesValue = context.notes || '';
+      const totalValue = Number.isFinite(numericValue) ? numericValue : 0;
+      const defaultPaidValue = Number.parseFloat(paidValueInput || '0');
+      const residualThreshold = 0.009;
+      const residualDefaultValue = Number.isFinite(defaultPaidValue)
+        ? Math.max(totalValue - defaultPaidValue, 0)
+        : Math.max(totalValue, 0);
+      const residualDefaultLabel = formatCurrencyBR(residualDefaultValue);
+      const residualDueDefault = formatDateInputValue(context.dueDate) || '';
       const bankOptionsData = buildModalSelectOptions(
         state.bankAccountOptions,
         context.bankAccountId,
@@ -1669,6 +1677,9 @@
       const paymentMethodOptionsHtml = renderOptions(paymentMethodOptionsData);
       const hasBankOptions = bankOptionsData.options.some((option) => option.value);
       const hasPaymentMethodOptions = paymentMethodOptionsData.options.some((option) => option.value);
+      const residualSectionClass =
+        'space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3' +
+        (residualDefaultValue > residualThreshold ? '' : ' hidden');
       const messageHtml =
         `<form id="payment-confirm-form" class="space-y-4 text-sm text-gray-700">`
         + `<div class="rounded-lg bg-slate-50 p-3">`
@@ -1690,6 +1701,27 @@
         + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Valor pago</span>`
         + `<input type="number" step="0.01" min="0" name="paidValue" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="${escapeHtml(paidValueInput)}" required>`
         + `</label>`
+        + `</div>`
+        + `<div class="${residualSectionClass}" data-residual-section>`
+        + `<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">`
+        + `<div>`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Resíduo pendente</span>`
+        + `<p class="text-xs text-amber-700">O valor pago é menor que o total. Ajuste o restante e informe um novo vencimento.</p>`
+        + `</div>`
+        + `<span class="text-base font-semibold text-amber-800" data-residual-amount>${escapeHtml(residualDefaultLabel)}</span>`
+        + `</div>`
+        + `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Valor do resíduo</span>`
+        + `<input type="number" step="0.01" min="0" name="residualValue" data-residual-input class="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-200" value="${escapeHtml(residualDefaultValue.toFixed(2))}">`
+        + `</label>`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Novo vencimento do resíduo</span>`
+        + `<input type="date" name="residualDueDate" data-residual-due class="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-200" value="${escapeHtml(residualDueDefault)}"${
+            residualDefaultValue > residualThreshold ? ' required' : ''
+          }>`
+        + `</label>`
+        + `</div>`
         + `</div>`
         + `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">`
         + `<label class="block space-y-1">`
@@ -1715,6 +1747,98 @@
         + `</div>`
         + `</form>`;
 
+      const initializePaymentModalForm = () => {
+        const form = document.getElementById('payment-confirm-form');
+        if (!form) return;
+        const paidInputField = form.querySelector('input[name="paidValue"]');
+        const residualInputField = form.querySelector('input[name="residualValue"]');
+        const residualDueInputField = form.querySelector('input[name="residualDueDate"]');
+        const residualSectionEl = form.querySelector('[data-residual-section]');
+        const residualAmountEl = form.querySelector('[data-residual-amount]');
+
+        const updateResidualUI = (rawValue) => {
+          const normalized = Number.isFinite(rawValue) ? Math.max(rawValue, 0) : 0;
+          if (residualAmountEl) {
+            residualAmountEl.textContent = formatCurrencyBR(normalized);
+          }
+          if (residualSectionEl) {
+            if (normalized > residualThreshold) {
+              residualSectionEl.classList.remove('hidden');
+            } else {
+              residualSectionEl.classList.add('hidden');
+            }
+          }
+          if (residualDueInputField) {
+            residualDueInputField.required = normalized > residualThreshold;
+          }
+        };
+
+        let residualEditedManually = false;
+
+        if (residualInputField) {
+          residualInputField.addEventListener('input', () => {
+            residualEditedManually = true;
+            const raw = Number.parseFloat(residualInputField.value || '0');
+            updateResidualUI(raw);
+          });
+          residualInputField.addEventListener('change', () => {
+            const paidRaw = Number.parseFloat(paidInputField?.value || '0');
+            const normalizedPaid = Number.isFinite(paidRaw) ? Math.max(paidRaw, 0) : 0;
+            const autoResidual = Math.max(totalValue - normalizedPaid, 0);
+            const raw = Number.parseFloat(residualInputField.value || '');
+            const normalized = Number.isFinite(raw) ? Math.max(raw, 0) : autoResidual;
+            residualInputField.value = normalized.toFixed(2);
+            if (Math.abs(normalized - autoResidual) < 0.005) {
+              residualEditedManually = false;
+            }
+            updateResidualUI(normalized);
+          });
+        }
+
+        if (paidInputField) {
+          paidInputField.addEventListener('input', () => {
+            const rawPaid = Number.parseFloat(paidInputField.value || '0');
+            const normalizedPaid = Number.isFinite(rawPaid) ? Math.max(rawPaid, 0) : 0;
+            const autoResidual = Math.max(totalValue - normalizedPaid, 0);
+            if (residualInputField) {
+              const currentResidualRaw = Number.parseFloat(residualInputField.value || '0');
+              const currentResidual = Number.isFinite(currentResidualRaw)
+                ? Math.max(currentResidualRaw, 0)
+                : 0;
+              if (residualEditedManually && Math.abs(currentResidual - autoResidual) < 0.005) {
+                residualEditedManually = false;
+              }
+              if (!residualEditedManually) {
+                residualInputField.value = autoResidual.toFixed(2);
+              }
+              const displayValueRaw = Number.parseFloat(residualInputField.value || '0');
+              const displayValue = Number.isFinite(displayValueRaw) ? displayValueRaw : autoResidual;
+              updateResidualUI(displayValue);
+            } else {
+              updateResidualUI(autoResidual);
+            }
+          });
+        }
+
+        if (residualDueInputField) {
+          residualDueInputField.addEventListener('change', () => {
+            if (!residualDueInputField.value) {
+              residualDueInputField.classList.remove('border-red-300');
+              return;
+            }
+            const parsed = parseDateInputValue(residualDueInputField.value);
+            if (!parsed) {
+              residualDueInputField.classList.add('border-red-300');
+            } else {
+              residualDueInputField.classList.remove('border-red-300');
+            }
+          });
+        }
+
+        const initialResidualRaw = Number.parseFloat(residualInputField?.value || '0');
+        updateResidualUI(Number.isFinite(initialResidualRaw) ? initialResidualRaw : 0);
+      };
+
       await new Promise((resolve) => {
         const finalize = (result) => resolve(result);
         window.showModal({
@@ -1724,47 +1848,117 @@
           cancelText: 'Cancelar',
           onConfirm: () => {
             const form = document.getElementById('payment-confirm-form');
-            if (form) {
-              const formData = new FormData(form);
-              const paymentDate = formData.get('paymentDate');
-              const paidValue = Number.parseFloat(formData.get('paidValue') || '0');
-              const bankAccount = formData.get('bankAccount') || '';
-              const paymentMethod = formData.get('paymentMethod') || '';
-              const paymentDocument = formData.get('paymentDocument') || '';
-              const notes = formData.get('notes') || '';
-              const paymentDateParsed = parseDateInputValue(paymentDate);
-              const paymentDateLabel = paymentDateParsed
-                ? formatDateBR(paymentDateParsed)
-                : paymentDate || '--';
-              const paidValueLabel = formatCurrencyBR(Number.isFinite(paidValue) ? paidValue : 0);
-              const bankSelect = form.querySelector('select[name="bankAccount"]');
-              const paymentSelect = form.querySelector('select[name="paymentMethod"]');
-              const bankOptionLabel = bankSelect?.options?.[bankSelect.selectedIndex]?.textContent?.trim() || '';
-              const paymentOptionLabel = paymentSelect?.options?.[paymentSelect.selectedIndex]?.textContent?.trim() || '';
-              notify(`Pagamento de ${paidValueLabel} em ${paymentDateLabel} confirmado para ${customerLabel}.`, 'success');
-              try {
-                console.log('Pagamento confirmado', {
-                  receivableId: context.receivableId,
-                  installmentNumber: context.installmentNumber,
-                  paymentDate,
-                  paidValue,
-                  bankAccount,
-                  bankAccountLabel: bankOptionLabel,
-                  paymentMethod,
-                  paymentMethodLabel: paymentOptionLabel,
-                  paymentDocument,
-                  notes,
-                });
-              } catch (_) {
-                /* ignore console errors */
-              }
-            } else {
+            if (!form) {
               notify('Pagamento confirmado com sucesso.', 'success');
+              finalize(true);
+              return true;
             }
+
+            const formData = new FormData(form);
+            const paymentDate = formData.get('paymentDate');
+            const paidValueRaw = Number.parseFloat(formData.get('paidValue') || '0');
+            const bankAccount = formData.get('bankAccount') || '';
+            const paymentMethod = formData.get('paymentMethod') || '';
+            const paymentDocument = formData.get('paymentDocument') || '';
+            const notes = formData.get('notes') || '';
+            const residualValueField = formData.get('residualValue');
+            const residualDueField = formData.get('residualDueDate');
+            const paymentDateParsed = parseDateInputValue(paymentDate);
+            if (!paymentDateParsed) {
+              notify('Informe uma data de pagamento válida.', 'warning');
+              const paymentDateInput = form.querySelector('input[name="paymentDate"]');
+              paymentDateInput?.focus();
+              return false;
+            }
+
+            if (!Number.isFinite(paidValueRaw) || paidValueRaw <= 0) {
+              notify('Informe um valor pago maior que zero.', 'warning');
+              const paidInput = form.querySelector('input[name="paidValue"]');
+              paidInput?.focus();
+              return false;
+            }
+
+            const paidValue = paidValueRaw;
+            const residualValueRaw = Number.parseFloat(residualValueField || '0');
+            const residualValue = Number.isFinite(residualValueRaw) ? Math.max(residualValueRaw, 0) : 0;
+            const residualDueRaw = typeof residualDueField === 'string' ? residualDueField : '';
+            const residualDueParsed = residualDueRaw ? parseDateInputValue(residualDueRaw) : null;
+            const hasResidual = residualValue > residualThreshold;
+
+            if (hasResidual && !residualDueRaw) {
+              notify('Informe uma nova data de vencimento para o resíduo.', 'warning');
+              const residualDueInput = form.querySelector('input[name="residualDueDate"]');
+              residualDueInput?.focus();
+              return false;
+            }
+
+            if (hasResidual && residualDueRaw && !residualDueParsed) {
+              notify('Informe uma data de vencimento válida para o resíduo.', 'warning');
+              const residualDueInput = form.querySelector('input[name="residualDueDate"]');
+              residualDueInput?.focus();
+              return false;
+            }
+
+            const paymentDateLabel = formatDateBR(paymentDateParsed);
+            const paidValueLabel = formatCurrencyBR(paidValue);
+            const bankSelect = form.querySelector('select[name="bankAccount"]');
+            const paymentSelect = form.querySelector('select[name="paymentMethod"]');
+            const bankOptionLabel = bankSelect?.options?.[bankSelect.selectedIndex]?.textContent?.trim() || '';
+            const paymentOptionLabel = paymentSelect?.options?.[paymentSelect.selectedIndex]?.textContent?.trim() || '';
+            const residualDueLabel = residualDueParsed ? formatDateBR(residualDueParsed) : residualDueRaw || '--';
+            const residualValueLabel = formatCurrencyBR(residualValue);
+
+            if (hasResidual) {
+              notify(
+                `Pagamento parcial registrado: ${paidValueLabel} recebido em ${paymentDateLabel}. Resíduo de ${residualValueLabel} vence em ${residualDueLabel}.`,
+                'success'
+              );
+            } else {
+              notify(`Pagamento de ${paidValueLabel} em ${paymentDateLabel} confirmado para ${customerLabel}.`, 'success');
+            }
+
+            try {
+              console.log('Pagamento confirmado', {
+                receivableId: context.receivableId,
+                installmentNumber: context.installmentNumber,
+                totalValue,
+                paymentDate,
+                paidValue,
+                bankAccount,
+                bankAccountLabel: bankOptionLabel,
+                paymentMethod,
+                paymentMethodLabel: paymentOptionLabel,
+                paymentDocument,
+                notes,
+                residual:
+                  hasResidual
+                    ? {
+                        value: residualValue,
+                        label: residualValueLabel,
+                        dueDate: residualDueRaw,
+                        dueDateLabel: residualDueLabel,
+                      }
+                    : null,
+              });
+            } catch (_) {
+              /* ignore console errors */
+            }
+
             finalize(true);
+            return true;
           },
-          onCancel: () => finalize(false),
+          onCancel: () => {
+            finalize(false);
+            return true;
+          },
         });
+
+        const scheduleInit = () => initializePaymentModalForm();
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => scheduleInit());
+        } else {
+          setTimeout(scheduleInit, 0);
+        }
       });
       return;
     }
