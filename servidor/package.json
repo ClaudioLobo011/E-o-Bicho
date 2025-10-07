@@ -11,7 +11,8 @@
     "category:destroy": "node categorySeeder.js -d",
     "nfce:status": "node scripts/test-status-servico.js",
     "nfce:envio:hom": "node scripts/test-autorizacao-hom.js",
-    "drive:reorganize-fiscals": "node scripts/reorganize-fiscal-drive-folders.js"
+    "drive:reorganize-fiscals": "node scripts/reorganize-fiscal-drive-folders.js",
+    "drive:reorganize-fiscals:dry-run": "node scripts/reorganize-fiscal-drive-folders.js --dry-run"
   },
   "keywords": [],
   "author": "",
