@@ -548,15 +548,20 @@ async function moveFileToFolder(fileId, options = {}) {
     return metadata;
   }
 
-  const bodyPayload = {};
+  const queryParams = new URLSearchParams({
+    supportsAllDrives: 'true',
+    fields: 'id,name,parents,webViewLink,webContentLink',
+  });
+
   if (needsAddParent) {
-    bodyPayload.addParents = destinationFolderId;
-  }
-  if (parentsToRemove.length) {
-    bodyPayload.removeParents = parentsToRemove.join(',');
+    queryParams.set('addParents', destinationFolderId);
   }
 
-  const bodyString = JSON.stringify(bodyPayload);
+  if (parentsToRemove.length) {
+    queryParams.set('removeParents', parentsToRemove.join(','));
+  }
+
+  const bodyString = JSON.stringify({});
   const headers = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
@@ -564,7 +569,7 @@ async function moveFileToFolder(fileId, options = {}) {
   };
 
   const response = await requestGoogle({
-    url: `${FILES_URI}/${fileId}?supportsAllDrives=true&fields=id,name,parents,webViewLink,webContentLink`,
+    url: `${FILES_URI}/${fileId}?${queryParams.toString()}`,
     method: 'PATCH',
     headers,
     body: Buffer.from(bodyString, 'utf8'),
