@@ -8,6 +8,7 @@
     avista: 0,
     debito: 1,
     credito: 2,
+    crediario: 3,
   };
 
   const caixaActions = [
@@ -99,6 +100,15 @@
     modalSelectedCliente: null,
     modalSelectedPet: null,
     modalActiveTab: 'cliente',
+    financeSettings: { contaCorrente: null, contaContabilReceber: null },
+    accountsReceivable: [],
+    crediarioModalMethod: null,
+    crediarioInstallments: [],
+    crediarioNextParcelNumber: 1,
+    crediarioLastDate: '',
+    crediarioEditingPayment: null,
+    crediarioEditingIndex: -1,
+    crediarioModalOpen: false,
     summary: { abertura: 0, recebido: 0, saldo: 0 },
     caixaInfo: {
       aberturaData: null,
@@ -301,6 +311,72 @@
       normalized.companyId = normalizeId(pdv.companyId);
     }
     return normalized;
+  };
+
+  const formatFinanceReferenceLabel = (reference) => {
+    if (!reference || typeof reference !== 'object') {
+      return '';
+    }
+    const code =
+      reference.codigo ||
+      reference.code ||
+      reference.numero ||
+      reference.number ||
+      '';
+    const name = reference.nome || reference.name || reference.descricao || reference.description || '';
+    const parts = [code, name].filter(Boolean);
+    return parts.join(' • ') || name || code || '';
+  };
+
+  const normalizeFinanceReference = (reference) => {
+    if (!reference) {
+      return null;
+    }
+    if (typeof reference === 'object') {
+      const id = normalizeId(reference._id || reference.id || reference.codigo || reference.code || '');
+      return {
+        id,
+        label: formatFinanceReferenceLabel(reference) || 'Conta',
+        raw: { ...reference },
+      };
+    }
+    const id = normalizeId(reference);
+    if (!id) {
+      return null;
+    }
+    return { id, label: '', raw: null };
+  };
+
+  const formatDateLabel = (value) => {
+    if (!value) return '';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('pt-BR');
+  };
+
+  const resolveCustomerName = (customer) => {
+    if (!customer || typeof customer !== 'object') return '';
+    return (
+      customer.nome ||
+      customer.razaoSocial ||
+      customer.fantasia ||
+      customer.name ||
+      customer.socialReason ||
+      customer.displayName ||
+      ''
+    );
+  };
+
+  const resolveCustomerDocument = (customer) => {
+    if (!customer || typeof customer !== 'object') return '';
+    return (
+      customer.documento ||
+      customer.document ||
+      customer.cpf ||
+      customer.cnpj ||
+      customer.doc ||
+      ''
+    );
   };
   const getSaleSequenceStorageKey = (pdvId) =>
     pdvId ? `${SALE_CODE_STORAGE_PREFIX}${pdvId}` : '';
@@ -1584,6 +1660,40 @@
     };
   };
 
+  const normalizeReceivableForPersist = (entry) => {
+    if (!entry || typeof entry !== 'object') return null;
+    const value = safeNumber(entry.value ?? entry.valor ?? entry.amount ?? 0);
+    const dueSource = entry.dueDate ?? entry.vencimento ?? null;
+    const dueDate = dueSource ? new Date(dueSource) : null;
+    return {
+      id: entry.id ? String(entry.id) : createUid(),
+      parcelNumber: (() => {
+        const raw = entry.parcelNumber ?? entry.parcela ?? entry.numeroParcela;
+        const parsed = Number.parseInt(raw, 10);
+        return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+      })(),
+      value,
+      formattedValue: entry.formattedValue ? String(entry.formattedValue) : formatCurrency(value),
+      dueDate: dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate.toISOString() : null,
+      dueDateLabel: entry.dueDateLabel ? String(entry.dueDateLabel) : formatDateLabel(dueDate),
+      paymentMethodId: entry.paymentMethodId ? String(entry.paymentMethodId) : '',
+      paymentMethodLabel: entry.paymentMethodLabel ? String(entry.paymentMethodLabel) : '',
+      contaCorrente:
+        entry.contaCorrente && typeof entry.contaCorrente === 'object'
+          ? { ...entry.contaCorrente }
+          : null,
+      contaContabil:
+        entry.contaContabil && typeof entry.contaContabil === 'object'
+          ? { ...entry.contaContabil }
+          : null,
+      saleCode: entry.saleCode ? String(entry.saleCode) : '',
+      crediarioMethodId: entry.crediarioMethodId ? String(entry.crediarioMethodId) : '',
+      clienteId: entry.clienteId ? String(entry.clienteId) : '',
+      clienteNome: entry.clienteNome ? String(entry.clienteNome) : '',
+      saleId: entry.saleId ? String(entry.saleId) : '',
+    };
+  };
+
   const normalizeSaleRecordForPersist = (record) => {
     if (!record || typeof record !== 'object') return null;
     const createdAt = record.createdAt ? new Date(record.createdAt) : new Date();
@@ -1597,6 +1707,17 @@
     }
     const rawFiscalStatus = record.fiscalStatus ? String(record.fiscalStatus) : '';
     const normalizedFiscalStatus = rawFiscalStatus === 'emitting' ? 'pending' : rawFiscalStatus;
+    const normalizedReceivables = Array.isArray(record.receivables)
+      ? record.receivables
+          .map((entry) => {
+            const normalized = normalizeReceivableForPersist(entry);
+            if (normalized && !normalized.saleId && record.id) {
+              normalized.saleId = String(record.id);
+            }
+            return normalized;
+          })
+          .filter(Boolean)
+      : [];
 
     return {
       id: record.id ? String(record.id) : createUid(),
@@ -1643,6 +1764,7 @@
       fiscalItemsSnapshot: Array.isArray(record.fiscalItemsSnapshot)
         ? record.fiscalItemsSnapshot.map((item) => (item && typeof item === 'object' ? { ...item } : item))
         : [],
+      receivables: normalizedReceivables,
       expanded: Boolean(record.expanded),
       status: record.status ? String(record.status) : 'completed',
       cancellationReason: record.cancellationReason ? String(record.cancellationReason) : '',
@@ -1782,6 +1904,11 @@
     const budgets = (Array.isArray(state.budgets) ? state.budgets : [])
       .map((budget) => normalizeBudgetRecordForPersist(budget))
       .filter(Boolean);
+    const accountsReceivable = (Array.isArray(state.accountsReceivable)
+      ? state.accountsReceivable
+      : [])
+      .map((entry) => normalizeReceivableForPersist(entry))
+      .filter(Boolean);
 
     return {
       caixaAberto: Boolean(state.caixaAberto),
@@ -1810,6 +1937,7 @@
         state.printPreferences && typeof state.printPreferences === 'object'
           ? { ...state.printPreferences }
           : { fechamento: 'PM', venda: 'PM' },
+      accountsReceivable,
     };
   };
 
@@ -2122,6 +2250,29 @@
     elements.paymentValueConfirm = document.getElementById('pdv-payment-value-confirm');
     elements.paymentValueCancel = document.getElementById('pdv-payment-value-cancel');
     elements.paymentValueBackdrop = elements.paymentValueModal?.querySelector('[data-pdv-payment-dismiss]') || null;
+
+    elements.crediarioModal = document.getElementById('pdv-crediario-modal');
+    elements.crediarioBackdrop =
+      elements.crediarioModal?.querySelector('[data-crediario-dismiss]') || null;
+    elements.crediarioClose = document.getElementById('pdv-crediario-close');
+    elements.crediarioCancel = document.getElementById('pdv-crediario-cancel');
+    elements.crediarioConfirm = document.getElementById('pdv-crediario-confirm');
+    elements.crediarioCustomerButton = document.getElementById('pdv-crediario-customer-select');
+    elements.crediarioCustomerName = document.getElementById('pdv-crediario-customer-name');
+    elements.crediarioCustomerDoc = document.getElementById('pdv-crediario-customer-doc');
+    elements.crediarioLimit = document.getElementById('pdv-crediario-limit');
+    elements.crediarioPending = document.getElementById('pdv-crediario-pending');
+    elements.crediarioFidelity = document.getElementById('pdv-crediario-fidelity');
+    elements.crediarioError = document.getElementById('pdv-crediario-error');
+    elements.crediarioMethodSelect = document.getElementById('pdv-crediario-method');
+    elements.crediarioDateInput = document.getElementById('pdv-crediario-date');
+    elements.crediarioParcelInput = document.getElementById('pdv-crediario-parcela');
+    elements.crediarioValueInput = document.getElementById('pdv-crediario-value');
+    elements.crediarioAddButton = document.getElementById('pdv-crediario-add');
+    elements.crediarioList = document.getElementById('pdv-crediario-list');
+    elements.crediarioListEmpty = document.getElementById('pdv-crediario-list-empty');
+    elements.crediarioTotal = document.getElementById('pdv-crediario-total');
+    elements.crediarioRemaining = document.getElementById('pdv-crediario-remaining');
 
     elements.deliveryAddressModal = document.getElementById('pdv-delivery-address-modal');
     elements.deliveryAddressBackdrop =
@@ -2642,6 +2793,11 @@
       state.vendaPet = null;
     }
     updateSaleCustomerSummary();
+    updateCrediarioCustomerSummary();
+    if (elements.crediarioError) {
+      elements.crediarioError.classList.add('hidden');
+      elements.crediarioError.textContent = '';
+    }
     recalculateItemsForCustomerChange();
     if (state.selectedProduct) {
       updateSelectedProductView();
@@ -4242,6 +4398,421 @@
     closePaymentValueModal(preserve);
   };
 
+  const getCrediarioInstallmentsTotal = () =>
+    state.crediarioInstallments.reduce((sum, installment) => sum + safeNumber(installment.valor), 0);
+
+  const getCrediarioRemainingAmount = () => {
+    const total = getSaleTotalLiquido();
+    const currentPaid = getSalePagoTotal();
+    const allocated = getCrediarioInstallmentsTotal();
+    const remaining = total - (currentPaid + allocated);
+    return remaining < 0 ? 0 : remaining;
+  };
+
+  const updateCrediarioTotals = () => {
+    if (elements.crediarioTotal) {
+      const total = getCrediarioInstallmentsTotal();
+      elements.crediarioTotal.textContent = `Total: ${formatCurrency(total)}`;
+    }
+    if (elements.crediarioRemaining) {
+      const remaining = getCrediarioRemainingAmount();
+      elements.crediarioRemaining.textContent =
+        remaining > 0.009 ? `Restante: ${formatCurrency(remaining)}` : 'Sem valor restante.';
+    }
+    if (elements.crediarioAddButton) {
+      const remaining = getCrediarioRemainingAmount();
+      const disabled = remaining <= 0.009;
+      elements.crediarioAddButton.disabled = disabled;
+      elements.crediarioAddButton.classList.toggle('opacity-60', disabled);
+      elements.crediarioAddButton.classList.toggle('cursor-not-allowed', disabled);
+    }
+  };
+
+  const updateCrediarioCustomerSummary = () => {
+    if (!elements.crediarioCustomerName || !elements.crediarioCustomerDoc) {
+      return;
+    }
+    const customer = state.vendaCliente;
+    if (!customer) {
+      elements.crediarioCustomerName.textContent = 'Nenhum cliente selecionado';
+      elements.crediarioCustomerDoc.textContent = 'Selecione um cliente para continuar.';
+      if (elements.crediarioLimit) elements.crediarioLimit.textContent = '—';
+      if (elements.crediarioPending) elements.crediarioPending.textContent = '—';
+      if (elements.crediarioFidelity) elements.crediarioFidelity.textContent = 'Em desenvolvimento';
+      return;
+    }
+    const name = resolveCustomerName(customer) || 'Cliente selecionado';
+    const document = resolveCustomerDocument(customer);
+    elements.crediarioCustomerName.textContent = name;
+    elements.crediarioCustomerDoc.textContent = document
+      ? `Documento: ${document}`
+      : 'Documento não informado.';
+    const limitValue =
+      customer.limiteCredito ??
+      customer.limite_credito ??
+      customer.creditLimit ??
+      customer.limite ??
+      null;
+    const pendingValue =
+      customer.pendencias ?? customer.saldoDevedor ?? customer.debitos ?? customer.emAberto ?? null;
+    if (elements.crediarioLimit) {
+      elements.crediarioLimit.textContent =
+        limitValue !== null && limitValue !== undefined
+          ? formatCurrency(safeNumber(limitValue))
+          : 'Não informado';
+    }
+    if (elements.crediarioPending) {
+      elements.crediarioPending.textContent =
+        pendingValue !== null && pendingValue !== undefined
+          ? formatCurrency(safeNumber(pendingValue))
+          : 'Sem pendências registradas';
+    }
+    if (elements.crediarioFidelity) {
+      const fidelity = customer.fidelidade ?? customer.fidelity ?? null;
+      elements.crediarioFidelity.textContent = fidelity ? String(fidelity) : 'Em desenvolvimento';
+    }
+  };
+
+  const populateCrediarioMethodOptions = () => {
+    if (!elements.crediarioMethodSelect) return;
+    const available = state.paymentMethods.filter(
+      (method) => method.type !== 'crediario' && method.id !== (state.crediarioModalMethod?.id || '')
+    );
+    if (!available.length) {
+      elements.crediarioMethodSelect.innerHTML =
+        '<option value="">Nenhum meio de pagamento disponível</option>';
+      elements.crediarioMethodSelect.disabled = true;
+      return;
+    }
+    const previous = elements.crediarioMethodSelect.value;
+    const options = available
+      .map((method) => `<option value="${method.id}">${escapeHtml(method.label)}</option>`)
+      .join('');
+    elements.crediarioMethodSelect.innerHTML = options;
+    if (previous && available.some((method) => method.id === previous)) {
+      elements.crediarioMethodSelect.value = previous;
+    } else {
+      elements.crediarioMethodSelect.selectedIndex = 0;
+    }
+    elements.crediarioMethodSelect.disabled = false;
+  };
+
+  const updateCrediarioInputs = () => {
+    if (elements.crediarioParcelInput) {
+      elements.crediarioParcelInput.value = String(state.crediarioNextParcelNumber);
+    }
+    const remaining = getCrediarioRemainingAmount();
+    if (elements.crediarioValueInput) {
+      elements.crediarioValueInput.value = remaining > 0.009 ? remaining.toFixed(2) : '';
+    }
+    if (elements.crediarioDateInput) {
+      const fallback = formatDateParam(new Date());
+      const last = state.crediarioLastDate || fallback;
+      elements.crediarioDateInput.value = last;
+    }
+    updateCrediarioTotals();
+  };
+
+  const renderCrediarioInstallments = () => {
+    if (!elements.crediarioList) return;
+    elements.crediarioList.innerHTML = '';
+    if (!state.crediarioInstallments.length) {
+      elements.crediarioList.classList.add('hidden');
+      elements.crediarioListEmpty?.classList.remove('hidden');
+      updateCrediarioTotals();
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    const sorted = [...state.crediarioInstallments].sort(
+      (a, b) => (Number(a.parcela) || 0) - (Number(b.parcela) || 0)
+    );
+    sorted.forEach((installment) => {
+      const li = document.createElement('li');
+      li.className = 'flex items-center justify-between gap-3 px-4 py-3';
+      const label = installment.methodLabel || 'Meio de pagamento';
+      li.innerHTML = `
+        <div class="flex flex-col">
+          <span class="text-sm font-semibold text-gray-800">Parcela ${
+            installment.parcela || 1
+          }</span>
+          <span class="text-xs text-gray-500">${escapeHtml(label)}</span>
+          <span class="text-xs text-gray-500">Vencimento: ${
+            installment.dueDateLabel || formatDateLabel(installment.dueDate) || '—'
+          }</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-semibold text-gray-700">${formatCurrency(
+            safeNumber(installment.valor)
+          )}</span>
+          <button type="button" class="text-xs text-red-500 transition hover:text-red-600" data-crediario-remove="${
+            installment.uid
+          }" aria-label="Remover parcela">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      `;
+      fragment.appendChild(li);
+    });
+    elements.crediarioList.appendChild(fragment);
+    elements.crediarioList.classList.remove('hidden');
+    elements.crediarioListEmpty?.classList.add('hidden');
+    updateCrediarioTotals();
+  };
+
+  const restoreCrediarioEditingPayment = () => {
+    if (!state.crediarioEditingPayment) return;
+    const payment = state.crediarioEditingPayment;
+    const index = Number.isInteger(state.crediarioEditingIndex)
+      ? state.crediarioEditingIndex
+      : -1;
+    if (index >= 0 && index <= state.vendaPagamentos.length) {
+      state.vendaPagamentos.splice(index, 0, payment);
+    } else {
+      state.vendaPagamentos.push(payment);
+    }
+    state.crediarioEditingPayment = null;
+    state.crediarioEditingIndex = -1;
+    renderSalePaymentsPreview();
+  };
+
+  const resetCrediarioState = () => {
+    state.crediarioInstallments = [];
+    state.crediarioNextParcelNumber = 1;
+    state.crediarioLastDate = formatDateParam(new Date());
+    state.crediarioModalMethod = null;
+  };
+
+  const openCrediarioModal = (method, { resume = false } = {}) => {
+    if (!elements.crediarioModal || !method) return;
+    if (!resume) {
+      resetCrediarioState();
+      state.crediarioModalMethod = { ...method };
+      const existingIndex = state.vendaPagamentos.findIndex(
+        (payment) =>
+          payment.id === method.id &&
+          (payment.type === 'crediario' || (payment.crediarioData && payment.crediarioData.installments))
+      );
+      if (existingIndex >= 0) {
+        const existing = state.vendaPagamentos.splice(existingIndex, 1)[0];
+        state.crediarioEditingPayment = existing;
+        state.crediarioEditingIndex = existingIndex;
+        const installments = Array.isArray(existing.crediarioData?.installments)
+          ? existing.crediarioData.installments
+          : [];
+        state.crediarioInstallments = installments.map((item, index) => {
+          const parcela = Number.parseInt(item.parcela, 10);
+          const dueDate = item.dueDate || item.vencimento || '';
+          return {
+            uid: createUid(),
+            parcela: Number.isFinite(parcela) ? parcela : index + 1,
+            valor: safeNumber(item.valor ?? item.value ?? item.amount ?? 0),
+            methodId: item.methodId || item.paymentMethodId || method.id,
+            methodLabel: item.methodLabel || item.paymentMethodLabel || method.label,
+            dueDate,
+            dueDateLabel: item.dueDateLabel || formatDateLabel(dueDate),
+          };
+        });
+        if (state.crediarioInstallments.length) {
+          const highest = Math.max(
+            ...state.crediarioInstallments.map((item, index) =>
+              Number.isFinite(Number(item.parcela)) ? Number(item.parcela) : index + 1
+            )
+          );
+          state.crediarioNextParcelNumber = Math.max(highest + 1, state.crediarioInstallments.length + 1);
+          const last = state.crediarioInstallments[state.crediarioInstallments.length - 1];
+          if (last?.dueDate) {
+            const parsed = new Date(last.dueDate);
+            state.crediarioLastDate = Number.isNaN(parsed.getTime())
+              ? formatDateParam(new Date())
+              : formatDateParam(parsed);
+          }
+        }
+        renderSalePaymentsPreview();
+      }
+    }
+    state.crediarioModalOpen = true;
+    populateCrediarioMethodOptions();
+    updateCrediarioCustomerSummary();
+    renderCrediarioInstallments();
+    updateCrediarioInputs();
+    if (elements.crediarioError) {
+      elements.crediarioError.classList.add('hidden');
+      elements.crediarioError.textContent = '';
+    }
+    elements.crediarioModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    window.setTimeout(() => {
+      elements.crediarioValueInput?.focus();
+      elements.crediarioValueInput?.select?.();
+    }, 120);
+  };
+
+  const closeCrediarioModal = ({ restorePayment = false } = {}) => {
+    if (!elements.crediarioModal) return;
+    elements.crediarioModal.classList.add('hidden');
+    state.crediarioModalOpen = false;
+    if (restorePayment) {
+      restoreCrediarioEditingPayment();
+    } else {
+      state.crediarioEditingPayment = null;
+      state.crediarioEditingIndex = -1;
+    }
+    if (
+      (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) &&
+      (!elements.customerModal || elements.customerModal.classList.contains('hidden')) &&
+      (!elements.paymentValueModal || elements.paymentValueModal.classList.contains('hidden'))
+    ) {
+      document.body.classList.remove('overflow-hidden');
+    }
+  };
+
+  const handleCrediarioAddInstallment = () => {
+    if (!state.crediarioModalMethod) return;
+    if (!elements.crediarioMethodSelect) return;
+    const methodId = elements.crediarioMethodSelect.value;
+    const method = state.paymentMethods.find((item) => item.id === methodId);
+    if (!method) {
+      notify('Selecione um meio de pagamento para a parcela.', 'warning');
+      elements.crediarioMethodSelect.focus();
+      return;
+    }
+    const dateValue = elements.crediarioDateInput?.value || '';
+    const parsedDate = parseDateInputValue(dateValue);
+    if (!parsedDate) {
+      notify('Informe uma data válida para o vencimento.', 'warning');
+      elements.crediarioDateInput?.focus();
+      return;
+    }
+    const value = safeNumber(elements.crediarioValueInput?.value || 0);
+    if (!(value > 0)) {
+      notify('Informe um valor válido para a parcela.', 'warning');
+      elements.crediarioValueInput?.focus();
+      return;
+    }
+    const remaining = getCrediarioRemainingAmount();
+    if (value - remaining > 0.009) {
+      notify('O valor informado ultrapassa o restante da venda.', 'warning');
+      elements.crediarioValueInput?.focus();
+      return;
+    }
+    const dueDate = toStartOfDay(parsedDate);
+    const dueDateIso = dueDate ? dueDate.toISOString() : null;
+    const parcelNumber = state.crediarioNextParcelNumber;
+    state.crediarioInstallments.push({
+      uid: createUid(),
+      parcela: parcelNumber,
+      valor: value,
+      methodId: method.id,
+      methodLabel: method.label,
+      dueDate: dueDateIso,
+      dueDateLabel: formatDateLabel(dueDateIso),
+    });
+    state.crediarioNextParcelNumber += 1;
+    const nextDate = addDays(parsedDate, 30) || parsedDate;
+    state.crediarioLastDate = formatDateParam(nextDate);
+    if (elements.crediarioError) {
+      elements.crediarioError.classList.add('hidden');
+      elements.crediarioError.textContent = '';
+    }
+    renderCrediarioInstallments();
+    updateCrediarioInputs();
+  };
+
+  const handleCrediarioListClick = (event) => {
+    const button = event.target.closest('[data-crediario-remove]');
+    if (!button) return;
+    const uid = button.getAttribute('data-crediario-remove');
+    state.crediarioInstallments = state.crediarioInstallments.filter((item) => item.uid !== uid);
+    if (!state.crediarioInstallments.length) {
+      state.crediarioNextParcelNumber = 1;
+      state.crediarioLastDate = formatDateParam(new Date());
+    } else {
+      const highest = Math.max(
+        ...state.crediarioInstallments.map((item, index) =>
+          Number.isFinite(Number(item.parcela)) ? Number(item.parcela) : index + 1
+        )
+      );
+      state.crediarioNextParcelNumber = Math.max(highest + 1, state.crediarioInstallments.length + 1);
+      const last = state.crediarioInstallments[state.crediarioInstallments.length - 1];
+      if (last?.dueDate) {
+        const parsed = new Date(last.dueDate);
+        state.crediarioLastDate = Number.isNaN(parsed.getTime())
+          ? formatDateParam(new Date())
+          : formatDateParam(parsed);
+      } else {
+        state.crediarioLastDate = formatDateParam(new Date());
+      }
+    }
+    renderCrediarioInstallments();
+    updateCrediarioInputs();
+  };
+
+  const handleCrediarioConfirm = () => {
+    if (!state.crediarioModalMethod) {
+      notify('Selecione um meio de pagamento de crediário.', 'warning');
+      return;
+    }
+    if (!state.vendaCliente) {
+      if (elements.crediarioError) {
+        elements.crediarioError.textContent = 'Selecione um cliente para registrar o crediário.';
+        elements.crediarioError.classList.remove('hidden');
+      }
+      notify('Selecione um cliente para vincular o crediário.', 'warning');
+      return;
+    }
+    if (!state.crediarioInstallments.length) {
+      notify('Adicione ao menos uma parcela para o crediário.', 'warning');
+      return;
+    }
+    const remaining = getCrediarioRemainingAmount();
+    if (remaining > 0.009) {
+      notify('Distribua todo o valor da venda entre as parcelas do crediário.', 'warning');
+      return;
+    }
+    const total = getCrediarioInstallmentsTotal();
+    const installments = state.crediarioInstallments.map((installment) => ({
+      parcela: installment.parcela,
+      valor: safeNumber(installment.valor),
+      methodId: installment.methodId,
+      methodLabel: installment.methodLabel,
+      dueDate: installment.dueDate,
+      dueDateLabel: installment.dueDateLabel,
+    }));
+    const customerId =
+      state.vendaCliente._id || state.vendaCliente.id || state.vendaCliente.codigo || state.vendaCliente.code || '';
+    const paymentEntry = {
+      uid: createUid(),
+      id: state.crediarioModalMethod.id,
+      label: state.crediarioModalMethod.label,
+      parcelas: installments.length,
+      valor: total,
+      type: 'crediario',
+      crediarioData: {
+        clienteId: customerId ? String(customerId) : '',
+        clienteNome: resolveCustomerName(state.vendaCliente) || '',
+        installments,
+      },
+    };
+    state.vendaPagamentos.push(paymentEntry);
+    renderSalePaymentsPreview();
+    updateSaleSummary();
+    closeCrediarioModal({ restorePayment: false });
+    resetCrediarioState();
+  };
+
+  const handleCrediarioCancel = () => {
+    closeCrediarioModal({ restorePayment: true });
+    resetCrediarioState();
+  };
+
+  const handleCrediarioCustomerSelect = () => {
+    if (elements.crediarioError) {
+      elements.crediarioError.classList.add('hidden');
+      elements.crediarioError.textContent = '';
+    }
+    openCustomerModal();
+  };
+
   const handleSaleMethodsClick = async (event) => {
     const toggleButton = event.target.closest('[data-sale-method-toggle]');
     if (toggleButton) {
@@ -4257,6 +4828,14 @@
       const parcelas = Math.max(1, Number(parcelasStr) || 1);
       const method = state.paymentMethods.find((item) => item.id === methodId);
       if (!method) return;
+      if (method.type === 'crediario') {
+        if (!state.itens.length) {
+          notify('Adicione itens para lançar pagamentos.', 'warning');
+          return;
+        }
+        openCrediarioModal(method);
+        return;
+      }
       if (!state.itens.length) {
         notify('Adicione itens para lançar pagamentos.', 'warning');
         return;
@@ -4281,6 +4860,14 @@
     const methodId = methodButton.getAttribute('data-sale-method');
     const method = state.paymentMethods.find((item) => item.id === methodId);
     if (!method) return;
+    if (method.type === 'crediario') {
+      if (!state.itens.length) {
+        notify('Adicione itens para lançar pagamentos.', 'warning');
+        return;
+      }
+      openCrediarioModal(method);
+      return;
+    }
     const parcelasAttr = methodButton.getAttribute('data-sale-parcelas');
     const parcelas = Math.max(1, Number(parcelasAttr) || 1);
     if (!state.itens.length) {
@@ -4541,6 +5128,10 @@
         method = { ...base, valor: 0 };
         state.pagamentos.push(method);
       }
+      const paymentType = String(payment.type || method?.type || '').toLowerCase();
+      if (paymentType === 'crediario') {
+        return;
+      }
       let valueToRegister = amount;
       if (remainingChange > 0 && methodAllowsChange(method)) {
         const deduction = Math.min(remainingChange, valueToRegister);
@@ -4564,6 +5155,69 @@
     const historyTitle = saleCode ? `Venda ${saleCode} finalizada` : 'Venda finalizada';
     addHistoryEntry({ id: 'venda', label: historyTitle }, total, '', historyPaymentLabel);
     updateStatusBadge();
+  };
+
+  const buildCrediarioReceivables = (payments, customer, saleCode = '') => {
+    if (!Array.isArray(payments) || !payments.length) return [];
+    const receivables = [];
+    const contaCorrente = state.financeSettings?.contaCorrente || null;
+    const contaContabil = state.financeSettings?.contaContabilReceber || null;
+    const fallbackCustomerId =
+      customer?._id || customer?.id || customer?.codigo || customer?.code || '';
+    const fallbackCustomerName = resolveCustomerName(customer) || 'Cliente não informado';
+    payments.forEach((payment) => {
+      const type = String(payment.type || '').toLowerCase();
+      if (type !== 'crediario') {
+        const methodRef = state.paymentMethods.find((item) => item.id === payment.id);
+        const resolvedType = String(methodRef?.type || '').toLowerCase();
+        if (resolvedType !== 'crediario') {
+          return;
+        }
+      }
+      const data = payment.crediarioData || {};
+      const installments = Array.isArray(data.installments) ? data.installments : [];
+      const clienteId = data.clienteId || fallbackCustomerId;
+      const clienteNome = data.clienteNome || fallbackCustomerName;
+      installments.forEach((installment, index) => {
+        const valor = safeNumber(installment.valor ?? installment.value ?? installment.amount ?? 0);
+        if (!(valor > 0)) return;
+        let dueIso = null;
+        if (installment.dueDate) {
+          const parsed = new Date(installment.dueDate);
+          if (!Number.isNaN(parsed.getTime())) {
+            dueIso = parsed.toISOString();
+          }
+        }
+        const parcelNumber = Number.parseInt(installment.parcela, 10);
+        receivables.push({
+          id: createUid(),
+          parcelNumber: Number.isFinite(parcelNumber) ? parcelNumber : index + 1,
+          value: valor,
+          formattedValue: formatCurrency(valor),
+          dueDate: dueIso,
+          dueDateLabel: installment.dueDateLabel || formatDateLabel(dueIso),
+          paymentMethodId: installment.methodId || payment.id || '',
+          paymentMethodLabel: installment.methodLabel || payment.label || 'Crediário',
+          contaCorrente: contaCorrente ? { ...contaCorrente } : null,
+          contaContabil: contaContabil ? { ...contaContabil } : null,
+          saleCode: saleCode || '',
+          crediarioMethodId: payment.id || '',
+          clienteId: clienteId ? String(clienteId) : '',
+          clienteNome,
+        });
+      });
+    });
+    return receivables;
+  };
+
+  const syncAccountsReceivableForSale = (saleId, receivables) => {
+    if (!saleId) return;
+    state.accountsReceivable = state.accountsReceivable.filter((entry) => entry.saleId !== saleId);
+    if (!Array.isArray(receivables) || !receivables.length) {
+      return;
+    }
+    const enriched = receivables.map((entry) => ({ ...entry, saleId }));
+    state.accountsReceivable.push(...enriched);
   };
 
   const emitFiscalForSale = async (saleId, { notifyOnSuccess = true } = {}) => {
@@ -4794,6 +5448,7 @@
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, { saleCode });
+    const receivables = buildCrediarioReceivables(pagamentosVenda, state.vendaCliente, saleCode);
     registerSaleOnCaixa(pagamentosVenda, total, saleCode);
     const saleRecord = registerCompletedSaleRecord({
       type: 'venda',
@@ -4804,7 +5459,12 @@
       discount: state.vendaDesconto,
       addition: state.vendaAcrescimo,
       customer: state.vendaCliente,
+      receivables,
     });
+    if (saleRecord) {
+      saleRecord.receivables = receivables.map((entry) => ({ ...entry }));
+      syncAccountsReceivableForSale(saleRecord.id, receivables);
+    }
     if (budgetToFinalize) {
       const finalizeIso = new Date().toISOString();
       budgetToFinalize.status = 'finalizado';
@@ -4902,6 +5562,7 @@
       state.vendaAcrescimo,
       saleCode
     );
+    const receivables = buildCrediarioReceivables(pagamentosVenda, state.vendaCliente, saleCode);
     const saleRecord = registerCompletedSaleRecord({
       type: 'delivery',
       saleCode,
@@ -4912,8 +5573,11 @@
       addition: state.vendaAcrescimo,
       customer: state.vendaCliente,
       createdAt: orderRecord.createdAt,
+      receivables,
     });
     if (saleRecord) {
+      saleRecord.receivables = receivables.map((entry) => ({ ...entry }));
+      syncAccountsReceivableForSale(saleRecord.id, receivables);
       orderRecord.saleRecordId = saleRecord.id;
     }
     state.deliveryOrders.unshift(orderRecord);
@@ -4976,6 +5640,7 @@
       notify('Não foi possível gerar o comprovante do delivery.', 'error');
       return;
     }
+    const receivables = buildCrediarioReceivables(pagamentosVenda, state.vendaCliente, saleCode);
     registerSaleOnCaixa(pagamentosVenda, total, saleCode);
     order.payments = pagamentosVenda;
     order.paymentsLabel = summarizeDeliveryPayments(pagamentosVenda);
@@ -5001,7 +5666,9 @@
         discount: state.vendaDesconto,
         addition: state.vendaAcrescimo,
         customer: state.vendaCliente,
+        receivables,
       });
+      syncAccountsReceivableForSale(saleRecordId, receivables);
     } else {
       const saleRecord = registerCompletedSaleRecord({
         type: 'delivery',
@@ -5013,8 +5680,11 @@
         addition: state.vendaAcrescimo,
         customer: state.vendaCliente,
         createdAt: order.createdAt,
+        receivables,
       });
       if (saleRecord) {
+        saleRecord.receivables = receivables.map((entry) => ({ ...entry }));
+        syncAccountsReceivableForSale(saleRecord.id, receivables);
         order.saleRecordId = saleRecord.id;
       }
     }
@@ -7222,6 +7892,7 @@
     addition = 0,
     customer = null,
     createdAt = null,
+    receivables = [],
   } = {}) => {
     const normalizedType = type === 'delivery' ? 'delivery' : 'venda';
     const typeLabel = normalizedType === 'delivery' ? 'Delivery' : 'Venda';
@@ -7326,6 +7997,9 @@
       fiscalSignature: '',
       fiscalProtocol: '',
       fiscalItemsSnapshot,
+      receivables: Array.isArray(receivables)
+        ? receivables.map((entry) => ({ ...entry }))
+        : [],
       expanded: false,
       status: 'completed',
       cancellationReason: '',
@@ -9430,6 +10104,11 @@
         .map((payment) => normalizePaymentSnapshotForPersist(payment))
         .filter(Boolean),
     };
+    const financeConfig = pdv?.configuracoesFinanceiro || {};
+    state.financeSettings = {
+      contaCorrente: normalizeFinanceReference(financeConfig.contaCorrente),
+      contaContabilReceber: normalizeFinanceReference(financeConfig.contaContabilReceber),
+    };
     const impressaoConfig = pdv?.configuracoesImpressao || {};
     const fechamentoMode = normalizePrintMode(
       impressaoConfig.fechamento ||
@@ -9470,24 +10149,55 @@
     state.history = historicoFonte
       .map((entry) => normalizeHistoryEntryForPersist(entry))
       .filter(Boolean);
+    const rootReceivablesData = Array.isArray(pdv?.accountsReceivable)
+      ? pdv.accountsReceivable
+      : Array.isArray(pdv?.contasReceber)
+      ? pdv.contasReceber
+      : Array.isArray(pdv?.caixa?.accountsReceivable)
+      ? pdv.caixa.accountsReceivable
+      : [];
+    const normalizedRootReceivables = rootReceivablesData
+      .map((entry) => normalizeReceivableForPersist(entry))
+      .filter(Boolean);
     const vendasFonte = Array.isArray(pdv?.completedSales)
       ? pdv.completedSales
       : Array.isArray(pdv?.caixa?.vendas)
       ? pdv.caixa.vendas
       : [];
+    const saleReceivables = [];
     state.completedSales = vendasFonte
       .map((sale) => normalizeSaleRecordForPersist(sale))
       .filter(Boolean)
       .map((sale) => {
         const normalizedFiscalStatus =
           sale.fiscalStatus === 'emitting' || !sale.fiscalStatus ? 'pending' : sale.fiscalStatus;
+        const normalizedReceivables = Array.isArray(sale.receivables)
+          ? sale.receivables.map((entry) => {
+              const normalized = normalizeReceivableForPersist(entry);
+              if (normalized) {
+                normalized.saleId = sale.id;
+                saleReceivables.push(normalized);
+                return { ...normalized };
+              }
+              return null;
+            })
+          : [];
         return {
           ...sale,
           fiscalStatus: normalizedFiscalStatus,
           paymentTags: Array.isArray(sale.paymentTags) ? sale.paymentTags : [],
           items: Array.isArray(sale.items) ? sale.items : [],
+          receivables: normalizedReceivables.filter(Boolean),
         };
       });
+    const mergedReceivables = [...saleReceivables];
+    normalizedRootReceivables.forEach((entry) => {
+      const alreadyRegistered = mergedReceivables.some((item) => item.id === entry.id);
+      if (!alreadyRegistered) {
+        mergedReceivables.push(entry);
+      }
+    });
+    state.accountsReceivable = mergedReceivables;
     const budgetsFonte = Array.isArray(pdv?.budgets)
       ? pdv.budgets
       : Array.isArray(pdv?.orcamentos)
@@ -10260,6 +10970,19 @@
     elements.paymentValueConfirm?.addEventListener('click', handlePaymentValueConfirm);
     elements.paymentValueCancel?.addEventListener('click', handlePaymentValueCancel);
     elements.paymentValueBackdrop?.addEventListener('click', handlePaymentValueCancel);
+    elements.crediarioAddButton?.addEventListener('click', handleCrediarioAddInstallment);
+    elements.crediarioList?.addEventListener('click', handleCrediarioListClick);
+    elements.crediarioConfirm?.addEventListener('click', handleCrediarioConfirm);
+    elements.crediarioCancel?.addEventListener('click', handleCrediarioCancel);
+    elements.crediarioClose?.addEventListener('click', handleCrediarioCancel);
+    elements.crediarioBackdrop?.addEventListener('click', handleCrediarioCancel);
+    elements.crediarioCustomerButton?.addEventListener('click', handleCrediarioCustomerSelect);
+    elements.crediarioDateInput?.addEventListener('change', () => {
+      if (elements.crediarioError) {
+        elements.crediarioError.classList.add('hidden');
+        elements.crediarioError.textContent = '';
+      }
+    });
     elements.tabTriggers?.forEach((trigger) => {
       trigger.addEventListener('click', (event) => {
         const target = trigger.getAttribute('data-tab-target');

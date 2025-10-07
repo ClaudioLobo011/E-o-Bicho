@@ -26,6 +26,27 @@ const historyEntrySchema = new mongoose.Schema(
   { _id: false }
 );
 
+const receivableSchema = new mongoose.Schema(
+  {
+    id: { type: String, trim: true },
+    parcelNumber: { type: Number, default: 1 },
+    value: { type: Number, default: 0 },
+    formattedValue: { type: String, trim: true },
+    dueDate: { type: Date, default: null },
+    dueDateLabel: { type: String, trim: true },
+    paymentMethodId: { type: String, trim: true },
+    paymentMethodLabel: { type: String, trim: true },
+    contaCorrente: { type: mongoose.Schema.Types.Mixed, default: null },
+    contaContabil: { type: mongoose.Schema.Types.Mixed, default: null },
+    saleCode: { type: String, trim: true },
+    crediarioMethodId: { type: String, trim: true },
+    clienteId: { type: String, trim: true },
+    clienteNome: { type: String, trim: true },
+    saleId: { type: String, trim: true },
+  },
+  { _id: false }
+);
+
 const saleRecordSchema = new mongoose.Schema(
   {
     id: { type: String, required: true, trim: true },
@@ -65,6 +86,7 @@ const saleRecordSchema = new mongoose.Schema(
     fiscalSefazProcessedAt: { type: Date },
     fiscalSefazProcessedAtLabel: { type: String, trim: true },
     fiscalItemsSnapshot: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    receivables: { type: [receivableSchema], default: [] },
     expanded: { type: Boolean, default: false },
     status: { type: String, trim: true },
     cancellationReason: { type: String, trim: true },
@@ -147,6 +169,7 @@ const pdvStateSchema = new mongoose.Schema(
       venda: { type: String, trim: true, default: 'PM' },
     },
     inventoryMovements: { type: [inventoryMovementSchema], default: [] },
+    accountsReceivable: { type: [receivableSchema], default: [] },
   },
   { timestamps: true }
 );
