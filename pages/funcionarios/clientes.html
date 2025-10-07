@@ -6,7 +6,7 @@
   <title>Funcionários — Cadastro de Cliente</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.css" integrity="sha512-YQ2GZWlznImPi0tLxe3LjXLp8dkUBaRdOy+nK8BPVKx/aRV+7Y6AmTAPGY7d8IvFcl1l0I/+ZZOco2wnBbUdeg==" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.css" integrity="sha512-RT/9M3vzjYojy97YiNTZbyrQ4nJ+gNoinZKTGSVvLITijfQIAIDNicUe+U2KaeOWo9j7IbRzRisx/7eglOc+wA==" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="../../src/output.css">
 </head>
 <body class="bg-gray-100">
@@ -243,8 +243,36 @@
                 </div>
 
                 <div class="tab-panel hidden" data-tab-panel="pendencias">
-                  <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
-                    Pendências em construção.
+                  <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="text-sm font-medium text-gray-600">Valor pendente</span>
+                        <span id="pendencias-valor-pendente-status" class="text-xs font-semibold uppercase tracking-wide text-gray-500"></span>
+                      </div>
+                      <p id="pendencias-valor-pendente" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
+                      <p class="mt-2 text-xs text-gray-500">Saldo em aberto considerando todos os lançamentos financeiros.</p>
+                    </div>
+
+                    <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                      <label for="pendencias-limite-credito" class="text-sm font-medium text-gray-600">Limite de crédito</label>
+                      <div class="mt-2 flex rounded-md shadow-sm">
+                        <span class="inline-flex items-center rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-3 text-sm text-gray-500">R$</span>
+                        <input id="pendencias-limite-credito" type="text" inputmode="decimal" class="-ml-px block w-full rounded-r-md border border-gray-300 py-2 pl-3 pr-3 text-base focus:border-indigo-500 focus:ring-indigo-500" placeholder="0,00" />
+                      </div>
+                      <p class="mt-2 text-xs text-gray-500">Defina o limite de compras a prazo permitido para o cliente.</p>
+                    </div>
+
+                    <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                      <span class="text-sm font-medium text-gray-600">Saldo disponível</span>
+                      <p id="pendencias-saldo-disponivel" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
+                      <p class="mt-2 text-xs text-gray-500">Calculado automaticamente a partir do limite e do saldo utilizado.</p>
+                    </div>
+
+                    <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                      <span class="text-sm font-medium text-gray-600">Saldo usado</span>
+                      <p id="pendencias-saldo-usado" class="mt-2 text-2xl font-semibold text-gray-700">R$ 0,00</p>
+                      <p class="mt-2 text-xs text-gray-500">Total já comprometido dentro do limite de crédito do cliente.</p>
+                    </div>
                   </div>
                 </div>
 
@@ -385,7 +413,7 @@
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.js" integrity="sha512-6Z6/Dr7guPmyAnbcW2CYwiVdc+GqOR/mdrIW6DCeU44yWiNysGEKMluSleqrs9jwELyhl725LLJoPLD114F8ZA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.5/awesomplete.min.js" integrity="sha512-HcBl0GSJvt4Qecm4srHapirUx0HJDi2zYXm6KUKNNUGdTIN9cBwakVZHWmRVj4MKgy1AChqhWGYcMDbRKgO0zg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="../../scripts/funcionarios/clientes.js"></script>
 </body>
 </html>

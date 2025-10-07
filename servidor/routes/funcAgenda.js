@@ -75,6 +75,25 @@ function sanitizeCnpj(value = '') {
   return digits.padStart(14, '0').slice(-14);
 }
 
+function parseNumber(value, fallback = 0) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : fallback;
+  }
+  if (typeof value === 'string') {
+    const cleaned = value
+      .trim()
+      .replace(/\s+/g, '')
+      .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+      .replace(',', '.')
+      .replace(/[^\d.-]/g, '')
+      .replace(/(?!^)-/g, '');
+    if (!cleaned || cleaned === '-' || cleaned === '.') return fallback;
+    const parsed = Number.parseFloat(cleaned);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
 async function buildClientePayload(body = {}, opts = {}) {
   const { isUpdate = false, currentUser = null } = opts;
   const tipoConta = normalizeTipoConta(body.tipoConta || currentUser?.tipoConta);
@@ -104,6 +123,12 @@ async function buildClientePayload(body = {}, opts = {}) {
     pais,
     apelido,
   };
+
+  if (Object.prototype.hasOwnProperty.call(body, 'limiteCredito')) {
+    payload.limiteCredito = parseNumber(body.limiteCredito, currentUser?.limiteCredito || 0);
+  } else if (!isUpdate && typeof payload.limiteCredito === 'undefined') {
+    payload.limiteCredito = 0;
+  }
 
   if (empresaPrincipal) {
     payload.empresaPrincipal = empresaPrincipal;
@@ -1260,7 +1285,7 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'ID inválido.' });
     }
     const u = await User.findById(id)
-      .select('_id role tipoConta nomeCompleto nomeContato razaoSocial nomeFantasia email celular telefone celularSecundario telefoneSecundario cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE apelido pais empresaPrincipal empresas')
+      .select('_id role tipoConta nomeCompleto nomeContato razaoSocial nomeFantasia email celular telefone celularSecundario telefoneSecundario cpf cnpj inscricaoEstadual genero dataNascimento rgNumero estadoIE isentoIE apelido pais empresaPrincipal empresas limiteCredito')
       .lean();
     if (!u) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
@@ -1293,6 +1318,8 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       }
     }
 
+    const limiteCredito = parseNumber(u.limiteCredito, 0);
+
     res.json({
       _id: u._id,
       nome,
@@ -1324,6 +1351,10 @@ router.get('/clientes/:id', authMiddleware, requireStaff, async (req, res) => {
       doc: documentoPrincipal,
       address,
       enderecos,
+      limiteCredito,
+      financeiro: {
+        limiteCredito,
+      },
     });
   } catch (e) {
     console.error('GET /func/clientes/:id', e);
