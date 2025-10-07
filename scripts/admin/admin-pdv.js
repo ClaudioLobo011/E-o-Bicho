@@ -2271,8 +2271,10 @@
     elements.crediarioAddButton = document.getElementById('pdv-crediario-add');
     elements.crediarioList = document.getElementById('pdv-crediario-list');
     elements.crediarioListEmpty = document.getElementById('pdv-crediario-list-empty');
+    elements.crediarioListHead = document.getElementById('pdv-crediario-list-head');
     elements.crediarioTotal = document.getElementById('pdv-crediario-total');
     elements.crediarioRemaining = document.getElementById('pdv-crediario-remaining');
+    elements.crediarioRemainingStatus = document.getElementById('pdv-crediario-remaining-status');
 
     elements.deliveryAddressModal = document.getElementById('pdv-delivery-address-modal');
     elements.deliveryAddressBackdrop =
@@ -4416,8 +4418,18 @@
     }
     if (elements.crediarioRemaining) {
       const remaining = getCrediarioRemainingAmount();
-      elements.crediarioRemaining.textContent =
-        remaining > 0.009 ? `Restante: ${formatCurrency(remaining)}` : 'Sem valor restante.';
+      const hasRemaining = remaining > 0.009;
+      const normalized = hasRemaining ? remaining : 0;
+      elements.crediarioRemaining.textContent = formatCurrency(normalized);
+      elements.crediarioRemaining.classList.toggle('text-emerald-600', !hasRemaining);
+      elements.crediarioRemaining.classList.toggle('text-gray-800', hasRemaining);
+      if (elements.crediarioRemainingStatus) {
+        elements.crediarioRemainingStatus.textContent = hasRemaining
+          ? 'Distribua o valor para prosseguir.'
+          : 'Tudo certo! Nenhum valor restante.';
+        elements.crediarioRemainingStatus.classList.toggle('text-emerald-600', !hasRemaining);
+        elements.crediarioRemainingStatus.classList.toggle('text-gray-500', hasRemaining);
+      }
     }
     if (elements.crediarioAddButton) {
       const remaining = getCrediarioRemainingAmount();
@@ -4519,6 +4531,7 @@
     if (!state.crediarioInstallments.length) {
       elements.crediarioList.classList.add('hidden');
       elements.crediarioListEmpty?.classList.remove('hidden');
+      elements.crediarioListHead?.classList.add('hidden');
       updateCrediarioTotals();
       return;
     }
@@ -4528,20 +4541,22 @@
     );
     sorted.forEach((installment) => {
       const li = document.createElement('li');
-      li.className = 'flex items-center justify-between gap-3 px-4 py-3';
+      li.className =
+        'flex flex-col gap-3 px-5 py-4 text-sm text-gray-700 md:grid md:grid-cols-3 md:items-center md:gap-4';
       const label = installment.methodLabel || 'Meio de pagamento';
+      const dueDateLabel =
+        installment.dueDateLabel || formatDateLabel(installment.dueDate) || '—';
       li.innerHTML = `
-        <div class="flex flex-col">
+        <div class="flex flex-col gap-1">
           <span class="text-sm font-semibold text-gray-800">Parcela ${
             installment.parcela || 1
           }</span>
           <span class="text-xs text-gray-500">${escapeHtml(label)}</span>
-          <span class="text-xs text-gray-500">Vencimento: ${
-            installment.dueDateLabel || formatDateLabel(installment.dueDate) || '—'
-          }</span>
+          <span class="text-xs text-gray-500 md:hidden">Vencimento: ${escapeHtml(dueDateLabel)}</span>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="text-sm font-semibold text-gray-700">${formatCurrency(
+        <div class="hidden text-sm text-gray-600 md:block">${escapeHtml(dueDateLabel)}</div>
+        <div class="flex items-center justify-between gap-3 md:justify-end">
+          <span class="text-sm font-semibold text-gray-800">${formatCurrency(
             safeNumber(installment.valor)
           )}</span>
           <button type="button" class="text-xs text-red-500 transition hover:text-red-600" data-crediario-remove="${
@@ -4556,6 +4571,7 @@
     elements.crediarioList.appendChild(fragment);
     elements.crediarioList.classList.remove('hidden');
     elements.crediarioListEmpty?.classList.add('hidden');
+    elements.crediarioListHead?.classList.remove('hidden');
     updateCrediarioTotals();
   };
 
