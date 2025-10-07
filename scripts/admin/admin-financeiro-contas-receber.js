@@ -795,6 +795,7 @@
       const options = methods.map((method) => ({
         value: method._id,
         label: method.name,
+        type: (method.type || '').toLowerCase(),
       }));
       setSelectOptions(elements.paymentMethod, options, options.length ? 'Selecione...' : 'Nenhum meio cadastrado');
       elements.paymentMethod.disabled = false;
@@ -879,6 +880,7 @@
         const paymentMethodLabel = receivable.paymentMethod?.name || '';
         const issueDate = installment.issueDate || receivable.issueDate || null;
         const notes = receivable.notes || '';
+        const paymentMethodType = (receivable.paymentMethod?.type || '').toLowerCase();
         rows.push({
           receivableId: receivable.id || receivable._id,
           code: receivable.code || receivable.documentNumber || receivable.document || '—',
@@ -893,6 +895,7 @@
           bankAccountLabel,
           paymentMethodId,
           paymentMethodLabel,
+          paymentMethodType,
           notes,
         });
       });
@@ -939,6 +942,7 @@
         if (item.bankAccountLabel) button.dataset.bankLabel = item.bankAccountLabel;
         if (item.paymentMethodId) button.dataset.paymentMethod = item.paymentMethodId;
         if (item.paymentMethodLabel) button.dataset.paymentLabel = item.paymentMethodLabel;
+        if (item.paymentMethodType) button.dataset.paymentType = item.paymentMethodType;
         if (item.notes) button.dataset.notes = item.notes;
       };
 
@@ -1067,6 +1071,7 @@
         const paymentMethodLabel = receivable.paymentMethod?.name || '';
         const issueDate = installment.issueDate || receivable.issueDate || null;
         const notes = receivable.notes || '';
+        const paymentMethodType = (receivable.paymentMethod?.type || '').toLowerCase();
         rows.push({
           receivableId: receivable.id || receivable._id,
           code: receivable.code || receivable.documentNumber || receivable.document || '—',
@@ -1081,6 +1086,7 @@
           bankAccountLabel,
           paymentMethodId,
           paymentMethodLabel,
+          paymentMethodType,
           notes,
         });
       });
@@ -1127,6 +1133,7 @@
         if (item.bankAccountLabel) button.dataset.bankLabel = item.bankAccountLabel;
         if (item.paymentMethodId) button.dataset.paymentMethod = item.paymentMethodId;
         if (item.paymentMethodLabel) button.dataset.paymentLabel = item.paymentMethodLabel;
+        if (item.paymentMethodType) button.dataset.paymentType = item.paymentMethodType;
         if (item.notes) button.dataset.notes = item.notes;
       };
 
@@ -1229,6 +1236,7 @@
       bankAccountLabel: button.dataset.bankLabel || '',
       paymentMethodId: button.dataset.paymentMethod || '',
       paymentMethodLabel: button.dataset.paymentLabel || '',
+      paymentMethodType: button.dataset.paymentType || '',
       notes: button.dataset.notes || '',
     };
   }
@@ -1661,10 +1669,23 @@
         context.bankAccountId,
         context.bankAccountLabel
       );
+      const filteredPaymentMethodOptions = state.paymentMethodOptions.filter(
+        (option) => (option.type || '').toLowerCase() !== 'crediario'
+      );
+      const selectedPaymentOption = state.paymentMethodOptions.find(
+        (option) => option.value === context.paymentMethodId
+      );
+      const contextPaymentMethodType = (context.paymentMethodType || '').toLowerCase();
+      const selectedPaymentMethodType = (
+        selectedPaymentOption?.type
+        || contextPaymentMethodType
+        || ''
+      ).toLowerCase();
+      const isSelectedCrediario = selectedPaymentMethodType === 'crediario';
       const paymentMethodOptionsData = buildModalSelectOptions(
-        state.paymentMethodOptions,
-        context.paymentMethodId,
-        context.paymentMethodLabel
+        filteredPaymentMethodOptions,
+        isSelectedCrediario ? '' : context.paymentMethodId,
+        isSelectedCrediario ? '' : context.paymentMethodLabel
       );
       const renderOptions = (optionData) =>
         optionData.options
