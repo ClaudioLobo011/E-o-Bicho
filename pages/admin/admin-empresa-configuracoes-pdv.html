@@ -58,6 +58,7 @@
                             <button type="button" class="tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary" data-tab-target="venda">Venda</button>
                             <button type="button" class="tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary" data-tab-target="administrativo">Administrativo</button>
                             <button type="button" class="tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary" data-tab-target="fiscal">Fiscal</button>
+                            <button type="button" class="tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary" data-tab-target="financeiro">Financeiro</button>
                             <button type="button" class="tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary" data-tab-target="estoque">Estoque</button>
                         </nav>
 
@@ -174,6 +175,32 @@
                                         </div>
                                     </div>
                                     <p class="text-xs text-gray-500">A emissão padrão define qual layout o PDV utilizará ao iniciar uma venda fiscal.</p>
+                                </div>
+                            </div>
+
+                            <div data-tab-panel="financeiro" class="hidden">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="conta-corrente" class="block text-sm font-semibold text-gray-700 mb-1">Conta corrente</label>
+                                        <select id="conta-corrente" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            <option value="">Selecione uma conta corrente</option>
+                                        </select>
+                                        <p class="mt-2 text-xs text-gray-500">Mostra apenas contas correntes vinculadas à empresa selecionada.</p>
+                                    </div>
+                                    <div>
+                                        <label for="conta-contabil-receber" class="block text-sm font-semibold text-gray-700 mb-1">Conta contábil (Receber)</label>
+                                        <select id="conta-contabil-receber" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            <option value="">Selecione uma conta contábil de receber</option>
+                                        </select>
+                                        <p class="mt-2 text-xs text-gray-500">Listagem filtrada pelas contas contábeis de contas a receber da empresa.</p>
+                                    </div>
+                                    <div>
+                                        <label for="conta-contabil-pagar" class="block text-sm font-semibold text-gray-700 mb-1">Conta contábil (A pagar)</label>
+                                        <select id="conta-contabil-pagar" class="config-input w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-config-field>
+                                            <option value="">Selecione uma conta contábil de pagar</option>
+                                        </select>
+                                        <p class="mt-2 text-xs text-gray-500">Mostra contas contábeis classificadas como contas a pagar da empresa.</p>
+                                    </div>
                                 </div>
                             </div>
 

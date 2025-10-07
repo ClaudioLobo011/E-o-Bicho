@@ -6,6 +6,9 @@
     stores: [],
     pdvs: [],
     deposits: [],
+    bankAccounts: [],
+    receivableAccounts: [],
+    payableAccounts: [],
     selectedStore: '',
     selectedPdv: '',
     saving: false,
@@ -50,6 +53,9 @@
     elements.statusLabel = document.getElementById('config-status');
     elements.selectionHint = document.getElementById('pdv-selection-hint');
     elements.depositoSelect = document.getElementById('deposito-padrao');
+    elements.bankAccountSelect = document.getElementById('conta-corrente');
+    elements.receivableAccountSelect = document.getElementById('conta-contabil-receber');
+    elements.payableAccountSelect = document.getElementById('conta-contabil-pagar');
 
     elements.printerInputs = {
       venda: {
@@ -141,6 +147,18 @@
       elements.depositoSelect.value = '';
     }
 
+    if (elements.bankAccountSelect) {
+      elements.bankAccountSelect.value = '';
+    }
+
+    if (elements.receivableAccountSelect) {
+      elements.receivableAccountSelect.value = '';
+    }
+
+    if (elements.payableAccountSelect) {
+      elements.payableAccountSelect.value = '';
+    }
+
     setStatus('As alterações só serão aplicadas após salvar.');
   };
 
@@ -186,6 +204,107 @@
       options.push(`<option value="${deposit._id}">${deposit.nome}</option>`);
     });
     elements.depositoSelect.innerHTML = options.join('');
+  };
+
+  const formatBankAccountLabel = (account) => {
+    if (!account) return 'Conta não listada';
+    const alias = account.alias && String(account.alias).trim();
+    const bankName = account.bankName && String(account.bankName).trim();
+    const bankCode = account.bankCode && String(account.bankCode).trim();
+    const agency = account.agency && String(account.agency).trim();
+    const accountNumber = account.accountNumber && String(account.accountNumber).trim();
+    const accountDigit = account.accountDigit && String(account.accountDigit).trim();
+
+    const primary = alias || bankName || bankCode || 'Conta sem descrição';
+    const secondaryParts = [];
+    if (bankName && bankName !== primary) secondaryParts.push(bankName);
+    else if (bankCode && bankCode !== primary) secondaryParts.push(`Banco ${bankCode}`);
+    const accountParts = [];
+    if (agency) accountParts.push(`Ag ${agency}`);
+    if (accountNumber) {
+      accountParts.push(`Conta ${accountNumber}${accountDigit ? `-${accountDigit}` : ''}`);
+    }
+
+    const composed = [primary];
+    if (secondaryParts.length) composed.push(secondaryParts.join(' / '));
+    if (accountParts.length) composed.push(accountParts.join(' · '));
+    return composed.join(' • ');
+  };
+
+  const populateBankAccounts = () => {
+    if (!elements.bankAccountSelect) return;
+    const previous = elements.bankAccountSelect.value;
+    const options = ['<option value="">Selecione uma conta corrente</option>'];
+    state.bankAccounts.forEach((account) => {
+      options.push(`<option value="${account._id}">${formatBankAccountLabel(account)}</option>`);
+    });
+    elements.bankAccountSelect.innerHTML = options.join('');
+    if (previous && Array.from(elements.bankAccountSelect.options).some((option) => option.value === previous)) {
+      elements.bankAccountSelect.value = previous;
+    }
+  };
+
+  const formatAccountingAccountLabel = (account) => {
+    if (!account) return 'Conta não listada';
+    const code = account.code && String(account.code).trim();
+    const name = account.name && String(account.name).trim();
+    if (code && name) return `${code} - ${name}`;
+    return code || name || 'Conta não listada';
+  };
+
+  const populateAccountingSelect = (select, accounts, placeholder) => {
+    if (!select) return;
+    const previous = select.value;
+    const options = [`<option value="">${placeholder}</option>`];
+    accounts.forEach((account) => {
+      options.push(`<option value="${account._id}">${formatAccountingAccountLabel(account)}</option>`);
+    });
+    select.innerHTML = options.join('');
+    if (previous && Array.from(select.options).some((option) => option.value === previous)) {
+      select.value = previous;
+    }
+  };
+
+  const populateReceivableAccounts = () => {
+    populateAccountingSelect(
+      elements.receivableAccountSelect,
+      state.receivableAccounts,
+      'Selecione uma conta contábil de receber'
+    );
+  };
+
+  const populatePayableAccounts = () => {
+    populateAccountingSelect(
+      elements.payableAccountSelect,
+      state.payableAccounts,
+      'Selecione uma conta contábil de pagar'
+    );
+  };
+
+  const ensureSelectValue = (select, value, fallbackLabel) => {
+    if (!select) return;
+    const normalizedValue = value ? String(value) : '';
+    if (!normalizedValue) {
+      select.value = '';
+      return;
+    }
+    const hasOption = Array.from(select.options).some((option) => option.value === normalizedValue);
+    if (!hasOption) {
+      const fallbackOption = document.createElement('option');
+      fallbackOption.value = normalizedValue;
+      fallbackOption.textContent = fallbackLabel || 'Opção não listada';
+      fallbackOption.dataset.fallback = 'true';
+      select.appendChild(fallbackOption);
+    }
+    select.value = normalizedValue;
+  };
+
+  const extractReferenceId = (value) => {
+    if (!value) return '';
+    if (typeof value === 'object') {
+      return value._id || value.id || '';
+    }
+    return String(value);
   };
 
   const formatDateTime = (date) => {
@@ -239,6 +358,73 @@
     populateDeposits();
   };
 
+  const fetchBankAccounts = async (storeId) => {
+    if (!storeId) {
+      state.bankAccounts = [];
+      populateBankAccounts();
+      return;
+    }
+    const token = getToken();
+    if (!token) {
+      throw new Error('Sessão expirada. Faça login novamente para continuar.');
+    }
+    const response = await fetch(
+      `${API_BASE}/bank-accounts?company=${encodeURIComponent(storeId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(payload?.message || 'Não foi possível carregar as contas correntes da empresa.');
+    }
+    state.bankAccounts = Array.isArray(payload?.accounts) ? payload.accounts : [];
+    populateBankAccounts();
+  };
+
+  const fetchAccountingAccounts = async (storeId, nature) => {
+    if (!storeId) return [];
+    const token = getToken();
+    if (!token) {
+      throw new Error('Sessão expirada. Faça login novamente para continuar.');
+    }
+    const params = new URLSearchParams();
+    if (storeId) params.set('company', storeId);
+    if (nature) params.set('nature', nature);
+    const response = await fetch(`${API_BASE}/accounting-accounts?${params.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(payload?.message || 'Não foi possível carregar as contas contábeis.');
+    }
+    return Array.isArray(payload?.accounts) ? payload.accounts : [];
+  };
+
+  const fetchReceivableAccounts = async (storeId) => {
+    if (!storeId) {
+      state.receivableAccounts = [];
+      populateReceivableAccounts();
+      return;
+    }
+    state.receivableAccounts = await fetchAccountingAccounts(storeId, 'contas_receber');
+    populateReceivableAccounts();
+  };
+
+  const fetchPayableAccounts = async (storeId) => {
+    if (!storeId) {
+      state.payableAccounts = [];
+      populatePayableAccounts();
+      return;
+    }
+    state.payableAccounts = await fetchAccountingAccounts(storeId, 'contas_pagar');
+    populatePayableAccounts();
+  };
+
   const fetchPdvDetails = async (pdvId) => {
     const response = await fetch(`${API_BASE}/pdvs/${pdvId}`);
     if (!response.ok) {
@@ -260,6 +446,7 @@
     const venda = pdv?.configuracoesVenda || {};
     const fiscal = pdv?.configuracoesFiscal || {};
     const estoque = pdv?.configuracoesEstoque || {};
+    const financeiro = pdv?.configuracoesFinanceiro || {};
 
     const sempreImprimir = impressao.sempreImprimir || 'perguntar';
     resetRadios('input[name="sempre-imprimir"]', sempreImprimir);
@@ -293,6 +480,33 @@
         elements.depositoSelect.appendChild(fallbackOption);
       }
       elements.depositoSelect.value = depositoValue;
+    }
+
+    const contaCorrenteId = extractReferenceId(financeiro.contaCorrente);
+    if (elements.bankAccountSelect) {
+      const contaCorrenteLabel =
+        typeof financeiro.contaCorrente === 'object'
+          ? formatBankAccountLabel(financeiro.contaCorrente)
+          : 'Conta não listada';
+      ensureSelectValue(elements.bankAccountSelect, contaCorrenteId, contaCorrenteLabel);
+    }
+
+    const contaReceberId = extractReferenceId(financeiro.contaContabilReceber);
+    if (elements.receivableAccountSelect) {
+      const contaReceberLabel =
+        typeof financeiro.contaContabilReceber === 'object'
+          ? formatAccountingAccountLabel(financeiro.contaContabilReceber)
+          : 'Conta contábil não listada';
+      ensureSelectValue(elements.receivableAccountSelect, contaReceberId, contaReceberLabel);
+    }
+
+    const contaPagarId = extractReferenceId(financeiro.contaContabilPagar);
+    if (elements.payableAccountSelect) {
+      const contaPagarLabel =
+        typeof financeiro.contaContabilPagar === 'object'
+          ? formatAccountingAccountLabel(financeiro.contaContabilPagar)
+          : 'Conta contábil não listada';
+      ensureSelectValue(elements.payableAccountSelect, contaPagarId, contaPagarLabel);
     }
 
     const now = formatDateTime(new Date());
@@ -374,6 +588,10 @@
 
     const depositoPadrao = elements.depositoSelect?.value || null;
 
+    const contaCorrente = elements.bankAccountSelect?.value || '';
+    const contaContabilReceber = elements.receivableAccountSelect?.value || '';
+    const contaContabilPagar = elements.payableAccountSelect?.value || '';
+
     return {
       impressao: {
         sempreImprimir,
@@ -390,6 +608,11 @@
       },
       estoque: {
         depositoPadrao,
+      },
+      financeiro: {
+        contaCorrente: contaCorrente || null,
+        contaContabilReceber: contaContabilReceber || null,
+        contaContabilPagar: contaContabilPagar || null,
       },
     };
   };
@@ -459,13 +682,25 @@
       if (!value) {
         state.pdvs = [];
         state.deposits = [];
+        state.bankAccounts = [];
+        state.receivableAccounts = [];
+        state.payableAccounts = [];
         populatePdvSelect();
         populateDeposits();
+        populateBankAccounts();
+        populateReceivableAccounts();
+        populatePayableAccounts();
         disableConfigFields(true);
         return;
       }
       disableConfigFields(true);
-      await Promise.all([fetchPdvs(value), fetchDeposits(value)]);
+      await Promise.all([
+        fetchPdvs(value),
+        fetchDeposits(value),
+        fetchBankAccounts(value),
+        fetchReceivableAccounts(value),
+        fetchPayableAccounts(value),
+      ]);
       if (elements.selectionHint) {
         elements.selectionHint.textContent =
           state.pdvs.length > 0
@@ -478,8 +713,14 @@
       notify(error.message || 'Erro ao carregar dados da empresa selecionada.', 'error');
       state.pdvs = [];
       state.deposits = [];
+      state.bankAccounts = [];
+      state.receivableAccounts = [];
+      state.payableAccounts = [];
       populatePdvSelect();
       populateDeposits();
+      populateBankAccounts();
+      populateReceivableAccounts();
+      populatePayableAccounts();
       disableConfigFields(true);
     }
   };

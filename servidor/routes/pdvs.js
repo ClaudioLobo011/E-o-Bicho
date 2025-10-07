@@ -6,6 +6,8 @@ const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
 const PdvState = require('../models/PdvState');
 const Product = require('../models/Product');
+const BankAccount = require('../models/BankAccount');
+const AccountingAccount = require('../models/AccountingAccount');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const { isDriveConfigured, uploadBufferToDrive } = require('../utils/googleDrive');
@@ -1081,6 +1083,9 @@ router.get('/:id', async (req, res) => {
     const pdv = await Pdv.findById(req.params.id)
       .populate('empresa')
       .populate('configuracoesEstoque.depositoPadrao')
+      .populate('configuracoesFinanceiro.contaCorrente')
+      .populate('configuracoesFinanceiro.contaContabilReceber')
+      .populate('configuracoesFinanceiro.contaContabilPagar')
       .lean();
 
     if (!pdv) {
@@ -1599,6 +1604,7 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
     const vendaPayload = req.body?.venda || {};
     const fiscalPayload = req.body?.fiscal || {};
     const estoquePayload = req.body?.estoque || {};
+    const financeiroPayload = req.body?.financeiro || {};
 
     const sempreImprimir = parseSempreImprimir(impressaoPayload.sempreImprimir);
     const impressoraVenda = buildPrinterPayload(impressaoPayload.impressoraVenda);
@@ -1623,6 +1629,60 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
       }
     }
 
+    let contaCorrenteId = null;
+    const contaCorrenteRaw = normalizeString(financeiroPayload.contaCorrente);
+    if (contaCorrenteRaw) {
+      if (!mongoose.Types.ObjectId.isValid(contaCorrenteRaw)) {
+        throw createValidationError('Conta corrente selecionada é inválida.');
+      }
+      const contaCorrente = await BankAccount.findOne({
+        _id: contaCorrenteRaw,
+        company: pdv.empresa,
+      });
+      if (!contaCorrente) {
+        throw createValidationError('Conta corrente selecionada não pertence à mesma empresa do PDV.');
+      }
+      contaCorrenteId = contaCorrente._id;
+    }
+
+    let contaContabilReceberId = null;
+    const contaContabilReceberRaw = normalizeString(financeiroPayload.contaContabilReceber);
+    if (contaContabilReceberRaw) {
+      if (!mongoose.Types.ObjectId.isValid(contaContabilReceberRaw)) {
+        throw createValidationError('Conta contábil de receber selecionada é inválida.');
+      }
+      const contaReceber = await AccountingAccount.findOne({
+        _id: contaContabilReceberRaw,
+        companies: pdv.empresa,
+        paymentNature: 'contas_receber',
+      });
+      if (!contaReceber) {
+        throw createValidationError(
+          'Conta contábil de receber selecionada não pertence à empresa ou não está classificada como contas a receber.'
+        );
+      }
+      contaContabilReceberId = contaReceber._id;
+    }
+
+    let contaContabilPagarId = null;
+    const contaContabilPagarRaw = normalizeString(financeiroPayload.contaContabilPagar);
+    if (contaContabilPagarRaw) {
+      if (!mongoose.Types.ObjectId.isValid(contaContabilPagarRaw)) {
+        throw createValidationError('Conta contábil de pagar selecionada é inválida.');
+      }
+      const contaPagar = await AccountingAccount.findOne({
+        _id: contaContabilPagarRaw,
+        companies: pdv.empresa,
+        paymentNature: 'contas_pagar',
+      });
+      if (!contaPagar) {
+        throw createValidationError(
+          'Conta contábil de pagar selecionada não pertence à empresa ou não está classificada como contas a pagar.'
+        );
+      }
+      contaContabilPagarId = contaPagar._id;
+    }
+
     pdv.configuracoesImpressao = {
       sempreImprimir,
       impressoraVenda: impressoraVenda || undefined,
@@ -1643,6 +1703,12 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
       depositoPadrao: depositoPadraoId || null,
     };
 
+    pdv.configuracoesFinanceiro = {
+      contaCorrente: contaCorrenteId || null,
+      contaContabilReceber: contaContabilReceberId || null,
+      contaContabilPagar: contaContabilPagarId || null,
+    };
+
     pdv.atualizadoPor = req.user?.email || req.user?.id || 'Sistema';
 
     await pdv.save();
@@ -1650,6 +1716,9 @@ router.put('/:id/configuracoes', requireAuth, authorizeRoles('admin', 'admin_mas
     await pdv.populate([
       { path: 'empresa' },
       { path: 'configuracoesEstoque.depositoPadrao' },
+      { path: 'configuracoesFinanceiro.contaCorrente' },
+      { path: 'configuracoesFinanceiro.contaContabilReceber' },
+      { path: 'configuracoesFinanceiro.contaContabilPagar' },
     ]);
 
     res.json(pdv);
