@@ -519,6 +519,52 @@
     );
   };
 
+  const abbreviateOperatorName = (name) => {
+    if (!name) return '';
+    const normalized = String(name).replace(/\s+/g, ' ').trim();
+    if (!normalized) return '';
+    const parts = normalized.split(' ').filter(Boolean);
+    if (!parts.length) return '';
+
+    const toTitleCase = (value) => {
+      if (!value) return '';
+      const first = value.charAt(0).toUpperCase();
+      const rest = value.slice(1).toLowerCase();
+      return `${first}${rest}`;
+    };
+
+    const connectors = new Set(['da', 'de', 'di', 'do', 'du', 'das', 'dos', 'e']);
+    const firstPart = toTitleCase(parts[0]);
+    let secondPart = '';
+    for (let index = 1; index < parts.length; index += 1) {
+      const candidate = parts[index];
+      if (!candidate) continue;
+      const normalizedCandidate = candidate.toLowerCase();
+      const letters = normalizedCandidate.replace(/[^a-zà-ú]/gi, '');
+      if (!letters) {
+        continue;
+      }
+      if (connectors.has(normalizedCandidate) || letters.length <= 2) {
+        if (!secondPart && index === parts.length - 1) {
+          secondPart = toTitleCase(candidate);
+        }
+        continue;
+      }
+      secondPart = toTitleCase(candidate);
+      break;
+    }
+
+    if (!secondPart && parts.length > 1) {
+      secondPart = toTitleCase(parts[1]);
+    }
+
+    if (secondPart) {
+      secondPart = secondPart.slice(0, 4);
+    }
+
+    return secondPart ? `${firstPart} ${secondPart}` : firstPart;
+  };
+
   const onlyDigits = (value) => String(value || '').replace(/\D+/g, '');
 
   const sanitizeCepDigits = (value) => onlyDigits(value).slice(0, 8);
@@ -5202,6 +5248,19 @@
         text-align: center;
         padding: 0 2mm;
       }
+      .nfce-compact__operator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.8mm;
+        font-size: 9.8px;
+        font-weight: 700;
+        color: #000;
+        margin-bottom: 0.4mm;
+      }
+      .nfce-compact__operator strong {
+        font-weight: 800;
+      }
       .receipt--nfce .nfce-compact__divider {
         width: 100%;
         height: 0.6px;
@@ -6286,9 +6345,308 @@
       </main>`;
   };
 
+  const buildMatricialReceiptMarkup = (snapshot) => {
+    if (!snapshot) {
+      return '<main class="receipt"><p class="receipt-empty">Nenhuma venda disponível para impressão.</p></main>';
+    }
+
+    const store = findStoreById(state.selectedStore);
+    const storeCompany = store?.empresa && typeof store.empresa === 'object' ? store.empresa : {};
+    const pickValue = (...candidates) => {
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) {
+          return candidate.trim();
+        }
+      }
+      return '';
+    };
+
+    const companyPrimaryName = pickValue(
+      store?.nomeFantasia,
+      store?.nome,
+      storeCompany?.nomeFantasia,
+      storeCompany?.nome,
+      store?.razaoSocial,
+      storeCompany?.razaoSocial,
+      snapshot.meta?.store,
+      'Estabelecimento'
+    );
+
+    const secondaryCandidates = [
+      store?.razaoSocial,
+      storeCompany?.razaoSocial,
+      storeCompany?.nomeFantasia,
+      storeCompany?.nome,
+      snapshot.meta?.store,
+    ];
+    const companySecondaryNameRaw = secondaryCandidates.find(
+      (value) => typeof value === 'string' && value.trim() && value.trim() !== companyPrimaryName
+    );
+    const companySecondaryName = companySecondaryNameRaw ? companySecondaryNameRaw.trim() : '';
+
+    const documents = [];
+    const appendDocument = (value, label) => {
+      const raw = (value ?? '').toString().trim();
+      if (raw) {
+        documents.push(`${label}: ${raw}`);
+      }
+    };
+    appendDocument(store?.cnpj || storeCompany?.cnpj, 'CNPJ');
+    appendDocument(store?.cpf || storeCompany?.cpf, 'CPF');
+    appendDocument(
+      store?.inscricaoEstadual || store?.ie || storeCompany?.inscricaoEstadual || storeCompany?.ie,
+      'IE'
+    );
+    appendDocument(
+      store?.inscricaoMunicipal || store?.im || storeCompany?.inscricaoMunicipal || storeCompany?.im,
+      'IM'
+    );
+    appendDocument(store?.telefone || store?.celular || storeCompany?.telefone || storeCompany?.celular, 'Tel');
+    const companyDocuments = documents.join(' • ');
+
+    const street = pickValue(
+      store?.logradouro,
+      store?.endereco,
+      store?.rua,
+      storeCompany?.logradouro,
+      storeCompany?.endereco,
+      storeCompany?.rua
+    );
+    const number = pickValue(store?.numero, store?.num, storeCompany?.numero, storeCompany?.num);
+    const mainAddress = [street, number].filter(Boolean).join(', ');
+    const neighborhood = pickValue(store?.bairro, storeCompany?.bairro, store?.distrito, storeCompany?.distrito);
+    const city = pickValue(
+      store?.cidade,
+      store?.municipio,
+      storeCompany?.cidade,
+      storeCompany?.municipio,
+      store?.city,
+      storeCompany?.city
+    );
+    const stateUf = pickValue(store?.uf, store?.estado, storeCompany?.uf, storeCompany?.estado);
+    const cityLine = [city, stateUf].filter(Boolean).join(' - ');
+    const cep = pickValue(store?.cep, storeCompany?.cep);
+    const addressParts = [mainAddress, neighborhood, cityLine, cep ? `CEP: ${cep}` : '']
+      .filter(Boolean)
+      .map((value) => value.trim());
+    const companyAddress = addressParts.join(' • ');
+
+    const operatorShort = abbreviateOperatorName(snapshot.meta?.operador || '');
+    const operatorMarkup = operatorShort
+      ? `<div class="nfce-compact__operator"><span>Operador:</span><strong>${escapeHtml(operatorShort)}</strong></div>`
+      : '';
+
+    const referenceLeftParts = [];
+    if (snapshot.meta?.pdv) referenceLeftParts.push(`PDV ${snapshot.meta.pdv}`);
+    if (snapshot.meta?.saleCode) referenceLeftParts.push(`Venda ${snapshot.meta.saleCode}`);
+    const referenceLeft = referenceLeftParts.join(' • ');
+    const referenceRightParts = [];
+    if (snapshot.meta?.data) referenceRightParts.push(snapshot.meta.data);
+    const referenceRight = referenceRightParts.join(' • ');
+
+    const referenceSegments = [];
+    if (referenceLeft) {
+      referenceSegments.push(`<span class="nfce-compact__reference-left">${escapeHtml(referenceLeft)}</span>`);
+    }
+    if (referenceLeft && referenceRight) {
+      referenceSegments.push('<span class="nfce-compact__reference-divider">|</span>');
+    }
+    if (referenceRight) {
+      referenceSegments.push(`<span class="nfce-compact__reference-right">${escapeHtml(referenceRight)}</span>`);
+    }
+    const referenceMarkup = referenceSegments.length
+      ? `<div class="nfce-compact__reference">${referenceSegments.join('')}</div>`
+      : '';
+
+    const headerDetails = [];
+    if (snapshot.meta?.store && snapshot.meta.store !== companyPrimaryName) {
+      headerDetails.push(snapshot.meta.store);
+    }
+    const headerDetailsMarkup = headerDetails.length
+      ? `<ul class="nfce-compact__header-details">${headerDetails
+          .map((detail) => `<li>${escapeHtml(detail)}</li>`)
+          .join('')}</ul>`
+      : '';
+    const headerMetaContent = [referenceMarkup, headerDetailsMarkup].filter(Boolean).join('');
+    const headerMeta = headerMetaContent ? `<div class="nfce-compact__header-meta">${headerMetaContent}</div>` : '';
+    const headerDivider = headerMetaContent ? '<span class="nfce-compact__divider" aria-hidden="true"></span>' : '';
+
+    const itemsRows = Array.isArray(snapshot.itens) && snapshot.itens.length
+      ? snapshot.itens
+          .map((item) => {
+            const description = `${item.index ? `${item.index}. ` : ''}${item.nome || 'Item'}`;
+            const quantity = `${item.quantidade} × ${item.unitario}`;
+            const codes = item.codigo
+              ? `<span class="nfce-compact__item-code">${escapeHtml(item.codigo)}</span>`
+              : '';
+            return `
+              <tr>
+                <td>
+                  <span class="nfce-compact__item-name">${escapeHtml(description)}</span>
+                  ${codes}
+                </td>
+                <td>${escapeHtml(quantity)}</td>
+                <td>${escapeHtml(item.subtotal || '')}</td>
+              </tr>`;
+          })
+          .join('')
+      : '<tr><td colspan="3" class="nfce-compact__empty">Nenhum item informado.</td></tr>';
+
+    const normalizeCurrency = (raw) => {
+      if (typeof raw === 'string') return raw;
+      if (raw == null) return '';
+      return String(raw);
+    };
+
+    const totalsEntries = [];
+    const subtotalValue = normalizeCurrency(snapshot.totais?.bruto).trim();
+    if (subtotalValue) {
+      totalsEntries.push({ label: 'Subtotal', value: subtotalValue });
+    }
+
+    const descontoValue = normalizeCurrency(snapshot.totais?.desconto).trim();
+    if (snapshot.totais?.descontoValor > 0 && descontoValue) {
+      totalsEntries.push({
+        label: 'Descontos',
+        value: descontoValue.startsWith('-') ? descontoValue : `- ${descontoValue}`,
+      });
+    }
+
+    const acrescimoValue = normalizeCurrency(snapshot.totais?.acrescimo).trim();
+    if (snapshot.totais?.acrescimoValor > 0 && acrescimoValue) {
+      totalsEntries.push({ label: 'Acréscimos', value: acrescimoValue });
+    }
+
+    const totalValue = normalizeCurrency(snapshot.totais?.liquido).trim();
+    if (totalValue) {
+      totalsEntries.push({ label: 'Total da venda', value: totalValue, isTotal: true });
+    }
+
+    const pagoValue = normalizeCurrency(snapshot.totais?.pago).trim();
+    if (pagoValue) {
+      totalsEntries.push({ label: 'Pago', value: pagoValue });
+    }
+
+    const trocoValue = normalizeCurrency(snapshot.totais?.troco).trim();
+    if (snapshot.totais?.trocoValor > 0 && trocoValue) {
+      totalsEntries.push({ label: 'Troco', value: trocoValue });
+    }
+
+    const totalsRows = totalsEntries
+      .map(
+        (row) => `
+          <li class="nfce-compact__total${row.isTotal ? ' nfce-compact__total--highlight' : ''}">
+            <span>${escapeHtml(row.label)}</span>
+            <span>${escapeHtml(row.value)}</span>
+          </li>`
+      )
+      .join('');
+
+    const totalsMarkup = totalsRows
+      ? `<ul class="nfce-compact__totals-list">${totalsRows}</ul>`
+      : '<p class="nfce-compact__empty">Totais indisponíveis.</p>';
+
+    const pagamentosRows = Array.isArray(snapshot.pagamentos?.items) && snapshot.pagamentos.items.length
+      ? snapshot.pagamentos.items
+          .map(
+            (payment) => `
+              <li class="nfce-compact__total">
+                <span>${escapeHtml(payment.label)}</span>
+                <span>${escapeHtml(payment.formatted)}</span>
+              </li>`
+          )
+          .join('')
+      : '';
+
+    const pagamentosMarkup = pagamentosRows
+      ? `<ul class="nfce-compact__totals-list">${pagamentosRows}</ul>`
+      : '<p class="nfce-compact__empty">Nenhum pagamento registrado.</p>';
+
+    const clienteLines = [];
+    if (snapshot.cliente?.nome) clienteLines.push(snapshot.cliente.nome);
+    if (snapshot.cliente?.documento) clienteLines.push(`Doc.: ${snapshot.cliente.documento}`);
+    if (snapshot.cliente?.contato) clienteLines.push(`Contato: ${snapshot.cliente.contato}`);
+    if (snapshot.cliente?.pet) clienteLines.push(`Pet: ${snapshot.cliente.pet}`);
+    const clienteSection = clienteLines.length
+      ? `<section class="nfce-compact__section nfce-compact__section--info">
+          <h2 class="nfce-compact__section-title">Cliente</h2>
+          <p class="nfce-compact__text">${clienteLines.map((line) => escapeHtml(line)).join('<br>')}</p>
+        </section>`
+      : '';
+
+    const deliveryLines = [];
+    if (snapshot.delivery?.apelido) deliveryLines.push(snapshot.delivery.apelido);
+    if (snapshot.delivery?.formatted) deliveryLines.push(snapshot.delivery.formatted);
+    const deliverySection = deliveryLines.length
+      ? `<section class="nfce-compact__section nfce-compact__section--info">
+          <h2 class="nfce-compact__section-title">Entrega</h2>
+          <p class="nfce-compact__text">${deliveryLines.map((line) => escapeHtml(line)).join('<br>')}</p>
+        </section>`
+      : '';
+
+    const thankYouSection = `<section class="nfce-compact__section">
+        <p class="nfce-compact__text">Obrigado pela preferência! Volte sempre.</p>
+      </section>`;
+
+    return `
+      <main class="receipt receipt--nfce nfce-compact nfce-compact--matricial">
+        <header class="nfce-compact__header">
+          ${operatorMarkup}
+          <div class="nfce-compact__company">
+            <h1 class="nfce-compact__company-name">${escapeHtml(companyPrimaryName)}</h1>
+            ${
+              companySecondaryName
+                ? `<p class="nfce-compact__company-secondary">${escapeHtml(companySecondaryName)}</p>`
+                : ''
+            }
+            ${
+              companyDocuments
+                ? `<p class="nfce-compact__company-line">${escapeHtml(companyDocuments)}</p>`
+                : ''
+            }
+            ${
+              companyAddress
+                ? `<p class="nfce-compact__company-line">${escapeHtml(companyAddress)}</p>`
+                : ''
+            }
+          </div>
+          ${headerMeta}
+          ${headerDivider}
+        </header>
+        <section class="nfce-compact__section nfce-compact__section--items">
+          <h2 class="nfce-compact__section-title">Produtos</h2>
+          <table class="nfce-compact__items-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qtd × Vlr</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>${itemsRows}</tbody>
+          </table>
+        </section>
+        <section class="nfce-compact__section nfce-compact__section--totals">
+          <h2 class="nfce-compact__section-title">Totais</h2>
+          ${totalsMarkup}
+        </section>
+        <section class="nfce-compact__section nfce-compact__section--payments">
+          <h2 class="nfce-compact__section-title">Pagamentos</h2>
+          ${pagamentosMarkup}
+        </section>
+        ${clienteSection}
+        ${deliverySection}
+        ${thankYouSection}
+      </main>`;
+  };
+
   const buildSaleReceiptMarkup = (snapshot, variant) => {
     if (!snapshot) {
       return '<main class="receipt"><p class="receipt-empty">Nenhuma venda disponível para impressão.</p></main>';
+    }
+
+    if (variant === 'matricial') {
+      return buildMatricialReceiptMarkup(snapshot);
     }
 
     const badgeLabel = variant === 'fiscal' ? 'Fiscal' : 'Matricial';
