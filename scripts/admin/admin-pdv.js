@@ -5187,27 +5187,30 @@
         color: #222;
       }
       main.receipt.receipt--nfce {
-        padding: 2.6mm 2.2mm 4mm;
-        gap: 2.4mm;
-        font-size: 9.6px;
+        width: 80mm;
+        margin: 0 auto;
+        padding: 2mm 0 4mm;
+        gap: 1.6mm;
+        font-size: 9.4px;
         background: #fff;
       }
       .receipt--nfce .nfce-compact__header {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 1.6mm;
+        gap: 1.2mm;
         text-align: center;
+        padding: 0 2mm;
       }
       .receipt--nfce .nfce-compact__divider {
         width: 100%;
-        height: 1px;
-        background: rgba(17, 17, 17, 0.12);
+        height: 0.6px;
+        background: rgba(17, 17, 17, 0.18);
       }
       .nfce-compact__company {
         display: flex;
         flex-direction: column;
-        gap: 0.8mm;
+        gap: 0.6mm;
         align-items: center;
       }
       .nfce-compact__company-name {
@@ -5235,34 +5238,28 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 1mm;
+        gap: 0.8mm;
         width: 100%;
       }
       .nfce-compact__tags {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.8mm;
+        gap: 0.6mm;
         justify-content: center;
-      }
-      .nfce-compact__tag {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0.6mm 1.6mm;
-        border-radius: 999px;
         font-size: 8.4px;
-        font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.35px;
-        color: #fff;
-        background: var(--receipt-accent);
+        color: var(--receipt-accent);
+      }
+      .nfce-compact__tag {
+        font-weight: 700;
       }
       .nfce-compact__reference {
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
-        gap: 0.8mm;
-        font-size: 8.8px;
+        gap: 0.6mm;
+        font-size: 8.6px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.35px;
@@ -5285,7 +5282,7 @@
         display: flex;
         flex-direction: column;
         gap: 0.6mm;
-        font-size: 8.4px;
+        font-size: 8.2px;
         color: #555;
         text-transform: uppercase;
         letter-spacing: 0.25px;
@@ -5295,39 +5292,33 @@
       .nfce-compact__section {
         display: flex;
         flex-direction: column;
-        gap: 1.2mm;
-        padding: 1.8mm 2mm;
-        border-radius: 1.8mm;
-        border: 1px solid rgba(17, 17, 17, 0.12);
-        background: rgba(17, 17, 17, 0.03);
+        gap: 0.8mm;
+        padding: 0 2mm;
       }
       .nfce-compact__section--items {
-        background: #fff;
-        border-color: rgba(17, 17, 17, 0.18);
+        padding-top: 1.2mm;
       }
       .nfce-compact__section-title {
         margin: 0;
-        font-size: 9.4px;
+        font-size: 9px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.4px;
+        letter-spacing: 0.3px;
         color: #111;
-        text-align: center;
+        text-align: left;
       }
       .nfce-compact__items-table {
         width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
-        font-size: 8.8px;
+        border-collapse: collapse;
+        font-size: 8.6px;
       }
       .nfce-compact__items-table thead th {
         text-align: left;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.3px;
-        padding: 1mm 0;
-        border-bottom: 1px solid rgba(17, 17, 17, 0.35);
-        background: rgba(17, 17, 17, 0.04);
+        padding: 0.8mm 0;
+        border-bottom: 1px solid rgba(17, 17, 17, 0.3);
       }
       .nfce-compact__items-table thead th:nth-child(2) {
         text-align: center;
@@ -5336,7 +5327,7 @@
         text-align: right;
       }
       .nfce-compact__items-table tbody td {
-        padding: 0.8mm 0;
+        padding: 0.6mm 0;
         border-bottom: 1px dashed rgba(17, 17, 17, 0.18);
         vertical-align: top;
       }
@@ -5358,29 +5349,25 @@
       }
       .nfce-compact__item-code {
         display: block;
-        font-size: 7.6px;
+        font-size: 7.4px;
         color: #666;
-        margin-top: 0.4mm;
+        margin-top: 0.3mm;
       }
       .nfce-compact__totals-list {
         list-style: none;
         margin: 0;
         padding: 0;
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 1mm;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4mm;
       }
       .nfce-compact__total {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: baseline;
         gap: 0.6mm;
         font-size: 9px;
         color: #222;
-        border: 1px solid rgba(17, 17, 17, 0.12);
-        border-radius: 1.4mm;
-        padding: 1mm 1.2mm;
-        background: #fff;
       }
       .nfce-compact__total span:first-child {
         text-transform: uppercase;
@@ -5390,61 +5377,54 @@
         font-weight: 700;
       }
       .nfce-compact__total--highlight {
-        grid-column: 1 / -1;
-        background: var(--receipt-accent);
-        color: #fff;
-        border-color: var(--receipt-accent);
-      }
-      .nfce-compact__total--highlight span:last-child {
-        color: #fff;
-        font-size: 10.2px;
+        margin-top: 0.6mm;
+        padding-top: 0.6mm;
+        border-top: 1px solid rgba(17, 17, 17, 0.5);
       }
       .nfce-compact__text {
         margin: 0;
-        font-size: 8.8px;
-        line-height: 1.4;
+        font-size: 8.6px;
+        line-height: 1.35;
         color: #333;
-        text-align: center;
+        text-align: left;
+      }
+      .nfce-compact__text--small {
+        font-size: 8.2px;
       }
       .nfce-compact__qr {
         display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 1.2mm;
-        border: 1px solid rgba(17, 17, 17, 0.12);
-        border-radius: 1.6mm;
-        padding: 1.6mm;
-        background: #fff;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 2mm;
       }
       .nfce-compact__qr img {
-        width: 32mm;
-        height: 32mm;
-        border-radius: 1.2mm;
-        border: 1px solid rgba(17, 17, 17, 0.15);
-        padding: 1mm;
-        background: #fff;
+        width: 30mm;
+        height: 30mm;
         image-rendering: pixelated;
+      }
+      .nfce-compact__qr-details {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.8mm;
+        font-size: 8.2px;
+        color: #444;
       }
       .nfce-compact__qr-payload {
         margin: 0;
-        font-size: 8.4px;
-        color: #444;
         line-height: 1.4;
-        text-align: center;
         word-break: break-word;
       }
       .nfce-compact__qr-note {
         margin: 0;
-        font-size: 8.2px;
-        color: #666;
-        text-align: center;
+        font-weight: 600;
         line-height: 1.4;
       }
       .nfce-compact__access-key {
         margin: 0;
-        font-size: 9.6px;
+        font-size: 9.4px;
         font-weight: 700;
-        letter-spacing: 0.45px;
+        letter-spacing: 0.4px;
         text-align: center;
         word-break: break-word;
       }
@@ -5452,28 +5432,11 @@
         color: #777;
         font-weight: 500;
       }
-      .nfce-compact__info-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 0.8mm;
-        font-size: 8.6px;
-        color: #333;
-        text-align: center;
-      }
-      .nfce-compact__info-list li {
-        line-height: 1.45;
-      }
       .nfce-compact__empty {
-        font-size: 8.6px;
-        text-align: center;
+        font-size: 8.4px;
+        text-align: left;
         color: #666;
-        padding: 1.2mm 0;
-        border: 1px dashed rgba(102, 102, 102, 0.35);
-        border-radius: 1.4mm;
-        background: rgba(0, 0, 0, 0.03);
+        padding: 0.6mm 0;
       }
       .receipt__divider {
         width: 100%;
@@ -6240,8 +6203,10 @@
         <h2 class="nfce-compact__section-title">Consulta</h2>
         <div class="nfce-compact__qr">
           ${qrImageMarkup}
-          <p class="nfce-compact__qr-payload">${qrPayloadText}</p>
-          <p class="nfce-compact__qr-note">${escapeHtml(qrNoteText)}</p>
+          <div class="nfce-compact__qr-details">
+            <p class="nfce-compact__qr-note">${escapeHtml(qrNoteText)}</p>
+            <p class="nfce-compact__qr-payload">${qrPayloadText}</p>
+          </div>
         </div>
       </section>`;
 
@@ -6267,9 +6232,9 @@
     infoLines.push('Documento emitido eletronicamente. Consulte pelo QR Code ou portal da SEFAZ.');
     const infoSection = `<section class="nfce-compact__section nfce-compact__section--notes">
         <h2 class="nfce-compact__section-title">Informações obrigatórias</h2>
-        <ul class="nfce-compact__info-list">
-          ${infoLines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
-        </ul>
+        <p class="nfce-compact__text nfce-compact__text--small">${infoLines
+          .map((line) => escapeHtml(line))
+          .join('<br>')}</p>
       </section>`;
 
     return `
