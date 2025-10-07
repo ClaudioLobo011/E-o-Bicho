@@ -66,6 +66,8 @@ function formatCurrency(value) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
 
+const RESIDUAL_THRESHOLD = 0.009;
+
 async function generateSequentialCode() {
   const now = new Date();
   const year = now.getUTCFullYear();
@@ -113,6 +115,9 @@ function buildInstallmentPayload(installment) {
     issueDate: plain.issueDate,
     dueDate: plain.dueDate,
     value: formatCurrency(plain.value),
+    originalValue: formatCurrency(plain.originalValue || plain.value),
+    paidValue: formatCurrency(plain.paidValue),
+    paidDate: plain.paidDate,
     bankAccount: plain.bankAccount ? {
       _id: plain.bankAccount._id,
       label: buildBankLabel(plain.bankAccount),
@@ -121,6 +126,18 @@ function buildInstallmentPayload(installment) {
       _id: plain.accountingAccount._id,
       label: buildAccountingLabel(plain.accountingAccount),
     } : null,
+    paymentMethod: plain.paymentMethod
+      ? {
+          _id: plain.paymentMethod._id,
+          name: plain.paymentMethod.name,
+          type: plain.paymentMethod.type,
+        }
+      : null,
+    paymentDocument: plain.paymentDocument || '',
+    paymentNotes: plain.paymentNotes || '',
+    residualValue: formatCurrency(plain.residualValue),
+    residualDueDate: plain.residualDueDate,
+    originInstallmentNumber: plain.originInstallmentNumber || null,
     status: plain.status,
   };
 }
@@ -199,6 +216,23 @@ function buildPublicReceivable(receivable, referenceDate = new Date()) {
   };
 }
 
+function recalculateReceivable(receivable) {
+  if (!receivable) return;
+  const installments = Array.isArray(receivable.installments) ? receivable.installments : [];
+  receivable.installmentsCount = installments.length;
+  const total = installments.reduce((acc, installment) => acc + Number(installment.value || 0), 0);
+  receivable.totalValue = formatCurrency(total);
+  const latestDue = installments.reduce((latest, installment) => {
+    const due = parseDate(installment.dueDate);
+    if (!due) return latest;
+    if (!latest || due > latest) return due;
+    return latest;
+  }, null);
+  if (latestDue) {
+    receivable.dueDate = latestDue;
+  }
+}
+
 function summarizeReceivables(receivables, referenceDate = new Date()) {
   const summary = {
     open: { count: 0, total: 0 },
@@ -232,6 +266,7 @@ const RECEIVABLE_POPULATE = [
   { path: 'responsible', select: 'nomeCompleto razaoSocial email' },
   { path: 'installments.bankAccount', select: 'alias bankName bankCode agency accountNumber accountDigit' },
   { path: 'installments.accountingAccount', select: 'name code' },
+  { path: 'installments.paymentMethod', select: 'name type' },
 ];
 
 async function assembleReceivablePayload(body, { existing = null } = {}) {
@@ -401,8 +436,17 @@ async function assembleReceivablePayload(body, { existing = null } = {}) {
       issueDate,
       dueDate: override.dueDate || baseDueDate,
       value,
+      originalValue: value,
+      paidValue: 0,
+      paidDate: null,
       bankAccount: override.bankAccount || bankAccountId,
       accountingAccount: accountingAccountId,
+      paymentMethod: paymentMethodId || undefined,
+      paymentDocument: '',
+      paymentNotes: '',
+      residualValue: 0,
+      residualDueDate: null,
+      originInstallmentNumber: undefined,
     });
   }
 
@@ -644,6 +688,224 @@ router.delete(
     } catch (error) {
       console.error('Erro ao excluir conta a receber:', error);
       res.status(500).json({ message: 'Erro ao excluir a conta a receber.' });
+    }
+  }
+);
+
+router.post(
+  '/:id/payments',
+  requireAuth,
+  authorizeRoles(...AUTH_ROLES),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Identificador inválido.' });
+      }
+
+      const installmentParam =
+        req.body?.installmentNumber ?? req.body?.installment ?? req.body?.parcel ?? null;
+      const installmentNumber = installmentParam ? Number.parseInt(installmentParam, 10) : null;
+      if (!Number.isFinite(installmentNumber) || installmentNumber < 1) {
+        return res.status(400).json({ message: 'Informe a parcela que está sendo quitada.' });
+      }
+
+      const paymentDate = parseDate(req.body?.paymentDate || req.body?.date);
+      if (!paymentDate) {
+        return res.status(400).json({ message: 'Informe uma data de pagamento válida.' });
+      }
+
+      const paidValue = formatCurrency(
+        parseLocaleNumber(req.body?.paidValue ?? req.body?.value ?? req.body?.amount ?? 0, 0)
+      );
+      if (!(paidValue > 0)) {
+        return res.status(400).json({ message: 'Informe um valor pago maior que zero.' });
+      }
+
+      const residualProvided = formatCurrency(
+        parseLocaleNumber(req.body?.residualValue ?? req.body?.residual ?? 0, 0)
+      );
+      const residualDueRaw = req.body?.residualDueDate || req.body?.residualDue || null;
+      const paymentDocument = normalizeString(req.body?.paymentDocument || req.body?.documento);
+      const paymentNotes = normalizeString(req.body?.notes || req.body?.paymentNotes);
+
+      const receivable = await AccountReceivable.findById(id);
+      if (!receivable) {
+        return res.status(404).json({ message: 'Conta a receber não encontrada.' });
+      }
+
+      const installmentsArray = Array.isArray(receivable.installments)
+        ? receivable.installments
+        : [];
+      const targetInstallment = installmentsArray.find(
+        (installment) => Number(installment.number) === Number(installmentNumber)
+      );
+
+      if (!targetInstallment) {
+        return res.status(404).json({ message: 'Parcela informada não foi encontrada.' });
+      }
+
+      const originalValue = formatCurrency(
+        targetInstallment.originalValue || targetInstallment.value || 0
+      );
+      if (!(originalValue > 0)) {
+        return res
+          .status(400)
+          .json({ message: 'Parcela selecionada não possui valor válido para pagamento.' });
+      }
+
+      if (paidValue - originalValue > RESIDUAL_THRESHOLD) {
+        return res
+          .status(400)
+          .json({ message: 'O valor pago não pode ser maior que o valor da parcela.' });
+      }
+
+      const companyId = String(receivable.company);
+
+      const bankAccountParam =
+        normalizeString(req.body?.bankAccount || req.body?.bankAccountId) || '';
+      const finalBankAccount =
+        bankAccountParam
+        || (targetInstallment.bankAccount ? String(targetInstallment.bankAccount) : '');
+      if (!finalBankAccount || !mongoose.Types.ObjectId.isValid(finalBankAccount)) {
+        return res.status(400).json({ message: 'Selecione a conta corrente do recebimento.' });
+      }
+
+      const bankAccountExists = await BankAccount.exists({
+        _id: finalBankAccount,
+        company: companyId,
+      });
+      if (!bankAccountExists) {
+        return res.status(404).json({ message: 'Conta corrente informada não foi encontrada.' });
+      }
+
+      let finalPaymentMethod = normalizeString(
+        req.body?.paymentMethod || req.body?.paymentMethodId
+      );
+      if (!finalPaymentMethod && targetInstallment.paymentMethod) {
+        finalPaymentMethod = String(targetInstallment.paymentMethod);
+      }
+      if (!finalPaymentMethod && receivable.paymentMethod) {
+        finalPaymentMethod = String(receivable.paymentMethod);
+      }
+
+      let paymentMethodDoc = null;
+      if (finalPaymentMethod) {
+        if (!mongoose.Types.ObjectId.isValid(finalPaymentMethod)) {
+          return res.status(400).json({ message: 'Meio de pagamento informado é inválido.' });
+        }
+        paymentMethodDoc = await PaymentMethod.findOne({
+          _id: finalPaymentMethod,
+          company: companyId,
+        }).select('type name');
+        if (!paymentMethodDoc) {
+          return res
+            .status(404)
+            .json({ message: 'Meio de pagamento informado não foi encontrado.' });
+        }
+        if ((paymentMethodDoc.type || '').toLowerCase() === 'crediario') {
+          return res
+            .status(400)
+            .json({ message: 'Não é permitido utilizar um meio de pagamento do tipo crediário.' });
+        }
+      }
+
+      const missingValue = formatCurrency(originalValue - paidValue);
+
+      let residualValue = residualProvided;
+      if (missingValue > RESIDUAL_THRESHOLD && residualValue <= RESIDUAL_THRESHOLD) {
+        residualValue = missingValue;
+      }
+
+      const hasResidual = residualValue > RESIDUAL_THRESHOLD;
+      const residualDueDate = hasResidual ? parseDate(residualDueRaw) : null;
+
+      if (hasResidual && !residualDueDate) {
+        return res
+          .status(400)
+          .json({ message: 'Informe uma data de vencimento válida para o resíduo.' });
+      }
+
+      if (hasResidual && Math.abs(residualValue - missingValue) > RESIDUAL_THRESHOLD) {
+        return res
+          .status(400)
+          .json({ message: 'O valor do resíduo deve corresponder ao saldo da parcela.' });
+      }
+
+      if (!hasResidual && missingValue > RESIDUAL_THRESHOLD) {
+        return res
+          .status(400)
+          .json({ message: 'O valor informado não quita a parcela. Cadastre o resíduo.' });
+      }
+
+      const accountingAccountId = targetInstallment.accountingAccount
+        ? String(targetInstallment.accountingAccount)
+        : receivable.accountingAccount
+        ? String(receivable.accountingAccount)
+        : null;
+      if (!accountingAccountId) {
+        return res
+          .status(400)
+          .json({ message: 'Conta contábil vinculada à parcela não foi encontrada.' });
+      }
+
+      targetInstallment.originalValue = originalValue;
+      targetInstallment.value = formatCurrency(paidValue);
+      targetInstallment.paidValue = formatCurrency(paidValue);
+      targetInstallment.paidDate = paymentDate;
+      targetInstallment.bankAccount = finalBankAccount;
+      if (finalPaymentMethod) {
+        targetInstallment.paymentMethod = finalPaymentMethod;
+      } else {
+        targetInstallment.paymentMethod = undefined;
+      }
+      targetInstallment.paymentDocument = paymentDocument;
+      targetInstallment.paymentNotes = paymentNotes;
+      targetInstallment.residualValue = hasResidual ? residualValue : 0;
+      if (hasResidual) {
+        targetInstallment.residualDueDate = residualDueDate;
+      } else {
+        targetInstallment.residualDueDate = undefined;
+      }
+      targetInstallment.status = 'received';
+
+      if (hasResidual) {
+        const maxNumber = installmentsArray.reduce(
+          (acc, installment) => Math.max(acc, Number(installment.number) || 0),
+          0
+        );
+        installmentsArray.push({
+          number: maxNumber + 1,
+          issueDate: paymentDate,
+          dueDate: residualDueDate,
+          value: residualValue,
+          originalValue: residualValue,
+          paidValue: 0,
+          paidDate: null,
+          bankAccount: finalBankAccount,
+          accountingAccount: accountingAccountId,
+          paymentMethod: finalPaymentMethod || undefined,
+          paymentDocument: '',
+          paymentNotes: '',
+          residualValue: 0,
+          residualDueDate: null,
+          originInstallmentNumber: targetInstallment.number || installmentNumber,
+          status: 'pending',
+        });
+      }
+
+      receivable.markModified('installments');
+      recalculateReceivable(receivable);
+      await receivable.save();
+      await receivable.populate(RECEIVABLE_POPULATE);
+
+      return res.json(buildPublicReceivable(receivable));
+    } catch (error) {
+      if (error?.status) {
+        return res.status(error.status).json({ message: error.message });
+      }
+      console.error('Erro ao registrar pagamento de conta a receber:', error);
+      return res.status(500).json({ message: 'Erro ao registrar o pagamento da conta a receber.' });
     }
   }
 );

@@ -467,6 +467,13 @@
           issueDate: installment.issueDate || receivable.issueDate || null,
           dueDate: installment.dueDate || receivable.dueDate || null,
           value: Number(installment.value || 0),
+          originalValue: Number(
+            installment.originalValue !== undefined && installment.originalValue !== null
+              ? installment.originalValue
+              : installment.value || 0
+          ),
+          paidValue: Number(installment.paidValue || 0),
+          paidDate: installment.paidDate || null,
           bankAccountId:
             (installment.bankAccount && typeof installment.bankAccount === 'object'
               ? installment.bankAccount._id
@@ -483,6 +490,26 @@
             (installment.accountingAccount && typeof installment.accountingAccount === 'object'
               ? installment.accountingAccount.label
               : '') || '',
+          paymentMethodId:
+            (installment.paymentMethod && typeof installment.paymentMethod === 'object'
+              ? installment.paymentMethod._id
+              : installment.paymentMethod) || '',
+          paymentMethodLabel:
+            (installment.paymentMethod && typeof installment.paymentMethod === 'object'
+              ? installment.paymentMethod.name
+              : installment.paymentMethodLabel) || '',
+          paymentMethodType: (() => {
+            const rawType =
+              installment.paymentMethod && typeof installment.paymentMethod === 'object'
+                ? installment.paymentMethod.type
+                : installment.paymentMethodType || '';
+            return typeof rawType === 'string' ? rawType.toLowerCase() : '';
+          })(),
+          paymentDocument: installment.paymentDocument || '',
+          paymentNotes: installment.paymentNotes || '',
+          residualValue: Number(installment.residualValue || 0),
+          residualDueDate: installment.residualDueDate || null,
+          originInstallmentNumber: installment.originInstallmentNumber || null,
           status: installment.status || computeStatus(receivable, installment),
         }))
       : [];
@@ -833,6 +860,33 @@
     return normalized;
   }
 
+  async function registerPayment(receivableId, payload = {}) {
+    if (!receivableId) {
+      throw new Error('Selecione um lançamento válido para registrar o pagamento.');
+    }
+    const response = await fetch(`${RECEIVABLES_API}/${receivableId}/payments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      if (await handleUnauthorized(response)) {
+        return null;
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData?.message || 'Não foi possível registrar o pagamento.');
+    }
+    const data = await response.json();
+    const normalized = normalizeReceivable(data.receivable || data);
+    if (normalized) {
+      storeReceivableInCache(normalized);
+    }
+    return normalized;
+  }
+
   function renderForecast() {
     if (!elements.forecastBody) return;
     const tbody = elements.forecastBody;
@@ -875,12 +929,20 @@
           || receivable.bankAccount?.name
           || '';
         const paymentMethodId =
-          receivable.paymentMethod?._id
+          installment.paymentMethodId
+          || receivable.paymentMethod?._id
           || (typeof receivable.paymentMethod === 'string' ? receivable.paymentMethod : '');
-        const paymentMethodLabel = receivable.paymentMethod?.name || '';
+        const paymentMethodLabel =
+          installment.paymentMethodLabel || receivable.paymentMethod?.name || '';
         const issueDate = installment.issueDate || receivable.issueDate || null;
-        const notes = receivable.notes || '';
-        const paymentMethodType = (receivable.paymentMethod?.type || '').toLowerCase();
+        const notes = installment.paymentNotes || receivable.notes || '';
+        const paymentMethodType =
+          (installment.paymentMethodType
+            || (typeof receivable.paymentMethod?.type === 'string'
+              ? receivable.paymentMethod.type
+              : '')
+            || ''
+          ).toLowerCase();
         rows.push({
           receivableId: receivable.id || receivable._id,
           code: receivable.code || receivable.documentNumber || receivable.document || '—',
@@ -1066,12 +1128,20 @@
           || receivable.bankAccount?.name
           || '';
         const paymentMethodId =
-          receivable.paymentMethod?._id
+          installment.paymentMethodId
+          || receivable.paymentMethod?._id
           || (typeof receivable.paymentMethod === 'string' ? receivable.paymentMethod : '');
-        const paymentMethodLabel = receivable.paymentMethod?.name || '';
+        const paymentMethodLabel =
+          installment.paymentMethodLabel || receivable.paymentMethod?.name || '';
         const issueDate = installment.issueDate || receivable.issueDate || null;
-        const notes = receivable.notes || '';
-        const paymentMethodType = (receivable.paymentMethod?.type || '').toLowerCase();
+        const notes = installment.paymentNotes || receivable.notes || '';
+        const paymentMethodType =
+          (installment.paymentMethodType
+            || (typeof receivable.paymentMethod?.type === 'string'
+              ? receivable.paymentMethod.type
+              : '')
+            || ''
+          ).toLowerCase();
         rows.push({
           receivableId: receivable.id || receivable._id,
           code: receivable.code || receivable.documentNumber || receivable.document || '—',
@@ -1867,7 +1937,7 @@
           message: messageHtml,
           confirmText: 'Confirmar pagamento',
           cancelText: 'Cancelar',
-          onConfirm: () => {
+          onConfirm: async () => {
             const form = document.getElementById('payment-confirm-form');
             if (!form) {
               notify('Pagamento confirmado com sucesso.', 'success');
@@ -1922,51 +1992,65 @@
 
             const paymentDateLabel = formatDateBR(paymentDateParsed);
             const paidValueLabel = formatCurrencyBR(paidValue);
-            const bankSelect = form.querySelector('select[name="bankAccount"]');
-            const paymentSelect = form.querySelector('select[name="paymentMethod"]');
-            const bankOptionLabel = bankSelect?.options?.[bankSelect.selectedIndex]?.textContent?.trim() || '';
-            const paymentOptionLabel = paymentSelect?.options?.[paymentSelect.selectedIndex]?.textContent?.trim() || '';
             const residualDueLabel = residualDueParsed ? formatDateBR(residualDueParsed) : residualDueRaw || '--';
             const residualValueLabel = formatCurrencyBR(residualValue);
 
-            if (hasResidual) {
-              notify(
-                `Pagamento parcial registrado: ${paidValueLabel} recebido em ${paymentDateLabel}. Resíduo de ${residualValueLabel} vence em ${residualDueLabel}.`,
-                'success'
-              );
-            } else {
-              notify(`Pagamento de ${paidValueLabel} em ${paymentDateLabel} confirmado para ${customerLabel}.`, 'success');
-            }
+            const normalizedBankAccount = bankAccount || context.bankAccountId || '';
+            const normalizedPaymentMethod = paymentMethod || context.paymentMethodId || '';
+            const paymentDocumentValue = typeof paymentDocument === 'string' ? paymentDocument.trim() : '';
+            const paymentNotesValue = typeof notes === 'string' ? notes.trim() : '';
+            const payload = {
+              installmentNumber: context.installmentNumber || 1,
+              paymentDate,
+              paidValue,
+              bankAccount: normalizedBankAccount,
+              paymentMethod: normalizedPaymentMethod,
+              paymentDocument: paymentDocumentValue,
+              notes: paymentNotesValue,
+              residualValue: hasResidual ? residualValue : 0,
+              residualDueDate: hasResidual ? residualDueRaw : null,
+            };
+
+            const confirmButton = document.getElementById('confirm-modal-confirm-btn');
+            const toggleConfirmState = (disabled) => {
+              if (!confirmButton) return;
+              confirmButton.disabled = !!disabled;
+              confirmButton.classList.toggle('opacity-60', !!disabled);
+              confirmButton.classList.toggle('cursor-wait', !!disabled);
+            };
 
             try {
-              console.log('Pagamento confirmado', {
-                receivableId: context.receivableId,
-                installmentNumber: context.installmentNumber,
-                totalValue,
-                paymentDate,
-                paidValue,
-                bankAccount,
-                bankAccountLabel: bankOptionLabel,
-                paymentMethod,
-                paymentMethodLabel: paymentOptionLabel,
-                paymentDocument,
-                notes,
-                residual:
-                  hasResidual
-                    ? {
-                        value: residualValue,
-                        label: residualValueLabel,
-                        dueDate: residualDueRaw,
-                        dueDateLabel: residualDueLabel,
-                      }
-                    : null,
-              });
-            } catch (_) {
-              /* ignore console errors */
-            }
+              toggleConfirmState(true);
 
-            finalize(true);
-            return true;
+              const registered = await registerPayment(context.receivableId, payload);
+              if (!registered) {
+                return false;
+              }
+
+              if (hasResidual) {
+                notify(
+                  `Pagamento parcial registrado: ${paidValueLabel} recebido em ${paymentDateLabel}. Resíduo de ${residualValueLabel} vence em ${residualDueLabel}.`,
+                  'success'
+                );
+              } else {
+                notify(
+                  `Pagamento de ${paidValueLabel} em ${paymentDateLabel} confirmado para ${customerLabel}.`,
+                  'success'
+                );
+              }
+
+              await loadReceivables();
+              await loadHistory();
+
+              finalize(true);
+              return true;
+            } catch (error) {
+              console.error('accounts-receivable:registerPayment', error);
+              notify(error.message || 'Não foi possível registrar o pagamento.', 'error');
+              return false;
+            } finally {
+              toggleConfirmState(false);
+            }
           },
           onCancel: () => {
             finalize(false);
