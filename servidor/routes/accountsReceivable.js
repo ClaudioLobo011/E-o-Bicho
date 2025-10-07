@@ -68,6 +68,94 @@ function formatCurrency(value) {
 
 const RESIDUAL_THRESHOLD = 0.009;
 
+function normalizeStatusToken(value) {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  let normalized = trimmed;
+  if (typeof normalized.normalize === 'function') {
+    try {
+      normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    } catch (error) {
+      /* ignore */
+    }
+  }
+  normalized = normalized.replace(/[^a-z0-9\s-]/gi, ' ');
+  return normalized.replace(/[\s_-]+/g, ' ').trim().toLowerCase();
+}
+
+const FINALIZED_STATUS_KEYS = new Set([
+  'received',
+  'recebido',
+  'recebida',
+  'paid',
+  'pago',
+  'paga',
+  'finalized',
+  'finalizado',
+  'finalizada',
+  'quitado',
+  'quitada',
+  'liquidado',
+  'liquidada',
+  'baixado',
+  'baixada',
+  'compensado',
+  'compensada',
+  'settled',
+  'concluido',
+  'concluida',
+]);
+
+const UNCOLLECTIBLE_STATUS_KEYS = new Set([
+  'uncollectible',
+  'incobravel',
+  'impagavel',
+  'perda',
+  'perdido',
+  'prejuizo',
+  'writeoff',
+]);
+
+const PROTEST_STATUS_KEYS = new Set([
+  'protest',
+  'protesto',
+  'protestado',
+  'protestada',
+  'em protesto',
+]);
+
+const OPEN_STATUS_KEYS = new Set([
+  'open',
+  'pending',
+  'pendente',
+  'aberto',
+  'em aberto',
+  'overdue',
+  'vencido',
+  'vencida',
+  'atrasado',
+  'atrasada',
+  'late',
+  'aguardando',
+  'aguardando pagamento',
+  'em atraso',
+  'inadimplente',
+  'inadimplencia',
+  'partial',
+  'parcial',
+]);
+
+function canonicalStatus(value) {
+  const token = normalizeStatusToken(value);
+  if (!token) return '';
+  if (FINALIZED_STATUS_KEYS.has(token)) return 'finalized';
+  if (UNCOLLECTIBLE_STATUS_KEYS.has(token)) return 'uncollectible';
+  if (PROTEST_STATUS_KEYS.has(token)) return 'protest';
+  if (OPEN_STATUS_KEYS.has(token)) return 'open';
+  return '';
+}
+
 async function generateSequentialCode() {
   const now = new Date();
   const year = now.getUTCFullYear();
@@ -138,28 +226,39 @@ function buildInstallmentPayload(installment) {
     residualValue: formatCurrency(plain.residualValue),
     residualDueDate: plain.residualDueDate,
     originInstallmentNumber: plain.originInstallmentNumber || null,
-    status: plain.status,
+    status: canonicalStatus(plain.status) || 'open',
   };
 }
 
 function computeStatus(receivable) {
   if (!receivable) return 'open';
-  if (receivable?.uncollectible) return 'uncollectible';
-  if (receivable?.protest) return 'protest';
+  const receivableStatus = canonicalStatus(receivable?.status);
 
-  const normalize = (value) => (typeof value === 'string' ? value.toLowerCase() : '');
-  const finalizedStatuses = new Set(['received', 'paid', 'finalized', 'quitado']);
-
-  if (finalizedStatuses.has(normalize(receivable?.status))) {
-    return 'finalized';
+  if (receivable?.uncollectible || receivableStatus === 'uncollectible') {
+    return 'uncollectible';
+  }
+  if (receivable?.protest || receivableStatus === 'protest') {
+    return 'protest';
   }
 
   const installments = Array.isArray(receivable?.installments) ? receivable.installments : [];
   if (installments.length > 0) {
-    const allFinalized = installments.every((item) => finalizedStatuses.has(normalize(item?.status)));
+    const anyUncollectible = installments.some((item) => canonicalStatus(item?.status) === 'uncollectible');
+    if (anyUncollectible) {
+      return 'uncollectible';
+    }
+    const anyProtest = installments.some((item) => canonicalStatus(item?.status) === 'protest');
+    if (anyProtest) {
+      return 'protest';
+    }
+    const allFinalized = installments.every((item) => canonicalStatus(item?.status) === 'finalized');
     if (allFinalized) {
       return 'finalized';
     }
+  }
+
+  if (receivableStatus === 'finalized') {
+    return 'finalized';
   }
 
   return 'open';

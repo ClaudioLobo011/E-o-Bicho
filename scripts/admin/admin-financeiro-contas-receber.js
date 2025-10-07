@@ -462,60 +462,64 @@
     normalized.customer = receivable.customer || null;
     normalized.totalValue = Number(receivable.totalValue || 0);
     normalized.installments = Array.isArray(receivable.installments)
-      ? receivable.installments.map((installment, index) => ({
-          number: installment.number || index + 1,
-          issueDate: installment.issueDate || receivable.issueDate || null,
-          dueDate: installment.dueDate || receivable.dueDate || null,
-          value: Number(installment.value || 0),
-          originalValue: Number(
-            installment.originalValue !== undefined && installment.originalValue !== null
-              ? installment.originalValue
-              : installment.value || 0
-          ),
-          paidValue: Number(installment.paidValue || 0),
-          paidDate: installment.paidDate || null,
-          bankAccountId:
-            (installment.bankAccount && typeof installment.bankAccount === 'object'
-              ? installment.bankAccount._id
-              : installment.bankAccount) || '',
-          bankAccountLabel:
-            (installment.bankAccount && typeof installment.bankAccount === 'object'
-              ? installment.bankAccount.label
-              : '') || '',
-          accountingAccountId:
-            (installment.accountingAccount && typeof installment.accountingAccount === 'object'
-              ? installment.accountingAccount._id
-              : installment.accountingAccount) || '',
-          accountingAccountLabel:
-            (installment.accountingAccount && typeof installment.accountingAccount === 'object'
-              ? installment.accountingAccount.label
-              : '') || '',
-          paymentMethodId:
-            (installment.paymentMethod && typeof installment.paymentMethod === 'object'
-              ? installment.paymentMethod._id
-              : installment.paymentMethod) || '',
-          paymentMethodLabel:
-            (installment.paymentMethod && typeof installment.paymentMethod === 'object'
-              ? installment.paymentMethod.name
-              : installment.paymentMethodLabel) || '',
-          paymentMethodType: (() => {
-            const rawType =
-              installment.paymentMethod && typeof installment.paymentMethod === 'object'
-                ? installment.paymentMethod.type
-                : installment.paymentMethodType || '';
-            return typeof rawType === 'string' ? rawType.toLowerCase() : '';
-          })(),
-          paymentDocument: installment.paymentDocument || '',
-          paymentNotes: installment.paymentNotes || '',
-          residualValue: Number(installment.residualValue || 0),
-          residualDueDate: installment.residualDueDate || null,
-          originInstallmentNumber: installment.originInstallmentNumber || null,
-          status: installment.status || computeStatus(receivable, installment),
-        }))
+      ? receivable.installments.map((installment, index) => {
+          const computedStatus = computeStatus(receivable, installment);
+          const normalizedStatus = canonicalStatus(installment?.status) || computedStatus;
+          return {
+            number: installment.number || index + 1,
+            issueDate: installment.issueDate || receivable.issueDate || null,
+            dueDate: installment.dueDate || receivable.dueDate || null,
+            value: Number(installment.value || 0),
+            originalValue: Number(
+              installment.originalValue !== undefined && installment.originalValue !== null
+                ? installment.originalValue
+                : installment.value || 0
+            ),
+            paidValue: Number(installment.paidValue || 0),
+            paidDate: installment.paidDate || null,
+            bankAccountId:
+              (installment.bankAccount && typeof installment.bankAccount === 'object'
+                ? installment.bankAccount._id
+                : installment.bankAccount) || '',
+            bankAccountLabel:
+              (installment.bankAccount && typeof installment.bankAccount === 'object'
+                ? installment.bankAccount.label
+                : '') || '',
+            accountingAccountId:
+              (installment.accountingAccount && typeof installment.accountingAccount === 'object'
+                ? installment.accountingAccount._id
+                : installment.accountingAccount) || '',
+            accountingAccountLabel:
+              (installment.accountingAccount && typeof installment.accountingAccount === 'object'
+                ? installment.accountingAccount.label
+                : '') || '',
+            paymentMethodId:
+              (installment.paymentMethod && typeof installment.paymentMethod === 'object'
+                ? installment.paymentMethod._id
+                : installment.paymentMethod) || '',
+            paymentMethodLabel:
+              (installment.paymentMethod && typeof installment.paymentMethod === 'object'
+                ? installment.paymentMethod.name
+                : installment.paymentMethodLabel) || '',
+            paymentMethodType: (() => {
+              const rawType =
+                installment.paymentMethod && typeof installment.paymentMethod === 'object'
+                  ? installment.paymentMethod.type
+                  : installment.paymentMethodType || '';
+              return typeof rawType === 'string' ? rawType.toLowerCase() : '';
+            })(),
+            paymentDocument: installment.paymentDocument || '',
+            paymentNotes: installment.paymentNotes || '',
+            residualValue: Number(installment.residualValue || 0),
+            residualDueDate: installment.residualDueDate || null,
+            originInstallmentNumber: installment.originInstallmentNumber || null,
+            status: normalizedStatus,
+          };
+        })
       : [];
     normalized.installmentsCount =
       receivable.installmentsCount || (Array.isArray(normalized.installments) ? normalized.installments.length : 0) || 1;
-    normalized.status = receivable.status || computeStatus(receivable);
+    normalized.status = canonicalStatus(receivable.status) || computeStatus(normalized);
     normalized.forecast = !!receivable.forecast;
     normalized.uncollectible = !!receivable.uncollectible;
     normalized.protest = !!receivable.protest;
@@ -564,22 +568,122 @@
     });
   }
 
+  function normalizeStatusToken(value) {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    let normalized = trimmed;
+    if (typeof normalized.normalize === 'function') {
+      try {
+        normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      } catch (error) {
+        /* ignore */
+      }
+    }
+    normalized = normalized.replace(/[^a-z0-9\s-]/gi, ' ');
+    return normalized.replace(/[\s_-]+/g, ' ').trim().toLowerCase();
+  }
+
+  const FINALIZED_STATUS_KEYS = new Set([
+    'received',
+    'recebido',
+    'recebida',
+    'paid',
+    'pago',
+    'paga',
+    'finalized',
+    'finalizado',
+    'finalizada',
+    'quitado',
+    'quitada',
+    'liquidado',
+    'liquidada',
+    'baixado',
+    'baixada',
+    'compensado',
+    'compensada',
+    'settled',
+    'concluido',
+    'concluida',
+  ]);
+
+  const UNCOLLECTIBLE_STATUS_KEYS = new Set([
+    'uncollectible',
+    'incobravel',
+    'impagavel',
+    'perda',
+    'perdido',
+    'prejuizo',
+    'writeoff',
+  ]);
+
+  const PROTEST_STATUS_KEYS = new Set([
+    'protest',
+    'protesto',
+    'protestado',
+    'protestada',
+    'em protesto',
+  ]);
+
+  const OPEN_STATUS_KEYS = new Set([
+    'open',
+    'pending',
+    'pendente',
+    'aberto',
+    'em aberto',
+    'overdue',
+    'vencido',
+    'vencida',
+    'atrasado',
+    'atrasada',
+    'late',
+    'aguardando',
+    'aguardando pagamento',
+    'em atraso',
+    'inadimplente',
+    'inadimplencia',
+    'partial',
+    'parcial',
+  ]);
+
+  function canonicalStatus(value) {
+    const token = normalizeStatusToken(value);
+    if (!token) return '';
+    if (FINALIZED_STATUS_KEYS.has(token)) return 'finalized';
+    if (UNCOLLECTIBLE_STATUS_KEYS.has(token)) return 'uncollectible';
+    if (PROTEST_STATUS_KEYS.has(token)) return 'protest';
+    if (OPEN_STATUS_KEYS.has(token)) return 'open';
+    return '';
+  }
+
   function computeStatus(receivable, installment) {
     if (!receivable) return 'open';
-    if (receivable.uncollectible) return 'uncollectible';
-    if (receivable.protest) return 'protest';
+    const receivableStatus = canonicalStatus(receivable.status);
+    if (receivable.uncollectible || receivableStatus === 'uncollectible') {
+      return 'uncollectible';
+    }
+    if (receivable.protest || receivableStatus === 'protest') {
+      return 'protest';
+    }
 
-    const normalize = (value) => (typeof value === 'string' ? value.toLowerCase() : '');
-    const installmentStatus = normalize(installment?.status || receivable.status);
-    const finalizedStatuses = new Set(['received', 'paid', 'finalized', 'quitado']);
+    const installmentStatus = canonicalStatus(installment?.status);
+    if (installmentStatus === 'finalized') {
+      return 'finalized';
+    }
+    if (installmentStatus === 'uncollectible') {
+      return 'uncollectible';
+    }
+    if (installmentStatus === 'protest') {
+      return 'protest';
+    }
 
-    if (finalizedStatuses.has(installmentStatus)) {
+    if (receivableStatus === 'finalized') {
       return 'finalized';
     }
 
     const installments = Array.isArray(receivable.installments) ? receivable.installments : [];
     if (installments.length > 0) {
-      const allFinalized = installments.every((item) => finalizedStatuses.has(normalize(item?.status)));
+      const allFinalized = installments.every((item) => canonicalStatus(item?.status) === 'finalized');
       if (allFinalized) {
         return 'finalized';
       }
@@ -612,7 +716,8 @@
       },
     };
 
-    return map[status] || map.open;
+    const normalized = canonicalStatus(status) || 'open';
+    return map[normalized] || map.open;
   }
 
   function updateSummary(summary = {}) {
@@ -913,7 +1018,7 @@
               number: 1,
               dueDate: receivable.dueDate,
               value: receivable.totalValue,
-              status: receivable.status || computeStatus(receivable),
+              status: canonicalStatus(receivable.status) || computeStatus(receivable),
             },
           ];
 
@@ -936,6 +1041,19 @@
           installment.paymentMethodLabel || receivable.paymentMethod?.name || '';
         const issueDate = installment.issueDate || receivable.issueDate || null;
         const notes = installment.paymentNotes || receivable.notes || '';
+        const computedStatus = computeStatus(receivable, installment);
+        const normalizedStatus = canonicalStatus(installment.status) || computedStatus;
+        const originRaw = installment.originInstallmentNumber;
+        const originNumber = Number.parseInt(originRaw, 10);
+        const isResidual = Number.isFinite(originNumber);
+        const baseDocument =
+          receivable.documentNumber || receivable.document || receivable.code || '—';
+        const hasBaseDocument = baseDocument && baseDocument !== '—';
+        const documentLabel = isResidual
+          ? hasBaseDocument
+            ? `${baseDocument} (Resíduo)`
+            : 'Resíduo'
+          : baseDocument;
         const paymentMethodType =
           (installment.paymentMethodType
             || (typeof receivable.paymentMethod?.type === 'string'
@@ -947,11 +1065,12 @@
           receivableId: receivable.id || receivable._id,
           code: receivable.code || receivable.documentNumber || receivable.document || '—',
           customer: receivable.customer?.name || '—',
-          document: receivable.documentNumber || receivable.document || receivable.code || '—',
+          document: documentLabel,
           dueDate: installment.dueDate || receivable.dueDate,
           value: installment.value || receivable.totalValue,
-          status: installment.status || computeStatus(receivable, installment),
+          status: normalizedStatus,
           installmentNumber: installment.number || null,
+          originInstallmentNumber: isResidual ? originNumber : null,
           issueDate,
           bankAccountId,
           bankAccountLabel,
@@ -993,6 +1112,9 @@
         button.dataset.id = item.receivableId || '';
         if (item.installmentNumber) {
           button.dataset.installment = String(item.installmentNumber);
+        }
+        if (Number.isFinite(item.originInstallmentNumber)) {
+          button.dataset.origin = String(item.originInstallmentNumber);
         }
         if (item.customer) button.dataset.customer = item.customer;
         if (item.document) button.dataset.document = item.document;
@@ -1112,7 +1234,7 @@
               number: 1,
               dueDate: receivable.dueDate,
               value: receivable.totalValue,
-              status: receivable.status || computeStatus(receivable),
+              status: canonicalStatus(receivable.status) || computeStatus(receivable),
             },
           ];
 
@@ -1135,6 +1257,19 @@
           installment.paymentMethodLabel || receivable.paymentMethod?.name || '';
         const issueDate = installment.issueDate || receivable.issueDate || null;
         const notes = installment.paymentNotes || receivable.notes || '';
+        const computedStatus = computeStatus(receivable, installment);
+        const normalizedStatus = canonicalStatus(installment.status) || computedStatus;
+        const originRaw = installment.originInstallmentNumber;
+        const originNumber = Number.parseInt(originRaw, 10);
+        const isResidual = Number.isFinite(originNumber);
+        const baseDocument =
+          receivable.documentNumber || receivable.document || receivable.code || '—';
+        const hasBaseDocument = baseDocument && baseDocument !== '—';
+        const documentLabel = isResidual
+          ? hasBaseDocument
+            ? `${baseDocument} (Resíduo)`
+            : 'Resíduo'
+          : baseDocument;
         const paymentMethodType =
           (installment.paymentMethodType
             || (typeof receivable.paymentMethod?.type === 'string'
@@ -1146,11 +1281,12 @@
           receivableId: receivable.id || receivable._id,
           code: receivable.code || receivable.documentNumber || receivable.document || '—',
           customer: receivable.customer?.name || '—',
-          document: receivable.documentNumber || receivable.document || receivable.code || '—',
+          document: documentLabel,
           dueDate: installment.dueDate || receivable.dueDate,
           value: installment.value || receivable.totalValue,
-          status: installment.status || computeStatus(receivable, installment),
+          status: normalizedStatus,
           installmentNumber: installment.number || null,
+          originInstallmentNumber: isResidual ? originNumber : null,
           issueDate,
           bankAccountId,
           bankAccountLabel,
@@ -1192,6 +1328,9 @@
         button.dataset.id = item.receivableId || '';
         if (item.installmentNumber) {
           button.dataset.installment = String(item.installmentNumber);
+        }
+        if (Number.isFinite(item.originInstallmentNumber)) {
+          button.dataset.origin = String(item.originInstallmentNumber);
         }
         if (item.customer) button.dataset.customer = item.customer;
         if (item.document) button.dataset.document = item.document;
@@ -1515,7 +1654,7 @@
             bankAccountLabel: bankLabel,
             accountingAccountId,
             accountingAccountLabel: accountingLabel,
-            status: receivable.status || 'pending',
+            status: canonicalStatus(receivable.status) || computeStatus(receivable) || 'open',
           },
         ];
 
@@ -1540,7 +1679,11 @@
         || installment.accountingAccount?.label
         || accountingLabel
         || '',
-      status: installment.status || receivable.status || 'pending',
+      status:
+        canonicalStatus(installment.status)
+          || canonicalStatus(receivable.status)
+          || computeStatus(receivable, installment)
+          || 'open',
     }));
 
     updateInstallmentsTable(state.previewInstallments, {
