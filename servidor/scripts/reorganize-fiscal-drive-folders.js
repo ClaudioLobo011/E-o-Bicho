@@ -13,6 +13,96 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const isDryRun = process.argv.includes('--dry-run');
 
+const DRIVE_ID_MIN_LENGTH = 15;
+const DRIVE_ID_REGEX = new RegExp(`^[A-Za-z0-9_-]{${DRIVE_ID_MIN_LENGTH},}$`);
+const DRIVE_PATH_REGEXES = [
+  /\/d\/([A-Za-z0-9_-]{15,})/i,
+  /\/file\/d\/([A-Za-z0-9_-]{15,})/i,
+  /\/folders\/([A-Za-z0-9_-]{15,})/i,
+];
+
+const flatten = (values) => {
+  const result = [];
+  const queue = Array.isArray(values) ? [...values] : [values];
+  while (queue.length) {
+    const value = queue.shift();
+    if (Array.isArray(value)) {
+      queue.push(...value);
+      continue;
+    }
+    if (value !== undefined && value !== null) {
+      result.push(value);
+    }
+  }
+  return result;
+};
+
+const looksLikeDriveId = (value) => {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  return DRIVE_ID_REGEX.test(trimmed);
+};
+
+const extractDriveFileId = (...candidates) => {
+  const inputs = flatten(candidates);
+
+  for (const raw of inputs) {
+    if (typeof raw !== 'string' && typeof raw !== 'number') {
+      continue;
+    }
+
+    const candidate = String(raw).trim();
+    if (!candidate) {
+      continue;
+    }
+
+    if (looksLikeDriveId(candidate)) {
+      return candidate;
+    }
+
+    let parsedUrl = null;
+    try {
+      parsedUrl = new URL(candidate);
+    } catch (error) {
+      parsedUrl = null;
+    }
+
+    if (parsedUrl) {
+      const queryCandidates = ['id', 'fileId', 'fid'];
+      for (const key of queryCandidates) {
+        const value = parsedUrl.searchParams.get(key);
+        if (typeof value === 'string' && looksLikeDriveId(value)) {
+          return value.trim();
+        }
+      }
+
+      const path = parsedUrl.pathname || '';
+      for (const pattern of DRIVE_PATH_REGEXES) {
+        const match = path.match(pattern);
+        if (match && typeof match[1] === 'string' && looksLikeDriveId(match[1])) {
+          return match[1].trim();
+        }
+      }
+
+      const pathSegments = path.split('/').filter(Boolean);
+      for (const segment of pathSegments) {
+        if (typeof segment === 'string' && looksLikeDriveId(segment)) {
+          return segment.trim();
+        }
+      }
+    }
+
+    const matches = candidate.match(/[A-Za-z0-9_-]{15,}/g) || [];
+    for (const match of matches) {
+      if (typeof match === 'string' && looksLikeDriveId(match)) {
+        return match.trim();
+      }
+    }
+  }
+
+  return null;
+};
+
 const toMap = (items) => {
   const map = new Map();
   items.forEach((item) => {
@@ -38,12 +128,28 @@ async function run() {
   await connectDB();
 
   const states = await PdvState.find(
-    { 'completedSales.fiscalDriveFileId': { $exists: true, $ne: '' } },
+    {
+      completedSales: {
+        $elemMatch: {
+          $or: [
+            { fiscalDriveFileId: { $exists: true } },
+            { fiscalXmlUrl: { $exists: true } },
+          ],
+        },
+      },
+    },
     { pdv: 1, empresa: 1, completedSales: 1 }
   ).lean();
 
   if (!states.length) {
-    console.log('Nenhuma venda fiscal com arquivo no Drive foi encontrada.');
+    const statesWithSales = await PdvState.countDocuments({ 'completedSales.0': { $exists: true } });
+    if (statesWithSales > 0) {
+      console.log(
+        'Nenhuma venda fiscal com referência ao Google Drive foi localizada. Verifique se os registros possuem o campo fiscalDriveFileId ou fiscalXmlUrl preenchido.',
+      );
+    } else {
+      console.log('Nenhuma venda fiscal com arquivo no Drive foi encontrada.');
+    }
     process.exit(0);
   }
 
@@ -74,21 +180,22 @@ async function run() {
   let moved = 0;
   let skipped = 0;
   let errors = 0;
+  let skippedMissingContext = 0;
+  let skippedMissingId = 0;
 
   for (const state of states) {
     const store = storeMap.get(String(state?.empresa || '')) || null;
     const pdv = pdvMap.get(String(state?.pdv || '')) || null;
 
-    if (!pdv) {
-      const stateId = state?._id ? String(state._id) : 'desconhecido';
-      console.warn(
-        `PDV não encontrado para o estado ${stateId}. Pulando ${state?.completedSales?.length || 0} registros.`,
-      );
-    }
-
     for (const sale of state.completedSales || []) {
-      const fileId = sale?.fiscalDriveFileId;
-      if (!fileId) {
+      const hasDriveReference = [sale?.fiscalDriveFileId, sale?.fiscalXmlUrl].some((value) => {
+        if (typeof value !== 'string') {
+          return false;
+        }
+        return value.trim().length > 0;
+      });
+
+      if (!hasDriveReference) {
         continue;
       }
 
@@ -96,6 +203,27 @@ async function run() {
 
       if (!pdv) {
         skipped += 1;
+        skippedMissingContext += 1;
+        if (processed <= 10 || isDryRun) {
+          const stateId = state?._id ? String(state._id) : 'desconhecido';
+          console.warn(
+            `PDV não encontrado para o estado ${stateId}. Venda ${sale?.id || 'sem-id'} ignorada.`,
+          );
+        }
+        continue;
+      }
+
+      const driveFileId = extractDriveFileId(sale?.fiscalDriveFileId, sale?.fiscalXmlUrl);
+      if (!driveFileId) {
+        skipped += 1;
+        skippedMissingId += 1;
+        if (processed <= 10 || isDryRun) {
+          console.warn(
+            `ID do arquivo do Drive não encontrado para a venda ${sale?.id || 'sem-id'} (PDV ${
+              pdv?.codigo || pdv?._id || 'desconhecido'
+            }).`,
+          );
+        }
         continue;
       }
 
@@ -103,19 +231,21 @@ async function run() {
       const folderPath = buildFiscalDrivePath({ store, pdv, emissionDate });
 
       const targetLabel = folderPath.join(' / ');
+      const idSourceLabel = sale?.fiscalDriveFileId?.trim() ? 'id informado' : 'id extraído do link';
+
       if (isDryRun) {
         moved += 1;
-        console.log(`[DRY-RUN] ${fileId} -> ${targetLabel}`);
+        console.log(`[DRY-RUN] ${driveFileId} -> ${targetLabel} (${idSourceLabel})`);
         continue;
       }
 
       try {
-        await moveFileToFolder(fileId, { folderPath });
+        await moveFileToFolder(driveFileId, { folderPath });
         moved += 1;
-        console.log(`Movido ${fileId} -> ${targetLabel}`);
+        console.log(`Movido ${driveFileId} -> ${targetLabel} (${idSourceLabel})`);
       } catch (error) {
         errors += 1;
-        console.error(`Erro ao mover arquivo ${fileId}:`, error?.message || error);
+        console.error(`Erro ao mover arquivo ${driveFileId}:`, error?.message || error);
       }
     }
   }
@@ -124,6 +254,12 @@ async function run() {
   console.log(`- Arquivos analisados: ${processed}`);
   console.log(`- Arquivos movidos${isDryRun ? ' (simulados)' : ''}: ${moved}`);
   console.log(`- Registros ignorados: ${skipped}`);
+  if (skippedMissingContext) {
+    console.log(`  - Sem PDV associado: ${skippedMissingContext}`);
+  }
+  if (skippedMissingId) {
+    console.log(`  - Sem ID no Drive: ${skippedMissingId}`);
+  }
   console.log(`- Falhas: ${errors}`);
 
   process.exit(errors ? 1 : 0);
