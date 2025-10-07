@@ -29,11 +29,12 @@ Para mover os arquivos XML já enviados para o Google Drive para a nova estrutur
    npm run drive:reorganize-fiscals
    ```
 
-   O script conecta ao banco, localiza vendas fiscais com arquivos no Drive (considerando tanto `fiscalDriveFileId` quanto, quando possível, o `fiscalXmlUrl` antigo) e move cada documento para a pasta correspondente à empresa, PDV e data de emissão. Ao final é exibido um resumo com a quantidade de arquivos processados, movidos, ignorados e possíveis erros, incluindo o motivo (sem PDV, sem ID no Drive, etc.).
+   O script conecta ao banco, localiza vendas fiscais com arquivos no Drive (considerando tanto `fiscalDriveFileId` quanto, quando possível, o `fiscalXmlUrl` antigo) e move cada documento para a pasta correspondente à empresa, PDV e data de emissão. Quando a chave de acesso (`fiscalAccessKey`) está preenchida, o arquivo também é renomeado para `<chave>.xml` durante a movimentação. Ao final é exibido um resumo com a quantidade de arquivos processados, movidos, ignorados, renomeados e possíveis erros, incluindo o motivo (sem PDV, sem ID no Drive, etc.).
 
 4. Se o comando retornar **"Nenhuma venda fiscal com referência ao Google Drive foi localizada"**, significa que os registros existentes não possuem `fiscalDriveFileId` nem um link reconhecível em `fiscalXmlUrl`. Nesse caso, revise se as notas foram emitidas após a integração com o Drive ou atualize manualmente os registros com o ID correto antes de rodar o script novamente.
 
 ## Dicas
 
 - Se algum arquivo apresentar erro, o `fileId` será mostrado no log. Após corrigir o problema (por exemplo, permissões no Drive), você pode rodar o comando novamente; apenas os itens restantes serão reposicionados.
+- Utilize o modo _dry-run_ para conferir não só o novo caminho como também quais arquivos seriam renomeados para a chave de acesso antes de aplicar as mudanças definitivas.
 - Para executar somente para uma base de homologação, defina as variáveis de ambiente de homolog antes de rodar os comandos.

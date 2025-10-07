@@ -50,6 +50,17 @@ function sanitizeDriveFolderName(name) {
     .slice(0, 255);
 }
 
+function sanitizeDriveFileName(name) {
+  if (name === null || name === undefined) return '';
+  return String(name)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\\/:*?"'<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 255);
+}
+
 function getFolderCacheKey(parentId, name) {
   const parentKey = parentId ? String(parentId) : 'root';
   return `${parentKey}::${name}`;
@@ -538,13 +549,16 @@ async function moveFileToFolder(fileId, options = {}) {
   }
 
   const metadata = await getFileMetadata(fileId, token, 'id,name,parents,webViewLink,webContentLink');
+  const newNameRaw = typeof options.newName === 'string' ? options.newName : null;
+  const sanitizedNewName = newNameRaw ? sanitizeDriveFileName(newNameRaw) : '';
+  const shouldRename = Boolean(sanitizedNewName && metadata?.name !== sanitizedNewName);
   const existingParents = Array.isArray(metadata?.parents)
     ? metadata.parents.filter((parent) => typeof parent === 'string' && parent)
     : [];
   const parentsToRemove = existingParents.filter((parent) => parent !== destinationFolderId);
   const needsAddParent = !existingParents.includes(destinationFolderId);
 
-  if (!needsAddParent && parentsToRemove.length === 0) {
+  if (!needsAddParent && parentsToRemove.length === 0 && !shouldRename) {
     return metadata;
   }
 
@@ -561,7 +575,12 @@ async function moveFileToFolder(fileId, options = {}) {
     queryParams.set('removeParents', parentsToRemove.join(','));
   }
 
-  const bodyString = JSON.stringify({});
+  const bodyPayload = {};
+  if (shouldRename) {
+    bodyPayload.name = sanitizedNewName;
+  }
+
+  const bodyString = JSON.stringify(bodyPayload);
   const headers = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',

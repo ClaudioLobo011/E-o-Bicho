@@ -13,6 +13,7 @@ const authorizeRoles = require('../middlewares/authorizeRoles');
 const { isDriveConfigured, uploadBufferToDrive } = require('../utils/googleDrive');
 const { emitPdvSaleFiscal } = require('../services/nfceEmitter');
 const { buildFiscalDrivePath } = require('../utils/fiscalDrivePath');
+const { buildFiscalXmlFileName } = require('../utils/fiscalXmlFileName');
 
 const ambientesPermitidos = ['homologacao', 'producao'];
 const ambientesSet = new Set(ambientesPermitidos);
@@ -1393,8 +1394,11 @@ router.post('/:id/sales/:saleId/fiscal', requireAuth, async (req, res) => {
     const qrCodeImage = await generateQrCodeDataUrl(emissionResult.qrCodePayload);
 
     saleCodeForName = sale.saleCode || saleId;
-    const baseName = sanitizeFileName(`NFCe-${saleCodeForName || emissionDate.getTime()}`);
-    const fileName = baseName.toLowerCase().endsWith('.xml') ? baseName : `${baseName}.xml`;
+    const fileName = buildFiscalXmlFileName({
+      accessKey: emissionResult.accessKey || sale.fiscalAccessKey,
+      saleCode: saleCodeForName,
+      emissionDate,
+    });
 
     const uploadResult = await uploadBufferToDrive(Buffer.from(emissionResult.xml, 'utf8'), {
       name: fileName,

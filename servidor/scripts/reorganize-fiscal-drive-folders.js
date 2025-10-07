@@ -8,6 +8,7 @@ const Pdv = require('../models/Pdv');
 const Store = require('../models/Store');
 const { moveFileToFolder } = require('../utils/googleDrive');
 const { buildFiscalDrivePath } = require('../utils/fiscalDrivePath');
+const { buildFiscalXmlFileName, sanitizeFiscalXmlBaseName } = require('../utils/fiscalXmlFileName');
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
@@ -182,6 +183,8 @@ async function run() {
   let errors = 0;
   let skippedMissingContext = 0;
   let skippedMissingId = 0;
+  let renameCandidates = 0;
+  let renamed = 0;
 
   for (const state of states) {
     const store = storeMap.get(String(state?.empresa || '')) || null;
@@ -229,20 +232,45 @@ async function run() {
 
       const emissionDate = resolveEmissionDate(sale);
       const folderPath = buildFiscalDrivePath({ store, pdv, emissionDate });
+      const accessKeyBase = sanitizeFiscalXmlBaseName(sale?.fiscalAccessKey || '', '');
+      const renameTargetName = accessKeyBase
+        ? buildFiscalXmlFileName({
+            accessKey: sale.fiscalAccessKey,
+            saleCode: sale.saleCode || sale.saleCodeLabel || sale.id || '',
+            emissionDate,
+          })
+        : null;
+
+      if (renameTargetName) {
+        renameCandidates += 1;
+      }
 
       const targetLabel = folderPath.join(' / ');
       const idSourceLabel = sale?.fiscalDriveFileId?.trim() ? 'id informado' : 'id extraído do link';
+      const renameLabel = renameTargetName ? `, renomear para ${renameTargetName}` : '';
 
       if (isDryRun) {
         moved += 1;
-        console.log(`[DRY-RUN] ${driveFileId} -> ${targetLabel} (${idSourceLabel})`);
+        console.log(`[DRY-RUN] ${driveFileId} -> ${targetLabel}${renameLabel} (${idSourceLabel})`);
         continue;
       }
 
       try {
-        await moveFileToFolder(driveFileId, { folderPath });
+        const result = await moveFileToFolder(driveFileId, {
+          folderPath,
+          newName: renameTargetName || undefined,
+        });
         moved += 1;
-        console.log(`Movido ${driveFileId} -> ${targetLabel} (${idSourceLabel})`);
+        if (renameTargetName) {
+          if (result?.name === renameTargetName) {
+            renamed += 1;
+          } else {
+            console.warn(
+              `Arquivo ${driveFileId} movido, mas o nome retornado foi ${result?.name || 'desconhecido'} (esperado ${renameTargetName}).`,
+            );
+          }
+        }
+        console.log(`Movido ${driveFileId} -> ${targetLabel}${renameLabel} (${idSourceLabel})`);
       } catch (error) {
         errors += 1;
         console.error(`Erro ao mover arquivo ${driveFileId}:`, error?.message || error);
@@ -261,6 +289,14 @@ async function run() {
     console.log(`  - Sem ID no Drive: ${skippedMissingId}`);
   }
   console.log(`- Falhas: ${errors}`);
+  if (renameCandidates) {
+    if (isDryRun) {
+      console.log(`- Arquivos que seriam renomeados para a chave de acesso: ${renameCandidates}`);
+    } else {
+      console.log(`- Arquivos com chave de acesso identificada: ${renameCandidates}`);
+      console.log(`  - Renomeados com sucesso: ${renamed}`);
+    }
+  }
 
   process.exit(errors ? 1 : 0);
 }
