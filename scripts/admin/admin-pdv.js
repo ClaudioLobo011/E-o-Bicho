@@ -519,6 +519,52 @@
     );
   };
 
+  const abbreviateOperatorName = (name) => {
+    if (!name) return '';
+    const normalized = String(name).replace(/\s+/g, ' ').trim();
+    if (!normalized) return '';
+    const parts = normalized.split(' ').filter(Boolean);
+    if (!parts.length) return '';
+
+    const toTitleCase = (value) => {
+      if (!value) return '';
+      const first = value.charAt(0).toUpperCase();
+      const rest = value.slice(1).toLowerCase();
+      return `${first}${rest}`;
+    };
+
+    const connectors = new Set(['da', 'de', 'di', 'do', 'du', 'das', 'dos', 'e']);
+    const firstPart = toTitleCase(parts[0]);
+    let secondPart = '';
+    for (let index = 1; index < parts.length; index += 1) {
+      const candidate = parts[index];
+      if (!candidate) continue;
+      const normalizedCandidate = candidate.toLowerCase();
+      const letters = normalizedCandidate.replace(/[^a-zà-ú]/gi, '');
+      if (!letters) {
+        continue;
+      }
+      if (connectors.has(normalizedCandidate) || letters.length <= 2) {
+        if (!secondPart && index === parts.length - 1) {
+          secondPart = toTitleCase(candidate);
+        }
+        continue;
+      }
+      secondPart = toTitleCase(candidate);
+      break;
+    }
+
+    if (!secondPart && parts.length > 1) {
+      secondPart = toTitleCase(parts[1]);
+    }
+
+    if (secondPart) {
+      secondPart = secondPart.slice(0, 4);
+    }
+
+    return secondPart ? `${firstPart} ${secondPart}` : firstPart;
+  };
+
   const onlyDigits = (value) => String(value || '').replace(/\D+/g, '');
 
   const sanitizeCepDigits = (value) => onlyDigits(value).slice(0, 8);
@@ -620,6 +666,45 @@
       parts.push(`CEP: ${formatCep(address.cep)}`);
     }
     return parts.filter(Boolean).join(' • ');
+  };
+
+  const resolveCustomerAddressRecord = (cliente) => {
+    if (!cliente || typeof cliente !== 'object') return null;
+
+    const inlineAddresses = extractInlineCustomerAddresses(cliente);
+    for (let index = 0; index < inlineAddresses.length; index += 1) {
+      const normalized = normalizeCustomerAddressRecord(inlineAddresses[index], index);
+      if (normalized?.formatted) {
+        return normalized;
+      }
+    }
+
+    const fallback = {
+      logradouro:
+        cliente.logradouro ||
+        cliente.endereco ||
+        cliente.rua ||
+        cliente.street ||
+        cliente.address ||
+        '',
+      numero: cliente.numero || cliente.num || cliente.number || cliente.addressNumber || '',
+      complemento: cliente.complemento || cliente.complement || cliente.comp || cliente.addressComplement || '',
+      bairro: cliente.bairro || cliente.distrito || cliente.neighborhood || cliente.bairroResidencia || '',
+      cidade: cliente.cidade || cliente.municipio || cliente.city || cliente.cidadeResidencia || '',
+      uf: (cliente.uf || cliente.estado || cliente.state || cliente.ufResidencia || '').toString().toUpperCase(),
+      cep: cliente.cep || cliente.cepFormatado || cliente.zip || cliente.postalCode || cliente.cepResidencia || '',
+    };
+
+    const hasMeaningfulValue = Object.values(fallback).some((value) => {
+      if (value == null) return false;
+      return String(value).trim() !== '';
+    });
+
+    if (!hasMeaningfulValue) {
+      return null;
+    }
+
+    return { ...fallback, formatted: buildDeliveryAddressLine(fallback) };
   };
 
   const normalizeCustomerAddressRecord = (address, index = 0) => {
@@ -1186,6 +1271,8 @@
     const pagoValor = pagamentoItems.reduce((sum, item) => sum + safeNumber(item.valor), 0);
     const trocoValor = Math.max(0, pagoValor - liquidoValor);
 
+    const clienteAddress = resolveCustomerAddressRecord(state.vendaCliente);
+
     const cliente = state.vendaCliente
       ? {
           nome:
@@ -1204,6 +1291,7 @@
             state.vendaCliente.email ||
             '',
           pet: state.vendaPet?.nome || '',
+          endereco: clienteAddress?.formatted || '',
         }
       : null;
 
@@ -3439,6 +3527,7 @@
           state.vendaCliente?.celular ||
           state.vendaCliente?.email ||
           '',
+        endereco: clienteBase.endereco || resolveCustomerAddressRecord(state.vendaCliente)?.formatted || '',
       },
       address: {
         ...address,
@@ -5001,7 +5090,7 @@
   };
 
   const getReceiptStyles = (variant = 'matricial') => {
-    const accent = variant === 'fiscal' ? '#0b3d91' : '#111111';
+    const accent = '#000000';
     return `
       :root { color-scheme: light; }
       *, *::before, *::after { box-sizing: border-box; }
@@ -5012,7 +5101,7 @@
         background: #fff;
         font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
         font-size: 11px;
-        color: #111;
+        color: #000;
         font-weight: 500;
         -webkit-font-smoothing: antialiased;
         -webkit-print-color-adjust: exact;
@@ -5057,7 +5146,7 @@
         gap: 0.7mm;
         font-size: 10.3px;
         line-height: 1.35;
-        color: #222;
+        color: #111;
       }
       .receipt__meta-item {
         display: block;
@@ -5065,7 +5154,7 @@
         max-width: 64mm;
       }
       .receipt__section {
-        border-top: 1px solid rgba(17, 17, 17, 0.85);
+        border-top: 1px solid #000;
         padding-top: 2mm;
         display: flex;
         flex-direction: column;
@@ -5081,7 +5170,7 @@
         font-weight: 700;
         letter-spacing: 0.45px;
         text-transform: uppercase;
-        color: #111;
+        color: #000;
       }
       .receipt__cards {
         display: grid;
@@ -5089,19 +5178,19 @@
         gap: 1.6mm;
       }
       .receipt-card {
-        border: 1px solid rgba(17, 17, 17, 0.85);
+        border: 1px solid #000;
         border-radius: 1.6mm;
         padding: 1.6mm 1.8mm;
         display: flex;
         flex-direction: column;
         gap: 0.4mm;
-        background: rgba(17, 17, 17, 0.05);
+        background: rgba(0, 0, 0, 0.04);
       }
       .receipt-card__label {
         font-size: 9.8px;
         text-transform: uppercase;
         letter-spacing: 0.4px;
-        color: #333;
+        color: #111;
       }
       .receipt-card__value {
         font-size: 11.3px;
@@ -5125,7 +5214,7 @@
       }
       .receipt-row__label {
         flex: 1;
-        color: #333;
+        color: #111;
       }
       .receipt-row__value {
         font-weight: 700;
@@ -5142,11 +5231,11 @@
       .receipt-list__empty {
         font-size: 10px;
         text-align: center;
-        color: #666;
+        color: #333;
         padding: 1.6mm 0;
-        border: 1px dashed rgba(102, 102, 102, 0.4);
+        border: 1px dashed rgba(0, 0, 0, 0.4);
         border-radius: 1.6mm;
-        background: rgba(0, 0, 0, 0.03);
+        background: rgba(0, 0, 0, 0.02);
       }
       .receipt-table {
         width: 100%;
@@ -5159,11 +5248,11 @@
         text-transform: uppercase;
         letter-spacing: 0.35px;
         padding-bottom: 0.8mm;
-        border-bottom: 1px solid rgba(17, 17, 17, 0.85);
+        border-bottom: 1px solid #000;
       }
       .receipt-table tbody td {
         padding: 0.6mm 0;
-        border-bottom: 1px dashed rgba(17, 17, 17, 0.25);
+        border-bottom: 1px dashed rgba(0, 0, 0, 0.35);
         vertical-align: top;
       }
       .receipt-table tbody td:last-child {
@@ -5173,129 +5262,165 @@
       .receipt-table__muted {
         display: block;
         font-size: 9.4px;
-        color: #555;
+        color: #333;
       }
       .receipt__footer {
         margin-top: 2mm;
         text-align: center;
         font-size: 9.4px;
-        color: #555;
+        color: #333;
         line-height: 1.45;
       }
       .receipt__footer-strong {
         font-weight: 600;
-        color: #222;
+        color: #000;
       }
       main.receipt.receipt--nfce {
-        padding: 2mm 1.4mm 3.4mm;
-        gap: 1mm;
-        font-size: 10px;
+        width: 80mm;
+        margin: 0 auto;
+        padding: 2mm 0 4mm;
+        gap: 1.6mm;
+        font-size: 9.4px;
+        background: #fff;
       }
       .receipt--nfce .nfce-compact__header {
         display: flex;
         flex-direction: column;
-        gap: 0.6mm;
-        border-bottom: 1px solid rgba(17, 17, 17, 0.65);
-        padding-bottom: 1.2mm;
+        align-items: center;
+        gap: 1.2mm;
+        text-align: center;
+        padding: 0 2mm;
+      }
+      .nfce-compact__operator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.8mm;
+        font-size: 9.8px;
+        font-weight: 700;
+        color: #000;
+        margin-bottom: 0.4mm;
+      }
+      .nfce-compact__operator strong {
+        font-weight: 800;
+      }
+      .receipt--nfce .nfce-compact__divider {
+        width: 100%;
+        height: 0.6px;
+        background: rgba(0, 0, 0, 0.35);
       }
       .nfce-compact__company {
         display: flex;
         flex-direction: column;
-        gap: 0.3mm;
+        gap: 0.6mm;
+        align-items: center;
       }
       .nfce-compact__company-name {
         margin: 0;
-        font-size: 11px;
+        font-size: 11.4px;
         font-weight: 800;
-        letter-spacing: 0.35px;
+        letter-spacing: 0.45px;
         text-transform: uppercase;
         color: #111;
       }
       .nfce-compact__company-secondary {
         margin: 0;
-        font-size: 9.3px;
-        color: #333;
-        line-height: 1.3;
+        font-size: 9.2px;
+        color: #111;
+        line-height: 1.35;
       }
       .nfce-compact__company-line {
         margin: 0;
         font-size: 9px;
-        color: #222;
-        line-height: 1.3;
+        color: #111;
+        line-height: 1.35;
+        text-align: center;
       }
       .nfce-compact__header-meta {
         display: flex;
         flex-direction: column;
-        gap: 0.6mm;
+        align-items: center;
+        gap: 0.8mm;
+        width: 100%;
       }
       .nfce-compact__tags {
         display: flex;
         flex-wrap: wrap;
         gap: 0.6mm;
-      }
-      .nfce-compact__tag {
-        display: inline-flex;
-        align-items: center;
         justify-content: center;
-        padding: 0.4mm 1mm;
-        border: 1px solid var(--receipt-accent);
-        border-radius: 1mm;
-        font-size: 8.6px;
-        font-weight: 700;
+        font-size: 8.4px;
         text-transform: uppercase;
         letter-spacing: 0.35px;
         color: var(--receipt-accent);
-        background: rgba(17, 17, 17, 0.04);
+      }
+      .nfce-compact__tag {
+        font-weight: 700;
       }
       .nfce-compact__reference {
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
+        justify-content: center;
         gap: 0.6mm;
-        font-size: 9px;
+        font-size: 8.6px;
         font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-        color: #333;
-      }
-      .nfce-compact__reference-left,
-      .nfce-compact__reference-right {
-        flex: 1 1 auto;
-      }
-      .nfce-compact__reference-divider {
-        flex: 0 0 auto;
-        font-size: 9px;
-        font-weight: 700;
-        color: rgba(17, 17, 17, 0.65);
-      }
-      .nfce-compact__section {
-        border-top: 1px solid rgba(17, 17, 17, 0.65);
-        padding-top: 1.1mm;
-        display: flex;
-        flex-direction: column;
-        gap: 0.6mm;
-      }
-      .nfce-compact__section-title {
-        margin: 0;
-        font-size: 9.2px;
-        font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.35px;
         color: #111;
       }
+      .nfce-compact__reference-left,
+      .nfce-compact__reference-right {
+        text-align: center;
+      }
+      .nfce-compact__reference-divider {
+        flex: 0 0 auto;
+        font-size: 8.8px;
+        font-weight: 700;
+        color: rgba(0, 0, 0, 0.7);
+      }
+      .nfce-compact__header-details {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6mm;
+        font-size: 8.2px;
+        color: #333;
+        text-transform: uppercase;
+        letter-spacing: 0.25px;
+        text-align: center;
+        align-items: center;
+      }
+      .nfce-compact__section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.8mm;
+        padding: 0 2mm;
+      }
+      .nfce-compact__section--items {
+        padding-top: 1.2mm;
+      }
+      .nfce-compact__section-title {
+        margin: 0;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        color: #111;
+        text-align: left;
+      }
       .nfce-compact__items-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 9px;
+        font-size: 8.6px;
       }
       .nfce-compact__items-table thead th {
         text-align: left;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.3px;
-        padding-bottom: 0.4mm;
-        border-bottom: 1px solid rgba(17, 17, 17, 0.65);
+        padding: 0.8mm 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.6);
       }
       .nfce-compact__items-table thead th:nth-child(2) {
         text-align: center;
@@ -5304,9 +5429,12 @@
         text-align: right;
       }
       .nfce-compact__items-table tbody td {
-        padding: 0.45mm 0;
-        border-bottom: 1px dashed rgba(17, 17, 17, 0.25);
+        padding: 0.6mm 0;
+        border-bottom: 1px dashed rgba(0, 0, 0, 0.3);
         vertical-align: top;
+      }
+      .nfce-compact__items-table tbody tr:last-child td {
+        border-bottom: none;
       }
       .nfce-compact__items-table tbody td:nth-child(2) {
         text-align: center;
@@ -5319,12 +5447,13 @@
       .nfce-compact__item-name {
         display: block;
         font-weight: 700;
-        color: #111;
+        color: #000;
       }
       .nfce-compact__item-code {
         display: block;
-        font-size: 8px;
-        color: #555;
+        font-size: 7.4px;
+        color: #333;
+        margin-top: 0.3mm;
       }
       .nfce-compact__totals-list {
         list-style: none;
@@ -5337,86 +5466,84 @@
       .nfce-compact__total {
         display: flex;
         justify-content: space-between;
+        align-items: baseline;
         gap: 0.6mm;
-        font-size: 9.2px;
-        color: #222;
+        font-size: 9px;
+        color: #111;
+      }
+      .nfce-compact__total span:first-child {
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
       }
       .nfce-compact__total span:last-child {
         font-weight: 700;
       }
-      .nfce-compact__total--highlight span:first-child {
-        text-transform: uppercase;
-        letter-spacing: 0.35px;
-      }
-      .nfce-compact__total--highlight span:last-child {
-        font-size: 10px;
+      .nfce-compact__total--highlight {
+        margin-top: 0.6mm;
+        padding-top: 0.6mm;
+        border-top: 1px solid rgba(0, 0, 0, 0.7);
       }
       .nfce-compact__text {
         margin: 0;
-        font-size: 9px;
+        font-size: 8.6px;
         line-height: 1.35;
-        color: #222;
+        color: #111;
+        text-align: left;
+      }
+      .nfce-compact__text--small {
+        font-size: 8.2px;
       }
       .nfce-compact__qr {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: center;
+        flex-direction: row;
+        align-items: flex-start;
         gap: 2mm;
       }
       .nfce-compact__qr img {
         width: 30mm;
         height: 30mm;
-        border: 1px solid rgba(17, 17, 17, 0.35);
-        border-radius: 1.2mm;
-        padding: 1mm;
-        background: #fff;
         image-rendering: pixelated;
       }
+      .nfce-compact__qr-details {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.8mm;
+        font-size: 8.2px;
+        color: #111;
+      }
       .nfce-compact__qr-payload {
-        flex: 1 1 30mm;
         margin: 0;
-        font-size: 8.6px;
-        color: #333;
         line-height: 1.4;
-        text-align: center;
         word-break: break-word;
+      }
+      .nfce-compact__qr-note {
+        margin: 0;
+        font-weight: 600;
+        line-height: 1.4;
       }
       .nfce-compact__access-key {
         margin: 0;
-        font-size: 9.6px;
+        font-size: 9.4px;
         font-weight: 700;
-        letter-spacing: 0.45px;
+        letter-spacing: 0.4px;
         text-align: center;
         word-break: break-word;
       }
       .nfce-compact__muted {
-        color: #777;
+        color: #444;
         font-weight: 500;
       }
-      .nfce-compact__info-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 0.4mm;
-        font-size: 8.8px;
-        color: #333;
-      }
-      .nfce-compact__info-list li {
-        line-height: 1.35;
-      }
       .nfce-compact__empty {
-        font-size: 8.8px;
-        text-align: center;
-        color: #666;
-        padding: 1mm 0;
+        font-size: 8.4px;
+        text-align: left;
+        color: #444;
+        padding: 0.6mm 0;
       }
       .receipt__divider {
         width: 100%;
         border: none;
-        border-top: 1px dashed rgba(17, 17, 17, 0.3);
+        border-top: 1px dashed rgba(0, 0, 0, 0.5);
         margin: 1.8mm 0 0;
       }
       .receipt-empty {
@@ -5424,13 +5551,13 @@
         padding: 7mm 0;
         text-align: center;
         font-size: 11px;
-        color: #666;
+        color: #444;
         font-weight: 600;
       }
       .receipt-fallback {
         margin: 0;
         font-size: 9.8px;
-        color: #666;
+        color: #444;
         line-height: 1.45;
         text-align: center;
         white-space: pre-wrap;
@@ -6010,8 +6137,24 @@
     const referenceMarkup = referenceSegments.length
       ? `<div class="nfce-compact__reference">${referenceSegments.join('')}</div>`
       : '';
-    const headerMetaContent = [tagsMarkup, referenceMarkup].filter(Boolean).join('');
+    const headerDetails = [];
+    if (identificacao.dataEmissao) {
+      headerDetails.push(`Emissão: ${formatXmlDateTime(identificacao.dataEmissao)}`);
+    }
+    if (identificacao.dataRegistro) {
+      headerDetails.push(`Registro: ${formatXmlDateTime(identificacao.dataRegistro)}`);
+    }
+    if (identificacao.protocolo) {
+      headerDetails.push(`Protocolo: ${identificacao.protocolo}`);
+    }
+    const headerDetailsMarkup = headerDetails.length
+      ? `<ul class="nfce-compact__header-details">${headerDetails
+          .map((detail) => `<li>${escapeHtml(detail)}</li>`)
+          .join('')}</ul>`
+      : '';
+    const headerMetaContent = [tagsMarkup, referenceMarkup, headerDetailsMarkup].filter(Boolean).join('');
     const headerMeta = headerMetaContent ? `<div class="nfce-compact__header-meta">${headerMetaContent}</div>` : '';
+    const headerDivider = headerMetaContent ? '<span class="nfce-compact__divider" aria-hidden="true"></span>' : '';
 
     const itensRows = itens.length
       ? itens
@@ -6149,13 +6292,23 @@
 
     const qrImage = qrCode.image || '';
     const qrPayload = qrCode.payload || '';
-    const qrPayloadText = qrPayload ? escapeHtml(qrPayload) : escapeHtml('QR Code indisponível.');
-    const qrImageMarkup = qrImage ? `<img src="${escapeHtml(qrImage)}" alt="QR Code da NFC-e" />` : '';
+    const qrPayloadText = qrPayload
+      ? escapeHtml(qrPayload)
+      : escapeHtml('Consulta disponível via portal da SEFAZ.');
+    const qrNoteText = qrPayload
+      ? 'Aponte a câmera do celular para validar a NFC-e.'
+      : 'Use a chave de acesso informada para consultar a NFC-e no portal da SEFAZ.';
+    const qrImageMarkup = qrImage
+      ? `<img src="${escapeHtml(qrImage)}" alt="QR Code da NFC-e" />`
+      : `<span class="nfce-compact__empty">QR Code indisponível.</span>`;
     const qrSection = `<section class="nfce-compact__section nfce-compact__section--qr">
         <h2 class="nfce-compact__section-title">Consulta</h2>
         <div class="nfce-compact__qr">
           ${qrImageMarkup}
-          <p class="nfce-compact__qr-payload">${qrPayloadText}</p>
+          <div class="nfce-compact__qr-details">
+            <p class="nfce-compact__qr-note">${escapeHtml(qrNoteText)}</p>
+            <p class="nfce-compact__qr-payload">${qrPayloadText}</p>
+          </div>
         </div>
       </section>`;
 
@@ -6171,7 +6324,7 @@
       </section>`;
 
     const infoLines = [
-      ambienteLabel ? `Ambiente: ${ambienteLabel}` : '',
+      !tags.length && ambienteLabel ? `Ambiente: ${ambienteLabel}` : '',
       identificacao.protocolo ? `Protocolo: ${identificacao.protocolo}` : '',
       identificacao.dataEmissao ? `Emissão: ${formatXmlDateTime(identificacao.dataEmissao)}` : '',
       identificacao.dataRegistro ? `Registro: ${formatXmlDateTime(identificacao.dataRegistro)}` : '',
@@ -6181,9 +6334,9 @@
     infoLines.push('Documento emitido eletronicamente. Consulte pelo QR Code ou portal da SEFAZ.');
     const infoSection = `<section class="nfce-compact__section nfce-compact__section--notes">
         <h2 class="nfce-compact__section-title">Informações obrigatórias</h2>
-        <ul class="nfce-compact__info-list">
-          ${infoLines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
-        </ul>
+        <p class="nfce-compact__text nfce-compact__text--small">${infoLines
+          .map((line) => escapeHtml(line))
+          .join('<br>')}</p>
       </section>`;
 
     return `
@@ -6208,6 +6361,7 @@
             }
           </div>
           ${headerMeta}
+          ${headerDivider}
         </header>
         <section class="nfce-compact__section nfce-compact__section--items">
           <h2 class="nfce-compact__section-title">Produtos</h2>
@@ -6234,9 +6388,309 @@
       </main>`;
   };
 
+  const buildMatricialReceiptMarkup = (snapshot) => {
+    if (!snapshot) {
+      return '<main class="receipt"><p class="receipt-empty">Nenhuma venda disponível para impressão.</p></main>';
+    }
+
+    const store = findStoreById(state.selectedStore);
+    const storeCompany = store?.empresa && typeof store.empresa === 'object' ? store.empresa : {};
+    const pickValue = (...candidates) => {
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) {
+          return candidate.trim();
+        }
+      }
+      return '';
+    };
+
+    const companyPrimaryName = pickValue(
+      store?.nomeFantasia,
+      store?.nome,
+      storeCompany?.nomeFantasia,
+      storeCompany?.nome,
+      store?.razaoSocial,
+      storeCompany?.razaoSocial,
+      snapshot.meta?.store,
+      'Estabelecimento'
+    );
+
+    const secondaryCandidates = [
+      store?.razaoSocial,
+      storeCompany?.razaoSocial,
+      storeCompany?.nomeFantasia,
+      storeCompany?.nome,
+      snapshot.meta?.store,
+    ];
+    const companySecondaryNameRaw = secondaryCandidates.find(
+      (value) => typeof value === 'string' && value.trim() && value.trim() !== companyPrimaryName
+    );
+    const companySecondaryName = companySecondaryNameRaw ? companySecondaryNameRaw.trim() : '';
+
+    const documents = [];
+    const appendDocument = (value, label) => {
+      const raw = (value ?? '').toString().trim();
+      if (raw) {
+        documents.push(`${label}: ${raw}`);
+      }
+    };
+    appendDocument(store?.cnpj || storeCompany?.cnpj, 'CNPJ');
+    appendDocument(store?.cpf || storeCompany?.cpf, 'CPF');
+    appendDocument(
+      store?.inscricaoEstadual || store?.ie || storeCompany?.inscricaoEstadual || storeCompany?.ie,
+      'IE'
+    );
+    appendDocument(
+      store?.inscricaoMunicipal || store?.im || storeCompany?.inscricaoMunicipal || storeCompany?.im,
+      'IM'
+    );
+    appendDocument(store?.telefone || store?.celular || storeCompany?.telefone || storeCompany?.celular, 'Tel');
+    const companyDocuments = documents.join(' • ');
+
+    const street = pickValue(
+      store?.logradouro,
+      store?.endereco,
+      store?.rua,
+      storeCompany?.logradouro,
+      storeCompany?.endereco,
+      storeCompany?.rua
+    );
+    const number = pickValue(store?.numero, store?.num, storeCompany?.numero, storeCompany?.num);
+    const mainAddress = [street, number].filter(Boolean).join(', ');
+    const neighborhood = pickValue(store?.bairro, storeCompany?.bairro, store?.distrito, storeCompany?.distrito);
+    const city = pickValue(
+      store?.cidade,
+      store?.municipio,
+      storeCompany?.cidade,
+      storeCompany?.municipio,
+      store?.city,
+      storeCompany?.city
+    );
+    const stateUf = pickValue(store?.uf, store?.estado, storeCompany?.uf, storeCompany?.estado);
+    const cityLine = [city, stateUf].filter(Boolean).join(' - ');
+    const cep = pickValue(store?.cep, storeCompany?.cep);
+    const addressParts = [mainAddress, neighborhood, cityLine, cep ? `CEP: ${cep}` : '']
+      .filter(Boolean)
+      .map((value) => value.trim());
+    const companyAddress = addressParts.join(' • ');
+
+    const operatorShort = abbreviateOperatorName(snapshot.meta?.operador || '');
+    const operatorMarkup = operatorShort
+      ? `<div class="nfce-compact__operator"><span>Operador:</span><strong>${escapeHtml(operatorShort)}</strong></div>`
+      : '';
+
+    const referenceLeftParts = [];
+    if (snapshot.meta?.pdv) referenceLeftParts.push(`PDV ${snapshot.meta.pdv}`);
+    if (snapshot.meta?.saleCode) referenceLeftParts.push(`Venda ${snapshot.meta.saleCode}`);
+    const referenceLeft = referenceLeftParts.join(' • ');
+    const referenceRightParts = [];
+    if (snapshot.meta?.data) referenceRightParts.push(snapshot.meta.data);
+    const referenceRight = referenceRightParts.join(' • ');
+
+    const referenceSegments = [];
+    if (referenceLeft) {
+      referenceSegments.push(`<span class="nfce-compact__reference-left">${escapeHtml(referenceLeft)}</span>`);
+    }
+    if (referenceLeft && referenceRight) {
+      referenceSegments.push('<span class="nfce-compact__reference-divider">|</span>');
+    }
+    if (referenceRight) {
+      referenceSegments.push(`<span class="nfce-compact__reference-right">${escapeHtml(referenceRight)}</span>`);
+    }
+    const referenceMarkup = referenceSegments.length
+      ? `<div class="nfce-compact__reference">${referenceSegments.join('')}</div>`
+      : '';
+
+    const headerDetails = [];
+    if (snapshot.meta?.store && snapshot.meta.store !== companyPrimaryName) {
+      headerDetails.push(snapshot.meta.store);
+    }
+    const headerDetailsMarkup = headerDetails.length
+      ? `<ul class="nfce-compact__header-details">${headerDetails
+          .map((detail) => `<li>${escapeHtml(detail)}</li>`)
+          .join('')}</ul>`
+      : '';
+    const headerMetaContent = [referenceMarkup, headerDetailsMarkup].filter(Boolean).join('');
+    const headerMeta = headerMetaContent ? `<div class="nfce-compact__header-meta">${headerMetaContent}</div>` : '';
+    const headerDivider = headerMetaContent ? '<span class="nfce-compact__divider" aria-hidden="true"></span>' : '';
+
+    const itemsRows = Array.isArray(snapshot.itens) && snapshot.itens.length
+      ? snapshot.itens
+          .map((item) => {
+            const description = `${item.index ? `${item.index}. ` : ''}${item.nome || 'Item'}`;
+            const quantity = `${item.quantidade} × ${item.unitario}`;
+            const codes = item.codigo
+              ? `<span class="nfce-compact__item-code">${escapeHtml(item.codigo)}</span>`
+              : '';
+            return `
+              <tr>
+                <td>
+                  <span class="nfce-compact__item-name">${escapeHtml(description)}</span>
+                  ${codes}
+                </td>
+                <td>${escapeHtml(quantity)}</td>
+                <td>${escapeHtml(item.subtotal || '')}</td>
+              </tr>`;
+          })
+          .join('')
+      : '<tr><td colspan="3" class="nfce-compact__empty">Nenhum item informado.</td></tr>';
+
+    const normalizeCurrency = (raw) => {
+      if (typeof raw === 'string') return raw;
+      if (raw == null) return '';
+      return String(raw);
+    };
+
+    const totalsEntries = [];
+    const subtotalValue = normalizeCurrency(snapshot.totais?.bruto).trim();
+    if (subtotalValue) {
+      totalsEntries.push({ label: 'Subtotal', value: subtotalValue });
+    }
+
+    const descontoValue = normalizeCurrency(snapshot.totais?.desconto).trim();
+    if (snapshot.totais?.descontoValor > 0 && descontoValue) {
+      totalsEntries.push({
+        label: 'Descontos',
+        value: descontoValue.startsWith('-') ? descontoValue : `- ${descontoValue}`,
+      });
+    }
+
+    const acrescimoValue = normalizeCurrency(snapshot.totais?.acrescimo).trim();
+    if (snapshot.totais?.acrescimoValor > 0 && acrescimoValue) {
+      totalsEntries.push({ label: 'Acréscimos', value: acrescimoValue });
+    }
+
+    const totalValue = normalizeCurrency(snapshot.totais?.liquido).trim();
+    if (totalValue) {
+      totalsEntries.push({ label: 'Total da venda', value: totalValue, isTotal: true });
+    }
+
+    const pagoValue = normalizeCurrency(snapshot.totais?.pago).trim();
+    if (pagoValue) {
+      totalsEntries.push({ label: 'Pago', value: pagoValue });
+    }
+
+    const trocoValue = normalizeCurrency(snapshot.totais?.troco).trim();
+    if (snapshot.totais?.trocoValor > 0 && trocoValue) {
+      totalsEntries.push({ label: 'Troco', value: trocoValue });
+    }
+
+    const totalsRows = totalsEntries
+      .map(
+        (row) => `
+          <li class="nfce-compact__total${row.isTotal ? ' nfce-compact__total--highlight' : ''}">
+            <span>${escapeHtml(row.label)}</span>
+            <span>${escapeHtml(row.value)}</span>
+          </li>`
+      )
+      .join('');
+
+    const totalsMarkup = totalsRows
+      ? `<ul class="nfce-compact__totals-list">${totalsRows}</ul>`
+      : '<p class="nfce-compact__empty">Totais indisponíveis.</p>';
+
+    const pagamentosRows = Array.isArray(snapshot.pagamentos?.items) && snapshot.pagamentos.items.length
+      ? snapshot.pagamentos.items
+          .map(
+            (payment) => `
+              <li class="nfce-compact__total">
+                <span>${escapeHtml(payment.label)}</span>
+                <span>${escapeHtml(payment.formatted)}</span>
+              </li>`
+          )
+          .join('')
+      : '';
+
+    const pagamentosMarkup = pagamentosRows
+      ? `<ul class="nfce-compact__totals-list">${pagamentosRows}</ul>`
+      : '<p class="nfce-compact__empty">Nenhum pagamento registrado.</p>';
+
+    const clienteLines = [];
+    if (snapshot.cliente?.nome) clienteLines.push(snapshot.cliente.nome);
+    if (snapshot.cliente?.documento) clienteLines.push(`Doc.: ${snapshot.cliente.documento}`);
+    if (snapshot.cliente?.contato) clienteLines.push(`Contato: ${snapshot.cliente.contato}`);
+    if (snapshot.cliente?.endereco) clienteLines.push(`End.: ${snapshot.cliente.endereco}`);
+    if (snapshot.cliente?.pet) clienteLines.push(`Pet: ${snapshot.cliente.pet}`);
+    const clienteSection = clienteLines.length
+      ? `<section class="nfce-compact__section nfce-compact__section--info">
+          <h2 class="nfce-compact__section-title">Cliente</h2>
+          <p class="nfce-compact__text">${clienteLines.map((line) => escapeHtml(line)).join('<br>')}</p>
+        </section>`
+      : '';
+
+    const deliveryLines = [];
+    if (snapshot.delivery?.apelido) deliveryLines.push(snapshot.delivery.apelido);
+    if (snapshot.delivery?.formatted) deliveryLines.push(snapshot.delivery.formatted);
+    const deliverySection = deliveryLines.length
+      ? `<section class="nfce-compact__section nfce-compact__section--info">
+          <h2 class="nfce-compact__section-title">Entrega</h2>
+          <p class="nfce-compact__text">${deliveryLines.map((line) => escapeHtml(line)).join('<br>')}</p>
+        </section>`
+      : '';
+
+    const thankYouSection = `<section class="nfce-compact__section">
+        <p class="nfce-compact__text">Obrigado pela preferência! Volte sempre.</p>
+      </section>`;
+
+    return `
+      <main class="receipt receipt--nfce nfce-compact nfce-compact--matricial">
+        <header class="nfce-compact__header">
+          ${operatorMarkup}
+          <div class="nfce-compact__company">
+            <h1 class="nfce-compact__company-name">${escapeHtml(companyPrimaryName)}</h1>
+            ${
+              companySecondaryName
+                ? `<p class="nfce-compact__company-secondary">${escapeHtml(companySecondaryName)}</p>`
+                : ''
+            }
+            ${
+              companyDocuments
+                ? `<p class="nfce-compact__company-line">${escapeHtml(companyDocuments)}</p>`
+                : ''
+            }
+            ${
+              companyAddress
+                ? `<p class="nfce-compact__company-line">${escapeHtml(companyAddress)}</p>`
+                : ''
+            }
+          </div>
+          ${headerMeta}
+          ${headerDivider}
+        </header>
+        <section class="nfce-compact__section nfce-compact__section--items">
+          <h2 class="nfce-compact__section-title">Produtos</h2>
+          <table class="nfce-compact__items-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qtd × Vlr</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>${itemsRows}</tbody>
+          </table>
+        </section>
+        <section class="nfce-compact__section nfce-compact__section--totals">
+          <h2 class="nfce-compact__section-title">Totais</h2>
+          ${totalsMarkup}
+        </section>
+        <section class="nfce-compact__section nfce-compact__section--payments">
+          <h2 class="nfce-compact__section-title">Pagamentos</h2>
+          ${pagamentosMarkup}
+        </section>
+        ${clienteSection}
+        ${deliverySection}
+        ${thankYouSection}
+      </main>`;
+  };
+
   const buildSaleReceiptMarkup = (snapshot, variant) => {
     if (!snapshot) {
       return '<main class="receipt"><p class="receipt-empty">Nenhuma venda disponível para impressão.</p></main>';
+    }
+
+    if (variant === 'matricial') {
+      return buildMatricialReceiptMarkup(snapshot);
     }
 
     const badgeLabel = variant === 'fiscal' ? 'Fiscal' : 'Matricial';
@@ -6314,6 +6768,9 @@
                 : ''}
               ${snapshot.cliente.contato
                 ? `<li class="receipt-row"><span class="receipt-row__label">Contato</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.contato)}</span></li>`
+                : ''}
+              ${snapshot.cliente.endereco
+                ? `<li class="receipt-row"><span class="receipt-row__label">Endereço</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.endereco)}</span></li>`
                 : ''}
               ${snapshot.cliente.pet
                 ? `<li class="receipt-row"><span class="receipt-row__label">Pet</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.pet)}</span></li>`
