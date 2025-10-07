@@ -111,6 +111,12 @@
     return currencyFormatter.format(Number.isFinite(numeric) ? numeric : 0);
   }
 
+  function toCurrencyNumber(value) {
+    const numeric = typeof value === 'number' ? value : Number(value || 0);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.round(numeric * 100) / 100;
+  }
+
   function escapeHtml(value) {
     return String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -750,6 +756,79 @@
     if (elements.summaryProtestCount) {
       elements.summaryProtestCount.textContent = `${protest.count || 0} lançamentos`;
     }
+  }
+
+  function buildSummaryFromReceivables(receivables = []) {
+    const summary = {
+      open: { count: 0, total: 0 },
+      finalized: { count: 0, total: 0 },
+      uncollectible: { count: 0, total: 0 },
+      protest: { count: 0, total: 0 },
+    };
+
+    const list = Array.isArray(receivables) ? receivables : [];
+    list.forEach((receivable) => {
+      const installments = Array.isArray(receivable?.installments) && receivable.installments.length
+        ? receivable.installments
+        : [
+            {
+              value: receivable?.totalValue,
+              status: receivable?.status,
+            },
+          ];
+
+      installments.forEach((installment) => {
+        const normalizedStatus = canonicalStatus(installment?.status)
+          || computeStatus(receivable, installment);
+        const key = Object.prototype.hasOwnProperty.call(summary, normalizedStatus)
+          ? normalizedStatus
+          : 'open';
+        const value = toCurrencyNumber(
+          installment?.value !== undefined && installment?.value !== null
+            ? installment.value
+            : receivable?.totalValue
+        );
+        summary[key].count += 1;
+        summary[key].total += value;
+      });
+    });
+
+    summary.open.total = toCurrencyNumber(summary.open.total);
+    summary.finalized.total = toCurrencyNumber(summary.finalized.total);
+    summary.uncollectible.total = toCurrencyNumber(summary.uncollectible.total);
+    summary.protest.total = toCurrencyNumber(summary.protest.total);
+
+    return summary;
+  }
+
+  function mergeSummaries(primary, fallback) {
+    const base = {
+      open: { count: 0, total: 0 },
+      finalized: { count: 0, total: 0 },
+      uncollectible: { count: 0, total: 0 },
+      protest: { count: 0, total: 0 },
+    };
+
+    const apply = (source) => {
+      if (!source || typeof source !== 'object') return;
+      Object.keys(base).forEach((key) => {
+        const entry = source[key];
+        if (!entry || typeof entry !== 'object') return;
+        const count = Number(entry.count);
+        if (Number.isFinite(count)) {
+          base[key].count = count;
+        }
+        const total = Number(entry.total);
+        if (Number.isFinite(total)) {
+          base[key].total = total;
+        }
+      });
+    };
+
+    apply(primary);
+    apply(fallback);
+
+    return base;
   }
 
   async function handleUnauthorized(response) {
@@ -1498,7 +1577,9 @@
         : [];
       state.receivables = receivables;
       receivables.forEach(storeReceivableInCache);
-      updateSummary(data.summary || {});
+      const computedSummary = buildSummaryFromReceivables(receivables);
+      const normalizedSummary = mergeSummaries(data.summary || {}, computedSummary);
+      updateSummary(normalizedSummary);
       renderForecast();
     } catch (error) {
       console.error('accounts-receivable:loadReceivables', error);

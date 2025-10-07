@@ -332,7 +332,42 @@ function recalculateReceivable(receivable) {
   }
 }
 
-function summarizeReceivables(receivables, referenceDate = new Date()) {
+function computeInstallmentStatus(receivable, installment) {
+  if (!receivable) return 'open';
+
+  const receivableStatus = canonicalStatus(receivable?.status);
+
+  if (receivable?.uncollectible || receivableStatus === 'uncollectible') {
+    return 'uncollectible';
+  }
+
+  if (receivable?.protest || receivableStatus === 'protest') {
+    return 'protest';
+  }
+
+  const installmentStatus = canonicalStatus(installment?.status);
+  if (installmentStatus) {
+    return installmentStatus;
+  }
+
+  if (receivableStatus === 'finalized') {
+    return 'finalized';
+  }
+
+  const installments = Array.isArray(receivable?.installments) ? receivable.installments : [];
+  if (!installment && installments.length > 0) {
+    const allFinalized = installments.every(
+      (item) => canonicalStatus(item?.status) === 'finalized'
+    );
+    if (allFinalized) {
+      return 'finalized';
+    }
+  }
+
+  return 'open';
+}
+
+function summarizeReceivables(receivables) {
   const summary = {
     open: { count: 0, total: 0 },
     finalized: { count: 0, total: 0 },
@@ -340,12 +375,27 @@ function summarizeReceivables(receivables, referenceDate = new Date()) {
     protest: { count: 0, total: 0 },
   };
 
-  receivables.forEach((item) => {
-    const status = computeStatus(item, referenceDate);
-    const total = formatCurrency(item.totalValue);
-    const key = Object.prototype.hasOwnProperty.call(summary, status) ? status : 'open';
-    summary[key].count += 1;
-    summary[key].total += total;
+  receivables.forEach((receivable) => {
+    const installments = Array.isArray(receivable?.installments) && receivable.installments.length
+      ? receivable.installments
+      : [
+          {
+            value: receivable?.totalValue,
+            status: receivable?.status,
+          },
+        ];
+
+    installments.forEach((installment) => {
+      const status = computeInstallmentStatus(receivable, installment);
+      const key = Object.prototype.hasOwnProperty.call(summary, status) ? status : 'open';
+      const value = formatCurrency(
+        installment?.value !== undefined && installment?.value !== null
+          ? installment.value
+          : receivable?.totalValue
+      );
+      summary[key].count += 1;
+      summary[key].total += value;
+    });
   });
 
   summary.open.total = formatCurrency(summary.open.total);
