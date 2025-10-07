@@ -1071,6 +1071,44 @@
     return normalized;
   }
 
+  async function updateInstallmentStatus(receivableId, installmentNumber, status) {
+    if (!receivableId) {
+      throw new Error('Selecione um lançamento válido para atualizar o status.');
+    }
+
+    const normalizedNumber = Number.parseInt(installmentNumber, 10);
+    if (!Number.isFinite(normalizedNumber) || normalizedNumber < 1) {
+      throw new Error('Selecione a parcela que deseja atualizar.');
+    }
+
+    const response = await fetch(
+      `${RECEIVABLES_API}/${receivableId}/installments/${normalizedNumber}/status`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
+        body: JSON.stringify({ status }),
+      }
+    );
+
+    if (!response.ok) {
+      if (await handleUnauthorized(response)) {
+        return null;
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData?.message || 'Não foi possível atualizar o status da parcela.');
+    }
+
+    const data = await response.json();
+    const normalized = normalizeReceivable(data.receivable || data);
+    if (normalized) {
+      storeReceivableInCache(normalized);
+    }
+    return normalized;
+  }
+
   function renderForecast() {
     if (!elements.forecastBody) return;
     const tbody = elements.forecastBody;
@@ -1198,6 +1236,7 @@
         if (item.customer) button.dataset.customer = item.customer;
         if (item.document) button.dataset.document = item.document;
         if (item.code) button.dataset.code = item.code;
+        if (item.status) button.dataset.status = item.status;
         if (dueISO) button.dataset.due = dueISO;
         if (issueISO) button.dataset.issue = issueISO;
         button.dataset.value = valueString;
@@ -1258,6 +1297,36 @@
       applyDataset(payButton);
       payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
       actionsWrapper.appendChild(payButton);
+
+      if (item.status !== 'finalized' && item.status !== 'uncollectible') {
+        const uncollectibleButton = document.createElement('button');
+        uncollectibleButton.type = 'button';
+        uncollectibleButton.className = 'forecast-action-uncollectible inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100';
+        uncollectibleButton.dataset.action = 'mark-uncollectible';
+        applyDataset(uncollectibleButton);
+        uncollectibleButton.innerHTML = '<i class="fas fa-ban"></i> Impagável';
+        actionsWrapper.appendChild(uncollectibleButton);
+      }
+
+      if (item.status !== 'finalized' && item.status !== 'protest') {
+        const protestButton = document.createElement('button');
+        protestButton.type = 'button';
+        protestButton.className = 'forecast-action-protest inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-100';
+        protestButton.dataset.action = 'mark-protest';
+        applyDataset(protestButton);
+        protestButton.innerHTML = '<i class="fas fa-file-contract"></i> Protesto';
+        actionsWrapper.appendChild(protestButton);
+      }
+
+      if (item.status === 'uncollectible' || item.status === 'protest') {
+        const reopenButton = document.createElement('button');
+        reopenButton.type = 'button';
+        reopenButton.className = 'forecast-action-reopen inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100';
+        reopenButton.dataset.action = 'restore-installment';
+        applyDataset(reopenButton);
+        reopenButton.innerHTML = '<i class="fas fa-rotate-left"></i> Reabrir';
+        actionsWrapper.appendChild(reopenButton);
+      }
 
       const downloadButton = document.createElement('button');
       downloadButton.type = 'button';
@@ -1414,6 +1483,7 @@
         if (item.customer) button.dataset.customer = item.customer;
         if (item.document) button.dataset.document = item.document;
         if (item.code) button.dataset.code = item.code;
+        if (item.status) button.dataset.status = item.status;
         if (dueISO) button.dataset.due = dueISO;
         if (issueISO) button.dataset.issue = issueISO;
         button.dataset.value = valueString;
@@ -1475,6 +1545,36 @@
       payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
       actionsWrapper.appendChild(payButton);
 
+      if (item.status !== 'finalized' && item.status !== 'uncollectible') {
+        const uncollectibleButton = document.createElement('button');
+        uncollectibleButton.type = 'button';
+        uncollectibleButton.className = 'history-action-uncollectible inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100';
+        uncollectibleButton.dataset.action = 'mark-uncollectible';
+        applyDataset(uncollectibleButton);
+        uncollectibleButton.innerHTML = '<i class="fas fa-ban"></i> Impagável';
+        actionsWrapper.appendChild(uncollectibleButton);
+      }
+
+      if (item.status !== 'finalized' && item.status !== 'protest') {
+        const protestButton = document.createElement('button');
+        protestButton.type = 'button';
+        protestButton.className = 'history-action-protest inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-100';
+        protestButton.dataset.action = 'mark-protest';
+        applyDataset(protestButton);
+        protestButton.innerHTML = '<i class="fas fa-file-contract"></i> Protesto';
+        actionsWrapper.appendChild(protestButton);
+      }
+
+      if (item.status === 'uncollectible' || item.status === 'protest') {
+        const reopenButton = document.createElement('button');
+        reopenButton.type = 'button';
+        reopenButton.className = 'history-action-reopen inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100';
+        reopenButton.dataset.action = 'restore-installment';
+        applyDataset(reopenButton);
+        reopenButton.innerHTML = '<i class="fas fa-rotate-left"></i> Reabrir';
+        actionsWrapper.appendChild(reopenButton);
+      }
+
       const downloadButton = document.createElement('button');
       downloadButton.type = 'button';
       downloadButton.className = 'history-action-download inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100';
@@ -1520,6 +1620,7 @@
       dueDate: dueRaw ? new Date(dueRaw) : null,
       issueDate: issueRaw ? new Date(issueRaw) : null,
       value: parsedValue,
+      status: button.dataset.status || '',
       bankAccountId: button.dataset.bankAccount || '',
       bankAccountLabel: button.dataset.bankLabel || '',
       paymentMethodId: button.dataset.paymentMethod || '',
@@ -1529,6 +1630,67 @@
     };
   }
 
+  async function handleInstallmentStatusAction(context, targetStatus) {
+    if (!context?.receivableId || !context?.installmentNumber) {
+      notify('Selecione uma parcela válida para atualizar o status.', 'warning');
+      return;
+    }
+
+    const currentCanonical = canonicalStatus(context.status);
+    if (currentCanonical === 'finalized') {
+      notify('Parcela quitada não pode ter o status alterado.', 'warning');
+      return;
+    }
+
+    const desiredCanonical = targetStatus === 'pending' ? 'open' : targetStatus;
+    if (currentCanonical === desiredCanonical) {
+      notify('Status da parcela já está atualizado.', 'info');
+      return;
+    }
+
+    const labels = {
+      pending: 'Em aberto',
+      uncollectible: 'Impagável',
+      protest: 'Em protesto',
+    };
+
+    const label = labels[targetStatus] || targetStatus;
+    const installmentLabel = context.installmentNumber
+      ? `parcela ${context.installmentNumber}${context.code ? ` do lançamento ${context.code}` : ''}`
+      : 'parcela selecionada';
+
+    const confirmed = await confirmDialog({
+      title: 'Atualizar status da parcela',
+      message:
+        targetStatus === 'pending'
+          ? `Deseja reabrir a ${installmentLabel}?`
+          : `Deseja marcar a ${installmentLabel} como ${label}?`,
+      confirmText: targetStatus === 'pending' ? 'Reabrir parcela' : 'Atualizar status',
+      cancelText: 'Cancelar',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const updated = await updateInstallmentStatus(
+        context.receivableId,
+        context.installmentNumber,
+        targetStatus
+      );
+      if (!updated) {
+        return;
+      }
+      notify('Status da parcela atualizado com sucesso.', 'success');
+      await loadReceivables();
+      await loadHistory();
+    } catch (error) {
+      console.error('accounts-receivable:handleInstallmentStatusAction', error);
+      notify(error.message || 'Erro ao atualizar o status da parcela.', 'error');
+    }
+  }
+
   async function handleForecastTableClick(event) {
     const context = extractActionContext(event.target);
     if (!context || !context.receivableId) return;
@@ -1536,6 +1698,12 @@
       handleEditReceivable(context.receivableId, context.installmentNumber);
     } else if (context.action === 'pay-forecast') {
       await handlePayReceivable(context);
+    } else if (context.action === 'mark-uncollectible') {
+      await handleInstallmentStatusAction(context, 'uncollectible');
+    } else if (context.action === 'mark-protest') {
+      await handleInstallmentStatusAction(context, 'protest');
+    } else if (context.action === 'restore-installment') {
+      await handleInstallmentStatusAction(context, 'pending');
     } else if (context.action === 'download-forecast') {
       await handleDownloadReceivable(context);
     } else if (context.action === 'delete-forecast') {
@@ -1550,6 +1718,12 @@
       handleEditReceivable(context.receivableId, context.installmentNumber);
     } else if (context.action === 'pay-history') {
       await handlePayReceivable(context);
+    } else if (context.action === 'mark-uncollectible') {
+      await handleInstallmentStatusAction(context, 'uncollectible');
+    } else if (context.action === 'mark-protest') {
+      await handleInstallmentStatusAction(context, 'protest');
+    } else if (context.action === 'restore-installment') {
+      await handleInstallmentStatusAction(context, 'pending');
     } else if (context.action === 'download-history') {
       await handleDownloadReceivable(context);
     } else if (context.action === 'delete-history') {

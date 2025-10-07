@@ -841,6 +841,87 @@ router.delete(
   }
 );
 
+router.patch(
+  '/:id/installments/:installmentNumber/status',
+  requireAuth,
+  authorizeRoles(...AUTH_ROLES),
+  async (req, res) => {
+    try {
+      const { id, installmentNumber: installmentParam } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Identificador inválido.' });
+      }
+
+      const installmentNumber = Number.parseInt(installmentParam, 10);
+      if (!Number.isFinite(installmentNumber) || installmentNumber < 1) {
+        return res.status(400).json({ message: 'Informe a parcela que deseja atualizar.' });
+      }
+
+      const rawStatus = normalizeString(
+        req.body?.status || req.body?.value || req.body?.statusCode || req.body?.targetStatus
+      );
+      const token = normalizeStatusToken(rawStatus);
+
+      let targetStatus = null;
+      if (!token || OPEN_STATUS_KEYS.has(token)) {
+        targetStatus = 'pending';
+      } else if (UNCOLLECTIBLE_STATUS_KEYS.has(token)) {
+        targetStatus = 'uncollectible';
+      } else if (PROTEST_STATUS_KEYS.has(token)) {
+        targetStatus = 'protest';
+      }
+
+      if (!targetStatus) {
+        return res.status(400).json({ message: 'Status informado é inválido para atualização.' });
+      }
+
+      const receivable = await AccountReceivable.findById(id);
+      if (!receivable) {
+        return res.status(404).json({ message: 'Conta a receber não encontrada.' });
+      }
+
+      const installmentsArray = Array.isArray(receivable.installments)
+        ? receivable.installments
+        : [];
+      const targetInstallment = installmentsArray.find(
+        (installment) => Number(installment.number) === Number(installmentNumber)
+      );
+
+      if (!targetInstallment) {
+        return res.status(404).json({ message: 'Parcela informada não foi encontrada.' });
+      }
+
+      const currentStatus = canonicalStatus(targetInstallment.status) || 'open';
+      if (currentStatus === 'finalized') {
+        return res
+          .status(409)
+          .json({ message: 'Parcela quitada não pode ter o status alterado.' });
+      }
+
+      const desiredCanonical = targetStatus === 'pending' ? 'open' : targetStatus;
+      if (desiredCanonical === currentStatus) {
+        await receivable.populate(RECEIVABLE_POPULATE);
+        return res.json(buildPublicReceivable(receivable));
+      }
+
+      if (targetStatus === 'pending') {
+        targetInstallment.status = 'pending';
+      } else {
+        targetInstallment.status = targetStatus;
+      }
+
+      receivable.markModified('installments');
+      await receivable.save();
+      await receivable.populate(RECEIVABLE_POPULATE);
+
+      return res.json(buildPublicReceivable(receivable));
+    } catch (error) {
+      console.error('Erro ao atualizar status da parcela:', error);
+      return res.status(500).json({ message: 'Erro ao atualizar o status da parcela.' });
+    }
+  }
+);
+
 router.post(
   '/:id/payments',
   requireAuth,
