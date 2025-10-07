@@ -23,6 +23,7 @@
     activeCompany: '',
     previewInstallments: [],
     bankAccountOptions: [],
+    paymentMethodOptions: [],
     lastCreatedCode: null,
     receivables: [],
     history: [],
@@ -110,11 +111,38 @@
     return currencyFormatter.format(Number.isFinite(numeric) ? numeric : 0);
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function formatDateBR(value) {
     if (!value) return '--';
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return '--';
     return dateFormatter.format(date);
+  }
+
+  function buildModalSelectOptions(baseOptions, selectedValue, selectedLabel, placeholder = 'Selecione...') {
+    const result = [];
+    const seen = new Set();
+    if (placeholder) {
+      result.push({ value: '', label: placeholder });
+    }
+    (Array.isArray(baseOptions) ? baseOptions : []).forEach((option) => {
+      if (!option || !option.value) return;
+      if (seen.has(option.value)) return;
+      seen.add(option.value);
+      result.push({ value: option.value, label: option.label || option.value });
+    });
+    if (selectedValue && !seen.has(selectedValue)) {
+      result.push({ value: selectedValue, label: selectedLabel || selectedValue });
+    }
+    return { options: result, selected: selectedValue || '' };
   }
 
   function formatDateInputValue(value) {
@@ -466,6 +494,11 @@
     normalized.protest = !!receivable.protest;
     normalized.document = receivable.document || '';
     normalized.documentNumber = receivable.documentNumber || '';
+    normalized.issueDate = receivable.issueDate || null;
+    normalized.dueDate = receivable.dueDate || null;
+    normalized.bankAccount = receivable.bankAccount || null;
+    normalized.accountingAccount = receivable.accountingAccount || null;
+    normalized.paymentMethod = receivable.paymentMethod || null;
     normalized.notes = receivable.notes || '';
     return normalized;
   }
@@ -745,6 +778,7 @@
     if (!companyId) {
       setSelectOptions(elements.paymentMethod, [], 'Selecione uma empresa');
       elements.paymentMethod.disabled = true;
+      state.paymentMethodOptions = [];
       return;
     }
     const currentCompany = companyId;
@@ -764,11 +798,13 @@
       }));
       setSelectOptions(elements.paymentMethod, options, options.length ? 'Selecione...' : 'Nenhum meio cadastrado');
       elements.paymentMethod.disabled = false;
+      state.paymentMethodOptions = options;
     } catch (error) {
       console.error('accounts-receivable:loadPaymentMethods', error);
       notify(error.message || 'Erro ao carregar os meios de pagamento.', 'error');
       setSelectOptions(elements.paymentMethod, [], 'Não foi possível carregar');
       elements.paymentMethod.disabled = true;
+      state.paymentMethodOptions = [];
     }
   }
 
@@ -827,6 +863,22 @@
           ];
 
       installments.forEach((installment) => {
+        const bankAccountId =
+          installment.bankAccountId
+          || receivable.bankAccount?._id
+          || (typeof receivable.bankAccount === 'string' ? receivable.bankAccount : '');
+        const bankAccountLabel =
+          installment.bankAccountLabel
+          || receivable.bankAccount?.label
+          || receivable.bankAccount?.alias
+          || receivable.bankAccount?.name
+          || '';
+        const paymentMethodId =
+          receivable.paymentMethod?._id
+          || (typeof receivable.paymentMethod === 'string' ? receivable.paymentMethod : '');
+        const paymentMethodLabel = receivable.paymentMethod?.name || '';
+        const issueDate = installment.issueDate || receivable.issueDate || null;
+        const notes = receivable.notes || '';
         rows.push({
           receivableId: receivable.id || receivable._id,
           code: receivable.code || receivable.documentNumber || receivable.document || '—',
@@ -836,6 +888,12 @@
           value: installment.value || receivable.totalValue,
           status: installment.status || computeStatus(receivable, installment),
           installmentNumber: installment.number || null,
+          issueDate,
+          bankAccountId,
+          bankAccountLabel,
+          paymentMethodId,
+          paymentMethodLabel,
+          notes,
         });
       });
     });
@@ -855,8 +913,34 @@
           dueISO = parsedDue.toISOString();
         }
       }
+      let issueISO = '';
+      if (item.issueDate) {
+        const parsedIssue = new Date(item.issueDate);
+        if (!Number.isNaN(parsedIssue.getTime())) {
+          issueISO = parsedIssue.toISOString();
+        }
+      }
       const valueRaw = Number(item.value || 0);
       const valueString = Number.isFinite(valueRaw) ? valueRaw.toFixed(2) : '0';
+
+      const applyDataset = (button) => {
+        if (!button) return;
+        button.dataset.id = item.receivableId || '';
+        if (item.installmentNumber) {
+          button.dataset.installment = String(item.installmentNumber);
+        }
+        if (item.customer) button.dataset.customer = item.customer;
+        if (item.document) button.dataset.document = item.document;
+        if (item.code) button.dataset.code = item.code;
+        if (dueISO) button.dataset.due = dueISO;
+        if (issueISO) button.dataset.issue = issueISO;
+        button.dataset.value = valueString;
+        if (item.bankAccountId) button.dataset.bankAccount = item.bankAccountId;
+        if (item.bankAccountLabel) button.dataset.bankLabel = item.bankAccountLabel;
+        if (item.paymentMethodId) button.dataset.paymentMethod = item.paymentMethodId;
+        if (item.paymentMethodLabel) button.dataset.paymentLabel = item.paymentMethodLabel;
+        if (item.notes) button.dataset.notes = item.notes;
+      };
 
       const customerCell = document.createElement('td');
       customerCell.className = 'px-4 py-3';
@@ -896,15 +980,7 @@
       editButton.type = 'button';
       editButton.className = 'forecast-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10';
       editButton.dataset.action = 'edit-forecast';
-      editButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        editButton.dataset.installment = String(item.installmentNumber);
-      }
-      if (item.customer) editButton.dataset.customer = item.customer;
-      if (item.document) editButton.dataset.document = item.document;
-      if (item.code) editButton.dataset.code = item.code;
-      if (dueISO) editButton.dataset.due = dueISO;
-      editButton.dataset.value = valueString;
+      applyDataset(editButton);
       editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
       actionsWrapper.appendChild(editButton);
 
@@ -912,15 +988,7 @@
       payButton.type = 'button';
       payButton.className = 'forecast-action-pay inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100';
       payButton.dataset.action = 'pay-forecast';
-      payButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        payButton.dataset.installment = String(item.installmentNumber);
-      }
-      if (item.customer) payButton.dataset.customer = item.customer;
-      if (item.document) payButton.dataset.document = item.document;
-      if (item.code) payButton.dataset.code = item.code;
-      if (dueISO) payButton.dataset.due = dueISO;
-      payButton.dataset.value = valueString;
+      applyDataset(payButton);
       payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
       actionsWrapper.appendChild(payButton);
 
@@ -928,15 +996,7 @@
       downloadButton.type = 'button';
       downloadButton.className = 'forecast-action-download inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100';
       downloadButton.dataset.action = 'download-forecast';
-      downloadButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        downloadButton.dataset.installment = String(item.installmentNumber);
-      }
-      if (item.customer) downloadButton.dataset.customer = item.customer;
-      if (item.document) downloadButton.dataset.document = item.document;
-      if (item.code) downloadButton.dataset.code = item.code;
-      if (dueISO) downloadButton.dataset.due = dueISO;
-      downloadButton.dataset.value = valueString;
+      applyDataset(downloadButton);
       downloadButton.innerHTML = '<i class="fas fa-arrow-down"></i> Baixar';
       actionsWrapper.appendChild(downloadButton);
 
@@ -944,10 +1004,7 @@
       deleteButton.type = 'button';
       deleteButton.className = 'forecast-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
       deleteButton.dataset.action = 'delete-forecast';
-      deleteButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        deleteButton.dataset.installment = String(item.installmentNumber);
-      }
+      applyDataset(deleteButton);
       deleteButton.innerHTML = '<i class="fas fa-trash"></i> Excluir';
       actionsWrapper.appendChild(deleteButton);
 
@@ -994,6 +1051,22 @@
           ];
 
       installments.forEach((installment) => {
+        const bankAccountId =
+          installment.bankAccountId
+          || receivable.bankAccount?._id
+          || (typeof receivable.bankAccount === 'string' ? receivable.bankAccount : '');
+        const bankAccountLabel =
+          installment.bankAccountLabel
+          || receivable.bankAccount?.label
+          || receivable.bankAccount?.alias
+          || receivable.bankAccount?.name
+          || '';
+        const paymentMethodId =
+          receivable.paymentMethod?._id
+          || (typeof receivable.paymentMethod === 'string' ? receivable.paymentMethod : '');
+        const paymentMethodLabel = receivable.paymentMethod?.name || '';
+        const issueDate = installment.issueDate || receivable.issueDate || null;
+        const notes = receivable.notes || '';
         rows.push({
           receivableId: receivable.id || receivable._id,
           code: receivable.code || receivable.documentNumber || receivable.document || '—',
@@ -1003,6 +1076,12 @@
           value: installment.value || receivable.totalValue,
           status: installment.status || computeStatus(receivable, installment),
           installmentNumber: installment.number || null,
+          issueDate,
+          bankAccountId,
+          bankAccountLabel,
+          paymentMethodId,
+          paymentMethodLabel,
+          notes,
         });
       });
     });
@@ -1022,8 +1101,34 @@
           dueISO = parsedDue.toISOString();
         }
       }
+      let issueISO = '';
+      if (item.issueDate) {
+        const parsedIssue = new Date(item.issueDate);
+        if (!Number.isNaN(parsedIssue.getTime())) {
+          issueISO = parsedIssue.toISOString();
+        }
+      }
       const valueRaw = Number(item.value || 0);
       const valueString = Number.isFinite(valueRaw) ? valueRaw.toFixed(2) : '0';
+
+      const applyDataset = (button) => {
+        if (!button) return;
+        button.dataset.id = item.receivableId || '';
+        if (item.installmentNumber) {
+          button.dataset.installment = String(item.installmentNumber);
+        }
+        if (item.customer) button.dataset.customer = item.customer;
+        if (item.document) button.dataset.document = item.document;
+        if (item.code) button.dataset.code = item.code;
+        if (dueISO) button.dataset.due = dueISO;
+        if (issueISO) button.dataset.issue = issueISO;
+        button.dataset.value = valueString;
+        if (item.bankAccountId) button.dataset.bankAccount = item.bankAccountId;
+        if (item.bankAccountLabel) button.dataset.bankLabel = item.bankAccountLabel;
+        if (item.paymentMethodId) button.dataset.paymentMethod = item.paymentMethodId;
+        if (item.paymentMethodLabel) button.dataset.paymentLabel = item.paymentMethodLabel;
+        if (item.notes) button.dataset.notes = item.notes;
+      };
 
       const customerCell = document.createElement('td');
       customerCell.className = 'px-4 py-3';
@@ -1063,15 +1168,7 @@
       editButton.type = 'button';
       editButton.className = 'history-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10';
       editButton.dataset.action = 'edit-history';
-      editButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        editButton.dataset.installment = String(item.installmentNumber);
-      }
-      if (item.customer) editButton.dataset.customer = item.customer;
-      if (item.document) editButton.dataset.document = item.document;
-      if (item.code) editButton.dataset.code = item.code;
-      if (dueISO) editButton.dataset.due = dueISO;
-      editButton.dataset.value = valueString;
+      applyDataset(editButton);
       editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
       actionsWrapper.appendChild(editButton);
 
@@ -1079,15 +1176,7 @@
       payButton.type = 'button';
       payButton.className = 'history-action-pay inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100';
       payButton.dataset.action = 'pay-history';
-      payButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        payButton.dataset.installment = String(item.installmentNumber);
-      }
-      if (item.customer) payButton.dataset.customer = item.customer;
-      if (item.document) payButton.dataset.document = item.document;
-      if (item.code) payButton.dataset.code = item.code;
-      if (dueISO) payButton.dataset.due = dueISO;
-      payButton.dataset.value = valueString;
+      applyDataset(payButton);
       payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
       actionsWrapper.appendChild(payButton);
 
@@ -1095,15 +1184,7 @@
       downloadButton.type = 'button';
       downloadButton.className = 'history-action-download inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100';
       downloadButton.dataset.action = 'download-history';
-      downloadButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        downloadButton.dataset.installment = String(item.installmentNumber);
-      }
-      if (item.customer) downloadButton.dataset.customer = item.customer;
-      if (item.document) downloadButton.dataset.document = item.document;
-      if (item.code) downloadButton.dataset.code = item.code;
-      if (dueISO) downloadButton.dataset.due = dueISO;
-      downloadButton.dataset.value = valueString;
+      applyDataset(downloadButton);
       downloadButton.innerHTML = '<i class="fas fa-arrow-down"></i> Baixar';
       actionsWrapper.appendChild(downloadButton);
 
@@ -1111,10 +1192,7 @@
       deleteButton.type = 'button';
       deleteButton.className = 'history-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
       deleteButton.dataset.action = 'delete-history';
-      deleteButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        deleteButton.dataset.installment = String(item.installmentNumber);
-      }
+      applyDataset(deleteButton);
       deleteButton.innerHTML = '<i class="fas fa-trash"></i> Excluir';
       actionsWrapper.appendChild(deleteButton);
 
@@ -1132,6 +1210,7 @@
     const installmentNumber = installmentRaw ? Number.parseInt(installmentRaw, 10) : null;
     const valueRaw = button.dataset.value;
     const dueRaw = button.dataset.due;
+    const issueRaw = button.dataset.issue;
     let parsedValue = Number.parseFloat(valueRaw || '0');
     if (!Number.isFinite(parsedValue)) {
       parsedValue = 0;
@@ -1144,7 +1223,13 @@
       document: button.dataset.document || '',
       code: button.dataset.code || '',
       dueDate: dueRaw ? new Date(dueRaw) : null,
+      issueDate: issueRaw ? new Date(issueRaw) : null,
       value: parsedValue,
+      bankAccountId: button.dataset.bankAccount || '',
+      bankAccountLabel: button.dataset.bankLabel || '',
+      paymentMethodId: button.dataset.paymentMethod || '',
+      paymentMethodLabel: button.dataset.paymentLabel || '',
+      notes: button.dataset.notes || '',
     };
   }
 
@@ -1551,33 +1636,134 @@
     const customerLabel = context.customer || '—';
     const documentLabel = context.document || context.code || '—';
     const dueLabel = formatDateBR(context.dueDate);
-    const valueLabel = formatCurrencyBR(context.value || 0);
+    const issueLabel = formatDateBR(context.issueDate);
+    const numericValue = Number.isFinite(context.value) ? context.value : Number(context.value || 0);
+    const valueLabel = formatCurrencyBR(Number.isFinite(numericValue) ? numericValue : 0);
     const installmentLabel = context.installmentNumber
       ? `Parcela ${context.installmentNumber}`
       : 'Lançamento completo';
 
     if (typeof window !== 'undefined' && typeof window.showModal === 'function') {
+      const paymentDateDefault = formatDateInputValue(new Date()) || '';
+      const paidValueInput = Number.isFinite(numericValue) ? numericValue.toFixed(2) : '0.00';
+      const paymentDocumentValue = context.document || context.code || '';
+      const notesValue = context.notes || '';
+      const bankOptionsData = buildModalSelectOptions(
+        state.bankAccountOptions,
+        context.bankAccountId,
+        context.bankAccountLabel
+      );
+      const paymentMethodOptionsData = buildModalSelectOptions(
+        state.paymentMethodOptions,
+        context.paymentMethodId,
+        context.paymentMethodLabel
+      );
+      const renderOptions = (optionData) =>
+        optionData.options
+          .map(
+            (option) =>
+              `<option value="${escapeHtml(option.value)}"${option.value === optionData.selected ? ' selected' : ''}>${escapeHtml(option.label)}</option>`
+          )
+          .join('');
+      const bankOptionsHtml = renderOptions(bankOptionsData);
+      const paymentMethodOptionsHtml = renderOptions(paymentMethodOptionsData);
+      const hasBankOptions = bankOptionsData.options.some((option) => option.value);
+      const hasPaymentMethodOptions = paymentMethodOptionsData.options.some((option) => option.value);
+      const messageHtml =
+        `<form id="payment-confirm-form" class="space-y-4 text-sm text-gray-700">`
+        + `<div class="rounded-lg bg-slate-50 p-3">`
+        + `<p class="font-semibold text-gray-800">${escapeHtml(installmentLabel)}</p>`
+        + `<ul class="mt-2 space-y-1 text-xs text-slate-600">`
+        + `<li><span class="font-medium text-gray-700">Cliente:</span> ${escapeHtml(customerLabel)}</li>`
+        + `<li><span class="font-medium text-gray-700">Documento:</span> ${escapeHtml(documentLabel)}</li>`
+        + `<li><span class="font-medium text-gray-700">Emissão:</span> ${escapeHtml(issueLabel)}</li>`
+        + `<li><span class="font-medium text-gray-700">Vencimento:</span> ${escapeHtml(dueLabel)}</li>`
+        + `<li><span class="font-medium text-gray-700">Valor:</span> ${escapeHtml(valueLabel)}</li>`
+        + `</ul>`
+        + `</div>`
+        + `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Data de pagamento</span>`
+        + `<input type="date" name="paymentDate" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="${escapeHtml(paymentDateDefault)}" required>`
+        + `</label>`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Valor pago</span>`
+        + `<input type="number" step="0.01" min="0" name="paidValue" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="${escapeHtml(paidValueInput)}" required>`
+        + `</label>`
+        + `</div>`
+        + `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Conta corrente</span>`
+        + `<select name="bankAccount" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"${hasBankOptions ? '' : ' disabled'}>${bankOptionsHtml}</select>`
+        + `</label>`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Meio de pagamento</span>`
+        + `<select name="paymentMethod" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"${hasPaymentMethodOptions ? '' : ' disabled'}>${paymentMethodOptionsHtml}</select>`
+        + `</label>`
+        + `</div>`
+        + `<div class="grid grid-cols-1 gap-3">`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Documento do pagamento</span>`
+        + `<input type="text" name="paymentDocument" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="${escapeHtml(paymentDocumentValue)}" placeholder="Ex.: recibo, comprovante, etc.">`
+        + `</label>`
+        + `</div>`
+        + `<div>`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Observação</span>`
+        + `<textarea name="notes" rows="3" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Anote descontos, juros ou observações do recebimento.">${escapeHtml(notesValue)}</textarea>`
+        + `</label>`
+        + `</div>`
+        + `</form>`;
+
       await new Promise((resolve) => {
+        const finalize = (result) => resolve(result);
         window.showModal({
           title: 'Confirmar pagamento',
-          message:
-            `<div class="space-y-2 text-sm text-gray-700">`
-            + `<p>Confirme os dados antes de registrar o pagamento.</p>`
-            + `<ul class="space-y-1 text-left">`
-            + `<li><strong>${installmentLabel}</strong></li>`
-            + `<li><strong>Cliente:</strong> ${customerLabel}</li>`
-            + `<li><strong>Documento:</strong> ${documentLabel}</li>`
-            + `<li><strong>Vencimento:</strong> ${dueLabel}</li>`
-            + `<li><strong>Valor:</strong> ${valueLabel}</li>`
-            + `</ul>`
-            + `</div>`,
+          message: messageHtml,
           confirmText: 'Confirmar pagamento',
           cancelText: 'Cancelar',
           onConfirm: () => {
-            notify('Pagamento confirmado com sucesso.', 'success');
-            resolve(true);
+            const form = document.getElementById('payment-confirm-form');
+            if (form) {
+              const formData = new FormData(form);
+              const paymentDate = formData.get('paymentDate');
+              const paidValue = Number.parseFloat(formData.get('paidValue') || '0');
+              const bankAccount = formData.get('bankAccount') || '';
+              const paymentMethod = formData.get('paymentMethod') || '';
+              const paymentDocument = formData.get('paymentDocument') || '';
+              const notes = formData.get('notes') || '';
+              const paymentDateParsed = parseDateInputValue(paymentDate);
+              const paymentDateLabel = paymentDateParsed
+                ? formatDateBR(paymentDateParsed)
+                : paymentDate || '--';
+              const paidValueLabel = formatCurrencyBR(Number.isFinite(paidValue) ? paidValue : 0);
+              const bankSelect = form.querySelector('select[name="bankAccount"]');
+              const paymentSelect = form.querySelector('select[name="paymentMethod"]');
+              const bankOptionLabel = bankSelect?.options?.[bankSelect.selectedIndex]?.textContent?.trim() || '';
+              const paymentOptionLabel = paymentSelect?.options?.[paymentSelect.selectedIndex]?.textContent?.trim() || '';
+              notify(`Pagamento de ${paidValueLabel} em ${paymentDateLabel} confirmado para ${customerLabel}.`, 'success');
+              try {
+                console.log('Pagamento confirmado', {
+                  receivableId: context.receivableId,
+                  installmentNumber: context.installmentNumber,
+                  paymentDate,
+                  paidValue,
+                  bankAccount,
+                  bankAccountLabel: bankOptionLabel,
+                  paymentMethod,
+                  paymentMethodLabel: paymentOptionLabel,
+                  paymentDocument,
+                  notes,
+                });
+              } catch (_) {
+                /* ignore console errors */
+              }
+            } else {
+              notify('Pagamento confirmado com sucesso.', 'success');
+            }
+            finalize(true);
           },
-          onCancel: () => resolve(false),
+          onCancel: () => finalize(false),
         });
       });
       return;
