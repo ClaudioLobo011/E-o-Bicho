@@ -4542,28 +4542,30 @@
     sorted.forEach((installment) => {
       const li = document.createElement('li');
       li.className =
-        'flex flex-col gap-3 px-5 py-4 text-sm text-gray-700 md:grid md:grid-cols-3 md:items-center md:gap-4';
+        'flex flex-col gap-3 rounded-2xl border border-gray-200 bg-gray-50/80 p-4 text-sm text-gray-700 shadow-sm';
       const label = installment.methodLabel || 'Meio de pagamento';
       const dueDateLabel =
         installment.dueDateLabel || formatDateLabel(installment.dueDate) || '—';
+      const formattedValue = formatCurrency(safeNumber(installment.valor));
       li.innerHTML = `
-        <div class="flex flex-col gap-1">
-          <span class="text-sm font-semibold text-gray-800">Parcela ${
-            installment.parcela || 1
-          }</span>
-          <span class="text-xs text-gray-500">${escapeHtml(label)}</span>
-          <span class="text-xs text-gray-500 md:hidden">Vencimento: ${escapeHtml(dueDateLabel)}</span>
-        </div>
-        <div class="hidden text-sm text-gray-600 md:block">${escapeHtml(dueDateLabel)}</div>
-        <div class="flex items-center justify-between gap-3 md:justify-end">
-          <span class="text-sm font-semibold text-gray-800">${formatCurrency(
-            safeNumber(installment.valor)
-          )}</span>
-          <button type="button" class="text-xs text-red-500 transition hover:text-red-600" data-crediario-remove="${
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 space-y-1">
+            <span class="block text-sm font-semibold text-gray-800">Parcela ${
+              installment.parcela || 1
+            }</span>
+            <span class="block text-xs text-gray-500 leading-tight break-words">${escapeHtml(label)}</span>
+          </div>
+          <button type="button" class="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs text-red-500 shadow-sm transition hover:bg-red-50 hover:text-red-600" data-crediario-remove="${
             installment.uid
           }" aria-label="Remover parcela">
             <i class="fas fa-times"></i>
           </button>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+          <span class="font-medium text-gray-600">Vencimento: ${escapeHtml(
+            dueDateLabel
+          )}</span>
+          <span class="text-base font-semibold text-gray-800">${formattedValue}</span>
         </div>
       `;
       fragment.appendChild(li);
