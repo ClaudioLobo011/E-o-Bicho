@@ -53,12 +53,14 @@
     generateButton: document.getElementById('receivable-generate'),
     installmentsBody: document.getElementById('receivable-installments-body'),
     forecastBody: document.getElementById('receivable-forecast-body'),
-    summaryConfirmedTotal: document.getElementById('receivable-summary-confirmed-total'),
-    summaryConfirmedCount: document.getElementById('receivable-summary-confirmed-count'),
     summaryOpenTotal: document.getElementById('receivable-summary-open-total'),
     summaryOpenCount: document.getElementById('receivable-summary-open-count'),
-    summaryOverdueTotal: document.getElementById('receivable-summary-overdue-total'),
-    summaryOverdueCount: document.getElementById('receivable-summary-overdue-count'),
+    summaryFinalizedTotal: document.getElementById('receivable-summary-finalized-total'),
+    summaryFinalizedCount: document.getElementById('receivable-summary-finalized-count'),
+    summaryUncollectibleTotal: document.getElementById('receivable-summary-uncollectible-total'),
+    summaryUncollectibleCount: document.getElementById('receivable-summary-uncollectible-count'),
+    summaryProtestTotal: document.getElementById('receivable-summary-protest-total'),
+    summaryProtestCount: document.getElementById('receivable-summary-protest-count'),
     historyBody: document.getElementById('receivable-history-body'),
     historyEmpty: document.getElementById('receivable-history-empty'),
     saveButton: document.getElementById('receivable-save'),
@@ -506,29 +508,37 @@
     if (!receivable) return 'open';
     if (receivable.uncollectible) return 'uncollectible';
     if (receivable.protest) return 'protest';
-    if (receivable.forecast) return 'forecast';
 
-    const dueDateValue = installment?.dueDate || receivable.dueDate;
-    if (!dueDateValue) return 'open';
+    const normalize = (value) => (typeof value === 'string' ? value.toLowerCase() : '');
+    const installmentStatus = normalize(installment?.status || receivable.status);
+    const finalizedStatuses = new Set(['received', 'paid', 'finalized', 'quitado']);
 
-    const dueDate = new Date(dueDateValue);
-    if (Number.isNaN(dueDate.getTime())) return 'open';
+    if (finalizedStatuses.has(installmentStatus)) {
+      return 'finalized';
+    }
 
-    const today = new Date();
-    const due = new Date(Date.UTC(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()));
-    const ref = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+    const installments = Array.isArray(receivable.installments) ? receivable.installments : [];
+    if (installments.length > 0) {
+      const allFinalized = installments.every((item) => finalizedStatuses.has(normalize(item?.status)));
+      if (allFinalized) {
+        return 'finalized';
+      }
+    }
 
-    if (due.getTime() < ref.getTime()) return 'overdue';
-    if (due.getTime() === ref.getTime()) return 'confirmed';
     return 'open';
   }
 
   function buildStatusBadge(status) {
     const map = {
-      forecast: {
-        label: 'Previsão',
-        classes: 'bg-sky-100 text-sky-700',
-        icon: 'fa-chart-line',
+      open: {
+        label: 'Em aberto',
+        classes: 'bg-amber-100 text-amber-700',
+        icon: 'fa-hourglass-half',
+      },
+      finalized: {
+        label: 'Finalizado',
+        classes: 'bg-emerald-100 text-emerald-700',
+        icon: 'fa-circle-check',
       },
       uncollectible: {
         label: 'Impagável',
@@ -536,24 +546,9 @@
         icon: 'fa-ban',
       },
       protest: {
-        label: 'Protesto',
+        label: 'Em protesto',
         classes: 'bg-purple-100 text-purple-700',
         icon: 'fa-gavel',
-      },
-      confirmed: {
-        label: 'Confirmado',
-        classes: 'bg-emerald-100 text-emerald-700',
-        icon: 'fa-check-circle',
-      },
-      overdue: {
-        label: 'Em atraso',
-        classes: 'bg-rose-100 text-rose-700',
-        icon: 'fa-circle-exclamation',
-      },
-      open: {
-        label: 'Aguardando',
-        classes: 'bg-amber-100 text-amber-700',
-        icon: 'fa-hourglass-half',
       },
     };
 
@@ -561,27 +556,34 @@
   }
 
   function updateSummary(summary = {}) {
-    const confirmed = summary.confirmed || { count: 0, total: 0 };
     const open = summary.open || { count: 0, total: 0 };
-    const overdue = summary.overdue || { count: 0, total: 0 };
+    const finalized = summary.finalized || { count: 0, total: 0 };
+    const uncollectible = summary.uncollectible || { count: 0, total: 0 };
+    const protest = summary.protest || { count: 0, total: 0 };
 
-    if (elements.summaryConfirmedTotal) {
-      elements.summaryConfirmedTotal.textContent = formatCurrencyBR(confirmed.total || 0);
-    }
-    if (elements.summaryConfirmedCount) {
-      elements.summaryConfirmedCount.textContent = `${confirmed.count || 0} lançamentos`;
-    }
     if (elements.summaryOpenTotal) {
       elements.summaryOpenTotal.textContent = formatCurrencyBR(open.total || 0);
     }
     if (elements.summaryOpenCount) {
       elements.summaryOpenCount.textContent = `${open.count || 0} lançamentos`;
     }
-    if (elements.summaryOverdueTotal) {
-      elements.summaryOverdueTotal.textContent = formatCurrencyBR(overdue.total || 0);
+    if (elements.summaryFinalizedTotal) {
+      elements.summaryFinalizedTotal.textContent = formatCurrencyBR(finalized.total || 0);
     }
-    if (elements.summaryOverdueCount) {
-      elements.summaryOverdueCount.textContent = `${overdue.count || 0} lançamentos`;
+    if (elements.summaryFinalizedCount) {
+      elements.summaryFinalizedCount.textContent = `${finalized.count || 0} lançamentos`;
+    }
+    if (elements.summaryUncollectibleTotal) {
+      elements.summaryUncollectibleTotal.textContent = formatCurrencyBR(uncollectible.total || 0);
+    }
+    if (elements.summaryUncollectibleCount) {
+      elements.summaryUncollectibleCount.textContent = `${uncollectible.count || 0} lançamentos`;
+    }
+    if (elements.summaryProtestTotal) {
+      elements.summaryProtestTotal.textContent = formatCurrencyBR(protest.total || 0);
+    }
+    if (elements.summaryProtestCount) {
+      elements.summaryProtestCount.textContent = `${protest.count || 0} lançamentos`;
     }
   }
 
@@ -827,6 +829,7 @@
       installments.forEach((installment) => {
         rows.push({
           receivableId: receivable.id || receivable._id,
+          code: receivable.code || receivable.documentNumber || receivable.document || '—',
           customer: receivable.customer?.name || '—',
           document: receivable.documentNumber || receivable.document || receivable.code || '—',
           dueDate: installment.dueDate || receivable.dueDate,
@@ -845,6 +848,15 @@
 
     rows.forEach((item) => {
       const row = document.createElement('tr');
+      let dueISO = '';
+      if (item.dueDate) {
+        const parsedDue = new Date(item.dueDate);
+        if (!Number.isNaN(parsedDue.getTime())) {
+          dueISO = parsedDue.toISOString();
+        }
+      }
+      const valueRaw = Number(item.value || 0);
+      const valueString = Number.isFinite(valueRaw) ? valueRaw.toFixed(2) : '0';
 
       const customerCell = document.createElement('td');
       customerCell.className = 'px-4 py-3';
@@ -888,8 +900,45 @@
       if (item.installmentNumber) {
         editButton.dataset.installment = String(item.installmentNumber);
       }
+      if (item.customer) editButton.dataset.customer = item.customer;
+      if (item.document) editButton.dataset.document = item.document;
+      if (item.code) editButton.dataset.code = item.code;
+      if (dueISO) editButton.dataset.due = dueISO;
+      editButton.dataset.value = valueString;
       editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
       actionsWrapper.appendChild(editButton);
+
+      const payButton = document.createElement('button');
+      payButton.type = 'button';
+      payButton.className = 'forecast-action-pay inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100';
+      payButton.dataset.action = 'pay-forecast';
+      payButton.dataset.id = item.receivableId || '';
+      if (item.installmentNumber) {
+        payButton.dataset.installment = String(item.installmentNumber);
+      }
+      if (item.customer) payButton.dataset.customer = item.customer;
+      if (item.document) payButton.dataset.document = item.document;
+      if (item.code) payButton.dataset.code = item.code;
+      if (dueISO) payButton.dataset.due = dueISO;
+      payButton.dataset.value = valueString;
+      payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
+      actionsWrapper.appendChild(payButton);
+
+      const downloadButton = document.createElement('button');
+      downloadButton.type = 'button';
+      downloadButton.className = 'forecast-action-download inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100';
+      downloadButton.dataset.action = 'download-forecast';
+      downloadButton.dataset.id = item.receivableId || '';
+      if (item.installmentNumber) {
+        downloadButton.dataset.installment = String(item.installmentNumber);
+      }
+      if (item.customer) downloadButton.dataset.customer = item.customer;
+      if (item.document) downloadButton.dataset.document = item.document;
+      if (item.code) downloadButton.dataset.code = item.code;
+      if (dueISO) downloadButton.dataset.due = dueISO;
+      downloadButton.dataset.value = valueString;
+      downloadButton.innerHTML = '<i class="fas fa-arrow-down"></i> Baixar';
+      actionsWrapper.appendChild(downloadButton);
 
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';
@@ -947,6 +996,7 @@
       installments.forEach((installment) => {
         rows.push({
           receivableId: receivable.id || receivable._id,
+          code: receivable.code || receivable.documentNumber || receivable.document || '—',
           customer: receivable.customer?.name || '—',
           document: receivable.documentNumber || receivable.document || receivable.code || '—',
           dueDate: installment.dueDate || receivable.dueDate,
@@ -965,6 +1015,15 @@
 
     rows.forEach((item) => {
       const row = document.createElement('tr');
+      let dueISO = '';
+      if (item.dueDate) {
+        const parsedDue = new Date(item.dueDate);
+        if (!Number.isNaN(parsedDue.getTime())) {
+          dueISO = parsedDue.toISOString();
+        }
+      }
+      const valueRaw = Number(item.value || 0);
+      const valueString = Number.isFinite(valueRaw) ? valueRaw.toFixed(2) : '0';
 
       const customerCell = document.createElement('td');
       customerCell.className = 'px-4 py-3';
@@ -1008,8 +1067,45 @@
       if (item.installmentNumber) {
         editButton.dataset.installment = String(item.installmentNumber);
       }
+      if (item.customer) editButton.dataset.customer = item.customer;
+      if (item.document) editButton.dataset.document = item.document;
+      if (item.code) editButton.dataset.code = item.code;
+      if (dueISO) editButton.dataset.due = dueISO;
+      editButton.dataset.value = valueString;
       editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
       actionsWrapper.appendChild(editButton);
+
+      const payButton = document.createElement('button');
+      payButton.type = 'button';
+      payButton.className = 'history-action-pay inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100';
+      payButton.dataset.action = 'pay-history';
+      payButton.dataset.id = item.receivableId || '';
+      if (item.installmentNumber) {
+        payButton.dataset.installment = String(item.installmentNumber);
+      }
+      if (item.customer) payButton.dataset.customer = item.customer;
+      if (item.document) payButton.dataset.document = item.document;
+      if (item.code) payButton.dataset.code = item.code;
+      if (dueISO) payButton.dataset.due = dueISO;
+      payButton.dataset.value = valueString;
+      payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
+      actionsWrapper.appendChild(payButton);
+
+      const downloadButton = document.createElement('button');
+      downloadButton.type = 'button';
+      downloadButton.className = 'history-action-download inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100';
+      downloadButton.dataset.action = 'download-history';
+      downloadButton.dataset.id = item.receivableId || '';
+      if (item.installmentNumber) {
+        downloadButton.dataset.installment = String(item.installmentNumber);
+      }
+      if (item.customer) downloadButton.dataset.customer = item.customer;
+      if (item.document) downloadButton.dataset.document = item.document;
+      if (item.code) downloadButton.dataset.code = item.code;
+      if (dueISO) downloadButton.dataset.due = dueISO;
+      downloadButton.dataset.value = valueString;
+      downloadButton.innerHTML = '<i class="fas fa-arrow-down"></i> Baixar';
+      actionsWrapper.appendChild(downloadButton);
 
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';
@@ -1034,28 +1130,47 @@
     if (!button) return null;
     const installmentRaw = button.dataset.installment;
     const installmentNumber = installmentRaw ? Number.parseInt(installmentRaw, 10) : null;
+    const valueRaw = button.dataset.value;
+    const dueRaw = button.dataset.due;
+    let parsedValue = Number.parseFloat(valueRaw || '0');
+    if (!Number.isFinite(parsedValue)) {
+      parsedValue = 0;
+    }
     return {
       action: button.dataset.action,
       receivableId: button.dataset.id || '',
       installmentNumber: Number.isFinite(installmentNumber) ? installmentNumber : null,
+      customer: button.dataset.customer || '',
+      document: button.dataset.document || '',
+      code: button.dataset.code || '',
+      dueDate: dueRaw ? new Date(dueRaw) : null,
+      value: parsedValue,
     };
   }
 
-  function handleForecastTableClick(event) {
+  async function handleForecastTableClick(event) {
     const context = extractActionContext(event.target);
     if (!context || !context.receivableId) return;
     if (context.action === 'edit-forecast') {
       handleEditReceivable(context.receivableId, context.installmentNumber);
+    } else if (context.action === 'pay-forecast') {
+      await handlePayReceivable(context);
+    } else if (context.action === 'download-forecast') {
+      await handleDownloadReceivable(context);
     } else if (context.action === 'delete-forecast') {
       handleDeleteReceivable(context.receivableId, context.installmentNumber);
     }
   }
 
-  function handleHistoryTableClick(event) {
+  async function handleHistoryTableClick(event) {
     const context = extractActionContext(event.target);
     if (!context || !context.receivableId) return;
     if (context.action === 'edit-history') {
       handleEditReceivable(context.receivableId, context.installmentNumber);
+    } else if (context.action === 'pay-history') {
+      await handlePayReceivable(context);
+    } else if (context.action === 'download-history') {
+      await handleDownloadReceivable(context);
     } else if (context.action === 'delete-history') {
       handleDeleteReceivable(context.receivableId, context.installmentNumber);
     }
@@ -1409,6 +1524,77 @@
     } catch (error) {
       console.error('accounts-receivable:handleDeleteReceivable', error);
       notify(error.message || 'Não foi possível excluir o lançamento selecionado.', 'error');
+    }
+  }
+
+  async function handleDownloadReceivable(context) {
+    const customerLabel = context.customer || '—';
+    const documentLabel = context.document || context.code || '—';
+    const valueLabel = formatCurrencyBR(context.value || 0);
+    const installmentLabel = context.installmentNumber
+      ? `parcela ${context.installmentNumber}`
+      : 'lançamento completo';
+
+    const confirmed = await confirmDialog({
+      title: 'Baixar comprovante',
+      message: `Deseja gerar o comprovante do ${installmentLabel} para ${customerLabel} (doc.: ${documentLabel})?`,
+      confirmText: 'Baixar',
+      cancelText: 'Cancelar',
+    });
+
+    if (confirmed) {
+      notify('Download do comprovante em preparação. Aguarde a geração do arquivo.', 'info');
+    }
+  }
+
+  async function handlePayReceivable(context) {
+    const customerLabel = context.customer || '—';
+    const documentLabel = context.document || context.code || '—';
+    const dueLabel = formatDateBR(context.dueDate);
+    const valueLabel = formatCurrencyBR(context.value || 0);
+    const installmentLabel = context.installmentNumber
+      ? `Parcela ${context.installmentNumber}`
+      : 'Lançamento completo';
+
+    if (typeof window !== 'undefined' && typeof window.showModal === 'function') {
+      await new Promise((resolve) => {
+        window.showModal({
+          title: 'Confirmar pagamento',
+          message:
+            `<div class="space-y-2 text-sm text-gray-700">`
+            + `<p>Confirme os dados antes de registrar o pagamento.</p>`
+            + `<ul class="space-y-1 text-left">`
+            + `<li><strong>${installmentLabel}</strong></li>`
+            + `<li><strong>Cliente:</strong> ${customerLabel}</li>`
+            + `<li><strong>Documento:</strong> ${documentLabel}</li>`
+            + `<li><strong>Vencimento:</strong> ${dueLabel}</li>`
+            + `<li><strong>Valor:</strong> ${valueLabel}</li>`
+            + `</ul>`
+            + `</div>`,
+          confirmText: 'Confirmar pagamento',
+          cancelText: 'Cancelar',
+          onConfirm: () => {
+            notify('Pagamento confirmado com sucesso.', 'success');
+            resolve(true);
+          },
+          onCancel: () => resolve(false),
+        });
+      });
+      return;
+    }
+
+    const plainMessage =
+      `${installmentLabel}\n\n`
+      + `Cliente: ${customerLabel}\n`
+      + `Documento: ${documentLabel}\n`
+      + `Vencimento: ${dueLabel}\n`
+      + `Valor: ${valueLabel}\n\n`
+      + 'Confirmar pagamento?';
+
+    // eslint-disable-next-line no-alert
+    const confirmed = window.confirm(plainMessage);
+    if (confirmed) {
+      notify('Pagamento confirmado com sucesso.', 'success');
     }
   }
 

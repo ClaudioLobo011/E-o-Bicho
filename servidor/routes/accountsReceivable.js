@@ -125,17 +125,26 @@ function buildInstallmentPayload(installment) {
   };
 }
 
-function computeStatus(receivable, referenceDate = new Date()) {
-  const ref = referenceDate instanceof Date ? referenceDate : new Date();
-  const due = receivable?.dueDate ? new Date(receivable.dueDate) : null;
+function computeStatus(receivable) {
+  if (!receivable) return 'open';
   if (receivable?.uncollectible) return 'uncollectible';
   if (receivable?.protest) return 'protest';
-  if (receivable?.forecast) return 'forecast';
-  if (!due || Number.isNaN(due.getTime())) return 'open';
-  const normalizedDue = new Date(Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate()));
-  const normalizedRef = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate()));
-  if (normalizedDue.getTime() < normalizedRef.getTime()) return 'overdue';
-  if (normalizedDue.getTime() === normalizedRef.getTime()) return 'confirmed';
+
+  const normalize = (value) => (typeof value === 'string' ? value.toLowerCase() : '');
+  const finalizedStatuses = new Set(['received', 'paid', 'finalized', 'quitado']);
+
+  if (finalizedStatuses.has(normalize(receivable?.status))) {
+    return 'finalized';
+  }
+
+  const installments = Array.isArray(receivable?.installments) ? receivable.installments : [];
+  if (installments.length > 0) {
+    const allFinalized = installments.every((item) => finalizedStatuses.has(normalize(item?.status)));
+    if (allFinalized) {
+      return 'finalized';
+    }
+  }
+
   return 'open';
 }
 
@@ -192,29 +201,24 @@ function buildPublicReceivable(receivable, referenceDate = new Date()) {
 
 function summarizeReceivables(receivables, referenceDate = new Date()) {
   const summary = {
-    confirmed: { count: 0, total: 0 },
     open: { count: 0, total: 0 },
-    overdue: { count: 0, total: 0 },
+    finalized: { count: 0, total: 0 },
+    uncollectible: { count: 0, total: 0 },
+    protest: { count: 0, total: 0 },
   };
 
   receivables.forEach((item) => {
     const status = computeStatus(item, referenceDate);
     const total = formatCurrency(item.totalValue);
-    if (status === 'confirmed') {
-      summary.confirmed.count += 1;
-      summary.confirmed.total += total;
-    } else if (status === 'overdue') {
-      summary.overdue.count += 1;
-      summary.overdue.total += total;
-    } else {
-      summary.open.count += 1;
-      summary.open.total += total;
-    }
+    const key = Object.prototype.hasOwnProperty.call(summary, status) ? status : 'open';
+    summary[key].count += 1;
+    summary[key].total += total;
   });
 
-  summary.confirmed.total = formatCurrency(summary.confirmed.total);
   summary.open.total = formatCurrency(summary.open.total);
-  summary.overdue.total = formatCurrency(summary.overdue.total);
+  summary.finalized.total = formatCurrency(summary.finalized.total);
+  summary.uncollectible.total = formatCurrency(summary.uncollectible.total);
+  summary.protest.total = formatCurrency(summary.protest.total);
 
   return summary;
 }
