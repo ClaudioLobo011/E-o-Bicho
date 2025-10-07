@@ -6,6 +6,16 @@
     <title>Admin: PDV - E o Bicho</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../../src/output.css">
+    <style>
+        body.pdv-fullscreen-active main.container {
+            max-width: 100vw;
+            width: 100%;
+        }
+
+        body.pdv-fullscreen-active #pdv-workspace {
+            min-height: calc(100vh - 6rem);
+        }
+    </style>
 </head>
 <body class="bg-gray-100">
     <div id="admin-header-placeholder"></div>
@@ -17,7 +27,7 @@
             </aside>
 
             <div class="md:col-span-4 space-y-4">
-                <section class="bg-white border border-gray-100 rounded-xl shadow-sm p-4 space-y-3">
+                <section id="pdv-selection-section" class="bg-white border border-gray-100 rounded-xl shadow-sm p-4 space-y-3">
                     <div class="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                         <div class="flex flex-col gap-1">
                             <h1 class="text-xl font-semibold text-gray-800">PDV</h1>
@@ -82,6 +92,13 @@
                                                 <span class="uppercase tracking-wide text-[10px] text-gray-400">Pergunta</span>
                                             </span>
                                             <span data-print-confirmation-label="venda" class="text-xs font-semibold text-gray-700">Perguntar</span>
+                                        </button>
+                                        <button type="button" id="pdv-fullscreen-toggle" class="inline-flex items-center justify-between gap-3 rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-fullscreen-toggle="true" aria-pressed="false">
+                                            <span class="flex items-center gap-1.5">
+                                                <i class="fas fa-up-right-and-down-left-from-center text-[10px]"></i>
+                                                <span class="uppercase tracking-wide text-[10px] text-gray-400">Tela cheia</span>
+                                            </span>
+                                            <span id="pdv-fullscreen-label" class="text-xs font-semibold text-gray-700">Ativar</span>
                                         </button>
                                     </div>
                                 </div>
@@ -433,7 +450,7 @@
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
 
-    <div id="pdv-customer-modal" class="fixed inset-0 z-[55] hidden">
+    <div id="pdv-customer-modal" class="fixed inset-0 z-[70] hidden">
         <div class="absolute inset-0 bg-slate-900/60" data-pdv-customer-dismiss="backdrop"></div>
         <div class="relative mx-auto mt-16 w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
@@ -541,6 +558,107 @@
                         </div>
                     </div>
                 </section>
+            </div>
+        </div>
+    </div>
+
+    <div id="pdv-crediario-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-slate-900/60" data-crediario-dismiss="backdrop"></div>
+        <div class="relative mx-auto mt-10 w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-800">Crediário</h2>
+                    <p class="text-sm text-gray-500">Configure as parcelas e vincule o cliente para registrar o crediário desta venda.</p>
+                </div>
+                <button type="button" id="pdv-crediario-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de crediário">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="flex flex-col gap-5 px-5 py-5">
+                <section class="rounded-2xl border border-gray-200 bg-white/80 p-5 shadow-sm">
+                    <div class="flex min-w-0 flex-col gap-4">
+                        <div class="flex min-w-0 flex-col gap-3">
+                            <label class="text-sm font-semibold text-gray-700" for="pdv-crediario-customer-select">Cliente vinculado</label>
+                            <div class="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-gray-50/70 p-4 sm:flex-row sm:items-center sm:gap-4">
+                                <div class="min-w-0 flex-1 space-y-1">
+                                    <p id="pdv-crediario-customer-name" class="text-base font-semibold leading-5 text-gray-800 break-words">Nenhum cliente selecionado</p>
+                                    <p id="pdv-crediario-customer-doc" class="text-xs text-gray-500">Selecione um cliente para continuar.</p>
+                                </div>
+                                <button type="button" id="pdv-crediario-customer-select" class="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 transition hover:border-primary hover:text-primary">
+                                    <i class="fas fa-user-plus text-[11px]"></i>
+                                    <span>Selecionar cliente</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="grid gap-2 sm:grid-cols-3 sm:gap-3">
+                            <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 text-center shadow-sm">
+                                <span class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Limite de crédito</span>
+                                <p id="pdv-crediario-limit" class="mt-1 text-sm font-semibold text-gray-800">—</p>
+                            </div>
+                            <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 text-center shadow-sm">
+                                <span class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Pendências</span>
+                                <p id="pdv-crediario-pending" class="mt-1 text-sm font-semibold text-gray-800">—</p>
+                            </div>
+                            <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 text-center shadow-sm">
+                                <span class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Fidelidade</span>
+                                <p id="pdv-crediario-fidelity" class="mt-1 text-sm font-semibold text-gray-800">Em desenvolvimento</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="pdv-crediario-error" class="mt-4 hidden rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600"></div>
+                </section>
+                <section class="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-5">
+                    <div class="space-y-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                        <div class="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
+                            <div class="md:col-span-5">
+                                <label for="pdv-crediario-method" class="block text-sm font-semibold text-gray-700">Meio de pagamento (liquidação)</label>
+                                <select id="pdv-crediario-method" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"></select>
+                            </div>
+                            <div class="md:col-span-3">
+                                <label for="pdv-crediario-date" class="block text-sm font-semibold text-gray-700">Data de pagamento</label>
+                                <input id="pdv-crediario-date" type="date" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="pdv-crediario-parcela" class="block text-sm font-semibold text-gray-700">Parcela</label>
+                                <input id="pdv-crediario-parcela" type="text" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 focus:border-primary focus:ring-2 focus:ring-primary/20" readonly>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label for="pdv-crediario-value" class="block text-sm font-semibold text-gray-700">Valor</label>
+                                <div class="mt-1 flex items-center gap-2">
+                                    <input id="pdv-crediario-value" type="number" min="0" step="0.01" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0,00">
+                                    <button type="button" id="pdv-crediario-add" class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white transition hover:bg-secondary" aria-label="Adicionar parcela">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500">Distribua o valor restante da venda informando as parcelas que serão recebidas no crediário.</p>
+                        <div class="flex items-center justify-between rounded-xl border border-dashed border-primary/30 bg-primary/5 px-4 py-3">
+                            <div class="flex flex-col">
+                                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Restante da venda</span>
+                                <span id="pdv-crediario-remaining-status" class="text-xs text-gray-500">Distribua o valor para prosseguir.</span>
+                            </div>
+                            <span id="pdv-crediario-remaining" class="text-base font-semibold text-gray-800">R$ 0,00</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                        <div class="flex flex-col gap-1 border-b border-gray-200 bg-gray-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                            <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Parcelas cadastradas</h3>
+                            <span id="pdv-crediario-total" class="text-sm font-semibold text-gray-700">Total: R$ 0,00</span>
+                        </div>
+                        <div id="pdv-crediario-list-empty" class="px-5 py-8 text-center text-sm text-gray-500">Nenhuma parcela adicionada.</div>
+                        <div id="pdv-crediario-list-head" class="hidden px-5 pt-4 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400">
+                            <span>Resumo das parcelas</span>
+                        </div>
+                        <div class="px-5 pb-5">
+                            <ul id="pdv-crediario-list" class="hidden grid gap-2.5 sm:grid-cols-2"></ul>
+                        </div>
+                    </div>
+                </section>
+            </div>
+            <div class="flex flex-col gap-3 border-t border-gray-200 bg-gray-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <button type="button" id="pdv-crediario-cancel" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
+                <button type="button" id="pdv-crediario-confirm" class="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60">Adicionar crediário</button>
             </div>
         </div>
     </div>
