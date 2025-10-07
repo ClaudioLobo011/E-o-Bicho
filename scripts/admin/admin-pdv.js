@@ -668,6 +668,45 @@
     return parts.filter(Boolean).join(' • ');
   };
 
+  const resolveCustomerAddressRecord = (cliente) => {
+    if (!cliente || typeof cliente !== 'object') return null;
+
+    const inlineAddresses = extractInlineCustomerAddresses(cliente);
+    for (let index = 0; index < inlineAddresses.length; index += 1) {
+      const normalized = normalizeCustomerAddressRecord(inlineAddresses[index], index);
+      if (normalized?.formatted) {
+        return normalized;
+      }
+    }
+
+    const fallback = {
+      logradouro:
+        cliente.logradouro ||
+        cliente.endereco ||
+        cliente.rua ||
+        cliente.street ||
+        cliente.address ||
+        '',
+      numero: cliente.numero || cliente.num || cliente.number || cliente.addressNumber || '',
+      complemento: cliente.complemento || cliente.complement || cliente.comp || cliente.addressComplement || '',
+      bairro: cliente.bairro || cliente.distrito || cliente.neighborhood || cliente.bairroResidencia || '',
+      cidade: cliente.cidade || cliente.municipio || cliente.city || cliente.cidadeResidencia || '',
+      uf: (cliente.uf || cliente.estado || cliente.state || cliente.ufResidencia || '').toString().toUpperCase(),
+      cep: cliente.cep || cliente.cepFormatado || cliente.zip || cliente.postalCode || cliente.cepResidencia || '',
+    };
+
+    const hasMeaningfulValue = Object.values(fallback).some((value) => {
+      if (value == null) return false;
+      return String(value).trim() !== '';
+    });
+
+    if (!hasMeaningfulValue) {
+      return null;
+    }
+
+    return { ...fallback, formatted: buildDeliveryAddressLine(fallback) };
+  };
+
   const normalizeCustomerAddressRecord = (address, index = 0) => {
     if (!address || typeof address !== 'object') return null;
     const idSource =
@@ -1232,6 +1271,8 @@
     const pagoValor = pagamentoItems.reduce((sum, item) => sum + safeNumber(item.valor), 0);
     const trocoValor = Math.max(0, pagoValor - liquidoValor);
 
+    const clienteAddress = resolveCustomerAddressRecord(state.vendaCliente);
+
     const cliente = state.vendaCliente
       ? {
           nome:
@@ -1250,6 +1291,7 @@
             state.vendaCliente.email ||
             '',
           pet: state.vendaPet?.nome || '',
+          endereco: clienteAddress?.formatted || '',
         }
       : null;
 
@@ -3485,6 +3527,7 @@
           state.vendaCliente?.celular ||
           state.vendaCliente?.email ||
           '',
+        endereco: clienteBase.endereco || resolveCustomerAddressRecord(state.vendaCliente)?.formatted || '',
       },
       address: {
         ...address,
@@ -6566,6 +6609,7 @@
     if (snapshot.cliente?.nome) clienteLines.push(snapshot.cliente.nome);
     if (snapshot.cliente?.documento) clienteLines.push(`Doc.: ${snapshot.cliente.documento}`);
     if (snapshot.cliente?.contato) clienteLines.push(`Contato: ${snapshot.cliente.contato}`);
+    if (snapshot.cliente?.endereco) clienteLines.push(`End.: ${snapshot.cliente.endereco}`);
     if (snapshot.cliente?.pet) clienteLines.push(`Pet: ${snapshot.cliente.pet}`);
     const clienteSection = clienteLines.length
       ? `<section class="nfce-compact__section nfce-compact__section--info">
@@ -6724,6 +6768,9 @@
                 : ''}
               ${snapshot.cliente.contato
                 ? `<li class="receipt-row"><span class="receipt-row__label">Contato</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.contato)}</span></li>`
+                : ''}
+              ${snapshot.cliente.endereco
+                ? `<li class="receipt-row"><span class="receipt-row__label">Endereço</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.endereco)}</span></li>`
                 : ''}
               ${snapshot.cliente.pet
                 ? `<li class="receipt-row"><span class="receipt-row__label">Pet</span><span class="receipt-row__value">${escapeHtml(snapshot.cliente.pet)}</span></li>`
