@@ -50,6 +50,17 @@ function sanitizeDriveFolderName(name) {
     .slice(0, 255);
 }
 
+function sanitizeDriveFileName(name) {
+  if (name === null || name === undefined) return '';
+  return String(name)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\\/:*?"'<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 255);
+}
+
 function getFolderCacheKey(parentId, name) {
   const parentKey = parentId ? String(parentId) : 'root';
   return `${parentKey}::${name}`;
@@ -394,12 +405,12 @@ async function ensureFileIsPublic(fileId, token) {
   }
 }
 
-async function getFileMetadata(fileId, token) {
+async function getFileMetadata(fileId, token, fields = 'id,name,mimeType,size,webViewLink,webContentLink,parents') {
   const headers = {
     Authorization: `Bearer ${token}`,
   };
   const response = await requestGoogle({
-    url: `${FILES_URI}/${fileId}?supportsAllDrives=true&fields=id,name,mimeType,size,webViewLink,webContentLink`,
+    url: `${FILES_URI}/${fileId}?supportsAllDrives=true&fields=${encodeURIComponent(fields)}`,
     method: 'GET',
     headers,
   });
@@ -500,6 +511,96 @@ async function uploadBufferToDrive(buffer, options = {}) {
   return fileData;
 }
 
+async function moveFileToFolder(fileId, options = {}) {
+  if (!fileId) {
+    throw new Error('ID do arquivo inválido para mover no Google Drive.');
+  }
+
+  const credentials = getCredentials();
+  if (!credentials) {
+    throw new Error('Credenciais do Google Drive não configuradas.');
+  }
+
+  const token = await fetchAccessToken();
+
+  const folderSource =
+    typeof options.folderId !== 'undefined' ? options.folderId : credentials.folderId;
+  const baseFolderId = cleanEnvValue(
+    folderSource === null || folderSource === undefined
+      ? ''
+      : typeof folderSource === 'string'
+        ? folderSource
+        : String(folderSource),
+  );
+
+  const pathSegments = Array.isArray(options.folderPath) ? options.folderPath : [];
+
+  let destinationFolderId = baseFolderId || null;
+  if (pathSegments.length) {
+    destinationFolderId = await ensureFolderPath({
+      segments: pathSegments,
+      baseFolderId: destinationFolderId,
+      token,
+    });
+  }
+
+  if (!destinationFolderId) {
+    throw new Error('Não foi possível determinar a pasta destino no Google Drive.');
+  }
+
+  const metadata = await getFileMetadata(fileId, token, 'id,name,parents,webViewLink,webContentLink');
+  const newNameRaw = typeof options.newName === 'string' ? options.newName : null;
+  const sanitizedNewName = newNameRaw ? sanitizeDriveFileName(newNameRaw) : '';
+  const shouldRename = Boolean(sanitizedNewName && metadata?.name !== sanitizedNewName);
+  const existingParents = Array.isArray(metadata?.parents)
+    ? metadata.parents.filter((parent) => typeof parent === 'string' && parent)
+    : [];
+  const parentsToRemove = existingParents.filter((parent) => parent !== destinationFolderId);
+  const needsAddParent = !existingParents.includes(destinationFolderId);
+
+  if (!needsAddParent && parentsToRemove.length === 0 && !shouldRename) {
+    return metadata;
+  }
+
+  const queryParams = new URLSearchParams({
+    supportsAllDrives: 'true',
+    fields: 'id,name,parents,webViewLink,webContentLink',
+  });
+
+  if (needsAddParent) {
+    queryParams.set('addParents', destinationFolderId);
+  }
+
+  if (parentsToRemove.length) {
+    queryParams.set('removeParents', parentsToRemove.join(','));
+  }
+
+  const bodyPayload = {};
+  if (shouldRename) {
+    bodyPayload.name = sanitizedNewName;
+  }
+
+  const bodyString = JSON.stringify(bodyPayload);
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(bodyString),
+  };
+
+  const response = await requestGoogle({
+    url: `${FILES_URI}/${fileId}?${queryParams.toString()}`,
+    method: 'PATCH',
+    headers,
+    body: Buffer.from(bodyString, 'utf8'),
+  });
+
+  try {
+    return JSON.parse(response.body.toString('utf8'));
+  } catch (error) {
+    return metadata;
+  }
+}
+
 async function deleteFile(fileId) {
   if (!fileId) return;
   try {
@@ -522,4 +623,5 @@ module.exports = {
   uploadBufferToDrive,
   deleteFile,
   resetCredentialsCache,
+  moveFileToFolder,
 };
