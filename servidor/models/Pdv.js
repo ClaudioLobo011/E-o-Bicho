@@ -53,6 +53,15 @@ const estoqueSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const financeiroSchema = new mongoose.Schema(
+  {
+    contaCorrente: { type: mongoose.Schema.Types.ObjectId, ref: 'BankAccount', default: null },
+    contaContabilReceber: { type: mongoose.Schema.Types.ObjectId, ref: 'AccountingAccount', default: null },
+    contaContabilPagar: { type: mongoose.Schema.Types.ObjectId, ref: 'AccountingAccount', default: null },
+  },
+  { _id: false }
+);
+
 const pdvSchema = new mongoose.Schema(
   {
     codigo: { type: String, required: true, trim: true, unique: true },
@@ -128,6 +137,7 @@ const pdvSchema = new mongoose.Schema(
     configuracoesVenda: { type: vendaSchema, default: () => ({}) },
     configuracoesFiscal: { type: fiscalSchema, default: () => ({}) },
     configuracoesEstoque: { type: estoqueSchema, default: () => ({}) },
+    configuracoesFinanceiro: { type: financeiroSchema, default: () => ({}) },
   },
   {
     timestamps: true,
