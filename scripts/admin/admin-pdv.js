@@ -5001,7 +5001,7 @@
   };
 
   const getReceiptStyles = (variant = 'matricial') => {
-    const accent = variant === 'fiscal' ? '#0b3d91' : '#111111';
+    const accent = '#000000';
     return `
       :root { color-scheme: light; }
       *, *::before, *::after { box-sizing: border-box; }
@@ -5012,7 +5012,7 @@
         background: #fff;
         font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
         font-size: 11px;
-        color: #111;
+        color: #000;
         font-weight: 500;
         -webkit-font-smoothing: antialiased;
         -webkit-print-color-adjust: exact;
@@ -5057,7 +5057,7 @@
         gap: 0.7mm;
         font-size: 10.3px;
         line-height: 1.35;
-        color: #222;
+        color: #111;
       }
       .receipt__meta-item {
         display: block;
@@ -5065,7 +5065,7 @@
         max-width: 64mm;
       }
       .receipt__section {
-        border-top: 1px solid rgba(17, 17, 17, 0.85);
+        border-top: 1px solid #000;
         padding-top: 2mm;
         display: flex;
         flex-direction: column;
@@ -5081,7 +5081,7 @@
         font-weight: 700;
         letter-spacing: 0.45px;
         text-transform: uppercase;
-        color: #111;
+        color: #000;
       }
       .receipt__cards {
         display: grid;
@@ -5089,19 +5089,19 @@
         gap: 1.6mm;
       }
       .receipt-card {
-        border: 1px solid rgba(17, 17, 17, 0.85);
+        border: 1px solid #000;
         border-radius: 1.6mm;
         padding: 1.6mm 1.8mm;
         display: flex;
         flex-direction: column;
         gap: 0.4mm;
-        background: rgba(17, 17, 17, 0.05);
+        background: rgba(0, 0, 0, 0.04);
       }
       .receipt-card__label {
         font-size: 9.8px;
         text-transform: uppercase;
         letter-spacing: 0.4px;
-        color: #333;
+        color: #111;
       }
       .receipt-card__value {
         font-size: 11.3px;
@@ -5125,7 +5125,7 @@
       }
       .receipt-row__label {
         flex: 1;
-        color: #333;
+        color: #111;
       }
       .receipt-row__value {
         font-weight: 700;
@@ -5142,11 +5142,11 @@
       .receipt-list__empty {
         font-size: 10px;
         text-align: center;
-        color: #666;
+        color: #333;
         padding: 1.6mm 0;
-        border: 1px dashed rgba(102, 102, 102, 0.4);
+        border: 1px dashed rgba(0, 0, 0, 0.4);
         border-radius: 1.6mm;
-        background: rgba(0, 0, 0, 0.03);
+        background: rgba(0, 0, 0, 0.02);
       }
       .receipt-table {
         width: 100%;
@@ -5159,11 +5159,11 @@
         text-transform: uppercase;
         letter-spacing: 0.35px;
         padding-bottom: 0.8mm;
-        border-bottom: 1px solid rgba(17, 17, 17, 0.85);
+        border-bottom: 1px solid #000;
       }
       .receipt-table tbody td {
         padding: 0.6mm 0;
-        border-bottom: 1px dashed rgba(17, 17, 17, 0.25);
+        border-bottom: 1px dashed rgba(0, 0, 0, 0.35);
         vertical-align: top;
       }
       .receipt-table tbody td:last-child {
@@ -5173,18 +5173,18 @@
       .receipt-table__muted {
         display: block;
         font-size: 9.4px;
-        color: #555;
+        color: #333;
       }
       .receipt__footer {
         margin-top: 2mm;
         text-align: center;
         font-size: 9.4px;
-        color: #555;
+        color: #333;
         line-height: 1.45;
       }
       .receipt__footer-strong {
         font-weight: 600;
-        color: #222;
+        color: #000;
       }
       main.receipt.receipt--nfce {
         width: 80mm;
@@ -5205,7 +5205,7 @@
       .receipt--nfce .nfce-compact__divider {
         width: 100%;
         height: 0.6px;
-        background: rgba(17, 17, 17, 0.18);
+        background: rgba(0, 0, 0, 0.35);
       }
       .nfce-compact__company {
         display: flex;
@@ -5224,13 +5224,13 @@
       .nfce-compact__company-secondary {
         margin: 0;
         font-size: 9.2px;
-        color: #333;
+        color: #111;
         line-height: 1.35;
       }
       .nfce-compact__company-line {
         margin: 0;
         font-size: 9px;
-        color: #222;
+        color: #111;
         line-height: 1.35;
         text-align: center;
       }
@@ -5263,7 +5263,7 @@
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.35px;
-        color: #333;
+        color: #111;
       }
       .nfce-compact__reference-left,
       .nfce-compact__reference-right {
@@ -5273,7 +5273,7 @@
         flex: 0 0 auto;
         font-size: 8.8px;
         font-weight: 700;
-        color: rgba(17, 17, 17, 0.5);
+        color: rgba(0, 0, 0, 0.7);
       }
       .nfce-compact__header-details {
         list-style: none;
@@ -5283,7 +5283,7 @@
         flex-direction: column;
         gap: 0.6mm;
         font-size: 8.2px;
-        color: #555;
+        color: #333;
         text-transform: uppercase;
         letter-spacing: 0.25px;
         text-align: center;
@@ -5318,7 +5318,7 @@
         text-transform: uppercase;
         letter-spacing: 0.3px;
         padding: 0.8mm 0;
-        border-bottom: 1px solid rgba(17, 17, 17, 0.3);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.6);
       }
       .nfce-compact__items-table thead th:nth-child(2) {
         text-align: center;
@@ -5328,7 +5328,7 @@
       }
       .nfce-compact__items-table tbody td {
         padding: 0.6mm 0;
-        border-bottom: 1px dashed rgba(17, 17, 17, 0.18);
+        border-bottom: 1px dashed rgba(0, 0, 0, 0.3);
         vertical-align: top;
       }
       .nfce-compact__items-table tbody tr:last-child td {
@@ -5345,12 +5345,12 @@
       .nfce-compact__item-name {
         display: block;
         font-weight: 700;
-        color: #111;
+        color: #000;
       }
       .nfce-compact__item-code {
         display: block;
         font-size: 7.4px;
-        color: #666;
+        color: #333;
         margin-top: 0.3mm;
       }
       .nfce-compact__totals-list {
@@ -5367,7 +5367,7 @@
         align-items: baseline;
         gap: 0.6mm;
         font-size: 9px;
-        color: #222;
+        color: #111;
       }
       .nfce-compact__total span:first-child {
         text-transform: uppercase;
@@ -5379,13 +5379,13 @@
       .nfce-compact__total--highlight {
         margin-top: 0.6mm;
         padding-top: 0.6mm;
-        border-top: 1px solid rgba(17, 17, 17, 0.5);
+        border-top: 1px solid rgba(0, 0, 0, 0.7);
       }
       .nfce-compact__text {
         margin: 0;
         font-size: 8.6px;
         line-height: 1.35;
-        color: #333;
+        color: #111;
         text-align: left;
       }
       .nfce-compact__text--small {
@@ -5408,7 +5408,7 @@
         flex-direction: column;
         gap: 0.8mm;
         font-size: 8.2px;
-        color: #444;
+        color: #111;
       }
       .nfce-compact__qr-payload {
         margin: 0;
@@ -5429,19 +5429,19 @@
         word-break: break-word;
       }
       .nfce-compact__muted {
-        color: #777;
+        color: #444;
         font-weight: 500;
       }
       .nfce-compact__empty {
         font-size: 8.4px;
         text-align: left;
-        color: #666;
+        color: #444;
         padding: 0.6mm 0;
       }
       .receipt__divider {
         width: 100%;
         border: none;
-        border-top: 1px dashed rgba(17, 17, 17, 0.3);
+        border-top: 1px dashed rgba(0, 0, 0, 0.5);
         margin: 1.8mm 0 0;
       }
       .receipt-empty {
@@ -5449,13 +5449,13 @@
         padding: 7mm 0;
         text-align: center;
         font-size: 11px;
-        color: #666;
+        color: #444;
         font-weight: 600;
       }
       .receipt-fallback {
         margin: 0;
         font-size: 9.8px;
-        color: #666;
+        color: #444;
         line-height: 1.45;
         text-align: center;
         white-space: pre-wrap;
