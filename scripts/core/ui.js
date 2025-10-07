@@ -23,6 +23,20 @@
   function qsa(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
   function noop() {}
 
+  function setModalMessageContent(container, message) {
+    if (!container) return;
+    if (message instanceof Node) {
+      container.innerHTML = '';
+      container.appendChild(message);
+      return;
+    }
+    if (typeof message === 'string') {
+      container.innerHTML = message;
+      return;
+    }
+    container.textContent = message != null ? String(message) : '';
+  }
+
   /* ------------------------------------------------------------------------
    * Garantir que o HTML do modal esteja no DOM
    * - Tenta pegar pelo ID
@@ -98,7 +112,7 @@
       const msgEl = qs('#info-modal-message', modal);
       const okBtn = qs('#info-modal-btn', modal) || qs('button', modal);
 
-      if (msgEl) msgEl.textContent = message || '';
+      setModalMessageContent(msgEl, message || '');
       if (okBtn) okBtn.textContent = confirmText || 'OK';
 
       modal.classList.remove('hidden');
@@ -119,7 +133,7 @@
     const btnOk     = qs('#confirm-modal-confirm-btn', modal);
 
     if (titleEl) titleEl.textContent = title || 'Atenção';
-    if (msgEl)   msgEl.textContent   = message || '';
+    setModalMessageContent(msgEl, message || '');
     if (btnOk)   btnOk.textContent   = confirmText || 'Confirmar';
     if (btnCancel) btnCancel.textContent = cancelText || 'Cancelar';
 
@@ -132,9 +146,19 @@
       };
     }
     if (btnOk) {
-      btnOk.onclick = () => {
+      btnOk.onclick = async () => {
+        try {
+          const callback = onConfirm || noop;
+          const result = callback();
+          const resolved = result instanceof Promise ? await result : result;
+          if (resolved === false) {
+            return;
+          }
+        } catch (err) {
+          console.error('ui:showModal confirm', err);
+          return;
+        }
         modal.classList.add('hidden');
-        (onConfirm || noop)();
       };
     }
   }

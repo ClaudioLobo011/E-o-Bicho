@@ -23,6 +23,7 @@
     activeCompany: '',
     previewInstallments: [],
     bankAccountOptions: [],
+    paymentMethodOptions: [],
     lastCreatedCode: null,
     receivables: [],
     history: [],
@@ -53,12 +54,14 @@
     generateButton: document.getElementById('receivable-generate'),
     installmentsBody: document.getElementById('receivable-installments-body'),
     forecastBody: document.getElementById('receivable-forecast-body'),
-    summaryConfirmedTotal: document.getElementById('receivable-summary-confirmed-total'),
-    summaryConfirmedCount: document.getElementById('receivable-summary-confirmed-count'),
     summaryOpenTotal: document.getElementById('receivable-summary-open-total'),
     summaryOpenCount: document.getElementById('receivable-summary-open-count'),
-    summaryOverdueTotal: document.getElementById('receivable-summary-overdue-total'),
-    summaryOverdueCount: document.getElementById('receivable-summary-overdue-count'),
+    summaryFinalizedTotal: document.getElementById('receivable-summary-finalized-total'),
+    summaryFinalizedCount: document.getElementById('receivable-summary-finalized-count'),
+    summaryUncollectibleTotal: document.getElementById('receivable-summary-uncollectible-total'),
+    summaryUncollectibleCount: document.getElementById('receivable-summary-uncollectible-count'),
+    summaryProtestTotal: document.getElementById('receivable-summary-protest-total'),
+    summaryProtestCount: document.getElementById('receivable-summary-protest-count'),
     historyBody: document.getElementById('receivable-history-body'),
     historyEmpty: document.getElementById('receivable-history-empty'),
     saveButton: document.getElementById('receivable-save'),
@@ -108,11 +111,38 @@
     return currencyFormatter.format(Number.isFinite(numeric) ? numeric : 0);
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function formatDateBR(value) {
     if (!value) return '--';
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return '--';
     return dateFormatter.format(date);
+  }
+
+  function buildModalSelectOptions(baseOptions, selectedValue, selectedLabel, placeholder = 'Selecione...') {
+    const result = [];
+    const seen = new Set();
+    if (placeholder) {
+      result.push({ value: '', label: placeholder });
+    }
+    (Array.isArray(baseOptions) ? baseOptions : []).forEach((option) => {
+      if (!option || !option.value) return;
+      if (seen.has(option.value)) return;
+      seen.add(option.value);
+      result.push({ value: option.value, label: option.label || option.value });
+    });
+    if (selectedValue && !seen.has(selectedValue)) {
+      result.push({ value: selectedValue, label: selectedLabel || selectedValue });
+    }
+    return { options: result, selected: selectedValue || '' };
   }
 
   function formatDateInputValue(value) {
@@ -437,6 +467,13 @@
           issueDate: installment.issueDate || receivable.issueDate || null,
           dueDate: installment.dueDate || receivable.dueDate || null,
           value: Number(installment.value || 0),
+          originalValue: Number(
+            installment.originalValue !== undefined && installment.originalValue !== null
+              ? installment.originalValue
+              : installment.value || 0
+          ),
+          paidValue: Number(installment.paidValue || 0),
+          paidDate: installment.paidDate || null,
           bankAccountId:
             (installment.bankAccount && typeof installment.bankAccount === 'object'
               ? installment.bankAccount._id
@@ -453,6 +490,26 @@
             (installment.accountingAccount && typeof installment.accountingAccount === 'object'
               ? installment.accountingAccount.label
               : '') || '',
+          paymentMethodId:
+            (installment.paymentMethod && typeof installment.paymentMethod === 'object'
+              ? installment.paymentMethod._id
+              : installment.paymentMethod) || '',
+          paymentMethodLabel:
+            (installment.paymentMethod && typeof installment.paymentMethod === 'object'
+              ? installment.paymentMethod.name
+              : installment.paymentMethodLabel) || '',
+          paymentMethodType: (() => {
+            const rawType =
+              installment.paymentMethod && typeof installment.paymentMethod === 'object'
+                ? installment.paymentMethod.type
+                : installment.paymentMethodType || '';
+            return typeof rawType === 'string' ? rawType.toLowerCase() : '';
+          })(),
+          paymentDocument: installment.paymentDocument || '',
+          paymentNotes: installment.paymentNotes || '',
+          residualValue: Number(installment.residualValue || 0),
+          residualDueDate: installment.residualDueDate || null,
+          originInstallmentNumber: installment.originInstallmentNumber || null,
           status: installment.status || computeStatus(receivable, installment),
         }))
       : [];
@@ -464,6 +521,11 @@
     normalized.protest = !!receivable.protest;
     normalized.document = receivable.document || '';
     normalized.documentNumber = receivable.documentNumber || '';
+    normalized.issueDate = receivable.issueDate || null;
+    normalized.dueDate = receivable.dueDate || null;
+    normalized.bankAccount = receivable.bankAccount || null;
+    normalized.accountingAccount = receivable.accountingAccount || null;
+    normalized.paymentMethod = receivable.paymentMethod || null;
     normalized.notes = receivable.notes || '';
     return normalized;
   }
@@ -506,29 +568,37 @@
     if (!receivable) return 'open';
     if (receivable.uncollectible) return 'uncollectible';
     if (receivable.protest) return 'protest';
-    if (receivable.forecast) return 'forecast';
 
-    const dueDateValue = installment?.dueDate || receivable.dueDate;
-    if (!dueDateValue) return 'open';
+    const normalize = (value) => (typeof value === 'string' ? value.toLowerCase() : '');
+    const installmentStatus = normalize(installment?.status || receivable.status);
+    const finalizedStatuses = new Set(['received', 'paid', 'finalized', 'quitado']);
 
-    const dueDate = new Date(dueDateValue);
-    if (Number.isNaN(dueDate.getTime())) return 'open';
+    if (finalizedStatuses.has(installmentStatus)) {
+      return 'finalized';
+    }
 
-    const today = new Date();
-    const due = new Date(Date.UTC(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()));
-    const ref = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+    const installments = Array.isArray(receivable.installments) ? receivable.installments : [];
+    if (installments.length > 0) {
+      const allFinalized = installments.every((item) => finalizedStatuses.has(normalize(item?.status)));
+      if (allFinalized) {
+        return 'finalized';
+      }
+    }
 
-    if (due.getTime() < ref.getTime()) return 'overdue';
-    if (due.getTime() === ref.getTime()) return 'confirmed';
     return 'open';
   }
 
   function buildStatusBadge(status) {
     const map = {
-      forecast: {
-        label: 'Previsão',
-        classes: 'bg-sky-100 text-sky-700',
-        icon: 'fa-chart-line',
+      open: {
+        label: 'Em aberto',
+        classes: 'bg-amber-100 text-amber-700',
+        icon: 'fa-hourglass-half',
+      },
+      finalized: {
+        label: 'Finalizado',
+        classes: 'bg-emerald-100 text-emerald-700',
+        icon: 'fa-circle-check',
       },
       uncollectible: {
         label: 'Impagável',
@@ -536,24 +606,9 @@
         icon: 'fa-ban',
       },
       protest: {
-        label: 'Protesto',
+        label: 'Em protesto',
         classes: 'bg-purple-100 text-purple-700',
         icon: 'fa-gavel',
-      },
-      confirmed: {
-        label: 'Confirmado',
-        classes: 'bg-emerald-100 text-emerald-700',
-        icon: 'fa-check-circle',
-      },
-      overdue: {
-        label: 'Em atraso',
-        classes: 'bg-rose-100 text-rose-700',
-        icon: 'fa-circle-exclamation',
-      },
-      open: {
-        label: 'Aguardando',
-        classes: 'bg-amber-100 text-amber-700',
-        icon: 'fa-hourglass-half',
       },
     };
 
@@ -561,27 +616,34 @@
   }
 
   function updateSummary(summary = {}) {
-    const confirmed = summary.confirmed || { count: 0, total: 0 };
     const open = summary.open || { count: 0, total: 0 };
-    const overdue = summary.overdue || { count: 0, total: 0 };
+    const finalized = summary.finalized || { count: 0, total: 0 };
+    const uncollectible = summary.uncollectible || { count: 0, total: 0 };
+    const protest = summary.protest || { count: 0, total: 0 };
 
-    if (elements.summaryConfirmedTotal) {
-      elements.summaryConfirmedTotal.textContent = formatCurrencyBR(confirmed.total || 0);
-    }
-    if (elements.summaryConfirmedCount) {
-      elements.summaryConfirmedCount.textContent = `${confirmed.count || 0} lançamentos`;
-    }
     if (elements.summaryOpenTotal) {
       elements.summaryOpenTotal.textContent = formatCurrencyBR(open.total || 0);
     }
     if (elements.summaryOpenCount) {
       elements.summaryOpenCount.textContent = `${open.count || 0} lançamentos`;
     }
-    if (elements.summaryOverdueTotal) {
-      elements.summaryOverdueTotal.textContent = formatCurrencyBR(overdue.total || 0);
+    if (elements.summaryFinalizedTotal) {
+      elements.summaryFinalizedTotal.textContent = formatCurrencyBR(finalized.total || 0);
     }
-    if (elements.summaryOverdueCount) {
-      elements.summaryOverdueCount.textContent = `${overdue.count || 0} lançamentos`;
+    if (elements.summaryFinalizedCount) {
+      elements.summaryFinalizedCount.textContent = `${finalized.count || 0} lançamentos`;
+    }
+    if (elements.summaryUncollectibleTotal) {
+      elements.summaryUncollectibleTotal.textContent = formatCurrencyBR(uncollectible.total || 0);
+    }
+    if (elements.summaryUncollectibleCount) {
+      elements.summaryUncollectibleCount.textContent = `${uncollectible.count || 0} lançamentos`;
+    }
+    if (elements.summaryProtestTotal) {
+      elements.summaryProtestTotal.textContent = formatCurrencyBR(protest.total || 0);
+    }
+    if (elements.summaryProtestCount) {
+      elements.summaryProtestCount.textContent = `${protest.count || 0} lançamentos`;
     }
   }
 
@@ -743,6 +805,7 @@
     if (!companyId) {
       setSelectOptions(elements.paymentMethod, [], 'Selecione uma empresa');
       elements.paymentMethod.disabled = true;
+      state.paymentMethodOptions = [];
       return;
     }
     const currentCompany = companyId;
@@ -759,14 +822,17 @@
       const options = methods.map((method) => ({
         value: method._id,
         label: method.name,
+        type: (method.type || '').toLowerCase(),
       }));
       setSelectOptions(elements.paymentMethod, options, options.length ? 'Selecione...' : 'Nenhum meio cadastrado');
       elements.paymentMethod.disabled = false;
+      state.paymentMethodOptions = options;
     } catch (error) {
       console.error('accounts-receivable:loadPaymentMethods', error);
       notify(error.message || 'Erro ao carregar os meios de pagamento.', 'error');
       setSelectOptions(elements.paymentMethod, [], 'Não foi possível carregar');
       elements.paymentMethod.disabled = true;
+      state.paymentMethodOptions = [];
     }
   }
 
@@ -785,6 +851,33 @@
       if (await handleUnauthorized(response)) return null;
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData?.message || `Erro ao carregar a conta a receber (${response.status}).`);
+    }
+    const data = await response.json();
+    const normalized = normalizeReceivable(data.receivable || data);
+    if (normalized) {
+      storeReceivableInCache(normalized);
+    }
+    return normalized;
+  }
+
+  async function registerPayment(receivableId, payload = {}) {
+    if (!receivableId) {
+      throw new Error('Selecione um lançamento válido para registrar o pagamento.');
+    }
+    const response = await fetch(`${RECEIVABLES_API}/${receivableId}/payments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      if (await handleUnauthorized(response)) {
+        return null;
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData?.message || 'Não foi possível registrar o pagamento.');
     }
     const data = await response.json();
     const normalized = normalizeReceivable(data.receivable || data);
@@ -825,14 +918,47 @@
           ];
 
       installments.forEach((installment) => {
+        const bankAccountId =
+          installment.bankAccountId
+          || receivable.bankAccount?._id
+          || (typeof receivable.bankAccount === 'string' ? receivable.bankAccount : '');
+        const bankAccountLabel =
+          installment.bankAccountLabel
+          || receivable.bankAccount?.label
+          || receivable.bankAccount?.alias
+          || receivable.bankAccount?.name
+          || '';
+        const paymentMethodId =
+          installment.paymentMethodId
+          || receivable.paymentMethod?._id
+          || (typeof receivable.paymentMethod === 'string' ? receivable.paymentMethod : '');
+        const paymentMethodLabel =
+          installment.paymentMethodLabel || receivable.paymentMethod?.name || '';
+        const issueDate = installment.issueDate || receivable.issueDate || null;
+        const notes = installment.paymentNotes || receivable.notes || '';
+        const paymentMethodType =
+          (installment.paymentMethodType
+            || (typeof receivable.paymentMethod?.type === 'string'
+              ? receivable.paymentMethod.type
+              : '')
+            || ''
+          ).toLowerCase();
         rows.push({
           receivableId: receivable.id || receivable._id,
+          code: receivable.code || receivable.documentNumber || receivable.document || '—',
           customer: receivable.customer?.name || '—',
           document: receivable.documentNumber || receivable.document || receivable.code || '—',
           dueDate: installment.dueDate || receivable.dueDate,
           value: installment.value || receivable.totalValue,
           status: installment.status || computeStatus(receivable, installment),
           installmentNumber: installment.number || null,
+          issueDate,
+          bankAccountId,
+          bankAccountLabel,
+          paymentMethodId,
+          paymentMethodLabel,
+          paymentMethodType,
+          notes,
         });
       });
     });
@@ -845,6 +971,42 @@
 
     rows.forEach((item) => {
       const row = document.createElement('tr');
+      let dueISO = '';
+      if (item.dueDate) {
+        const parsedDue = new Date(item.dueDate);
+        if (!Number.isNaN(parsedDue.getTime())) {
+          dueISO = parsedDue.toISOString();
+        }
+      }
+      let issueISO = '';
+      if (item.issueDate) {
+        const parsedIssue = new Date(item.issueDate);
+        if (!Number.isNaN(parsedIssue.getTime())) {
+          issueISO = parsedIssue.toISOString();
+        }
+      }
+      const valueRaw = Number(item.value || 0);
+      const valueString = Number.isFinite(valueRaw) ? valueRaw.toFixed(2) : '0';
+
+      const applyDataset = (button) => {
+        if (!button) return;
+        button.dataset.id = item.receivableId || '';
+        if (item.installmentNumber) {
+          button.dataset.installment = String(item.installmentNumber);
+        }
+        if (item.customer) button.dataset.customer = item.customer;
+        if (item.document) button.dataset.document = item.document;
+        if (item.code) button.dataset.code = item.code;
+        if (dueISO) button.dataset.due = dueISO;
+        if (issueISO) button.dataset.issue = issueISO;
+        button.dataset.value = valueString;
+        if (item.bankAccountId) button.dataset.bankAccount = item.bankAccountId;
+        if (item.bankAccountLabel) button.dataset.bankLabel = item.bankAccountLabel;
+        if (item.paymentMethodId) button.dataset.paymentMethod = item.paymentMethodId;
+        if (item.paymentMethodLabel) button.dataset.paymentLabel = item.paymentMethodLabel;
+        if (item.paymentMethodType) button.dataset.paymentType = item.paymentMethodType;
+        if (item.notes) button.dataset.notes = item.notes;
+      };
 
       const customerCell = document.createElement('td');
       customerCell.className = 'px-4 py-3';
@@ -884,21 +1046,31 @@
       editButton.type = 'button';
       editButton.className = 'forecast-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10';
       editButton.dataset.action = 'edit-forecast';
-      editButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        editButton.dataset.installment = String(item.installmentNumber);
-      }
+      applyDataset(editButton);
       editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
       actionsWrapper.appendChild(editButton);
+
+      const payButton = document.createElement('button');
+      payButton.type = 'button';
+      payButton.className = 'forecast-action-pay inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100';
+      payButton.dataset.action = 'pay-forecast';
+      applyDataset(payButton);
+      payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
+      actionsWrapper.appendChild(payButton);
+
+      const downloadButton = document.createElement('button');
+      downloadButton.type = 'button';
+      downloadButton.className = 'forecast-action-download inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100';
+      downloadButton.dataset.action = 'download-forecast';
+      applyDataset(downloadButton);
+      downloadButton.innerHTML = '<i class="fas fa-arrow-down"></i> Baixar';
+      actionsWrapper.appendChild(downloadButton);
 
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';
       deleteButton.className = 'forecast-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
       deleteButton.dataset.action = 'delete-forecast';
-      deleteButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        deleteButton.dataset.installment = String(item.installmentNumber);
-      }
+      applyDataset(deleteButton);
       deleteButton.innerHTML = '<i class="fas fa-trash"></i> Excluir';
       actionsWrapper.appendChild(deleteButton);
 
@@ -945,14 +1117,47 @@
           ];
 
       installments.forEach((installment) => {
+        const bankAccountId =
+          installment.bankAccountId
+          || receivable.bankAccount?._id
+          || (typeof receivable.bankAccount === 'string' ? receivable.bankAccount : '');
+        const bankAccountLabel =
+          installment.bankAccountLabel
+          || receivable.bankAccount?.label
+          || receivable.bankAccount?.alias
+          || receivable.bankAccount?.name
+          || '';
+        const paymentMethodId =
+          installment.paymentMethodId
+          || receivable.paymentMethod?._id
+          || (typeof receivable.paymentMethod === 'string' ? receivable.paymentMethod : '');
+        const paymentMethodLabel =
+          installment.paymentMethodLabel || receivable.paymentMethod?.name || '';
+        const issueDate = installment.issueDate || receivable.issueDate || null;
+        const notes = installment.paymentNotes || receivable.notes || '';
+        const paymentMethodType =
+          (installment.paymentMethodType
+            || (typeof receivable.paymentMethod?.type === 'string'
+              ? receivable.paymentMethod.type
+              : '')
+            || ''
+          ).toLowerCase();
         rows.push({
           receivableId: receivable.id || receivable._id,
+          code: receivable.code || receivable.documentNumber || receivable.document || '—',
           customer: receivable.customer?.name || '—',
           document: receivable.documentNumber || receivable.document || receivable.code || '—',
           dueDate: installment.dueDate || receivable.dueDate,
           value: installment.value || receivable.totalValue,
           status: installment.status || computeStatus(receivable, installment),
           installmentNumber: installment.number || null,
+          issueDate,
+          bankAccountId,
+          bankAccountLabel,
+          paymentMethodId,
+          paymentMethodLabel,
+          paymentMethodType,
+          notes,
         });
       });
     });
@@ -965,6 +1170,42 @@
 
     rows.forEach((item) => {
       const row = document.createElement('tr');
+      let dueISO = '';
+      if (item.dueDate) {
+        const parsedDue = new Date(item.dueDate);
+        if (!Number.isNaN(parsedDue.getTime())) {
+          dueISO = parsedDue.toISOString();
+        }
+      }
+      let issueISO = '';
+      if (item.issueDate) {
+        const parsedIssue = new Date(item.issueDate);
+        if (!Number.isNaN(parsedIssue.getTime())) {
+          issueISO = parsedIssue.toISOString();
+        }
+      }
+      const valueRaw = Number(item.value || 0);
+      const valueString = Number.isFinite(valueRaw) ? valueRaw.toFixed(2) : '0';
+
+      const applyDataset = (button) => {
+        if (!button) return;
+        button.dataset.id = item.receivableId || '';
+        if (item.installmentNumber) {
+          button.dataset.installment = String(item.installmentNumber);
+        }
+        if (item.customer) button.dataset.customer = item.customer;
+        if (item.document) button.dataset.document = item.document;
+        if (item.code) button.dataset.code = item.code;
+        if (dueISO) button.dataset.due = dueISO;
+        if (issueISO) button.dataset.issue = issueISO;
+        button.dataset.value = valueString;
+        if (item.bankAccountId) button.dataset.bankAccount = item.bankAccountId;
+        if (item.bankAccountLabel) button.dataset.bankLabel = item.bankAccountLabel;
+        if (item.paymentMethodId) button.dataset.paymentMethod = item.paymentMethodId;
+        if (item.paymentMethodLabel) button.dataset.paymentLabel = item.paymentMethodLabel;
+        if (item.paymentMethodType) button.dataset.paymentType = item.paymentMethodType;
+        if (item.notes) button.dataset.notes = item.notes;
+      };
 
       const customerCell = document.createElement('td');
       customerCell.className = 'px-4 py-3';
@@ -1004,21 +1245,31 @@
       editButton.type = 'button';
       editButton.className = 'history-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10';
       editButton.dataset.action = 'edit-history';
-      editButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        editButton.dataset.installment = String(item.installmentNumber);
-      }
+      applyDataset(editButton);
       editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
       actionsWrapper.appendChild(editButton);
+
+      const payButton = document.createElement('button');
+      payButton.type = 'button';
+      payButton.className = 'history-action-pay inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100';
+      payButton.dataset.action = 'pay-history';
+      applyDataset(payButton);
+      payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
+      actionsWrapper.appendChild(payButton);
+
+      const downloadButton = document.createElement('button');
+      downloadButton.type = 'button';
+      downloadButton.className = 'history-action-download inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100';
+      downloadButton.dataset.action = 'download-history';
+      applyDataset(downloadButton);
+      downloadButton.innerHTML = '<i class="fas fa-arrow-down"></i> Baixar';
+      actionsWrapper.appendChild(downloadButton);
 
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';
       deleteButton.className = 'history-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
       deleteButton.dataset.action = 'delete-history';
-      deleteButton.dataset.id = item.receivableId || '';
-      if (item.installmentNumber) {
-        deleteButton.dataset.installment = String(item.installmentNumber);
-      }
+      applyDataset(deleteButton);
       deleteButton.innerHTML = '<i class="fas fa-trash"></i> Excluir';
       actionsWrapper.appendChild(deleteButton);
 
@@ -1034,28 +1285,55 @@
     if (!button) return null;
     const installmentRaw = button.dataset.installment;
     const installmentNumber = installmentRaw ? Number.parseInt(installmentRaw, 10) : null;
+    const valueRaw = button.dataset.value;
+    const dueRaw = button.dataset.due;
+    const issueRaw = button.dataset.issue;
+    let parsedValue = Number.parseFloat(valueRaw || '0');
+    if (!Number.isFinite(parsedValue)) {
+      parsedValue = 0;
+    }
     return {
       action: button.dataset.action,
       receivableId: button.dataset.id || '',
       installmentNumber: Number.isFinite(installmentNumber) ? installmentNumber : null,
+      customer: button.dataset.customer || '',
+      document: button.dataset.document || '',
+      code: button.dataset.code || '',
+      dueDate: dueRaw ? new Date(dueRaw) : null,
+      issueDate: issueRaw ? new Date(issueRaw) : null,
+      value: parsedValue,
+      bankAccountId: button.dataset.bankAccount || '',
+      bankAccountLabel: button.dataset.bankLabel || '',
+      paymentMethodId: button.dataset.paymentMethod || '',
+      paymentMethodLabel: button.dataset.paymentLabel || '',
+      paymentMethodType: button.dataset.paymentType || '',
+      notes: button.dataset.notes || '',
     };
   }
 
-  function handleForecastTableClick(event) {
+  async function handleForecastTableClick(event) {
     const context = extractActionContext(event.target);
     if (!context || !context.receivableId) return;
     if (context.action === 'edit-forecast') {
       handleEditReceivable(context.receivableId, context.installmentNumber);
+    } else if (context.action === 'pay-forecast') {
+      await handlePayReceivable(context);
+    } else if (context.action === 'download-forecast') {
+      await handleDownloadReceivable(context);
     } else if (context.action === 'delete-forecast') {
       handleDeleteReceivable(context.receivableId, context.installmentNumber);
     }
   }
 
-  function handleHistoryTableClick(event) {
+  async function handleHistoryTableClick(event) {
     const context = extractActionContext(event.target);
     if (!context || !context.receivableId) return;
     if (context.action === 'edit-history') {
       handleEditReceivable(context.receivableId, context.installmentNumber);
+    } else if (context.action === 'pay-history') {
+      await handlePayReceivable(context);
+    } else if (context.action === 'download-history') {
+      await handleDownloadReceivable(context);
     } else if (context.action === 'delete-history') {
       handleDeleteReceivable(context.receivableId, context.installmentNumber);
     }
@@ -1409,6 +1687,399 @@
     } catch (error) {
       console.error('accounts-receivable:handleDeleteReceivable', error);
       notify(error.message || 'Não foi possível excluir o lançamento selecionado.', 'error');
+    }
+  }
+
+  async function handleDownloadReceivable(context) {
+    const customerLabel = context.customer || '—';
+    const documentLabel = context.document || context.code || '—';
+    const valueLabel = formatCurrencyBR(context.value || 0);
+    const installmentLabel = context.installmentNumber
+      ? `parcela ${context.installmentNumber}`
+      : 'lançamento completo';
+
+    const confirmed = await confirmDialog({
+      title: 'Baixar comprovante',
+      message: `Deseja gerar o comprovante do ${installmentLabel} para ${customerLabel} (doc.: ${documentLabel})?`,
+      confirmText: 'Baixar',
+      cancelText: 'Cancelar',
+    });
+
+    if (confirmed) {
+      notify('Download do comprovante em preparação. Aguarde a geração do arquivo.', 'info');
+    }
+  }
+
+  async function handlePayReceivable(context) {
+    const customerLabel = context.customer || '—';
+    const documentLabel = context.document || context.code || '—';
+    const dueLabel = formatDateBR(context.dueDate);
+    const issueLabel = formatDateBR(context.issueDate);
+    const numericValue = Number.isFinite(context.value) ? context.value : Number(context.value || 0);
+    const valueLabel = formatCurrencyBR(Number.isFinite(numericValue) ? numericValue : 0);
+    const installmentLabel = context.installmentNumber
+      ? `Parcela ${context.installmentNumber}`
+      : 'Lançamento completo';
+
+    if (typeof window !== 'undefined' && typeof window.showModal === 'function') {
+      const paymentDateDefault = formatDateInputValue(new Date()) || '';
+      const paidValueInput = Number.isFinite(numericValue) ? numericValue.toFixed(2) : '0.00';
+      const paymentDocumentValue = context.document || context.code || '';
+      const notesValue = context.notes || '';
+      const totalValue = Number.isFinite(numericValue) ? numericValue : 0;
+      const defaultPaidValue = Number.parseFloat(paidValueInput || '0');
+      const residualThreshold = 0.009;
+      const residualDefaultValue = Number.isFinite(defaultPaidValue)
+        ? Math.max(totalValue - defaultPaidValue, 0)
+        : Math.max(totalValue, 0);
+      const residualDefaultLabel = formatCurrencyBR(residualDefaultValue);
+      const residualDueDefault = formatDateInputValue(context.dueDate) || '';
+      const bankOptionsData = buildModalSelectOptions(
+        state.bankAccountOptions,
+        context.bankAccountId,
+        context.bankAccountLabel
+      );
+      const filteredPaymentMethodOptions = state.paymentMethodOptions.filter(
+        (option) => (option.type || '').toLowerCase() !== 'crediario'
+      );
+      const selectedPaymentOption = state.paymentMethodOptions.find(
+        (option) => option.value === context.paymentMethodId
+      );
+      const contextPaymentMethodType = (context.paymentMethodType || '').toLowerCase();
+      const selectedPaymentMethodType = (
+        selectedPaymentOption?.type
+        || contextPaymentMethodType
+        || ''
+      ).toLowerCase();
+      const isSelectedCrediario = selectedPaymentMethodType === 'crediario';
+      const paymentMethodOptionsData = buildModalSelectOptions(
+        filteredPaymentMethodOptions,
+        isSelectedCrediario ? '' : context.paymentMethodId,
+        isSelectedCrediario ? '' : context.paymentMethodLabel
+      );
+      const renderOptions = (optionData) =>
+        optionData.options
+          .map(
+            (option) =>
+              `<option value="${escapeHtml(option.value)}"${option.value === optionData.selected ? ' selected' : ''}>${escapeHtml(option.label)}</option>`
+          )
+          .join('');
+      const bankOptionsHtml = renderOptions(bankOptionsData);
+      const paymentMethodOptionsHtml = renderOptions(paymentMethodOptionsData);
+      const hasBankOptions = bankOptionsData.options.some((option) => option.value);
+      const hasPaymentMethodOptions = paymentMethodOptionsData.options.some((option) => option.value);
+      const residualSectionClass =
+        'space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3' +
+        (residualDefaultValue > residualThreshold ? '' : ' hidden');
+      const messageHtml =
+        `<form id="payment-confirm-form" class="space-y-4 text-sm text-gray-700">`
+        + `<div class="rounded-lg bg-slate-50 p-3">`
+        + `<p class="font-semibold text-gray-800">${escapeHtml(installmentLabel)}</p>`
+        + `<ul class="mt-2 space-y-1 text-xs text-slate-600">`
+        + `<li><span class="font-medium text-gray-700">Cliente:</span> ${escapeHtml(customerLabel)}</li>`
+        + `<li><span class="font-medium text-gray-700">Documento:</span> ${escapeHtml(documentLabel)}</li>`
+        + `<li><span class="font-medium text-gray-700">Emissão:</span> ${escapeHtml(issueLabel)}</li>`
+        + `<li><span class="font-medium text-gray-700">Vencimento:</span> ${escapeHtml(dueLabel)}</li>`
+        + `<li><span class="font-medium text-gray-700">Valor:</span> ${escapeHtml(valueLabel)}</li>`
+        + `</ul>`
+        + `</div>`
+        + `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Data de pagamento</span>`
+        + `<input type="date" name="paymentDate" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="${escapeHtml(paymentDateDefault)}" required>`
+        + `</label>`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Valor pago</span>`
+        + `<input type="number" step="0.01" min="0" name="paidValue" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="${escapeHtml(paidValueInput)}" required>`
+        + `</label>`
+        + `</div>`
+        + `<div class="${residualSectionClass}" data-residual-section>`
+        + `<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">`
+        + `<div>`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Resíduo pendente</span>`
+        + `<p class="text-xs text-amber-700">O valor pago é menor que o total. Ajuste o restante e informe um novo vencimento.</p>`
+        + `</div>`
+        + `<span class="text-base font-semibold text-amber-800" data-residual-amount>${escapeHtml(residualDefaultLabel)}</span>`
+        + `</div>`
+        + `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Valor do resíduo</span>`
+        + `<input type="number" step="0.01" min="0" name="residualValue" data-residual-input class="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-200" value="${escapeHtml(residualDefaultValue.toFixed(2))}">`
+        + `</label>`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-amber-700">Novo vencimento do resíduo</span>`
+        + `<input type="date" name="residualDueDate" data-residual-due class="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-200" value="${escapeHtml(residualDueDefault)}"${
+            residualDefaultValue > residualThreshold ? ' required' : ''
+          }>`
+        + `</label>`
+        + `</div>`
+        + `</div>`
+        + `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Conta corrente</span>`
+        + `<select name="bankAccount" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"${hasBankOptions ? '' : ' disabled'}>${bankOptionsHtml}</select>`
+        + `</label>`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Meio de pagamento</span>`
+        + `<select name="paymentMethod" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"${hasPaymentMethodOptions ? '' : ' disabled'}>${paymentMethodOptionsHtml}</select>`
+        + `</label>`
+        + `</div>`
+        + `<div class="grid grid-cols-1 gap-3">`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Documento do pagamento</span>`
+        + `<input type="text" name="paymentDocument" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="${escapeHtml(paymentDocumentValue)}" placeholder="Ex.: recibo, comprovante, etc.">`
+        + `</label>`
+        + `</div>`
+        + `<div>`
+        + `<label class="block space-y-1">`
+        + `<span class="text-xs font-semibold uppercase tracking-wide text-gray-600">Observação</span>`
+        + `<textarea name="notes" rows="3" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Anote descontos, juros ou observações do recebimento.">${escapeHtml(notesValue)}</textarea>`
+        + `</label>`
+        + `</div>`
+        + `</form>`;
+
+      const initializePaymentModalForm = () => {
+        const form = document.getElementById('payment-confirm-form');
+        if (!form) return;
+        const paidInputField = form.querySelector('input[name="paidValue"]');
+        const residualInputField = form.querySelector('input[name="residualValue"]');
+        const residualDueInputField = form.querySelector('input[name="residualDueDate"]');
+        const residualSectionEl = form.querySelector('[data-residual-section]');
+        const residualAmountEl = form.querySelector('[data-residual-amount]');
+
+        const updateResidualUI = (rawValue) => {
+          const normalized = Number.isFinite(rawValue) ? Math.max(rawValue, 0) : 0;
+          if (residualAmountEl) {
+            residualAmountEl.textContent = formatCurrencyBR(normalized);
+          }
+          if (residualSectionEl) {
+            if (normalized > residualThreshold) {
+              residualSectionEl.classList.remove('hidden');
+            } else {
+              residualSectionEl.classList.add('hidden');
+            }
+          }
+          if (residualDueInputField) {
+            residualDueInputField.required = normalized > residualThreshold;
+          }
+        };
+
+        let residualEditedManually = false;
+
+        if (residualInputField) {
+          residualInputField.addEventListener('input', () => {
+            residualEditedManually = true;
+            const raw = Number.parseFloat(residualInputField.value || '0');
+            updateResidualUI(raw);
+          });
+          residualInputField.addEventListener('change', () => {
+            const paidRaw = Number.parseFloat(paidInputField?.value || '0');
+            const normalizedPaid = Number.isFinite(paidRaw) ? Math.max(paidRaw, 0) : 0;
+            const autoResidual = Math.max(totalValue - normalizedPaid, 0);
+            const raw = Number.parseFloat(residualInputField.value || '');
+            const normalized = Number.isFinite(raw) ? Math.max(raw, 0) : autoResidual;
+            residualInputField.value = normalized.toFixed(2);
+            if (Math.abs(normalized - autoResidual) < 0.005) {
+              residualEditedManually = false;
+            }
+            updateResidualUI(normalized);
+          });
+        }
+
+        if (paidInputField) {
+          paidInputField.addEventListener('input', () => {
+            const rawPaid = Number.parseFloat(paidInputField.value || '0');
+            const normalizedPaid = Number.isFinite(rawPaid) ? Math.max(rawPaid, 0) : 0;
+            const autoResidual = Math.max(totalValue - normalizedPaid, 0);
+            if (residualInputField) {
+              const currentResidualRaw = Number.parseFloat(residualInputField.value || '0');
+              const currentResidual = Number.isFinite(currentResidualRaw)
+                ? Math.max(currentResidualRaw, 0)
+                : 0;
+              if (residualEditedManually && Math.abs(currentResidual - autoResidual) < 0.005) {
+                residualEditedManually = false;
+              }
+              if (!residualEditedManually) {
+                residualInputField.value = autoResidual.toFixed(2);
+              }
+              const displayValueRaw = Number.parseFloat(residualInputField.value || '0');
+              const displayValue = Number.isFinite(displayValueRaw) ? displayValueRaw : autoResidual;
+              updateResidualUI(displayValue);
+            } else {
+              updateResidualUI(autoResidual);
+            }
+          });
+        }
+
+        if (residualDueInputField) {
+          residualDueInputField.addEventListener('change', () => {
+            if (!residualDueInputField.value) {
+              residualDueInputField.classList.remove('border-red-300');
+              return;
+            }
+            const parsed = parseDateInputValue(residualDueInputField.value);
+            if (!parsed) {
+              residualDueInputField.classList.add('border-red-300');
+            } else {
+              residualDueInputField.classList.remove('border-red-300');
+            }
+          });
+        }
+
+        const initialResidualRaw = Number.parseFloat(residualInputField?.value || '0');
+        updateResidualUI(Number.isFinite(initialResidualRaw) ? initialResidualRaw : 0);
+      };
+
+      await new Promise((resolve) => {
+        const finalize = (result) => resolve(result);
+        window.showModal({
+          title: 'Confirmar pagamento',
+          message: messageHtml,
+          confirmText: 'Confirmar pagamento',
+          cancelText: 'Cancelar',
+          onConfirm: async () => {
+            const form = document.getElementById('payment-confirm-form');
+            if (!form) {
+              notify('Pagamento confirmado com sucesso.', 'success');
+              finalize(true);
+              return true;
+            }
+
+            const formData = new FormData(form);
+            const paymentDate = formData.get('paymentDate');
+            const paidValueRaw = Number.parseFloat(formData.get('paidValue') || '0');
+            const bankAccount = formData.get('bankAccount') || '';
+            const paymentMethod = formData.get('paymentMethod') || '';
+            const paymentDocument = formData.get('paymentDocument') || '';
+            const notes = formData.get('notes') || '';
+            const residualValueField = formData.get('residualValue');
+            const residualDueField = formData.get('residualDueDate');
+            const paymentDateParsed = parseDateInputValue(paymentDate);
+            if (!paymentDateParsed) {
+              notify('Informe uma data de pagamento válida.', 'warning');
+              const paymentDateInput = form.querySelector('input[name="paymentDate"]');
+              paymentDateInput?.focus();
+              return false;
+            }
+
+            if (!Number.isFinite(paidValueRaw) || paidValueRaw <= 0) {
+              notify('Informe um valor pago maior que zero.', 'warning');
+              const paidInput = form.querySelector('input[name="paidValue"]');
+              paidInput?.focus();
+              return false;
+            }
+
+            const paidValue = paidValueRaw;
+            const residualValueRaw = Number.parseFloat(residualValueField || '0');
+            const residualValue = Number.isFinite(residualValueRaw) ? Math.max(residualValueRaw, 0) : 0;
+            const residualDueRaw = typeof residualDueField === 'string' ? residualDueField : '';
+            const residualDueParsed = residualDueRaw ? parseDateInputValue(residualDueRaw) : null;
+            const hasResidual = residualValue > residualThreshold;
+
+            if (hasResidual && !residualDueRaw) {
+              notify('Informe uma nova data de vencimento para o resíduo.', 'warning');
+              const residualDueInput = form.querySelector('input[name="residualDueDate"]');
+              residualDueInput?.focus();
+              return false;
+            }
+
+            if (hasResidual && residualDueRaw && !residualDueParsed) {
+              notify('Informe uma data de vencimento válida para o resíduo.', 'warning');
+              const residualDueInput = form.querySelector('input[name="residualDueDate"]');
+              residualDueInput?.focus();
+              return false;
+            }
+
+            const paymentDateLabel = formatDateBR(paymentDateParsed);
+            const paidValueLabel = formatCurrencyBR(paidValue);
+            const residualDueLabel = residualDueParsed ? formatDateBR(residualDueParsed) : residualDueRaw || '--';
+            const residualValueLabel = formatCurrencyBR(residualValue);
+
+            const normalizedBankAccount = bankAccount || context.bankAccountId || '';
+            const normalizedPaymentMethod = paymentMethod || context.paymentMethodId || '';
+            const paymentDocumentValue = typeof paymentDocument === 'string' ? paymentDocument.trim() : '';
+            const paymentNotesValue = typeof notes === 'string' ? notes.trim() : '';
+            const payload = {
+              installmentNumber: context.installmentNumber || 1,
+              paymentDate,
+              paidValue,
+              bankAccount: normalizedBankAccount,
+              paymentMethod: normalizedPaymentMethod,
+              paymentDocument: paymentDocumentValue,
+              notes: paymentNotesValue,
+              residualValue: hasResidual ? residualValue : 0,
+              residualDueDate: hasResidual ? residualDueRaw : null,
+            };
+
+            const confirmButton = document.getElementById('confirm-modal-confirm-btn');
+            const toggleConfirmState = (disabled) => {
+              if (!confirmButton) return;
+              confirmButton.disabled = !!disabled;
+              confirmButton.classList.toggle('opacity-60', !!disabled);
+              confirmButton.classList.toggle('cursor-wait', !!disabled);
+            };
+
+            try {
+              toggleConfirmState(true);
+
+              const registered = await registerPayment(context.receivableId, payload);
+              if (!registered) {
+                return false;
+              }
+
+              if (hasResidual) {
+                notify(
+                  `Pagamento parcial registrado: ${paidValueLabel} recebido em ${paymentDateLabel}. Resíduo de ${residualValueLabel} vence em ${residualDueLabel}.`,
+                  'success'
+                );
+              } else {
+                notify(
+                  `Pagamento de ${paidValueLabel} em ${paymentDateLabel} confirmado para ${customerLabel}.`,
+                  'success'
+                );
+              }
+
+              await loadReceivables();
+              await loadHistory();
+
+              finalize(true);
+              return true;
+            } catch (error) {
+              console.error('accounts-receivable:registerPayment', error);
+              notify(error.message || 'Não foi possível registrar o pagamento.', 'error');
+              return false;
+            } finally {
+              toggleConfirmState(false);
+            }
+          },
+          onCancel: () => {
+            finalize(false);
+            return true;
+          },
+        });
+
+        const scheduleInit = () => initializePaymentModalForm();
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => scheduleInit());
+        } else {
+          setTimeout(scheduleInit, 0);
+        }
+      });
+      return;
+    }
+
+    const plainMessage =
+      `${installmentLabel}\n\n`
+      + `Cliente: ${customerLabel}\n`
+      + `Documento: ${documentLabel}\n`
+      + `Vencimento: ${dueLabel}\n`
+      + `Valor: ${valueLabel}\n\n`
+      + 'Confirmar pagamento?';
+
+    // eslint-disable-next-line no-alert
+    const confirmed = window.confirm(plainMessage);
+    if (confirmed) {
+      notify('Pagamento confirmado com sucesso.', 'success');
     }
   }
 
