@@ -4542,7 +4542,7 @@
     sorted.forEach((installment) => {
       const li = document.createElement('li');
       li.className =
-        'flex flex-col gap-3 rounded-2xl border border-gray-200 bg-gray-50/80 p-4 text-sm text-gray-700 shadow-sm';
+        'space-y-3 rounded-xl border border-gray-200 bg-white/95 p-4 text-sm text-gray-700 shadow-sm transition hover:border-primary/40 hover:shadow-md';
       const label = installment.methodLabel || 'Meio de pagamento';
       const dueDateLabel =
         installment.dueDateLabel || formatDateLabel(installment.dueDate) || '—';
@@ -4550,22 +4550,26 @@
       li.innerHTML = `
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 space-y-1">
-            <span class="block text-sm font-semibold text-gray-800">Parcela ${
+            <span class="block text-sm font-semibold leading-tight text-gray-800">Parcela ${
               installment.parcela || 1
             }</span>
-            <span class="block text-xs text-gray-500 leading-tight break-words">${escapeHtml(label)}</span>
+            <span class="inline-flex items-center gap-1.5 text-xs text-gray-500 leading-tight">
+              <i class="fas fa-credit-card text-[10px] text-gray-400"></i>
+              <span class="break-words">${escapeHtml(label)}</span>
+            </span>
           </div>
-          <button type="button" class="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs text-red-500 shadow-sm transition hover:bg-red-50 hover:text-red-600" data-crediario-remove="${
+          <button type="button" class="flex h-7 w-7 items-center justify-center rounded-full border border-red-100 bg-red-50 text-[11px] text-red-500 transition hover:bg-red-100" data-crediario-remove="${
             installment.uid
           }" aria-label="Remover parcela">
             <i class="fas fa-times"></i>
           </button>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
-          <span class="font-medium text-gray-600">Vencimento: ${escapeHtml(
-            dueDateLabel
-          )}</span>
-          <span class="text-base font-semibold text-gray-800">${formattedValue}</span>
+        <div class="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600">
+            <i class="fas fa-calendar-day text-[10px] text-gray-400"></i>
+            ${escapeHtml(dueDateLabel)}
+          </span>
+          <span class="ml-auto text-base font-semibold text-gray-800">${formattedValue}</span>
         </div>
       `;
       fragment.appendChild(li);
