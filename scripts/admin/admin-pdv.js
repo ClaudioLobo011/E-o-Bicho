@@ -141,6 +141,7 @@
     fiscalEmissionStep: '',
     fiscalEmissionModalOpen: false,
     activePdvStoreId: '',
+    fullscreenActive: false,
   };
 
   const elements = {};
@@ -1938,6 +1939,7 @@
     elements.companySelect = document.getElementById('company-select');
     elements.pdvSelect = document.getElementById('pdv-select');
     elements.selectionHint = document.getElementById('pdv-selection-hint');
+    elements.selectionSection = document.getElementById('pdv-selection-section');
 
     elements.emptyState = document.getElementById('pdv-empty-state');
     elements.workspace = document.getElementById('pdv-workspace');
@@ -1945,6 +1947,8 @@
     elements.saleCodeWrapper = document.getElementById('pdv-sale-code-wrapper');
     elements.saleCodeValue = document.getElementById('pdv-sale-code');
     elements.printControls = document.getElementById('pdv-print-controls');
+    elements.fullscreenToggle = document.getElementById('pdv-fullscreen-toggle');
+    elements.fullscreenLabel = document.getElementById('pdv-fullscreen-label');
     elements.companyLabel = document.getElementById('pdv-company-label');
     elements.pdvLabel = document.getElementById('pdv-name-label');
     elements.selectedInfo = document.getElementById('pdv-selected-info');
@@ -2334,6 +2338,106 @@
       notify(`Confirmação de impressão para ${typeLabel} definida para ${promptLabel.toLowerCase()}.`, 'info');
       scheduleStatePersist();
     }
+  };
+
+  const getFullscreenElement = () => {
+    return (
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement ||
+      null
+    );
+  };
+
+  const requestAppFullscreen = () => {
+    const target = document.documentElement;
+    if (!target) {
+      throw new Error('Elemento inválido para ativar tela cheia.');
+    }
+    if (target.requestFullscreen) {
+      return target.requestFullscreen();
+    }
+    if (target.webkitRequestFullscreen) {
+      target.webkitRequestFullscreen();
+      return Promise.resolve();
+    }
+    if (target.mozRequestFullScreen) {
+      target.mozRequestFullScreen();
+      return Promise.resolve();
+    }
+    if (target.msRequestFullscreen) {
+      target.msRequestFullscreen();
+      return Promise.resolve();
+    }
+    throw new Error('Modo tela cheia não é suportado neste navegador.');
+  };
+
+  const exitAppFullscreen = () => {
+    if (document.exitFullscreen) {
+      return document.exitFullscreen();
+    }
+    if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+      return Promise.resolve();
+    }
+    if (document.mozCancelFullScreen) {
+      document.mozCancelFullScreen();
+      return Promise.resolve();
+    }
+    if (document.msExitFullscreen) {
+      document.msExitFullscreen();
+      return Promise.resolve();
+    }
+    return Promise.resolve();
+  };
+
+  const applyFullscreenState = () => {
+    const active = Boolean(getFullscreenElement());
+    state.fullscreenActive = active;
+    if (document.body) {
+      document.body.classList.toggle('pdv-fullscreen-active', active);
+    }
+    if (elements.fullscreenToggle) {
+      elements.fullscreenToggle.setAttribute('aria-pressed', active ? 'true' : 'false');
+      elements.fullscreenToggle.classList.toggle('border-primary', active);
+      elements.fullscreenToggle.classList.toggle('text-primary', active);
+      elements.fullscreenToggle.classList.toggle('bg-primary/5', active);
+      elements.fullscreenToggle.classList.toggle('bg-white', !active);
+      elements.fullscreenToggle.classList.toggle('border-gray-200', !active);
+      elements.fullscreenToggle.classList.toggle('text-gray-600', !active);
+      elements.fullscreenToggle.setAttribute(
+        'title',
+        active ? 'Sair do modo tela cheia' : 'Ativar modo tela cheia'
+      );
+    }
+    if (elements.fullscreenLabel) {
+      elements.fullscreenLabel.textContent = active ? 'Sair' : 'Ativar';
+    }
+    if (elements.selectionSection) {
+      elements.selectionSection.classList.toggle('hidden', active);
+    }
+  };
+
+  const handleFullscreenToggle = async (event) => {
+    event.preventDefault();
+    try {
+      if (getFullscreenElement()) {
+        await exitAppFullscreen();
+        applyFullscreenState();
+      } else {
+        await requestAppFullscreen();
+        applyFullscreenState();
+      }
+    } catch (error) {
+      console.error('Erro ao alternar tela cheia no PDV:', error);
+      notify(error.message || 'Não foi possível alternar o modo tela cheia.', 'error');
+      applyFullscreenState();
+    }
+  };
+
+  const handleFullscreenChange = () => {
+    applyFullscreenState();
   };
 
   const updateWorkspaceInfo = () => {
@@ -10139,6 +10243,11 @@
     elements.caixaActions?.addEventListener('click', handleActionClick);
     elements.actionConfirm?.addEventListener('click', handleActionConfirm);
     elements.printControls?.addEventListener('click', handlePrintToggleClick);
+    elements.fullscreenToggle?.addEventListener('click', handleFullscreenToggle);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
     elements.finalizeButton?.addEventListener('click', handleFinalizeButtonClick);
     elements.finalizeClose?.addEventListener('click', closeFinalizeModal);
     elements.finalizeBack?.addEventListener('click', closeFinalizeModal);
@@ -10260,6 +10369,7 @@
 
   const init = async () => {
     queryElements();
+    applyFullscreenState();
     pendingActiveTabPreference = loadActiveTabPreference();
     const selectionPreference = loadPdvSelectionPreference();
     setActiveTab(pendingActiveTabPreference || 'caixa-tab', { persist: false });
