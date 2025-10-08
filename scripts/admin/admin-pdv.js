@@ -106,6 +106,8 @@
     receivablesSearchResults: [],
     receivablesSearchLoading: false,
     receivablesSelectedCustomer: null,
+    receivablesListLoading: false,
+    receivablesListError: '',
     crediarioModalMethod: null,
     crediarioInstallments: [],
     crediarioNextParcelNumber: 1,
@@ -164,6 +166,7 @@
   const customerPetsCache = new Map();
   const customerAddressesCache = new Map();
   const appointmentCache = new Map();
+  const customerReceivablesCache = new Map();
 
   const generateBudgetCode = () => {
     const sequence = Math.max(1, Number.parseInt(state.budgetSequence, 10) || 1);
@@ -536,6 +539,9 @@
   let customerPetsController = null;
   let receivablesSearchTimeout = null;
   let receivablesSearchController = null;
+  let receivablesCustomerController = null;
+  let activeReceivablesRequestId = 0;
+  let receivablesRequestSequence = 0;
   let paymentModalState = null;
   let appointmentsRequestId = 0;
 
@@ -2157,6 +2163,8 @@
     elements.receivablesLimit = document.getElementById('pdv-receivables-customer-limit');
     elements.receivablesPending = document.getElementById('pdv-receivables-customer-pending');
     elements.receivablesClear = document.getElementById('pdv-receivables-clear');
+    elements.receivablesLoading = document.getElementById('pdv-receivables-loading');
+    elements.receivablesError = document.getElementById('pdv-receivables-error');
     elements.receivablesEmpty = document.getElementById('pdv-receivables-empty');
     elements.receivablesTable = document.getElementById('pdv-receivables-table');
     elements.receivablesList = document.getElementById('pdv-receivables-list');
@@ -2990,6 +2998,12 @@
     return candidate ? String(candidate) : '';
   };
 
+  const resolveCustomerId = (customer) => {
+    if (!customer || typeof customer !== 'object') return '';
+    const candidate = customer._id || customer.id || customer.codigo || customer.code || '';
+    return candidate ? String(candidate) : '';
+  };
+
   const isCrediarioReceivable = (entry) => {
     if (!entry || typeof entry !== 'object') return false;
     if (entry.crediarioMethodId) return true;
@@ -3006,6 +3020,137 @@
       const entryId = normalizeReceivableCustomerId(entry);
       return entryId && entryId === id;
     });
+  };
+
+  const setCachedReceivablesForCustomer = (customerId, receivables) => {
+    const id = customerId ? String(customerId) : '';
+    if (!id) return;
+    const list = Array.isArray(receivables)
+      ? receivables.map((entry) => (entry && typeof entry === 'object' ? { ...entry } : entry))
+      : [];
+    customerReceivablesCache.set(id, list);
+  };
+
+  const getCachedReceivablesForCustomer = (customerId) => {
+    const id = customerId ? String(customerId) : '';
+    if (!id || !customerReceivablesCache.has(id)) return null;
+    const cached = customerReceivablesCache.get(id) || [];
+    return cached.map((entry) => (entry && typeof entry === 'object' ? { ...entry } : entry));
+  };
+
+  const clearReceivablesCache = () => {
+    customerReceivablesCache.clear();
+  };
+
+  const flattenReceivableRecords = (records) => {
+    if (!Array.isArray(records)) return [];
+    const flattened = [];
+    records.forEach((record) => {
+      if (!record || typeof record !== 'object') return;
+      const receivableId = record._id ? String(record._id) : '';
+      const customerId = record.customer && typeof record.customer === 'object'
+        ? resolveCustomerId(record.customer)
+        : '';
+      const customerName =
+        (record.customer && typeof record.customer === 'object' && record.customer.name) ||
+        record.customerNome ||
+        '';
+      const baseMethod = record.paymentMethod || null;
+      const saleCode = record.code || record.saleCode || '';
+      const installments = Array.isArray(record.installments) && record.installments.length
+        ? record.installments
+        : [
+            {
+              number: record.installmentsCount || 1,
+              dueDate: record.dueDate || record.issueDate || null,
+              value: record.totalValue,
+              status: record.status || '',
+              paymentMethod: record.paymentMethod || null,
+            },
+          ];
+      installments.forEach((installment, index) => {
+        if (!installment) return;
+        const parcelNumber =
+          installment.parcelNumber ??
+          installment.numeroParcela ??
+          installment.number ??
+          installment.installmentNumber ??
+          index + 1;
+        const dueDate = installment.dueDate || record.dueDate || record.issueDate || null;
+        const paymentMethod = installment.paymentMethod || baseMethod || null;
+        const value = safeNumber(
+          installment.value ?? installment.originalValue ?? record.totalValue ?? 0
+        );
+        const normalized = {
+          id: receivableId ? `${receivableId}:${parcelNumber}` : createUid(),
+          parcelNumber,
+          installmentNumber: parcelNumber,
+          value,
+          formattedValue: formatCurrency(value),
+          dueDate,
+          dueDateLabel: formatDateLabel(dueDate),
+          paymentMethodId: paymentMethod?._id ? String(paymentMethod._id) : '',
+          paymentMethodLabel: paymentMethod?.name || 'Crediário',
+          saleCode,
+          crediarioMethodId: paymentMethod?._id ? String(paymentMethod._id) : '',
+          clienteId: customerId,
+          clienteNome: customerName,
+          origin: 'remote',
+          receivableId,
+          status: typeof installment.status === 'string' && installment.status
+            ? installment.status
+            : record.status || '',
+        };
+        flattened.push(normalized);
+      });
+    });
+    return flattened;
+  };
+
+  const mergeReceivablesForCustomer = (customerId, receivables) => {
+    const id = customerId ? String(customerId) : '';
+    if (!id) return;
+    const existing = Array.isArray(state.accountsReceivable) ? state.accountsReceivable : [];
+    const filtered = existing.filter((entry) => normalizeReceivableCustomerId(entry) !== id);
+    const normalizedList = Array.isArray(receivables)
+      ? receivables
+          .map((entry) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const clone = { ...entry };
+            if (!clone.id) {
+              clone.id = createUid();
+            }
+            if (!normalizeReceivableCustomerId(clone)) {
+              clone.clienteId = id;
+            }
+            if (!clone.formattedValue) {
+              clone.formattedValue = formatCurrency(
+                safeNumber(clone.value ?? clone.valor ?? clone.amount ?? 0)
+              );
+            }
+            if (!clone.dueDateLabel) {
+              clone.dueDateLabel = formatDateLabel(clone.dueDate);
+            }
+            if (clone.installmentNumber == null && clone.parcelNumber != null) {
+              clone.installmentNumber = clone.parcelNumber;
+            } else if (clone.parcelNumber == null && clone.installmentNumber != null) {
+              clone.parcelNumber = clone.installmentNumber;
+            }
+            if (!clone.origin) {
+              clone.origin = 'remote';
+            }
+            return clone;
+          })
+          .filter(Boolean)
+      : [];
+    state.accountsReceivable = [...filtered, ...normalizedList];
+  };
+
+  const abortReceivablesCustomerFetch = () => {
+    if (receivablesCustomerController) {
+      receivablesCustomerController.abort();
+      receivablesCustomerController = null;
+    }
   };
 
   const renderReceivablesSearchResults = () => {
@@ -3131,6 +3276,19 @@
           ? formatCurrency(safeNumber(limit))
           : 'Não informado';
     }
+    if (elements.receivablesPending) {
+      if (state.receivablesListLoading) {
+        elements.receivablesPending.textContent = 'Carregando...';
+      } else {
+        const customerId = resolveCustomerId(customer);
+        const receivables = getReceivablesForCustomer(customerId);
+        const total = receivables.reduce(
+          (sum, entry) => sum + safeNumber(entry.value ?? entry.valor ?? entry.amount ?? 0),
+          0
+        );
+        elements.receivablesPending.textContent = formatCurrency(total);
+      }
+    }
   };
 
   const renderReceivablesList = () => {
@@ -3143,7 +3301,8 @@
       return;
     }
     const customer = state.receivablesSelectedCustomer;
-    const customerId = customer?._id || customer?.id || '';
+    const customerId = resolveCustomerId(customer);
+    const { receivablesLoading, receivablesError } = elements;
     if (!customerId) {
       elements.receivablesList.innerHTML = '';
       elements.receivablesTable.classList.add('hidden');
@@ -3154,7 +3313,50 @@
       if (elements.receivablesPending) {
         elements.receivablesPending.textContent = formatCurrency(0);
       }
+      if (receivablesLoading) {
+        receivablesLoading.classList.add('hidden');
+      }
+      if (receivablesError) {
+        receivablesError.classList.add('hidden');
+      }
       return;
+    }
+    if (state.receivablesListLoading) {
+      elements.receivablesList.innerHTML = '';
+      elements.receivablesTable.classList.add('hidden');
+      elements.receivablesEmpty.classList.add('hidden');
+      elements.receivablesTotal.textContent = '—';
+      if (elements.receivablesPending) {
+        elements.receivablesPending.textContent = 'Carregando...';
+      }
+      if (receivablesError) {
+        receivablesError.classList.add('hidden');
+      }
+      if (receivablesLoading) {
+        receivablesLoading.textContent = 'Carregando pendências do cliente selecionado...';
+        receivablesLoading.classList.remove('hidden');
+      }
+      return;
+    }
+    if (receivablesLoading) {
+      receivablesLoading.classList.add('hidden');
+    }
+    if (state.receivablesListError) {
+      elements.receivablesList.innerHTML = '';
+      elements.receivablesTable.classList.add('hidden');
+      elements.receivablesEmpty.classList.add('hidden');
+      elements.receivablesTotal.textContent = formatCurrency(0);
+      if (elements.receivablesPending) {
+        elements.receivablesPending.textContent = formatCurrency(0);
+      }
+      if (receivablesError) {
+        receivablesError.textContent = state.receivablesListError;
+        receivablesError.classList.remove('hidden');
+      }
+      return;
+    }
+    if (receivablesError) {
+      receivablesError.classList.add('hidden');
     }
     const receivables = getReceivablesForCustomer(customerId).map((entry) => ({ ...entry }));
     receivables.sort((a, b) => {
@@ -3208,19 +3410,98 @@
     elements.receivablesList.appendChild(fragment);
   };
 
-  const setReceivablesSelectedCustomer = (cliente) => {
-    state.receivablesSelectedCustomer = cliente ? { ...cliente } : null;
+  const loadReceivablesForCustomer = async (cliente, { force = false } = {}) => {
+    const customerId = resolveCustomerId(cliente);
+    if (!customerId) {
+      state.receivablesListLoading = false;
+      state.receivablesListError = '';
+      renderReceivablesList();
+      return;
+    }
+    if (!force) {
+      const cached = getCachedReceivablesForCustomer(customerId);
+      if (cached) {
+        state.receivablesListError = '';
+        mergeReceivablesForCustomer(customerId, cached);
+        state.receivablesListLoading = false;
+        renderReceivablesList();
+        renderReceivablesSelectedCustomer();
+        return;
+      }
+    }
+    abortReceivablesCustomerFetch();
+    const params = new URLSearchParams();
+    params.set('customer', customerId);
+    const companyId = state.activePdvStoreId || state.selectedStore || '';
+    if (companyId) {
+      params.set('company', companyId);
+    }
+    const token = getToken();
+    const requestId = ++receivablesRequestSequence;
+    activeReceivablesRequestId = requestId;
+    receivablesCustomerController = new AbortController();
+    state.receivablesListLoading = true;
+    state.receivablesListError = '';
+    renderReceivablesList();
+    try {
+      const payload = await fetchWithOptionalAuth(
+        `${API_BASE}/accounts-receivable?${params.toString()}`,
+        {
+          token,
+          signal: receivablesCustomerController.signal,
+          errorMessage: 'Não foi possível carregar as contas a receber do cliente selecionado.',
+        }
+      );
+      const flattened = flattenReceivableRecords(payload?.receivables);
+      setCachedReceivablesForCustomer(customerId, flattened);
+      if (resolveCustomerId(state.receivablesSelectedCustomer) === customerId) {
+        mergeReceivablesForCustomer(customerId, flattened);
+        state.receivablesListError = '';
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
+      console.error('Erro ao carregar contas a receber do cliente:', error);
+      if (resolveCustomerId(state.receivablesSelectedCustomer) === customerId) {
+        state.receivablesListError =
+          error?.message || 'Não foi possível carregar as contas a receber do cliente.';
+        notify(state.receivablesListError, 'error');
+      }
+    } finally {
+      if (activeReceivablesRequestId === requestId) {
+        state.receivablesListLoading = false;
+        receivablesCustomerController = null;
+        renderReceivablesList();
+        if (resolveCustomerId(state.receivablesSelectedCustomer) === customerId) {
+          renderReceivablesSelectedCustomer();
+        }
+      }
+    }
+  };
+
+  const setReceivablesSelectedCustomer = (cliente, { force = false } = {}) => {
+    if (!cliente) {
+      abortReceivablesCustomerFetch();
+      state.receivablesSelectedCustomer = null;
+      state.receivablesListLoading = false;
+      state.receivablesListError = '';
+      renderReceivablesSelectedCustomer();
+      renderReceivablesSearchResults();
+      renderReceivablesList();
+      return;
+    }
+    state.receivablesSelectedCustomer = { ...cliente };
     renderReceivablesSelectedCustomer();
     renderReceivablesSearchResults();
     renderReceivablesList();
+    loadReceivablesForCustomer(cliente, { force });
   };
 
   const clearReceivablesSelection = () => {
-    state.receivablesSelectedCustomer = null;
     state.receivablesSearchLoading = false;
-    renderReceivablesSelectedCustomer();
-    renderReceivablesSearchResults();
-    renderReceivablesList();
+    setReceivablesSelectedCustomer(null);
+    elements.receivablesSearchInput?.focus();
   };
 
   const performReceivablesSearch = async (term) => {
@@ -5569,9 +5850,11 @@
           }
         }
         const parcelNumber = Number.parseInt(installment.parcela, 10);
+        const resolvedParcel = Number.isFinite(parcelNumber) ? parcelNumber : index + 1;
         receivables.push({
           id: createUid(),
-          parcelNumber: Number.isFinite(parcelNumber) ? parcelNumber : index + 1,
+          parcelNumber: resolvedParcel,
+          installmentNumber: resolvedParcel,
           value: valor,
           formattedValue: formatCurrency(valor),
           dueDate: dueIso,
@@ -5584,6 +5867,7 @@
           crediarioMethodId: payment.id || '',
           clienteId: clienteId ? String(clienteId) : '',
           clienteNome,
+          origin: 'sale',
         });
       });
     });
@@ -10169,6 +10453,8 @@
     state.receivablesSearchResults = [];
     state.receivablesSearchLoading = false;
     state.receivablesSelectedCustomer = null;
+    state.receivablesListLoading = false;
+    state.receivablesListError = '';
     state.modalSelectedCliente = null;
     state.modalSelectedPet = null;
     state.modalActiveTab = 'cliente';
@@ -10220,6 +10506,8 @@
       receivablesSearchController.abort();
       receivablesSearchController = null;
     }
+    abortReceivablesCustomerFetch();
+    clearReceivablesCache();
     if (elements.customerSearchInput) {
       elements.customerSearchInput.value = '';
     }
@@ -10598,6 +10886,9 @@
       }
     });
     state.accountsReceivable = mergedReceivables;
+    clearReceivablesCache();
+    state.receivablesListLoading = false;
+    state.receivablesListError = '';
     renderReceivablesList();
     renderReceivablesSelectedCustomer();
     const budgetsFonte = Array.isArray(pdv?.budgets)
