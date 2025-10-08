@@ -24,6 +24,72 @@ const normalizeString = (value) => {
 
 const normalizeLower = (value) => normalizeString(value).toLowerCase();
 
+function normalizeStatusToken(value) {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  let normalized = trimmed;
+  if (typeof normalized.normalize === 'function') {
+    try {
+      normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    } catch (error) {
+      /* ignore */
+    }
+  }
+  normalized = normalized.replace(/[^a-z0-9\s-]/gi, ' ');
+  return normalized.replace(/[\s_-]+/g, ' ').trim().toLowerCase();
+}
+
+const PENDING_STATUS_KEYS = new Set([
+  'pending',
+  'pendente',
+  'pendentes',
+  'open',
+  'em aberto',
+  'aberto',
+  'aguardando pagamento',
+  'aguardando',
+  'overdue',
+  'vencido',
+  'vencida',
+  'em atraso',
+  'atrasado',
+  'atrasada',
+]);
+
+const PAID_STATUS_KEYS = new Set([
+  'paid',
+  'pago',
+  'paga',
+  'quitado',
+  'quitada',
+  'liquidado',
+  'liquidada',
+  'finalizado',
+  'finalizada',
+  'concluido',
+  'concluida',
+]);
+
+const CANCELLED_STATUS_KEYS = new Set([
+  'cancelled',
+  'cancel',
+  'cancelar',
+  'cancelado',
+  'cancelada',
+  'cancelamento',
+  'anulado',
+  'anulada',
+]);
+
+function canonicalInstallmentStatus(value) {
+  const token = normalizeStatusToken(value);
+  if (!token) return 'pending';
+  if (PAID_STATUS_KEYS.has(token)) return 'paid';
+  if (CANCELLED_STATUS_KEYS.has(token)) return 'cancelled';
+  return 'pending';
+}
+
 const parseLocaleNumber = (value, fallback = 0) => {
   if (value === undefined || value === null || value === '') return fallback;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -53,6 +119,42 @@ const clampAgendaRange = (value) => {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return 7;
   return Math.min(parsed, 90);
+};
+
+const derivePayableStatus = (installments = []) => {
+  const entries = Array.isArray(installments) ? installments : [];
+  if (!entries.length) {
+    return 'pending';
+  }
+
+  let hasPending = false;
+  let hasPaid = false;
+  let hasCancelled = false;
+
+  entries.forEach((installment) => {
+    const status = canonicalInstallmentStatus(installment?.status);
+    if (status === 'paid') {
+      hasPaid = true;
+    } else if (status === 'cancelled') {
+      hasCancelled = true;
+    } else {
+      hasPending = true;
+    }
+  });
+
+  if (hasPending) {
+    return 'pending';
+  }
+  if (hasPaid && !hasPending && !hasCancelled) {
+    return 'paid';
+  }
+  if (hasCancelled && !hasPending && !hasPaid) {
+    return 'cancelled';
+  }
+  if (hasPaid && hasCancelled && !hasPending) {
+    return 'paid';
+  }
+  return 'pending';
 };
 
 const createHttpError = (status, message) => {
@@ -235,9 +337,7 @@ async function assemblePayablePayload(body, { existing } = {}) {
       );
     }
 
-    const statusNormalized = normalizeLower(entry.status);
-    const allowedStatuses = ['pending', 'paid', 'cancelled'];
-    const status = allowedStatuses.includes(statusNormalized) ? statusNormalized : 'pending';
+    const status = canonicalInstallmentStatus(entry.status);
 
     installmentsTotal += value;
     installments.push({
@@ -357,7 +457,7 @@ const buildInstallmentPayload = (installment) => {
     accountingAccount: plain.accountingAccount
       ? { _id: plain.accountingAccount._id, label: buildAccountingLabel(plain.accountingAccount) }
       : null,
-    status: plain.status,
+    status: canonicalInstallmentStatus(plain.status),
   };
 };
 
@@ -397,6 +497,7 @@ const buildPublicPayable = (payable) => {
     installments: Array.isArray(plain.installments)
       ? plain.installments.map(buildInstallmentPayload).filter(Boolean)
       : [],
+    status: derivePayableStatus(plain.installments),
     createdAt: plain.createdAt,
     updatedAt: plain.updatedAt,
   };
@@ -606,6 +707,7 @@ router.get(
           if (Number.isNaN(dueDate.getTime())) return;
           if (dueDate < periodStart || dueDate >= periodEndExclusive) return;
           const rawValue = Number(installment.value || 0);
+          const canonicalStatus = canonicalInstallmentStatus(installment.status);
           upcomingTotal += rawValue;
           upcomingCount += 1;
           agendaItems.push({
@@ -616,7 +718,7 @@ router.get(
             payableCode,
             dueDate,
             value: formatCurrency(rawValue),
-            status: installment.status || 'pending',
+            status: canonicalStatus,
           });
         });
       });
@@ -633,7 +735,8 @@ router.get(
       pendingDocs.forEach((doc) => {
         const plain = typeof doc.toObject === 'function' ? doc.toObject() : doc;
         (plain.installments || []).forEach((installment) => {
-          if (!installment || installment.status !== 'pending') return;
+          const canonicalStatus = canonicalInstallmentStatus(installment?.status);
+          if (canonicalStatus !== 'pending') return;
           pendingTotal += Number(installment.value || 0);
           pendingCount += 1;
         });
@@ -644,7 +747,8 @@ router.get(
       paidDocs.forEach((doc) => {
         const plain = typeof doc.toObject === 'function' ? doc.toObject() : doc;
         (plain.installments || []).forEach((installment) => {
-          if (!installment || installment.status !== 'paid' || !installment.dueDate) return;
+          const canonicalStatus = canonicalInstallmentStatus(installment?.status);
+          if (!installment || canonicalStatus !== 'paid' || !installment.dueDate) return;
           const dueDate = new Date(installment.dueDate);
           if (Number.isNaN(dueDate.getTime())) return;
           if (dueDate < monthStart || dueDate >= monthEndExclusive) return;
@@ -811,6 +915,76 @@ router.put(
       }
       console.error('Erro ao atualizar conta a pagar:', error);
       res.status(500).json({ message: 'Erro ao atualizar a conta a pagar.' });
+    }
+  }
+);
+
+router.patch(
+  '/:id/installments/:installmentNumber/status',
+  requireAuth,
+  authorizeRoles(...AUTH_ROLES),
+  async (req, res) => {
+    try {
+      const { id, installmentNumber: installmentParam } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Identificador inválido.' });
+      }
+
+      const installmentNumber = Number.parseInt(installmentParam, 10);
+      if (!Number.isFinite(installmentNumber) || installmentNumber < 1) {
+        return res.status(400).json({ message: 'Informe a parcela que deseja atualizar.' });
+      }
+
+      const rawStatus = normalizeString(
+        req.body?.status || req.body?.value || req.body?.statusCode || req.body?.targetStatus
+      );
+      const token = normalizeStatusToken(rawStatus);
+
+      let targetStatus = null;
+      if (!token || PENDING_STATUS_KEYS.has(token)) {
+        targetStatus = 'pending';
+      } else if (PAID_STATUS_KEYS.has(token)) {
+        targetStatus = 'paid';
+      } else if (CANCELLED_STATUS_KEYS.has(token)) {
+        targetStatus = 'cancelled';
+      }
+
+      if (!targetStatus) {
+        return res.status(400).json({ message: 'Status informado é inválido para atualização.' });
+      }
+
+      const payable = await AccountPayable.findById(id);
+      if (!payable) {
+        return res.status(404).json({ message: 'Conta a pagar não encontrada.' });
+      }
+
+      const installmentsArray = Array.isArray(payable.installments)
+        ? payable.installments
+        : [];
+      const targetInstallment = installmentsArray.find(
+        (installment) => Number(installment.number) === Number(installmentNumber)
+      );
+
+      if (!targetInstallment) {
+        return res.status(404).json({ message: 'Parcela informada não foi encontrada.' });
+      }
+
+      const currentStatus = canonicalInstallmentStatus(targetInstallment.status);
+      if (currentStatus === targetStatus) {
+        await payable.populate(PAYABLE_POPULATE);
+        return res.json(buildPublicPayable(payable));
+      }
+
+      targetInstallment.status = targetStatus;
+      payable.markModified('installments');
+
+      await payable.save();
+      await payable.populate(PAYABLE_POPULATE);
+
+      return res.json(buildPublicPayable(payable));
+    } catch (error) {
+      console.error('Erro ao atualizar status da parcela de conta a pagar:', error);
+      return res.status(500).json({ message: 'Erro ao atualizar o status da parcela.' });
     }
   }
 );

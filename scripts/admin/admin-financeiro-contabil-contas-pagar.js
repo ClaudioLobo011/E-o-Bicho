@@ -85,9 +85,27 @@
   };
 
   const STATUS_BADGES = {
-    pending: { icon: 'fa-circle-pause', classes: 'bg-amber-100 text-amber-700', label: 'Pendente' },
-    paid: { icon: 'fa-circle-check', classes: 'bg-emerald-100 text-emerald-700', label: 'Pago' },
-    cancelled: { icon: 'fa-circle-xmark', classes: 'bg-gray-200 text-gray-600', label: 'Cancelado' },
+    pending: {
+      icon: 'fa-circle-exclamation',
+      classes: 'bg-amber-100 text-amber-700',
+      label: 'Pendente',
+    },
+    paid: {
+      icon: 'fa-circle-check',
+      classes: 'bg-emerald-100 text-emerald-700',
+      label: 'Pago',
+    },
+    cancelled: {
+      icon: 'fa-circle-xmark',
+      classes: 'bg-slate-200 text-slate-600',
+      label: 'Cancelado',
+    },
+  };
+
+  const STATUS_LABELS = {
+    pending: 'Pendente',
+    paid: 'Pago',
+    cancelled: 'Cancelado',
   };
 
   const AGENDA_FILTERS = [
@@ -181,6 +199,72 @@
     return dateFormatter.format(date);
   }
 
+  function normalizeStatusToken(value) {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    let normalized = trimmed;
+    if (typeof normalized.normalize === 'function') {
+      try {
+        normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      } catch (error) {
+        /* noop */
+      }
+    }
+    normalized = normalized.replace(/[^a-z0-9\s-]/gi, ' ');
+    return normalized.replace(/[\s_-]+/g, ' ').trim().toLowerCase();
+  }
+
+  const PENDING_STATUS_TOKENS = new Set([
+    'pending',
+    'pendente',
+    'pendentes',
+    'open',
+    'em aberto',
+    'aberto',
+    'aguardando pagamento',
+    'aguardando',
+    'overdue',
+    'vencido',
+    'vencida',
+    'em atraso',
+    'atrasado',
+    'atrasada',
+  ]);
+
+  const PAID_STATUS_TOKENS = new Set([
+    'paid',
+    'pago',
+    'paga',
+    'quitado',
+    'quitada',
+    'liquidado',
+    'liquidada',
+    'finalizado',
+    'finalizada',
+    'concluido',
+    'concluida',
+  ]);
+
+  const CANCELLED_STATUS_TOKENS = new Set([
+    'cancelled',
+    'cancel',
+    'cancelar',
+    'cancelado',
+    'cancelada',
+    'cancelamento',
+    'anulado',
+    'anulada',
+  ]);
+
+  function canonicalStatus(value) {
+    const token = normalizeStatusToken(value);
+    if (!token) return 'pending';
+    if (PAID_STATUS_TOKENS.has(token)) return 'paid';
+    if (CANCELLED_STATUS_TOKENS.has(token)) return 'cancelled';
+    return 'pending';
+  }
+
   function createEmptyAgendaSummary() {
     return {
       upcoming: { totalValue: 0, installments: 0 },
@@ -190,15 +274,27 @@
   }
 
   function getStatusBadgeConfig(status) {
-    if (!status || typeof status !== 'string') {
-      return { icon: 'fa-circle-info', classes: 'bg-slate-100 text-slate-700', label: 'Indefinido' };
+    const canonical = canonicalStatus(status);
+    if (STATUS_BADGES[canonical]) {
+      return STATUS_BADGES[canonical];
     }
-    const normalized = status.toLowerCase();
-    if (STATUS_BADGES[normalized]) {
-      return STATUS_BADGES[normalized];
-    }
-    const label = `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+    const label = STATUS_LABELS[canonical] || 'Indefinido';
     return { icon: 'fa-circle-info', classes: 'bg-slate-100 text-slate-700', label };
+  }
+
+  function buildActionButton({ action, icon, label, className = '', dataset = {} }) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.action = action;
+    const baseClass =
+      'inline-flex w-full items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold leading-tight transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1';
+    button.className = `${baseClass} ${className}`.trim();
+    Object.entries(dataset).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '') return;
+      button.dataset[key] = String(value);
+    });
+    button.innerHTML = `<i class="fas ${icon}"></i> ${label}`;
+    return button;
   }
 
   function formatInstallmentsText(count, singular, plural) {
@@ -311,6 +407,7 @@
       issueDate: toDate(raw.issueDate),
       dueDate: toDate(raw.dueDate),
       totalValue: parseCurrency(raw.totalValue),
+      status: canonicalStatus(raw.status),
     };
     if (raw.bankAccount && raw.bankAccount._id) {
       normalized.bankAccount = { ...raw.bankAccount };
@@ -334,7 +431,7 @@
           accountingAccount: installment?.accountingAccount && installment.accountingAccount._id
             ? { ...installment.accountingAccount }
             : installment?.accountingAccount || null,
-          status: installment?.status || 'pending',
+          status: canonicalStatus(installment?.status),
         }))
       : [];
     normalized.installmentsCount = normalized.installments.length || normalized.installmentsCount || 0;
@@ -538,19 +635,73 @@
       actionsCell.className = 'px-4 py-3 text-sm text-center';
       const payableIdAttr = item.payableId || '';
       const installmentAttr = item.installmentNumber != null ? item.installmentNumber : '';
-      actionsCell.innerHTML = `
-        <div class="flex items-center justify-center gap-2">
-          <button type="button" class="agenda-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
-            data-action="edit-agenda" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
-            <i class="fas fa-pen"></i>
-            Editar
-          </button>
-          <button type="button" class="agenda-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
-            data-action="delete-agenda" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
-            <i class="fas fa-trash"></i>
-            Excluir
-          </button>
-        </div>`;
+      const canonical = canonicalStatus(item.status);
+      const dataset = { id: payableIdAttr, installment: installmentAttr };
+      const hasInstallment = installmentAttr !== '';
+
+      const actionsWrapper = document.createElement('div');
+      actionsWrapper.className = 'grid grid-cols-3 gap-1';
+      actionsWrapper.style.maxWidth = '18rem';
+      actionsWrapper.style.margin = '0 auto';
+      actionsWrapper.style.justifyItems = 'stretch';
+
+      actionsWrapper.appendChild(
+        buildActionButton({
+          action: 'edit-agenda',
+          icon: 'fa-pen',
+          label: 'Editar',
+          className: 'border-primary text-primary hover:bg-primary/10',
+          dataset,
+        })
+      );
+
+      if (hasInstallment && canonical !== 'paid') {
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'mark-paid',
+            icon: 'fa-money-check-dollar',
+            label: 'Registrar',
+            className: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
+            dataset,
+          })
+        );
+      }
+
+      if (hasInstallment && canonical !== 'cancelled') {
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'cancel-installment',
+            icon: 'fa-ban',
+            label: 'Cancelar',
+            className: 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100',
+            dataset,
+          })
+        );
+      }
+
+      if (hasInstallment && canonical !== 'pending') {
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'restore-installment',
+            icon: 'fa-rotate-left',
+            label: 'Reabrir',
+            className: 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100',
+            dataset,
+          })
+        );
+      }
+
+      actionsWrapper.appendChild(
+        buildActionButton({
+          action: 'delete-agenda',
+          icon: 'fa-trash',
+          label: 'Excluir',
+          className: 'border-red-200 text-red-600 hover:bg-red-50',
+          dataset,
+        })
+      );
+
+      actionsCell.appendChild(actionsWrapper);
       row.appendChild(actionsCell);
 
       elements.agendaTableBody.appendChild(row);
@@ -1198,19 +1349,73 @@
         actionsCell.className = 'px-4 py-3 text-sm text-center';
         const payableIdAttr = payable._id || '';
         const installmentAttr = installment.number != null ? installment.number : '';
-        actionsCell.innerHTML = `
-          <div class="flex items-center justify-center gap-2">
-            <button type="button" class="history-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
-              data-action="edit-history" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
-              <i class="fas fa-pen"></i>
-              Editar
-            </button>
-            <button type="button" class="history-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
-              data-action="delete-history" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
-              <i class="fas fa-trash"></i>
-              Excluir
-            </button>
-          </div>`;
+        const canonical = canonicalStatus(installment.status || payable.status);
+        const dataset = { id: payableIdAttr, installment: installmentAttr };
+        const hasInstallment = installmentAttr !== '';
+
+        const actionsWrapper = document.createElement('div');
+        actionsWrapper.className = 'grid grid-cols-3 gap-1';
+        actionsWrapper.style.maxWidth = '18rem';
+        actionsWrapper.style.margin = '0 auto';
+        actionsWrapper.style.justifyItems = 'stretch';
+
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'edit-history',
+            icon: 'fa-pen',
+            label: 'Editar',
+            className: 'border-primary text-primary hover:bg-primary/10',
+            dataset,
+          })
+        );
+
+        if (hasInstallment && canonical !== 'paid') {
+          actionsWrapper.appendChild(
+            buildActionButton({
+              action: 'mark-paid',
+              icon: 'fa-money-check-dollar',
+              label: 'Registrar',
+              className: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
+              dataset,
+            })
+          );
+        }
+
+        if (hasInstallment && canonical !== 'cancelled') {
+          actionsWrapper.appendChild(
+            buildActionButton({
+              action: 'cancel-installment',
+              icon: 'fa-ban',
+              label: 'Cancelar',
+              className: 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100',
+              dataset,
+            })
+          );
+        }
+
+        if (hasInstallment && canonical !== 'pending') {
+          actionsWrapper.appendChild(
+            buildActionButton({
+              action: 'restore-installment',
+              icon: 'fa-rotate-left',
+              label: 'Reabrir',
+              className: 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100',
+              dataset,
+            })
+          );
+        }
+
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'delete-history',
+            icon: 'fa-trash',
+            label: 'Excluir',
+            className: 'border-red-200 text-red-600 hover:bg-red-50',
+            dataset,
+          })
+        );
+
+        actionsCell.appendChild(actionsWrapper);
         row.appendChild(actionsCell);
 
         elements.historyBody.appendChild(row);
@@ -1293,18 +1498,19 @@
       });
       if (!confirmRemoval) return;
 
-        const totalInstallments = Array.isArray(payable.installments) ? payable.installments.length : 0;
-        let deleted = null;
+      const totalInstallments = Array.isArray(payable.installments) ? payable.installments.length : 0;
 
-        if (totalInstallments > 1 && installmentNumber) {
-          const deleteAll = await confirmDialog({
-            title: 'Excluir parcelas',
-            message: 'Excluir todas as parcelas deste lançamento? Escolha "Excluir todas" para remover o título completo ou "Somente esta" para remover apenas a parcela atual.',
-            confirmText: 'Excluir todas',
-            cancelText: 'Somente esta',
-          });
-          if (deleteAll) {
-            deleted = await performDeletePayable(payableId, { deleteAll: true });
+      if (totalInstallments > 1 && installmentNumber) {
+        const deleteAll = await confirmDialog({
+          title: 'Excluir parcelas',
+          message:
+            'Excluir todas as parcelas deste lançamento? Escolha "Excluir todas" para remover o título completo ou "Somente esta" para remover apenas a parcela atual.',
+          confirmText: 'Excluir todas',
+          cancelText: 'Somente esta',
+        });
+
+        if (deleteAll) {
+          await performDeletePayable(payableId, { deleteAll: true });
           removePayableFromCache(payableId);
           exitEditMode(state.currentEditing?.id === payableId);
           notify('Lançamento excluído com sucesso.', 'success');
@@ -1316,10 +1522,12 @@
             cancelText: 'Cancelar',
           });
           if (!confirmSingle) return;
+
           const updated = await performDeletePayable(payableId, {
             deleteAll: false,
             installmentNumber,
           });
+
           if (updated && updated._id) {
             const normalized = normalizePayable(updated);
             storePayableInCache(normalized);
@@ -1345,6 +1553,69 @@
     } catch (error) {
       console.error('accounts-payable:handleDeletePayable', error);
       notify(error.message || 'Não foi possível excluir o lançamento selecionado.', 'error');
+    }
+  }
+
+  async function updateInstallmentStatus(payableId, installmentNumber, targetStatus) {
+    if (!payableId || !Number.isFinite(installmentNumber)) {
+      throw new Error('Parcela inválida para atualização.');
+    }
+
+    const url = `${PAYABLES_API}/${payableId}/installments/${installmentNumber}/status`;
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ status: targetStatus }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        notify('Sua sessão expirou. Faça login novamente para atualizar o status.', 'error');
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData?.message || `Erro ao atualizar o status (${response.status}).`);
+    }
+
+    const data = await response.json();
+    const normalized = normalizePayable(data);
+    if (normalized) {
+      storePayableInCache(normalized);
+    }
+    return normalized;
+  }
+
+  async function handleInstallmentStatusAction(context, targetStatus) {
+    if (!context?.payableId || !Number.isFinite(context.installmentNumber)) {
+      notify('Não foi possível identificar a parcela selecionada.', 'warning');
+      return;
+    }
+
+    const installmentLabel = `parcela ${context.installmentNumber}`;
+    const statusLabel = STATUS_LABELS[targetStatus] || targetStatus;
+    const confirmMessage =
+      targetStatus === 'pending'
+        ? `Deseja reabrir a ${installmentLabel}?`
+        : `Deseja marcar a ${installmentLabel} como ${statusLabel.toLowerCase()}?`;
+
+    const confirmed = await confirmDialog({
+      title: 'Atualizar status',
+      message: confirmMessage,
+      confirmText: targetStatus === 'pending' ? 'Reabrir parcela' : 'Atualizar status',
+      cancelText: 'Cancelar',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await updateInstallmentStatus(context.payableId, context.installmentNumber, targetStatus);
+      notify('Status da parcela atualizado com sucesso.', 'success');
+      await loadAgenda();
+      await loadHistory();
+    } catch (error) {
+      console.error('accounts-payable:updateInstallmentStatus', error);
+      notify(error.message || 'Erro ao atualizar o status da parcela.', 'error');
     }
   }
 
@@ -1374,6 +1645,12 @@
     if (!context || !context.payableId) return;
     if (context.action === 'edit-agenda') {
       handleEditPayable(context.payableId, context.installmentNumber);
+    } else if (context.action === 'mark-paid') {
+      handleInstallmentStatusAction(context, 'paid');
+    } else if (context.action === 'cancel-installment') {
+      handleInstallmentStatusAction(context, 'cancelled');
+    } else if (context.action === 'restore-installment') {
+      handleInstallmentStatusAction(context, 'pending');
     } else if (context.action === 'delete-agenda') {
       handleDeletePayable(context.payableId, context.installmentNumber);
     }
@@ -1384,6 +1661,12 @@
     if (!context || !context.payableId) return;
     if (context.action === 'edit-history') {
       handleEditPayable(context.payableId, context.installmentNumber);
+    } else if (context.action === 'mark-paid') {
+      handleInstallmentStatusAction(context, 'paid');
+    } else if (context.action === 'cancel-installment') {
+      handleInstallmentStatusAction(context, 'cancelled');
+    } else if (context.action === 'restore-installment') {
+      handleInstallmentStatusAction(context, 'pending');
     } else if (context.action === 'delete-history') {
       handleDeletePayable(context.payableId, context.installmentNumber);
     }
@@ -1463,7 +1746,7 @@
               ...item,
               dueDate: item?.dueDate ? new Date(item.dueDate) : null,
               value: typeof item?.value === 'number' ? item.value : parseCurrency(item?.value),
-              status: item?.status || 'pending',
+              status: canonicalStatus(item?.status),
               partyName: item?.partyName || item?.party || '',
               document: item?.document || '',
               payableCode: item?.payableCode || item?.code || '',
