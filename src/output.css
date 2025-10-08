@@ -1233,6 +1233,13 @@
   .gap-8 {
     gap: calc(var(--spacing) * 8);
   }
+  .space-y-0\.5 {
+    :where(& > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      margin-block-start: calc(calc(var(--spacing) * 0.5) * var(--tw-space-y-reverse));
+      margin-block-end: calc(calc(var(--spacing) * 0.5) * calc(1 - var(--tw-space-y-reverse)));
+    }
+  }
   .space-y-1 {
     :where(& > :not(:last-child)) {
       --tw-space-y-reverse: 0;
@@ -2147,6 +2154,9 @@
   }
   .pl-5 {
     padding-left: calc(var(--spacing) * 5);
+  }
+  .pl-8 {
+    padding-left: calc(var(--spacing) * 8);
   }
   .pl-9 {
     padding-left: calc(var(--spacing) * 9);
@@ -4353,9 +4363,9 @@
       width: calc(2/3 * 100%);
     }
   }
-  .lg\:w-72 {
+  .lg\:w-64 {
     @media (width >= 64rem) {
-      width: calc(var(--spacing) * 72);
+      width: calc(var(--spacing) * 64);
     }
   }
   .lg\:w-auto {
@@ -4406,11 +4416,6 @@
   .lg\:items-center {
     @media (width >= 64rem) {
       align-items: center;
-    }
-  }
-  .lg\:items-end {
-    @media (width >= 64rem) {
-      align-items: flex-end;
     }
   }
   .lg\:justify-between {

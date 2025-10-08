@@ -2149,6 +2149,7 @@
     elements.receivablesSearchResults = document.getElementById('pdv-receivables-search-results');
     elements.receivablesSearchEmpty = document.getElementById('pdv-receivables-search-empty');
     elements.receivablesSearchLoading = document.getElementById('pdv-receivables-search-loading');
+    elements.receivablesSearchWrapper = document.getElementById('pdv-receivables-search-wrapper');
     elements.receivablesSelected = document.getElementById('pdv-receivables-selected');
     elements.receivablesName = document.getElementById('pdv-receivables-customer-name');
     elements.receivablesDoc = document.getElementById('pdv-receivables-customer-doc');
@@ -3015,14 +3016,24 @@
     ) {
       return;
     }
+    const query = state.receivablesSearchQuery.trim();
+    const shouldHideFeedback = Boolean(state.receivablesSelectedCustomer) && !query;
+    if (elements.receivablesSearchWrapper) {
+      elements.receivablesSearchWrapper.classList.toggle('hidden', shouldHideFeedback);
+    }
+    elements.receivablesSearchResults.classList.toggle('hidden', shouldHideFeedback);
     elements.receivablesSearchResults.innerHTML = '';
+    if (shouldHideFeedback) {
+      elements.receivablesSearchLoading.classList.add('hidden');
+      elements.receivablesSearchEmpty.classList.add('hidden');
+      return;
+    }
     if (state.receivablesSearchLoading) {
       elements.receivablesSearchLoading.classList.remove('hidden');
       elements.receivablesSearchEmpty.classList.add('hidden');
       return;
     }
     elements.receivablesSearchLoading.classList.add('hidden');
-    const query = state.receivablesSearchQuery.trim();
     if (!query) {
       elements.receivablesSearchEmpty.textContent = 'Digite para buscar clientes.';
       elements.receivablesSearchEmpty.classList.remove('hidden');
@@ -3034,6 +3045,7 @@
       return;
     }
     elements.receivablesSearchEmpty.classList.add('hidden');
+    elements.receivablesSearchResults.classList.remove('hidden');
     const fragment = document.createDocumentFragment();
     state.receivablesSearchResults.forEach((cliente) => {
       const button = document.createElement('button');
@@ -3047,7 +3059,7 @@
         state.receivablesSelectedCustomer?._id || state.receivablesSelectedCustomer?.id || '';
       const isSelected = selectedId && id && String(selectedId) === id;
       button.className = [
-        'w-full text-left rounded-lg border px-4 py-3 transition flex flex-col gap-1',
+        'w-full text-left rounded-lg border px-3 py-2 transition flex flex-col gap-1',
         isSelected
           ? 'border-primary bg-primary/5 text-primary'
           : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/5',
@@ -3205,6 +3217,7 @@
 
   const clearReceivablesSelection = () => {
     state.receivablesSelectedCustomer = null;
+    state.receivablesSearchLoading = false;
     renderReceivablesSelectedCustomer();
     renderReceivablesSearchResults();
     renderReceivablesList();
@@ -3274,6 +3287,12 @@
       return itemId && String(itemId) === id;
     });
     if (!cliente) return;
+    state.receivablesSearchQuery = '';
+    state.receivablesSearchResults = [];
+    state.receivablesSearchLoading = false;
+    if (elements.receivablesSearchInput) {
+      elements.receivablesSearchInput.value = '';
+    }
     setReceivablesSelectedCustomer(cliente);
     window.setTimeout(() => {
       elements.receivablesTable?.scrollIntoView({ behavior: 'smooth', block: 'start' });
