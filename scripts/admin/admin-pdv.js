@@ -108,6 +108,7 @@
     receivablesSelectedCustomer: null,
     receivablesListLoading: false,
     receivablesListError: '',
+    receivablesCustomerLoading: false,
     crediarioModalMethod: null,
     crediarioInstallments: [],
     crediarioNextParcelNumber: 1,
@@ -167,6 +168,7 @@
   const customerAddressesCache = new Map();
   const appointmentCache = new Map();
   const customerReceivablesCache = new Map();
+  const customerReceivablesDetailsCache = new Map();
 
   const generateBudgetCode = () => {
     const sequence = Math.max(1, Number.parseInt(state.budgetSequence, 10) || 1);
@@ -540,8 +542,11 @@
   let receivablesSearchTimeout = null;
   let receivablesSearchController = null;
   let receivablesCustomerController = null;
+  let receivablesCustomerDetailsController = null;
   let activeReceivablesRequestId = 0;
   let receivablesRequestSequence = 0;
+  let activeReceivablesDetailsRequestId = 0;
+  let receivablesDetailsRequestSequence = 0;
   let paymentModalState = null;
   let appointmentsRequestId = 0;
 
@@ -3040,6 +3045,40 @@
 
   const clearReceivablesCache = () => {
     customerReceivablesCache.clear();
+    customerReceivablesDetailsCache.clear();
+  };
+
+  const cloneReceivablesCustomerDetails = (details) => {
+    if (!details || typeof details !== 'object') {
+      return {};
+    }
+    const clone = { ...details };
+    if (details.financeiro && typeof details.financeiro === 'object') {
+      clone.financeiro = { ...details.financeiro };
+    }
+    return clone;
+  };
+
+  const applyReceivablesCustomerDetails = (customerId, details) => {
+    const id = customerId ? String(customerId) : '';
+    if (!id || !details || typeof details !== 'object') {
+      return;
+    }
+    const selected = state.receivablesSelectedCustomer;
+    if (!selected || resolveCustomerId(selected) !== id) {
+      return;
+    }
+    const merged = {
+      ...selected,
+      ...details,
+    };
+    if (selected.financeiro || details.financeiro) {
+      merged.financeiro = {
+        ...(selected.financeiro && typeof selected.financeiro === 'object' ? selected.financeiro : {}),
+        ...(details.financeiro && typeof details.financeiro === 'object' ? details.financeiro : {}),
+      };
+    }
+    state.receivablesSelectedCustomer = merged;
   };
 
   const flattenReceivableRecords = (records) => {
@@ -3151,6 +3190,12 @@
       receivablesCustomerController.abort();
       receivablesCustomerController = null;
     }
+    if (receivablesCustomerDetailsController) {
+      receivablesCustomerDetailsController.abort();
+      receivablesCustomerDetailsController = null;
+    }
+    activeReceivablesDetailsRequestId = 0;
+    state.receivablesCustomerLoading = false;
   };
 
   const renderReceivablesSearchResults = () => {
@@ -3235,8 +3280,9 @@
     const customer = state.receivablesSelectedCustomer;
     if (!customer) {
       elements.receivablesSelected.classList.add('hidden');
-      if (elements.receivablesName) elements.receivablesName.textContent = '—';
-      if (elements.receivablesDoc) elements.receivablesDoc.textContent = 'Documento: —';
+      if (elements.receivablesName) elements.receivablesName.textContent = 'Nenhum cliente selecionado';
+      if (elements.receivablesDoc)
+        elements.receivablesDoc.textContent = 'Selecione um cliente para visualizar pendências.';
       if (elements.receivablesContact) elements.receivablesContact.textContent = 'Contato: —';
       if (elements.receivablesLimit) elements.receivablesLimit.textContent = '—';
       if (elements.receivablesPending) elements.receivablesPending.textContent = formatCurrency(0);
@@ -3266,15 +3312,22 @@
         : 'Contato não informado';
     }
     if (elements.receivablesLimit) {
-      const limit =
-        customer.financeiro?.limiteCredito ??
-        customer.limiteCredito ??
-        customer.creditLimit ??
-        null;
-      elements.receivablesLimit.textContent =
-        limit !== null && limit !== undefined
-          ? formatCurrency(safeNumber(limit))
-          : 'Não informado';
+      if (state.receivablesCustomerLoading) {
+        elements.receivablesLimit.textContent = 'Carregando...';
+      } else {
+        const limit =
+          customer.financeiro?.limiteCredito ??
+          customer.financeiro?.limite_credito ??
+          customer.limiteCredito ??
+          customer.limite_credito ??
+          customer.creditLimit ??
+          customer.limite ??
+          null;
+        elements.receivablesLimit.textContent =
+          limit !== null && limit !== undefined
+            ? formatCurrency(safeNumber(limit))
+            : 'Não informado';
+      }
     }
     if (elements.receivablesPending) {
       if (state.receivablesListLoading) {
@@ -3287,6 +3340,58 @@
           0
         );
         elements.receivablesPending.textContent = formatCurrency(total);
+      }
+    }
+  };
+
+  const loadReceivablesCustomerDetails = async (cliente, { force = false } = {}) => {
+    const customerId = resolveCustomerId(cliente);
+    if (!customerId) {
+      return;
+    }
+    if (!force && customerReceivablesDetailsCache.has(customerId)) {
+      const cached = cloneReceivablesCustomerDetails(customerReceivablesDetailsCache.get(customerId));
+      applyReceivablesCustomerDetails(customerId, cached);
+      renderReceivablesSelectedCustomer();
+      return;
+    }
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    if (receivablesCustomerDetailsController) {
+      receivablesCustomerDetailsController.abort();
+    }
+    const requestId = ++receivablesDetailsRequestSequence;
+    activeReceivablesDetailsRequestId = requestId;
+    receivablesCustomerDetailsController = new AbortController();
+    state.receivablesCustomerLoading = true;
+    renderReceivablesSelectedCustomer();
+    try {
+      const response = await fetch(`${API_BASE}/func/clientes/${customerId}`, {
+        headers,
+        signal: receivablesCustomerDetailsController.signal,
+      });
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar os detalhes do cliente.');
+      }
+      const payload = await response.json();
+      const details = cloneReceivablesCustomerDetails(payload);
+      customerReceivablesDetailsCache.set(customerId, details);
+      applyReceivablesCustomerDetails(customerId, details);
+      renderReceivablesSelectedCustomer();
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
+      console.error('Erro ao carregar dados do cliente (contas a receber):', error);
+      notify(
+        error?.message || 'Não foi possível carregar os detalhes do cliente selecionado.',
+        'error'
+      );
+    } finally {
+      if (activeReceivablesDetailsRequestId === requestId) {
+        state.receivablesCustomerLoading = false;
+        receivablesCustomerDetailsController = null;
+        renderReceivablesSelectedCustomer();
       }
     }
   };
@@ -3486,16 +3591,26 @@
       state.receivablesSelectedCustomer = null;
       state.receivablesListLoading = false;
       state.receivablesListError = '';
+      state.receivablesCustomerLoading = false;
       renderReceivablesSelectedCustomer();
       renderReceivablesSearchResults();
       renderReceivablesList();
       return;
     }
     state.receivablesSelectedCustomer = { ...cliente };
+    const customerId = resolveCustomerId(cliente);
+    if (customerId && customerReceivablesDetailsCache.has(customerId)) {
+      const cachedDetails = cloneReceivablesCustomerDetails(
+        customerReceivablesDetailsCache.get(customerId)
+      );
+      applyReceivablesCustomerDetails(customerId, cachedDetails);
+    }
+    state.receivablesCustomerLoading = Boolean(customerId) && !customerReceivablesDetailsCache.has(customerId);
     renderReceivablesSelectedCustomer();
     renderReceivablesSearchResults();
     renderReceivablesList();
     loadReceivablesForCustomer(cliente, { force });
+    loadReceivablesCustomerDetails(cliente, { force });
   };
 
   const clearReceivablesSelection = () => {
@@ -5099,6 +5214,8 @@
       ? `Documento: ${document}`
       : 'Documento não informado.';
     const limitValue =
+      customer.financeiro?.limiteCredito ??
+      customer.financeiro?.limite_credito ??
       customer.limiteCredito ??
       customer.limite_credito ??
       customer.creditLimit ??
