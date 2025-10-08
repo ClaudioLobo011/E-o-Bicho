@@ -1696,6 +1696,7 @@
       dueDateLabel: entry.dueDateLabel ? String(entry.dueDateLabel) : formatDateLabel(dueDate),
       paymentMethodId: entry.paymentMethodId ? String(entry.paymentMethodId) : '',
       paymentMethodLabel: entry.paymentMethodLabel ? String(entry.paymentMethodLabel) : '',
+      paymentMethodType: entry.paymentMethodType ? String(entry.paymentMethodType) : '',
       contaCorrente:
         entry.contaCorrente && typeof entry.contaCorrente === 'object'
           ? { ...entry.contaCorrente }
@@ -1709,6 +1710,16 @@
       clienteId: entry.clienteId ? String(entry.clienteId) : '',
       clienteNome: entry.clienteNome ? String(entry.clienteNome) : '',
       saleId: entry.saleId ? String(entry.saleId) : '',
+      salePaymentId: entry.salePaymentId ? String(entry.salePaymentId) : '',
+      accountReceivableId: entry.accountReceivableId ? String(entry.accountReceivableId) : '',
+      documentNumber: entry.documentNumber ? String(entry.documentNumber) : '',
+      status: entry.status ? String(entry.status) : '',
+      notes: entry.notes ? String(entry.notes) : '',
+      locked: Boolean(entry.locked),
+      lockReason: entry.lockReason ? String(entry.lockReason) : '',
+      origin: entry.origin ? String(entry.origin) : '',
+      metadata:
+        entry.metadata && typeof entry.metadata === 'object' ? { ...entry.metadata } : null,
     };
   };
 
@@ -3011,7 +3022,18 @@
 
   const isCrediarioReceivable = (entry) => {
     if (!entry || typeof entry !== 'object') return false;
+    const status = String(entry.status || '').toLowerCase();
+    if (status && ['finalized', 'received', 'cancelled', 'canceled'].includes(status)) {
+      return false;
+    }
+    if (entry.origin === 'sale') {
+      return true;
+    }
     if (entry.crediarioMethodId) return true;
+    const methodType = String(entry.paymentMethodType || '').toLowerCase();
+    if (methodType === 'crediario' || methodType === 'credito') {
+      return true;
+    }
     const methodLabel = String(entry.paymentMethodLabel || entry.paymentLabel || '').toLowerCase();
     return methodLabel.includes('crediário') || methodLabel.includes('crediario');
   };
@@ -3130,6 +3152,7 @@
           dueDateLabel: formatDateLabel(dueDate),
           paymentMethodId: paymentMethod?._id ? String(paymentMethod._id) : '',
           paymentMethodLabel: paymentMethod?.name || 'Crediário',
+          paymentMethodType: (paymentMethod?.type || '').toLowerCase(),
           saleCode,
           crediarioMethodId: paymentMethod?._id ? String(paymentMethod._id) : '',
           clienteId: customerId,
@@ -3139,6 +3162,12 @@
           status: typeof installment.status === 'string' && installment.status
             ? installment.status
             : record.status || '',
+          accountReceivableId: receivableId,
+          documentNumber: record.documentNumber || record.document || saleCode,
+          notes: record.notes || '',
+          locked: !!record.locked,
+          lockReason: record.lockReason || '',
+          metadata: record.metadata || null,
         };
         flattened.push(normalized);
       });
@@ -5935,71 +5964,447 @@
     updateStatusBadge();
   };
 
-  const buildCrediarioReceivables = (payments, customer, saleCode = '') => {
-    if (!Array.isArray(payments) || !payments.length) return [];
-    const receivables = [];
+  const buildSaleReceivables = ({
+    payments = [],
+    customer = null,
+    saleCode = '',
+    items = [],
+    saleDate = new Date(),
+  } = {}) => {
+    if (!Array.isArray(payments) || !payments.length) {
+      return { entries: [], backendRequests: [], saleDate: new Date().toISOString() };
+    }
+
     const contaCorrente = state.financeSettings?.contaCorrente || null;
     const contaContabil = state.financeSettings?.contaContabilReceber || null;
     const fallbackCustomerId =
       customer?._id || customer?.id || customer?.codigo || customer?.code || '';
     const fallbackCustomerName = resolveCustomerName(customer) || 'Cliente não informado';
-    payments.forEach((payment) => {
-      const type = String(payment.type || '').toLowerCase();
-      if (type !== 'crediario') {
-        const methodRef = state.paymentMethods.find((item) => item.id === payment.id);
-        const resolvedType = String(methodRef?.type || '').toLowerCase();
-        if (resolvedType !== 'crediario') {
+    const fallbackCustomerDocument = resolveCustomerDocument(customer) || '';
+
+    const saleDateObj = saleDate instanceof Date ? saleDate : new Date(saleDate || Date.now());
+    const saleDateIso = saleDateObj.toISOString();
+
+    const methodMap = new Map(state.paymentMethods.map((method) => [method.id, method]));
+    const receivables = [];
+    const backendRequests = [];
+
+    const toDateValue = (value) => {
+      if (!value) return null;
+      const date = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(date.getTime())) return null;
+      return date;
+    };
+
+    const addDays = (base, days) => {
+      const reference = base instanceof Date ? new Date(base.getTime()) : new Date();
+      if (!Number.isFinite(days) || !days) {
+        return reference;
+      }
+      reference.setDate(reference.getDate() + days);
+      return reference;
+    };
+
+    const createInstallmentEntry = ({
+      parcelNumber,
+      value,
+      dueDate,
+      paymentMethodId,
+      paymentMethodLabel,
+      paymentMethodType,
+      salePaymentId,
+      clienteId,
+      clienteNome,
+    }) => {
+      const dueIso = dueDate ? dueDate.toISOString() : null;
+      return {
+        id: createUid(),
+        parcelNumber,
+        installmentNumber: parcelNumber,
+        value,
+        formattedValue: formatCurrency(value),
+        dueDate: dueIso,
+        dueDateLabel: formatDateLabel(dueIso),
+        paymentMethodId: paymentMethodId || '',
+        paymentMethodLabel: paymentMethodLabel || 'Pagamento',
+        paymentMethodType,
+        contaCorrente: contaCorrente ? { ...contaCorrente } : null,
+        contaContabil: contaContabil ? { ...contaContabil } : null,
+        saleCode: saleCode || '',
+        crediarioMethodId: paymentMethodType === 'crediario' ? paymentMethodId || salePaymentId || '' : '',
+        clienteId: clienteId ? String(clienteId) : '',
+        clienteNome,
+        origin: 'sale',
+        salePaymentId,
+        status: 'open',
+        documentNumber: '',
+        accountReceivableId: '',
+        notes: '',
+        locked: true,
+        lockReason: '',
+      };
+    };
+
+    payments.forEach((payment, paymentIndex) => {
+      const method = methodMap.get(payment.id) || null;
+      const resolvedType = String(payment.type || method?.type || '').toLowerCase();
+      const paymentMethodId = method?.raw?._id ? String(method.raw._id) : '';
+      const paymentMethodLabel = payment.label || method?.label || 'Pagamento';
+      const paymentMethodType = resolvedType || 'avista';
+      const totalValue = safeNumber(payment.valor ?? 0);
+      if (!(totalValue > 0)) {
+        return;
+      }
+
+      const salePaymentId = payment.id || method?.id || createUid();
+
+      if (paymentMethodType === 'crediario' || payment.crediarioData) {
+        const data = payment.crediarioData || {};
+        const installments = Array.isArray(data.installments) ? data.installments : [];
+        const clienteId = data.clienteId || fallbackCustomerId;
+        const clienteNome = data.clienteNome || fallbackCustomerName;
+        const normalizedInstallments = [];
+        installments.forEach((installment, index) => {
+          const valor = safeNumber(installment.valor ?? installment.value ?? installment.amount ?? 0);
+          if (!(valor > 0)) return;
+          const rawDue = installment.dueDate || installment.vencimento || null;
+          const dueDate = toDateValue(rawDue) || addDays(saleDateObj, 0);
+          const parcelNumber = (() => {
+            const parsed = Number.parseInt(installment.parcela ?? installment.number, 10);
+            return Number.isFinite(parsed) ? parsed : index + 1;
+          })();
+          receivables.push(
+            createInstallmentEntry({
+              parcelNumber,
+              value: valor,
+              dueDate,
+              paymentMethodId: installment.methodId || paymentMethodId,
+              paymentMethodLabel: installment.methodLabel || paymentMethodLabel,
+              paymentMethodType,
+              salePaymentId,
+              clienteId,
+              clienteNome,
+            })
+          );
+          normalizedInstallments.push({
+            number: parcelNumber,
+            value: valor,
+            dueDate,
+          });
+        });
+        if (!normalizedInstallments.length) {
           return;
         }
-      }
-      const data = payment.crediarioData || {};
-      const installments = Array.isArray(data.installments) ? data.installments : [];
-      const clienteId = data.clienteId || fallbackCustomerId;
-      const clienteNome = data.clienteNome || fallbackCustomerName;
-      installments.forEach((installment, index) => {
-        const valor = safeNumber(installment.valor ?? installment.value ?? installment.amount ?? 0);
-        if (!(valor > 0)) return;
-        let dueIso = null;
-        if (installment.dueDate) {
-          const parsed = new Date(installment.dueDate);
-          if (!Number.isNaN(parsed.getTime())) {
-            dueIso = parsed.toISOString();
-          }
-        }
-        const parcelNumber = Number.parseInt(installment.parcela, 10);
-        const resolvedParcel = Number.isFinite(parcelNumber) ? parcelNumber : index + 1;
-        receivables.push({
-          id: createUid(),
-          parcelNumber: resolvedParcel,
-          installmentNumber: resolvedParcel,
-          value: valor,
-          formattedValue: formatCurrency(valor),
-          dueDate: dueIso,
-          dueDateLabel: installment.dueDateLabel || formatDateLabel(dueIso),
-          paymentMethodId: installment.methodId || payment.id || '',
-          paymentMethodLabel: installment.methodLabel || payment.label || 'Crediário',
-          contaCorrente: contaCorrente ? { ...contaCorrente } : null,
-          contaContabil: contaContabil ? { ...contaContabil } : null,
-          saleCode: saleCode || '',
-          crediarioMethodId: payment.id || '',
-          clienteId: clienteId ? String(clienteId) : '',
-          clienteNome,
-          origin: 'sale',
+        backendRequests.push({
+          paymentId: salePaymentId,
+          paymentLabel: paymentMethodLabel,
+          methodType: paymentMethodType,
+          paymentMethodId: paymentMethodId || '',
+          totalValue,
+          installments: normalizedInstallments,
+          customerId: clienteId ? String(clienteId) : '',
+          customerName: clienteNome,
+          customerDocument: fallbackCustomerDocument,
+          markAsPaid: false,
+          salePaymentId,
         });
+        return;
+      }
+
+      if (paymentMethodType === 'credito') {
+        const parcelasRaw = payment.parcelas ?? payment.parcelas ?? 1;
+        const parcelas = Math.max(1, Number.parseInt(parcelasRaw, 10) || 1);
+        const configs = Array.isArray(method?.installmentConfigurations)
+          ? method.installmentConfigurations
+          : [];
+        const configMap = new Map();
+        configs.forEach((config) => {
+          const number = Number(config?.number);
+          if (Number.isFinite(number)) {
+            const days = safeNumber(config.days);
+            configMap.set(number, days);
+          }
+        });
+        const baseDays = safeNumber(method?.raw?.days ?? method?.raw?.prazo ?? 0);
+        const anticipated = Boolean(method?.raw?.anticipated);
+        const totalCents = Math.round(totalValue * 100);
+        const baseCents = Math.floor(totalCents / parcelas);
+        const remainder = totalCents - baseCents * parcelas;
+        const firstDue = addDays(saleDateObj, baseDays);
+        const normalizedInstallments = [];
+        for (let index = 0; index < parcelas; index += 1) {
+          const parcelNumber = index + 1;
+          const amountCents = baseCents + (index < remainder ? 1 : 0);
+          const valor = amountCents / 100;
+          let dueDate;
+          if (configMap.has(parcelNumber)) {
+            dueDate = addDays(saleDateObj, configMap.get(parcelNumber));
+          } else if (parcelNumber === 1) {
+            dueDate = firstDue;
+          } else if (anticipated) {
+            dueDate = addDays(saleDateObj, baseDays);
+          } else {
+            const offset = 30 * (parcelNumber - 1);
+            dueDate = addDays(firstDue, offset);
+          }
+          receivables.push(
+            createInstallmentEntry({
+              parcelNumber,
+              value: valor,
+              dueDate,
+              paymentMethodId,
+              paymentMethodLabel,
+              paymentMethodType,
+              salePaymentId,
+              clienteId: fallbackCustomerId,
+              clienteNome: fallbackCustomerName,
+            })
+          );
+          normalizedInstallments.push({ number: parcelNumber, value: valor, dueDate });
+        }
+        const dueNow = normalizedInstallments[0]?.dueDate || saleDateObj;
+        const markAsPaid = dueNow && dueNow.getTime() <= saleDateObj.getTime();
+        backendRequests.push({
+          paymentId: salePaymentId,
+          paymentLabel: paymentMethodLabel,
+          methodType: paymentMethodType,
+          paymentMethodId: paymentMethodId || '',
+          totalValue,
+          installments: normalizedInstallments,
+          customerId: fallbackCustomerId,
+          customerName: fallbackCustomerName,
+          customerDocument: fallbackCustomerDocument,
+          markAsPaid,
+          salePaymentId,
+        });
+        return;
+      }
+
+      // Pagamentos à vista, débito, PIX etc.
+      const immediateDue = addDays(saleDateObj, safeNumber(method?.raw?.days ?? 0));
+      receivables.push(
+        createInstallmentEntry({
+          parcelNumber: 1,
+          value: totalValue,
+          dueDate: immediateDue,
+          paymentMethodId,
+          paymentMethodLabel,
+          paymentMethodType,
+          salePaymentId,
+          clienteId: fallbackCustomerId,
+          clienteNome: fallbackCustomerName,
+        })
+      );
+      backendRequests.push({
+        paymentId: salePaymentId,
+        paymentLabel: paymentMethodLabel,
+        methodType: paymentMethodType,
+        paymentMethodId: paymentMethodId || '',
+        totalValue,
+        installments: [{ number: 1, value: totalValue, dueDate: immediateDue }],
+        customerId: fallbackCustomerId,
+        customerName: fallbackCustomerName,
+        customerDocument: fallbackCustomerDocument,
+        markAsPaid: true,
+        salePaymentId,
       });
     });
-    return receivables;
+
+    return { entries: receivables, backendRequests, saleDate: saleDateIso, saleItems: items };
   };
 
-  const syncAccountsReceivableForSale = (saleId, receivables) => {
-    if (!saleId) return;
-    state.accountsReceivable = state.accountsReceivable.filter((entry) => entry.saleId !== saleId);
-    if (Array.isArray(receivables) && receivables.length) {
-      const enriched = receivables.map((entry) => ({ ...entry, saleId }));
-      state.accountsReceivable.push(...enriched);
+  const syncAccountsReceivableForSale = async (
+    saleRecord,
+    receivables,
+    backendRequests,
+    context = {}
+  ) => {
+    if (!saleRecord || !saleRecord.id) return;
+    const saleId = saleRecord.id;
+
+    const commitReceivablesToState = () => {
+      state.accountsReceivable = state.accountsReceivable.filter((entry) => entry.saleId !== saleId);
+      if (Array.isArray(receivables) && receivables.length) {
+        const enriched = receivables.map((entry) => ({ ...entry, saleId }));
+        state.accountsReceivable.push(...enriched);
+        saleRecord.receivables = enriched.map((entry) => ({ ...entry }));
+      }
+      renderReceivablesList();
+      renderReceivablesSelectedCustomer();
+    };
+
+    commitReceivablesToState();
+
+    if (!Array.isArray(backendRequests) || !backendRequests.length) {
+      return;
     }
-    renderReceivablesList();
-    renderReceivablesSelectedCustomer();
+
+    const pdv = findPdvById(state.selectedPdv);
+    const companyId = getPdvCompanyId(pdv);
+    const contaCorrente = state.financeSettings?.contaCorrente || null;
+    const contaContabil = state.financeSettings?.contaContabilReceber || null;
+    const bankAccountId = contaCorrente?.id || contaCorrente?.raw?._id || '';
+    const accountingAccountId = contaContabil?.id || contaContabil?.raw?._id || '';
+    if (!companyId || !bankAccountId || !accountingAccountId) {
+      notify(
+        'Configure a empresa, a conta corrente e a conta contábil do PDV para registrar contas a receber automaticamente.',
+        'warning'
+      );
+      return;
+    }
+
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const saleCode = context.saleCode || saleRecord.saleCode || '';
+    const saleDateIso = context.saleDate || saleRecord.createdAt || new Date().toISOString();
+    const saleDateLabel = toDateLabel(saleDateIso);
+    const saleItems = Array.isArray(context.items) ? context.items : [];
+    const customerName = resolveCustomerName(context.customer || state.vendaCliente) || 'Cliente não informado';
+    const customerDocument = resolveCustomerDocument(context.customer || state.vendaCliente) || '';
+    const pdvCode = pdv?.codigo || pdv?.code || state.saleCodeIdentifier || 'PDV';
+    const pdvName = pdv?.nome || pdv?.apelido || pdv?.descricao || 'PDV';
+    const observationLines = [];
+    observationLines.push(
+      `Venda finalizada pelo PDV ${pdvName}${pdvCode ? ` (cód. ${pdvCode})` : ''} em ${saleDateLabel}.`
+    );
+    if (saleCode) {
+      observationLines.push(`Código da venda: ${saleCode}.`);
+    }
+    if (customerName) {
+      const documentInfo = customerDocument ? ` (${customerDocument})` : '';
+      observationLines.push(`Cliente: ${customerName}${documentInfo}.`);
+    }
+    if (saleItems.length) {
+      observationLines.push('Itens vendidos:');
+      saleItems.forEach((item) => {
+        const itemName =
+          item?.nome || item?.descricao || item?.produto || item?.product || 'Item da venda';
+        const quantityValue = safeNumber(item?.quantidade ?? item?.qtd ?? 0);
+        const quantityLabel = quantityValue.toLocaleString('pt-BR', {
+          minimumFractionDigits: Number.isInteger(quantityValue) ? 0 : 2,
+          maximumFractionDigits: 3,
+        });
+        const unitLabel = item?.unidade || item?.productSnapshot?.unidade || '';
+        observationLines.push(`- ${itemName} • ${quantityLabel}${unitLabel ? ` ${unitLabel}` : ''}`);
+      });
+    }
+    const observationBase = observationLines.join('\n');
+    const lockReasonMessage =
+      'Lançamento gerado automaticamente pelo PDV. Edite apenas pelo PDV.';
+
+    let requestIndex = 0;
+    for (const request of backendRequests) {
+      requestIndex += 1;
+      try {
+        const installmentsData = Array.isArray(request.installments)
+          ? request.installments.map((installment) => ({
+              number: installment.number,
+              dueDate: installment.dueDate ? installment.dueDate.toISOString() : saleDateIso,
+              bankAccount: bankAccountId,
+            }))
+          : [];
+        const documentNumberParts = [pdvCode || 'PDV', saleCode || saleId, requestIndex];
+        const documentNumber = documentNumberParts.filter(Boolean).join('-');
+        const payload = {
+          company: companyId,
+          customer: request.customerId || undefined,
+          bankAccount: bankAccountId,
+          accountingAccount: accountingAccountId,
+          paymentMethod: request.paymentMethodId || undefined,
+          issueDate: saleDateIso,
+          dueDate: installmentsData[0]?.dueDate || saleDateIso,
+          totalValue: request.totalValue,
+          installmentsCount: installmentsData.length,
+          installmentsData,
+          documentNumber,
+          notes: [observationBase, `Meio de pagamento: ${request.paymentLabel}`].filter(Boolean).join('\n\n'),
+          locked: true,
+          lockReason: lockReasonMessage,
+          origin: 'pdv-sale',
+          originReference: `${saleId}:${request.paymentId}`,
+          metadata: {
+            pdvId: state.selectedPdv || '',
+            pdvCode,
+            pdvName,
+            saleId,
+            saleCode,
+            paymentId: request.paymentId,
+            paymentLabel: request.paymentLabel,
+            methodType: request.methodType,
+          },
+        };
+
+        const response = await fetch(`${API_BASE}/accounts-receivable`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message = data?.message || 'Não foi possível registrar as contas a receber da venda.';
+          throw new Error(message);
+        }
+        const receivable = data?.receivable || data || {};
+        const accountId = receivable._id || '';
+        const documentNumberResponse = receivable.documentNumber || payload.documentNumber;
+
+        const updateEntries = (entries) => {
+          entries.forEach((entry) => {
+            if (entry.salePaymentId === request.salePaymentId) {
+              entry.accountReceivableId = accountId;
+              entry.documentNumber = documentNumberResponse;
+              entry.locked = true;
+              entry.lockReason = lockReasonMessage;
+              entry.notes = payload.notes;
+              if (request.markAsPaid) {
+                entry.status = 'finalized';
+              }
+              entry.metadata = payload.metadata;
+            }
+          });
+        };
+
+        updateEntries(receivables);
+        if (Array.isArray(saleRecord.receivables)) {
+          updateEntries(saleRecord.receivables);
+        }
+
+        if (request.markAsPaid && accountId) {
+          for (const installment of request.installments) {
+            const paymentResponse = await fetch(
+              `${API_BASE}/accounts-receivable/${accountId}/payments`,
+              {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  installmentNumber: installment.number,
+                  paymentDate: saleDateIso,
+                  paidValue: installment.value,
+                  bankAccount: bankAccountId,
+                  paymentMethod: request.paymentMethodId || undefined,
+                  allowLockedUpdate: true,
+                }),
+              }
+            );
+            if (!paymentResponse.ok) {
+              const paymentError = await paymentResponse.json().catch(() => ({}));
+              const message = paymentError?.message || 'Não foi possível marcar a conta como recebida.';
+              throw new Error(message);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao sincronizar contas a receber da venda:', error);
+        notify(error.message || 'Não foi possível registrar as contas a receber da venda.', 'error');
+      }
+    }
+
+    commitReceivablesToState();
+    scheduleStatePersist({ immediate: true });
   };
 
   const emitFiscalForSale = async (saleId, { notifyOnSuccess = true } = {}) => {
@@ -6230,7 +6635,14 @@
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, { saleCode });
-    const receivables = buildCrediarioReceivables(pagamentosVenda, state.vendaCliente, saleCode);
+    const saleDate = new Date();
+    const saleReceivables = buildSaleReceivables({
+      payments: pagamentosVenda,
+      customer: state.vendaCliente,
+      saleCode,
+      items: itensSnapshot,
+      saleDate,
+    });
     registerSaleOnCaixa(pagamentosVenda, total, saleCode);
     const saleRecord = registerCompletedSaleRecord({
       type: 'venda',
@@ -6241,11 +6653,22 @@
       discount: state.vendaDesconto,
       addition: state.vendaAcrescimo,
       customer: state.vendaCliente,
-      receivables,
+      createdAt: saleReceivables.saleDate,
+      receivables: saleReceivables.entries,
     });
     if (saleRecord) {
-      saleRecord.receivables = receivables.map((entry) => ({ ...entry }));
-      syncAccountsReceivableForSale(saleRecord.id, receivables);
+      saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
+      await syncAccountsReceivableForSale(
+        saleRecord,
+        saleReceivables.entries,
+        saleReceivables.backendRequests,
+        {
+          saleCode,
+          customer: state.vendaCliente,
+          items: saleReceivables.saleItems,
+          saleDate: saleReceivables.saleDate,
+        }
+      );
     }
     if (budgetToFinalize) {
       const finalizeIso = new Date().toISOString();
@@ -6304,7 +6727,7 @@
     }
   };
 
-  const finalizeDeliveryFlow = () => {
+  const finalizeDeliveryFlow = async () => {
     const total = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
     if (!state.itens.length) {
@@ -6344,7 +6767,13 @@
       state.vendaAcrescimo,
       saleCode
     );
-    const receivables = buildCrediarioReceivables(pagamentosVenda, state.vendaCliente, saleCode);
+    const saleReceivables = buildSaleReceivables({
+      payments: pagamentosVenda,
+      customer: state.vendaCliente,
+      saleCode,
+      items: itensSnapshot,
+      saleDate: orderRecord.createdAt,
+    });
     const saleRecord = registerCompletedSaleRecord({
       type: 'delivery',
       saleCode,
@@ -6355,11 +6784,21 @@
       addition: state.vendaAcrescimo,
       customer: state.vendaCliente,
       createdAt: orderRecord.createdAt,
-      receivables,
+      receivables: saleReceivables.entries,
     });
     if (saleRecord) {
-      saleRecord.receivables = receivables.map((entry) => ({ ...entry }));
-      syncAccountsReceivableForSale(saleRecord.id, receivables);
+      saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
+      await syncAccountsReceivableForSale(
+        saleRecord,
+        saleReceivables.entries,
+        saleReceivables.backendRequests,
+        {
+          saleCode,
+          customer: state.vendaCliente,
+          items: saleReceivables.saleItems,
+          saleDate: saleReceivables.saleDate,
+        }
+      );
       orderRecord.saleRecordId = saleRecord.id;
     }
     state.deliveryOrders.unshift(orderRecord);
@@ -6387,7 +6826,7 @@
     state.deliverySelectedAddressId = '';
   };
 
-  const finalizeRegisteredDeliveryOrder = () => {
+  const finalizeRegisteredDeliveryOrder = async () => {
     const orderId = state.deliveryFinalizingOrderId;
     if (!orderId) {
       notify('Nenhum delivery selecionado para finalização.', 'warning');
@@ -6422,7 +6861,13 @@
       notify('Não foi possível gerar o comprovante do delivery.', 'error');
       return;
     }
-    const receivables = buildCrediarioReceivables(pagamentosVenda, state.vendaCliente, saleCode);
+    const saleReceivables = buildSaleReceivables({
+      payments: pagamentosVenda,
+      customer: state.vendaCliente || order.customer,
+      saleCode,
+      items: itensSnapshot,
+      saleDate: order.createdAt || new Date(),
+    });
     registerSaleOnCaixa(pagamentosVenda, total, saleCode);
     order.payments = pagamentosVenda;
     order.paymentsLabel = summarizeDeliveryPayments(pagamentosVenda);
@@ -6440,7 +6885,7 @@
     renderDeliveryOrders();
     const saleRecordId = order.saleRecordId;
     if (saleRecordId) {
-      updateCompletedSaleRecord(saleRecordId, {
+      const saleRecord = updateCompletedSaleRecord(saleRecordId, {
         saleCode: order.saleCode,
         snapshot: saleSnapshot,
         payments: pagamentosVenda,
@@ -6448,9 +6893,22 @@
         discount: state.vendaDesconto,
         addition: state.vendaAcrescimo,
         customer: state.vendaCliente,
-        receivables,
+        receivables: saleReceivables.entries,
       });
-      syncAccountsReceivableForSale(saleRecordId, receivables);
+      if (saleRecord) {
+        saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
+        await syncAccountsReceivableForSale(
+          saleRecord,
+          saleReceivables.entries,
+          saleReceivables.backendRequests,
+          {
+            saleCode,
+            customer: state.vendaCliente || order.customer,
+            items: saleReceivables.saleItems,
+            saleDate: saleReceivables.saleDate,
+          }
+        );
+      }
     } else {
       const saleRecord = registerCompletedSaleRecord({
         type: 'delivery',
@@ -6462,11 +6920,21 @@
         addition: state.vendaAcrescimo,
         customer: state.vendaCliente,
         createdAt: order.createdAt,
-        receivables,
+        receivables: saleReceivables.entries,
       });
       if (saleRecord) {
-        saleRecord.receivables = receivables.map((entry) => ({ ...entry }));
-        syncAccountsReceivableForSale(saleRecord.id, receivables);
+        saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
+        await syncAccountsReceivableForSale(
+          saleRecord,
+          saleReceivables.entries,
+          saleReceivables.backendRequests,
+          {
+            saleCode,
+            customer: state.vendaCliente || order.customer,
+            items: saleReceivables.saleItems,
+            saleDate: saleReceivables.saleDate,
+          }
+        );
         order.saleRecordId = saleRecord.id;
       }
     }
@@ -6483,11 +6951,11 @@
 
   const handleFinalizeConfirm = async () => {
     if (state.activeFinalizeContext === 'delivery') {
-      finalizeDeliveryFlow();
+      await finalizeDeliveryFlow();
       return;
     }
     if (state.activeFinalizeContext === 'delivery-complete') {
-      finalizeRegisteredDeliveryOrder();
+      await finalizeRegisteredDeliveryOrder();
       return;
     }
     if (state.activeFinalizeContext === 'orcamento') {
