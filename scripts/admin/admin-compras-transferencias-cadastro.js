@@ -37,21 +37,45 @@
     timeout: null,
     controller: null,
     lastResults: [],
+    hideTimeout: null,
   };
 
-  function renderProductSearchMessage(message, type = 'neutral') {
+  function showProductResults() {
+    const container = productSearchSelectors.results;
+    if (!container) return;
+    if (searchState.hideTimeout) {
+      clearTimeout(searchState.hideTimeout);
+      searchState.hideTimeout = null;
+    }
+    container.classList.remove('hidden');
+  }
+
+  function hideProductResults() {
+    const container = productSearchSelectors.results;
+    if (!container) return;
+    container.classList.add('hidden');
+  }
+
+  function renderProductSearchMessage(message, type = 'neutral', options = {}) {
     if (!productSearchSelectors.results) return;
 
-    let classes = 'rounded-lg border border-dashed border-gray-300 bg-white/80 p-4 text-sm text-gray-500';
+    const { show = true } = options;
+
+    let classes = 'px-4 py-3 text-sm text-gray-600';
     if (type === 'loading') {
-      classes = 'rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-600';
+      classes = 'flex items-center gap-2 px-4 py-3 text-sm text-primary-600';
     } else if (type === 'error') {
-      classes = 'rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600';
+      classes = 'px-4 py-3 text-sm text-red-600';
     } else if (type === 'info') {
-      classes = 'rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700';
+      classes = 'px-4 py-3 text-sm text-amber-600';
     }
 
-    productSearchSelectors.results.innerHTML = `<div class="${classes}">${message}</div>`;
+    productSearchSelectors.results.dataset.state = 'message';
+    productSearchSelectors.results.innerHTML = `<div class="max-h-80 overflow-y-auto"><div class="${classes}">${message}</div></div>`;
+
+    if (show) {
+      showProductResults();
+    }
   }
 
   const allowedRolesLabels = {
@@ -368,7 +392,10 @@
     if (productSearchSelectors.input) {
       productSearchSelectors.input.value = '';
     }
-    renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.');
+    renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.', 'neutral', {
+      show: false,
+    });
+    hideProductResults();
   }
 
   function renderSearchResults(products) {
@@ -391,38 +418,29 @@
         : '—';
 
       return `
-        <article class="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40">
-          <div>
-            <h3 class="text-sm font-semibold text-gray-800">${nome}</h3>
-            <p class="mt-1 text-xs text-gray-500">EAN: ${barcode}</p>
-          </div>
-          <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-500">
-            <div>
-              <dt class="font-medium text-gray-600">SKU</dt>
-              <dd class="text-gray-700">${sku}</dd>
+        <li>
+          <button type="button" class="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-primary/5 focus:bg-primary/5" data-action="select-product" data-index="${index}">
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-gray-800">${nome}</p>
+              <p class="mt-1 text-xs text-gray-500">SKU ${sku} • EAN ${barcode}</p>
             </div>
-            <div>
-              <dt class="font-medium text-gray-600">Unidade</dt>
-              <dd class="text-gray-700">${unidade || '—'}</dd>
+            <div class="flex flex-col items-end gap-1 text-xs text-gray-500">
+              <span class="font-medium text-gray-600">Unidade: <span class="text-gray-700">${unidade || '—'}</span></span>
+              <span class="font-medium text-gray-600">Peso: <span class="text-gray-700">${peso}</span></span>
+              <span class="font-medium text-gray-600">Custo: <span class="text-gray-700">${unitCost}</span></span>
             </div>
-            <div>
-              <dt class="font-medium text-gray-600">Peso</dt>
-              <dd class="text-gray-700">${peso}</dd>
-            </div>
-            <div>
-              <dt class="font-medium text-gray-600">Custo médio</dt>
-              <dd class="text-gray-700">${unitCost}</dd>
-            </div>
-          </dl>
-          <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary/90" data-action="select-product" data-index="${index}">
-            <i class="fas fa-plus"></i>
-            Adicionar
           </button>
-        </article>
+        </li>
       `;
     });
 
-    productSearchSelectors.results.innerHTML = rows.join('');
+    productSearchSelectors.results.dataset.state = 'results';
+    productSearchSelectors.results.innerHTML = `
+      <ul class="max-h-80 overflow-y-auto divide-y divide-gray-100">
+        ${rows.join('')}
+      </ul>
+    `;
+    showProductResults();
   }
 
   async function searchProducts(term) {
@@ -532,6 +550,24 @@
           searchProducts(term);
         }
       });
+
+      input.addEventListener('focus', () => {
+        if (!productSearchSelectors.results) return;
+        if (!input.value.trim()) {
+          renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.', 'neutral', {
+            show: false,
+          });
+        } else if (searchState.lastResults.length) {
+          renderSearchResults(searchState.lastResults);
+        }
+        showProductResults();
+      });
+
+      input.addEventListener('blur', () => {
+        searchState.hideTimeout = setTimeout(() => {
+          hideProductResults();
+        }, 150);
+      });
     }
 
     const results = productSearchSelectors.results;
@@ -544,7 +580,25 @@
         const product = searchState.lastResults[index];
         addProductToTransfer(product);
       });
+      results.addEventListener('mouseenter', () => {
+        if (searchState.hideTimeout) {
+          clearTimeout(searchState.hideTimeout);
+          searchState.hideTimeout = null;
+        }
+      });
+      results.addEventListener('mouseleave', () => {
+        searchState.hideTimeout = setTimeout(() => {
+          hideProductResults();
+        }, 150);
+      });
     }
+
+    document.addEventListener('click', (event) => {
+      if (!productSearchSelectors.input || !productSearchSelectors.results) return;
+      if (productSearchSelectors.input.contains(event.target)) return;
+      if (productSearchSelectors.results.contains(event.target)) return;
+      hideProductResults();
+    });
   }
 
   function addProductToTransfer(product) {
