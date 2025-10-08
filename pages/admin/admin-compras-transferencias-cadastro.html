@@ -16,7 +16,7 @@
         <div id="admin-sidebar-placeholder"></div>
       </aside>
 
-      <div class="md:col-span-4 space-y-6">
+      <form id="transfer-form" class="md:col-span-4 space-y-6">
         <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div class="space-y-2">
             <div class="flex items-center gap-2 text-sm text-gray-500">
@@ -38,7 +38,7 @@
             <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
               <i class="fas fa-file-import"></i>
               Importar via planilha</button>
-            <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+            <button type="submit" id="transfer-save-button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
               <i class="fas fa-save"></i>
               Salvar transferência</button>
           </div>
@@ -59,18 +59,12 @@
                 <label for="origin-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de origem <span class="text-red-500">*</span></label>
                 <select id="origin-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
                   <option value="">Selecione</option>
-                  <option value="matriz">E o Bicho Matriz - CNPJ 12.345.678/0001-90</option>
-                  <option value="filial-ald">E o Bicho Filial Aldeota - CNPJ 12.345.678/0002-71</option>
-                  <option value="filial-mei">E o Bicho Filial Meireles - CNPJ 12.345.678/0003-52</option>
                 </select>
               </div>
               <div>
                 <label for="transfer-origin" class="block text-sm font-medium text-gray-700 mb-1">Depósito de origem <span class="text-red-500">*</span></label>
                 <select id="transfer-origin" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
                   <option value="">Selecione</option>
-                  <option data-company="matriz">Centro de Distribuição Fortaleza</option>
-                  <option data-company="filial-ald">Backroom Loja Aldeota</option>
-                  <option data-company="filial-mei">Backroom Loja Meireles</option>
                 </select>
               </div>
             </div>
@@ -79,33 +73,23 @@
                 <label for="destination-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de destino <span class="text-red-500">*</span></label>
                 <select id="destination-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
                   <option value="">Selecione</option>
-                  <option value="filial-ald">E o Bicho Filial Aldeota - CNPJ 12.345.678/0002-71</option>
-                  <option value="filial-mei">E o Bicho Filial Meireles - CNPJ 12.345.678/0003-52</option>
-                  <option value="clinica-iguatemi">Clínica Veterinária Iguatemi - CNPJ 12.345.678/0004-33</option>
                 </select>
               </div>
               <div>
                 <label for="transfer-destination" class="block text-sm font-medium text-gray-700 mb-1">Depósito de destino <span class="text-red-500">*</span></label>
                 <select id="transfer-destination" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
                   <option value="">Selecione</option>
-                  <option data-company="filial-ald">Loja Aldeota - Área de vendas</option>
-                  <option data-company="filial-mei">Loja Meireles - Área de vendas</option>
-                  <option data-company="clinica-iguatemi">Clínica Vet Iguatemi - Farmácia</option>
                 </select>
               </div>
             </div>
             <div>
-              <label for="transfer-responsible" class="block text-sm font-medium text-gray-700 mb-1">Responsável <span class="text-red-500">*</span></label>
+              <label for="transfer-responsible-search" class="block text-sm font-medium text-gray-700 mb-1">Responsável <span class="text-red-500">*</span></label>
               <div class="relative">
-                <input type="search" id="transfer-responsible" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" list="responsible-list" placeholder="Digite o nome do colaborador" required>
-                <datalist id="responsible-list">
-                  <option value="Ana Paula Ferreira - Compras">Analista fiscal</option>
-                  <option value="Bruno Nascimento - Logística">Coordenador de logística</option>
-                  <option value="Camila Duarte - Compras">Assistente de compras</option>
-                  <option value="Diego Albuquerque - Operações">Supervisor de operações</option>
-                </datalist>
+                <input type="hidden" id="transfer-responsible">
+                <input type="search" id="transfer-responsible-search" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" list="responsible-list" placeholder="Digite o nome do colaborador" autocomplete="off" required>
+                <datalist id="responsible-list"></datalist>
               </div>
-              <p class="mt-1 text-xs text-gray-500">Selecione o colaborador responsável pela solicitação de acordo com o cadastro de funcionários.</p>
+              <p class="mt-1 text-xs text-gray-500">Digite para localizar colaboradores com acesso administrativo e confirme a seleção pelo nome exibido.</p>
             </div>
             <div>
               <label for="transfer-reference" class="block text-sm font-medium text-gray-700 mb-1">Documento de referência</label>
@@ -116,7 +100,7 @@
           <div class="space-y-4">
             <div class="flex items-center justify-between">
               <h2 class="text-lg font-semibold text-gray-800">Itens da transferência</h2>
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+              <button type="button" id="transfer-add-item" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
                 <i class="fas fa-plus"></i>
                 Adicionar item
               </button>
@@ -134,42 +118,17 @@
                     <th class="px-4 py-3 text-right font-semibold text-gray-700">Ações</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
+                <tbody id="transfer-items-body" class="divide-y divide-gray-100">
                   <tr>
-                    <td class="px-4 py-3 font-medium text-gray-800">RAÇ-000123</td>
-                    <td class="px-4 py-3 text-gray-600">Ração Premium Cães Adultos 15kg</td>
-                    <td class="px-4 py-3 text-gray-600">12</td>
-                    <td class="px-4 py-3 text-gray-600">Un</td>
-                    <td class="px-4 py-3 text-gray-600">L2309</td>
-                    <td class="px-4 py-3 text-gray-600">10/2024</td>
-                    <td class="px-4 py-3 text-right">
-                      <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
-                        <i class="fas fa-pen"></i>
-                        Editar
-                      </button>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="px-4 py-3 font-medium text-gray-800">MED-004587</td>
-                    <td class="px-4 py-3 text-gray-600">Antipulgas Spot-on 20kg</td>
-                    <td class="px-4 py-3 text-gray-600">24</td>
-                    <td class="px-4 py-3 text-gray-600">Un</td>
-                    <td class="px-4 py-3 text-gray-600">SPT2311</td>
-                    <td class="px-4 py-3 text-gray-600">08/2025</td>
-                    <td class="px-4 py-3 text-right">
-                      <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
-                        <i class="fas fa-pen"></i>
-                        Editar
-                      </button>
-                    </td>
+                    <td colspan="7" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum item adicionado até o momento.</td>
                   </tr>
                 </tbody>
               </table>
             </div>
             <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between text-sm text-gray-600">
-              <span>Volume total: <strong class="text-gray-800">36 unidades</strong></span>
-              <span>Peso estimado: <strong class="text-gray-800">182 kg</strong></span>
-              <span>Valor contábil: <strong class="text-gray-800">R$ 8.432,00</strong></span>
+              <span>Volume total: <strong id="transfer-total-volume" class="text-gray-800">0 unidades</strong></span>
+              <span>Peso estimado: <strong id="transfer-total-weight" class="text-gray-800">0 kg</strong></span>
+              <span>Valor contábil: <strong id="transfer-total-value" class="text-gray-800">R$ 0,00</strong></span>
             </div>
           </div>
 
@@ -177,12 +136,11 @@
             <div class="space-y-4">
               <h2 class="text-lg font-semibold text-gray-800">Transporte</h2>
               <div>
-                <label for="transfer-transport" class="block text-sm font-medium text-gray-700 mb-1">Responsável</label>
-                <select id="transfer-transport" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Selecione</option>
-                  <option>Frota própria</option>
-                  <option>Transportadora Parceira</option>
+                <label for="transfer-transport" class="block text-sm font-medium text-gray-700 mb-1">Modalidade</label>
+                <select id="transfer-transport" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-gray-50 text-gray-600" disabled>
+                  <option value="teste">Teste</option>
                 </select>
+                <p class="mt-1 text-xs text-gray-500">Integrações logísticas serão configuradas após definição oficial.</p>
               </div>
               <div>
                 <label for="transfer-vehicle" class="block text-sm font-medium text-gray-700 mb-1">Placa / veículo</label>
@@ -206,7 +164,7 @@
             </div>
           </div>
         </section>
-      </div>
+      </form>
     </div>
   </main>
 
@@ -214,22 +172,46 @@
   <div id="modal-placeholder"></div>
   <div id="confirm-modal-placeholder"></div>
 
+  <div id="transfer-item-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-slate-900/60" data-action="close-modal"></div>
+    <div class="relative mx-auto mt-16 w-full max-w-3xl px-4 sm:mt-24">
+      <div class="overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-800">Adicionar item</h2>
+            <p class="text-sm text-gray-500">Pesquise pelo código interno, código de barras ou nome do produto.</p>
+          </div>
+          <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-700" data-action="close-modal" aria-label="Fechar">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="space-y-4 px-6 py-5">
+          <div>
+            <label for="transfer-item-search" class="block text-sm font-medium text-gray-700">Buscar produto</label>
+            <div class="relative mt-1">
+              <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400"><i class="fas fa-search"></i></span>
+              <input type="search" id="transfer-item-search" class="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite código interno, código de barras ou nome" autocomplete="off">
+            </div>
+            <p class="mt-1 text-xs text-gray-500">Pressione Enter para pesquisar imediatamente ou aguarde a busca automática.</p>
+          </div>
+          <div id="transfer-item-results" class="max-h-80 overflow-y-auto rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+            Digite ao menos três caracteres para localizar produtos cadastrados.
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 px-6 py-4">
+          <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-white transition" data-action="close-modal">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js"></script>
   <script src="../../scripts/core/ui.js"></script>
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      var dateInput = document.getElementById('transfer-date');
-      if (dateInput && !dateInput.value) {
-        var today = new Date();
-        var month = String(today.getMonth() + 1).padStart(2, '0');
-        var day = String(today.getDate()).padStart(2, '0');
-        var formatted = today.getFullYear() + '-' + month + '-' + day;
-        dateInput.value = formatted;
-      }
-    });
-  </script>
+  <script src="../../scripts/admin/admin-compras-transferencias-cadastro.js"></script>
 </body>
 </html>
