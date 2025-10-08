@@ -97,13 +97,26 @@
             </div>
           </div>
 
-          <div class="space-y-4">
-            <div class="flex items-center justify-between">
+          <div class="space-y-5">
+            <div>
               <h2 class="text-lg font-semibold text-gray-800">Itens da transferência</h2>
-              <button type="button" id="transfer-add-item" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
-                <i class="fas fa-plus"></i>
-                Adicionar item
-              </button>
+              <p class="mt-1 text-sm text-gray-500">Pesquise o produto pelo código interno, código de barras ou nome e adicione à tabela.</p>
+            </div>
+            <div class="space-y-3 rounded-2xl border border-gray-200 bg-slate-50/60 p-4">
+              <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                <label for="transfer-item-search" class="text-sm font-medium text-gray-700">Buscar produto para adicionar</label>
+                <span class="hidden text-xs font-semibold uppercase tracking-wide text-primary lg:block">Busca dinâmica</span>
+              </div>
+              <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400"><i class="fas fa-search"></i></span>
+                <input type="search" id="transfer-item-search" class="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite código interno, código de barras ou nome" autocomplete="off">
+              </div>
+              <p class="text-xs text-gray-500">A busca é realizada automaticamente após digitar três caracteres ou ao pressionar Enter.</p>
+              <div id="transfer-item-results" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div class="rounded-lg border border-dashed border-gray-300 bg-white/80 p-4 text-sm text-gray-500">
+                  Digite ao menos três caracteres para localizar produtos cadastrados.
+                </div>
+              </div>
             </div>
             <div class="overflow-x-auto">
               <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -171,41 +184,6 @@
   <div id="admin-footer-placeholder"></div>
   <div id="modal-placeholder"></div>
   <div id="confirm-modal-placeholder"></div>
-
-  <div id="transfer-item-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
-    <div class="absolute inset-0 bg-slate-900/60" data-action="close-modal"></div>
-    <div class="relative mx-auto mt-16 w-full max-w-3xl px-4 sm:mt-24">
-      <div class="overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div class="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <div>
-            <h2 class="text-lg font-semibold text-gray-800">Adicionar item</h2>
-            <p class="text-sm text-gray-500">Pesquise pelo código interno, código de barras ou nome do produto.</p>
-          </div>
-          <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-700" data-action="close-modal" aria-label="Fechar">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-        <div class="space-y-4 px-6 py-5">
-          <div>
-            <label for="transfer-item-search" class="block text-sm font-medium text-gray-700">Buscar produto</label>
-            <div class="relative mt-1">
-              <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400"><i class="fas fa-search"></i></span>
-              <input type="search" id="transfer-item-search" class="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite código interno, código de barras ou nome" autocomplete="off">
-            </div>
-            <p class="mt-1 text-xs text-gray-500">Pressione Enter para pesquisar imediatamente ou aguarde a busca automática.</p>
-          </div>
-          <div id="transfer-item-results" class="max-h-80 overflow-y-auto rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
-            Digite ao menos três caracteres para localizar produtos cadastrados.
-          </div>
-        </div>
-        <div class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50 px-6 py-4">
-          <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-white transition" data-action="close-modal">
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <script>var basePath = '../../';</script>
   <script src="../../scripts/core/config.js"></script>

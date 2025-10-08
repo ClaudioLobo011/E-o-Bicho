@@ -21,7 +21,6 @@
     notesInput: document.getElementById('transfer-notes'),
     vehicleInput: document.getElementById('transfer-vehicle'),
     driverInput: document.getElementById('transfer-driver'),
-    addItemButton: document.getElementById('transfer-add-item'),
     itemsTableBody: document.getElementById('transfer-items-body'),
     totalVolume: document.getElementById('transfer-total-volume'),
     totalWeight: document.getElementById('transfer-total-weight'),
@@ -29,9 +28,8 @@
     saveButton: document.getElementById('transfer-save-button'),
   };
 
-  const modalSelectors = {
-    container: document.getElementById('transfer-item-modal'),
-    searchInput: document.getElementById('transfer-item-search'),
+  const productSearchSelectors = {
+    input: document.getElementById('transfer-item-search'),
     results: document.getElementById('transfer-item-results'),
   };
 
@@ -40,6 +38,21 @@
     controller: null,
     lastResults: [],
   };
+
+  function renderProductSearchMessage(message, type = 'neutral') {
+    if (!productSearchSelectors.results) return;
+
+    let classes = 'rounded-lg border border-dashed border-gray-300 bg-white/80 p-4 text-sm text-gray-500';
+    if (type === 'loading') {
+      classes = 'rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-600';
+    } else if (type === 'error') {
+      classes = 'rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600';
+    } else if (type === 'info') {
+      classes = 'rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700';
+    }
+
+    productSearchSelectors.results.innerHTML = `<div class="${classes}">${message}</div>`;
+  }
 
   const allowedRolesLabels = {
     admin: 'Admin',
@@ -342,39 +355,26 @@
     });
   }
 
-  function resetModalState() {
-    searchState.lastResults = [];
-    if (modalSelectors.searchInput) {
-      modalSelectors.searchInput.value = '';
-    }
-    if (modalSelectors.results) {
-      modalSelectors.results.innerHTML = 'Digite ao menos três caracteres para localizar produtos cadastrados.';
-    }
-  }
-
-  function closeModal() {
+  function resetProductSearch() {
     if (searchState.controller) {
       searchState.controller.abort();
       searchState.controller = null;
     }
-    if (modalSelectors.container) {
-      modalSelectors.container.classList.add('hidden');
+    if (searchState.timeout) {
+      clearTimeout(searchState.timeout);
+      searchState.timeout = null;
     }
-    resetModalState();
-  }
-
-  function openModal() {
-    if (!modalSelectors.container) return;
-    modalSelectors.container.classList.remove('hidden');
-    if (modalSelectors.searchInput) {
-      setTimeout(() => modalSelectors.searchInput?.focus(), 120);
+    searchState.lastResults = [];
+    if (productSearchSelectors.input) {
+      productSearchSelectors.input.value = '';
     }
+    renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.');
   }
 
   function renderSearchResults(products) {
-    if (!modalSelectors.results) return;
+    if (!productSearchSelectors.results) return;
     if (!products.length) {
-      modalSelectors.results.innerHTML = '<div class="text-center text-sm text-gray-500">Nenhum produto encontrado com os critérios informados.</div>';
+      renderProductSearchMessage('Nenhum produto encontrado com os critérios informados.', 'info');
       return;
     }
 
@@ -383,50 +383,69 @@
       const sku = escapeHtml(product.cod || '—');
       const barcode = escapeHtml(product.codbarras || '—');
       const unidade = escapeHtml(product.unidade || '');
-      const peso = Number.isFinite(Number(product.peso)) ? `${Number(product.peso).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg` : '—';
+      const peso = Number.isFinite(Number(product.peso))
+        ? `${Number(product.peso).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`
+        : '—';
+      const unitCost = Number.isFinite(Number(product.custo))
+        ? formatCurrency(Number(product.custo))
+        : '—';
 
       return `
-        <div class="mb-3 last:mb-0 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div class="font-semibold text-gray-800">${nome}</div>
-              <div class="mt-1 flex flex-wrap gap-3 text-xs text-gray-500">
-                <span>SKU: ${sku}</span>
-                <span>EAN: ${barcode}</span>
-                <span>Unidade: ${unidade || '—'}</span>
-                <span>Peso: ${peso}</span>
-              </div>
-            </div>
-            <button type="button" class="inline-flex items-center gap-2 self-start rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary/90" data-action="select-product" data-index="${index}">
-              <i class="fas fa-plus"></i>
-              Adicionar
-            </button>
+        <article class="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40">
+          <div>
+            <h3 class="text-sm font-semibold text-gray-800">${nome}</h3>
+            <p class="mt-1 text-xs text-gray-500">EAN: ${barcode}</p>
           </div>
-        </div>
+          <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-500">
+            <div>
+              <dt class="font-medium text-gray-600">SKU</dt>
+              <dd class="text-gray-700">${sku}</dd>
+            </div>
+            <div>
+              <dt class="font-medium text-gray-600">Unidade</dt>
+              <dd class="text-gray-700">${unidade || '—'}</dd>
+            </div>
+            <div>
+              <dt class="font-medium text-gray-600">Peso</dt>
+              <dd class="text-gray-700">${peso}</dd>
+            </div>
+            <div>
+              <dt class="font-medium text-gray-600">Custo médio</dt>
+              <dd class="text-gray-700">${unitCost}</dd>
+            </div>
+          </dl>
+          <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary/90" data-action="select-product" data-index="${index}">
+            <i class="fas fa-plus"></i>
+            Adicionar
+          </button>
+        </article>
       `;
     });
 
-    modalSelectors.results.innerHTML = rows.join('');
+    productSearchSelectors.results.innerHTML = rows.join('');
   }
 
   async function searchProducts(term) {
     if (!term || term.length < 3) {
-      if (modalSelectors.results) {
-        modalSelectors.results.innerHTML = 'Digite ao menos três caracteres para localizar produtos cadastrados.';
+      searchState.lastResults = [];
+      if (!term) {
+        renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.');
+      } else {
+        renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.', 'info');
       }
       return;
     }
 
     if (searchState.controller) {
       searchState.controller.abort();
+      searchState.controller = null;
     }
 
-    searchState.controller = new AbortController();
-    const signal = searchState.controller.signal;
+    const controller = new AbortController();
+    searchState.controller = controller;
+    const { signal } = controller;
 
-    if (modalSelectors.results) {
-      modalSelectors.results.innerHTML = '<div class="flex items-center gap-2 text-sm text-gray-500"><i class="fas fa-spinner fa-spin"></i> Pesquisando produtos...</div>';
-    }
+    renderProductSearchMessage('<div class="flex items-center gap-2"><i class="fas fa-spinner fa-spin"></i> Pesquisando produtos...</div>', 'loading');
 
     try {
       const token = getToken();
@@ -453,8 +472,10 @@
         return;
       }
       console.error('Erro ao pesquisar produtos:', error);
-      if (modalSelectors.results) {
-        modalSelectors.results.innerHTML = `<div class="text-sm text-red-600">${escapeHtml(error.message || 'Erro ao buscar produtos.')}</div>`;
+      renderProductSearchMessage(escapeHtml(error.message || 'Erro ao buscar produtos.'), 'error');
+    } finally {
+      if (searchState.controller === controller) {
+        searchState.controller = null;
       }
     }
   }
@@ -465,49 +486,63 @@
     }
     searchState.timeout = setTimeout(() => {
       searchProducts(term);
+      searchState.timeout = null;
     }, 450);
   }
 
-  function attachModalEvents() {
-    if (!modalSelectors.container) return;
-
-    modalSelectors.container.addEventListener('click', (event) => {
-      const closeTarget = event.target.closest('[data-action="close-modal"]');
-      if (closeTarget) {
-        closeModal();
-      }
-    });
-
-    if (modalSelectors.searchInput) {
-      modalSelectors.searchInput.addEventListener('input', (event) => {
+  function attachProductSearchEvents() {
+    const input = productSearchSelectors.input;
+    if (input) {
+      input.addEventListener('input', (event) => {
         const term = event.target.value.trim();
+
+        if (searchState.controller) {
+          searchState.controller.abort();
+          searchState.controller = null;
+        }
+
+        if (searchState.timeout) {
+          clearTimeout(searchState.timeout);
+          searchState.timeout = null;
+        }
+
         if (!term) {
-          if (modalSelectors.results) {
-            modalSelectors.results.innerHTML = 'Digite ao menos três caracteres para localizar produtos cadastrados.';
-          }
+          searchState.lastResults = [];
+          renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.');
           return;
         }
+
+        if (term.length < 3) {
+          searchState.lastResults = [];
+          renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.', 'info');
+          return;
+        }
+
         scheduleSearch(term);
       });
 
-      modalSelectors.searchInput.addEventListener('keydown', (event) => {
+      input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
           event.preventDefault();
           const term = event.target.value.trim();
+          if (!term) {
+            renderProductSearchMessage('Digite ao menos três caracteres para localizar produtos cadastrados.');
+            return;
+          }
           searchProducts(term);
         }
       });
     }
 
-    if (modalSelectors.results) {
-      modalSelectors.results.addEventListener('click', (event) => {
+    const results = productSearchSelectors.results;
+    if (results) {
+      results.addEventListener('click', (event) => {
         const button = event.target.closest('button[data-action="select-product"]');
         if (!button) return;
         const index = Number(button.dataset.index);
         if (!Number.isInteger(index) || index < 0 || index >= searchState.lastResults.length) return;
         const product = searchState.lastResults[index];
         addProductToTransfer(product);
-        closeModal();
       });
     }
   }
@@ -540,6 +575,9 @@
     });
 
     renderItemsTable();
+    if (productSearchSelectors.input) {
+      productSearchSelectors.input.focus();
+    }
     showToast('Item adicionado à transferência.', 'success');
   }
 
@@ -587,6 +625,7 @@
     updateDepositSelect(selectors.destinationCompany, selectors.destinationDeposit);
     state.items = [];
     renderItemsTable();
+    resetProductSearch();
   }
 
   async function handleSubmit(event) {
@@ -722,19 +761,16 @@
       updateDepositSelect(selectors.destinationCompany, selectors.destinationDeposit);
     });
 
-    selectors.addItemButton?.addEventListener('click', () => {
-      openModal();
-    });
-
     selectors.form?.addEventListener('submit', handleSubmit);
   }
 
   function init() {
     setTodayDate();
     attachTableListeners();
-    attachModalEvents();
+    attachProductSearchEvents();
     attachFormEvents();
     handleResponsibleInputEvents();
+    resetProductSearch();
     renderItemsTable();
     loadFormData();
   }
