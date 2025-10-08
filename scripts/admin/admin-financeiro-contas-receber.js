@@ -1280,7 +1280,7 @@
       const actionsCell = document.createElement('td');
       actionsCell.className = 'px-4 py-3 text-center';
       const actionsWrapper = document.createElement('div');
-      actionsWrapper.className = 'inline-flex items-center justify-center gap-2';
+      actionsWrapper.className = 'grid grid-cols-3 gap-2 place-items-center';
 
       const editButton = document.createElement('button');
       editButton.type = 'button';
@@ -1527,7 +1527,7 @@
       const actionsCell = document.createElement('td');
       actionsCell.className = 'px-4 py-3 text-center';
       const actionsWrapper = document.createElement('div');
-      actionsWrapper.className = 'inline-flex items-center justify-center gap-2';
+      actionsWrapper.className = 'grid grid-cols-3 gap-2 place-items-center';
 
       const editButton = document.createElement('button');
       editButton.type = 'button';
