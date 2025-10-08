@@ -166,6 +166,21 @@
     return currencyFormatter.format(Number.isFinite(numeric) ? numeric : 0);
   }
 
+  function roundCurrency(value) {
+    const numeric = typeof value === 'number' && Number.isFinite(value) ? value : parseCurrency(value);
+    return Math.round(numeric * 100) / 100;
+  }
+
+  function toCurrencyNumber(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return roundCurrency(value);
+    }
+    if (typeof value === 'string') {
+      return roundCurrency(parseCurrency(value));
+    }
+    return 0;
+  }
+
   function parseCurrency(value) {
     if (value === null || value === undefined || value === '') return 0;
     if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -289,6 +304,92 @@
     };
   }
 
+  function normalizeAgendaSummaryEntry(entry) {
+    if (!entry || typeof entry !== 'object') {
+      return { totalValue: 0, installments: 0 };
+    }
+    const total = Number(entry.totalValue ?? entry.total ?? 0);
+    const installments = Number(entry.installments ?? entry.count ?? 0);
+    return {
+      totalValue: Number.isFinite(total) ? total : 0,
+      installments: Number.isFinite(installments) ? installments : 0,
+    };
+  }
+
+  function mergeAgendaSummaries(primary = {}, secondary = {}, { overrideKeys = [] } = {}) {
+    const result = createEmptyAgendaSummary();
+    const overrides = new Set(Array.isArray(overrideKeys) ? overrideKeys : []);
+
+    Object.keys(result).forEach((key) => {
+      const normalized = normalizeAgendaSummaryEntry(primary[key]);
+      result[key] = { ...result[key], ...normalized };
+    });
+
+    Object.keys(result).forEach((key) => {
+      const normalized = normalizeAgendaSummaryEntry(secondary[key]);
+      if (overrides.has(key)) {
+        result[key] = { ...result[key], ...normalized };
+        return;
+      }
+      if (!Number.isFinite(result[key].totalValue) || result[key].totalValue === 0) {
+        result[key].totalValue = normalized.totalValue;
+      }
+      if (!Number.isFinite(result[key].installments) || result[key].installments === 0) {
+        result[key].installments = normalized.installments;
+      }
+    });
+
+    Object.keys(result).forEach((key) => {
+      result[key].totalValue = roundCurrency(result[key].totalValue);
+      const count = Number(result[key].installments);
+      result[key].installments = Number.isFinite(count) && count >= 0 ? count : 0;
+    });
+
+    return result;
+  }
+
+  function buildAgendaSummaryFromItems(items, { periodStart = null, periodEnd = null } = {}) {
+    const summary = createEmptyAgendaSummary();
+    const list = Array.isArray(items) ? items : [];
+    const startTime = isValidDate(periodStart) ? periodStart.getTime() : null;
+    const endTime = isValidDate(periodEnd)
+      ? new Date(periodEnd.getFullYear(), periodEnd.getMonth(), periodEnd.getDate(), 23, 59, 59, 999).getTime()
+      : null;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    list.forEach((item) => {
+      const status = canonicalStatus(item?.status);
+      const value = toCurrencyNumber(item?.value);
+      const dueDate = toDate(item?.dueDate);
+      const dueTime = isValidDate(dueDate) ? dueDate.getTime() : null;
+      const withinPeriod =
+        startTime !== null && endTime !== null && dueTime !== null ? dueTime >= startTime && dueTime <= endTime : true;
+
+      if (withinPeriod && (status === 'pending' || status === 'protest')) {
+        summary.upcoming.totalValue += value;
+        summary.upcoming.installments += 1;
+      }
+
+      if (status === 'pending') {
+        summary.pending.totalValue += value;
+        summary.pending.installments += 1;
+      }
+
+      if (status === 'paid' && dueTime !== null && dueDate >= monthStart && dueDate < monthEnd) {
+        summary.paidThisMonth.totalValue += value;
+        summary.paidThisMonth.installments += 1;
+      }
+    });
+
+    summary.upcoming.totalValue = roundCurrency(summary.upcoming.totalValue);
+    summary.pending.totalValue = roundCurrency(summary.pending.totalValue);
+    summary.paidThisMonth.totalValue = roundCurrency(summary.paidThisMonth.totalValue);
+
+    return summary;
+  }
+
   function getStatusBadgeConfig(status) {
     const canonical = canonicalStatus(status);
     if (STATUS_BADGES[canonical]) {
@@ -333,6 +434,10 @@
     if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  function isValidDate(value) {
+    return value instanceof Date && !Number.isNaN(value.getTime());
   }
 
   function isAgendaItemOverdue(item) {
@@ -1781,14 +1886,9 @@
       }
 
       const data = await response.json();
-      const summary = data?.summary || {};
-      state.agenda.summary = {
-        upcoming: summary.upcoming || { totalValue: 0, installments: 0 },
-        pending: summary.pending || { totalValue: 0, installments: 0 },
-        paidThisMonth: summary.paidThisMonth || { totalValue: 0, installments: 0 },
-      };
+      const apiSummary = data?.summary || {};
 
-      state.agenda.items = Array.isArray(data?.items)
+      const mappedItems = Array.isArray(data?.items)
         ? data.items
             .map((item) => ({
               ...item,
@@ -1824,6 +1924,16 @@
 
       state.agenda.periodStart = data?.periodStart ? new Date(data.periodStart) : null;
       state.agenda.periodEnd = data?.periodEnd ? new Date(data.periodEnd) : null;
+
+      const computedSummary = buildAgendaSummaryFromItems(mappedItems, {
+        periodStart: state.agenda.periodStart,
+        periodEnd: state.agenda.periodEnd,
+      });
+
+      const overrideKeys = mappedItems.length ? ['upcoming', 'pending'] : [];
+      state.agenda.summary = mergeAgendaSummaries(apiSummary, computedSummary, { overrideKeys });
+
+      state.agenda.items = mappedItems;
       renderAgenda();
     } catch (error) {
       console.error('accounts-payable:loadAgenda', error);
