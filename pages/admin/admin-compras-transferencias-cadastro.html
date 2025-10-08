@@ -54,32 +54,58 @@
               <label for="transfer-date" class="block text-sm font-medium text-gray-700 mb-1">Data da solicitação <span class="text-red-500">*</span></label>
               <input type="date" id="transfer-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
             </div>
-            <div>
-              <label for="transfer-origin" class="block text-sm font-medium text-gray-700 mb-1">Depósito de origem <span class="text-red-500">*</span></label>
-              <select id="transfer-origin" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                <option value="">Selecione</option>
-                <option>Centro de Distribuição Fortaleza</option>
-                <option>Loja Aldeota</option>
-                <option>Loja Meireles</option>
-              </select>
+            <div class="space-y-3">
+              <div>
+                <label for="origin-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de origem <span class="text-red-500">*</span></label>
+                <select id="origin-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                  <option value="">Selecione</option>
+                  <option value="matriz">E o Bicho Matriz - CNPJ 12.345.678/0001-90</option>
+                  <option value="filial-ald">E o Bicho Filial Aldeota - CNPJ 12.345.678/0002-71</option>
+                  <option value="filial-mei">E o Bicho Filial Meireles - CNPJ 12.345.678/0003-52</option>
+                </select>
+              </div>
+              <div>
+                <label for="transfer-origin" class="block text-sm font-medium text-gray-700 mb-1">Depósito de origem <span class="text-red-500">*</span></label>
+                <select id="transfer-origin" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                  <option value="">Selecione</option>
+                  <option data-company="matriz">Centro de Distribuição Fortaleza</option>
+                  <option data-company="filial-ald">Backroom Loja Aldeota</option>
+                  <option data-company="filial-mei">Backroom Loja Meireles</option>
+                </select>
+              </div>
+            </div>
+            <div class="space-y-3">
+              <div>
+                <label for="destination-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de destino <span class="text-red-500">*</span></label>
+                <select id="destination-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                  <option value="">Selecione</option>
+                  <option value="filial-ald">E o Bicho Filial Aldeota - CNPJ 12.345.678/0002-71</option>
+                  <option value="filial-mei">E o Bicho Filial Meireles - CNPJ 12.345.678/0003-52</option>
+                  <option value="clinica-iguatemi">Clínica Veterinária Iguatemi - CNPJ 12.345.678/0004-33</option>
+                </select>
+              </div>
+              <div>
+                <label for="transfer-destination" class="block text-sm font-medium text-gray-700 mb-1">Depósito de destino <span class="text-red-500">*</span></label>
+                <select id="transfer-destination" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                  <option value="">Selecione</option>
+                  <option data-company="filial-ald">Loja Aldeota - Área de vendas</option>
+                  <option data-company="filial-mei">Loja Meireles - Área de vendas</option>
+                  <option data-company="clinica-iguatemi">Clínica Vet Iguatemi - Farmácia</option>
+                </select>
+              </div>
             </div>
             <div>
-              <label for="transfer-destination" class="block text-sm font-medium text-gray-700 mb-1">Depósito de destino <span class="text-red-500">*</span></label>
-              <select id="transfer-destination" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                <option value="">Selecione</option>
-                <option>Loja Aldeota</option>
-                <option>Loja Meireles</option>
-                <option>Clínica Vet Iguatemi</option>
-              </select>
-            </div>
-            <div>
-              <label for="transfer-cfop" class="block text-sm font-medium text-gray-700 mb-1">CFOP</label>
-              <select id="transfer-cfop" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="6152">6.152 - Transferência de mercadoria para venda fora do Estado</option>
-                <option value="5152">5.152 - Transferência de mercadoria adquirida ou recebida de terceiros</option>
-                <option value="6902">6.902 - Retorno de mercadoria remetida para venda fora do estabelecimento</option>
-              </select>
-              <p class="mt-1 text-xs text-gray-500">Baseado no manual de orientações do Contribuinte da NF-e (AJUSTE SINIEF 07/05).</p>
+              <label for="transfer-responsible" class="block text-sm font-medium text-gray-700 mb-1">Responsável <span class="text-red-500">*</span></label>
+              <div class="relative">
+                <input type="search" id="transfer-responsible" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" list="responsible-list" placeholder="Digite o nome do colaborador" required>
+                <datalist id="responsible-list">
+                  <option value="Ana Paula Ferreira - Compras">Analista fiscal</option>
+                  <option value="Bruno Nascimento - Logística">Coordenador de logística</option>
+                  <option value="Camila Duarte - Compras">Assistente de compras</option>
+                  <option value="Diego Albuquerque - Operações">Supervisor de operações</option>
+                </datalist>
+              </div>
+              <p class="mt-1 text-xs text-gray-500">Selecione o colaborador responsável pela solicitação de acordo com o cadastro de funcionários.</p>
             </div>
             <div>
               <label for="transfer-reference" class="block text-sm font-medium text-gray-700 mb-1">Documento de referência</label>
@@ -193,5 +219,17 @@
   <script src="../../scripts/core/ui.js"></script>
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var dateInput = document.getElementById('transfer-date');
+      if (dateInput && !dateInput.value) {
+        var today = new Date();
+        var month = String(today.getMonth() + 1).padStart(2, '0');
+        var day = String(today.getDate()).padStart(2, '0');
+        var formatted = today.getFullYear() + '-' + month + '-' + day;
+        dateInput.value = formatted;
+      }
+    });
+  </script>
 </body>
 </html>
