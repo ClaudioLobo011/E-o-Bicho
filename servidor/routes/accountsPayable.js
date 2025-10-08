@@ -71,6 +71,14 @@ const PAID_STATUS_KEYS = new Set([
   'concluida',
 ]);
 
+const PROTEST_STATUS_KEYS = new Set([
+  'protest',
+  'protesto',
+  'protestado',
+  'protestada',
+  'em protesto',
+]);
+
 const CANCELLED_STATUS_KEYS = new Set([
   'cancelled',
   'cancel',
@@ -86,6 +94,7 @@ function canonicalInstallmentStatus(value) {
   const token = normalizeStatusToken(value);
   if (!token) return 'pending';
   if (PAID_STATUS_KEYS.has(token)) return 'paid';
+  if (PROTEST_STATUS_KEYS.has(token)) return 'protest';
   if (CANCELLED_STATUS_KEYS.has(token)) return 'cancelled';
   return 'pending';
 }
@@ -130,11 +139,14 @@ const derivePayableStatus = (installments = []) => {
   let hasPending = false;
   let hasPaid = false;
   let hasCancelled = false;
+  let hasProtest = false;
 
   entries.forEach((installment) => {
     const status = canonicalInstallmentStatus(installment?.status);
     if (status === 'paid') {
       hasPaid = true;
+    } else if (status === 'protest') {
+      hasProtest = true;
     } else if (status === 'cancelled') {
       hasCancelled = true;
     } else {
@@ -144,6 +156,9 @@ const derivePayableStatus = (installments = []) => {
 
   if (hasPending) {
     return 'pending';
+  }
+  if (hasProtest) {
+    return 'protest';
   }
   if (hasPaid && !hasPending && !hasCancelled) {
     return 'paid';
@@ -945,6 +960,8 @@ router.patch(
         targetStatus = 'pending';
       } else if (PAID_STATUS_KEYS.has(token)) {
         targetStatus = 'paid';
+      } else if (PROTEST_STATUS_KEYS.has(token)) {
+        targetStatus = 'protest';
       } else if (CANCELLED_STATUS_KEYS.has(token)) {
         targetStatus = 'cancelled';
       }

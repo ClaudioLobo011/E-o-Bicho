@@ -100,12 +100,18 @@
       classes: 'bg-slate-200 text-slate-600',
       label: 'Cancelado',
     },
+    protest: {
+      icon: 'fa-file-contract',
+      classes: 'bg-purple-100 text-purple-700',
+      label: 'Protestado',
+    },
   };
 
   const STATUS_LABELS = {
     pending: 'Pendente',
     paid: 'Pago',
     cancelled: 'Cancelado',
+    protest: 'Protestado',
   };
 
   const AGENDA_FILTERS = [
@@ -114,6 +120,7 @@
     { key: 'overdue', label: 'Vencidos' },
     { key: 'paid', label: 'Quitados' },
     { key: 'cancelled', label: 'Cancelados' },
+    { key: 'protest', label: 'Protestados' },
   ];
 
   const originalSaveButtonHTML = elements.saveButton ? elements.saveButton.innerHTML : '';
@@ -246,6 +253,14 @@
     'concluida',
   ]);
 
+  const PROTEST_STATUS_TOKENS = new Set([
+    'protest',
+    'protesto',
+    'protestado',
+    'protestada',
+    'em protesto',
+  ]);
+
   const CANCELLED_STATUS_TOKENS = new Set([
     'cancelled',
     'cancel',
@@ -261,6 +276,7 @@
     const token = normalizeStatusToken(value);
     if (!token) return 'pending';
     if (PAID_STATUS_TOKENS.has(token)) return 'paid';
+    if (PROTEST_STATUS_TOKENS.has(token)) return 'protest';
     if (CANCELLED_STATUS_TOKENS.has(token)) return 'cancelled';
     return 'pending';
   }
@@ -337,6 +353,7 @@
       overdue: 0,
       paid: 0,
       cancelled: 0,
+      protest: 0,
     };
     items.forEach((item) => {
       counts.all += 1;
@@ -344,6 +361,7 @@
       if (status === 'pending') counts.pending += 1;
       if (status === 'paid') counts.paid += 1;
       if (status === 'cancelled') counts.cancelled += 1;
+      if (status === 'protest') counts.protest += 1;
       if (isAgendaItemOverdue(item)) counts.overdue += 1;
     });
     return counts;
@@ -357,6 +375,8 @@
         return (item) => (item.status || '').toLowerCase() === 'paid';
       case 'cancelled':
         return (item) => (item.status || '').toLowerCase() === 'cancelled';
+      case 'protest':
+        return (item) => (item.status || '').toLowerCase() === 'protest';
       case 'overdue':
         return (item) => isAgendaItemOverdue(item);
       default:
@@ -674,6 +694,18 @@
             icon: 'fa-ban',
             label: 'Cancelar',
             className: 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100',
+            dataset,
+          })
+        );
+      }
+
+      if (hasInstallment && canonical !== 'protest') {
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'mark-protest',
+            icon: 'fa-file-contract',
+            label: 'Protesto',
+            className: 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100',
             dataset,
           })
         );
@@ -1393,6 +1425,18 @@
           );
         }
 
+        if (hasInstallment && canonical !== 'protest') {
+          actionsWrapper.appendChild(
+            buildActionButton({
+              action: 'mark-protest',
+              icon: 'fa-file-contract',
+              label: 'Protesto',
+              className: 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100',
+              dataset,
+            })
+          );
+        }
+
         if (hasInstallment && canonical !== 'pending') {
           actionsWrapper.appendChild(
             buildActionButton({
@@ -1647,6 +1691,8 @@
       handleEditPayable(context.payableId, context.installmentNumber);
     } else if (context.action === 'mark-paid') {
       handleInstallmentStatusAction(context, 'paid');
+    } else if (context.action === 'mark-protest') {
+      handleInstallmentStatusAction(context, 'protest');
     } else if (context.action === 'cancel-installment') {
       handleInstallmentStatusAction(context, 'cancelled');
     } else if (context.action === 'restore-installment') {
@@ -1663,6 +1709,8 @@
       handleEditPayable(context.payableId, context.installmentNumber);
     } else if (context.action === 'mark-paid') {
       handleInstallmentStatusAction(context, 'paid');
+    } else if (context.action === 'mark-protest') {
+      handleInstallmentStatusAction(context, 'protest');
     } else if (context.action === 'cancel-installment') {
       handleInstallmentStatusAction(context, 'cancelled');
     } else if (context.action === 'restore-installment') {
