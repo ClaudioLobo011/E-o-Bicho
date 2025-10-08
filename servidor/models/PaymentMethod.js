@@ -22,6 +22,7 @@ const paymentMethodSchema = new mongoose.Schema(
       type: [creditInstallmentSchema],
       default: undefined,
     },
+    anticipated: { type: Boolean, default: false },
     accountingAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'AccountingAccount' },
     bankAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'BankAccount' },
   },

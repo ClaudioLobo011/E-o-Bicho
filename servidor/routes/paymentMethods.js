@@ -21,6 +21,59 @@ const parseNumber = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const parseBoolean = (value, fallback = false) => {
+  if (typeof value === 'boolean') return value;
+  const normalized = normalizeString(value).toLowerCase();
+  if (!normalized) return fallback;
+  if (
+    [
+      '1',
+      'true',
+      'sim',
+      'yes',
+      'y',
+      'on',
+      'antecipado',
+      'anticipado',
+      'antecipacao',
+      'antecipação',
+      'anticipation',
+    ].includes(normalized)
+  ) {
+    return true;
+  }
+  if (['0', 'false', 'nao', 'não', 'off', 'no', 'normal', 'padrao', 'padrão'].includes(normalized)) {
+    return false;
+  }
+  return fallback;
+};
+
+const extractAnticipatedFlag = (source, fallback = false) => {
+  if (!source || typeof source !== 'object') return fallback;
+  if (Object.prototype.hasOwnProperty.call(source, 'anticipated')) {
+    return parseBoolean(source.anticipated, fallback);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'isAnticipated')) {
+    return parseBoolean(source.isAnticipated, fallback);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'antecipado')) {
+    return parseBoolean(source.antecipado, fallback);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'antecipation')) {
+    return parseBoolean(source.antecipation, fallback);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'anticipation')) {
+    return parseBoolean(source.anticipation, fallback);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'antecipacao')) {
+    return parseBoolean(source.antecipacao, fallback);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'antecipação')) {
+    return parseBoolean(source['antecipação'], fallback);
+  }
+  return fallback;
+};
+
 const VALID_TYPES = new Set(['avista', 'debito', 'credito', 'crediario']);
 
 const validateAccountingAccount = async (accountingAccountId) => {
@@ -185,6 +238,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
 
     const days = Math.max(0, parseNumber(req.body.days, 0));
     const discount = Math.max(0, parseNumber(req.body.discount, 0));
+    const anticipated = extractAnticipatedFlag(req.body, false);
 
     const payload = {
       company,
@@ -194,6 +248,9 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
       days,
       discount,
     };
+
+    const shouldApplyAnticipation = type === 'debito' || type === 'credito';
+    payload.anticipated = shouldApplyAnticipation ? anticipated : false;
 
     if (type === 'credito') {
       const installments = Math.max(1, Math.min(12, parseNumber(req.body.installments, 1)));
@@ -323,6 +380,9 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
       }
     }
 
+    const anticipatedFromBody = extractAnticipatedFlag(req.body, existing.anticipated ?? false);
+    const shouldApplyAnticipation = type === 'debito' || type === 'credito';
+
     existing.company = company;
     existing.code = candidateCode;
     existing.name = name;
@@ -331,6 +391,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
     existing.discount = discount;
     existing.accountingAccount = accountingAccountIdToApply;
     existing.bankAccount = bankAccountIdToApply;
+    existing.anticipated = shouldApplyAnticipation ? anticipatedFromBody : false;
 
     if (type === 'credito') {
       const installments = Math.max(1, Math.min(12, parseNumber(req.body.installments, existing.installments || 1)));

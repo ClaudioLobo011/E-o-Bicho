@@ -27,11 +27,13 @@
     debitoSection: '#debito-section',
     debitoDays: '#debito-days',
     debitoDiscount: '#debito-discount',
+    debitoAnticipated: '#debito-anticipated',
     debitoPreview: '#debito-preview',
     creditoSection: '#credito-section',
     creditoInstallments: '#credito-installments',
     creditoDays: '#credito-days',
     creditoDiscount: '#credito-discount',
+    creditoAnticipated: '#credito-anticipated',
     creditoPreviewList: '#credito-preview-list',
     crediarioSection: '#crediario-section',
     crediarioInstallments: '#crediario-installments',
@@ -113,6 +115,22 @@
     const discount = Math.max(0, parseNumber(value, 0));
     if (discount === 0) return 'Sem desconto aplicado';
     return `Desconto de ${formatPercentage(discount)}`;
+  };
+
+  const formatAnticipation = (value) => (value ? 'Antecipado' : 'Repasse padrão');
+
+  const resolveAnticipatedFlag = (input, fallback = false) => {
+    if (typeof input === 'boolean') return input;
+    if (input === null || input === undefined) return fallback;
+    const normalized = String(input).trim().toLowerCase();
+    if (!normalized) return fallback;
+    if (['1', 'true', 'sim', 'yes', 'y', 'on', 'antecipado'].includes(normalized)) {
+      return true;
+    }
+    if (['0', 'false', 'nao', 'não', 'nao antecipado', 'off', 'no', 'normal', 'padrao', 'padrão'].includes(normalized)) {
+      return false;
+    }
+    return fallback;
   };
 
   const formatRate = (value) => {
@@ -661,6 +679,7 @@
     if (state.currentType === 'debito') {
       const days = formatDays(elements.debitoDays?.value);
       const discount = formatDiscount(elements.debitoDiscount?.value);
+      const anticipation = formatAnticipation(Boolean(elements.debitoAnticipated?.checked));
       elements.overview.innerHTML = `
         <div class="space-y-3">
           ${buildRow('Empresa', companyName)}
@@ -669,6 +688,7 @@
           ${buildRow('Modalidade', 'Débito')}
           ${buildRow('Prazo', days)}
           ${buildRow('Desconto', discount)}
+          ${buildRow('Antecipação', anticipation)}
         </div>
       `;
       return;
@@ -695,6 +715,7 @@
     updateCreditDiscountsStructure();
     const installments = Math.max(1, parseNumber(elements.creditoInstallments?.value, 1));
     const days = formatDays(elements.creditoDays?.value);
+    const anticipation = formatAnticipation(Boolean(elements.creditoAnticipated?.checked));
 
     const badges = [];
     for (let installment = 1; installment <= installments; installment += 1) {
@@ -717,6 +738,7 @@
         ${buildRow('Parcelas', `${installments}x`)}
         ${buildRow('Prazo', days)}
         ${buildRow('Descontos', discounts)}
+        ${buildRow('Antecipação', anticipation)}
       </div>
     `;
   };
@@ -732,7 +754,8 @@
     if (!elements.debitoPreview) return;
     const days = formatDays(elements.debitoDays?.value);
     const discount = formatDiscount(elements.debitoDiscount?.value);
-    elements.debitoPreview.textContent = `${days} • ${discount}`;
+    const anticipation = formatAnticipation(Boolean(elements.debitoAnticipated?.checked));
+    elements.debitoPreview.textContent = `${days} • ${discount} • ${anticipation}`;
   };
 
   const updateCreditoPreview = () => {
@@ -740,6 +763,7 @@
     updateCreditDiscountsStructure();
     const installments = Math.max(1, parseNumber(elements.creditoInstallments?.value, 1));
     const days = formatDays(elements.creditoDays?.value);
+    const anticipationLabel = formatAnticipation(Boolean(elements.creditoAnticipated?.checked));
 
     const items = [];
     for (let installment = 1; installment <= installments; installment += 1) {
@@ -748,7 +772,7 @@
         <div class="flex items-center justify-between gap-3 rounded-lg border border-indigo-100 bg-white px-3 py-2" data-installment-row="${installment}">
           <div>
             <p class="text-sm font-semibold text-indigo-700">Crédito ${installment}x</p>
-            <p class="text-xs text-indigo-500">${days}</p>
+            <p class="text-xs text-indigo-500">${days} • ${anticipationLabel}</p>
           </div>
           <div class="flex items-center gap-2">
             <input
@@ -969,9 +993,11 @@
     if (elements.avistaDiscount) elements.avistaDiscount.value = 0;
     if (elements.debitoDays) elements.debitoDays.value = 1;
     if (elements.debitoDiscount) elements.debitoDiscount.value = 0;
+    if (elements.debitoAnticipated) elements.debitoAnticipated.checked = false;
     if (elements.creditoInstallments) elements.creditoInstallments.value = 3;
     if (elements.creditoDays) elements.creditoDays.value = 30;
     if (elements.creditoDiscount) elements.creditoDiscount.value = 2.49;
+    if (elements.creditoAnticipated) elements.creditoAnticipated.checked = false;
     if (elements.crediarioInstallments) elements.crediarioInstallments.value = 6;
     if (elements.crediarioDays) elements.crediarioDays.value = 30;
     if (elements.crediarioInterest) elements.crediarioInterest.value = 0;
@@ -1026,6 +1052,15 @@
           : 'À vista';
 
       const details = [];
+      const anticipated = resolveAnticipatedFlag(
+        method.anticipated ??
+          method.isAnticipated ??
+          method.antecipado ??
+          method.antecipation ??
+          method.anticipation ??
+          method.antecipacao,
+        false
+      );
       if (method.accountingAccount) {
         const accountLabel = buildAccountingAccountLabel(method.accountingAccount);
         details.push(
@@ -1050,6 +1085,9 @@
           return `<span class="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">${config.number}x • ${percent}</span>`;
         });
         details.push(`<p class="text-xs text-gray-500">${days}</p>`);
+        details.push(
+          `<p class="text-xs text-gray-500"><span class="font-medium text-gray-600">Antecipação:</span> ${formatAnticipation(anticipated)}</p>`
+        );
         if (badges.length) {
           details.push(`<div class="flex flex-wrap gap-2">${badges.join('')}</div>`);
         } else {
@@ -1063,7 +1101,9 @@
       } else {
         const days = formatDays(method.days);
         const discount = formatDiscount(method.discount);
-        details.push(`<p class="text-xs text-gray-500">${days} • ${discount}</p>`);
+        const anticipationSegment =
+          method.type === 'debito' ? ` • ${formatAnticipation(anticipated)}` : '';
+        details.push(`<p class="text-xs text-gray-500">${days} • ${discount}${anticipationSegment}</p>`);
       }
 
       const isEditing = state.editingId && String(state.editingId) === String(method._id);
@@ -1195,6 +1235,22 @@
     radios.forEach((radio) => {
       radio.checked = radio.value === state.currentType;
     });
+
+    const anticipatedFlag = resolveAnticipatedFlag(
+      method.anticipated ??
+        method.isAnticipated ??
+        method.antecipado ??
+        method.antecipation ??
+        method.anticipation ??
+        method.antecipacao,
+      false
+    );
+    if (elements.debitoAnticipated) {
+      elements.debitoAnticipated.checked = anticipatedFlag;
+    }
+    if (elements.creditoAnticipated) {
+      elements.creditoAnticipated.checked = anticipatedFlag;
+    }
 
     state.creditDiscounts = {};
 
@@ -1369,18 +1425,24 @@
     payload.accountingAccount = state.selectedAccountingAccountId || null;
     payload.bankAccount = state.selectedBankAccountId || null;
 
+    const debitAnticipated = Boolean(elements.debitoAnticipated?.checked);
+    const creditAnticipated = Boolean(elements.creditoAnticipated?.checked);
+
     if (state.currentType === 'avista') {
       payload.days = Math.max(0, parseNumber(elements.avistaDays?.value, 0));
       payload.discount = Math.max(0, parseNumber(elements.avistaDiscount?.value, 0));
       payload.installments = 1;
+      payload.anticipated = false;
     } else if (state.currentType === 'debito') {
       payload.days = Math.max(0, parseNumber(elements.debitoDays?.value, 1));
       payload.discount = Math.max(0, parseNumber(elements.debitoDiscount?.value, 0));
       payload.installments = 1;
+      payload.anticipated = debitAnticipated;
     } else if (state.currentType === 'crediario') {
       payload.days = Math.max(0, parseNumber(elements.crediarioDays?.value, 30));
       payload.discount = Math.max(0, parseNumber(elements.crediarioInterest?.value, 0));
       payload.installments = Math.max(1, parseNumber(elements.crediarioInstallments?.value, 1));
+      payload.anticipated = false;
     } else {
       updateCreditDiscountsStructure();
       const installments = Math.max(1, parseNumber(elements.creditoInstallments?.value, 1));
@@ -1398,6 +1460,7 @@
       }
 
       payload.discount = payload.installmentConfigurations[0]?.discount || 0;
+      payload.anticipated = creditAnticipated;
     }
 
     setSavingState(true);
@@ -1465,6 +1528,10 @@
       updateDebitoPreview();
       updateOverview();
     });
+    elements.debitoAnticipated?.addEventListener('change', () => {
+      updateDebitoPreview();
+      updateOverview();
+    });
 
     elements.creditoInstallments?.addEventListener('input', () => {
       updateCreditDiscountsStructure();
@@ -1481,6 +1548,10 @@
       for (let installment = 1; installment <= total; installment += 1) {
         state.creditDiscounts[installment] = base;
       }
+      updateCreditoPreview();
+      updateOverview();
+    });
+    elements.creditoAnticipated?.addEventListener('change', () => {
       updateCreditoPreview();
       updateOverview();
     });
