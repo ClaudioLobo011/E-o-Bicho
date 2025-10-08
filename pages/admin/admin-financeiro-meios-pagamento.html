@@ -164,6 +164,16 @@
                       <input type="number" id="debito-discount" min="0" step="0.01" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="0">
                     </div>
                   </div>
+                  <div class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p class="text-sm font-medium text-gray-700">Antecipação de recebíveis</p>
+                      <p class="text-xs text-gray-500">Ative se as vendas no débito possuem repasse antecipado.</p>
+                    </div>
+                    <label for="debito-anticipated" class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <input type="checkbox" id="debito-anticipated" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary">
+                      <span>Antecipado</span>
+                    </label>
+                  </div>
                   <div class="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3">
                     <div class="flex items-center gap-3 text-cyan-700">
                       <i class="fas fa-credit-card text-lg"></i>
@@ -189,6 +199,16 @@
                       <label for="credito-discount" class="block text-sm font-medium text-gray-700 mb-1">Desconto padrão (%)</label>
                       <input type="number" id="credito-discount" min="0" step="0.01" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="2.49">
                     </div>
+                  </div>
+                  <div class="flex flex-col gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p class="text-sm font-semibold text-indigo-700">Antecipação de recebíveis</p>
+                      <p class="text-xs text-indigo-600">Marque se as vendas no crédito são antecipadas.</p>
+                    </div>
+                    <label for="credito-anticipated" class="inline-flex items-center gap-2 text-sm font-medium text-indigo-700">
+                      <input type="checkbox" id="credito-anticipated" class="h-4 w-4 rounded border-indigo-300 text-primary focus:ring-primary">
+                      <span>Antecipado</span>
+                    </label>
                   </div>
                   <div class="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 space-y-3">
                     <div class="flex items-center gap-3 text-indigo-700">
