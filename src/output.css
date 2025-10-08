@@ -996,8 +996,8 @@
   .max-w-\[700px\] {
     max-width: 700px;
   }
-  .max-w-\[calc\(64rem\+40px\)\] {
-    max-width: calc(64rem + 40px);
+  .max-w-\[calc\(64rem\+80px\)\] {
+    max-width: calc(64rem + 80px);
   }
   .max-w-full {
     max-width: 100%;
