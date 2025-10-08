@@ -178,6 +178,21 @@
       document.body.appendChild(container);
     }
 
+    const normalizedType = String(type || 'info');
+    const normalizedMessage = String(message || '');
+    const toastKey = `${normalizedType}::${normalizedMessage}`;
+
+    try {
+      const existing = Array.from(container.querySelectorAll('[data-toast-key]')).find((node) => {
+        return node instanceof HTMLElement && node.dataset.toastKey === toastKey;
+      });
+      if (existing) {
+        existing.remove();
+      }
+    } catch (_) {
+      /* ignore lookup/remove errors */
+    }
+
     const base =
       'px-4 py-2 rounded shadow text-sm text-white transition transform';
     const color = {
@@ -185,11 +200,12 @@
       success: 'bg-green-600',
       error:   'bg-red-600',
       warning: 'bg-yellow-600'
-    }[type] || 'bg-slate-700';
+    }[normalizedType] || 'bg-slate-700';
 
     const el = document.createElement('div');
     el.className = `${base} ${color} opacity-0 translate-y-2`;
-    el.textContent = message || '';
+    el.dataset.toastKey = toastKey;
+    el.textContent = normalizedMessage;
     container.appendChild(el);
 
     // animaÃ§Ã£o simples

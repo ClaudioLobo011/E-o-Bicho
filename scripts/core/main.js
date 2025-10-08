@@ -1,5 +1,438 @@
 var basePath = basePath || '';
 
+(function () {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  function isRecord(value) {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function safeParseJsonValue(value) {
+    if (!value || typeof value !== 'string') {
+      return null;
+    }
+    var trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    try {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      console.warn('Não foi possível interpretar dados legados como JSON:', error);
+      return null;
+    }
+  }
+
+  function safeParseJson(value) {
+    var parsed = safeParseJsonValue(value);
+    return isRecord(parsed) ? parsed : null;
+  }
+
+  function normalizeToken(token) {
+    if (!token || typeof token !== 'string') {
+      return '';
+    }
+    var trimmed = token.trim();
+    if (!trimmed) {
+      return '';
+    }
+    return trimmed.replace(/^bearer\s+/i, '');
+  }
+
+  function extractTokenFromUnknown(value, depth) {
+    if (depth === void 0) { depth = 0; }
+    if (!value || depth > 5) {
+      return '';
+    }
+
+    if (typeof value === 'string') {
+      var trimmed = value.trim();
+      if (!trimmed) {
+        return '';
+      }
+
+      var startsWithQuote = trimmed.startsWith('"') || trimmed.startsWith("'");
+      var endsWithQuote = trimmed.endsWith('"') || trimmed.endsWith("'");
+      if (startsWithQuote && endsWithQuote && trimmed.length > 1) {
+        return extractTokenFromUnknown(trimmed.slice(1, -1), depth + 1);
+      }
+
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        var parsed = safeParseJsonValue(trimmed);
+        if (parsed !== null && parsed !== undefined) {
+          var nested = extractTokenFromUnknown(parsed, depth + 1);
+          if (nested) {
+            return nested;
+          }
+        }
+      }
+
+      return normalizeToken(trimmed);
+    }
+
+    if (Array.isArray(value)) {
+      for (var i = 0; i < value.length; i++) {
+        var entry = value[i];
+        var nested = extractTokenFromUnknown(entry, depth + 1);
+        if (nested) {
+          return nested;
+        }
+      }
+      return '';
+    }
+
+    if (!isRecord(value)) {
+      return '';
+    }
+
+    var directCandidates = [
+      value.token,
+      value.authToken,
+      value.accessToken,
+      value.access_token,
+      value.jwt,
+      value.sessionToken,
+      value.session_token
+    ];
+    for (var j = 0; j < directCandidates.length; j++) {
+      var candidate = directCandidates[j];
+      var nested = extractTokenFromUnknown(candidate, depth + 1);
+      if (nested) {
+        return nested;
+      }
+    }
+
+    var nestedCandidates = [
+      value.user,
+      value.usuario,
+      value.session,
+      value.auth,
+      value.data,
+      value.payload,
+      value.perfil,
+      value.profile
+    ];
+
+    for (var k = 0; k < nestedCandidates.length; k++) {
+      var nestedCandidate = nestedCandidates[k];
+      var nestedToken = extractTokenFromUnknown(nestedCandidate, depth + 1);
+      if (nestedToken) {
+        return nestedToken;
+      }
+    }
+
+    var objectValues = Object.values(value);
+    for (var l = 0; l < objectValues.length; l++) {
+      var nestedValue = objectValues[l];
+      var nestedResult = extractTokenFromUnknown(nestedValue, depth + 1);
+      if (nestedResult) {
+        return nestedResult;
+      }
+    }
+
+    return '';
+  }
+
+  function readCookieToken() {
+    if (typeof document === 'undefined') {
+      return '';
+    }
+    try {
+      var cookieSource = document.cookie || '';
+      if (!cookieSource) {
+        return '';
+      }
+      var pairs = cookieSource.split(';');
+      for (var i = 0; i < pairs.length; i++) {
+        var pair = pairs[i];
+        var parts = pair.split('=');
+        var rawName = parts[0];
+        var rawValue = parts[1];
+        var name = rawName ? rawName.trim().toLowerCase() : '';
+        if (!name || !rawValue) {
+          continue;
+        }
+        if (['auth_token', 'token', 'jwt'].includes(name)) {
+          var decoded = decodeURIComponent(rawValue.trim());
+          var normalized = normalizeToken(decoded);
+          if (normalized) {
+            return normalized;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Não foi possível ler cookies para sincronizar sessão legada:', error);
+    }
+    return '';
+  }
+
+  function mergeUserRecords() {
+    var records = Array.prototype.slice.call(arguments);
+    var result = {};
+    for (var i = 0; i < records.length; i++) {
+      var record = records[i];
+      if (!record || typeof record !== 'object') {
+        continue;
+      }
+      var entries = Object.entries(record);
+      for (var j = 0; j < entries.length; j++) {
+        var entry = entries[j];
+        var key = entry[0];
+        var value = entry[1];
+        if (value === undefined) {
+          continue;
+        }
+        if (!(key in result)) {
+          result[key] = value;
+        }
+      }
+    }
+    return result;
+  }
+
+  function ensureUserId(record) {
+    if (!isRecord(record)) {
+      return;
+    }
+    if (typeof record.id === 'string' && record.id.trim()) {
+      return;
+    }
+    var candidates = [
+      record._id,
+      record.usuarioId,
+      record.userId,
+      record.usuario && record.usuario._id,
+      record.user && record.user._id
+    ];
+    for (var i = 0; i < candidates.length; i++) {
+      var candidate = candidates[i];
+      if (typeof candidate === 'string' && candidate.trim()) {
+        record.id = candidate.trim();
+        return;
+      }
+    }
+  }
+
+  function syncLegacyAuthSession() {
+    var localStorageRef = null;
+    var sessionStorageRef = null;
+
+    try {
+      localStorageRef = window.localStorage;
+    } catch (error) {
+      console.warn('localStorage indisponível para sessão legada:', error);
+    }
+
+    try {
+      sessionStorageRef = window.sessionStorage;
+    } catch (error) {
+      console.warn('sessionStorage indisponível para sessão legada:', error);
+    }
+
+    if (!localStorageRef && !sessionStorageRef) {
+      return;
+    }
+
+    var storedLegacy =
+      safeParseJson(localStorageRef && localStorageRef.getItem('loggedInUser')) ||
+      safeParseJson(sessionStorageRef && sessionStorageRef.getItem('loggedInUser'));
+
+    var candidateRecords = [];
+    if (storedLegacy) {
+      candidateRecords.push(storedLegacy);
+    }
+
+    var storageRecordKeys = ['user', 'authToken', 'perfil', 'session', 'sessionUser', 'session_user'];
+    for (var i = 0; i < storageRecordKeys.length; i++) {
+      var key = storageRecordKeys[i];
+      var localRecord = safeParseJson(localStorageRef && localStorageRef.getItem(key));
+      if (localRecord) {
+        candidateRecords.push(localRecord);
+      }
+      var sessionRecord = safeParseJson(sessionStorageRef && sessionStorageRef.getItem(key));
+      if (sessionRecord) {
+        candidateRecords.push(sessionRecord);
+      }
+    }
+
+    var normalizedToken = '';
+    var tokenSource = null;
+
+    for (var i = 0; i < candidateRecords.length; i++) {
+      var record = candidateRecords[i];
+      var candidate = extractTokenFromUnknown(record);
+      if (candidate) {
+        normalizedToken = normalizeToken(candidate);
+        if (normalizedToken) {
+          tokenSource = record;
+          break;
+        }
+      }
+    }
+
+    if (!normalizedToken) {
+      var directValueKeys = [
+        'auth_token',
+        'token',
+        'jwt',
+        'pdv_token',
+        'access_token',
+        'session_token',
+        'authToken'
+      ];
+      for (var i = 0; i < directValueKeys.length; i++) {
+        var key = directValueKeys[i];
+        var directValues = [];
+        if (localStorageRef) {
+          directValues.push(localStorageRef.getItem(key));
+        }
+        if (sessionStorageRef) {
+          directValues.push(sessionStorageRef.getItem(key));
+        }
+        for (var j = 0; j < directValues.length; j++) {
+          var value = directValues[j];
+          var candidate = extractTokenFromUnknown(value);
+          if (candidate) {
+            normalizedToken = normalizeToken(candidate);
+            if (normalizedToken) {
+              break;
+            }
+          }
+        }
+        if (normalizedToken) {
+          break;
+        }
+      }
+    }
+
+    if (!normalizedToken) {
+      normalizedToken = readCookieToken();
+    }
+
+    if (!normalizedToken) {
+      return;
+    }
+
+    var mergeArgs = [];
+    if (storedLegacy) {
+      mergeArgs.push(storedLegacy);
+    }
+    if (tokenSource && tokenSource !== storedLegacy) {
+      mergeArgs.push(tokenSource);
+    }
+    if (candidateRecords.length) {
+      mergeArgs = mergeArgs.concat(candidateRecords);
+    }
+
+    var mergedRecord = mergeUserRecords.apply(null, mergeArgs);
+    if (!isRecord(mergedRecord)) {
+      mergedRecord = {};
+    }
+    mergedRecord.token = normalizedToken;
+    ensureUserId(mergedRecord);
+
+    var storages = [];
+    if (localStorageRef) {
+      storages.push(localStorageRef);
+    }
+    if (sessionStorageRef) {
+      storages.push(sessionStorageRef);
+    }
+
+    var persistSafely = function (key, value) {
+      for (var i = 0; i < storages.length; i++) {
+        var storage = storages[i];
+        try {
+          if (storage.getItem(key) !== value) {
+            storage.setItem(key, value);
+          }
+        } catch (error) {
+          console.warn('Não foi possível atualizar a chave "' + key + '" no storage legado:', error);
+        }
+      }
+    };
+
+    var persistCookie = function (name, value) {
+      if (typeof document === 'undefined') {
+        return;
+      }
+      try {
+        var encoded = encodeURIComponent(name) + '=' + encodeURIComponent(value);
+        document.cookie = encoded + '; path=/; SameSite=Lax; Max-Age=86400';
+      } catch (error) {
+        console.warn('Não foi possível atualizar o cookie "' + name + '" para sessão legada:', error);
+      }
+    };
+
+    var stringifiedLogged = JSON.stringify(mergedRecord);
+    persistSafely('loggedInUser', stringifiedLogged);
+
+    var userCandidates = [
+      mergedRecord.user,
+      mergedRecord.usuario,
+      tokenSource && tokenSource.user,
+      tokenSource && tokenSource.usuario
+    ];
+    var userPayload = null;
+    for (var i = 0; i < userCandidates.length; i++) {
+      var candidate = userCandidates[i];
+      if (isRecord(candidate)) {
+        userPayload = candidate;
+        break;
+      }
+    }
+
+    if (!userPayload) {
+      var fallbackUser = {};
+      for (var key in mergedRecord) {
+        if (!Object.prototype.hasOwnProperty.call(mergedRecord, key)) {
+          continue;
+        }
+        if (key === 'token') {
+          continue;
+        }
+        fallbackUser[key] = mergedRecord[key];
+      }
+      if (Object.keys(fallbackUser).length > 0) {
+        userPayload = fallbackUser;
+      }
+    }
+
+    if (userPayload) {
+      persistSafely('user', JSON.stringify(userPayload));
+    }
+
+    persistSafely('auth_token', normalizedToken);
+    persistSafely('token', normalizedToken);
+    persistSafely('jwt', normalizedToken);
+    persistCookie('auth_token', normalizedToken);
+    persistCookie('token', normalizedToken);
+    persistCookie('jwt', normalizedToken);
+
+    if (userPayload) {
+      var authTokenPayload = {
+        token: normalizedToken,
+        user: userPayload
+      };
+      if (isRecord(mergedRecord.perfil)) {
+        authTokenPayload.perfil = mergedRecord.perfil;
+      } else if (tokenSource && isRecord(tokenSource.perfil)) {
+        authTokenPayload.perfil = tokenSource.perfil;
+      }
+      persistSafely('authToken', JSON.stringify(authTokenPayload));
+    }
+  }
+
+  window.syncLegacyAuthSession = syncLegacyAuthSession;
+  try {
+    syncLegacyAuthSession();
+  } catch (error) {
+    console.warn('Falha ao sincronizar sessão legada:', error);
+  }
+})();
+
 async function loadComponents() {
     try {
         const placeholders = {
@@ -1081,6 +1514,19 @@ function checkAdminLink() {
   return checkRoleLink('admin-link', ['funcionario','admin','admin_master']);
 }
 
+function resolveAdminPanelUrl() {
+  const defaultPath = '/app';
+  const { hostname, port, protocol } = window.location;
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
+
+  if (isLocalHost && port && port !== '5173') {
+    const safeProtocol = protocol === 'file:' ? 'http:' : protocol;
+    return `${safeProtocol}//${hostname}:5173${defaultPath}`;
+  }
+
+  return defaultPath;
+}
+
 let __roleCachePromise = null;
 async function __getUserRoleOnce() {
   if (__roleCachePromise) return __roleCachePromise;
@@ -1112,7 +1558,17 @@ async function checkRoleLink(linkId, allowedRoles) {
   const toggle = (ok) => el.classList.toggle('hidden', !ok);
   try {
     const role = await __getUserRoleOnce();
-    toggle(allowedRoles.includes(role));
+    const isAllowed = allowedRoles.includes(role);
+    toggle(isAllowed);
+
+    if (isAllowed) {
+      const resolvedUrl = resolveAdminPanelUrl();
+      if (resolvedUrl) {
+        el.href = resolvedUrl;
+        el.target = '_blank';
+        el.rel = 'noopener noreferrer';
+      }
+    }
   } catch (e) {
     console.error('checkRoleLink:', e);
     toggle(false);

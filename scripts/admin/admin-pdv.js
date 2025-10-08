@@ -155,6 +155,13 @@
   };
 
   const elements = {};
+  const REQUIRED_DOM_SELECTORS = [
+    '#pdv-open-customer',
+    '#pdv-customer-modal',
+    '#pdv-product-search',
+  ];
+  let domReadyObserver = null;
+  let waitingForDom = false;
   let budgetImportDefaultLabel = 'Importar orçamento';
   const BUDGET_IMPORT_FINALIZED_LABEL = 'Orçamento finalizado';
   const customerPetsCache = new Map();
@@ -550,36 +557,297 @@
     window.alert(message);
   };
 
-  const getToken = () => {
+  const TOKEN_PREFIX_PATTERN = /^bearer\s+/i;
+  const normalizeToken = (token) => {
+    if (!token || typeof token !== 'string') return '';
+    const trimmed = token.trim();
+    if (!trimmed) return '';
+    return trimmed.replace(TOKEN_PREFIX_PATTERN, '');
+  };
+
+  const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+
+  const readStorageItem = (storage, key) => {
+    if (!storage || typeof storage.getItem !== 'function') return null;
     try {
-      const raw = localStorage.getItem('loggedInUser');
-      if (!raw) return '';
-      const parsed = JSON.parse(raw);
-      return parsed?.token || '';
+      return storage.getItem(key);
     } catch (error) {
-      console.warn('Não foi possível obter o token do usuário logado.', error);
-      return '';
+      console.warn(`Não foi possível acessar a chave "${key}" no storage.`, error);
+      return null;
     }
   };
 
-  const getLoggedUserPayload = () => {
+  const parseJsonSafely = (raw) => {
+    if (!raw || typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (trimmed[0] !== '{' && trimmed[0] !== '[' && trimmed[0] !== '"') return null;
     try {
-      const raw = localStorage.getItem('loggedInUser');
-      if (!raw) return {};
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        if (parsed.user && typeof parsed.user === 'object') {
-          return parsed.user;
-        }
-        if (parsed.usuario && typeof parsed.usuario === 'object') {
-          return parsed.usuario;
+      return JSON.parse(trimmed);
+    } catch (error) {
+      console.warn('Não foi possível interpretar os dados armazenados como JSON.', error);
+      return null;
+    }
+  };
+
+  const extractTokenFromObject = (input, depth = 0) => {
+    if (!isPlainObject(input) && !Array.isArray(input)) return '';
+    if (depth > 4) return '';
+    const tokenKeys = ['token', 'authToken', 'accessToken', 'access_token'];
+    if (isPlainObject(input)) {
+      for (const key of tokenKeys) {
+        const value = input[key];
+        if (typeof value === 'string' && value.trim()) {
+          const normalized = normalizeToken(value);
+          if (normalized) return normalized;
         }
       }
-      return parsed || {};
+    }
+    const nestedCandidates = [];
+    if (isPlainObject(input)) {
+      nestedCandidates.push(
+        input.user,
+        input.usuario,
+        input.data,
+        input.payload,
+        input.session,
+        input.auth,
+        input.usuarioAutenticado
+      );
+    }
+    if (Array.isArray(input)) {
+      nestedCandidates.push(...input);
+    }
+    for (const candidate of nestedCandidates) {
+      if (!candidate) continue;
+      if (typeof candidate === 'string') {
+        const normalized = normalizeToken(candidate);
+        if (normalized) return normalized;
+        continue;
+      }
+      const token = extractTokenFromObject(candidate, depth + 1);
+      if (token) return token;
+    }
+    if (isPlainObject(input)) {
+      for (const value of Object.values(input)) {
+        if (value && (isPlainObject(value) || Array.isArray(value))) {
+          const token = extractTokenFromObject(value, depth + 1);
+          if (token) return token;
+        }
+      }
+    }
+    return '';
+  };
+
+  const extractTokenFromValue = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      if (trimmed[0] !== '{' && trimmed[0] !== '[') {
+        if (
+          (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+          (trimmed.startsWith("'") && trimmed.endsWith("'"))
+        ) {
+          const inner = trimmed.slice(1, -1).trim();
+          if (inner) return normalizeToken(inner);
+        }
+        return normalizeToken(trimmed);
+      }
+      const parsed = parseJsonSafely(trimmed);
+      if (parsed) {
+        if (typeof parsed === 'string') {
+          return extractTokenFromValue(parsed);
+        }
+        return extractTokenFromObject(parsed);
+      }
+      return '';
+    }
+    if (typeof value === 'object') {
+      return extractTokenFromObject(value);
+    }
+    return '';
+  };
+
+  const hasMeaningfulValue = (value) => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') {
+      return value.trim().length > 0;
+    }
+    return true;
+  };
+
+  const mergeRecords = (...records) => {
+    const merged = {};
+    records.forEach((record) => {
+      if (!isPlainObject(record)) return;
+      Object.entries(record).forEach(([key, value]) => {
+        if (value === undefined) return;
+        if (!(key in merged)) {
+          merged[key] = value;
+          return;
+        }
+        const current = merged[key];
+        if (isPlainObject(current) && isPlainObject(value)) {
+          if (current === value) {
+            return;
+          }
+          merged[key] = mergeRecords(current, value);
+          return;
+        }
+        if (!hasMeaningfulValue(current) && hasMeaningfulValue(value)) {
+          merged[key] = value;
+        }
+      });
+    });
+    return merged;
+  };
+
+  const ensureRecordId = (record) => {
+    if (!isPlainObject(record)) return;
+    const candidateId =
+      typeof record.id === 'string' && record.id.trim()
+        ? record.id.trim()
+        : typeof record._id === 'string' && record._id.trim()
+        ? record._id.trim()
+        : typeof record.usuarioId === 'string' && record.usuarioId.trim()
+        ? record.usuarioId.trim()
+        : typeof record.userId === 'string' && record.userId.trim()
+        ? record.userId.trim()
+        : typeof record.usuario?.id === 'string' && record.usuario.id.trim()
+        ? record.usuario.id.trim()
+        : typeof record.usuario?._id === 'string' && record.usuario._id.trim()
+        ? record.usuario._id.trim()
+        : typeof record.user?.id === 'string' && record.user.id.trim()
+        ? record.user.id.trim()
+        : typeof record.user?._id === 'string' && record.user._id.trim()
+        ? record.user._id.trim()
+        : '';
+    if (candidateId) {
+      record.id = candidateId;
+    }
+  };
+
+  const collectStoredUserRecords = () => {
+    const records = [];
+    const getters = [
+      () => parseJsonSafely(readStorageItem(localStorage, 'loggedInUser')),
+      () => parseJsonSafely(readStorageItem(sessionStorage, 'loggedInUser')),
+      () => parseJsonSafely(readStorageItem(localStorage, 'user')),
+      () => parseJsonSafely(readStorageItem(sessionStorage, 'user')),
+    ];
+    for (const getter of getters) {
+      try {
+        const record = getter();
+        if (isPlainObject(record)) {
+          records.push(record);
+        }
+      } catch (error) {
+        console.warn('Não foi possível obter os dados armazenados do usuário.', error);
+      }
+    }
+    return records;
+  };
+
+  const readLoggedUserRecord = () => {
+    const records = collectStoredUserRecords();
+    if (!records.length) return {};
+    const merged = mergeRecords(...records);
+    if (!isPlainObject(merged)) return {};
+    const normalized = { ...merged };
+    const token = extractTokenFromObject(normalized);
+    if (token) {
+      normalized.token = normalizeToken(token);
+    }
+    ensureRecordId(normalized);
+    return normalized;
+  };
+
+  const getToken = () => {
+    const record = readLoggedUserRecord();
+    const directRecordToken = normalizeToken(record?.token);
+    if (directRecordToken) {
+      return directRecordToken;
+    }
+    const recordToken = extractTokenFromObject(record);
+    if (recordToken) {
+      return normalizeToken(recordToken);
+    }
+    const valueCandidates = [
+      readStorageItem(localStorage, 'loggedInUser'),
+      readStorageItem(sessionStorage, 'loggedInUser'),
+      readStorageItem(localStorage, 'auth_token'),
+      readStorageItem(sessionStorage, 'auth_token'),
+      readStorageItem(localStorage, 'token'),
+      readStorageItem(sessionStorage, 'token'),
+      readStorageItem(localStorage, 'jwt'),
+      readStorageItem(sessionStorage, 'jwt'),
+      readStorageItem(localStorage, 'user'),
+      readStorageItem(sessionStorage, 'user'),
+    ];
+    for (const value of valueCandidates) {
+      const token = extractTokenFromValue(value);
+      if (token) {
+        return normalizeToken(token);
+      }
+    }
+    const cookieToken = (() => {
+      if (typeof document === 'undefined') return '';
+      try {
+        const cookieSource = document.cookie || '';
+        if (!cookieSource) return '';
+        const entries = cookieSource.split(';');
+        for (const entry of entries) {
+          const [rawKey, ...rest] = entry.split('=');
+          const key = rawKey?.trim().toLowerCase();
+          if (!key || !rest.length) continue;
+          if (!['auth_token', 'token', 'jwt'].includes(key)) continue;
+          const rawValue = rest.join('=').trim();
+          if (!rawValue) continue;
+          try {
+            const decoded = decodeURIComponent(rawValue);
+            const normalized = normalizeToken(decoded);
+            if (normalized) return normalized;
+          } catch (decodeError) {
+            const normalized = normalizeToken(rawValue);
+            if (normalized) return normalized;
+          }
+        }
+      } catch (error) {
+        console.warn('Não foi possível ler cookies para localizar o token de autenticação.', error);
+      }
+      return '';
+    })();
+    if (cookieToken) {
+      return cookieToken;
+    }
+    try {
+      const raw = window?.localStorage?.getItem('loggedInUser');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const fallbackToken = normalizeToken(parsed?.token);
+        if (fallbackToken) {
+          return fallbackToken;
+        }
+      }
     } catch (error) {
-      console.warn('Não foi possível obter os dados do usuário logado.', error);
+      console.warn('Fallback direto não encontrou o token do usuário logado.', error);
+    }
+    return '';
+  };
+
+  const getLoggedUserPayload = () => {
+    const record = readLoggedUserRecord();
+    if (!record || typeof record !== 'object') {
       return {};
     }
+    if (record.user && typeof record.user === 'object') {
+      return record.user;
+    }
+    if (record.usuario && typeof record.usuario === 'object') {
+      return record.usuario;
+    }
+    return record;
   };
 
   const getLoggedUserName = () => {
@@ -2063,6 +2331,48 @@
     return base;
   };
 
+  const lockBodyScroll = () => {
+    if (typeof document === 'undefined' || !document.body) return;
+    const current = Number.parseInt(document.body.dataset.pdvScrollLocks || '0', 10) || 0;
+    if (current === 0) {
+      document.body.dataset.pdvOriginalOverflow = document.body.style.overflow || '';
+      document.body.style.overflow = 'hidden';
+    }
+    document.body.dataset.pdvScrollLocks = String(current + 1);
+  };
+
+  const unlockBodyScroll = () => {
+    if (typeof document === 'undefined' || !document.body) return;
+    const current = Number.parseInt(document.body.dataset.pdvScrollLocks || '0', 10) || 0;
+    const next = Math.max(0, current - 1);
+    if (next === 0) {
+      const previous = document.body.dataset.pdvOriginalOverflow || '';
+      document.body.style.overflow = previous;
+      delete document.body.dataset.pdvOriginalOverflow;
+    }
+    document.body.dataset.pdvScrollLocks = String(next);
+  };
+
+  const showElement = (element, displayFallback = 'block') => {
+    if (!element) return;
+    element.classList.remove('hidden');
+    if (element.style.display === 'none') {
+      element.style.display = '';
+    }
+    if (typeof window !== 'undefined' && window.getComputedStyle) {
+      const computed = window.getComputedStyle(element);
+      if (computed && computed.display === 'none') {
+        element.style.display = displayFallback;
+      }
+    }
+  };
+
+  const hideElement = (element) => {
+    if (!element) return;
+    element.classList.add('hidden');
+    element.style.display = 'none';
+  };
+
   const queryElements = () => {
     elements.companySelect = document.getElementById('company-select');
     elements.pdvSelect = document.getElementById('pdv-select');
@@ -2718,14 +3028,22 @@
     }
     const hasCustomer = Boolean(state.vendaCliente);
     if (elements.customerSummaryEmpty) {
-      elements.customerSummaryEmpty.classList.toggle('hidden', hasCustomer);
+      if (hasCustomer) {
+        hideElement(elements.customerSummaryEmpty);
+      } else {
+        showElement(elements.customerSummaryEmpty);
+      }
     }
     if (elements.customerSummaryInfo) {
-      elements.customerSummaryInfo.classList.toggle('hidden', !hasCustomer);
+      if (hasCustomer) {
+        showElement(elements.customerSummaryInfo);
+      } else {
+        hideElement(elements.customerSummaryInfo);
+      }
     }
     if (!hasCustomer) {
       if (elements.customerPet) {
-        elements.customerPet.classList.add('hidden');
+        hideElement(elements.customerPet);
       }
       return;
     }
@@ -2748,9 +3066,9 @@
         const details = [state.vendaPet.tipo, state.vendaPet.raca].filter(Boolean).join(' • ');
         const detailText = details ? ` (${details})` : '';
         elements.customerPet.textContent = `Pet: ${state.vendaPet.nome || 'Pet sem nome'}${detailText}`;
-        elements.customerPet.classList.remove('hidden');
+        showElement(elements.customerPet);
       } else {
-        elements.customerPet.classList.add('hidden');
+        hideElement(elements.customerPet);
       }
     }
   };
@@ -2835,7 +3153,11 @@
     });
     panels.forEach((panel) => {
       const tab = panel.getAttribute('data-pdv-customer-panel');
-      panel.classList.toggle('hidden', tab !== state.modalActiveTab);
+      if (tab === state.modalActiveTab) {
+        showElement(panel);
+      } else {
+        hideElement(panel);
+      }
     });
   };
 
@@ -2858,25 +3180,27 @@
     if (!elements.customerResultsList || !elements.customerResultsEmpty || !elements.customerResultsLoading) {
       return;
     }
-    elements.customerResultsList.innerHTML = '';
+    if (elements.customerResultsList) {
+      elements.customerResultsList.innerHTML = '';
+    }
     if (state.customerSearchLoading) {
-      elements.customerResultsLoading.classList.remove('hidden');
-      elements.customerResultsEmpty.classList.add('hidden');
+      showElement(elements.customerResultsLoading);
+      hideElement(elements.customerResultsEmpty);
       return;
     }
-    elements.customerResultsLoading.classList.add('hidden');
+    hideElement(elements.customerResultsLoading);
     const query = state.customerSearchQuery.trim();
     if (!query) {
       elements.customerResultsEmpty.textContent = 'Digite para buscar clientes.';
-      elements.customerResultsEmpty.classList.remove('hidden');
+      showElement(elements.customerResultsEmpty);
       return;
     }
     if (!state.customerSearchResults.length) {
       elements.customerResultsEmpty.textContent = 'Nenhum cliente encontrado para a busca informada.';
-      elements.customerResultsEmpty.classList.remove('hidden');
+      showElement(elements.customerResultsEmpty);
       return;
     }
-    elements.customerResultsEmpty.classList.add('hidden');
+    hideElement(elements.customerResultsEmpty);
     const fragment = document.createDocumentFragment();
     state.customerSearchResults.forEach((cliente) => {
       const isSelected = Boolean(state.modalSelectedCliente && state.modalSelectedCliente._id === cliente._id);
@@ -2905,25 +3229,27 @@
     if (!elements.customerPetsList || !elements.customerPetsEmpty || !elements.customerPetsLoading) {
       return;
     }
-    elements.customerPetsList.innerHTML = '';
+    if (elements.customerPetsList) {
+      elements.customerPetsList.innerHTML = '';
+    }
     if (!state.modalSelectedCliente) {
-      elements.customerPetsLoading.classList.add('hidden');
+      hideElement(elements.customerPetsLoading);
       elements.customerPetsEmpty.textContent = 'Selecione um cliente para visualizar os pets vinculados.';
-      elements.customerPetsEmpty.classList.remove('hidden');
+      showElement(elements.customerPetsEmpty);
       return;
     }
     if (state.customerPetsLoading) {
-      elements.customerPetsLoading.classList.remove('hidden');
-      elements.customerPetsEmpty.classList.add('hidden');
+      showElement(elements.customerPetsLoading);
+      hideElement(elements.customerPetsEmpty);
       return;
     }
-    elements.customerPetsLoading.classList.add('hidden');
+    hideElement(elements.customerPetsLoading);
     if (!state.customerPets.length) {
       elements.customerPetsEmpty.textContent = 'Nenhum pet cadastrado para este cliente.';
-      elements.customerPetsEmpty.classList.remove('hidden');
+      showElement(elements.customerPetsEmpty);
       return;
     }
-    elements.customerPetsEmpty.classList.add('hidden');
+    hideElement(elements.customerPetsEmpty);
     const fragment = document.createDocumentFragment();
     state.customerPets.forEach((pet) => {
       const isSelected = Boolean(state.modalSelectedPet && state.modalSelectedPet._id === pet._id);
@@ -3122,8 +3448,9 @@
       renderCustomerPets();
       updateCustomerModalActions();
     }
-    elements.customerModal.classList.remove('hidden');
+    showElement(elements.customerModal);
     document.body.classList.add('overflow-hidden');
+    lockBodyScroll();
     updateCustomerModalTabs();
     renderCustomerSearchResults();
     renderCustomerPets();
@@ -3135,11 +3462,12 @@
 
   const closeCustomerModal = () => {
     if (!elements.customerModal) return;
-    elements.customerModal.classList.add('hidden');
-    if (
-      (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) &&
-      (!elements.paymentValueModal || elements.paymentValueModal.classList.contains('hidden'))
-    ) {
+    hideElement(elements.customerModal);
+    const preserveScroll =
+      (elements.finalizeModal && !elements.finalizeModal.classList.contains('hidden')) ||
+      (elements.paymentValueModal && !elements.paymentValueModal.classList.contains('hidden'));
+    unlockBodyScroll();
+    if (!preserveScroll) {
       document.body.classList.remove('overflow-hidden');
     }
     if (customerSearchTimeout) {
@@ -3595,14 +3923,18 @@
     setDeliveryAddressFormVisible(false);
     resetDeliveryAddressForm();
     await loadDeliveryAddresses();
-    elements.deliveryAddressModal.classList.remove('hidden');
+    showElement(elements.deliveryAddressModal);
     document.body.classList.add('overflow-hidden');
+    lockBodyScroll();
   };
 
   const closeDeliveryAddressModal = () => {
     if (!elements.deliveryAddressModal) return;
-    elements.deliveryAddressModal.classList.add('hidden');
-    if (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) {
+    hideElement(elements.deliveryAddressModal);
+    const preserveScroll =
+      elements.finalizeModal && !elements.finalizeModal.classList.contains('hidden');
+    unlockBodyScroll();
+    if (!preserveScroll) {
       document.body.classList.remove('overflow-hidden');
     }
   };
@@ -4153,8 +4485,9 @@
     renderSalePaymentsPreview();
     updateSaleSummary();
     if (elements.finalizeModal) {
-      elements.finalizeModal.classList.remove('hidden');
+      showElement(elements.finalizeModal);
       document.body.classList.add('overflow-hidden');
+      lockBodyScroll();
     }
   };
 
@@ -4171,8 +4504,11 @@
   };
 
   const closePaymentValueModal = (preserveBodyScroll = false) => {
+    const hadScrollLock =
+      elements.paymentValueModal?.dataset.pdvScrollLocked === '1';
     if (elements.paymentValueModal) {
-      elements.paymentValueModal.classList.add('hidden');
+      hideElement(elements.paymentValueModal);
+      delete elements.paymentValueModal.dataset.pdvScrollLocked;
     }
     if (elements.paymentValueInput) {
       elements.paymentValueInput.value = '';
@@ -4181,6 +4517,9 @@
       elements.paymentValueHint.textContent = '';
     }
     paymentModalState = null;
+    if (hadScrollLock) {
+      unlockBodyScroll();
+    }
     if (!preserveBodyScroll) {
       document.body.classList.remove('overflow-hidden');
     }
@@ -4189,9 +4528,12 @@
   const closeFinalizeModal = () => {
     if (!elements.finalizeModal) return;
     const context = state.activeFinalizeContext;
-    elements.finalizeModal.classList.add('hidden');
+    hideElement(elements.finalizeModal);
     closePaymentValueModal(true);
-    if (!elements.deliveryAddressModal || elements.deliveryAddressModal.classList.contains('hidden')) {
+    const preserveScroll =
+      elements.deliveryAddressModal && !elements.deliveryAddressModal.classList.contains('hidden');
+    unlockBodyScroll();
+    if (!preserveScroll) {
       document.body.classList.remove('overflow-hidden');
     }
     if (context === 'orcamento') {
@@ -4321,8 +4663,9 @@
   const openFiscalEmissionModal = (initialStep = fiscalEmissionStepOrder[0]) => {
     state.fiscalEmissionModalOpen = true;
     if (!elements.fiscalStatusModal) return;
-    elements.fiscalStatusModal.classList.remove('hidden');
+    showElement(elements.fiscalStatusModal);
     document.body.classList.add('overflow-hidden');
+    lockBodyScroll();
     if (elements.fiscalStatusTitle) {
       elements.fiscalStatusTitle.textContent = 'Emitindo nota fiscal...';
     }
@@ -4333,8 +4676,11 @@
     if (!state.fiscalEmissionModalOpen) return;
     state.fiscalEmissionModalOpen = false;
     if (!elements.fiscalStatusModal) return;
-    elements.fiscalStatusModal.classList.add('hidden');
-    if (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) {
+    hideElement(elements.fiscalStatusModal);
+    const preserveScroll =
+      elements.finalizeModal && !elements.finalizeModal.classList.contains('hidden');
+    unlockBodyScroll();
+    if (!preserveScroll) {
       document.body.classList.remove('overflow-hidden');
     }
   };
@@ -4357,14 +4703,18 @@
         elements.paymentValueSubtitle.textContent = `Pagamento ${parcelasLabel}.`;
       }
       if (elements.paymentValueHint) {
-        elements.paymentValueHint.textContent = restante > 0
-          ? `Restante sugerido: ${formatCurrency(restante)}.`
-          : 'Informe o valor recebido para este pagamento.';
+      elements.paymentValueHint.textContent = restante > 0
+        ? `Restante sugerido: ${formatCurrency(restante)}.`
+        : 'Informe o valor recebido para este pagamento.';
       }
       elements.paymentValueInput.value = restante > 0 ? restante.toFixed(2) : '';
       paymentModalState = { resolve, reject, method, parcelas };
-      elements.paymentValueModal.classList.remove('hidden');
+      showElement(elements.paymentValueModal);
       document.body.classList.add('overflow-hidden');
+      lockBodyScroll();
+      if (elements.paymentValueModal) {
+        elements.paymentValueModal.dataset.pdvScrollLocked = '1';
+      }
       setTimeout(() => elements.paymentValueInput?.focus(), 60);
     });
   };
@@ -4936,13 +5286,14 @@
     if (elements.budgetModalError) {
       elements.budgetModalError.classList.add('hidden');
     }
-    elements.budgetModal.classList.remove('hidden');
+    showElement(elements.budgetModal);
     document.body.classList.add('overflow-hidden');
+    lockBodyScroll();
   };
 
   const closeBudgetModal = ({ preserveValidity = false } = {}) => {
     if (!elements.budgetModal) return;
-    elements.budgetModal.classList.add('hidden');
+    hideElement(elements.budgetModal);
     if (!preserveValidity) {
       state.pendingBudgetValidityDays = null;
     }
@@ -4950,6 +5301,7 @@
       elements.budgetModalError.classList.add('hidden');
     }
     document.body.classList.remove('overflow-hidden');
+    unlockBodyScroll();
   };
 
   const confirmBudgetValidity = () => {
@@ -9521,8 +9873,9 @@
       elements.saleCancelReason.value = '';
     }
     clearSaleCancelError();
-    elements.saleCancelModal.classList.remove('hidden');
+    showElement(elements.saleCancelModal);
     document.body.classList.add('overflow-hidden');
+    lockBodyScroll();
     window.setTimeout(() => {
       elements.saleCancelReason?.focus();
     }, 50);
@@ -9530,19 +9883,20 @@
 
   const closeSaleCancelModal = () => {
     if (elements.saleCancelModal) {
-      elements.saleCancelModal.classList.add('hidden');
+      hideElement(elements.saleCancelModal);
     }
     state.activeSaleCancellationId = '';
     if (elements.saleCancelReason) {
       elements.saleCancelReason.value = '';
     }
     clearSaleCancelError();
-    if (
-      !isModalActive(elements.finalizeModal) &&
-      !isModalActive(elements.paymentValueModal) &&
-      !isModalActive(elements.deliveryAddressModal) &&
-      !isModalActive(elements.customerModal)
-    ) {
+    const otherModalOpen =
+      isModalActive(elements.finalizeModal) ||
+      isModalActive(elements.paymentValueModal) ||
+      isModalActive(elements.deliveryAddressModal) ||
+      isModalActive(elements.customerModal);
+    unlockBodyScroll();
+    if (!otherModalOpen) {
       document.body.classList.remove('overflow-hidden');
     }
   };
@@ -10278,6 +10632,65 @@
       elements.searchResults.innerHTML = `<div class="p-4 text-sm text-gray-500">Nenhum produto encontrado para "${term}".</div>`;
       return;
     }
+    const buttonInlineStyle = [
+      "display:flex",
+      "align-items:center",
+      "gap:0.75rem",
+      "width:100%",
+      "padding:0.75rem 1rem",
+      "text-align:left"
+    ].join(";");
+    const thumbnailInlineStyle = [
+      "width:56px",
+      "height:56px",
+      "flex-shrink:0",
+      "display:flex",
+      "align-items:center",
+      "justify-content:center",
+      "border-radius:0.75rem",
+      "border:1px solid rgba(229,231,235,1)",
+      "background-color:#fff",
+      "overflow:hidden"
+    ].join(";");
+    const imageInlineStyle = [
+      "max-width:100%",
+      "max-height:100%",
+      "object-fit:contain"
+    ].join(";");
+    const infoInlineStyle = [
+      "flex:1 1 auto",
+      "min-width:0"
+    ].join(";");
+    const titleInlineStyle = [
+      "display:block",
+      "font-size:0.875rem",
+      "font-weight:600",
+      "color:#1f2937",
+      "overflow:hidden",
+      "text-overflow:ellipsis",
+      "white-space:nowrap"
+    ].join(";");
+    const metaInlineStyle = [
+      "margin-top:0.25rem",
+      "display:flex",
+      "flex-wrap:wrap",
+      "align-items:center",
+      "gap:0.5rem",
+      "font-size:0.75rem",
+      "color:#6b7280"
+    ].join(";");
+    const noticeInlineStyle = [
+      "display:block",
+      "margin-top:0.25rem",
+      "font-size:0.6875rem",
+      "color:#b45309"
+    ].join(";");
+    const codeInlineStyle = [
+      "display:block",
+      "margin-top:0.25rem",
+      "font-size:0.6875rem",
+      "color:#9ca3af"
+    ].join(";");
     const toReais = (value) => formatCurrency(value).replace('R$', '').trim();
     const html = results
       .map((product, index) => {
@@ -10300,18 +10713,25 @@
           ? '<span class="block text-[11px] text-amber-600 mt-1">Vincule um cliente para aplicar a promoção geral.</span>'
           : '';
         return `
-          <button type="button" class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-primary/5" data-result-index="${index}">
-            <span class="h-14 w-14 flex items-center justify-center rounded border border-gray-200 bg-white overflow-hidden">
-              ${image ? `<img src="${image}" alt="${product.nome}" class="h-full w-full object-contain">` : '<i class="fas fa-image text-gray-300"></i>'}
+          <button type="button" class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-primary/5" data-result-index="${index}" style="${buttonInlineStyle}">
+            <span class="h-14 w-14 flex items-center justify-center rounded border border-gray-200 bg-white overflow-hidden" style="${thumbnailInlineStyle}">
+              ${image ? `<img src="${image}" alt="${product.nome}" class="h-full w-full object-contain" style="${imageInlineStyle}">` : '<i class="fas fa-image text-gray-300"></i>'}
             </span>
-            <span class="flex-1 min-w-0">
-              <span class="block text-sm font-semibold text-gray-800 truncate">${product.nome || 'Produto sem nome'}</span>
-              <span class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <span class="flex-1 min-w-0" style="${infoInlineStyle}">
+              <span class="block text-sm font-semibold text-gray-800 truncate" style="${titleInlineStyle}">${product.nome || 'Produto sem nome'}</span>
+              <span class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500" style="${metaInlineStyle}">
                 ${priceLine}
                 ${badges}
               </span>
-              ${extraNotice}
-              <span class="block text-[11px] text-gray-400 mt-1">Cód: ${getProductCode(product) || '—'} • Barras: ${getProductBarcode(product) || '—'}</span>
+              ${
+                extraNotice
+                  ? extraNotice.replace(
+                      '<span class="block text-[11px] text-amber-600 mt-1">',
+                      `<span class="block text-[11px] text-amber-600 mt-1" style="${noticeInlineStyle}">`
+                    )
+                  : ''
+              }
+              <span class="block text-[11px] text-gray-400 mt-1" style="${codeInlineStyle}">Cód: ${getProductCode(product) || '—'} • Barras: ${getProductBarcode(product) || '—'}</span>
             </span>
           </button>
         `;
@@ -11145,5 +11565,180 @@
     }
   };
 
-  document.addEventListener('DOMContentLoaded', init);
+  const hasEssentialDom = () => {
+    if (typeof document === 'undefined') {
+      return false;
+    }
+    try {
+      return REQUIRED_DOM_SELECTORS.every((selector) =>
+        Boolean(document.querySelector(selector))
+      );
+    } catch (error) {
+      console.error('Erro ao verificar elementos essenciais do PDV:', error);
+      return false;
+    }
+  };
+
+  const stopDomObserver = () => {
+    if (domReadyObserver) {
+      try {
+        domReadyObserver.disconnect();
+      } catch (error) {
+        console.error('Erro ao desconectar observer do PDV:', error);
+      }
+      domReadyObserver = null;
+    }
+    waitingForDom = false;
+  };
+
+  const resetBodyScrollState = () => {
+    if (typeof document === 'undefined' || !document.body) {
+      return;
+    }
+    const previousOverflow = document.body.dataset.pdvOriginalOverflow;
+    if (previousOverflow !== undefined) {
+      document.body.style.overflow = previousOverflow;
+    } else if (document.body.dataset.pdvScrollLocks) {
+      document.body.style.overflow = '';
+    }
+    document.body.classList.remove('overflow-hidden');
+    delete document.body.dataset.pdvScrollLocks;
+    delete document.body.dataset.pdvOriginalOverflow;
+  };
+
+  const abortPendingAsyncOperations = () => {
+    if (statePersistTimeout) {
+      window.clearTimeout(statePersistTimeout);
+      statePersistTimeout = null;
+    }
+    statePersistPending = false;
+    statePersistInFlight = false;
+    if (state.searchController) {
+      try {
+        state.searchController.abort();
+      } catch (error) {
+        console.error('Erro ao abortar busca de produtos do PDV:', error);
+      }
+      state.searchController = null;
+    }
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+      searchTimeout = null;
+    }
+    if (customerSearchTimeout) {
+      clearTimeout(customerSearchTimeout);
+      customerSearchTimeout = null;
+    }
+    if (customerSearchController) {
+      try {
+        customerSearchController.abort();
+      } catch (error) {
+        console.error('Erro ao abortar busca de clientes do PDV:', error);
+      }
+      customerSearchController = null;
+    }
+    if (customerPetsController) {
+      try {
+        customerPetsController.abort();
+      } catch (error) {
+        console.error('Erro ao abortar busca de pets do cliente no PDV:', error);
+      }
+      customerPetsController = null;
+    }
+    if (deliveryAddressesController) {
+      try {
+        deliveryAddressesController.abort();
+      } catch (error) {
+        console.error('Erro ao abortar carregamento de endereços de entrega no PDV:', error);
+      }
+      deliveryAddressesController = null;
+    }
+    if (deliveryCepLookupController) {
+      try {
+        deliveryCepLookupController.abort();
+      } catch (error) {
+        console.error('Erro ao abortar consulta de CEP para entrega no PDV:', error);
+      }
+      deliveryCepLookupController = null;
+    }
+    if (statePersistInFlight) {
+      lastPersistSignature = '';
+    }
+  };
+
+  const clearElementReferences = () => {
+    Object.keys(elements).forEach((key) => {
+      elements[key] = null;
+    });
+  };
+
+  let hasInitialized = false;
+
+  const beginInit = () => {
+    if (hasInitialized) {
+      return;
+    }
+    stopDomObserver();
+    hasInitialized = true;
+    void init();
+  };
+
+  const ensureInit = () => {
+    if (hasInitialized) {
+      return;
+    }
+    if (hasEssentialDom()) {
+      beginInit();
+      return;
+    }
+    if (waitingForDom) {
+      return;
+    }
+    waitingForDom = true;
+    const root = document.body || document.documentElement;
+    if (!root) {
+      waitingForDom = false;
+      window.setTimeout(ensureInit, 60);
+      return;
+    }
+    try {
+      domReadyObserver = new MutationObserver(() => {
+        if (hasEssentialDom()) {
+          beginInit();
+        }
+      });
+      domReadyObserver.observe(root, { childList: true, subtree: true });
+    } catch (error) {
+      console.error('Erro ao observar DOM para inicialização do PDV:', error);
+      stopDomObserver();
+      beginInit();
+    }
+  };
+
+  const start = () => {
+    ensureInit();
+  };
+
+  window.__LEGACY_PDV_CLEANUP = () => {
+    abortPendingAsyncOperations();
+    resetBodyScrollState();
+    stopDomObserver();
+    clearElementReferences();
+    hasInitialized = false;
+    pendingActiveTabPreference = '';
+    lastPersistSignature = '';
+    if (typeof document !== 'undefined') {
+      try {
+        document.removeEventListener('DOMContentLoaded', start);
+      } catch (error) {
+        console.error('Erro ao remover listener de DOMContentLoaded do PDV:', error);
+      }
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else {
+    start();
+  }
 })();
