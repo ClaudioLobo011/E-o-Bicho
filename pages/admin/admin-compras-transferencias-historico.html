@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Histórico de Transferências - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div class="space-y-2">
+            <div class="flex items-center gap-2 text-sm text-gray-500">
+              <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                <i class="fas fa-shopping-basket"></i>
+                Compras
+              </span>
+              <i class="fas fa-angle-right text-xs"></i>
+              <span class="font-medium text-gray-600">Transferências</span>
+              <i class="fas fa-angle-right text-xs"></i>
+              <span class="font-semibold text-gray-800">Histórico de transferências</span>
+            </div>
+            <div>
+              <h1 class="text-2xl font-bold text-gray-800">Histórico de transferências</h1>
+              <p class="text-sm text-gray-600">Audite movimentações concluídas e gere arquivos auxiliares para escrituração fiscal (SPED, NF-e, NFC-e e NFS-e de serviços envolvidos).</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-filter"></i>
+              Salvar filtro
+            </button>
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+              <i class="fas fa-file-download"></i>
+              Exportar CSV
+            </button>
+          </div>
+        </header>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div class="lg:col-span-2">
+              <label for="history-period" class="block text-sm font-medium text-gray-700 mb-1">Período</label>
+              <div class="flex items-center gap-2">
+                <input type="date" id="history-period" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <span class="text-gray-400">até</span>
+                <input type="date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+            </div>
+            <div>
+              <label for="history-status" class="block text-sm font-medium text-gray-700 mb-1">Status fiscal</label>
+              <select id="history-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todos</option>
+                <option>NF-e emitida</option>
+                <option>NF3-e emitida</option>
+                <option>Manifesto pendente</option>
+              </select>
+            </div>
+            <div>
+              <label for="history-cfop" class="block text-sm font-medium text-gray-700 mb-1">CFOP</label>
+              <input type="text" id="history-cfop" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 5.152">
+            </div>
+            <div>
+              <label for="history-issuer" class="block text-sm font-medium text-gray-700 mb-1">Emitente</label>
+              <select id="history-issuer" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todos</option>
+                <option>CD Fortaleza</option>
+                <option>Loja Aldeota</option>
+                <option>Loja Meireles</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">Número</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">Data</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">Origem</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">Destino</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">Documento fiscal</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">CFOP</th>
+                  <th class="px-4 py-3 text-right font-semibold text-gray-700">Valor contábil</th>
+                  <th class="px-4 py-3 text-right font-semibold text-gray-700">Ações</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr>
+                  <td class="px-4 py-3 font-medium text-gray-800">TRF-2024-054</td>
+                  <td class="px-4 py-3 text-gray-600">04/02/2024</td>
+                  <td class="px-4 py-3 text-gray-600">CD Fortaleza</td>
+                  <td class="px-4 py-3 text-gray-600">Loja Aldeota</td>
+                  <td class="px-4 py-3 text-gray-600">NF-e 432.987.123</td>
+                  <td class="px-4 py-3 text-gray-600">6.152</td>
+                  <td class="px-4 py-3 text-right text-gray-800">R$ 12.874,00</td>
+                  <td class="px-4 py-3 text-right">
+                    <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+                      <i class="fas fa-file-pdf"></i>
+                      DANFE
+                    </button>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3 font-medium text-gray-800">TRF-2024-055</td>
+                  <td class="px-4 py-3 text-gray-600">06/02/2024</td>
+                  <td class="px-4 py-3 text-gray-600">Loja Meireles</td>
+                  <td class="px-4 py-3 text-gray-600">Clínica Vet Iguatemi</td>
+                  <td class="px-4 py-3 text-gray-600">NF3-e 12789</td>
+                  <td class="px-4 py-3 text-gray-600">5.152</td>
+                  <td class="px-4 py-3 text-right text-gray-800">R$ 6.540,00</td>
+                  <td class="px-4 py-3 text-right">
+                    <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+                      <i class="fas fa-file-lines"></i>
+                      XML
+                    </button>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3 font-medium text-gray-800">TRF-2024-056</td>
+                  <td class="px-4 py-3 text-gray-600">10/02/2024</td>
+                  <td class="px-4 py-3 text-gray-600">CD Fortaleza</td>
+                  <td class="px-4 py-3 text-gray-600">Loja Meireles</td>
+                  <td class="px-4 py-3 text-gray-600">NF-e 432.990.811</td>
+                  <td class="px-4 py-3 text-gray-600">6.152</td>
+                  <td class="px-4 py-3 text-right text-gray-800">R$ 9.327,00</td>
+                  <td class="px-4 py-3 text-right">
+                    <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+                      <i class="fas fa-file-contract"></i>
+                      Manifesto
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Indicadores mensais</h2>
+              <p class="text-sm text-gray-600">Dados consolidados para conciliação com obrigações acessórias estaduais.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                <i class="fas fa-calendar-alt"></i>
+                Fevereiro/2024
+              </span>
+            </div>
+          </div>
+
+          <dl class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <dt class="text-sm font-medium text-gray-500">Transferências concluídas</dt>
+              <dd class="mt-2 text-2xl font-bold text-gray-800">42</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <dt class="text-sm font-medium text-gray-500">Valor contábil total</dt>
+              <dd class="mt-2 text-2xl font-bold text-gray-800">R$ 198.430,00</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <dt class="text-sm font-medium text-gray-500">NF-e emitidas</dt>
+              <dd class="mt-2 text-2xl font-bold text-gray-800">39</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <dt class="text-sm font-medium text-gray-500">NF3-e emitidas</dt>
+              <dd class="mt-2 text-2xl font-bold text-gray-800">3</dd>
+            </div>
+          </dl>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+</body>
+</html>
