@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const { Schema } = mongoose;
 
-const PAYABLE_STATUSES = ['pending', 'paid', 'cancelled'];
+const PAYABLE_STATUSES = ['pending', 'paid', 'cancelled', 'protest'];
 
 const installmentSchema = new Schema(
   {

@@ -68,6 +68,94 @@ function formatCurrency(value) {
 
 const RESIDUAL_THRESHOLD = 0.009;
 
+function normalizeStatusToken(value) {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  let normalized = trimmed;
+  if (typeof normalized.normalize === 'function') {
+    try {
+      normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    } catch (error) {
+      /* ignore */
+    }
+  }
+  normalized = normalized.replace(/[^a-z0-9\s-]/gi, ' ');
+  return normalized.replace(/[\s_-]+/g, ' ').trim().toLowerCase();
+}
+
+const FINALIZED_STATUS_KEYS = new Set([
+  'received',
+  'recebido',
+  'recebida',
+  'paid',
+  'pago',
+  'paga',
+  'finalized',
+  'finalizado',
+  'finalizada',
+  'quitado',
+  'quitada',
+  'liquidado',
+  'liquidada',
+  'baixado',
+  'baixada',
+  'compensado',
+  'compensada',
+  'settled',
+  'concluido',
+  'concluida',
+]);
+
+const UNCOLLECTIBLE_STATUS_KEYS = new Set([
+  'uncollectible',
+  'incobravel',
+  'impagavel',
+  'perda',
+  'perdido',
+  'prejuizo',
+  'writeoff',
+]);
+
+const PROTEST_STATUS_KEYS = new Set([
+  'protest',
+  'protesto',
+  'protestado',
+  'protestada',
+  'em protesto',
+]);
+
+const OPEN_STATUS_KEYS = new Set([
+  'open',
+  'pending',
+  'pendente',
+  'aberto',
+  'em aberto',
+  'overdue',
+  'vencido',
+  'vencida',
+  'atrasado',
+  'atrasada',
+  'late',
+  'aguardando',
+  'aguardando pagamento',
+  'em atraso',
+  'inadimplente',
+  'inadimplencia',
+  'partial',
+  'parcial',
+]);
+
+function canonicalStatus(value) {
+  const token = normalizeStatusToken(value);
+  if (!token) return '';
+  if (FINALIZED_STATUS_KEYS.has(token)) return 'finalized';
+  if (UNCOLLECTIBLE_STATUS_KEYS.has(token)) return 'uncollectible';
+  if (PROTEST_STATUS_KEYS.has(token)) return 'protest';
+  if (OPEN_STATUS_KEYS.has(token)) return 'open';
+  return '';
+}
+
 async function generateSequentialCode() {
   const now = new Date();
   const year = now.getUTCFullYear();
@@ -138,28 +226,39 @@ function buildInstallmentPayload(installment) {
     residualValue: formatCurrency(plain.residualValue),
     residualDueDate: plain.residualDueDate,
     originInstallmentNumber: plain.originInstallmentNumber || null,
-    status: plain.status,
+    status: canonicalStatus(plain.status) || 'open',
   };
 }
 
 function computeStatus(receivable) {
   if (!receivable) return 'open';
-  if (receivable?.uncollectible) return 'uncollectible';
-  if (receivable?.protest) return 'protest';
+  const receivableStatus = canonicalStatus(receivable?.status);
 
-  const normalize = (value) => (typeof value === 'string' ? value.toLowerCase() : '');
-  const finalizedStatuses = new Set(['received', 'paid', 'finalized', 'quitado']);
-
-  if (finalizedStatuses.has(normalize(receivable?.status))) {
-    return 'finalized';
+  if (receivable?.uncollectible || receivableStatus === 'uncollectible') {
+    return 'uncollectible';
+  }
+  if (receivable?.protest || receivableStatus === 'protest') {
+    return 'protest';
   }
 
   const installments = Array.isArray(receivable?.installments) ? receivable.installments : [];
   if (installments.length > 0) {
-    const allFinalized = installments.every((item) => finalizedStatuses.has(normalize(item?.status)));
+    const anyUncollectible = installments.some((item) => canonicalStatus(item?.status) === 'uncollectible');
+    if (anyUncollectible) {
+      return 'uncollectible';
+    }
+    const anyProtest = installments.some((item) => canonicalStatus(item?.status) === 'protest');
+    if (anyProtest) {
+      return 'protest';
+    }
+    const allFinalized = installments.every((item) => canonicalStatus(item?.status) === 'finalized');
     if (allFinalized) {
       return 'finalized';
     }
+  }
+
+  if (receivableStatus === 'finalized') {
+    return 'finalized';
   }
 
   return 'open';
@@ -233,7 +332,42 @@ function recalculateReceivable(receivable) {
   }
 }
 
-function summarizeReceivables(receivables, referenceDate = new Date()) {
+function computeInstallmentStatus(receivable, installment) {
+  if (!receivable) return 'open';
+
+  const receivableStatus = canonicalStatus(receivable?.status);
+
+  if (receivable?.uncollectible || receivableStatus === 'uncollectible') {
+    return 'uncollectible';
+  }
+
+  if (receivable?.protest || receivableStatus === 'protest') {
+    return 'protest';
+  }
+
+  const installmentStatus = canonicalStatus(installment?.status);
+  if (installmentStatus) {
+    return installmentStatus;
+  }
+
+  if (receivableStatus === 'finalized') {
+    return 'finalized';
+  }
+
+  const installments = Array.isArray(receivable?.installments) ? receivable.installments : [];
+  if (!installment && installments.length > 0) {
+    const allFinalized = installments.every(
+      (item) => canonicalStatus(item?.status) === 'finalized'
+    );
+    if (allFinalized) {
+      return 'finalized';
+    }
+  }
+
+  return 'open';
+}
+
+function summarizeReceivables(receivables) {
   const summary = {
     open: { count: 0, total: 0 },
     finalized: { count: 0, total: 0 },
@@ -241,12 +375,27 @@ function summarizeReceivables(receivables, referenceDate = new Date()) {
     protest: { count: 0, total: 0 },
   };
 
-  receivables.forEach((item) => {
-    const status = computeStatus(item, referenceDate);
-    const total = formatCurrency(item.totalValue);
-    const key = Object.prototype.hasOwnProperty.call(summary, status) ? status : 'open';
-    summary[key].count += 1;
-    summary[key].total += total;
+  receivables.forEach((receivable) => {
+    const installments = Array.isArray(receivable?.installments) && receivable.installments.length
+      ? receivable.installments
+      : [
+          {
+            value: receivable?.totalValue,
+            status: receivable?.status,
+          },
+        ];
+
+    installments.forEach((installment) => {
+      const status = computeInstallmentStatus(receivable, installment);
+      const key = Object.prototype.hasOwnProperty.call(summary, status) ? status : 'open';
+      const value = formatCurrency(
+        installment?.value !== undefined && installment?.value !== null
+          ? installment.value
+          : receivable?.totalValue
+      );
+      summary[key].count += 1;
+      summary[key].total += value;
+    });
   });
 
   summary.open.total = formatCurrency(summary.open.total);
@@ -688,6 +837,87 @@ router.delete(
     } catch (error) {
       console.error('Erro ao excluir conta a receber:', error);
       res.status(500).json({ message: 'Erro ao excluir a conta a receber.' });
+    }
+  }
+);
+
+router.patch(
+  '/:id/installments/:installmentNumber/status',
+  requireAuth,
+  authorizeRoles(...AUTH_ROLES),
+  async (req, res) => {
+    try {
+      const { id, installmentNumber: installmentParam } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Identificador inválido.' });
+      }
+
+      const installmentNumber = Number.parseInt(installmentParam, 10);
+      if (!Number.isFinite(installmentNumber) || installmentNumber < 1) {
+        return res.status(400).json({ message: 'Informe a parcela que deseja atualizar.' });
+      }
+
+      const rawStatus = normalizeString(
+        req.body?.status || req.body?.value || req.body?.statusCode || req.body?.targetStatus
+      );
+      const token = normalizeStatusToken(rawStatus);
+
+      let targetStatus = null;
+      if (!token || OPEN_STATUS_KEYS.has(token)) {
+        targetStatus = 'pending';
+      } else if (UNCOLLECTIBLE_STATUS_KEYS.has(token)) {
+        targetStatus = 'uncollectible';
+      } else if (PROTEST_STATUS_KEYS.has(token)) {
+        targetStatus = 'protest';
+      }
+
+      if (!targetStatus) {
+        return res.status(400).json({ message: 'Status informado é inválido para atualização.' });
+      }
+
+      const receivable = await AccountReceivable.findById(id);
+      if (!receivable) {
+        return res.status(404).json({ message: 'Conta a receber não encontrada.' });
+      }
+
+      const installmentsArray = Array.isArray(receivable.installments)
+        ? receivable.installments
+        : [];
+      const targetInstallment = installmentsArray.find(
+        (installment) => Number(installment.number) === Number(installmentNumber)
+      );
+
+      if (!targetInstallment) {
+        return res.status(404).json({ message: 'Parcela informada não foi encontrada.' });
+      }
+
+      const currentStatus = canonicalStatus(targetInstallment.status) || 'open';
+      if (currentStatus === 'finalized') {
+        return res
+          .status(409)
+          .json({ message: 'Parcela quitada não pode ter o status alterado.' });
+      }
+
+      const desiredCanonical = targetStatus === 'pending' ? 'open' : targetStatus;
+      if (desiredCanonical === currentStatus) {
+        await receivable.populate(RECEIVABLE_POPULATE);
+        return res.json(buildPublicReceivable(receivable));
+      }
+
+      if (targetStatus === 'pending') {
+        targetInstallment.status = 'pending';
+      } else {
+        targetInstallment.status = targetStatus;
+      }
+
+      receivable.markModified('installments');
+      await receivable.save();
+      await receivable.populate(RECEIVABLE_POPULATE);
+
+      return res.json(buildPublicReceivable(receivable));
+    } catch (error) {
+      console.error('Erro ao atualizar status da parcela:', error);
+      return res.status(500).json({ message: 'Erro ao atualizar o status da parcela.' });
     }
   }
 );

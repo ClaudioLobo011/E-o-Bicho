@@ -111,6 +111,12 @@
     return currencyFormatter.format(Number.isFinite(numeric) ? numeric : 0);
   }
 
+  function toCurrencyNumber(value) {
+    const numeric = typeof value === 'number' ? value : Number(value || 0);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.round(numeric * 100) / 100;
+  }
+
   function escapeHtml(value) {
     return String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -462,60 +468,64 @@
     normalized.customer = receivable.customer || null;
     normalized.totalValue = Number(receivable.totalValue || 0);
     normalized.installments = Array.isArray(receivable.installments)
-      ? receivable.installments.map((installment, index) => ({
-          number: installment.number || index + 1,
-          issueDate: installment.issueDate || receivable.issueDate || null,
-          dueDate: installment.dueDate || receivable.dueDate || null,
-          value: Number(installment.value || 0),
-          originalValue: Number(
-            installment.originalValue !== undefined && installment.originalValue !== null
-              ? installment.originalValue
-              : installment.value || 0
-          ),
-          paidValue: Number(installment.paidValue || 0),
-          paidDate: installment.paidDate || null,
-          bankAccountId:
-            (installment.bankAccount && typeof installment.bankAccount === 'object'
-              ? installment.bankAccount._id
-              : installment.bankAccount) || '',
-          bankAccountLabel:
-            (installment.bankAccount && typeof installment.bankAccount === 'object'
-              ? installment.bankAccount.label
-              : '') || '',
-          accountingAccountId:
-            (installment.accountingAccount && typeof installment.accountingAccount === 'object'
-              ? installment.accountingAccount._id
-              : installment.accountingAccount) || '',
-          accountingAccountLabel:
-            (installment.accountingAccount && typeof installment.accountingAccount === 'object'
-              ? installment.accountingAccount.label
-              : '') || '',
-          paymentMethodId:
-            (installment.paymentMethod && typeof installment.paymentMethod === 'object'
-              ? installment.paymentMethod._id
-              : installment.paymentMethod) || '',
-          paymentMethodLabel:
-            (installment.paymentMethod && typeof installment.paymentMethod === 'object'
-              ? installment.paymentMethod.name
-              : installment.paymentMethodLabel) || '',
-          paymentMethodType: (() => {
-            const rawType =
-              installment.paymentMethod && typeof installment.paymentMethod === 'object'
-                ? installment.paymentMethod.type
-                : installment.paymentMethodType || '';
-            return typeof rawType === 'string' ? rawType.toLowerCase() : '';
-          })(),
-          paymentDocument: installment.paymentDocument || '',
-          paymentNotes: installment.paymentNotes || '',
-          residualValue: Number(installment.residualValue || 0),
-          residualDueDate: installment.residualDueDate || null,
-          originInstallmentNumber: installment.originInstallmentNumber || null,
-          status: installment.status || computeStatus(receivable, installment),
-        }))
+      ? receivable.installments.map((installment, index) => {
+          const computedStatus = computeStatus(receivable, installment);
+          const normalizedStatus = canonicalStatus(installment?.status) || computedStatus;
+          return {
+            number: installment.number || index + 1,
+            issueDate: installment.issueDate || receivable.issueDate || null,
+            dueDate: installment.dueDate || receivable.dueDate || null,
+            value: Number(installment.value || 0),
+            originalValue: Number(
+              installment.originalValue !== undefined && installment.originalValue !== null
+                ? installment.originalValue
+                : installment.value || 0
+            ),
+            paidValue: Number(installment.paidValue || 0),
+            paidDate: installment.paidDate || null,
+            bankAccountId:
+              (installment.bankAccount && typeof installment.bankAccount === 'object'
+                ? installment.bankAccount._id
+                : installment.bankAccount) || '',
+            bankAccountLabel:
+              (installment.bankAccount && typeof installment.bankAccount === 'object'
+                ? installment.bankAccount.label
+                : '') || '',
+            accountingAccountId:
+              (installment.accountingAccount && typeof installment.accountingAccount === 'object'
+                ? installment.accountingAccount._id
+                : installment.accountingAccount) || '',
+            accountingAccountLabel:
+              (installment.accountingAccount && typeof installment.accountingAccount === 'object'
+                ? installment.accountingAccount.label
+                : '') || '',
+            paymentMethodId:
+              (installment.paymentMethod && typeof installment.paymentMethod === 'object'
+                ? installment.paymentMethod._id
+                : installment.paymentMethod) || '',
+            paymentMethodLabel:
+              (installment.paymentMethod && typeof installment.paymentMethod === 'object'
+                ? installment.paymentMethod.name
+                : installment.paymentMethodLabel) || '',
+            paymentMethodType: (() => {
+              const rawType =
+                installment.paymentMethod && typeof installment.paymentMethod === 'object'
+                  ? installment.paymentMethod.type
+                  : installment.paymentMethodType || '';
+              return typeof rawType === 'string' ? rawType.toLowerCase() : '';
+            })(),
+            paymentDocument: installment.paymentDocument || '',
+            paymentNotes: installment.paymentNotes || '',
+            residualValue: Number(installment.residualValue || 0),
+            residualDueDate: installment.residualDueDate || null,
+            originInstallmentNumber: installment.originInstallmentNumber || null,
+            status: normalizedStatus,
+          };
+        })
       : [];
     normalized.installmentsCount =
       receivable.installmentsCount || (Array.isArray(normalized.installments) ? normalized.installments.length : 0) || 1;
-    normalized.status = receivable.status || computeStatus(receivable);
+    normalized.status = canonicalStatus(receivable.status) || computeStatus(normalized);
     normalized.forecast = !!receivable.forecast;
     normalized.uncollectible = !!receivable.uncollectible;
     normalized.protest = !!receivable.protest;
@@ -564,22 +574,122 @@
     });
   }
 
+  function normalizeStatusToken(value) {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    let normalized = trimmed;
+    if (typeof normalized.normalize === 'function') {
+      try {
+        normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      } catch (error) {
+        /* ignore */
+      }
+    }
+    normalized = normalized.replace(/[^a-z0-9\s-]/gi, ' ');
+    return normalized.replace(/[\s_-]+/g, ' ').trim().toLowerCase();
+  }
+
+  const FINALIZED_STATUS_KEYS = new Set([
+    'received',
+    'recebido',
+    'recebida',
+    'paid',
+    'pago',
+    'paga',
+    'finalized',
+    'finalizado',
+    'finalizada',
+    'quitado',
+    'quitada',
+    'liquidado',
+    'liquidada',
+    'baixado',
+    'baixada',
+    'compensado',
+    'compensada',
+    'settled',
+    'concluido',
+    'concluida',
+  ]);
+
+  const UNCOLLECTIBLE_STATUS_KEYS = new Set([
+    'uncollectible',
+    'incobravel',
+    'impagavel',
+    'perda',
+    'perdido',
+    'prejuizo',
+    'writeoff',
+  ]);
+
+  const PROTEST_STATUS_KEYS = new Set([
+    'protest',
+    'protesto',
+    'protestado',
+    'protestada',
+    'em protesto',
+  ]);
+
+  const OPEN_STATUS_KEYS = new Set([
+    'open',
+    'pending',
+    'pendente',
+    'aberto',
+    'em aberto',
+    'overdue',
+    'vencido',
+    'vencida',
+    'atrasado',
+    'atrasada',
+    'late',
+    'aguardando',
+    'aguardando pagamento',
+    'em atraso',
+    'inadimplente',
+    'inadimplencia',
+    'partial',
+    'parcial',
+  ]);
+
+  function canonicalStatus(value) {
+    const token = normalizeStatusToken(value);
+    if (!token) return '';
+    if (FINALIZED_STATUS_KEYS.has(token)) return 'finalized';
+    if (UNCOLLECTIBLE_STATUS_KEYS.has(token)) return 'uncollectible';
+    if (PROTEST_STATUS_KEYS.has(token)) return 'protest';
+    if (OPEN_STATUS_KEYS.has(token)) return 'open';
+    return '';
+  }
+
   function computeStatus(receivable, installment) {
     if (!receivable) return 'open';
-    if (receivable.uncollectible) return 'uncollectible';
-    if (receivable.protest) return 'protest';
+    const receivableStatus = canonicalStatus(receivable.status);
+    if (receivable.uncollectible || receivableStatus === 'uncollectible') {
+      return 'uncollectible';
+    }
+    if (receivable.protest || receivableStatus === 'protest') {
+      return 'protest';
+    }
 
-    const normalize = (value) => (typeof value === 'string' ? value.toLowerCase() : '');
-    const installmentStatus = normalize(installment?.status || receivable.status);
-    const finalizedStatuses = new Set(['received', 'paid', 'finalized', 'quitado']);
+    const installmentStatus = canonicalStatus(installment?.status);
+    if (installmentStatus === 'finalized') {
+      return 'finalized';
+    }
+    if (installmentStatus === 'uncollectible') {
+      return 'uncollectible';
+    }
+    if (installmentStatus === 'protest') {
+      return 'protest';
+    }
 
-    if (finalizedStatuses.has(installmentStatus)) {
+    if (receivableStatus === 'finalized') {
       return 'finalized';
     }
 
     const installments = Array.isArray(receivable.installments) ? receivable.installments : [];
     if (installments.length > 0) {
-      const allFinalized = installments.every((item) => finalizedStatuses.has(normalize(item?.status)));
+      const allFinalized = installments.every((item) => canonicalStatus(item?.status) === 'finalized');
       if (allFinalized) {
         return 'finalized';
       }
@@ -612,7 +722,8 @@
       },
     };
 
-    return map[status] || map.open;
+    const normalized = canonicalStatus(status) || 'open';
+    return map[normalized] || map.open;
   }
 
   function updateSummary(summary = {}) {
@@ -645,6 +756,79 @@
     if (elements.summaryProtestCount) {
       elements.summaryProtestCount.textContent = `${protest.count || 0} lançamentos`;
     }
+  }
+
+  function buildSummaryFromReceivables(receivables = []) {
+    const summary = {
+      open: { count: 0, total: 0 },
+      finalized: { count: 0, total: 0 },
+      uncollectible: { count: 0, total: 0 },
+      protest: { count: 0, total: 0 },
+    };
+
+    const list = Array.isArray(receivables) ? receivables : [];
+    list.forEach((receivable) => {
+      const installments = Array.isArray(receivable?.installments) && receivable.installments.length
+        ? receivable.installments
+        : [
+            {
+              value: receivable?.totalValue,
+              status: receivable?.status,
+            },
+          ];
+
+      installments.forEach((installment) => {
+        const normalizedStatus = canonicalStatus(installment?.status)
+          || computeStatus(receivable, installment);
+        const key = Object.prototype.hasOwnProperty.call(summary, normalizedStatus)
+          ? normalizedStatus
+          : 'open';
+        const value = toCurrencyNumber(
+          installment?.value !== undefined && installment?.value !== null
+            ? installment.value
+            : receivable?.totalValue
+        );
+        summary[key].count += 1;
+        summary[key].total += value;
+      });
+    });
+
+    summary.open.total = toCurrencyNumber(summary.open.total);
+    summary.finalized.total = toCurrencyNumber(summary.finalized.total);
+    summary.uncollectible.total = toCurrencyNumber(summary.uncollectible.total);
+    summary.protest.total = toCurrencyNumber(summary.protest.total);
+
+    return summary;
+  }
+
+  function mergeSummaries(primary, fallback) {
+    const base = {
+      open: { count: 0, total: 0 },
+      finalized: { count: 0, total: 0 },
+      uncollectible: { count: 0, total: 0 },
+      protest: { count: 0, total: 0 },
+    };
+
+    const apply = (source) => {
+      if (!source || typeof source !== 'object') return;
+      Object.keys(base).forEach((key) => {
+        const entry = source[key];
+        if (!entry || typeof entry !== 'object') return;
+        const count = Number(entry.count);
+        if (Number.isFinite(count)) {
+          base[key].count = count;
+        }
+        const total = Number(entry.total);
+        if (Number.isFinite(total)) {
+          base[key].total = total;
+        }
+      });
+    };
+
+    apply(primary);
+    apply(fallback);
+
+    return base;
   }
 
   async function handleUnauthorized(response) {
@@ -887,6 +1071,44 @@
     return normalized;
   }
 
+  async function updateInstallmentStatus(receivableId, installmentNumber, status) {
+    if (!receivableId) {
+      throw new Error('Selecione um lançamento válido para atualizar o status.');
+    }
+
+    const normalizedNumber = Number.parseInt(installmentNumber, 10);
+    if (!Number.isFinite(normalizedNumber) || normalizedNumber < 1) {
+      throw new Error('Selecione a parcela que deseja atualizar.');
+    }
+
+    const response = await fetch(
+      `${RECEIVABLES_API}/${receivableId}/installments/${normalizedNumber}/status`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
+        body: JSON.stringify({ status }),
+      }
+    );
+
+    if (!response.ok) {
+      if (await handleUnauthorized(response)) {
+        return null;
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData?.message || 'Não foi possível atualizar o status da parcela.');
+    }
+
+    const data = await response.json();
+    const normalized = normalizeReceivable(data.receivable || data);
+    if (normalized) {
+      storeReceivableInCache(normalized);
+    }
+    return normalized;
+  }
+
   function renderForecast() {
     if (!elements.forecastBody) return;
     const tbody = elements.forecastBody;
@@ -913,7 +1135,7 @@
               number: 1,
               dueDate: receivable.dueDate,
               value: receivable.totalValue,
-              status: receivable.status || computeStatus(receivable),
+              status: canonicalStatus(receivable.status) || computeStatus(receivable),
             },
           ];
 
@@ -936,6 +1158,19 @@
           installment.paymentMethodLabel || receivable.paymentMethod?.name || '';
         const issueDate = installment.issueDate || receivable.issueDate || null;
         const notes = installment.paymentNotes || receivable.notes || '';
+        const computedStatus = computeStatus(receivable, installment);
+        const normalizedStatus = canonicalStatus(installment.status) || computedStatus;
+        const originRaw = installment.originInstallmentNumber;
+        const originNumber = Number.parseInt(originRaw, 10);
+        const isResidual = Number.isFinite(originNumber);
+        const baseDocument =
+          receivable.documentNumber || receivable.document || receivable.code || '—';
+        const hasBaseDocument = baseDocument && baseDocument !== '—';
+        const documentLabel = isResidual
+          ? hasBaseDocument
+            ? `${baseDocument} (Resíduo)`
+            : 'Resíduo'
+          : baseDocument;
         const paymentMethodType =
           (installment.paymentMethodType
             || (typeof receivable.paymentMethod?.type === 'string'
@@ -947,11 +1182,12 @@
           receivableId: receivable.id || receivable._id,
           code: receivable.code || receivable.documentNumber || receivable.document || '—',
           customer: receivable.customer?.name || '—',
-          document: receivable.documentNumber || receivable.document || receivable.code || '—',
+          document: documentLabel,
           dueDate: installment.dueDate || receivable.dueDate,
           value: installment.value || receivable.totalValue,
-          status: installment.status || computeStatus(receivable, installment),
+          status: normalizedStatus,
           installmentNumber: installment.number || null,
+          originInstallmentNumber: isResidual ? originNumber : null,
           issueDate,
           bankAccountId,
           bankAccountLabel,
@@ -994,9 +1230,13 @@
         if (item.installmentNumber) {
           button.dataset.installment = String(item.installmentNumber);
         }
+        if (Number.isFinite(item.originInstallmentNumber)) {
+          button.dataset.origin = String(item.originInstallmentNumber);
+        }
         if (item.customer) button.dataset.customer = item.customer;
         if (item.document) button.dataset.document = item.document;
         if (item.code) button.dataset.code = item.code;
+        if (item.status) button.dataset.status = item.status;
         if (dueISO) button.dataset.due = dueISO;
         if (issueISO) button.dataset.issue = issueISO;
         button.dataset.value = valueString;
@@ -1038,13 +1278,20 @@
       row.appendChild(statusCell);
 
       const actionsCell = document.createElement('td');
-      actionsCell.className = 'px-4 py-3 text-center';
+      actionsCell.className = 'px-4 py-3';
       const actionsWrapper = document.createElement('div');
-      actionsWrapper.className = 'inline-flex items-center justify-center gap-2';
+      actionsWrapper.className = 'grid grid-cols-3 gap-1';
+      actionsWrapper.style.maxWidth = '18rem';
+      actionsWrapper.style.margin = '0 auto';
+      actionsWrapper.style.justifyItems = 'stretch';
+      actionsWrapper.style.alignItems = 'stretch';
+
+      const baseActionClass =
+        'inline-flex w-full items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold leading-tight transition-colors';
 
       const editButton = document.createElement('button');
       editButton.type = 'button';
-      editButton.className = 'forecast-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10';
+      editButton.className = `${baseActionClass} forecast-action-edit border-primary text-primary hover:bg-primary/10`;
       editButton.dataset.action = 'edit-forecast';
       applyDataset(editButton);
       editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
@@ -1052,15 +1299,45 @@
 
       const payButton = document.createElement('button');
       payButton.type = 'button';
-      payButton.className = 'forecast-action-pay inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100';
+      payButton.className = `${baseActionClass} forecast-action-pay border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100`;
       payButton.dataset.action = 'pay-forecast';
       applyDataset(payButton);
       payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
       actionsWrapper.appendChild(payButton);
 
+      if (item.status !== 'finalized' && item.status !== 'uncollectible') {
+        const uncollectibleButton = document.createElement('button');
+        uncollectibleButton.type = 'button';
+        uncollectibleButton.className = `${baseActionClass} forecast-action-uncollectible border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100`;
+        uncollectibleButton.dataset.action = 'mark-uncollectible';
+        applyDataset(uncollectibleButton);
+        uncollectibleButton.innerHTML = '<i class="fas fa-ban"></i> Impagável';
+        actionsWrapper.appendChild(uncollectibleButton);
+      }
+
+      if (item.status !== 'finalized' && item.status !== 'protest') {
+        const protestButton = document.createElement('button');
+        protestButton.type = 'button';
+        protestButton.className = `${baseActionClass} forecast-action-protest border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100`;
+        protestButton.dataset.action = 'mark-protest';
+        applyDataset(protestButton);
+        protestButton.innerHTML = '<i class="fas fa-file-contract"></i> Protesto';
+        actionsWrapper.appendChild(protestButton);
+      }
+
+      if (item.status === 'uncollectible' || item.status === 'protest') {
+        const reopenButton = document.createElement('button');
+        reopenButton.type = 'button';
+        reopenButton.className = `${baseActionClass} forecast-action-reopen border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100`;
+        reopenButton.dataset.action = 'restore-installment';
+        applyDataset(reopenButton);
+        reopenButton.innerHTML = '<i class="fas fa-rotate-left"></i> Reabrir';
+        actionsWrapper.appendChild(reopenButton);
+      }
+
       const downloadButton = document.createElement('button');
       downloadButton.type = 'button';
-      downloadButton.className = 'forecast-action-download inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100';
+      downloadButton.className = `${baseActionClass} forecast-action-download border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100`;
       downloadButton.dataset.action = 'download-forecast';
       applyDataset(downloadButton);
       downloadButton.innerHTML = '<i class="fas fa-arrow-down"></i> Baixar';
@@ -1068,7 +1345,7 @@
 
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';
-      deleteButton.className = 'forecast-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
+      deleteButton.className = `${baseActionClass} forecast-action-delete border-red-200 text-red-600 hover:bg-red-50`;
       deleteButton.dataset.action = 'delete-forecast';
       applyDataset(deleteButton);
       deleteButton.innerHTML = '<i class="fas fa-trash"></i> Excluir';
@@ -1112,7 +1389,7 @@
               number: 1,
               dueDate: receivable.dueDate,
               value: receivable.totalValue,
-              status: receivable.status || computeStatus(receivable),
+              status: canonicalStatus(receivable.status) || computeStatus(receivable),
             },
           ];
 
@@ -1135,6 +1412,19 @@
           installment.paymentMethodLabel || receivable.paymentMethod?.name || '';
         const issueDate = installment.issueDate || receivable.issueDate || null;
         const notes = installment.paymentNotes || receivable.notes || '';
+        const computedStatus = computeStatus(receivable, installment);
+        const normalizedStatus = canonicalStatus(installment.status) || computedStatus;
+        const originRaw = installment.originInstallmentNumber;
+        const originNumber = Number.parseInt(originRaw, 10);
+        const isResidual = Number.isFinite(originNumber);
+        const baseDocument =
+          receivable.documentNumber || receivable.document || receivable.code || '—';
+        const hasBaseDocument = baseDocument && baseDocument !== '—';
+        const documentLabel = isResidual
+          ? hasBaseDocument
+            ? `${baseDocument} (Resíduo)`
+            : 'Resíduo'
+          : baseDocument;
         const paymentMethodType =
           (installment.paymentMethodType
             || (typeof receivable.paymentMethod?.type === 'string'
@@ -1146,11 +1436,12 @@
           receivableId: receivable.id || receivable._id,
           code: receivable.code || receivable.documentNumber || receivable.document || '—',
           customer: receivable.customer?.name || '—',
-          document: receivable.documentNumber || receivable.document || receivable.code || '—',
+          document: documentLabel,
           dueDate: installment.dueDate || receivable.dueDate,
           value: installment.value || receivable.totalValue,
-          status: installment.status || computeStatus(receivable, installment),
+          status: normalizedStatus,
           installmentNumber: installment.number || null,
+          originInstallmentNumber: isResidual ? originNumber : null,
           issueDate,
           bankAccountId,
           bankAccountLabel,
@@ -1193,9 +1484,13 @@
         if (item.installmentNumber) {
           button.dataset.installment = String(item.installmentNumber);
         }
+        if (Number.isFinite(item.originInstallmentNumber)) {
+          button.dataset.origin = String(item.originInstallmentNumber);
+        }
         if (item.customer) button.dataset.customer = item.customer;
         if (item.document) button.dataset.document = item.document;
         if (item.code) button.dataset.code = item.code;
+        if (item.status) button.dataset.status = item.status;
         if (dueISO) button.dataset.due = dueISO;
         if (issueISO) button.dataset.issue = issueISO;
         button.dataset.value = valueString;
@@ -1237,13 +1532,20 @@
       row.appendChild(statusCell);
 
       const actionsCell = document.createElement('td');
-      actionsCell.className = 'px-4 py-3 text-center';
+      actionsCell.className = 'px-4 py-3';
       const actionsWrapper = document.createElement('div');
-      actionsWrapper.className = 'inline-flex items-center justify-center gap-2';
+      actionsWrapper.className = 'grid grid-cols-3 gap-1';
+      actionsWrapper.style.maxWidth = '18rem';
+      actionsWrapper.style.margin = '0 auto';
+      actionsWrapper.style.justifyItems = 'stretch';
+      actionsWrapper.style.alignItems = 'stretch';
+
+      const baseActionClass =
+        'inline-flex w-full items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold leading-tight transition-colors';
 
       const editButton = document.createElement('button');
       editButton.type = 'button';
-      editButton.className = 'history-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10';
+      editButton.className = `${baseActionClass} history-action-edit border-primary text-primary hover:bg-primary/10`;
       editButton.dataset.action = 'edit-history';
       applyDataset(editButton);
       editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
@@ -1251,15 +1553,45 @@
 
       const payButton = document.createElement('button');
       payButton.type = 'button';
-      payButton.className = 'history-action-pay inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100';
+      payButton.className = `${baseActionClass} history-action-pay border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100`;
       payButton.dataset.action = 'pay-history';
       applyDataset(payButton);
       payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
       actionsWrapper.appendChild(payButton);
 
+      if (item.status !== 'finalized' && item.status !== 'uncollectible') {
+        const uncollectibleButton = document.createElement('button');
+        uncollectibleButton.type = 'button';
+        uncollectibleButton.className = `${baseActionClass} history-action-uncollectible border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100`;
+        uncollectibleButton.dataset.action = 'mark-uncollectible';
+        applyDataset(uncollectibleButton);
+        uncollectibleButton.innerHTML = '<i class="fas fa-ban"></i> Impagável';
+        actionsWrapper.appendChild(uncollectibleButton);
+      }
+
+      if (item.status !== 'finalized' && item.status !== 'protest') {
+        const protestButton = document.createElement('button');
+        protestButton.type = 'button';
+        protestButton.className = `${baseActionClass} history-action-protest border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100`;
+        protestButton.dataset.action = 'mark-protest';
+        applyDataset(protestButton);
+        protestButton.innerHTML = '<i class="fas fa-file-contract"></i> Protesto';
+        actionsWrapper.appendChild(protestButton);
+      }
+
+      if (item.status === 'uncollectible' || item.status === 'protest') {
+        const reopenButton = document.createElement('button');
+        reopenButton.type = 'button';
+        reopenButton.className = `${baseActionClass} history-action-reopen border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100`;
+        reopenButton.dataset.action = 'restore-installment';
+        applyDataset(reopenButton);
+        reopenButton.innerHTML = '<i class="fas fa-rotate-left"></i> Reabrir';
+        actionsWrapper.appendChild(reopenButton);
+      }
+
       const downloadButton = document.createElement('button');
       downloadButton.type = 'button';
-      downloadButton.className = 'history-action-download inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100';
+      downloadButton.className = `${baseActionClass} history-action-download border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100`;
       downloadButton.dataset.action = 'download-history';
       applyDataset(downloadButton);
       downloadButton.innerHTML = '<i class="fas fa-arrow-down"></i> Baixar';
@@ -1267,7 +1599,7 @@
 
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';
-      deleteButton.className = 'history-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
+      deleteButton.className = `${baseActionClass} history-action-delete border-red-200 text-red-600 hover:bg-red-50`;
       deleteButton.dataset.action = 'delete-history';
       applyDataset(deleteButton);
       deleteButton.innerHTML = '<i class="fas fa-trash"></i> Excluir';
@@ -1302,6 +1634,7 @@
       dueDate: dueRaw ? new Date(dueRaw) : null,
       issueDate: issueRaw ? new Date(issueRaw) : null,
       value: parsedValue,
+      status: button.dataset.status || '',
       bankAccountId: button.dataset.bankAccount || '',
       bankAccountLabel: button.dataset.bankLabel || '',
       paymentMethodId: button.dataset.paymentMethod || '',
@@ -1311,6 +1644,67 @@
     };
   }
 
+  async function handleInstallmentStatusAction(context, targetStatus) {
+    if (!context?.receivableId || !context?.installmentNumber) {
+      notify('Selecione uma parcela válida para atualizar o status.', 'warning');
+      return;
+    }
+
+    const currentCanonical = canonicalStatus(context.status);
+    if (currentCanonical === 'finalized') {
+      notify('Parcela quitada não pode ter o status alterado.', 'warning');
+      return;
+    }
+
+    const desiredCanonical = targetStatus === 'pending' ? 'open' : targetStatus;
+    if (currentCanonical === desiredCanonical) {
+      notify('Status da parcela já está atualizado.', 'info');
+      return;
+    }
+
+    const labels = {
+      pending: 'Em aberto',
+      uncollectible: 'Impagável',
+      protest: 'Em protesto',
+    };
+
+    const label = labels[targetStatus] || targetStatus;
+    const installmentLabel = context.installmentNumber
+      ? `parcela ${context.installmentNumber}${context.code ? ` do lançamento ${context.code}` : ''}`
+      : 'parcela selecionada';
+
+    const confirmed = await confirmDialog({
+      title: 'Atualizar status da parcela',
+      message:
+        targetStatus === 'pending'
+          ? `Deseja reabrir a ${installmentLabel}?`
+          : `Deseja marcar a ${installmentLabel} como ${label}?`,
+      confirmText: targetStatus === 'pending' ? 'Reabrir parcela' : 'Atualizar status',
+      cancelText: 'Cancelar',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const updated = await updateInstallmentStatus(
+        context.receivableId,
+        context.installmentNumber,
+        targetStatus
+      );
+      if (!updated) {
+        return;
+      }
+      notify('Status da parcela atualizado com sucesso.', 'success');
+      await loadReceivables();
+      await loadHistory();
+    } catch (error) {
+      console.error('accounts-receivable:handleInstallmentStatusAction', error);
+      notify(error.message || 'Erro ao atualizar o status da parcela.', 'error');
+    }
+  }
+
   async function handleForecastTableClick(event) {
     const context = extractActionContext(event.target);
     if (!context || !context.receivableId) return;
@@ -1318,6 +1712,12 @@
       handleEditReceivable(context.receivableId, context.installmentNumber);
     } else if (context.action === 'pay-forecast') {
       await handlePayReceivable(context);
+    } else if (context.action === 'mark-uncollectible') {
+      await handleInstallmentStatusAction(context, 'uncollectible');
+    } else if (context.action === 'mark-protest') {
+      await handleInstallmentStatusAction(context, 'protest');
+    } else if (context.action === 'restore-installment') {
+      await handleInstallmentStatusAction(context, 'pending');
     } else if (context.action === 'download-forecast') {
       await handleDownloadReceivable(context);
     } else if (context.action === 'delete-forecast') {
@@ -1332,6 +1732,12 @@
       handleEditReceivable(context.receivableId, context.installmentNumber);
     } else if (context.action === 'pay-history') {
       await handlePayReceivable(context);
+    } else if (context.action === 'mark-uncollectible') {
+      await handleInstallmentStatusAction(context, 'uncollectible');
+    } else if (context.action === 'mark-protest') {
+      await handleInstallmentStatusAction(context, 'protest');
+    } else if (context.action === 'restore-installment') {
+      await handleInstallmentStatusAction(context, 'pending');
     } else if (context.action === 'download-history') {
       await handleDownloadReceivable(context);
     } else if (context.action === 'delete-history') {
@@ -1359,7 +1765,9 @@
         : [];
       state.receivables = receivables;
       receivables.forEach(storeReceivableInCache);
-      updateSummary(data.summary || {});
+      const computedSummary = buildSummaryFromReceivables(receivables);
+      const normalizedSummary = mergeSummaries(data.summary || {}, computedSummary);
+      updateSummary(normalizedSummary);
       renderForecast();
     } catch (error) {
       console.error('accounts-receivable:loadReceivables', error);
@@ -1515,7 +1923,7 @@
             bankAccountLabel: bankLabel,
             accountingAccountId,
             accountingAccountLabel: accountingLabel,
-            status: receivable.status || 'pending',
+            status: canonicalStatus(receivable.status) || computeStatus(receivable) || 'open',
           },
         ];
 
@@ -1540,7 +1948,11 @@
         || installment.accountingAccount?.label
         || accountingLabel
         || '',
-      status: installment.status || receivable.status || 'pending',
+      status:
+        canonicalStatus(installment.status)
+          || canonicalStatus(receivable.status)
+          || computeStatus(receivable, installment)
+          || 'open',
     }));
 
     updateInstallmentsTable(state.previewInstallments, {

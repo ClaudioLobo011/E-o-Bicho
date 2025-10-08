@@ -35,6 +35,8 @@
       summary: {
         upcoming: { totalValue: 0, installments: 0 },
         pending: { totalValue: 0, installments: 0 },
+        protest: { totalValue: 0, installments: 0 },
+        cancelled: { totalValue: 0, installments: 0 },
         paidThisMonth: { totalValue: 0, installments: 0 },
       },
       items: [],
@@ -79,15 +81,43 @@
     agendaPendingCount: document.getElementById('agenda-pending-count'),
     agendaPaidValue: document.getElementById('agenda-paid-value'),
     agendaPaidCount: document.getElementById('agenda-paid-count'),
+    agendaProtestValue: document.getElementById('agenda-protest-value'),
+    agendaProtestCount: document.getElementById('agenda-protest-count'),
+    agendaCancelledValue: document.getElementById('agenda-cancelled-value'),
+    agendaCancelledCount: document.getElementById('agenda-cancelled-count'),
     agendaTableBody: document.getElementById('agenda-table-body'),
     agendaEmpty: document.getElementById('agenda-empty'),
     agendaFilters: document.getElementById('agenda-status-filters'),
   };
 
   const STATUS_BADGES = {
-    pending: { icon: 'fa-circle-pause', classes: 'bg-amber-100 text-amber-700', label: 'Pendente' },
-    paid: { icon: 'fa-circle-check', classes: 'bg-emerald-100 text-emerald-700', label: 'Pago' },
-    cancelled: { icon: 'fa-circle-xmark', classes: 'bg-gray-200 text-gray-600', label: 'Cancelado' },
+    pending: {
+      icon: 'fa-circle-exclamation',
+      classes: 'bg-amber-100 text-amber-700',
+      label: 'Pendente',
+    },
+    paid: {
+      icon: 'fa-circle-check',
+      classes: 'bg-emerald-100 text-emerald-700',
+      label: 'Pago',
+    },
+    cancelled: {
+      icon: 'fa-circle-xmark',
+      classes: 'bg-slate-200 text-slate-600',
+      label: 'Cancelado',
+    },
+    protest: {
+      icon: 'fa-file-contract',
+      classes: 'bg-purple-100 text-purple-700',
+      label: 'Protestado',
+    },
+  };
+
+  const STATUS_LABELS = {
+    pending: 'Pendente',
+    paid: 'Pago',
+    cancelled: 'Cancelado',
+    protest: 'Protestado',
   };
 
   const AGENDA_FILTERS = [
@@ -96,6 +126,7 @@
     { key: 'overdue', label: 'Vencidos' },
     { key: 'paid', label: 'Quitados' },
     { key: 'cancelled', label: 'Cancelados' },
+    { key: 'protest', label: 'Protestados' },
   ];
 
   const originalSaveButtonHTML = elements.saveButton ? elements.saveButton.innerHTML : '';
@@ -141,6 +172,21 @@
     return currencyFormatter.format(Number.isFinite(numeric) ? numeric : 0);
   }
 
+  function roundCurrency(value) {
+    const numeric = typeof value === 'number' && Number.isFinite(value) ? value : parseCurrency(value);
+    return Math.round(numeric * 100) / 100;
+  }
+
+  function toCurrencyNumber(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return roundCurrency(value);
+    }
+    if (typeof value === 'string') {
+      return roundCurrency(parseCurrency(value));
+    }
+    return 0;
+  }
+
   function parseCurrency(value) {
     if (value === null || value === undefined || value === '') return 0;
     if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -181,24 +227,211 @@
     return dateFormatter.format(date);
   }
 
+  function normalizeStatusToken(value) {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    let normalized = trimmed;
+    if (typeof normalized.normalize === 'function') {
+      try {
+        normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      } catch (error) {
+        /* noop */
+      }
+    }
+    normalized = normalized.replace(/[^a-z0-9\s-]/gi, ' ');
+    return normalized.replace(/[\s_-]+/g, ' ').trim().toLowerCase();
+  }
+
+  const PENDING_STATUS_TOKENS = new Set([
+    'pending',
+    'pendente',
+    'pendentes',
+    'open',
+    'em aberto',
+    'aberto',
+    'aguardando pagamento',
+    'aguardando',
+    'overdue',
+    'vencido',
+    'vencida',
+    'em atraso',
+    'atrasado',
+    'atrasada',
+  ]);
+
+  const PAID_STATUS_TOKENS = new Set([
+    'paid',
+    'pago',
+    'paga',
+    'quitado',
+    'quitada',
+    'liquidado',
+    'liquidada',
+    'finalizado',
+    'finalizada',
+    'concluido',
+    'concluida',
+  ]);
+
+  const PROTEST_STATUS_TOKENS = new Set([
+    'protest',
+    'protesto',
+    'protestado',
+    'protestada',
+    'em protesto',
+  ]);
+
+  const CANCELLED_STATUS_TOKENS = new Set([
+    'cancelled',
+    'cancel',
+    'cancelar',
+    'cancelado',
+    'cancelada',
+    'cancelamento',
+    'anulado',
+    'anulada',
+  ]);
+
+  function canonicalStatus(value) {
+    const token = normalizeStatusToken(value);
+    if (!token) return 'pending';
+    if (PAID_STATUS_TOKENS.has(token)) return 'paid';
+    if (PROTEST_STATUS_TOKENS.has(token)) return 'protest';
+    if (CANCELLED_STATUS_TOKENS.has(token)) return 'cancelled';
+    return 'pending';
+  }
+
   function createEmptyAgendaSummary() {
     return {
       upcoming: { totalValue: 0, installments: 0 },
       pending: { totalValue: 0, installments: 0 },
+      protest: { totalValue: 0, installments: 0 },
+      cancelled: { totalValue: 0, installments: 0 },
       paidThisMonth: { totalValue: 0, installments: 0 },
     };
   }
 
+  function normalizeAgendaSummaryEntry(entry) {
+    if (!entry || typeof entry !== 'object') {
+      return { totalValue: 0, installments: 0 };
+    }
+    const total = Number(entry.totalValue ?? entry.total ?? 0);
+    const installments = Number(entry.installments ?? entry.count ?? 0);
+    return {
+      totalValue: Number.isFinite(total) ? total : 0,
+      installments: Number.isFinite(installments) ? installments : 0,
+    };
+  }
+
+  function mergeAgendaSummaries(primary = {}, secondary = {}, { overrideKeys = [] } = {}) {
+    const result = createEmptyAgendaSummary();
+    const overrides = new Set(Array.isArray(overrideKeys) ? overrideKeys : []);
+
+    Object.keys(result).forEach((key) => {
+      const normalized = normalizeAgendaSummaryEntry(primary[key]);
+      result[key] = { ...result[key], ...normalized };
+    });
+
+    Object.keys(result).forEach((key) => {
+      const normalized = normalizeAgendaSummaryEntry(secondary[key]);
+      if (overrides.has(key)) {
+        result[key] = { ...result[key], ...normalized };
+        return;
+      }
+      if (!Number.isFinite(result[key].totalValue) || result[key].totalValue === 0) {
+        result[key].totalValue = normalized.totalValue;
+      }
+      if (!Number.isFinite(result[key].installments) || result[key].installments === 0) {
+        result[key].installments = normalized.installments;
+      }
+    });
+
+    Object.keys(result).forEach((key) => {
+      result[key].totalValue = roundCurrency(result[key].totalValue);
+      const count = Number(result[key].installments);
+      result[key].installments = Number.isFinite(count) && count >= 0 ? count : 0;
+    });
+
+    return result;
+  }
+
+  function buildAgendaSummaryFromItems(items, { periodStart = null, periodEnd = null } = {}) {
+    const summary = createEmptyAgendaSummary();
+    const list = Array.isArray(items) ? items : [];
+    const startTime = isValidDate(periodStart) ? periodStart.getTime() : null;
+    const endTime = isValidDate(periodEnd)
+      ? new Date(periodEnd.getFullYear(), periodEnd.getMonth(), periodEnd.getDate(), 23, 59, 59, 999).getTime()
+      : null;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    list.forEach((item) => {
+      const status = canonicalStatus(item?.status);
+      const value = toCurrencyNumber(item?.value);
+      const dueDate = toDate(item?.dueDate);
+      const dueTime = isValidDate(dueDate) ? dueDate.getTime() : null;
+      const withinPeriod =
+        startTime !== null && endTime !== null && dueTime !== null ? dueTime >= startTime && dueTime <= endTime : true;
+
+      if (withinPeriod && (status === 'pending' || status === 'protest')) {
+        summary.upcoming.totalValue += value;
+        summary.upcoming.installments += 1;
+      }
+
+      if (status === 'pending') {
+        summary.pending.totalValue += value;
+        summary.pending.installments += 1;
+      }
+
+      if (status === 'protest') {
+        summary.protest.totalValue += value;
+        summary.protest.installments += 1;
+      }
+
+      if (status === 'cancelled') {
+        summary.cancelled.totalValue += value;
+        summary.cancelled.installments += 1;
+      }
+
+      if (status === 'paid' && dueTime !== null && dueDate >= monthStart && dueDate < monthEnd) {
+        summary.paidThisMonth.totalValue += value;
+        summary.paidThisMonth.installments += 1;
+      }
+    });
+
+    summary.upcoming.totalValue = roundCurrency(summary.upcoming.totalValue);
+    summary.pending.totalValue = roundCurrency(summary.pending.totalValue);
+    summary.protest.totalValue = roundCurrency(summary.protest.totalValue);
+    summary.cancelled.totalValue = roundCurrency(summary.cancelled.totalValue);
+    summary.paidThisMonth.totalValue = roundCurrency(summary.paidThisMonth.totalValue);
+
+    return summary;
+  }
+
   function getStatusBadgeConfig(status) {
-    if (!status || typeof status !== 'string') {
-      return { icon: 'fa-circle-info', classes: 'bg-slate-100 text-slate-700', label: 'Indefinido' };
+    const canonical = canonicalStatus(status);
+    if (STATUS_BADGES[canonical]) {
+      return STATUS_BADGES[canonical];
     }
-    const normalized = status.toLowerCase();
-    if (STATUS_BADGES[normalized]) {
-      return STATUS_BADGES[normalized];
-    }
-    const label = `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+    const label = STATUS_LABELS[canonical] || 'Indefinido';
     return { icon: 'fa-circle-info', classes: 'bg-slate-100 text-slate-700', label };
+  }
+
+  function buildActionButton({ action, icon, label, className = '', dataset = {} }) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.action = action;
+    const baseClass =
+      'inline-flex w-full items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold leading-tight transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1';
+    button.className = `${baseClass} ${className}`.trim();
+    Object.entries(dataset).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '') return;
+      button.dataset[key] = String(value);
+    });
+    button.innerHTML = `<i class="fas ${icon}"></i> ${label}`;
+    return button;
   }
 
   function formatInstallmentsText(count, singular, plural) {
@@ -223,6 +456,10 @@
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
+  function isValidDate(value) {
+    return value instanceof Date && !Number.isNaN(value.getTime());
+  }
+
   function isAgendaItemOverdue(item) {
     if (!item) return false;
     const due = toDate(item.dueDate);
@@ -241,6 +478,7 @@
       overdue: 0,
       paid: 0,
       cancelled: 0,
+      protest: 0,
     };
     items.forEach((item) => {
       counts.all += 1;
@@ -248,6 +486,7 @@
       if (status === 'pending') counts.pending += 1;
       if (status === 'paid') counts.paid += 1;
       if (status === 'cancelled') counts.cancelled += 1;
+      if (status === 'protest') counts.protest += 1;
       if (isAgendaItemOverdue(item)) counts.overdue += 1;
     });
     return counts;
@@ -261,6 +500,8 @@
         return (item) => (item.status || '').toLowerCase() === 'paid';
       case 'cancelled':
         return (item) => (item.status || '').toLowerCase() === 'cancelled';
+      case 'protest':
+        return (item) => (item.status || '').toLowerCase() === 'protest';
       case 'overdue':
         return (item) => isAgendaItemOverdue(item);
       default:
@@ -311,6 +552,7 @@
       issueDate: toDate(raw.issueDate),
       dueDate: toDate(raw.dueDate),
       totalValue: parseCurrency(raw.totalValue),
+      status: canonicalStatus(raw.status),
     };
     if (raw.bankAccount && raw.bankAccount._id) {
       normalized.bankAccount = { ...raw.bankAccount };
@@ -334,7 +576,7 @@
           accountingAccount: installment?.accountingAccount && installment.accountingAccount._id
             ? { ...installment.accountingAccount }
             : installment?.accountingAccount || null,
-          status: installment?.status || 'pending',
+          status: canonicalStatus(installment?.status),
         }))
       : [];
     normalized.installmentsCount = normalized.installments.length || normalized.installmentsCount || 0;
@@ -451,6 +693,26 @@
         'parcelas aguardando pagamento'
       );
     }
+    if (elements.agendaProtestValue) {
+      elements.agendaProtestValue.textContent = formatCurrencyBR(state.agenda.summary.protest.totalValue);
+    }
+    if (elements.agendaProtestCount) {
+      elements.agendaProtestCount.textContent = formatInstallmentsText(
+        state.agenda.summary.protest.installments,
+        'parcela protestada',
+        'parcelas protestadas'
+      );
+    }
+    if (elements.agendaCancelledValue) {
+      elements.agendaCancelledValue.textContent = formatCurrencyBR(state.agenda.summary.cancelled.totalValue);
+    }
+    if (elements.agendaCancelledCount) {
+      elements.agendaCancelledCount.textContent = formatInstallmentsText(
+        state.agenda.summary.cancelled.installments,
+        'parcela cancelada',
+        'parcelas canceladas'
+      );
+    }
     if (elements.agendaPaidValue) {
       elements.agendaPaidValue.textContent = formatCurrencyBR(state.agenda.summary.paidThisMonth.totalValue);
     }
@@ -538,19 +800,85 @@
       actionsCell.className = 'px-4 py-3 text-sm text-center';
       const payableIdAttr = item.payableId || '';
       const installmentAttr = item.installmentNumber != null ? item.installmentNumber : '';
-      actionsCell.innerHTML = `
-        <div class="flex items-center justify-center gap-2">
-          <button type="button" class="agenda-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
-            data-action="edit-agenda" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
-            <i class="fas fa-pen"></i>
-            Editar
-          </button>
-          <button type="button" class="agenda-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
-            data-action="delete-agenda" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
-            <i class="fas fa-trash"></i>
-            Excluir
-          </button>
-        </div>`;
+      const canonical = canonicalStatus(item.status);
+      const dataset = { id: payableIdAttr, installment: installmentAttr };
+      const hasInstallment = installmentAttr !== '';
+
+      const actionsWrapper = document.createElement('div');
+      actionsWrapper.className = 'grid grid-cols-3 gap-1';
+      actionsWrapper.style.maxWidth = '18rem';
+      actionsWrapper.style.margin = '0 auto';
+      actionsWrapper.style.justifyItems = 'stretch';
+
+      actionsWrapper.appendChild(
+        buildActionButton({
+          action: 'edit-agenda',
+          icon: 'fa-pen',
+          label: 'Editar',
+          className: 'border-primary text-primary hover:bg-primary/10',
+          dataset,
+        })
+      );
+
+      if (hasInstallment && canonical !== 'paid') {
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'mark-paid',
+            icon: 'fa-money-check-dollar',
+            label: 'Registrar',
+            className: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
+            dataset,
+          })
+        );
+      }
+
+      if (hasInstallment && canonical !== 'cancelled') {
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'cancel-installment',
+            icon: 'fa-ban',
+            label: 'Cancelar',
+            className: 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100',
+            dataset,
+          })
+        );
+      }
+
+      if (hasInstallment && canonical !== 'protest') {
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'mark-protest',
+            icon: 'fa-file-contract',
+            label: 'Protesto',
+            className: 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100',
+            dataset,
+          })
+        );
+      }
+
+      if (hasInstallment && canonical !== 'pending') {
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'restore-installment',
+            icon: 'fa-rotate-left',
+            label: 'Reabrir',
+            className: 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100',
+            dataset,
+          })
+        );
+      }
+
+      actionsWrapper.appendChild(
+        buildActionButton({
+          action: 'delete-agenda',
+          icon: 'fa-trash',
+          label: 'Excluir',
+          className: 'border-red-200 text-red-600 hover:bg-red-50',
+          dataset,
+        })
+      );
+
+      actionsCell.appendChild(actionsWrapper);
       row.appendChild(actionsCell);
 
       elements.agendaTableBody.appendChild(row);
@@ -1198,19 +1526,85 @@
         actionsCell.className = 'px-4 py-3 text-sm text-center';
         const payableIdAttr = payable._id || '';
         const installmentAttr = installment.number != null ? installment.number : '';
-        actionsCell.innerHTML = `
-          <div class="flex items-center justify-center gap-2">
-            <button type="button" class="history-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
-              data-action="edit-history" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
-              <i class="fas fa-pen"></i>
-              Editar
-            </button>
-            <button type="button" class="history-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
-              data-action="delete-history" data-id="${payableIdAttr}" data-installment="${installmentAttr}">
-              <i class="fas fa-trash"></i>
-              Excluir
-            </button>
-          </div>`;
+        const canonical = canonicalStatus(installment.status || payable.status);
+        const dataset = { id: payableIdAttr, installment: installmentAttr };
+        const hasInstallment = installmentAttr !== '';
+
+        const actionsWrapper = document.createElement('div');
+        actionsWrapper.className = 'grid grid-cols-3 gap-1';
+        actionsWrapper.style.maxWidth = '18rem';
+        actionsWrapper.style.margin = '0 auto';
+        actionsWrapper.style.justifyItems = 'stretch';
+
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'edit-history',
+            icon: 'fa-pen',
+            label: 'Editar',
+            className: 'border-primary text-primary hover:bg-primary/10',
+            dataset,
+          })
+        );
+
+        if (hasInstallment && canonical !== 'paid') {
+          actionsWrapper.appendChild(
+            buildActionButton({
+              action: 'mark-paid',
+              icon: 'fa-money-check-dollar',
+              label: 'Registrar',
+              className: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
+              dataset,
+            })
+          );
+        }
+
+        if (hasInstallment && canonical !== 'cancelled') {
+          actionsWrapper.appendChild(
+            buildActionButton({
+              action: 'cancel-installment',
+              icon: 'fa-ban',
+              label: 'Cancelar',
+              className: 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100',
+              dataset,
+            })
+          );
+        }
+
+        if (hasInstallment && canonical !== 'protest') {
+          actionsWrapper.appendChild(
+            buildActionButton({
+              action: 'mark-protest',
+              icon: 'fa-file-contract',
+              label: 'Protesto',
+              className: 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100',
+              dataset,
+            })
+          );
+        }
+
+        if (hasInstallment && canonical !== 'pending') {
+          actionsWrapper.appendChild(
+            buildActionButton({
+              action: 'restore-installment',
+              icon: 'fa-rotate-left',
+              label: 'Reabrir',
+              className: 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100',
+              dataset,
+            })
+          );
+        }
+
+        actionsWrapper.appendChild(
+          buildActionButton({
+            action: 'delete-history',
+            icon: 'fa-trash',
+            label: 'Excluir',
+            className: 'border-red-200 text-red-600 hover:bg-red-50',
+            dataset,
+          })
+        );
+
+        actionsCell.appendChild(actionsWrapper);
         row.appendChild(actionsCell);
 
         elements.historyBody.appendChild(row);
@@ -1293,18 +1687,19 @@
       });
       if (!confirmRemoval) return;
 
-        const totalInstallments = Array.isArray(payable.installments) ? payable.installments.length : 0;
-        let deleted = null;
+      const totalInstallments = Array.isArray(payable.installments) ? payable.installments.length : 0;
 
-        if (totalInstallments > 1 && installmentNumber) {
-          const deleteAll = await confirmDialog({
-            title: 'Excluir parcelas',
-            message: 'Excluir todas as parcelas deste lançamento? Escolha "Excluir todas" para remover o título completo ou "Somente esta" para remover apenas a parcela atual.',
-            confirmText: 'Excluir todas',
-            cancelText: 'Somente esta',
-          });
-          if (deleteAll) {
-            deleted = await performDeletePayable(payableId, { deleteAll: true });
+      if (totalInstallments > 1 && installmentNumber) {
+        const deleteAll = await confirmDialog({
+          title: 'Excluir parcelas',
+          message:
+            'Excluir todas as parcelas deste lançamento? Escolha "Excluir todas" para remover o título completo ou "Somente esta" para remover apenas a parcela atual.',
+          confirmText: 'Excluir todas',
+          cancelText: 'Somente esta',
+        });
+
+        if (deleteAll) {
+          await performDeletePayable(payableId, { deleteAll: true });
           removePayableFromCache(payableId);
           exitEditMode(state.currentEditing?.id === payableId);
           notify('Lançamento excluído com sucesso.', 'success');
@@ -1316,10 +1711,12 @@
             cancelText: 'Cancelar',
           });
           if (!confirmSingle) return;
+
           const updated = await performDeletePayable(payableId, {
             deleteAll: false,
             installmentNumber,
           });
+
           if (updated && updated._id) {
             const normalized = normalizePayable(updated);
             storePayableInCache(normalized);
@@ -1345,6 +1742,69 @@
     } catch (error) {
       console.error('accounts-payable:handleDeletePayable', error);
       notify(error.message || 'Não foi possível excluir o lançamento selecionado.', 'error');
+    }
+  }
+
+  async function updateInstallmentStatus(payableId, installmentNumber, targetStatus) {
+    if (!payableId || !Number.isFinite(installmentNumber)) {
+      throw new Error('Parcela inválida para atualização.');
+    }
+
+    const url = `${PAYABLES_API}/${payableId}/installments/${installmentNumber}/status`;
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ status: targetStatus }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        notify('Sua sessão expirou. Faça login novamente para atualizar o status.', 'error');
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData?.message || `Erro ao atualizar o status (${response.status}).`);
+    }
+
+    const data = await response.json();
+    const normalized = normalizePayable(data);
+    if (normalized) {
+      storePayableInCache(normalized);
+    }
+    return normalized;
+  }
+
+  async function handleInstallmentStatusAction(context, targetStatus) {
+    if (!context?.payableId || !Number.isFinite(context.installmentNumber)) {
+      notify('Não foi possível identificar a parcela selecionada.', 'warning');
+      return;
+    }
+
+    const installmentLabel = `parcela ${context.installmentNumber}`;
+    const statusLabel = STATUS_LABELS[targetStatus] || targetStatus;
+    const confirmMessage =
+      targetStatus === 'pending'
+        ? `Deseja reabrir a ${installmentLabel}?`
+        : `Deseja marcar a ${installmentLabel} como ${statusLabel.toLowerCase()}?`;
+
+    const confirmed = await confirmDialog({
+      title: 'Atualizar status',
+      message: confirmMessage,
+      confirmText: targetStatus === 'pending' ? 'Reabrir parcela' : 'Atualizar status',
+      cancelText: 'Cancelar',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await updateInstallmentStatus(context.payableId, context.installmentNumber, targetStatus);
+      notify('Status da parcela atualizado com sucesso.', 'success');
+      await loadAgenda();
+      await loadHistory();
+    } catch (error) {
+      console.error('accounts-payable:updateInstallmentStatus', error);
+      notify(error.message || 'Erro ao atualizar o status da parcela.', 'error');
     }
   }
 
@@ -1374,6 +1834,14 @@
     if (!context || !context.payableId) return;
     if (context.action === 'edit-agenda') {
       handleEditPayable(context.payableId, context.installmentNumber);
+    } else if (context.action === 'mark-paid') {
+      handleInstallmentStatusAction(context, 'paid');
+    } else if (context.action === 'mark-protest') {
+      handleInstallmentStatusAction(context, 'protest');
+    } else if (context.action === 'cancel-installment') {
+      handleInstallmentStatusAction(context, 'cancelled');
+    } else if (context.action === 'restore-installment') {
+      handleInstallmentStatusAction(context, 'pending');
     } else if (context.action === 'delete-agenda') {
       handleDeletePayable(context.payableId, context.installmentNumber);
     }
@@ -1384,6 +1852,14 @@
     if (!context || !context.payableId) return;
     if (context.action === 'edit-history') {
       handleEditPayable(context.payableId, context.installmentNumber);
+    } else if (context.action === 'mark-paid') {
+      handleInstallmentStatusAction(context, 'paid');
+    } else if (context.action === 'mark-protest') {
+      handleInstallmentStatusAction(context, 'protest');
+    } else if (context.action === 'cancel-installment') {
+      handleInstallmentStatusAction(context, 'cancelled');
+    } else if (context.action === 'restore-installment') {
+      handleInstallmentStatusAction(context, 'pending');
     } else if (context.action === 'delete-history') {
       handleDeletePayable(context.payableId, context.installmentNumber);
     }
@@ -1450,20 +1926,15 @@
       }
 
       const data = await response.json();
-      const summary = data?.summary || {};
-      state.agenda.summary = {
-        upcoming: summary.upcoming || { totalValue: 0, installments: 0 },
-        pending: summary.pending || { totalValue: 0, installments: 0 },
-        paidThisMonth: summary.paidThisMonth || { totalValue: 0, installments: 0 },
-      };
+      const apiSummary = data?.summary || {};
 
-      state.agenda.items = Array.isArray(data?.items)
+      const mappedItems = Array.isArray(data?.items)
         ? data.items
             .map((item) => ({
               ...item,
               dueDate: item?.dueDate ? new Date(item.dueDate) : null,
               value: typeof item?.value === 'number' ? item.value : parseCurrency(item?.value),
-              status: item?.status || 'pending',
+              status: canonicalStatus(item?.status),
               partyName: item?.partyName || item?.party || '',
               document: item?.document || '',
               payableCode: item?.payableCode || item?.code || '',
@@ -1493,6 +1964,16 @@
 
       state.agenda.periodStart = data?.periodStart ? new Date(data.periodStart) : null;
       state.agenda.periodEnd = data?.periodEnd ? new Date(data.periodEnd) : null;
+
+      const computedSummary = buildAgendaSummaryFromItems(mappedItems, {
+        periodStart: state.agenda.periodStart,
+        periodEnd: state.agenda.periodEnd,
+      });
+
+      const overrideKeys = mappedItems.length ? ['upcoming', 'pending', 'protest', 'cancelled'] : [];
+      state.agenda.summary = mergeAgendaSummaries(apiSummary, computedSummary, { overrideKeys });
+
+      state.agenda.items = mappedItems;
       renderAgenda();
     } catch (error) {
       console.error('accounts-payable:loadAgenda', error);
