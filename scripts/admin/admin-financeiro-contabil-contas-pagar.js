@@ -35,6 +35,8 @@
       summary: {
         upcoming: { totalValue: 0, installments: 0 },
         pending: { totalValue: 0, installments: 0 },
+        protest: { totalValue: 0, installments: 0 },
+        cancelled: { totalValue: 0, installments: 0 },
         paidThisMonth: { totalValue: 0, installments: 0 },
       },
       items: [],
@@ -79,6 +81,10 @@
     agendaPendingCount: document.getElementById('agenda-pending-count'),
     agendaPaidValue: document.getElementById('agenda-paid-value'),
     agendaPaidCount: document.getElementById('agenda-paid-count'),
+    agendaProtestValue: document.getElementById('agenda-protest-value'),
+    agendaProtestCount: document.getElementById('agenda-protest-count'),
+    agendaCancelledValue: document.getElementById('agenda-cancelled-value'),
+    agendaCancelledCount: document.getElementById('agenda-cancelled-count'),
     agendaTableBody: document.getElementById('agenda-table-body'),
     agendaEmpty: document.getElementById('agenda-empty'),
     agendaFilters: document.getElementById('agenda-status-filters'),
@@ -300,6 +306,8 @@
     return {
       upcoming: { totalValue: 0, installments: 0 },
       pending: { totalValue: 0, installments: 0 },
+      protest: { totalValue: 0, installments: 0 },
+      cancelled: { totalValue: 0, installments: 0 },
       paidThisMonth: { totalValue: 0, installments: 0 },
     };
   }
@@ -377,6 +385,16 @@
         summary.pending.installments += 1;
       }
 
+      if (status === 'protest') {
+        summary.protest.totalValue += value;
+        summary.protest.installments += 1;
+      }
+
+      if (status === 'cancelled') {
+        summary.cancelled.totalValue += value;
+        summary.cancelled.installments += 1;
+      }
+
       if (status === 'paid' && dueTime !== null && dueDate >= monthStart && dueDate < monthEnd) {
         summary.paidThisMonth.totalValue += value;
         summary.paidThisMonth.installments += 1;
@@ -385,6 +403,8 @@
 
     summary.upcoming.totalValue = roundCurrency(summary.upcoming.totalValue);
     summary.pending.totalValue = roundCurrency(summary.pending.totalValue);
+    summary.protest.totalValue = roundCurrency(summary.protest.totalValue);
+    summary.cancelled.totalValue = roundCurrency(summary.cancelled.totalValue);
     summary.paidThisMonth.totalValue = roundCurrency(summary.paidThisMonth.totalValue);
 
     return summary;
@@ -671,6 +691,26 @@
         state.agenda.summary.pending.installments,
         'parcela aguardando pagamento',
         'parcelas aguardando pagamento'
+      );
+    }
+    if (elements.agendaProtestValue) {
+      elements.agendaProtestValue.textContent = formatCurrencyBR(state.agenda.summary.protest.totalValue);
+    }
+    if (elements.agendaProtestCount) {
+      elements.agendaProtestCount.textContent = formatInstallmentsText(
+        state.agenda.summary.protest.installments,
+        'parcela protestada',
+        'parcelas protestadas'
+      );
+    }
+    if (elements.agendaCancelledValue) {
+      elements.agendaCancelledValue.textContent = formatCurrencyBR(state.agenda.summary.cancelled.totalValue);
+    }
+    if (elements.agendaCancelledCount) {
+      elements.agendaCancelledCount.textContent = formatInstallmentsText(
+        state.agenda.summary.cancelled.installments,
+        'parcela cancelada',
+        'parcelas canceladas'
       );
     }
     if (elements.agendaPaidValue) {
@@ -1930,7 +1970,7 @@
         periodEnd: state.agenda.periodEnd,
       });
 
-      const overrideKeys = mappedItems.length ? ['upcoming', 'pending'] : [];
+      const overrideKeys = mappedItems.length ? ['upcoming', 'pending', 'protest', 'cancelled'] : [];
       state.agenda.summary = mergeAgendaSummaries(apiSummary, computedSummary, { overrideKeys });
 
       state.agenda.items = mappedItems;
