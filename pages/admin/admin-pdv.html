@@ -116,7 +116,7 @@
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="sales-tab">Vendas</button>
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="orcamentos-tab">Orçamentos</button>
                             <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="delivery-tab">Delivery</button>
-                            <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="cliente-tab">Cliente</button>
+                            <button type="button" class="pdv-tab-trigger px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-primary rounded-t" data-tab-target="cliente-tab">Contas a receber</button>
                         </nav>
 
                         <div class="space-y-5">
@@ -432,12 +432,85 @@
                                 </div>
                             </div>
                             <div data-tab-panel="cliente-tab" class="hidden space-y-5">
-                                <div class="rounded-xl border border-dashed border-gray-300 bg-white p-6">
-                                    <div class="flex flex-col items-center justify-center gap-3 text-center text-gray-500">
-                                        <i class="fas fa-user-friends text-2xl text-gray-400"></i>
-                                        <p class="text-sm font-medium text-gray-600">Área do cliente em desenvolvimento.</p>
+                                <section class="rounded-xl border border-gray-200 bg-white p-4 space-y-4">
+                                    <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                                        <div class="space-y-1">
+                                            <h3 class="text-sm font-semibold text-gray-800">Contas a receber por cliente</h3>
+                                            <p class="text-[11px] text-gray-500">Localize o cliente pelo CPF/CNPJ, celular ou e-mail e acompanhe rapidamente as pendências.</p>
+                                        </div>
+                                        <div class="w-full lg:w-64">
+                                            <label for="pdv-receivables-search" class="block text-xs font-semibold uppercase tracking-wide text-gray-500">Buscar cliente</label>
+                                            <div class="relative mt-1">
+                                                <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+                                                    <i class="fas fa-search text-[11px]"></i>
+                                                </span>
+                                                <input id="pdv-receivables-search" type="search" placeholder="CPF, CNPJ, celular ou e-mail" class="w-full rounded-lg border border-gray-200 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
+                                    <div id="pdv-receivables-search-wrapper" class="space-y-2">
+                                        <div id="pdv-receivables-search-loading" class="hidden rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                                            Buscando clientes...
+                                        </div>
+                                        <div id="pdv-receivables-search-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                                            Digite para buscar clientes.
+                                        </div>
+                                        <div id="pdv-receivables-search-results" class="grid gap-2 sm:grid-cols-2"></div>
+                                    </div>
+                                    <div id="pdv-receivables-selected" class="hidden rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div class="space-y-0.5">
+                                                <p id="pdv-receivables-customer-name" class="text-sm font-semibold text-gray-800">—</p>
+                                                <p id="pdv-receivables-customer-doc" class="text-xs text-gray-500">Documento: —</p>
+                                                <p id="pdv-receivables-customer-contact" class="text-xs text-gray-500">Contato: —</p>
+                                            </div>
+                                            <button type="button" id="pdv-receivables-clear" class="self-start rounded-full border border-gray-200 px-3 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-rose-300 hover:text-rose-600">Remover seleção</button>
+                                        </div>
+                                        <dl class="mt-3 grid grid-cols-1 gap-2 text-xs text-gray-600 sm:grid-cols-2">
+                                            <div class="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                                                <dt class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Limite de crédito</dt>
+                                                <dd id="pdv-receivables-customer-limit" class="mt-1 text-sm font-semibold text-gray-700">—</dd>
+                                            </div>
+                                            <div class="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                                                <dt class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Pendências de crediário</dt>
+                                                <dd id="pdv-receivables-customer-pending" class="mt-1 text-sm font-semibold text-gray-700">R$ 0,00</dd>
+                                            </div>
+                                        </dl>
+                                    </div>
+                                </section>
+                                <section class="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+                                    <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <h4 class="text-sm font-semibold text-gray-800">Pendências do crediário</h4>
+                                            <p class="text-[11px] text-gray-500">Visualize rapidamente as parcelas do cliente selecionado.</p>
+                                        </div>
+                                        <div class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold text-gray-600">
+                                            <span>Total em aberto:</span>
+                                            <span id="pdv-receivables-total" class="text-sm text-gray-800">R$ 0,00</span>
+                                        </div>
+                                    </div>
+                                    <div id="pdv-receivables-loading" class="hidden rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                                        Carregando pendências do cliente selecionado...
+                                    </div>
+                                    <div id="pdv-receivables-error" class="hidden rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600"></div>
+                                    <div id="pdv-receivables-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                                        Selecione um cliente para visualizar as pendências de crediário.
+                                    </div>
+                                    <div id="pdv-receivables-table" class="hidden overflow-x-auto">
+                                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                            <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                                                <tr>
+                                                    <th scope="col" class="px-3 py-2 text-left font-semibold">Venda</th>
+                                                    <th scope="col" class="px-3 py-2 text-left font-semibold">Parcela</th>
+                                                    <th scope="col" class="px-3 py-2 text-left font-semibold">Vencimento</th>
+                                                    <th scope="col" class="px-3 py-2 text-left font-semibold">Valor</th>
+                                                    <th scope="col" class="px-3 py-2 text-left font-semibold">Forma de pagamento</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="pdv-receivables-list" class="divide-y divide-gray-100 text-gray-600"></tbody>
+                                        </table>
+                                    </div>
+                                </section>
                             </div>
                         </div>
                     </div>
