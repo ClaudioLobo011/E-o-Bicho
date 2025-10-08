@@ -914,6 +914,90 @@
     return Number.isFinite(number) ? number : 0;
   };
 
+  const parsePrazoDays = (value) => {
+    if (value == null) {
+      return 0;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : 0;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      if (!normalized) {
+        return 0;
+      }
+      const match = normalized.match(/-?\d+/);
+      if (match) {
+        const parsed = Number.parseInt(match[0], 10);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+      const coerced = Number(normalized.replace(',', '.'));
+      return Number.isFinite(coerced) ? coerced : 0;
+    }
+    if (typeof value === 'object') {
+      const candidates = [
+        value.days,
+        value.dias,
+        value.prazo,
+        value.prazoRecebimento,
+        value.prazo_recebimento,
+      ];
+      for (const candidate of candidates) {
+        if (candidate == null) {
+          continue;
+        }
+        if (candidate === value) {
+          continue;
+        }
+        const parsed = parsePrazoDays(candidate);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+    }
+    const coerced = Number(value);
+    return Number.isFinite(coerced) ? coerced : 0;
+  };
+
+  const resolveAnticipationFlag = (method, payment) => {
+    const truthyStrings = new Set(['1', 'true', 't', 'y', 'yes', 'sim', 's', 'ativo', 'ligado', 'on']);
+    const candidates = [
+      payment?.antecipado,
+      payment?.anticipated,
+      payment?.anticipation,
+      method?.raw?.anticipated,
+      method?.raw?.antecipado,
+      method?.raw?.antecipacao,
+      method?.raw?.antecipacaoAutomatica,
+      method?.raw?.antecipar,
+      method?.raw?.anticipation,
+      method?.raw?.recebimentoAntecipado,
+      method?.raw?.configuracaoAntecipacao?.ativo,
+      method?.raw?.configuracaoAntecipacao?.active,
+      method?.raw?.configuracaoRecebimento?.antecipado,
+      method?.raw?.config?.antecipado,
+      method?.raw?.config?.anticipated,
+    ];
+    return candidates.some((candidate) => {
+      if (typeof candidate === 'boolean') {
+        return candidate;
+      }
+      if (typeof candidate === 'number') {
+        return Number.isFinite(candidate) && candidate > 0;
+      }
+      if (typeof candidate === 'string') {
+        const normalized = candidate.trim().toLowerCase();
+        if (!normalized) {
+          return false;
+        }
+        return truthyStrings.has(normalized);
+      }
+      return false;
+    });
+  };
+
   const normalizePrintMode = (value, fallback = 'PM') => {
     const normalized = (value || '').toString().trim().toUpperCase();
     if (!normalized) return fallback;
@@ -5998,10 +6082,11 @@
 
     const addDays = (base, days) => {
       const reference = base instanceof Date ? new Date(base.getTime()) : new Date();
-      if (!Number.isFinite(days) || !days) {
+      const offset = parsePrazoDays(days);
+      if (!Number.isFinite(offset) || !offset) {
         return reference;
       }
-      reference.setDate(reference.getDate() + days);
+      reference.setDate(reference.getDate() + offset);
       return reference;
     };
 
@@ -6119,38 +6204,49 @@
           : [];
         const configMap = new Map();
         configs.forEach((config) => {
-          const number = Number(config?.number);
-          if (Number.isFinite(number)) {
-            const days = safeNumber(config.days);
-            configMap.set(number, days);
+          const rawNumber =
+            config?.number ??
+            config?.parcela ??
+            config?.parcel ??
+            config?.installment ??
+            config?.sequencia ??
+            config?.sequence;
+          const parcelNumber = Number.parseInt(rawNumber, 10);
+          if (!Number.isFinite(parcelNumber) || parcelNumber < 1) {
+            return;
           }
+          const days = parsePrazoDays(
+            config?.days ??
+              config?.prazo ??
+              config?.dias ??
+              config?.prazoRecebimento ??
+              config?.prazo_recebimento ??
+              config?.delay
+          );
+          if (!Number.isFinite(days)) {
+            return;
+          }
+          configMap.set(parcelNumber, days);
         });
-        const baseDays = safeNumber(method?.raw?.days ?? method?.raw?.prazo ?? 0);
-        const anticipated = Boolean(method?.raw?.anticipated);
-        const totalCents = Math.round(totalValue * 100);
-        const baseCents = Math.floor(totalCents / parcelas);
-        const remainder = totalCents - baseCents * parcelas;
-        const firstDue = addDays(saleDateObj, baseDays);
+        const baseDays = parsePrazoDays(
+          payment?.prazo ??
+            method?.raw?.prazoRecebimento ??
+            method?.raw?.prazo_recebimento ??
+            method?.raw?.prazo ??
+            method?.raw?.days ??
+            method?.raw?.prazoRecebimentoDias ??
+            method?.raw?.prazoDias ??
+            0
+        );
+        const anticipated = resolveAnticipationFlag(method, payment);
         const normalizedInstallments = [];
-        for (let index = 0; index < parcelas; index += 1) {
-          const parcelNumber = index + 1;
-          const amountCents = baseCents + (index < remainder ? 1 : 0);
-          const valor = amountCents / 100;
-          let dueDate;
-          if (configMap.has(parcelNumber)) {
-            dueDate = addDays(saleDateObj, configMap.get(parcelNumber));
-          } else if (parcelNumber === 1) {
-            dueDate = firstDue;
-          } else if (anticipated) {
-            dueDate = addDays(saleDateObj, baseDays);
-          } else {
-            const offset = 30 * (parcelNumber - 1);
-            dueDate = addDays(firstDue, offset);
-          }
+        const firstParcelOffset = configMap.has(1) ? configMap.get(1) : baseDays;
+        if (anticipated) {
+          const dueDate = addDays(saleDateObj, firstParcelOffset);
           receivables.push(
             createInstallmentEntry({
-              parcelNumber,
-              value: valor,
+              parcelNumber: 1,
+              value: totalValue,
               dueDate,
               paymentMethodId,
               paymentMethodLabel,
@@ -6160,7 +6256,40 @@
               clienteNome: fallbackCustomerName,
             })
           );
-          normalizedInstallments.push({ number: parcelNumber, value: valor, dueDate });
+          normalizedInstallments.push({ number: 1, value: totalValue, dueDate });
+        } else {
+          const totalCents = Math.round(totalValue * 100);
+          const baseCents = parcelas > 0 ? Math.floor(totalCents / parcelas) : totalCents;
+          const remainder = totalCents - baseCents * parcelas;
+          const firstDue = addDays(saleDateObj, firstParcelOffset);
+          for (let index = 0; index < parcelas; index += 1) {
+            const parcelNumber = index + 1;
+            const amountCents = baseCents + (index < remainder ? 1 : 0);
+            const valor = amountCents / 100;
+            let dueDate;
+            if (configMap.has(parcelNumber)) {
+              dueDate = addDays(saleDateObj, configMap.get(parcelNumber));
+            } else if (parcelNumber === 1) {
+              dueDate = firstDue;
+            } else {
+              const offset = 30 * (parcelNumber - 1);
+              dueDate = addDays(firstDue, offset);
+            }
+            receivables.push(
+              createInstallmentEntry({
+                parcelNumber,
+                value: valor,
+                dueDate,
+                paymentMethodId,
+                paymentMethodLabel,
+                paymentMethodType,
+                salePaymentId,
+                clienteId: fallbackCustomerId,
+                clienteNome: fallbackCustomerName,
+              })
+            );
+            normalizedInstallments.push({ number: parcelNumber, value: valor, dueDate });
+          }
         }
         const dueNow = normalizedInstallments[0]?.dueDate || saleDateObj;
         const markAsPaid = dueNow && dueNow.getTime() <= saleDateObj.getTime();
@@ -6181,7 +6310,10 @@
       }
 
       // Pagamentos à vista, débito, PIX etc.
-      const immediateDue = addDays(saleDateObj, safeNumber(method?.raw?.days ?? 0));
+      const immediateDue = addDays(
+        saleDateObj,
+        method?.raw?.days ?? method?.raw?.prazo ?? method?.raw?.prazoRecebimento ?? 0
+      );
       receivables.push(
         createInstallmentEntry({
           parcelNumber: 1,
