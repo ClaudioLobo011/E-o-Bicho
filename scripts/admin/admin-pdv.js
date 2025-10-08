@@ -4,6 +4,8 @@
   const SERVER_URL =
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.SERVER_URL) || '';
 
+  const PDV_NO_CUSTOMER_LABEL = 'Sem Cliente na Venda';
+
   const paymentTypeOrder = {
     avista: 0,
     debito: 1,
@@ -6063,7 +6065,7 @@
     const contaContabil = state.financeSettings?.contaContabilReceber || null;
     const fallbackCustomerId =
       customer?._id || customer?.id || customer?.codigo || customer?.code || '';
-    const fallbackCustomerName = resolveCustomerName(customer) || 'Cliente não informado';
+    const fallbackCustomerName = resolveCustomerName(customer) || PDV_NO_CUSTOMER_LABEL;
     const fallbackCustomerDocument = resolveCustomerDocument(customer) || '';
 
     const saleDateObj = saleDate instanceof Date ? saleDate : new Date(saleDate || Date.now());
@@ -6401,7 +6403,8 @@
     const saleDateIso = context.saleDate || saleRecord.createdAt || new Date().toISOString();
     const saleDateLabel = toDateLabel(saleDateIso);
     const saleItems = Array.isArray(context.items) ? context.items : [];
-    const customerName = resolveCustomerName(context.customer || state.vendaCliente) || 'Cliente não informado';
+    const customerName =
+      resolveCustomerName(context.customer || state.vendaCliente) || PDV_NO_CUSTOMER_LABEL;
     const customerDocument = resolveCustomerDocument(context.customer || state.vendaCliente) || '';
     const pdvCode = pdv?.codigo || pdv?.code || state.saleCodeIdentifier || 'PDV';
     const pdvName = pdv?.nome || pdv?.apelido || pdv?.descricao || 'PDV';
