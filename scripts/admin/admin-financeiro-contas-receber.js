@@ -1278,13 +1278,20 @@
       row.appendChild(statusCell);
 
       const actionsCell = document.createElement('td');
-      actionsCell.className = 'px-4 py-3 text-center';
+      actionsCell.className = 'px-4 py-3';
       const actionsWrapper = document.createElement('div');
-      actionsWrapper.className = 'grid grid-cols-3 gap-2 place-items-center';
+      actionsWrapper.className = 'grid grid-cols-3 gap-1';
+      actionsWrapper.style.maxWidth = '18rem';
+      actionsWrapper.style.margin = '0 auto';
+      actionsWrapper.style.justifyItems = 'stretch';
+      actionsWrapper.style.alignItems = 'stretch';
+
+      const baseActionClass =
+        'inline-flex w-full items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold leading-tight transition-colors';
 
       const editButton = document.createElement('button');
       editButton.type = 'button';
-      editButton.className = 'forecast-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10';
+      editButton.className = `${baseActionClass} forecast-action-edit border-primary text-primary hover:bg-primary/10`;
       editButton.dataset.action = 'edit-forecast';
       applyDataset(editButton);
       editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
@@ -1292,7 +1299,7 @@
 
       const payButton = document.createElement('button');
       payButton.type = 'button';
-      payButton.className = 'forecast-action-pay inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100';
+      payButton.className = `${baseActionClass} forecast-action-pay border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100`;
       payButton.dataset.action = 'pay-forecast';
       applyDataset(payButton);
       payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
@@ -1301,7 +1308,7 @@
       if (item.status !== 'finalized' && item.status !== 'uncollectible') {
         const uncollectibleButton = document.createElement('button');
         uncollectibleButton.type = 'button';
-        uncollectibleButton.className = 'forecast-action-uncollectible inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100';
+        uncollectibleButton.className = `${baseActionClass} forecast-action-uncollectible border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100`;
         uncollectibleButton.dataset.action = 'mark-uncollectible';
         applyDataset(uncollectibleButton);
         uncollectibleButton.innerHTML = '<i class="fas fa-ban"></i> Impagável';
@@ -1311,7 +1318,7 @@
       if (item.status !== 'finalized' && item.status !== 'protest') {
         const protestButton = document.createElement('button');
         protestButton.type = 'button';
-        protestButton.className = 'forecast-action-protest inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-100';
+        protestButton.className = `${baseActionClass} forecast-action-protest border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100`;
         protestButton.dataset.action = 'mark-protest';
         applyDataset(protestButton);
         protestButton.innerHTML = '<i class="fas fa-file-contract"></i> Protesto';
@@ -1321,7 +1328,7 @@
       if (item.status === 'uncollectible' || item.status === 'protest') {
         const reopenButton = document.createElement('button');
         reopenButton.type = 'button';
-        reopenButton.className = 'forecast-action-reopen inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100';
+        reopenButton.className = `${baseActionClass} forecast-action-reopen border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100`;
         reopenButton.dataset.action = 'restore-installment';
         applyDataset(reopenButton);
         reopenButton.innerHTML = '<i class="fas fa-rotate-left"></i> Reabrir';
@@ -1330,7 +1337,7 @@
 
       const downloadButton = document.createElement('button');
       downloadButton.type = 'button';
-      downloadButton.className = 'forecast-action-download inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100';
+      downloadButton.className = `${baseActionClass} forecast-action-download border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100`;
       downloadButton.dataset.action = 'download-forecast';
       applyDataset(downloadButton);
       downloadButton.innerHTML = '<i class="fas fa-arrow-down"></i> Baixar';
@@ -1338,7 +1345,7 @@
 
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';
-      deleteButton.className = 'forecast-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
+      deleteButton.className = `${baseActionClass} forecast-action-delete border-red-200 text-red-600 hover:bg-red-50`;
       deleteButton.dataset.action = 'delete-forecast';
       applyDataset(deleteButton);
       deleteButton.innerHTML = '<i class="fas fa-trash"></i> Excluir';
@@ -1525,13 +1532,20 @@
       row.appendChild(statusCell);
 
       const actionsCell = document.createElement('td');
-      actionsCell.className = 'px-4 py-3 text-center';
+      actionsCell.className = 'px-4 py-3';
       const actionsWrapper = document.createElement('div');
-      actionsWrapper.className = 'grid grid-cols-3 gap-2 place-items-center';
+      actionsWrapper.className = 'grid grid-cols-3 gap-1';
+      actionsWrapper.style.maxWidth = '18rem';
+      actionsWrapper.style.margin = '0 auto';
+      actionsWrapper.style.justifyItems = 'stretch';
+      actionsWrapper.style.alignItems = 'stretch';
+
+      const baseActionClass =
+        'inline-flex w-full items-center justify-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold leading-tight transition-colors';
 
       const editButton = document.createElement('button');
       editButton.type = 'button';
-      editButton.className = 'history-action-edit inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10';
+      editButton.className = `${baseActionClass} history-action-edit border-primary text-primary hover:bg-primary/10`;
       editButton.dataset.action = 'edit-history';
       applyDataset(editButton);
       editButton.innerHTML = '<i class="fas fa-pen"></i> Editar';
@@ -1539,7 +1553,7 @@
 
       const payButton = document.createElement('button');
       payButton.type = 'button';
-      payButton.className = 'history-action-pay inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100';
+      payButton.className = `${baseActionClass} history-action-pay border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100`;
       payButton.dataset.action = 'pay-history';
       applyDataset(payButton);
       payButton.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Pagar';
@@ -1548,7 +1562,7 @@
       if (item.status !== 'finalized' && item.status !== 'uncollectible') {
         const uncollectibleButton = document.createElement('button');
         uncollectibleButton.type = 'button';
-        uncollectibleButton.className = 'history-action-uncollectible inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100';
+        uncollectibleButton.className = `${baseActionClass} history-action-uncollectible border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100`;
         uncollectibleButton.dataset.action = 'mark-uncollectible';
         applyDataset(uncollectibleButton);
         uncollectibleButton.innerHTML = '<i class="fas fa-ban"></i> Impagável';
@@ -1558,7 +1572,7 @@
       if (item.status !== 'finalized' && item.status !== 'protest') {
         const protestButton = document.createElement('button');
         protestButton.type = 'button';
-        protestButton.className = 'history-action-protest inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-100';
+        protestButton.className = `${baseActionClass} history-action-protest border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100`;
         protestButton.dataset.action = 'mark-protest';
         applyDataset(protestButton);
         protestButton.innerHTML = '<i class="fas fa-file-contract"></i> Protesto';
@@ -1568,7 +1582,7 @@
       if (item.status === 'uncollectible' || item.status === 'protest') {
         const reopenButton = document.createElement('button');
         reopenButton.type = 'button';
-        reopenButton.className = 'history-action-reopen inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100';
+        reopenButton.className = `${baseActionClass} history-action-reopen border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100`;
         reopenButton.dataset.action = 'restore-installment';
         applyDataset(reopenButton);
         reopenButton.innerHTML = '<i class="fas fa-rotate-left"></i> Reabrir';
@@ -1577,7 +1591,7 @@
 
       const downloadButton = document.createElement('button');
       downloadButton.type = 'button';
-      downloadButton.className = 'history-action-download inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100';
+      downloadButton.className = `${baseActionClass} history-action-download border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100`;
       downloadButton.dataset.action = 'download-history';
       applyDataset(downloadButton);
       downloadButton.innerHTML = '<i class="fas fa-arrow-down"></i> Baixar';
@@ -1585,7 +1599,7 @@
 
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';
-      deleteButton.className = 'history-action-delete inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50';
+      deleteButton.className = `${baseActionClass} history-action-delete border-red-200 text-red-600 hover:bg-red-50`;
       deleteButton.dataset.action = 'delete-history';
       applyDataset(deleteButton);
       deleteButton.innerHTML = '<i class="fas fa-trash"></i> Excluir';
