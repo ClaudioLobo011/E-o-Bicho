@@ -6241,6 +6241,7 @@
         const anticipated = resolveAnticipationFlag(method, payment);
         const normalizedInstallments = [];
         const firstParcelOffset = configMap.has(1) ? configMap.get(1) : baseDays;
+        const scheduledDueDates = [];
         if (anticipated) {
           const dueDate = addDays(saleDateObj, firstParcelOffset);
           receivables.push(
@@ -6272,9 +6273,14 @@
             } else if (parcelNumber === 1) {
               dueDate = firstDue;
             } else {
-              const offset = 30 * (parcelNumber - 1);
-              dueDate = addDays(firstDue, offset);
+              const previousDue = scheduledDueDates[scheduledDueDates.length - 1] || firstDue;
+              dueDate = addDays(previousDue, 30);
             }
+            const lastScheduled = scheduledDueDates[scheduledDueDates.length - 1] || null;
+            if (lastScheduled && dueDate.getTime() <= lastScheduled.getTime()) {
+              dueDate = addDays(lastScheduled, 30);
+            }
+            scheduledDueDates.push(dueDate);
             receivables.push(
               createInstallmentEntry({
                 parcelNumber,
