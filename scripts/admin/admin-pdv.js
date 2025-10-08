@@ -102,6 +102,10 @@
     modalActiveTab: 'cliente',
     financeSettings: { contaCorrente: null, contaContabilReceber: null },
     accountsReceivable: [],
+    receivablesSearchQuery: '',
+    receivablesSearchResults: [],
+    receivablesSearchLoading: false,
+    receivablesSelectedCustomer: null,
     crediarioModalMethod: null,
     crediarioInstallments: [],
     crediarioNextParcelNumber: 1,
@@ -357,6 +361,7 @@
   const resolveCustomerName = (customer) => {
     if (!customer || typeof customer !== 'object') return '';
     return (
+      customer.nomeCompleto ||
       customer.nome ||
       customer.razaoSocial ||
       customer.fantasia ||
@@ -529,6 +534,8 @@
   let customerSearchTimeout = null;
   let customerSearchController = null;
   let customerPetsController = null;
+  let receivablesSearchTimeout = null;
+  let receivablesSearchController = null;
   let paymentModalState = null;
   let appointmentsRequestId = 0;
 
@@ -2138,6 +2145,22 @@
     elements.customerClear = document.getElementById('pdv-customer-clear');
     elements.customerCancel = document.getElementById('pdv-customer-cancel');
 
+    elements.receivablesSearchInput = document.getElementById('pdv-receivables-search');
+    elements.receivablesSearchResults = document.getElementById('pdv-receivables-search-results');
+    elements.receivablesSearchEmpty = document.getElementById('pdv-receivables-search-empty');
+    elements.receivablesSearchLoading = document.getElementById('pdv-receivables-search-loading');
+    elements.receivablesSelected = document.getElementById('pdv-receivables-selected');
+    elements.receivablesName = document.getElementById('pdv-receivables-customer-name');
+    elements.receivablesDoc = document.getElementById('pdv-receivables-customer-doc');
+    elements.receivablesContact = document.getElementById('pdv-receivables-customer-contact');
+    elements.receivablesLimit = document.getElementById('pdv-receivables-customer-limit');
+    elements.receivablesPending = document.getElementById('pdv-receivables-customer-pending');
+    elements.receivablesClear = document.getElementById('pdv-receivables-clear');
+    elements.receivablesEmpty = document.getElementById('pdv-receivables-empty');
+    elements.receivablesTable = document.getElementById('pdv-receivables-table');
+    elements.receivablesList = document.getElementById('pdv-receivables-list');
+    elements.receivablesTotal = document.getElementById('pdv-receivables-total');
+
     elements.caixaActions = document.getElementById('pdv-caixa-actions');
     elements.caixaStateLabel = document.getElementById('pdv-caixa-state-label');
     elements.actionDetails = document.getElementById('pdv-caixa-action-details');
@@ -2794,6 +2817,9 @@
     if (!cliente) {
       state.vendaPet = null;
     }
+    if (cliente && !state.receivablesSelectedCustomer) {
+      setReceivablesSelectedCustomer(cliente);
+    }
     updateSaleCustomerSummary();
     updateCrediarioCustomerSummary();
     if (elements.crediarioError) {
@@ -2944,6 +2970,319 @@
       fragment.appendChild(button);
     });
     elements.customerPetsList.appendChild(fragment);
+  };
+
+  const normalizeReceivableCustomerId = (entry) => {
+    if (!entry || typeof entry !== 'object') return '';
+    const candidate =
+      entry.clienteId ||
+      entry.cliente_id ||
+      entry.customerId ||
+      entry.cliente ||
+      entry.customer ||
+      (entry.cliente && typeof entry.cliente === 'object'
+        ? entry.cliente._id || entry.cliente.id
+        : '') ||
+      (entry.customer && typeof entry.customer === 'object'
+        ? entry.customer._id || entry.customer.id
+        : '');
+    return candidate ? String(candidate) : '';
+  };
+
+  const isCrediarioReceivable = (entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    if (entry.crediarioMethodId) return true;
+    const methodLabel = String(entry.paymentMethodLabel || entry.paymentLabel || '').toLowerCase();
+    return methodLabel.includes('crediário') || methodLabel.includes('crediario');
+  };
+
+  const getReceivablesForCustomer = (customerId) => {
+    const id = customerId ? String(customerId) : '';
+    if (!id) return [];
+    const entries = Array.isArray(state.accountsReceivable) ? state.accountsReceivable : [];
+    return entries.filter((entry) => {
+      if (!isCrediarioReceivable(entry)) return false;
+      const entryId = normalizeReceivableCustomerId(entry);
+      return entryId && entryId === id;
+    });
+  };
+
+  const renderReceivablesSearchResults = () => {
+    if (
+      !elements.receivablesSearchResults ||
+      !elements.receivablesSearchEmpty ||
+      !elements.receivablesSearchLoading
+    ) {
+      return;
+    }
+    elements.receivablesSearchResults.innerHTML = '';
+    if (state.receivablesSearchLoading) {
+      elements.receivablesSearchLoading.classList.remove('hidden');
+      elements.receivablesSearchEmpty.classList.add('hidden');
+      return;
+    }
+    elements.receivablesSearchLoading.classList.add('hidden');
+    const query = state.receivablesSearchQuery.trim();
+    if (!query) {
+      elements.receivablesSearchEmpty.textContent = 'Digite para buscar clientes.';
+      elements.receivablesSearchEmpty.classList.remove('hidden');
+      return;
+    }
+    if (!state.receivablesSearchResults.length) {
+      elements.receivablesSearchEmpty.textContent = 'Nenhum cliente encontrado para a busca informada.';
+      elements.receivablesSearchEmpty.classList.remove('hidden');
+      return;
+    }
+    elements.receivablesSearchEmpty.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    state.receivablesSearchResults.forEach((cliente) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      const rawId = cliente?._id || cliente?.id || '';
+      const id = rawId ? String(rawId) : '';
+      if (id) {
+        button.setAttribute('data-receivables-customer-id', id);
+      }
+      const selectedId =
+        state.receivablesSelectedCustomer?._id || state.receivablesSelectedCustomer?.id || '';
+      const isSelected = selectedId && id && String(selectedId) === id;
+      button.className = [
+        'w-full text-left rounded-lg border px-4 py-3 transition flex flex-col gap-1',
+        isSelected
+          ? 'border-primary bg-primary/5 text-primary'
+          : 'border-gray-200 text-gray-700 hover:border-primary hover:bg-primary/5',
+      ].join(' ');
+      const name =
+        resolveCustomerName(cliente) ||
+        cliente.nomeCompleto ||
+        cliente.nomeContato ||
+        'Cliente sem nome';
+      const documento = resolveCustomerDocument(cliente);
+      const contato = [cliente.email, cliente.celular, cliente.telefone]
+        .filter(Boolean)
+        .join(' • ');
+      const documentLabel = documento ? `Documento: ${documento}` : 'Documento não informado';
+      const contactLabel = contato || 'Contato não informado';
+      button.innerHTML = `
+        <span class="text-sm font-semibold">${escapeHtml(name)}</span>
+        <span class="text-xs text-gray-500">${escapeHtml(documentLabel)}</span>
+        <span class="text-xs text-gray-500">${escapeHtml(contactLabel)}</span>
+      `;
+      fragment.appendChild(button);
+    });
+    elements.receivablesSearchResults.appendChild(fragment);
+  };
+
+  const renderReceivablesSelectedCustomer = () => {
+    if (!elements.receivablesSelected) return;
+    const customer = state.receivablesSelectedCustomer;
+    if (!customer) {
+      elements.receivablesSelected.classList.add('hidden');
+      if (elements.receivablesName) elements.receivablesName.textContent = '—';
+      if (elements.receivablesDoc) elements.receivablesDoc.textContent = 'Documento: —';
+      if (elements.receivablesContact) elements.receivablesContact.textContent = 'Contato: —';
+      if (elements.receivablesLimit) elements.receivablesLimit.textContent = '—';
+      if (elements.receivablesPending) elements.receivablesPending.textContent = formatCurrency(0);
+      return;
+    }
+    elements.receivablesSelected.classList.remove('hidden');
+    const name =
+      resolveCustomerName(customer) ||
+      customer.nomeCompleto ||
+      customer.nomeContato ||
+      'Cliente selecionado';
+    const documento = resolveCustomerDocument(customer);
+    const contato = [customer.email, customer.celular, customer.telefone]
+      .filter(Boolean)
+      .join(' • ');
+    if (elements.receivablesName) {
+      elements.receivablesName.textContent = name;
+    }
+    if (elements.receivablesDoc) {
+      elements.receivablesDoc.textContent = documento
+        ? `Documento: ${documento}`
+        : 'Documento não informado';
+    }
+    if (elements.receivablesContact) {
+      elements.receivablesContact.textContent = contato
+        ? `Contato: ${contato}`
+        : 'Contato não informado';
+    }
+    if (elements.receivablesLimit) {
+      const limit =
+        customer.financeiro?.limiteCredito ??
+        customer.limiteCredito ??
+        customer.creditLimit ??
+        null;
+      elements.receivablesLimit.textContent =
+        limit !== null && limit !== undefined
+          ? formatCurrency(safeNumber(limit))
+          : 'Não informado';
+    }
+  };
+
+  const renderReceivablesList = () => {
+    if (
+      !elements.receivablesList ||
+      !elements.receivablesEmpty ||
+      !elements.receivablesTable ||
+      !elements.receivablesTotal
+    ) {
+      return;
+    }
+    const customer = state.receivablesSelectedCustomer;
+    const customerId = customer?._id || customer?.id || '';
+    if (!customerId) {
+      elements.receivablesList.innerHTML = '';
+      elements.receivablesTable.classList.add('hidden');
+      elements.receivablesEmpty.textContent =
+        'Selecione um cliente para visualizar as pendências de crediário.';
+      elements.receivablesEmpty.classList.remove('hidden');
+      elements.receivablesTotal.textContent = formatCurrency(0);
+      if (elements.receivablesPending) {
+        elements.receivablesPending.textContent = formatCurrency(0);
+      }
+      return;
+    }
+    const receivables = getReceivablesForCustomer(customerId).map((entry) => ({ ...entry }));
+    receivables.sort((a, b) => {
+      const dueA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const dueB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      if (dueA && dueB && dueA !== dueB) {
+        return dueA - dueB;
+      }
+      const parcelA = Number.parseInt(a.parcelNumber ?? a.parcela ?? a.numeroParcela, 10) || 0;
+      const parcelB = Number.parseInt(b.parcelNumber ?? b.parcela ?? b.numeroParcela, 10) || 0;
+      return parcelA - parcelB;
+    });
+    const total = receivables.reduce(
+      (sum, entry) => sum + safeNumber(entry.value ?? entry.valor ?? entry.amount ?? 0),
+      0
+    );
+    elements.receivablesTotal.textContent = formatCurrency(total);
+    if (elements.receivablesPending) {
+      elements.receivablesPending.textContent = formatCurrency(total);
+    }
+    if (!receivables.length) {
+      elements.receivablesList.innerHTML = '';
+      elements.receivablesTable.classList.add('hidden');
+      elements.receivablesEmpty.textContent =
+        'Nenhuma pendência de crediário encontrada para este cliente.';
+      elements.receivablesEmpty.classList.remove('hidden');
+      return;
+    }
+    elements.receivablesEmpty.classList.add('hidden');
+    elements.receivablesTable.classList.remove('hidden');
+    elements.receivablesList.innerHTML = '';
+    const fragment = document.createDocumentFragment();
+    receivables.forEach((entry) => {
+      const tr = document.createElement('tr');
+      const saleCode = entry.saleCode || entry.sale || '—';
+      const parcel = entry.parcelNumber ?? entry.parcela ?? entry.numeroParcela ?? '—';
+      const dueLabel = entry.dueDateLabel || formatDateLabel(entry.dueDate) || 'Sem vencimento';
+      const valueLabel = formatCurrency(
+        safeNumber(entry.value ?? entry.valor ?? entry.amount ?? 0)
+      );
+      const methodLabel = entry.paymentMethodLabel || 'Crediário';
+      tr.innerHTML = `
+        <td class="px-3 py-2 whitespace-nowrap text-gray-700">${escapeHtml(saleCode || '—')}</td>
+        <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(String(parcel))}</td>
+        <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(dueLabel)}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-gray-700">${escapeHtml(valueLabel)}</td>
+        <td class="px-3 py-2">${escapeHtml(methodLabel)}</td>
+      `;
+      fragment.appendChild(tr);
+    });
+    elements.receivablesList.appendChild(fragment);
+  };
+
+  const setReceivablesSelectedCustomer = (cliente) => {
+    state.receivablesSelectedCustomer = cliente ? { ...cliente } : null;
+    renderReceivablesSelectedCustomer();
+    renderReceivablesSearchResults();
+    renderReceivablesList();
+  };
+
+  const clearReceivablesSelection = () => {
+    state.receivablesSelectedCustomer = null;
+    renderReceivablesSelectedCustomer();
+    renderReceivablesSearchResults();
+    renderReceivablesList();
+  };
+
+  const performReceivablesSearch = async (term) => {
+    const query = term.trim();
+    state.receivablesSearchQuery = term;
+    if (receivablesSearchController) {
+      receivablesSearchController.abort();
+      receivablesSearchController = null;
+    }
+    if (!query) {
+      state.receivablesSearchResults = [];
+      state.receivablesSearchLoading = false;
+      renderReceivablesSearchResults();
+      return;
+    }
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    state.receivablesSearchLoading = true;
+    renderReceivablesSearchResults();
+    receivablesSearchController = new AbortController();
+    try {
+      const response = await fetch(
+        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=8`,
+        { headers, signal: receivablesSearchController.signal }
+      );
+      if (!response.ok) {
+        throw new Error('Não foi possível buscar clientes.');
+      }
+      const payload = await response.json();
+      state.receivablesSearchResults = Array.isArray(payload) ? payload : [];
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      console.error('Erro ao buscar clientes (contas a receber):', error);
+      notify(error.message || 'Não foi possível buscar clientes.', 'error');
+      state.receivablesSearchResults = [];
+    } finally {
+      state.receivablesSearchLoading = false;
+      receivablesSearchController = null;
+      renderReceivablesSearchResults();
+    }
+  };
+
+  const handleReceivablesSearchInput = (event) => {
+    const value = event.target.value || '';
+    state.receivablesSearchQuery = value;
+    if (receivablesSearchTimeout) {
+      clearTimeout(receivablesSearchTimeout);
+    }
+    receivablesSearchTimeout = setTimeout(() => performReceivablesSearch(value), 300);
+    if (!value.trim()) {
+      state.receivablesSearchResults = [];
+      state.receivablesSearchLoading = false;
+      renderReceivablesSearchResults();
+    }
+  };
+
+  const handleReceivablesResultsClick = (event) => {
+    const button = event.target.closest('[data-receivables-customer-id]');
+    if (!button) return;
+    const id = button.getAttribute('data-receivables-customer-id');
+    if (!id) return;
+    const cliente = state.receivablesSearchResults.find((item) => {
+      const itemId = item?._id || item?.id || '';
+      return itemId && String(itemId) === id;
+    });
+    if (!cliente) return;
+    setReceivablesSelectedCustomer(cliente);
+    window.setTimeout(() => {
+      elements.receivablesTable?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
+  };
+
+  const handleReceivablesClear = () => {
+    clearReceivablesSelection();
+    elements.receivablesSearchInput?.focus();
   };
 
   const clearProductSearchArea = () => {
@@ -5235,11 +5574,12 @@
   const syncAccountsReceivableForSale = (saleId, receivables) => {
     if (!saleId) return;
     state.accountsReceivable = state.accountsReceivable.filter((entry) => entry.saleId !== saleId);
-    if (!Array.isArray(receivables) || !receivables.length) {
-      return;
+    if (Array.isArray(receivables) && receivables.length) {
+      const enriched = receivables.map((entry) => ({ ...entry, saleId }));
+      state.accountsReceivable.push(...enriched);
     }
-    const enriched = receivables.map((entry) => ({ ...entry, saleId }));
-    state.accountsReceivable.push(...enriched);
+    renderReceivablesList();
+    renderReceivablesSelectedCustomer();
   };
 
   const emitFiscalForSale = async (saleId, { notifyOnSuccess = true } = {}) => {
@@ -9781,6 +10121,7 @@
     state.itens = [];
     state.vendaCliente = null;
     state.vendaPet = null;
+    state.accountsReceivable = [];
     state.summary = { abertura: 0, recebido: 0, saldo: 0 };
     state.caixaInfo = {
       aberturaData: null,
@@ -9805,6 +10146,10 @@
     state.customerSearchQuery = '';
     state.customerPets = [];
     state.customerPetsLoading = false;
+    state.receivablesSearchQuery = '';
+    state.receivablesSearchResults = [];
+    state.receivablesSearchLoading = false;
+    state.receivablesSelectedCustomer = null;
     state.modalSelectedCliente = null;
     state.modalSelectedPet = null;
     state.modalActiveTab = 'cliente';
@@ -9848,6 +10193,14 @@
       customerPetsController.abort();
       customerPetsController = null;
     }
+    if (receivablesSearchTimeout) {
+      clearTimeout(receivablesSearchTimeout);
+      receivablesSearchTimeout = null;
+    }
+    if (receivablesSearchController) {
+      receivablesSearchController.abort();
+      receivablesSearchController = null;
+    }
     if (elements.customerSearchInput) {
       elements.customerSearchInput.value = '';
     }
@@ -9870,6 +10223,12 @@
     if (elements.customerPetsEmpty) {
       elements.customerPetsEmpty.textContent = 'Nenhum pet disponível.';
     }
+    if (elements.receivablesSearchInput) {
+      elements.receivablesSearchInput.value = '';
+    }
+    renderReceivablesSearchResults();
+    renderReceivablesSelectedCustomer();
+    renderReceivablesList();
     if (elements.searchInput) {
       elements.searchInput.value = '';
     }
@@ -10220,6 +10579,8 @@
       }
     });
     state.accountsReceivable = mergedReceivables;
+    renderReceivablesList();
+    renderReceivablesSelectedCustomer();
     const budgetsFonte = Array.isArray(pdv?.budgets)
       ? pdv.budgets
       : Array.isArray(pdv?.orcamentos)
@@ -11060,6 +11421,9 @@
     elements.customerSearchInput?.addEventListener('input', handleCustomerSearchInput);
     elements.customerResultsList?.addEventListener('click', handleCustomerResultsClick);
     elements.customerPetsList?.addEventListener('click', handleCustomerPetsClick);
+    elements.receivablesSearchInput?.addEventListener('input', handleReceivablesSearchInput);
+    elements.receivablesSearchResults?.addEventListener('click', handleReceivablesResultsClick);
+    elements.receivablesClear?.addEventListener('click', handleReceivablesClear);
     Array.from(elements.customerTabButtons || []).forEach((button) => {
       button.addEventListener('click', handleCustomerTabClick);
     });
