@@ -45,44 +45,48 @@
         </header>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-8">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div class="xl:col-span-1">
               <label for="transfer-number" class="block text-sm font-medium text-gray-700 mb-1">Número</label>
               <input type="text" id="transfer-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-gray-50 text-gray-600" value="Gerado automaticamente" readonly>
             </div>
-            <div>
+            <div class="xl:col-span-1">
               <label for="transfer-date" class="block text-sm font-medium text-gray-700 mb-1">Data da solicitação <span class="text-red-500">*</span></label>
               <input type="date" id="transfer-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
             </div>
-            <div class="space-y-3">
-              <div>
-                <label for="origin-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de origem <span class="text-red-500">*</span></label>
-                <select id="origin-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                  <option value="">Selecione</option>
-                </select>
-              </div>
-              <div>
-                <label for="transfer-origin" class="block text-sm font-medium text-gray-700 mb-1">Depósito de origem <span class="text-red-500">*</span></label>
-                <select id="transfer-origin" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                  <option value="">Selecione</option>
-                </select>
-              </div>
-            </div>
-            <div class="space-y-3">
-              <div>
-                <label for="destination-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de destino <span class="text-red-500">*</span></label>
-                <select id="destination-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                  <option value="">Selecione</option>
-                </select>
-              </div>
-              <div>
-                <label for="transfer-destination" class="block text-sm font-medium text-gray-700 mb-1">Depósito de destino <span class="text-red-500">*</span></label>
-                <select id="transfer-destination" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                  <option value="">Selecione</option>
-                </select>
+            <div class="xl:col-span-2">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label for="origin-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de origem <span class="text-red-500">*</span></label>
+                  <select id="origin-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                    <option value="">Selecione</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="transfer-origin" class="block text-sm font-medium text-gray-700 mb-1">Depósito de origem <span class="text-red-500">*</span></label>
+                  <select id="transfer-origin" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                    <option value="">Selecione</option>
+                  </select>
+                </div>
               </div>
             </div>
-            <div>
+            <div class="xl:col-span-2">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label for="destination-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de destino <span class="text-red-500">*</span></label>
+                  <select id="destination-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                    <option value="">Selecione</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="transfer-destination" class="block text-sm font-medium text-gray-700 mb-1">Depósito de destino <span class="text-red-500">*</span></label>
+                  <select id="transfer-destination" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                    <option value="">Selecione</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="xl:col-span-2">
               <label for="transfer-responsible-search" class="block text-sm font-medium text-gray-700 mb-1">Responsável <span class="text-red-500">*</span></label>
               <div class="relative">
                 <input type="hidden" id="transfer-responsible">
@@ -91,7 +95,7 @@
               </div>
               <p class="mt-1 text-xs text-gray-500">Digite para localizar colaboradores com acesso administrativo e confirme a seleção pelo nome exibido.</p>
             </div>
-            <div>
+            <div class="xl:col-span-2">
               <label for="transfer-reference" class="block text-sm font-medium text-gray-700 mb-1">Documento de referência</label>
               <input type="text" id="transfer-reference" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Pedido interno 12045">
             </div>
