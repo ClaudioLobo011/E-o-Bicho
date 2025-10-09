@@ -4,6 +4,7 @@
     deposits: [],
     responsaveis: [],
     items: [],
+    selectedProduct: null,
   };
 
   const selectors = {
@@ -26,6 +27,25 @@
     totalWeight: document.getElementById('transfer-total-weight'),
     totalValue: document.getElementById('transfer-total-value'),
     saveButton: document.getElementById('transfer-save-button'),
+    selectedProductContainer: document.getElementById('transfer-selected-product'),
+    selectedProductName: document.getElementById('transfer-selected-product-name'),
+    selectedProductSku: document.getElementById('transfer-selected-product-sku'),
+    selectedProductBarcode: document.getElementById('transfer-selected-product-barcode'),
+    selectedProductUnit: document.getElementById('transfer-selected-product-unit'),
+    selectedOriginDeposit: document.getElementById('transfer-selected-product-origin-deposit'),
+    selectedDestinationDeposit: document.getElementById('transfer-selected-product-destination-deposit'),
+    selectedOriginStock: document.getElementById('transfer-selected-product-origin-stock'),
+    selectedDestinationStock: document.getElementById('transfer-selected-product-destination-stock'),
+    selectedOriginCost: document.getElementById('transfer-selected-product-origin-cost'),
+    selectedDestinationCost: document.getElementById('transfer-selected-product-destination-cost'),
+    selectedOriginSale: document.getElementById('transfer-selected-product-origin-sale'),
+    selectedDestinationSale: document.getElementById('transfer-selected-product-destination-sale'),
+    selectedOriginUnit: document.getElementById('transfer-selected-product-origin-unit'),
+    selectedDestinationUnit: document.getElementById('transfer-selected-product-destination-unit'),
+    selectedProductQuantity: document.getElementById('transfer-selected-product-quantity'),
+    selectedProductAddButton: document.getElementById('transfer-selected-product-add'),
+    selectedProductClearButton: document.getElementById('transfer-selected-product-clear'),
+    selectedProductWarning: document.getElementById('transfer-selected-product-warning'),
   };
 
   const productSearchSelectors = {
@@ -124,6 +144,119 @@
       return '0 kg';
     }
     return `${number.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`;
+  }
+
+  function formatQuantityDisplay(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      return '0';
+    }
+    if (Number.isInteger(number)) {
+      return number.toLocaleString('pt-BR');
+    }
+    return number.toLocaleString('pt-BR', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 3,
+    });
+  }
+
+  function getDepositNameById(id) {
+    if (!id) return '';
+    const deposit = state.deposits.find((item) => String(item._id) === String(id));
+    return deposit?.nome || '';
+  }
+
+  function findStockForDeposit(stocks, depositId) {
+    if (!depositId || !Array.isArray(stocks)) return null;
+    return stocks.find((stock) => String(stock.depositId) === String(depositId));
+  }
+
+  function toggleSelectedProductWarning(show) {
+    const warning = selectors.selectedProductWarning;
+    if (!warning) return;
+    warning.classList.toggle('hidden', !show);
+  }
+
+  function renderSelectedProduct() {
+    const container = selectors.selectedProductContainer;
+    if (!container) return;
+
+    const product = state.selectedProduct;
+    if (!product) {
+      container.classList.add('hidden');
+      toggleSelectedProductWarning(false);
+      return;
+    }
+
+    container.classList.remove('hidden');
+
+    if (selectors.selectedProductName) {
+      selectors.selectedProductName.textContent = product.description || 'Produto sem descrição';
+    }
+    if (selectors.selectedProductSku) {
+      selectors.selectedProductSku.textContent = product.sku || '—';
+    }
+    if (selectors.selectedProductBarcode) {
+      selectors.selectedProductBarcode.textContent = product.barcode || '—';
+    }
+    if (selectors.selectedProductUnit) {
+      selectors.selectedProductUnit.textContent = product.unit || '—';
+    }
+
+    const originDepositId = selectors.originDeposit?.value || '';
+    const destinationDepositId = selectors.destinationDeposit?.value || '';
+
+    if (selectors.selectedOriginDeposit) {
+      const originName = getDepositNameById(originDepositId);
+      selectors.selectedOriginDeposit.textContent = originName || 'Selecione o depósito';
+    }
+    if (selectors.selectedDestinationDeposit) {
+      const destinationName = getDepositNameById(destinationDepositId);
+      selectors.selectedDestinationDeposit.textContent = destinationName || 'Selecione o depósito';
+    }
+
+    const originStock = findStockForDeposit(product.stocks, originDepositId);
+    const destinationStock = findStockForDeposit(product.stocks, destinationDepositId);
+
+    if (selectors.selectedOriginStock) {
+      selectors.selectedOriginStock.textContent = formatQuantityDisplay(originStock?.quantity || 0);
+    }
+    if (selectors.selectedDestinationStock) {
+      selectors.selectedDestinationStock.textContent = formatQuantityDisplay(destinationStock?.quantity || 0);
+    }
+
+    const costText = formatCurrency(product.unitCost);
+    const saleText = formatCurrency(product.unitSale);
+
+    if (selectors.selectedOriginCost) {
+      selectors.selectedOriginCost.textContent = costText;
+    }
+    if (selectors.selectedDestinationCost) {
+      selectors.selectedDestinationCost.textContent = costText;
+    }
+    if (selectors.selectedOriginSale) {
+      selectors.selectedOriginSale.textContent = saleText;
+    }
+    if (selectors.selectedDestinationSale) {
+      selectors.selectedDestinationSale.textContent = saleText;
+    }
+
+    if (selectors.selectedOriginUnit) {
+      selectors.selectedOriginUnit.textContent = originStock?.unit || product.unit || '—';
+    }
+    if (selectors.selectedDestinationUnit) {
+      selectors.selectedDestinationUnit.textContent = destinationStock?.unit || product.unit || '—';
+    }
+
+    toggleSelectedProductWarning(!originDepositId || !destinationDepositId);
+  }
+
+  function clearSelectedProduct() {
+    state.selectedProduct = null;
+    if (selectors.selectedProductQuantity) {
+      selectors.selectedProductQuantity.value = '1';
+    }
+    renderSelectedProduct();
   }
 
   function setTodayDate() {
@@ -498,6 +631,73 @@
     }
   }
 
+  async function fetchProductDetails(productId) {
+    if (!productId) {
+      throw new Error('Produto inválido selecionado.');
+    }
+
+    const token = getToken();
+    if (!token) {
+      throw new Error('Sessão expirada. Faça login novamente.');
+    }
+
+    const response = await fetch(`${API_CONFIG.BASE_URL}/transfers/products/${productId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data?.message || 'Não foi possível carregar os detalhes do produto.');
+    }
+
+    const product = data?.product || {};
+    const stocks = Array.isArray(data?.stocks)
+      ? data.stocks.map((stock) => ({
+          depositId: stock?.depositId ? String(stock.depositId) : '',
+          quantity: Number(stock?.quantity) || 0,
+          unit: stock?.unit || '',
+        }))
+      : [];
+
+    return {
+      productId: String(product?._id || productId),
+      sku: product?.cod || '',
+      barcode: product?.codbarras || '',
+      description: product?.nome || '',
+      unit: product?.unidade || '',
+      unitWeight: Number(product?.peso),
+      unitCost: Number(product?.custo),
+      unitSale: Number(product?.venda),
+      stocks,
+    };
+  }
+
+  async function handleProductSelection(product) {
+    if (!product || !product._id) {
+      showToast('Produto inválido selecionado.', 'error');
+      return;
+    }
+
+    try {
+      renderProductSearchMessage('<div class="flex items-center gap-2"><i class="fas fa-spinner fa-spin"></i> Carregando detalhes do produto...</div>', 'loading');
+      const detailedProduct = await fetchProductDetails(product._id);
+      state.selectedProduct = detailedProduct;
+      if (selectors.selectedProductQuantity) {
+        selectors.selectedProductQuantity.value = '1';
+      }
+      renderSelectedProduct();
+      hideProductResults();
+      if (productSearchSelectors.input) {
+        productSearchSelectors.input.value = '';
+      }
+    } catch (error) {
+      console.error('Erro ao carregar detalhes do produto selecionado:', error);
+      showToast(error.message || 'Não foi possível carregar os detalhes do produto selecionado.', 'error');
+      renderProductSearchMessage(escapeHtml(error.message || 'Erro ao carregar detalhes do produto.'), 'error');
+    }
+  }
+
   function scheduleSearch(term) {
     if (searchState.timeout) {
       clearTimeout(searchState.timeout);
@@ -578,7 +778,7 @@
         const index = Number(button.dataset.index);
         if (!Number.isInteger(index) || index < 0 || index >= searchState.lastResults.length) return;
         const product = searchState.lastResults[index];
-        addProductToTransfer(product);
+        handleProductSelection(product);
       });
       results.addEventListener('mouseenter', () => {
         if (searchState.hideTimeout) {
@@ -601,38 +801,75 @@
     });
   }
 
-  function addProductToTransfer(product) {
-    if (!product || !product._id) {
-      showToast('Produto inválido selecionado.', 'error');
-      return;
-    }
+  function attachSelectedProductControls() {
+    selectors.selectedProductAddButton?.addEventListener('click', addSelectedProductToTransfer);
 
-    const existing = state.items.find((item) => item.productId === String(product._id));
-    if (existing) {
-      existing.quantity = Number(existing.quantity || 0) + 1;
-      renderItemsTable();
-      showToast('Quantidade do item atualizada.', 'info');
-      return;
-    }
-
-    state.items.push({
-      productId: String(product._id),
-      sku: product.cod || '',
-      barcode: product.codbarras || '',
-      description: product.nome || '',
-      quantity: 1,
-      unit: product.unidade || '',
-      lot: '',
-      validity: '',
-      unitWeight: Number(product.peso),
-      unitCost: Number(product.custo),
+    selectors.selectedProductClearButton?.addEventListener('click', () => {
+      clearSelectedProduct();
+      if (productSearchSelectors.input) {
+        productSearchSelectors.input.value = '';
+        productSearchSelectors.input.focus();
+      }
     });
 
-    renderItemsTable();
+    selectors.selectedProductQuantity?.addEventListener('blur', (event) => {
+      const value = Number(event.target.value);
+      if (!Number.isFinite(value) || value <= 0) {
+        event.target.value = '1';
+      }
+    });
+  }
+
+  function addSelectedProductToTransfer() {
+    const selected = state.selectedProduct;
+    if (!selected || !selected.productId) {
+      showToast('Selecione um produto antes de adicionar.', 'warning');
+      return;
+    }
+
+    const originDepositId = selectors.originDeposit?.value || '';
+    const destinationDepositId = selectors.destinationDeposit?.value || '';
+    if (!originDepositId || !destinationDepositId) {
+      showToast('Defina os depósitos de origem e destino antes de adicionar o item.', 'warning');
+      return;
+    }
+
+    const quantityInput = selectors.selectedProductQuantity;
+    const quantityValue = Number(quantityInput?.value);
+    if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+      showToast('Informe uma quantidade válida para transferir.', 'warning');
+      if (quantityInput) {
+        quantityInput.focus();
+      }
+      return;
+    }
+
+    const existing = state.items.find((item) => item.productId === selected.productId);
+    if (existing) {
+      existing.quantity = Number(existing.quantity || 0) + quantityValue;
+      renderItemsTable();
+      showToast('Quantidade do item atualizada.', 'info');
+    } else {
+      state.items.push({
+        productId: selected.productId,
+        sku: selected.sku || '',
+        barcode: selected.barcode || '',
+        description: selected.description || '',
+        quantity: quantityValue,
+        unit: selected.unit || '',
+        lot: '',
+        validity: '',
+        unitWeight: selected.unitWeight,
+        unitCost: selected.unitCost,
+      });
+      renderItemsTable();
+      showToast('Item adicionado à transferência.', 'success');
+    }
+
+    clearSelectedProduct();
     if (productSearchSelectors.input) {
       productSearchSelectors.input.focus();
     }
-    showToast('Item adicionado à transferência.', 'success');
   }
 
   async function loadFormData() {
@@ -661,6 +898,7 @@
       updateDepositSelect(selectors.originCompany, selectors.originDeposit);
       updateDepositSelect(selectors.destinationCompany, selectors.destinationDeposit);
       populateResponsibleList();
+      renderSelectedProduct();
     } catch (error) {
       console.error('Erro ao carregar dados iniciais:', error);
       showModal({
@@ -679,6 +917,7 @@
     updateDepositSelect(selectors.destinationCompany, selectors.destinationDeposit);
     state.items = [];
     renderItemsTable();
+    clearSelectedProduct();
     resetProductSearch();
   }
 
@@ -809,10 +1048,20 @@
   function attachFormEvents() {
     selectors.originCompany?.addEventListener('change', () => {
       updateDepositSelect(selectors.originCompany, selectors.originDeposit);
+      renderSelectedProduct();
     });
 
     selectors.destinationCompany?.addEventListener('change', () => {
       updateDepositSelect(selectors.destinationCompany, selectors.destinationDeposit);
+      renderSelectedProduct();
+    });
+
+    selectors.originDeposit?.addEventListener('change', () => {
+      renderSelectedProduct();
+    });
+
+    selectors.destinationDeposit?.addEventListener('change', () => {
+      renderSelectedProduct();
     });
 
     selectors.form?.addEventListener('submit', handleSubmit);
@@ -822,6 +1071,7 @@
     setTodayDate();
     attachTableListeners();
     attachProductSearchEvents();
+    attachSelectedProductControls();
     attachFormEvents();
     handleResponsibleInputEvents();
     resetProductSearch();

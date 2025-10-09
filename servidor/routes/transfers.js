@@ -85,6 +85,7 @@ router.get('/search-products', requireAuth, authorizeRoles(...allowedRoles), asy
             unidade: 1,
             peso: 1,
             custo: 1,
+            venda: 1,
         })
             .limit(20)
             .sort({ nome: 1 })
@@ -94,6 +95,55 @@ router.get('/search-products', requireAuth, authorizeRoles(...allowedRoles), asy
     } catch (error) {
         console.error('Erro ao buscar produtos para transferência:', error);
         res.status(500).json({ message: 'Não foi possível buscar produtos no momento.' });
+    }
+});
+
+router.get('/products/:id', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Produto inválido informado.' });
+        }
+
+        const product = await Product.findById(id, {
+            cod: 1,
+            codbarras: 1,
+            nome: 1,
+            unidade: 1,
+            peso: 1,
+            custo: 1,
+            venda: 1,
+            estoques: 1,
+        }).lean();
+
+        if (!product) {
+            return res.status(404).json({ message: 'Produto não encontrado.' });
+        }
+
+        const stocks = Array.isArray(product.estoques)
+            ? product.estoques.map((stock) => ({
+                  depositId: stock?.deposito ? String(stock.deposito) : '',
+                  quantity: Number(stock?.quantidade) || 0,
+                  unit: stock?.unidade || '',
+              }))
+            : [];
+
+        res.json({
+            product: {
+                _id: product._id,
+                cod: product.cod,
+                codbarras: product.codbarras,
+                nome: product.nome,
+                unidade: product.unidade,
+                peso: product.peso,
+                custo: product.custo,
+                venda: product.venda,
+            },
+            stocks,
+        });
+    } catch (error) {
+        console.error('Erro ao carregar detalhes do produto para transferência:', error);
+        res.status(500).json({ message: 'Não foi possível carregar os detalhes do produto.' });
     }
 });
 
