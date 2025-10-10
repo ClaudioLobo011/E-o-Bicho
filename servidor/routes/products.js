@@ -539,4 +539,47 @@ router.delete('/:productId/categories/:categoryId', requireAuth, authorizeRoles(
     }
 });
 
+// DELETE /api/products/:id (restrito)
+router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const product = await Product.findById(id);
+
+        if (!product) {
+            return res.status(404).json({ message: 'Produto não encontrado.' });
+        }
+
+        const imagePaths = new Set();
+
+        if (typeof product.imagemPrincipal === 'string' && product.imagemPrincipal && !product.imagemPrincipal.includes('placeholder')) {
+            imagePaths.add(product.imagemPrincipal);
+        }
+
+        if (Array.isArray(product.imagens)) {
+            product.imagens
+                .filter((imagePath) => typeof imagePath === 'string' && imagePath && !imagePath.includes('placeholder'))
+                .forEach((imagePath) => imagePaths.add(imagePath));
+        }
+
+        await product.deleteOne();
+
+        for (const imagePath of imagePaths) {
+            const normalizedPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
+            const absolutePath = path.join('public', normalizedPath);
+            try {
+                if (fs.existsSync(absolutePath)) {
+                    await fs.promises.unlink(absolutePath);
+                }
+            } catch (fileError) {
+                console.warn(`Não foi possível remover a imagem ${absolutePath}:`, fileError);
+            }
+        }
+
+        res.json({ message: 'Produto removido com sucesso.' });
+    } catch (error) {
+        console.error('Erro ao apagar produto:', error);
+        res.status(500).json({ message: 'Erro ao apagar produto.' });
+    }
+});
+
 module.exports = router;

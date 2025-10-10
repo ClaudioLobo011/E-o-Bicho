@@ -88,7 +88,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     </span>`
                 ).join('')
                 : '<span class="text-xs text-gray-400">Sem categoria</span>';
-            
+
+            const encodedProductName = encodeURIComponent(product.nome ?? '');
+
             return `
                 <tr class="bg-white border-b hover:bg-gray-50">
                     <td class="p-4">
@@ -105,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="px-6 py-4">${stockDisplay}</td>
                     <td class="px-6 py-4 text-center">
                         <a href="admin-produto-editar.html?id=${product._id}" class="font-medium text-blue-600 hover:underline mr-3">Editar</a>
-                        <a href="#" class="font-medium text-red-600 hover:underline">Apagar</a>
+                        <button type="button" class="delete-product-btn font-medium text-red-600 hover:underline" data-product-id="${product._id}" data-product-name="${encodedProductName}">Apagar</button>
                     </td>
                 </tr>
             `;
@@ -180,6 +182,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Event Listeners ---
+
+    function getAuthToken() {
+        try {
+            const raw = localStorage.getItem('loggedInUser');
+            if (!raw) return '';
+            const parsed = JSON.parse(raw);
+            return parsed?.token || '';
+        } catch (error) {
+            console.warn('Não foi possível obter o token do usuário logado.', error);
+            return '';
+        }
+    }
 
     function initializeEventListeners() {
         limitSelect.addEventListener('change', (event) => {
@@ -284,6 +298,68 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         tableBody.addEventListener('click', async (event) => {
+            const deleteButton = event.target.closest('button.delete-product-btn');
+            if (deleteButton) {
+                event.preventDefault();
+                const productId = deleteButton.dataset.productId;
+                let productName = '';
+                try {
+                    productName = decodeURIComponent(deleteButton.dataset.productName || '');
+                } catch (error) {
+                    productName = deleteButton.dataset.productName || '';
+                }
+                const displayName = productName || 'este produto';
+
+                showModal({
+                    title: 'Confirmar exclusão',
+                    message: `Tem certeza que deseja apagar o produto "${displayName}"? Esta ação não pode ser desfeita.`,
+                    confirmText: 'Apagar',
+                    cancelText: 'Cancelar',
+                    onConfirm: async () => {
+                        try {
+                            const token = getAuthToken();
+                            if (!token) {
+                                throw new Error('Sessão expirada. Faça login novamente para continuar.');
+                            }
+
+                            const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                }
+                            });
+
+                            let result = null;
+                            try {
+                                result = await response.json();
+                            } catch (parseError) {
+                                result = null;
+                            }
+
+                            if (!response.ok) {
+                                const errorMessage = result?.message || 'Não foi possível apagar o produto.';
+                                throw new Error(errorMessage);
+                            }
+
+                            selectedProductIds.delete(productId);
+                            updateBulkActionsToolbar();
+
+                            showModal({
+                                title: 'Sucesso!',
+                                message: result?.message || 'Produto removido com sucesso.',
+                                confirmText: 'OK',
+                                onConfirm: () => fetchAndDisplayProducts()
+                            });
+                        } catch (error) {
+                            console.error('Erro ao apagar produto:', error);
+                            showModal({ title: 'Erro', message: error.message || 'Não foi possível apagar o produto.', confirmText: 'OK' });
+                        }
+                    }
+                });
+                return;
+            }
+
             const removeButton = event.target.closest('button.remove-category-btn');
             if (removeButton) {
                 const productId = removeButton.dataset.productId;
