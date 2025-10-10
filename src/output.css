@@ -1315,6 +1315,9 @@
   .gap-x-3 {
     column-gap: calc(var(--spacing) * 3);
   }
+  .gap-x-4 {
+    column-gap: calc(var(--spacing) * 4);
+  }
   .gap-x-6 {
     column-gap: calc(var(--spacing) * 6);
   }
@@ -1358,6 +1361,9 @@
   }
   .gap-y-1 {
     row-gap: calc(var(--spacing) * 1);
+  }
+  .gap-y-3 {
+    row-gap: calc(var(--spacing) * 3);
   }
   .gap-y-5 {
     row-gap: calc(var(--spacing) * 5);
@@ -1587,6 +1593,12 @@
   }
   .border-primary {
     border-color: var(--color-primary);
+  }
+  .border-primary\/20 {
+    border-color: color-mix(in srgb, #7A9A55 20%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--color-primary) 20%, transparent);
+    }
   }
   .border-primary\/30 {
     border-color: color-mix(in srgb, #7A9A55 30%, transparent);
@@ -1897,6 +1909,18 @@
   .bg-slate-50 {
     background-color: var(--color-slate-50);
   }
+  .bg-slate-50\/60 {
+    background-color: color-mix(in srgb, oklch(98.4% 0.003 247.858) 60%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-slate-50) 60%, transparent);
+    }
+  }
+  .bg-slate-50\/80 {
+    background-color: color-mix(in srgb, oklch(98.4% 0.003 247.858) 80%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-slate-50) 80%, transparent);
+    }
+  }
   .bg-slate-100 {
     background-color: var(--color-slate-100);
   }
@@ -2181,6 +2205,9 @@
   }
   .align-baseline {
     vertical-align: baseline;
+  }
+  .align-middle {
+    vertical-align: middle;
   }
   .align-top {
     vertical-align: top;
@@ -3627,6 +3654,14 @@
       border-color: transparent;
     }
   }
+  .focus\:bg-primary\/5 {
+    &:focus {
+      background-color: color-mix(in srgb, #7A9A55 5%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        background-color: color-mix(in oklab, var(--color-primary) 5%, transparent);
+      }
+    }
+  }
   .focus\:bg-primary\/10 {
     &:focus {
       background-color: color-mix(in srgb, #7A9A55 10%, transparent);
@@ -3747,6 +3782,14 @@
       --tw-ring-color: color-mix(in srgb, #7A9A55 40%, transparent);
       @supports (color: color-mix(in lab, red, red)) {
         --tw-ring-color: color-mix(in oklab, var(--color-primary) 40%, transparent);
+      }
+    }
+  }
+  .focus\:ring-primary\/50 {
+    &:focus {
+      --tw-ring-color: color-mix(in srgb, #7A9A55 50%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        --tw-ring-color: color-mix(in oklab, var(--color-primary) 50%, transparent);
       }
     }
   }
@@ -4356,6 +4399,11 @@
       grid-column: span 11 / span 11;
     }
   }
+  .lg\:block {
+    @media (width >= 64rem) {
+      display: block;
+    }
+  }
   .lg\:w-1\/3 {
     @media (width >= 64rem) {
       width: calc(1/3 * 100%);
@@ -4404,6 +4452,11 @@
   .lg\:grid-cols-\[minmax\(0\,1\.05fr\)_minmax\(0\,0\.95fr\)\] {
     @media (width >= 64rem) {
       grid-template-columns: minmax(0,1.05fr) minmax(0,0.95fr);
+    }
+  }
+  .lg\:grid-cols-\[minmax\(0\,1fr\)_auto\] {
+    @media (width >= 64rem) {
+      grid-template-columns: minmax(0,1fr) auto;
     }
   }
   .lg\:flex-row {

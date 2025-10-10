@@ -496,10 +496,24 @@
                                     <div id="pdv-receivables-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
                                         Selecione um cliente para visualizar as pendências de crediário.
                                     </div>
+                                    <div id="pdv-receivables-actions" class="hidden flex flex-col gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-gray-700 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span id="pdv-receivables-selected-count" class="font-semibold text-gray-800">0 parcelas selecionadas</span>
+                                            <span class="text-xs text-gray-500">Total</span>
+                                            <span id="pdv-receivables-selected-total" class="font-semibold text-gray-800">R$ 0,00</span>
+                                        </div>
+                                        <button type="button" id="pdv-receivables-pay" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60">
+                                            <i class="fas fa-cash-register text-xs"></i>
+                                            <span>Receber selecionadas</span>
+                                        </button>
+                                    </div>
                                     <div id="pdv-receivables-table" class="hidden overflow-x-auto">
                                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                                             <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
                                                 <tr>
+                                                    <th scope="col" class="px-3 py-2 text-left font-semibold">
+                                                        <span class="sr-only">Selecionar</span>
+                                                    </th>
                                                     <th scope="col" class="px-3 py-2 text-left font-semibold">Venda</th>
                                                     <th scope="col" class="px-3 py-2 text-left font-semibold">Parcela</th>
                                                     <th scope="col" class="px-3 py-2 text-left font-semibold">Vencimento</th>
