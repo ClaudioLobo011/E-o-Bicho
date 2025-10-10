@@ -6023,6 +6023,8 @@
       }
       const paymentType = String(payment.type || method?.type || '').toLowerCase();
       if (paymentType === 'crediario') {
+        method.valor += amount;
+        processed.push(method);
         return;
       }
       let valueToRegister = amount;
@@ -6182,11 +6184,40 @@
         if (!normalizedInstallments.length) {
           return;
         }
+        const installmentMethodIds = [];
+        const installmentMethodLabels = [];
+        installments.forEach((installment) => {
+          const rawId =
+            installment.methodId ||
+            installment.paymentMethodId ||
+            installment.paymentMethod ||
+            '';
+          const normalizedId = rawId !== null && rawId !== undefined ? String(rawId).trim() : '';
+          if (normalizedId) {
+            installmentMethodIds.push(normalizedId);
+          }
+          const rawLabel = installment.methodLabel || installment.paymentMethodLabel || '';
+          const normalizedLabel = rawLabel !== null && rawLabel !== undefined ? String(rawLabel).trim() : '';
+          if (normalizedLabel) {
+            installmentMethodLabels.push(normalizedLabel);
+          }
+        });
+        const uniqueInstallmentMethodIds = Array.from(new Set(installmentMethodIds));
+        const uniqueInstallmentMethodLabels = Array.from(new Set(installmentMethodLabels));
+        const requestPaymentMethodId =
+          uniqueInstallmentMethodIds.length === 1
+            ? uniqueInstallmentMethodIds[0]
+            : paymentMethodId || '';
+        const requestPaymentLabel =
+          uniqueInstallmentMethodLabels.length === 1
+            ? uniqueInstallmentMethodLabels[0]
+            : paymentMethodLabel;
+
         backendRequests.push({
           paymentId: salePaymentId,
-          paymentLabel: paymentMethodLabel,
+          paymentLabel: requestPaymentLabel,
           methodType: paymentMethodType,
-          paymentMethodId: paymentMethodId || '',
+          paymentMethodId: requestPaymentMethodId || '',
           totalValue,
           installments: normalizedInstallments,
           customerId: clienteId ? String(clienteId) : '',
