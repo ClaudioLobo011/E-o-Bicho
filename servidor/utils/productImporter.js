@@ -21,7 +21,8 @@ const COLUMN_KEYS = {
     price: ['Venda', 'venda', 'Preço de Venda'],
     stock: ['Estoque', 'estoque', 'Qtd'],
     inactive: ['Inativo (Sim, Não)', 'Inativo', 'inativo'],
-    ncm: ['NCM', 'ncm']
+    ncm: ['NCM', 'ncm'],
+    unit: ['UN', 'Unidade', 'unidade', 'Un.', 'un', 'Unidad']
 };
 
 const sanitizeString = (value) => {
@@ -122,6 +123,7 @@ const parseProductsFromBuffer = (buffer) => {
         const rawStock = findValueInRow(row, COLUMN_KEYS.stock);
         const rawInactive = findValueInRow(row, COLUMN_KEYS.inactive);
         const rawNcm = sanitizeString(findValueInRow(row, COLUMN_KEYS.ncm));
+        const rawUnit = sanitizeString(findValueInRow(row, COLUMN_KEYS.unit));
 
         if (!rawCode) {
             warnings.push(`Linha ${rowNumber}: Código obrigatório não informado. Registro ignorado.`);
@@ -147,7 +149,8 @@ const parseProductsFromBuffer = (buffer) => {
             venda: parseNumber(rawPrice, 0),
             stock: parseNumber(rawStock, 0),
             inativo: parseBoolean(rawInactive),
-            ncm: rawNcm
+            ncm: rawNcm,
+            unidade: rawUnit
         });
     });
 
@@ -214,11 +217,13 @@ const importProducts = async (socket, productsFromExcel, options = {}) => {
             const fallbackUnit = depositIndex >= 0
                 ? normalizedStocks[depositIndex]?.unidade || ''
                 : (typeof existingProduct?.unidade === 'string' ? existingProduct.unidade.trim() : '');
+            const normalizedProductUnit = typeof product?.unidade === 'string' ? product.unidade.trim() : '';
+            const effectiveUnit = normalizedProductUnit || fallbackUnit || '';
 
             const depositEntry = {
                 deposito: depositIdValue,
                 quantidade: depositQuantity,
-                unidade: fallbackUnit || ''
+                unidade: effectiveUnit
             };
 
             if (depositIndex >= 0) {
@@ -242,6 +247,7 @@ const importProducts = async (socket, productsFromExcel, options = {}) => {
                 ncm: product.ncm || '',
                 inativo: Boolean(product.inativo),
                 searchableString: normalizeText(`${product.nome} ${product.cod} ${product.marca || ''} ${product.codbarras}`),
+                unidade: effectiveUnit,
                 imagens: imagePathsForDB,
                 imagemPrincipal: imagePathsForDB.length > 0 ? imagePathsForDB[0] : '/image/placeholder.png',
                 estoques: normalizedStocks,
