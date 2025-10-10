@@ -1534,6 +1534,18 @@
     });
   };
 
+  const normalizePaymentType = (value) => {
+    const rawValue = value === undefined || value === null ? '' : String(value);
+    if (!rawValue) {
+      return 'avista';
+    }
+    const normalized =
+      typeof rawValue.normalize === 'function'
+        ? rawValue.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        : rawValue;
+    return normalized.toLowerCase();
+  };
+
   const normalizePaymentMethod = (method) => {
     if (!method) {
       return null;
@@ -1543,7 +1555,7 @@
     const id = idSource ? String(idSource) : createUid();
     const label =
       method.name || method.nome || method.label || method.code || 'Meio de pagamento';
-    const type = (method.type || 'avista').toLowerCase();
+    const type = normalizePaymentType(method.type || 'avista');
     const code = method.code ? String(method.code) : '';
     const rawInstallments = Array.isArray(method.installmentConfigurations)
       ? method.installmentConfigurations
@@ -1604,6 +1616,24 @@
       raw: method,
     };
   };
+
+  const createDefaultCrediarioMethod = () => ({
+    id: 'crediario',
+    label: 'Crediário',
+    type: 'crediario',
+    code: 'crediario',
+    installments: [1],
+    installmentConfigurations: [],
+    aliases: ['crediario', 'Crediario', 'Crediário'],
+    raw: {
+      _id: 'crediario',
+      id: 'crediario',
+      code: 'crediario',
+      label: 'Crediário',
+      name: 'Crediário',
+      type: 'crediario',
+    },
+  });
 
   const extractPaymentAmount = (value) => {
     if (value === null || value === undefined) return 0;
@@ -1672,18 +1702,22 @@
   };
 
   const updatePaymentMethods = (methods) => {
+    const sortPaymentMethods = (a, b) => {
+      const typeDiff =
+        (paymentTypeOrder[a.type] ?? Number.MAX_SAFE_INTEGER) -
+        (paymentTypeOrder[b.type] ?? Number.MAX_SAFE_INTEGER);
+      if (typeDiff !== 0) return typeDiff;
+      return a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' });
+    };
+
     const normalized = Array.isArray(methods)
-      ? methods
-          .map((method) => normalizePaymentMethod(method))
-          .filter(Boolean)
-          .sort((a, b) => {
-            const typeDiff =
-              (paymentTypeOrder[a.type] ?? Number.MAX_SAFE_INTEGER) -
-              (paymentTypeOrder[b.type] ?? Number.MAX_SAFE_INTEGER);
-            if (typeDiff !== 0) return typeDiff;
-            return a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' });
-          })
+      ? methods.map((method) => normalizePaymentMethod(method)).filter(Boolean).sort(sortPaymentMethods)
       : [];
+
+    if (!normalized.some((method) => method.type === 'crediario')) {
+      normalized.push(createDefaultCrediarioMethod());
+      normalized.sort(sortPaymentMethods);
+    }
     const previousValues = new Map(
       state.pagamentos.map((item) => [item.id, safeNumber(item.valor)])
     );
