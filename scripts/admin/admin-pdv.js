@@ -127,7 +127,7 @@
     crediarioEditingPayment: null,
     crediarioEditingIndex: -1,
     crediarioModalOpen: false,
-    summary: { abertura: 0, recebido: 0, saldo: 0 },
+    summary: { abertura: 0, recebido: 0, saldo: 0, recebimentosCliente: 0 },
     caixaInfo: {
       aberturaData: null,
       fechamentoData: null,
@@ -1344,6 +1344,7 @@
     const aberturaValor = safeNumber(state.summary.abertura);
     const recebidoValor = safeNumber(state.summary.recebido);
     const saldoValor = safeNumber(state.summary.saldo);
+    const recebimentosClienteValor = safeNumber(state.summary.recebimentosCliente);
 
     const recebimentosItems = createPaymentItems(state.pagamentos);
     const recebimentosTotal = sumPayments(state.pagamentos);
@@ -1378,6 +1379,10 @@
         recebido: {
           value: recebidoValor,
           formatted: formatCurrency(recebidoValor),
+        },
+        recebimentosCliente: {
+          value: recebimentosClienteValor,
+          formatted: formatCurrency(recebimentosClienteValor),
         },
         saldo: {
           value: saldoValor,
@@ -2041,6 +2046,7 @@
         abertura: safeNumber(state.summary.abertura),
         recebido: safeNumber(state.summary.recebido),
         saldo: safeNumber(state.summary.saldo),
+        recebimentosCliente: safeNumber(state.summary.recebimentosCliente),
       },
       caixaInfo: {
         aberturaData: state.caixaInfo.aberturaData || null,
@@ -6340,6 +6346,11 @@
     const paymentsSummary = describeSalePayments(payments);
     const historyPaymentLabel = [customerName, paymentsSummary].filter(Boolean).join(' • ');
     applyPaymentsToCaixa({ payments, total, historyAction, paymentLabel: historyPaymentLabel });
+    const receivedValue = safeNumber(total);
+    if (receivedValue > 0) {
+      state.summary.recebimentosCliente = safeNumber(state.summary.recebimentosCliente) + receivedValue;
+      updateSummary();
+    }
   };
 
   const buildReceivablesPaymentOperations = (entries, payments, options = {}) => {
@@ -7851,9 +7862,14 @@
     lines.push(`Empresa: ${snapshot.meta.store} | PDV: ${snapshot.meta.pdv}`);
     lines.push(`Período: ${snapshot.meta.abertura} → ${snapshot.meta.fechamento}`);
     lines.push('');
+    const recebimentosClienteFormatted =
+      snapshot.resumo?.recebimentosCliente?.formatted ||
+      formatCurrency(snapshot.resumo?.recebimentosCliente?.value || 0);
+
     lines.push('Resumo financeiro');
     lines.push(formatPrintLine('Abertura', snapshot.resumo.abertura.formatted));
     lines.push(formatPrintLine('Recebido', snapshot.resumo.recebido.formatted));
+    lines.push(formatPrintLine('Recebimentos de Cliente', recebimentosClienteFormatted));
     lines.push(formatPrintLine('Saldo', snapshot.resumo.saldo.formatted));
     lines.push('');
     lines.push('Recebimentos por meio');
@@ -8410,6 +8426,10 @@
       .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
       .join('');
 
+    const resumoRecebimentosCliente =
+      snapshot.resumo?.recebimentosCliente?.formatted ||
+      formatCurrency(snapshot.resumo?.recebimentosCliente?.value || 0);
+
     const resumoCards = `
       <div class="receipt__cards">
         <div class="receipt-card">
@@ -8419,6 +8439,10 @@
         <div class="receipt-card">
           <span class="receipt-card__label">Recebido</span>
           <span class="receipt-card__value">${escapeHtml(snapshot.resumo.recebido.formatted)}</span>
+        </div>
+        <div class="receipt-card">
+          <span class="receipt-card__label">Recebimentos de Cliente</span>
+          <span class="receipt-card__value">${escapeHtml(resumoRecebimentosCliente)}</span>
         </div>
         <div class="receipt-card">
           <span class="receipt-card__label">Saldo</span>
@@ -11776,6 +11800,7 @@
   const resetPagamentos = () => {
     state.pagamentos = state.pagamentos.map((payment) => ({ ...payment, valor: 0 }));
     state.summary.abertura = 0;
+    state.summary.recebimentosCliente = 0;
     state.allowApuradoEdit = false;
     state.caixaInfo.previstoPagamentos = [];
     state.caixaInfo.apuradoPagamentos = [];
@@ -11796,7 +11821,7 @@
     state.vendaCliente = null;
     state.vendaPet = null;
     state.accountsReceivable = [];
-    state.summary = { abertura: 0, recebido: 0, saldo: 0 };
+    state.summary = { abertura: 0, recebido: 0, saldo: 0, recebimentosCliente: 0 };
     state.caixaInfo = {
       aberturaData: null,
       fechamentoData: null,
@@ -12114,6 +12139,14 @@
     );
     state.summary.recebido = safeNumber(summarySource.recebido ?? state.summary.recebido ?? 0);
     state.summary.saldo = safeNumber(summarySource.saldo ?? state.summary.saldo ?? 0);
+    state.summary.recebimentosCliente = safeNumber(
+      summarySource.recebimentosCliente ??
+        summarySource.recebimentosClientes ??
+        summarySource.recebimentoCliente ??
+        summarySource.recebimentoClientes ??
+        state.summary.recebimentosCliente ??
+        0
+    );
     const aberturaData =
       pdv?.caixa?.dataAbertura ||
       pdv?.caixa?.aberturaData ||
