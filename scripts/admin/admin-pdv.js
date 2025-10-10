@@ -5,6 +5,7 @@
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.SERVER_URL) || '';
 
   const PDV_NO_CUSTOMER_LABEL = 'Sem Cliente na Venda';
+  const RECEIVABLES_RESIDUAL_THRESHOLD = 0.009;
 
   const paymentTypeOrder = {
     avista: 0,
@@ -116,6 +117,9 @@
     receivablesPaymentLoading: false,
     receivablesPaymentContext: null,
     receivablesSaleBackup: null,
+    receivablesResidualValue: 0,
+    receivablesResidualDueDate: '',
+    receivablesResidualError: '',
     crediarioModalMethod: null,
     crediarioInstallments: [],
     crediarioNextParcelNumber: 1,
@@ -2363,6 +2367,10 @@
     elements.saleTotal = document.getElementById('pdv-sale-total');
     elements.saleDiscount = document.getElementById('pdv-sale-discount');
     elements.salePaid = document.getElementById('pdv-sale-paid');
+    elements.receivablesResidualContainer = document.getElementById('pdv-receivables-residual');
+    elements.receivablesResidualAmount = document.getElementById('pdv-receivables-residual-amount');
+    elements.receivablesResidualDue = document.getElementById('pdv-receivables-residual-due');
+    elements.receivablesResidualError = document.getElementById('pdv-receivables-residual-error');
     elements.saleAdjust = document.getElementById('pdv-sale-adjust');
     elements.saleItemAdjust = document.getElementById('pdv-sale-item-adjust');
 
@@ -5258,6 +5266,7 @@
         notify('Selecione as parcelas do crediário que deseja receber.', 'warning');
         return;
       }
+      resetReceivablesResidualState();
       state.receivablesPaymentContext.total =
         state.receivablesPaymentContext.total ?? state.receivablesSelectedTotal;
       state.receivablesPaymentContext.entries = selection.map((entry) => ({ ...entry }));
@@ -5320,6 +5329,7 @@
     if (context === 'receivables') {
       restoreReceivablesSaleState();
       clearReceivablesPaymentContext();
+      resetReceivablesResidualState();
     }
     applyFinalizeModalContext('sale');
     state.activeFinalizeContext = null;
@@ -6332,7 +6342,7 @@
     applyPaymentsToCaixa({ payments, total, historyAction, paymentLabel: historyPaymentLabel });
   };
 
-  const buildReceivablesPaymentOperations = (entries, payments) => {
+  const buildReceivablesPaymentOperations = (entries, payments, options = {}) => {
     const methodMap = new Map(state.paymentMethods.map((method) => [method.id, method]));
     const allocations = payments
       .map((payment) => {
@@ -6350,7 +6360,11 @@
       throw new Error('Informe as formas de pagamento recebidas.');
     }
     const operations = [];
-    entries.forEach((entry) => {
+    const processedEntries = [];
+    const residualDue = typeof options.residualDueDate === 'string' ? options.residualDueDate : '';
+    let residualProcessed = false;
+    let residualTotalValue = 0;
+    for (const entry of entries) {
       const accountIdSource = entry.accountReceivableId || entry.receivableId || '';
       const accountId = accountIdSource ? String(accountIdSource) : '';
       const installmentRaw =
@@ -6360,30 +6374,67 @@
       if (!accountId || !Number.isFinite(installmentNumber) || !(amountCents > 0)) {
         throw new Error('Não foi possível identificar as parcelas selecionadas para o recebimento.');
       }
-      let remainingCents = amountCents;
-      while (remainingCents > 0) {
+      const hasAvailableAllocation = allocations.some((item) => item.remainingCents > 0);
+      if (!hasAvailableAllocation) {
+        break;
+      }
+      let allocatedCents = 0;
+      const usedMethods = new Set();
+      while (allocatedCents < amountCents) {
         const allocation = allocations.find((item) => item.remainingCents > 0);
         if (!allocation) {
-          throw new Error('Distribua o valor recebido entre as parcelas selecionadas.');
+          break;
         }
-        const portionCents = Math.min(allocation.remainingCents, remainingCents);
+        const portionCents = Math.min(allocation.remainingCents, amountCents - allocatedCents);
         if (portionCents <= 0) {
           break;
         }
-        operations.push({
-          accountId,
-          installmentNumber,
-          paidValue: portionCents / 100,
-          paymentMethodId: allocation.paymentMethodId || undefined,
-        });
         allocation.remainingCents -= portionCents;
-        remainingCents -= portionCents;
+        allocatedCents += portionCents;
+        if (allocation.paymentMethodId) {
+          usedMethods.add(allocation.paymentMethodId);
+        }
+        if (allocatedCents >= amountCents) {
+          break;
+        }
       }
-      if (remainingCents > 0) {
-        throw new Error('Os valores informados não são suficientes para quitar as parcelas selecionadas.');
+      if (allocatedCents <= 0) {
+        continue;
       }
-    });
-    return operations;
+      const missingCents = Math.max(amountCents - allocatedCents, 0);
+      let residualValue = 0;
+      let residualDueDate = '';
+      if (missingCents > RECEIVABLES_RESIDUAL_THRESHOLD * 100) {
+        if (residualProcessed) {
+          throw new Error('Distribua o valor recebido entre as parcelas selecionadas.');
+        }
+        residualValue = missingCents / 100;
+        residualDueDate = residualDue;
+        if (!residualDueDate) {
+          throw new Error('Informe uma nova data de vencimento para o resíduo.');
+        }
+        residualProcessed = true;
+        residualTotalValue = residualValue;
+      }
+      const methodId = usedMethods.size === 1 ? Array.from(usedMethods)[0] : '';
+      operations.push({
+        accountId,
+        installmentNumber,
+        paidValue: allocatedCents / 100,
+        paymentMethodId: methodId || undefined,
+        residualValue,
+        residualDueDate: residualValue > RECEIVABLES_RESIDUAL_THRESHOLD ? residualDueDate : undefined,
+        entryId: entry.id,
+      });
+      processedEntries.push(entry);
+      if (missingCents > 0) {
+        break;
+      }
+    }
+    if (!operations.length) {
+      throw new Error('Informe as formas de pagamento recebidas.');
+    }
+    return { operations, processedEntries, residualValue: residualTotalValue };
   };
 
   const buildSaleReceivables = ({
@@ -7248,16 +7299,26 @@
       notify('Informe as formas de pagamento recebidas.', 'warning');
       return;
     }
-    const total = context.total ?? entries.reduce((sum, entry) => sum + getReceivableValue(entry), 0);
-    const pago = getSalePagoTotal();
-    if (total > 0 && pago + 0.009 < total) {
-      notify('O valor recebido é insuficiente para quitar as parcelas selecionadas.', 'warning');
-      return;
-    }
     state.receivablesPaymentLoading = true;
     renderReceivablesSelectionSummary();
     try {
-      const operations = buildReceivablesPaymentOperations(entries, payments);
+      const { operations, processedEntries, residualValue } = buildReceivablesPaymentOperations(
+        entries,
+        payments,
+        { residualDueDate: state.receivablesResidualDueDate }
+      );
+      if (residualValue > RECEIVABLES_RESIDUAL_THRESHOLD) {
+        const dueValue = state.receivablesResidualDueDate || '';
+        const parsedDue = parseDateInputValue(dueValue);
+        if (!dueValue) {
+          elements.receivablesResidualDue?.focus();
+          throw new Error('Informe uma nova data de vencimento para o resíduo.');
+        }
+        if (!parsedDue) {
+          elements.receivablesResidualDue?.focus();
+          throw new Error('Informe uma data de vencimento válida para o resíduo.');
+        }
+      }
       if (!operations.length) {
         throw new Error('Informe as formas de pagamento recebidas.');
       }
@@ -7284,6 +7345,12 @@
               paidValue: operation.paidValue,
               bankAccount: bankAccountId,
               paymentMethod: operation.paymentMethodId || undefined,
+              residualValue:
+                operation.residualValue &&
+                operation.residualValue > RECEIVABLES_RESIDUAL_THRESHOLD
+                  ? operation.residualValue
+                  : undefined,
+              residualDueDate: operation.residualDueDate || undefined,
               allowLockedUpdate: true,
             }),
           }
@@ -7298,7 +7365,8 @@
       }
 
       const customer = context.customer || state.receivablesSelectedCustomer;
-      registerReceivablesOnCaixa(payments, total, customer);
+      const receivedTotal = operations.reduce((sum, operation) => sum + operation.paidValue, 0);
+      registerReceivablesOnCaixa(payments, receivedTotal, customer);
 
       const customerId = resolveCustomerId(customer);
       if (customerId) {
@@ -7306,10 +7374,11 @@
         customerReceivablesDetailsCache.delete(customerId);
       }
 
-      const paidIds = new Set(entries.map((entry) => entry.id));
+      const paidIds = new Set(processedEntries.map((entry) => entry.id));
       state.receivablesSelectedIds = state.receivablesSelectedIds.filter((id) => !paidIds.has(id));
       state.vendaPagamentos = [];
       renderSalePaymentsPreview();
+      resetReceivablesResidualState();
       notify('Recebimento registrado com sucesso.', 'success');
       if (state.receivablesSelectedCustomer) {
         await loadReceivablesForCustomer(state.receivablesSelectedCustomer, { force: true });
@@ -7586,11 +7655,97 @@
     notify('Funcionalidade de ajuste por item em desenvolvimento.', 'info');
   };
 
+  const setReceivablesResidualError = (message = '') => {
+    const normalized = typeof message === 'string' ? message : '';
+    state.receivablesResidualError = normalized;
+    if (!elements.receivablesResidualError) return;
+    const hasError = Boolean(normalized);
+    elements.receivablesResidualError.textContent = normalized;
+    elements.receivablesResidualError.classList.toggle('hidden', !hasError);
+    if (elements.receivablesResidualDue) {
+      elements.receivablesResidualDue.classList.toggle('border-red-300', hasError);
+    }
+  };
+
+  const resetReceivablesResidualState = () => {
+    state.receivablesResidualValue = 0;
+    state.receivablesResidualDueDate = '';
+    state.receivablesResidualError = '';
+    if (elements.receivablesResidualContainer) {
+      elements.receivablesResidualContainer.classList.add('hidden');
+    }
+    if (elements.receivablesResidualDue) {
+      elements.receivablesResidualDue.value = '';
+      elements.receivablesResidualDue.classList.remove('border-red-300');
+    }
+    setReceivablesResidualError('');
+  };
+
+  const updateReceivablesResidualSection = (remaining) => {
+    if (!elements.receivablesResidualContainer) return;
+    const isReceivables = state.activeFinalizeContext === 'receivables';
+    const showResidual = isReceivables && remaining > RECEIVABLES_RESIDUAL_THRESHOLD;
+    elements.receivablesResidualContainer.classList.toggle('hidden', !showResidual);
+    if (!showResidual) {
+      state.receivablesResidualValue = 0;
+      state.receivablesResidualDueDate = '';
+      if (elements.receivablesResidualDue) {
+        elements.receivablesResidualDue.value = '';
+        elements.receivablesResidualDue.classList.remove('border-red-300');
+      }
+      setReceivablesResidualError('');
+      return;
+    }
+    const residualValue = Math.max(remaining, 0);
+    state.receivablesResidualValue = residualValue;
+    if (elements.receivablesResidualAmount) {
+      elements.receivablesResidualAmount.textContent = formatCurrency(residualValue);
+    }
+    if (elements.receivablesResidualDue) {
+      if (state.receivablesResidualDueDate) {
+        elements.receivablesResidualDue.value = state.receivablesResidualDueDate;
+      } else if (elements.receivablesResidualDue.value) {
+        elements.receivablesResidualDue.value = '';
+      }
+    }
+    const dueValue = state.receivablesResidualDueDate || '';
+    if (!dueValue) {
+      setReceivablesResidualError('Informe uma nova data de vencimento para o resíduo.');
+      return;
+    }
+    if (!parseDateInputValue(dueValue)) {
+      setReceivablesResidualError('Informe uma data de vencimento válida para o resíduo.');
+      return;
+    }
+    setReceivablesResidualError('');
+  };
+
+  const handleReceivablesResidualDueInput = (event) => {
+    if (state.activeFinalizeContext !== 'receivables') {
+      return;
+    }
+    const value = typeof event?.target?.value === 'string' ? event.target.value : '';
+    state.receivablesResidualDueDate = value;
+    if (!value) {
+      setReceivablesResidualError('Informe uma nova data de vencimento para o resíduo.');
+      updateSaleSummary();
+      return;
+    }
+    if (!parseDateInputValue(value)) {
+      setReceivablesResidualError('Informe uma data de vencimento válida para o resíduo.');
+      updateSaleSummary();
+      return;
+    }
+    setReceivablesResidualError('');
+    updateSaleSummary();
+  };
+
   const updateSaleSummary = () => {
     const totalLiquido = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
     const desconto = state.vendaDesconto > 0 ? state.vendaDesconto : 0;
     const isBudgetContext = state.activeFinalizeContext === 'orcamento';
+    const isReceivablesContext = state.activeFinalizeContext === 'receivables';
     if (elements.saleTotal) {
       elements.saleTotal.textContent = formatCurrency(totalLiquido);
     }
@@ -7601,11 +7756,24 @@
       elements.salePaid.textContent = formatCurrency(pago);
     }
     if (elements.finalizeConfirm) {
-      const tolerance = 0.009;
+      const tolerance = RECEIVABLES_RESIDUAL_THRESHOLD;
       const remaining = totalLiquido - pago;
+      updateReceivablesResidualSection(remaining);
       const hasInsufficient = totalLiquido > 0 && remaining > tolerance;
       const hasChange = totalLiquido > 0 && pago - totalLiquido > tolerance;
-      const canFinalize = totalLiquido > 0 && (isBudgetContext || !hasInsufficient);
+      const residualDueValue = state.receivablesResidualDueDate || '';
+      const residualDueValid = !residualDueValue || Boolean(parseDateInputValue(residualDueValue));
+      const hasPayments = state.vendaPagamentos.length > 0;
+      let canFinalize = false;
+      if (!totalLiquido) {
+        canFinalize = false;
+      } else if (isBudgetContext) {
+        canFinalize = true;
+      } else if (isReceivablesContext) {
+        canFinalize = hasPayments;
+      } else {
+        canFinalize = !hasInsufficient;
+      }
       elements.finalizeConfirm.disabled = !canFinalize;
       elements.finalizeConfirm.classList.toggle('opacity-60', !canFinalize);
       if (elements.finalizeDifference) {
@@ -7618,6 +7786,19 @@
             elements.finalizeDifference.textContent = `Faltam ${formatCurrency(Math.max(remaining, 0))}`;
           } else if (hasChange) {
             elements.finalizeDifference.textContent = `Troco previsto ${formatCurrency(Math.max(pago - totalLiquido, 0))}`;
+          } else {
+            elements.finalizeDifference.textContent = '';
+          }
+        } else if (isReceivablesContext) {
+          if (!state.vendaPagamentos.length) {
+            elements.finalizeDifference.textContent = 'Informe as formas de pagamento recebidas.';
+          } else if (hasInsufficient) {
+            const residualLabel = formatCurrency(Math.max(remaining, 0));
+            elements.finalizeDifference.textContent = residualDueValid
+              ? `Resíduo pendente de ${residualLabel}.`
+              : `Defina o vencimento para o resíduo de ${residualLabel}.`;
+          } else if (hasChange) {
+            elements.finalizeDifference.textContent = `Troco ${formatCurrency(Math.max(pago - totalLiquido, 0))}`;
           } else {
             elements.finalizeDifference.textContent = '';
           }
@@ -12935,6 +13116,8 @@
     elements.receivablesClear?.addEventListener('click', handleReceivablesClear);
     elements.receivablesList?.addEventListener('change', handleReceivablesListChange);
     elements.receivablesPayButton?.addEventListener('click', handleReceivablesPay);
+    elements.receivablesResidualDue?.addEventListener('input', handleReceivablesResidualDueInput);
+    elements.receivablesResidualDue?.addEventListener('change', handleReceivablesResidualDueInput);
     Array.from(elements.customerTabButtons || []).forEach((button) => {
       button.addEventListener('click', handleCustomerTabClick);
     });
