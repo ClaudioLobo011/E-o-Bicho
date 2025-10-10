@@ -3130,6 +3130,14 @@
     return candidate ? String(candidate) : '';
   };
 
+  const normalizeKeyword = (value) => {
+    if (value == null) return '';
+    const raw = String(value).trim().toLowerCase();
+    if (!raw) return '';
+    const normalized = typeof raw.normalize === 'function' ? raw.normalize('NFD') : raw;
+    return normalized.replace(/[\u0300-\u036f]/g, '');
+  };
+
   const isCrediarioReceivable = (entry) => {
     if (!entry || typeof entry !== 'object') return false;
     const status = String(entry.status || '').toLowerCase();
@@ -3140,12 +3148,15 @@
       return true;
     }
     if (entry.crediarioMethodId) return true;
-    const methodType = String(entry.paymentMethodType || '').toLowerCase();
-    if (methodType === 'crediario' || methodType === 'credito') {
-      return true;
+    const methodType = normalizeKeyword(entry.paymentMethodType);
+    if (methodType) {
+      if (methodType.includes('crediario')) {
+        return true;
+      }
+      return false;
     }
-    const methodLabel = String(entry.paymentMethodLabel || entry.paymentLabel || '').toLowerCase();
-    return methodLabel.includes('crediário') || methodLabel.includes('crediario');
+    const methodLabel = normalizeKeyword(entry.paymentMethodLabel || entry.paymentLabel);
+    return methodLabel.includes('crediario');
   };
 
   const getReceivablesForCustomer = (customerId) => {
