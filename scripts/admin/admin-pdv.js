@@ -3057,7 +3057,8 @@
     renderItemsList();
   };
 
-  const setSaleCustomer = (cliente, pet = null) => {
+  const setSaleCustomer = (cliente, pet = null, options = {}) => {
+    const skipRecalculate = Boolean(options.skipRecalculate);
     state.vendaCliente = cliente ? { ...cliente } : null;
     state.vendaPet = cliente && pet ? { ...pet } : null;
     if (!cliente) {
@@ -3072,7 +3073,9 @@
       elements.crediarioError.classList.add('hidden');
       elements.crediarioError.textContent = '';
     }
-    recalculateItemsForCustomerChange();
+    if (!skipRecalculate) {
+      recalculateItemsForCustomerChange();
+    }
     if (state.selectedProduct) {
       updateSelectedProductView();
     }
@@ -4935,6 +4938,96 @@
       .join(' • ');
   };
 
+  const resolveDeliveryOrderCustomer = (order) => {
+    if (!order || typeof order !== 'object') return null;
+    if (order.customerDetails && typeof order.customerDetails === 'object') {
+      return { ...order.customerDetails };
+    }
+    const customer = order.customer && typeof order.customer === 'object' ? order.customer : {};
+    const candidateId = order.customerId || resolveCustomerId(customer);
+    const candidateDocument =
+      order.customerDocument || customer.documento || customer.document || '';
+    const candidateName =
+      customer.nome || customer.nomeCompleto || customer.razaoSocial || order.customerName || '';
+    const candidateContact =
+      order.customerContact || customer.contato || customer.telefone || customer.celular || '';
+    if (!candidateId && !candidateDocument && !candidateName && !candidateContact) {
+      return null;
+    }
+    const reference = {};
+    if (candidateId) {
+      reference._id = String(candidateId);
+      reference.id = reference._id;
+      reference.codigo = reference.codigo || reference._id;
+      reference.code = reference.code || reference._id;
+    }
+    if (candidateName) {
+      reference.nome = candidateName;
+      reference.nomeCompleto = reference.nomeCompleto || candidateName;
+      reference.razaoSocial = reference.razaoSocial || candidateName;
+      reference.fantasia = reference.fantasia || candidateName;
+    }
+    if (candidateDocument) {
+      reference.documento = candidateDocument;
+      const digits = String(candidateDocument).replace(/\D+/g, '');
+      if (digits.length === 11) {
+        reference.cpf = reference.cpf || digits;
+      } else if (digits.length === 14) {
+        reference.cnpj = reference.cnpj || digits;
+      }
+    }
+    if (candidateContact) {
+      if (candidateContact.includes('@')) {
+        reference.email = reference.email || candidateContact;
+      } else {
+        reference.telefone = reference.telefone || candidateContact;
+        reference.celular = reference.celular || candidateContact;
+      }
+    }
+    return reference;
+  };
+
+  const normalizeDocumentDigits = (value) => {
+    if (!value) return '';
+    return String(value).replace(/\D+/g, '');
+  };
+
+  const fetchDeliveryCustomerByDocument = async (document) => {
+    const normalized = (document || '').toString().trim();
+    if (!normalized) {
+      return null;
+    }
+    const query = normalizeDocumentDigits(normalized) || normalized;
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    try {
+      const response = await fetch(
+        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=5`,
+        { headers }
+      );
+      if (!response.ok) {
+        return null;
+      }
+      const payload = await response.json().catch(() => []);
+      if (!Array.isArray(payload) || !payload.length) {
+        return null;
+      }
+      const targetDigits = normalizeDocumentDigits(normalized);
+      const matched = payload.find((entry) => {
+        const entryDoc = resolveCustomerDocument(entry) || '';
+        if (!entryDoc) return false;
+        return normalizeDocumentDigits(entryDoc) === targetDigits;
+      });
+      if (targetDigits) {
+        return matched ? { ...matched } : null;
+      }
+      return matched ? { ...matched } : { ...payload[0] };
+    } catch (error) {
+      console.error('Erro ao localizar cliente para o delivery:', error);
+      return null;
+    }
+  };
+
   const createDeliveryOrderRecord = (
     snapshot,
     address,
@@ -4947,6 +5040,27 @@
   ) => {
     const nowIso = new Date().toISOString();
     const clienteBase = snapshot?.cliente || {};
+    const customerDetails = state.vendaCliente ? { ...state.vendaCliente } : null;
+    const customerId = resolveCustomerId(customerDetails);
+    const customerName =
+      resolveCustomerName(customerDetails) ||
+      clienteBase.nome ||
+      state.vendaCliente?.razaoSocial ||
+      state.vendaCliente?.fantasia ||
+      'Cliente';
+    const customerDocument =
+      resolveCustomerDocument(customerDetails) ||
+      clienteBase.documento ||
+      state.vendaCliente?.documento ||
+      '';
+    const customerContact =
+      state.vendaCliente?.telefone ||
+      state.vendaCliente?.celular ||
+      state.vendaCliente?.email ||
+      clienteBase.contato ||
+      '';
+    const customerAddress =
+      clienteBase.endereco || resolveCustomerAddressRecord(state.vendaCliente)?.formatted || '';
     const order = {
       id: createUid(),
       status: 'registrado',
@@ -4961,26 +5075,16 @@
       items: Array.isArray(items) ? items.map((item) => ({ ...item })) : [],
       finalizedAt: null,
       customer: {
-        nome:
-          clienteBase.nome ||
-          state.vendaCliente?.nome ||
-          state.vendaCliente?.razaoSocial ||
-          state.vendaCliente?.fantasia ||
-          'Cliente',
-        documento:
-          clienteBase.documento ||
-          state.vendaCliente?.cpf ||
-          state.vendaCliente?.cnpj ||
-          state.vendaCliente?.documento ||
-          '',
-        contato:
-          clienteBase.contato ||
-          state.vendaCliente?.telefone ||
-          state.vendaCliente?.celular ||
-          state.vendaCliente?.email ||
-          '',
-        endereco: clienteBase.endereco || resolveCustomerAddressRecord(state.vendaCliente)?.formatted || '',
+        id: customerId || '',
+        nome: customerName,
+        documento: customerDocument,
+        contato: customerContact,
+        endereco: customerAddress,
       },
+      customerId: customerId || '',
+      customerDocument,
+      customerContact,
+      customerDetails,
       address: {
         ...address,
         formatted: address.formatted || buildDeliveryAddressLine(address),
@@ -5186,6 +5290,8 @@
     vendaAcrescimo: state.vendaAcrescimo,
     selectedProduct: state.selectedProduct ? { ...state.selectedProduct } : null,
     quantidade: state.quantidade,
+    vendaCliente: state.vendaCliente ? { ...state.vendaCliente } : null,
+    vendaPet: state.vendaPet ? { ...state.vendaPet } : null,
   });
 
   const applySaleStateSnapshot = (snapshot = {}) => {
@@ -5202,6 +5308,12 @@
       : null;
     state.quantidade = snapshot.quantidade && snapshot.quantidade > 0 ? snapshot.quantidade : 1;
     updateSelectedProductView();
+    const snapshotCustomer = snapshot.vendaCliente || null;
+    const snapshotPet = snapshotCustomer ? snapshot.vendaPet || null : null;
+    if (snapshotCustomer || state.vendaCliente) {
+      const skipRecalculate = snapshotCustomer ? Boolean(snapshot.preserveItemTotals) : false;
+      setSaleCustomer(snapshotCustomer, snapshotPet, { skipRecalculate });
+    }
   };
 
   const restoreSaleStateFromBackup = () => {
@@ -5253,6 +5365,7 @@
     }
     state.saleStateBackup = captureSaleStateSnapshot();
     state.deliveryFinalizingOrderId = order.id;
+    const orderCustomer = resolveDeliveryOrderCustomer(order);
     applySaleStateSnapshot({
       itens: order.items,
       vendaPagamentos: order.payments,
@@ -5260,6 +5373,8 @@
       vendaAcrescimo: order.addition,
       selectedProduct: null,
       quantidade: 1,
+      vendaCliente: orderCustomer,
+      preserveItemTotals: true,
     });
     renderItemsList();
     renderSalePaymentsPreview();
@@ -7706,9 +7821,73 @@
       notify('Não foi possível gerar o comprovante do delivery.', 'error');
       return;
     }
+    const orderCustomer = resolveDeliveryOrderCustomer(order);
+    if (orderCustomer) {
+      order.customerDetails = { ...orderCustomer };
+      const resolvedId = resolveCustomerId(orderCustomer);
+      if (resolvedId) {
+        order.customerId = resolvedId;
+        if (order.customer && typeof order.customer === 'object') {
+          order.customer.id = order.customer.id || resolvedId;
+        }
+      }
+      if (!order.customerDocument) {
+        order.customerDocument = resolveCustomerDocument(orderCustomer) || '';
+      }
+      if (!order.customerContact) {
+        const contactCandidate =
+          orderCustomer.telefone || orderCustomer.celular || orderCustomer.email || '';
+        order.customerContact = contactCandidate;
+        if (order.customer && typeof order.customer === 'object' && !order.customer.contato) {
+          order.customer.contato = contactCandidate;
+        }
+      }
+    }
+    let saleCustomer = state.vendaCliente || orderCustomer;
+    if (!resolveCustomerId(saleCustomer)) {
+      const lookupDocument =
+        resolveCustomerDocument(orderCustomer) ||
+        order.customerDocument ||
+        resolveCustomerDocument(state.vendaCliente) ||
+        '';
+      if (lookupDocument) {
+        const fetchedCustomer = await fetchDeliveryCustomerByDocument(lookupDocument);
+        if (fetchedCustomer && resolveCustomerId(fetchedCustomer)) {
+          saleCustomer = fetchedCustomer;
+          setSaleCustomer(fetchedCustomer, null, { skipRecalculate: true });
+          order.customerDetails = { ...fetchedCustomer };
+          const fetchedId = resolveCustomerId(fetchedCustomer);
+          if (fetchedId) {
+            order.customerId = fetchedId;
+            if (order.customer && typeof order.customer === 'object') {
+              order.customer.id = order.customer.id || fetchedId;
+            }
+          }
+          order.customerDocument =
+            resolveCustomerDocument(fetchedCustomer) || order.customerDocument || '';
+          const fetchedContact =
+            fetchedCustomer.telefone ||
+            fetchedCustomer.celular ||
+            fetchedCustomer.email ||
+            order.customerContact ||
+            '';
+          if (fetchedContact) {
+            order.customerContact = fetchedContact;
+            if (order.customer && typeof order.customer === 'object' && !order.customer.contato) {
+              order.customer.contato = fetchedContact;
+            }
+          }
+        }
+      }
+    }
+    const saleCustomerId = resolveCustomerId(saleCustomer);
+    if (!saleCustomerId) {
+      notify('Selecione novamente o cliente do delivery antes de finalizar.', 'warning');
+      return;
+    }
     const saleReceivables = buildSaleReceivables({
       payments: pagamentosVenda,
-      customer: state.vendaCliente || order.customer,
+      customer: saleCustomer,
       saleCode,
       items: itensSnapshot,
       saleDate: order.createdAt || new Date(),
@@ -7739,7 +7918,7 @@
         items: itensSnapshot,
         discount: state.vendaDesconto,
         addition: state.vendaAcrescimo,
-        customer: state.vendaCliente,
+        customer: saleCustomer,
         receivables: saleReceivables.entries,
         cashContributions,
       });
@@ -7753,7 +7932,7 @@
           saleReceivables.backendRequests,
           {
             saleCode,
-            customer: state.vendaCliente || order.customer,
+            customer: saleCustomer,
             items: saleReceivables.saleItems,
             saleDate: saleReceivables.saleDate,
           }
@@ -7768,7 +7947,7 @@
         items: itensSnapshot,
         discount: state.vendaDesconto,
         addition: state.vendaAcrescimo,
-        customer: state.vendaCliente,
+        customer: saleCustomer,
         createdAt: order.createdAt,
         receivables: saleReceivables.entries,
         cashContributions,
@@ -7783,7 +7962,7 @@
           saleReceivables.backendRequests,
           {
             saleCode,
-            customer: state.vendaCliente || order.customer,
+            customer: saleCustomer,
             items: saleReceivables.saleItems,
             saleDate: saleReceivables.saleDate,
           }
