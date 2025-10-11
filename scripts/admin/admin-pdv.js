@@ -152,6 +152,7 @@
     saleCodeSequence: 1,
     currentSaleCode: '',
     deliveryFinalizingOrderId: '',
+    finalizeProcessing: false,
     completedSales: [],
     budgets: [],
     selectedBudgetId: '',
@@ -5274,6 +5275,15 @@
     return 'finalizar a venda';
   };
 
+  const syncFinalizeConfirmLabel = () => {
+    if (!elements.finalizeConfirm) return;
+    const label = elements.finalizeConfirm.textContent?.trim() || '';
+    elements.finalizeConfirm.dataset.defaultLabel = label;
+    if (!state.finalizeProcessing) {
+      elements.finalizeConfirm.innerHTML = label;
+    }
+  };
+
   const applyFinalizeModalContext = (context) => {
     if (context === 'delivery') {
       if (elements.finalizeTitle) {
@@ -5333,6 +5343,7 @@
           finalizeModalDefaults.confirm || 'Finalizar venda';
       }
     }
+    syncFinalizeConfirmLabel();
     const hideAdjustments = context === 'receivables';
     if (elements.saleAdjust) {
       elements.saleAdjust.classList.toggle('hidden', hideAdjustments);
@@ -5441,6 +5452,9 @@
   const closeFinalizeModal = () => {
     if (!elements.finalizeModal) return;
     const context = state.activeFinalizeContext;
+    if (state.finalizeProcessing) {
+      setFinalizeProcessing(false);
+    }
     elements.finalizeModal.classList.add('hidden');
     closePaymentValueModal(true);
     if (!elements.deliveryAddressModal || elements.deliveryAddressModal.classList.contains('hidden')) {
@@ -7789,30 +7803,36 @@
   };
 
   const handleFinalizeConfirm = async () => {
-    if (state.activeFinalizeContext === 'delivery') {
-      await finalizeDeliveryFlow();
+    if (state.finalizeProcessing) {
       return;
     }
-    if (state.activeFinalizeContext === 'delivery-complete') {
-      await finalizeRegisteredDeliveryOrder();
-      return;
-    }
-    if (state.activeFinalizeContext === 'receivables') {
-      await finalizeReceivablesPaymentFlow();
-      return;
-    }
-    if (state.activeFinalizeContext === 'orcamento') {
-      try {
-        await finalizeBudgetFlow();
-      } catch (error) {
-        console.error('Erro ao salvar orçamento', error);
-      }
-      return;
-    }
+    setFinalizeProcessing(true);
     try {
+      if (state.activeFinalizeContext === 'delivery') {
+        await finalizeDeliveryFlow();
+        return;
+      }
+      if (state.activeFinalizeContext === 'delivery-complete') {
+        await finalizeRegisteredDeliveryOrder();
+        return;
+      }
+      if (state.activeFinalizeContext === 'receivables') {
+        await finalizeReceivablesPaymentFlow();
+        return;
+      }
+      if (state.activeFinalizeContext === 'orcamento') {
+        await finalizeBudgetFlow();
+        return;
+      }
       await finalizeSaleFlow();
     } catch (error) {
-      console.error('Erro ao finalizar venda', error);
+      console.error('Erro ao confirmar finalização', error);
+      const message =
+        (error && typeof error.message === 'string' && error.message) ||
+        'Não foi possível concluir a operação.';
+      notify(message, 'error');
+    } finally {
+      setFinalizeProcessing(false);
     }
   };
 
@@ -7933,6 +7953,7 @@
       const residualDueValue = state.receivablesResidualDueDate || '';
       const residualDueValid = !residualDueValue || Boolean(parseDateInputValue(residualDueValue));
       const hasPayments = state.vendaPagamentos.length > 0;
+      const isProcessing = state.finalizeProcessing;
       let canFinalize = false;
       if (!totalLiquido) {
         canFinalize = false;
@@ -7943,8 +7964,10 @@
       } else {
         canFinalize = !hasInsufficient;
       }
-      elements.finalizeConfirm.disabled = !canFinalize;
-      elements.finalizeConfirm.classList.toggle('opacity-60', !canFinalize);
+      const shouldDisable = !canFinalize || isProcessing;
+      elements.finalizeConfirm.disabled = shouldDisable;
+      elements.finalizeConfirm.classList.toggle('opacity-60', shouldDisable);
+      elements.finalizeConfirm.classList.toggle('cursor-not-allowed', shouldDisable);
       if (elements.finalizeDifference) {
         if (totalLiquido === 0) {
           elements.finalizeDifference.textContent = 'Adicione itens para finalizar a venda.';
@@ -7980,6 +8003,40 @@
         }
       }
     }
+  };
+
+  const setFinalizeProcessing = (processing) => {
+    const normalized = Boolean(processing);
+    state.finalizeProcessing = normalized;
+    if (elements.finalizeConfirm) {
+      const defaultLabel =
+        elements.finalizeConfirm.dataset.defaultLabel ||
+        elements.finalizeConfirm.textContent?.trim() ||
+        '';
+      elements.finalizeConfirm.dataset.defaultLabel = defaultLabel;
+      if (normalized) {
+        elements.finalizeConfirm.innerHTML = `<i class="fas fa-circle-notch fa-sm animate-spin mr-2"></i>${defaultLabel}`;
+      } else {
+        elements.finalizeConfirm.innerHTML = defaultLabel;
+      }
+      elements.finalizeConfirm.setAttribute('aria-busy', normalized ? 'true' : 'false');
+    }
+    if (elements.finalizeBack) {
+      elements.finalizeBack.disabled = normalized;
+      elements.finalizeBack.classList.toggle('opacity-60', normalized);
+      elements.finalizeBack.classList.toggle('cursor-not-allowed', normalized);
+      elements.finalizeBack.setAttribute('aria-disabled', normalized ? 'true' : 'false');
+    }
+    if (elements.finalizeClose) {
+      elements.finalizeClose.disabled = normalized;
+      elements.finalizeClose.classList.toggle('opacity-60', normalized);
+      elements.finalizeClose.classList.toggle('cursor-not-allowed', normalized);
+      elements.finalizeClose.setAttribute('aria-disabled', normalized ? 'true' : 'false');
+    }
+    if (elements.finalizeBackdrop) {
+      elements.finalizeBackdrop.classList.toggle('pointer-events-none', normalized);
+    }
+    updateSaleSummary();
   };
 
   const populatePaymentSelect = () => {
