@@ -7602,9 +7602,7 @@
       items: itensSnapshot,
       saleDate: orderRecord.createdAt,
     });
-    const cashContributions = normalizeCashContributions(
-      registerSaleOnCaixa(pagamentosVenda, total, saleCode)
-    );
+    const cashContributions = normalizeCashContributions([]);
     const saleRecord = registerCompletedSaleRecord({
       type: 'delivery',
       saleCode,
