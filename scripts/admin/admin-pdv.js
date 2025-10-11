@@ -7749,17 +7749,6 @@
       saleRecord.cashContributions = cashContributions;
       saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
       scheduleStatePersist();
-      await syncAccountsReceivableForSale(
-        saleRecord,
-        saleReceivables.entries,
-        saleReceivables.backendRequests,
-        {
-          saleCode,
-          customer: state.vendaCliente,
-          items: saleReceivables.saleItems,
-          saleDate: saleReceivables.saleDate,
-        }
-      );
       orderRecord.saleRecordId = saleRecord.id;
     }
     state.deliveryOrders.unshift(orderRecord);
@@ -7810,7 +7799,11 @@
       notify('O valor pago é insuficiente para finalizar o delivery.', 'warning');
       return;
     }
-    const saleCode = state.currentSaleCode || '';
+    const existingSaleCode =
+      order.saleCode ||
+      order.receiptSnapshot?.meta?.saleCode ||
+      '';
+    const saleCode = existingSaleCode || state.currentSaleCode || '';
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
@@ -7902,7 +7895,7 @@
     order.discount = state.vendaDesconto;
     order.addition = state.vendaAcrescimo;
     order.receiptSnapshot = saleSnapshot;
-    order.saleCode = saleCode || order.saleCode;
+    order.saleCode = saleCode;
     order.status = 'finalizado';
     const nowIso = new Date().toISOString();
     order.statusUpdatedAt = nowIso;
@@ -7977,7 +7970,9 @@
     setSaleCustomer(null, null);
     clearSaleSearchAreas();
     closeFinalizeModal();
-    advanceSaleCode();
+    if (!existingSaleCode && saleCode) {
+      advanceSaleCode();
+    }
     promptDeliveryPrint(saleSnapshot);
   };
 
