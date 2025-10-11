@@ -12021,6 +12021,7 @@
       }
     });
     renderPayments();
+    updateSummary();
     updateStatusBadge();
     scheduleStatePersist();
     if (totalRemoved > 0) {
@@ -12052,8 +12053,9 @@
       if (entry?.clienteId) {
         customerIds.add(entry.clienteId);
       }
-      if (entry?.accountReceivableId) {
-        accountIds.add(entry.accountReceivableId);
+      const accountIdSource = entry?.accountReceivableId || entry?.receivableId;
+      if (accountIdSource) {
+        accountIds.add(accountIdSource);
       }
     });
     customerIds.forEach((id) => {
