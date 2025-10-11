@@ -11561,6 +11561,7 @@
       fiscalSignature,
       fiscalProtocol,
       fiscalItemsSnapshot,
+      cashContributions,
     } = updates;
     if (saleCode !== undefined) {
       sale.saleCode = saleCode || '';
