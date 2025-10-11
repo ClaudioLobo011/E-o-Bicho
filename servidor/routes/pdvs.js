@@ -305,7 +305,8 @@ const collectSaleProductQuantities = (sale) => {
 };
 
 const updateProductStockForDeposit = async ({ productId, depositId, quantity }) => {
-  if (!productId || !depositId || quantity <= 0) {
+  const numericQuantity = Number(quantity);
+  if (!productId || !depositId || !Number.isFinite(numericQuantity) || numericQuantity === 0) {
     return false;
   }
 
@@ -334,11 +335,11 @@ const updateProductStockForDeposit = async ({ productId, depositId, quantity }) 
     } else {
       current = safeNumber(entry.quantidade, 0);
     }
-    entry.quantidade = current - quantity;
+    entry.quantidade = current - numericQuantity;
   } else {
     entry = {
       deposito: depositId,
-      quantidade: -quantity,
+      quantidade: -numericQuantity,
       unidade: product.unidade || 'UN',
     };
     product.estoques.push(entry);
@@ -349,8 +350,12 @@ const updateProductStockForDeposit = async ({ productId, depositId, quantity }) 
   return true;
 };
 
-const applyInventoryMovementsToSales = async ({ sales, depositId }) => {
-  const result = { sales: Array.isArray(sales) ? sales : [], movements: [] };
+const applyInventoryMovementsToSales = async ({ sales, depositId, existingMovements = [] }) => {
+  const result = {
+    sales: Array.isArray(sales) ? sales : [],
+    movements: [],
+    revertedSales: [],
+  };
   if (!Array.isArray(result.sales) || !depositId) {
     return result;
   }
@@ -360,14 +365,47 @@ const applyInventoryMovementsToSales = async ({ sales, depositId }) => {
     return result;
   }
 
+  const movementMap = new Map();
+  if (Array.isArray(existingMovements)) {
+    for (const movement of existingMovements) {
+      if (!movement || typeof movement !== 'object' || !movement.saleId) continue;
+      const key = movement.saleId;
+      const list = movementMap.get(key) || [];
+      list.push(movement);
+      movementMap.set(key, list);
+    }
+  }
+
   for (const sale of result.sales) {
     if (!sale || typeof sale !== 'object') continue;
-    if (Boolean(sale.inventoryProcessed)) continue;
-    if (normalizeString(sale.status).toLowerCase() === 'cancelled') {
-      sale.inventoryProcessed = Boolean(sale.inventoryProcessed);
-      sale.inventoryProcessedAt = sale.inventoryProcessed ? safeDate(sale.inventoryProcessedAt) : null;
+    const saleId = sale.id || sale._id || '';
+    const saleStatus = normalizeString(sale.status).toLowerCase();
+    if (saleStatus === 'cancelled') {
+      const relatedMovements = movementMap.get(saleId) || [];
+      if (relatedMovements.length) {
+        for (const movement of relatedMovements) {
+          const movementDeposit = movement?.deposit ? toObjectIdOrNull(movement.deposit) : depositObjectId;
+          if (!movementDeposit) continue;
+          const items = Array.isArray(movement.items) ? movement.items : [];
+          for (const item of items) {
+            const productId = item?.product ? toObjectIdOrNull(item.product) : null;
+            const quantity = Number(item?.quantity) || 0;
+            if (!productId || !(quantity > 0)) continue;
+            await updateProductStockForDeposit({
+              productId,
+              depositId: movementDeposit,
+              quantity: -quantity,
+            });
+          }
+        }
+        result.revertedSales.push(saleId);
+      }
+      sale.inventoryProcessed = false;
+      sale.inventoryProcessedAt = null;
       continue;
     }
+
+    if (Boolean(sale.inventoryProcessed)) continue;
 
     const productQuantities = collectSaleProductQuantities(sale);
     if (!productQuantities.size) {
@@ -428,13 +466,25 @@ const mergeInventoryProcessingStatus = (sales, existingSales) => {
     if (previous) {
       const previousProcessed = Boolean(previous.inventoryProcessed);
       const currentProcessed = Boolean(sale.inventoryProcessed);
-      sale.inventoryProcessed = previousProcessed || currentProcessed;
-      if (sale.inventoryProcessed) {
-        const previousDate = safeDate(previous.inventoryProcessedAt);
-        const currentDate = safeDate(sale.inventoryProcessedAt);
-        sale.inventoryProcessedAt = previousDate || currentDate || null;
+      const saleStatus = normalizeString(sale.status).toLowerCase();
+      if (saleStatus === 'cancelled') {
+        sale.inventoryProcessed = currentProcessed;
+        if (sale.inventoryProcessed) {
+          const currentDate = safeDate(sale.inventoryProcessedAt);
+          const previousDate = safeDate(previous.inventoryProcessedAt);
+          sale.inventoryProcessedAt = currentDate || previousDate || null;
+        } else {
+          sale.inventoryProcessedAt = null;
+        }
       } else {
-        sale.inventoryProcessedAt = null;
+        sale.inventoryProcessed = previousProcessed || currentProcessed;
+        if (sale.inventoryProcessed) {
+          const previousDate = safeDate(previous.inventoryProcessedAt);
+          const currentDate = safeDate(sale.inventoryProcessedAt);
+          sale.inventoryProcessedAt = previousDate || currentDate || null;
+        } else {
+          sale.inventoryProcessedAt = null;
+        }
       }
     } else {
       sale.inventoryProcessed = Boolean(sale.inventoryProcessed);
@@ -597,6 +647,27 @@ const normalizeSaleRecordPayload = (record) => {
   const cancellationAtLabel = normalizeString(record.cancellationAtLabel);
   const inventoryProcessed = Boolean(record.inventoryProcessed);
   const inventoryProcessedAt = inventoryProcessed ? safeDate(record.inventoryProcessedAt) : null;
+  const cashContributionsSource = Array.isArray(record.cashContributions)
+    ? record.cashContributions
+    : Array.isArray(record.caixaContributions)
+    ? record.caixaContributions
+    : [];
+  const cashContributions = cashContributionsSource
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const paymentId = normalizeString(entry.paymentId || entry.id);
+      const paymentLabel = normalizeString(entry.paymentLabel || entry.label) || '';
+      const amount = safeNumber(entry.amount ?? entry.valor ?? entry.total ?? 0, 0);
+      if (!(amount > 0)) {
+        return null;
+      }
+      return {
+        paymentId,
+        paymentLabel,
+        amount,
+      };
+    })
+    .filter(Boolean);
   return {
     id,
     type,
@@ -637,6 +708,7 @@ const normalizeSaleRecordPayload = (record) => {
     cancellationAtLabel,
     inventoryProcessed,
     inventoryProcessedAt,
+    cashContributions,
   };
 };
 
@@ -1762,22 +1834,33 @@ router.put('/:id/state', requireAuth, async (req, res) => {
     );
 
     const depositConfig = pdv?.configuracoesEstoque?.depositoPadrao || null;
+    const existingInventoryMovements = Array.isArray(existingState?.inventoryMovements)
+      ? existingState.inventoryMovements.map((movement) =>
+          movement && typeof movement.toObject === 'function' ? movement.toObject() : movement
+        )
+      : [];
     let newInventoryMovements = [];
 
     if (depositConfig) {
       const inventoryResult = await applyInventoryMovementsToSales({
         sales: updatePayload.completedSales,
         depositId: depositConfig,
+        existingMovements: existingInventoryMovements,
       });
       updatePayload.completedSales = inventoryResult.sales;
       newInventoryMovements = inventoryResult.movements || [];
+      const revertedSales = new Set(inventoryResult.revertedSales || []);
+      let combinedMovements = existingInventoryMovements;
+      if (revertedSales.size) {
+        combinedMovements = combinedMovements.filter(
+          (movement) => movement && !revertedSales.has(movement.saleId)
+        );
+      }
       if (newInventoryMovements.length) {
-        const existingMovements = Array.isArray(existingState?.inventoryMovements)
-          ? existingState.inventoryMovements.map((movement) =>
-              movement && typeof movement.toObject === 'function' ? movement.toObject() : movement
-            )
-          : [];
-        updatePayload.inventoryMovements = [...existingMovements, ...newInventoryMovements];
+        combinedMovements = [...combinedMovements, ...newInventoryMovements];
+      }
+      if (revertedSales.size || newInventoryMovements.length) {
+        updatePayload.inventoryMovements = combinedMovements;
       }
     }
 

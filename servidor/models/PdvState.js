@@ -26,6 +26,15 @@ const historyEntrySchema = new mongoose.Schema(
   { _id: false }
 );
 
+const cashContributionSchema = new mongoose.Schema(
+  {
+    paymentId: { type: String, trim: true },
+    paymentLabel: { type: String, trim: true },
+    amount: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
 const receivableSchema = new mongoose.Schema(
   {
     id: { type: String, trim: true },
@@ -94,6 +103,7 @@ const saleRecordSchema = new mongoose.Schema(
     cancellationAtLabel: { type: String, trim: true },
     inventoryProcessed: { type: Boolean, default: false },
     inventoryProcessedAt: { type: Date, default: null },
+    cashContributions: { type: [cashContributionSchema], default: [] },
   },
   { _id: false }
 );
