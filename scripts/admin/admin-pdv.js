@@ -6392,11 +6392,28 @@
 
   const applyPaymentsToCaixa = ({ payments = [], total = 0, historyAction = null, paymentLabel = '' } = {}) => {
     if (!state.caixaAberto || !Array.isArray(payments) || !payments.length) {
-      return;
+      return [];
     }
     const totalPaid = payments.reduce((sum, payment) => sum + safeNumber(payment.valor), 0);
     let remainingChange = Math.max(0, totalPaid - safeNumber(total));
     const processed = [];
+    const contributionsMap = new Map();
+
+    const recordContribution = (method, amount) => {
+      if (!method || amount === 0) return;
+      const paymentId = method.id || method.raw?._id || '';
+      const key = paymentId || method.label || method.raw?.nome || Math.random().toString(16).slice(2);
+      if (!contributionsMap.has(key)) {
+        contributionsMap.set(key, {
+          paymentId: paymentId || '',
+          paymentLabel: method.label || method.raw?.nome || 'Pagamento',
+          amount: 0,
+        });
+      }
+      const entry = contributionsMap.get(key);
+      entry.amount += amount;
+    };
+
     payments.forEach((payment) => {
       const amount = safeNumber(payment.valor);
       if (!(amount > 0)) {
@@ -6421,6 +6438,7 @@
       const paymentType = String(payment.type || method?.type || '').toLowerCase();
       if (paymentType === 'crediario') {
         method.valor += amount;
+        recordContribution(method, amount);
         processed.push(method);
         return;
       }
@@ -6431,6 +6449,7 @@
         remainingChange -= deduction;
       }
       method.valor += valueToRegister;
+      recordContribution(method, valueToRegister);
       processed.push(method);
     });
     if (remainingChange > 0 && processed.length) {
@@ -6438,6 +6457,7 @@
       if (fallbackEntry) {
         const deduction = Math.min(remainingChange, fallbackEntry.valor);
         fallbackEntry.valor = Math.max(0, fallbackEntry.valor - deduction);
+        recordContribution(fallbackEntry, -deduction);
         remainingChange -= deduction;
       }
     }
@@ -6446,6 +6466,7 @@
       addHistoryEntry(historyAction, total, '', paymentLabel);
     }
     updateStatusBadge();
+    return Array.from(contributionsMap.values()).filter((entry) => entry.amount !== 0);
   };
 
   const registerSaleOnCaixa = (payments, total, saleCode = '') => {
@@ -6455,7 +6476,7 @@
       id: 'venda',
       label: saleCode ? `Venda ${saleCode} finalizada` : 'Venda finalizada',
     };
-    applyPaymentsToCaixa({ payments, total, historyAction, paymentLabel: historyPaymentLabel });
+    return applyPaymentsToCaixa({ payments, total, historyAction, paymentLabel: historyPaymentLabel });
   };
 
   const registerReceivablesOnCaixa = (payments, total, customer = null) => {
@@ -7332,7 +7353,9 @@
       items: itensSnapshot,
       saleDate,
     });
-    registerSaleOnCaixa(pagamentosVenda, total, saleCode);
+    const cashContributions = normalizeCashContributions(
+      registerSaleOnCaixa(pagamentosVenda, total, saleCode)
+    );
     const saleRecord = registerCompletedSaleRecord({
       type: 'venda',
       saleCode,
@@ -7344,9 +7367,12 @@
       customer: state.vendaCliente,
       createdAt: saleReceivables.saleDate,
       receivables: saleReceivables.entries,
+      cashContributions,
     });
     if (saleRecord) {
+      saleRecord.cashContributions = cashContributions;
       saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
+      scheduleStatePersist();
       await syncAccountsReceivableForSale(
         saleRecord,
         saleReceivables.entries,
@@ -7576,6 +7602,9 @@
       items: itensSnapshot,
       saleDate: orderRecord.createdAt,
     });
+    const cashContributions = normalizeCashContributions(
+      registerSaleOnCaixa(pagamentosVenda, total, saleCode)
+    );
     const saleRecord = registerCompletedSaleRecord({
       type: 'delivery',
       saleCode,
@@ -7587,9 +7616,12 @@
       customer: state.vendaCliente,
       createdAt: orderRecord.createdAt,
       receivables: saleReceivables.entries,
+      cashContributions,
     });
     if (saleRecord) {
+      saleRecord.cashContributions = cashContributions;
       saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
+      scheduleStatePersist();
       await syncAccountsReceivableForSale(
         saleRecord,
         saleReceivables.entries,
@@ -7605,7 +7637,6 @@
     }
     state.deliveryOrders.unshift(orderRecord);
     renderDeliveryOrders();
-    registerSaleOnCaixa(pagamentosVenda, total, saleCode);
     const successMessage = saleCode
       ? `Delivery ${saleCode} registrado com sucesso.`
       : 'Delivery registrado com sucesso.';
@@ -7670,7 +7701,9 @@
       items: itensSnapshot,
       saleDate: order.createdAt || new Date(),
     });
-    registerSaleOnCaixa(pagamentosVenda, total, saleCode);
+    const cashContributions = normalizeCashContributions(
+      registerSaleOnCaixa(pagamentosVenda, total, saleCode)
+    );
     order.payments = pagamentosVenda;
     order.paymentsLabel = summarizeDeliveryPayments(pagamentosVenda);
     order.total = total;
@@ -7696,9 +7729,12 @@
         addition: state.vendaAcrescimo,
         customer: state.vendaCliente,
         receivables: saleReceivables.entries,
+        cashContributions,
       });
       if (saleRecord) {
+        saleRecord.cashContributions = cashContributions;
         saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
+        scheduleStatePersist();
         await syncAccountsReceivableForSale(
           saleRecord,
           saleReceivables.entries,
@@ -7723,9 +7759,12 @@
         customer: state.vendaCliente,
         createdAt: order.createdAt,
         receivables: saleReceivables.entries,
+        cashContributions,
       });
       if (saleRecord) {
+        saleRecord.cashContributions = cashContributions;
         saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
+        scheduleStatePersist();
         await syncAccountsReceivableForSale(
           saleRecord,
           saleReceivables.entries,
@@ -10063,6 +10102,22 @@
     )}`;
   };
 
+  const normalizeCashContributions = (entries) => {
+    if (!Array.isArray(entries)) return [];
+    return entries
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const amount = safeNumber(entry.amount ?? entry.valor ?? entry.total ?? 0);
+        if (!(amount > 0)) return null;
+        return {
+          paymentId: entry.paymentId || entry.id || '',
+          paymentLabel: entry.paymentLabel || entry.label || 'Pagamento',
+          amount,
+        };
+      })
+      .filter(Boolean);
+  };
+
   const createCompletedSaleRecord = ({
     type = 'venda',
     saleCode = '',
@@ -10074,6 +10129,7 @@
     customer = null,
     createdAt = null,
     receivables = [],
+    cashContributions = [],
   } = {}) => {
     const normalizedType = type === 'delivery' ? 'delivery' : 'venda';
     const typeLabel = normalizedType === 'delivery' ? 'Delivery' : 'Venda';
@@ -10145,6 +10201,8 @@
       unit: item?.unidade || item?.productSnapshot?.unidade || 'UN',
       productSnapshot: item?.productSnapshot ? { ...item.productSnapshot } : null,
     }));
+    const normalizedCashContributions = normalizeCashContributions(cashContributions);
+
     return {
       id: createUid(),
       type: normalizedType,
@@ -10188,6 +10246,7 @@
       cancellationAtLabel: '',
       inventoryProcessed: false,
       inventoryProcessedAt: null,
+      cashContributions: normalizedCashContributions,
     };
   };
 
@@ -11551,6 +11610,9 @@
         entry && typeof entry === 'object' ? { ...entry } : entry
       );
     }
+    if (cashContributions !== undefined) {
+      sale.cashContributions = normalizeCashContributions(cashContributions);
+    }
     const discountSource =
       discount !== undefined
         ? discount
@@ -11706,7 +11768,109 @@
     }
   };
 
-  const handleSaleCancelConfirm = () => {
+  const revertSaleCashMovements = (sale) => {
+    const contributions = normalizeCashContributions(sale.cashContributions || []);
+    if (!contributions.length) {
+      return 0;
+    }
+    let totalRemoved = 0;
+    contributions.forEach((entry) => {
+      const amount = safeNumber(entry.amount);
+      if (!(amount > 0)) {
+        return;
+      }
+      totalRemoved += amount;
+      const paymentId = entry.paymentId || '';
+      const paymentLabel = entry.paymentLabel || '';
+      let method = paymentId ? state.pagamentos.find((item) => item.id === paymentId) : null;
+      if (!method && paymentLabel) {
+        method = state.pagamentos.find((item) => item.label === paymentLabel);
+      }
+      if (method) {
+        method.valor = Math.max(0, safeNumber(method.valor) - amount);
+      }
+    });
+    renderPayments();
+    updateStatusBadge();
+    scheduleStatePersist();
+    if (totalRemoved > 0) {
+      const saleCode = sale.saleCode || sale.saleCodeLabel || '';
+      const action = {
+        id: 'cancelamento-venda',
+        label: saleCode ? `Cancelamento da venda ${saleCode}` : 'Cancelamento de venda',
+      };
+      const paymentLabel = contributions
+        .map((entry) => `${entry.paymentLabel || 'Pagamento'} • ${formatCurrency(entry.amount)}`)
+        .join(' + ');
+      addHistoryEntry(action, totalRemoved, sale.cancellationReason || '', paymentLabel, -Math.abs(totalRemoved));
+    }
+    return totalRemoved;
+  };
+
+  const removeSaleAccountsReceivable = async (sale) => {
+    const receivables = Array.isArray(sale.receivables) ? sale.receivables : [];
+    if (!receivables.length) {
+      return;
+    }
+    const saleId = sale.id;
+    state.accountsReceivable = state.accountsReceivable.filter((entry) => entry.saleId !== saleId);
+    renderReceivablesList();
+    renderReceivablesSelectedCustomer();
+    const customerIds = new Set();
+    const accountIds = new Set();
+    receivables.forEach((entry) => {
+      if (entry?.clienteId) {
+        customerIds.add(entry.clienteId);
+      }
+      if (entry?.accountReceivableId) {
+        accountIds.add(entry.accountReceivableId);
+      }
+    });
+    customerIds.forEach((id) => {
+      if (!id) return;
+      customerReceivablesCache.delete(id);
+      customerReceivablesDetailsCache.delete(id);
+    });
+    scheduleStatePersist();
+    if (!accountIds.size) {
+      sale.receivables = [];
+      return;
+    }
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const errors = [];
+    for (const accountId of accountIds) {
+      try {
+        const response = await fetch(
+          `${API_BASE}/accounts-receivable/${encodeURIComponent(accountId)}`,
+          {
+            method: 'DELETE',
+            headers,
+          }
+        );
+        if (!response.ok && response.status !== 404) {
+          const payload = await response.json().catch(() => ({}));
+          const message =
+            payload?.message || 'Não foi possível remover uma conta a receber vinculada à venda.';
+          errors.push(message);
+        }
+      } catch (error) {
+        console.error('Erro ao remover conta a receber vinculada à venda cancelada:', error);
+        errors.push(
+          error?.message || 'Não foi possível remover uma conta a receber vinculada à venda.'
+        );
+      }
+    }
+    sale.receivables = [];
+    if (errors.length) {
+      notify(errors[0], 'warning');
+    }
+  };
+
+  const handleSaleCancelConfirm = async () => {
     const saleId = state.activeSaleCancellationId;
     const reason = elements.saleCancelReason?.value?.trim() || '';
     if (!saleId) {
@@ -11723,14 +11887,33 @@
       closeSaleCancelModal();
       return;
     }
-    sale.status = 'cancelled';
-    sale.cancellationReason = reason;
-    sale.cancellationAt = new Date().toISOString();
-    sale.cancellationAtLabel = toDateLabel(sale.cancellationAt);
-    renderSalesList();
-    closeSaleCancelModal();
-    notify('Venda cancelada com sucesso.', 'success');
-    scheduleStatePersist({ immediate: true });
+    const confirmButton = elements.saleCancelConfirm;
+    if (confirmButton) {
+      confirmButton.disabled = true;
+      confirmButton.classList.add('opacity-60', 'cursor-not-allowed');
+    }
+    try {
+      sale.status = 'cancelled';
+      sale.cancellationReason = reason;
+      sale.cancellationAt = new Date().toISOString();
+      sale.cancellationAtLabel = toDateLabel(sale.cancellationAt);
+      sale.inventoryProcessed = false;
+      sale.inventoryProcessedAt = null;
+      revertSaleCashMovements(sale);
+      await removeSaleAccountsReceivable(sale);
+      renderSalesList();
+      closeSaleCancelModal();
+      notify('Venda cancelada com sucesso.', 'success');
+      scheduleStatePersist({ immediate: true });
+    } catch (error) {
+      console.error('Erro ao cancelar venda no PDV:', error);
+      notify(error?.message || 'Não foi possível cancelar a venda.', 'error');
+    } finally {
+      if (confirmButton) {
+        confirmButton.disabled = false;
+        confirmButton.classList.remove('opacity-60', 'cursor-not-allowed');
+      }
+    }
   };
 
   const handleSaleCancelModalKeydown = (event) => {
