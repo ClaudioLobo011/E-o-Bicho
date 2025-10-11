@@ -5,6 +5,7 @@
     (typeof API_CONFIG !== 'undefined' && API_CONFIG && API_CONFIG.SERVER_URL) || '';
 
   const PDV_NO_CUSTOMER_LABEL = 'Sem Cliente na Venda';
+  const RECEIVABLES_RESIDUAL_THRESHOLD = 0.009;
 
   const paymentTypeOrder = {
     avista: 0,
@@ -111,6 +112,14 @@
     receivablesListLoading: false,
     receivablesListError: '',
     receivablesCustomerLoading: false,
+    receivablesSelectedIds: [],
+    receivablesSelectedTotal: 0,
+    receivablesPaymentLoading: false,
+    receivablesPaymentContext: null,
+    receivablesSaleBackup: null,
+    receivablesResidualValue: 0,
+    receivablesResidualDueDate: '',
+    receivablesResidualError: '',
     crediarioModalMethod: null,
     crediarioInstallments: [],
     crediarioNextParcelNumber: 1,
@@ -118,7 +127,7 @@
     crediarioEditingPayment: null,
     crediarioEditingIndex: -1,
     crediarioModalOpen: false,
-    summary: { abertura: 0, recebido: 0, saldo: 0 },
+    summary: { abertura: 0, recebido: 0, saldo: 0, recebimentosCliente: 0 },
     caixaInfo: {
       aberturaData: null,
       fechamentoData: null,
@@ -1335,6 +1344,7 @@
     const aberturaValor = safeNumber(state.summary.abertura);
     const recebidoValor = safeNumber(state.summary.recebido);
     const saldoValor = safeNumber(state.summary.saldo);
+    const recebimentosClienteValor = safeNumber(state.summary.recebimentosCliente);
 
     const recebimentosItems = createPaymentItems(state.pagamentos);
     const recebimentosTotal = sumPayments(state.pagamentos);
@@ -1369,6 +1379,10 @@
         recebido: {
           value: recebidoValor,
           formatted: formatCurrency(recebidoValor),
+        },
+        recebimentosCliente: {
+          value: recebimentosClienteValor,
+          formatted: formatCurrency(recebimentosClienteValor),
         },
         saldo: {
           value: saldoValor,
@@ -1534,6 +1548,100 @@
     });
   };
 
+  const resolvePaymentMethodType = (method) => {
+    if (!method) return '';
+    const classify = (value) => {
+      const normalized = normalizeKeyword(value);
+      if (!normalized) {
+        return '';
+      }
+      if (
+        normalized.includes('crediario') ||
+        normalized.includes('fiado') ||
+        normalized.includes('caderneta') ||
+        normalized.includes('carne') ||
+        normalized.includes('carn')
+      ) {
+        return 'crediario';
+      }
+      if (
+        normalized.includes('debito') ||
+        normalized.includes('debit') ||
+        normalized.includes('maestro') ||
+        normalized.includes('electron') ||
+        (normalized.includes('hiper') && normalized.includes('deb')) ||
+        normalized.includes('banricompras') ||
+        (normalized.includes('sodexo') && normalized.includes('deb')) ||
+        normalized.includes('cartao debito') ||
+        normalized.includes('cartao_debito')
+      ) {
+        return 'debito';
+      }
+      if (
+        normalized.includes('credito') ||
+        normalized.includes('credit') ||
+        normalized.includes('parcelad') ||
+        normalized.includes('cartao credito') ||
+        normalized.includes('cartao_credito') ||
+        normalized.includes('cartao') ||
+        normalized.includes('visa') ||
+        normalized.includes('master') ||
+        normalized.includes('amex') ||
+        normalized.includes('elo')
+      ) {
+        return 'credito';
+      }
+      if (
+        normalized.includes('dinheiro') ||
+        normalized.includes('especie') ||
+        normalized.includes('espécie') ||
+        normalized.includes('cash') ||
+        normalized.includes('numerario') ||
+        normalized.includes('avista') ||
+        normalized.includes('a vista') ||
+        normalized.includes('pix') ||
+        normalized.includes('transferencia') ||
+        normalized.includes('boleto') ||
+        normalized.includes('cheque')
+      ) {
+        return 'avista';
+      }
+      return '';
+    };
+    const candidates = [
+      method.type,
+      method.tipo,
+      method.paymentType,
+      method.payment_type,
+      method.formaPagamento,
+      method.forma_pagamento,
+      method.formaRecebimento,
+      method.forma_recebimento,
+      method.modalidade,
+      method.modalidadeRecebimento,
+      method.categoria,
+      method.category,
+      method.codigoTipo,
+      method.codigo_tipo,
+      method.codigo,
+      method.code,
+      method.nome,
+      method.name,
+      method.label,
+      method.slug,
+      method.displayName,
+      method.descricao,
+      method.description,
+    ];
+    for (const candidate of candidates) {
+      const resolved = classify(candidate);
+      if (resolved) {
+        return resolved;
+      }
+    }
+    return '';
+  };
+
   const normalizePaymentMethod = (method) => {
     if (!method) {
       return null;
@@ -1543,7 +1651,8 @@
     const id = idSource ? String(idSource) : createUid();
     const label =
       method.name || method.nome || method.label || method.code || 'Meio de pagamento';
-    const type = (method.type || 'avista').toLowerCase();
+    const resolvedType = resolvePaymentMethodType(method);
+    const type = (resolvedType || 'avista').toLowerCase();
     const code = method.code ? String(method.code) : '';
     const rawInstallments = Array.isArray(method.installmentConfigurations)
       ? method.installmentConfigurations
@@ -1586,8 +1695,23 @@
           method.label,
           method.codigo,
           method.slug,
+          method.displayName,
+          method.descricao,
+          method.description,
           method.tipo,
           method.type,
+          method.paymentType,
+          method.payment_type,
+          method.formaPagamento,
+          method.forma_pagamento,
+          method.formaRecebimento,
+          method.forma_recebimento,
+          method.modalidade,
+          method.modalidadeRecebimento,
+          method.categoria,
+          method.category,
+          method.codigoTipo,
+          method.codigo_tipo,
         ]
           .filter(Boolean)
           .map((value) => String(value))
@@ -1702,6 +1826,7 @@
     renderPayments();
     updateSummary();
     populatePaymentSelect();
+    renderReceivablesSelectionSummary();
   };
 
   const applyPagamentosData = (data) => {
@@ -2031,6 +2156,7 @@
         abertura: safeNumber(state.summary.abertura),
         recebido: safeNumber(state.summary.recebido),
         saldo: safeNumber(state.summary.saldo),
+        recebimentosCliente: safeNumber(state.summary.recebimentosCliente),
       },
       caixaInfo: {
         aberturaData: state.caixaInfo.aberturaData || null,
@@ -2271,6 +2397,10 @@
     elements.receivablesTable = document.getElementById('pdv-receivables-table');
     elements.receivablesList = document.getElementById('pdv-receivables-list');
     elements.receivablesTotal = document.getElementById('pdv-receivables-total');
+    elements.receivablesActions = document.getElementById('pdv-receivables-actions');
+    elements.receivablesSelectedCount = document.getElementById('pdv-receivables-selected-count');
+    elements.receivablesSelectedTotalLabel = document.getElementById('pdv-receivables-selected-total');
+    elements.receivablesPayButton = document.getElementById('pdv-receivables-pay');
 
     elements.caixaActions = document.getElementById('pdv-caixa-actions');
     elements.caixaStateLabel = document.getElementById('pdv-caixa-state-label');
@@ -2353,6 +2483,10 @@
     elements.saleTotal = document.getElementById('pdv-sale-total');
     elements.saleDiscount = document.getElementById('pdv-sale-discount');
     elements.salePaid = document.getElementById('pdv-sale-paid');
+    elements.receivablesResidualContainer = document.getElementById('pdv-receivables-residual');
+    elements.receivablesResidualAmount = document.getElementById('pdv-receivables-residual-amount');
+    elements.receivablesResidualDue = document.getElementById('pdv-receivables-residual-due');
+    elements.receivablesResidualError = document.getElementById('pdv-receivables-residual-error');
     elements.saleAdjust = document.getElementById('pdv-sale-adjust');
     elements.saleItemAdjust = document.getElementById('pdv-sale-item-adjust');
 
@@ -3106,6 +3240,14 @@
     return candidate ? String(candidate) : '';
   };
 
+  const normalizeKeyword = (value) => {
+    if (value == null) return '';
+    const raw = String(value).trim().toLowerCase();
+    if (!raw) return '';
+    const normalized = typeof raw.normalize === 'function' ? raw.normalize('NFD') : raw;
+    return normalized.replace(/[\u0300-\u036f]/g, '');
+  };
+
   const isCrediarioReceivable = (entry) => {
     if (!entry || typeof entry !== 'object') return false;
     const status = String(entry.status || '').toLowerCase();
@@ -3116,12 +3258,15 @@
       return true;
     }
     if (entry.crediarioMethodId) return true;
-    const methodType = String(entry.paymentMethodType || '').toLowerCase();
-    if (methodType === 'crediario' || methodType === 'credito') {
-      return true;
+    const methodType = normalizeKeyword(entry.paymentMethodType);
+    if (methodType) {
+      if (methodType.includes('crediario')) {
+        return true;
+      }
+      return false;
     }
-    const methodLabel = String(entry.paymentMethodLabel || entry.paymentLabel || '').toLowerCase();
-    return methodLabel.includes('crediário') || methodLabel.includes('crediario');
+    const methodLabel = normalizeKeyword(entry.paymentMethodLabel || entry.paymentLabel);
+    return methodLabel.includes('crediario');
   };
 
   const getReceivablesForCustomer = (customerId) => {
@@ -3154,6 +3299,78 @@
   const clearReceivablesCache = () => {
     customerReceivablesCache.clear();
     customerReceivablesDetailsCache.clear();
+  };
+
+  const getReceivableValue = (entry) =>
+    safeNumber(entry?.value ?? entry?.valor ?? entry?.amount ?? entry?.remaining ?? 0);
+
+  const refreshReceivablesSelection = () => {
+    const customerId = resolveCustomerId(state.receivablesSelectedCustomer);
+    if (!customerId) {
+      if (state.receivablesSelectedIds.length || state.receivablesSelectedTotal) {
+        state.receivablesSelectedIds = [];
+        state.receivablesSelectedTotal = 0;
+      }
+      return [];
+    }
+    const receivables = getReceivablesForCustomer(customerId);
+    const selectedSet = new Set(state.receivablesSelectedIds);
+    const entries = receivables.filter((entry) => selectedSet.has(entry.id));
+    const validIds = entries.map((entry) => entry.id);
+    if (validIds.length !== state.receivablesSelectedIds.length) {
+      state.receivablesSelectedIds = validIds;
+    }
+    const total = entries.reduce((sum, entry) => sum + getReceivableValue(entry), 0);
+    state.receivablesSelectedTotal = total;
+    return entries;
+  };
+
+  const renderReceivablesSelectionSummary = () => {
+    if (!elements.receivablesActions) return;
+    const entries = refreshReceivablesSelection();
+    const hasSelection = entries.length > 0;
+    elements.receivablesActions.classList.toggle('hidden', !hasSelection);
+    if (elements.receivablesSelectedCount) {
+      elements.receivablesSelectedCount.textContent = hasSelection
+        ? `${entries.length} parcela${entries.length > 1 ? 's' : ''} selecionada${
+            entries.length > 1 ? 's' : ''
+          }`
+        : 'Nenhuma parcela selecionada';
+    }
+    if (elements.receivablesSelectedTotalLabel) {
+      elements.receivablesSelectedTotalLabel.textContent = formatCurrency(
+        state.receivablesSelectedTotal
+      );
+    }
+    if (elements.receivablesPayButton) {
+      const hasEligibleMethod = state.paymentMethods.some((method) => {
+        const type = String(method?.type || '').toLowerCase();
+        return type !== 'crediario';
+      });
+      const disabled =
+        !hasSelection ||
+        state.paymentMethodsLoading ||
+        !hasEligibleMethod ||
+        !state.caixaAberto ||
+        state.receivablesPaymentLoading ||
+        state.activeFinalizeContext === 'receivables';
+      elements.receivablesPayButton.disabled = disabled;
+      elements.receivablesPayButton.classList.toggle('opacity-60', disabled);
+      elements.receivablesPayButton.classList.toggle('cursor-not-allowed', disabled);
+    }
+  };
+
+  const clearReceivablesSelectionState = () => {
+    state.receivablesSelectedIds = [];
+    state.receivablesSelectedTotal = 0;
+    renderReceivablesSelectionSummary();
+  };
+
+  const clearReceivablesPaymentContext = () => {
+    state.receivablesPaymentContext = null;
+    state.receivablesSaleBackup = null;
+    state.receivablesPaymentLoading = false;
+    renderReceivablesSelectionSummary();
   };
 
   const cloneReceivablesCustomerDetails = (details) => {
@@ -3520,6 +3737,7 @@
     ) {
       return;
     }
+    renderReceivablesSelectionSummary();
     const customer = state.receivablesSelectedCustomer;
     const customerId = resolveCustomerId(customer);
     const { receivablesLoading, receivablesError } = elements;
@@ -3589,10 +3807,7 @@
       const parcelB = Number.parseInt(b.parcelNumber ?? b.parcela ?? b.numeroParcela, 10) || 0;
       return parcelA - parcelB;
     });
-    const total = receivables.reduce(
-      (sum, entry) => sum + safeNumber(entry.value ?? entry.valor ?? entry.amount ?? 0),
-      0
-    );
+    const total = receivables.reduce((sum, entry) => sum + getReceivableValue(entry), 0);
     elements.receivablesTotal.textContent = formatCurrency(total);
     if (elements.receivablesPending) {
       elements.receivablesPending.textContent = formatCurrency(total);
@@ -3608,18 +3823,35 @@
     elements.receivablesEmpty.classList.add('hidden');
     elements.receivablesTable.classList.remove('hidden');
     elements.receivablesList.innerHTML = '';
+    const selectedIds = new Set(state.receivablesSelectedIds);
     const fragment = document.createDocumentFragment();
     receivables.forEach((entry) => {
+      const rawEntryId = entry.id ? String(entry.id) : createUid();
+      if (!entry.id) {
+        entry.id = rawEntryId;
+      }
+      const sanitizedId = rawEntryId.replace(/[^a-zA-Z0-9_-]/g, '');
+      const checkboxId = `receivable-${sanitizedId || createUid()}`;
+      const isSelected = selectedIds.has(entry.id);
       const tr = document.createElement('tr');
+      tr.className = 'transition-colors hover:bg-primary/5';
+      if (isSelected) {
+        tr.classList.add('bg-primary/5');
+      }
       const saleCode = entry.saleCode || entry.sale || '—';
       const parcel = entry.parcelNumber ?? entry.parcela ?? entry.numeroParcela ?? '—';
       const dueLabel = entry.dueDateLabel || formatDateLabel(entry.dueDate) || 'Sem vencimento';
-      const valueLabel = formatCurrency(
-        safeNumber(entry.value ?? entry.valor ?? entry.amount ?? 0)
-      );
+      const valueLabel = formatCurrency(getReceivableValue(entry));
       const methodLabel = entry.paymentMethodLabel || 'Crediário';
       tr.innerHTML = `
-        <td class="px-3 py-2 whitespace-nowrap text-gray-700">${escapeHtml(saleCode || '—')}</td>
+        <td class="px-3 py-2 align-middle">
+          <input id="${checkboxId}" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50" data-receivable-select="${escapeHtml(rawEntryId)}" ${
+            isSelected ? 'checked' : ''
+          }>
+        </td>
+        <td class="px-3 py-2 whitespace-nowrap text-gray-700">
+          <label for="${checkboxId}" class="cursor-pointer">${escapeHtml(saleCode || '—')}</label>
+        </td>
         <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(String(parcel))}</td>
         <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(dueLabel)}</td>
         <td class="px-3 py-2 whitespace-nowrap text-gray-700">${escapeHtml(valueLabel)}</td>
@@ -3707,12 +3939,20 @@
       state.receivablesListLoading = false;
       state.receivablesListError = '';
       state.receivablesCustomerLoading = false;
+      clearReceivablesPaymentContext();
+      clearReceivablesSelectionState();
       renderReceivablesSelectedCustomer();
       renderReceivablesSearchResults();
       renderReceivablesList();
       return;
     }
+    const previousId = resolveCustomerId(state.receivablesSelectedCustomer);
+    const nextId = resolveCustomerId(cliente);
     state.receivablesSelectedCustomer = { ...cliente };
+    if (previousId !== nextId) {
+      clearReceivablesPaymentContext();
+      clearReceivablesSelectionState();
+    }
     const customerId = resolveCustomerId(cliente);
     if (customerId && customerReceivablesDetailsCache.has(customerId)) {
       const cachedDetails = cloneReceivablesCustomerDetails(
@@ -3813,6 +4053,70 @@
   const handleReceivablesClear = () => {
     clearReceivablesSelection();
     elements.receivablesSearchInput?.focus();
+  };
+
+  const handleReceivablesListChange = (event) => {
+    const checkbox = event.target.closest('input[data-receivable-select]');
+    if (!checkbox) return;
+    const id = checkbox.getAttribute('data-receivable-select') || '';
+    if (!id) return;
+    const normalizedId = String(id);
+    const selectedSet = new Set(state.receivablesSelectedIds);
+    if (checkbox.checked) {
+      selectedSet.add(normalizedId);
+    } else {
+      selectedSet.delete(normalizedId);
+    }
+    state.receivablesSelectedIds = Array.from(selectedSet);
+    if (state.activeFinalizeContext !== 'receivables') {
+      state.receivablesPaymentContext = null;
+      state.receivablesSaleBackup = null;
+    }
+    renderReceivablesSelectionSummary();
+    const row = checkbox.closest('tr');
+    if (row) {
+      row.classList.add('transition-colors', 'hover:bg-primary/5');
+      row.classList.toggle('bg-primary/5', checkbox.checked);
+    }
+  };
+
+  const handleReceivablesPay = () => {
+    if (state.receivablesPaymentLoading || state.activeFinalizeContext === 'receivables') {
+      return;
+    }
+    if (!state.caixaAberto) {
+      notify('Abra o caixa para registrar o recebimento.', 'warning');
+      return;
+    }
+    if (state.paymentMethodsLoading) {
+      notify('Aguarde o carregamento dos meios de pagamento.', 'info');
+      return;
+    }
+    const hasEligibleMethod = state.paymentMethods.some(
+      (method) => String(method.type || '').toLowerCase() !== 'crediario'
+    );
+    if (!hasEligibleMethod) {
+      notify('Cadastre meios de pagamento para registrar o recebimento.', 'warning');
+      return;
+    }
+    const selection = refreshReceivablesSelection();
+    if (!selection.length) {
+      notify('Selecione as parcelas do crediário que deseja receber.', 'warning');
+      return;
+    }
+    state.receivablesSaleBackup = captureSaleStateSnapshot();
+    state.vendaPagamentos = [];
+    state.vendaDesconto = 0;
+    state.vendaAcrescimo = 0;
+    state.receivablesPaymentContext = {
+      entries: selection.map((entry) => ({ ...entry })),
+      total: state.receivablesSelectedTotal,
+      customer: state.receivablesSelectedCustomer
+        ? { ...state.receivablesSelectedCustomer }
+        : null,
+    };
+    renderSalePaymentsPreview();
+    openFinalizeModal('receivables');
   };
 
   const clearProductSearchArea = () => {
@@ -4178,7 +4482,15 @@
     updateSaleSummary();
   };
 
-  const getSaleTotalBruto = () => state.itens.reduce((sum, item) => sum + item.subtotal, 0);
+  const getSaleTotalBruto = () => {
+    if (state.activeFinalizeContext === 'receivables') {
+      if (state.receivablesPaymentContext?.total != null) {
+        return state.receivablesPaymentContext.total;
+      }
+      return state.receivablesSelectedTotal || 0;
+    }
+    return state.itens.reduce((sum, item) => sum + item.subtotal, 0);
+  };
   const getSaleTotalLiquido = () => {
     const bruto = getSaleTotalBruto();
     const liquido = bruto + state.vendaAcrescimo - state.vendaDesconto;
@@ -4233,14 +4545,22 @@
         '<li class="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">Carregando meios de pagamento...</li>';
       return;
     }
-    if (!state.paymentMethods.length) {
-      const message = state.selectedStore
+    const isReceivablesContext = state.activeFinalizeContext === 'receivables';
+    const availableMethods = isReceivablesContext
+      ? state.paymentMethods.filter(
+          (method) => String(method.type || '').toLowerCase() !== 'crediario'
+        )
+      : state.paymentMethods;
+    if (!availableMethods.length) {
+      const message = isReceivablesContext
+        ? 'Cadastre meios de pagamento para registrar recebimentos de clientes.'
+        : state.selectedStore
         ? 'Cadastre meios de pagamento para finalizar vendas neste PDV.'
         : 'Selecione uma empresa para carregar os meios de pagamento disponíveis.';
       elements.saleMethods.innerHTML = `<li class="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500">${message}</li>`;
       return;
     }
-    const html = state.paymentMethods
+    const html = availableMethods
       .map((method) => {
         const installments = Array.isArray(method.installments)
           ? method.installments.filter((value) => Number.isFinite(value) && value >= 1)
@@ -4893,6 +5213,16 @@
     updateSaleSummary();
   };
 
+  const restoreReceivablesSaleState = () => {
+    if (!state.receivablesSaleBackup) return;
+    applySaleStateSnapshot(state.receivablesSaleBackup);
+    state.receivablesSaleBackup = null;
+    renderItemsList();
+    renderSalePaymentsPreview();
+    updateFinalizeButton();
+    updateSaleSummary();
+  };
+
   const openDeliveryFinalizeModalForOrder = (order) => {
     if (!order) return;
     if (order.finalizedAt) {
@@ -4957,15 +5287,26 @@
         elements.finalizeConfirm.textContent = 'Concluir delivery';
       }
     } else if (context === 'delivery-complete') {
+    if (elements.finalizeTitle) {
+      elements.finalizeTitle.textContent = 'Finalizar delivery';
+    }
+    if (elements.finalizeSubtitle) {
+      elements.finalizeSubtitle.textContent =
+        'Confirme os pagamentos recebidos antes de registrar no caixa.';
+    }
+    if (elements.finalizeConfirm) {
+      elements.finalizeConfirm.textContent = 'Finalizar delivery';
+    }
+    } else if (context === 'receivables') {
       if (elements.finalizeTitle) {
-        elements.finalizeTitle.textContent = 'Finalizar delivery';
+        elements.finalizeTitle.textContent = 'Registrar recebimento';
       }
       if (elements.finalizeSubtitle) {
         elements.finalizeSubtitle.textContent =
-          'Confirme os pagamentos recebidos antes de registrar no caixa.';
+          'Informe como o cliente pagou as parcelas selecionadas.';
       }
       if (elements.finalizeConfirm) {
-        elements.finalizeConfirm.textContent = 'Finalizar delivery';
+        elements.finalizeConfirm.textContent = 'Confirmar recebimento';
       }
     } else if (context === 'orcamento') {
       if (elements.finalizeTitle) {
@@ -4984,31 +5325,45 @@
       }
       if (elements.finalizeSubtitle) {
         elements.finalizeSubtitle.textContent =
-          finalizeModalDefaults.subtitle ||
-          'Defina as formas de pagamento e confirme o fechamento da venda.';
+        finalizeModalDefaults.subtitle ||
+        'Defina as formas de pagamento e confirme o fechamento da venda.';
       }
       if (elements.finalizeConfirm) {
         elements.finalizeConfirm.textContent =
           finalizeModalDefaults.confirm || 'Finalizar venda';
       }
     }
+    const hideAdjustments = context === 'receivables';
+    if (elements.saleAdjust) {
+      elements.saleAdjust.classList.toggle('hidden', hideAdjustments);
+      elements.saleAdjust.disabled = hideAdjustments;
+      elements.saleAdjust.classList.toggle('opacity-60', hideAdjustments);
+      elements.saleAdjust.classList.toggle('cursor-not-allowed', hideAdjustments);
+    }
+    if (elements.saleItemAdjust) {
+      elements.saleItemAdjust.classList.toggle('hidden', hideAdjustments);
+      elements.saleItemAdjust.disabled = hideAdjustments;
+      elements.saleItemAdjust.classList.toggle('opacity-60', hideAdjustments);
+      elements.saleItemAdjust.classList.toggle('cursor-not-allowed', hideAdjustments);
+    }
   };
 
   const openFinalizeModal = (context = 'sale') => {
     const isBudget = context === 'orcamento';
+    const isReceivables = context === 'receivables';
     if (!isBudget && !state.caixaAberto) {
       notify(`Abra o caixa para ${getFinalizeContextActionLabel(context)}.`, 'warning');
       return;
     }
-    if (!state.itens.length) {
+    if (!isReceivables && !state.itens.length) {
       notify(`Adicione itens para ${getFinalizeContextActionLabel(context)}.`, 'warning');
       return;
     }
-    if (!isBudget && state.paymentMethodsLoading) {
+    if (!isBudget && !isReceivables && state.paymentMethodsLoading) {
       notify('Aguarde o carregamento dos meios de pagamento.', 'info');
       return;
     }
-    if (!isBudget && !state.paymentMethods.length) {
+    if (!isBudget && !isReceivables && !state.paymentMethods.length) {
       notify('Cadastre meios de pagamento para concluir a operação.', 'warning');
       return;
     }
@@ -5016,11 +5371,39 @@
       notify('Selecione um endereço de entrega para continuar.', 'warning');
       return;
     }
+    if (isReceivables) {
+      const hasEligibleMethod = state.paymentMethods.some(
+        (method) => String(method.type || '').toLowerCase() !== 'crediario'
+      );
+      if (state.paymentMethodsLoading) {
+        notify('Aguarde o carregamento dos meios de pagamento.', 'info');
+        return;
+      }
+      if (!hasEligibleMethod) {
+        notify('Cadastre meios de pagamento para registrar o recebimento.', 'warning');
+        return;
+      }
+      const selection = refreshReceivablesSelection();
+      if (
+        !state.receivablesPaymentContext ||
+        !Array.isArray(state.receivablesPaymentContext.entries) ||
+        !state.receivablesPaymentContext.entries.length ||
+        !selection.length
+      ) {
+        notify('Selecione as parcelas do crediário que deseja receber.', 'warning');
+        return;
+      }
+      resetReceivablesResidualState();
+      state.receivablesPaymentContext.total =
+        state.receivablesPaymentContext.total ?? state.receivablesSelectedTotal;
+      state.receivablesPaymentContext.entries = selection.map((entry) => ({ ...entry }));
+    }
     state.activeFinalizeContext = context;
     applyFinalizeModalContext(context);
     renderSalePaymentMethods();
     renderSalePaymentsPreview();
     updateSaleSummary();
+    renderReceivablesSelectionSummary();
     if (elements.finalizeModal) {
       elements.finalizeModal.classList.remove('hidden');
       document.body.classList.add('overflow-hidden');
@@ -5069,6 +5452,11 @@
     if (context === 'delivery-complete') {
       state.deliveryFinalizingOrderId = '';
       restoreSaleStateFromBackup();
+    }
+    if (context === 'receivables') {
+      restoreReceivablesSaleState();
+      clearReceivablesPaymentContext();
+      resetReceivablesResidualState();
     }
     applyFinalizeModalContext('sale');
     state.activeFinalizeContext = null;
@@ -5707,6 +6095,7 @@
   };
 
   const handleSaleMethodsClick = async (event) => {
+    const requiresItems = state.activeFinalizeContext !== 'receivables';
     const toggleButton = event.target.closest('[data-sale-method-toggle]');
     if (toggleButton) {
       const methodId = toggleButton.getAttribute('data-sale-method-toggle');
@@ -5722,14 +6111,18 @@
       const method = state.paymentMethods.find((item) => item.id === methodId);
       if (!method) return;
       if (method.type === 'crediario') {
-        if (!state.itens.length) {
+        if (state.activeFinalizeContext === 'receivables') {
+          notify('Utilize meios de pagamento à vista para registrar o recebimento.', 'info');
+          return;
+        }
+        if (requiresItems && !state.itens.length) {
           notify('Adicione itens para lançar pagamentos.', 'warning');
           return;
         }
         openCrediarioModal(method);
         return;
       }
-      if (!state.itens.length) {
+      if (requiresItems && !state.itens.length) {
         notify('Adicione itens para lançar pagamentos.', 'warning');
         return;
       }
@@ -5754,7 +6147,11 @@
     const method = state.paymentMethods.find((item) => item.id === methodId);
     if (!method) return;
     if (method.type === 'crediario') {
-      if (!state.itens.length) {
+      if (state.activeFinalizeContext === 'receivables') {
+        notify('Utilize meios de pagamento à vista para registrar o recebimento.', 'info');
+        return;
+      }
+      if (requiresItems && !state.itens.length) {
         notify('Adicione itens para lançar pagamentos.', 'warning');
         return;
       }
@@ -5763,7 +6160,7 @@
     }
     const parcelasAttr = methodButton.getAttribute('data-sale-parcelas');
     const parcelas = Math.max(1, Number(parcelasAttr) || 1);
-    if (!state.itens.length) {
+    if (requiresItems && !state.itens.length) {
       notify('Adicione itens para lançar pagamentos.', 'warning');
       return;
     }
@@ -5993,8 +6390,8 @@
     return /(dinheiro|esp[eé]cie|cash|moeda)/.test(rawName);
   };
 
-  const registerSaleOnCaixa = (payments, total, saleCode = '') => {
-    if (!state.caixaAberto || !payments.length) {
+  const applyPaymentsToCaixa = ({ payments = [], total = 0, historyAction = null, paymentLabel = '' } = {}) => {
+    if (!state.caixaAberto || !Array.isArray(payments) || !payments.length) {
       return;
     }
     const totalPaid = payments.reduce((sum, payment) => sum + safeNumber(payment.valor), 0);
@@ -6023,6 +6420,8 @@
       }
       const paymentType = String(payment.type || method?.type || '').toLowerCase();
       if (paymentType === 'crediario') {
+        method.valor += amount;
+        processed.push(method);
         return;
       }
       let valueToRegister = amount;
@@ -6043,11 +6442,131 @@
       }
     }
     renderPayments();
+    if (historyAction) {
+      addHistoryEntry(historyAction, total, '', paymentLabel);
+    }
+    updateStatusBadge();
+  };
+
+  const registerSaleOnCaixa = (payments, total, saleCode = '') => {
     const paymentsSummary = describeSalePayments(payments);
     const historyPaymentLabel = [saleCode, paymentsSummary].filter(Boolean).join(' • ');
-    const historyTitle = saleCode ? `Venda ${saleCode} finalizada` : 'Venda finalizada';
-    addHistoryEntry({ id: 'venda', label: historyTitle }, total, '', historyPaymentLabel);
-    updateStatusBadge();
+    const historyAction = {
+      id: 'venda',
+      label: saleCode ? `Venda ${saleCode} finalizada` : 'Venda finalizada',
+    };
+    applyPaymentsToCaixa({ payments, total, historyAction, paymentLabel: historyPaymentLabel });
+  };
+
+  const registerReceivablesOnCaixa = (payments, total, customer = null) => {
+    const historyAction = { id: 'recebimento-cliente', label: 'Recebimentos de Cliente' };
+    const customerName =
+      resolveCustomerName(customer) ||
+      resolveCustomerName(state.receivablesSelectedCustomer) ||
+      PDV_NO_CUSTOMER_LABEL;
+    const paymentsSummary = describeSalePayments(payments);
+    const historyPaymentLabel = [customerName, paymentsSummary].filter(Boolean).join(' • ');
+    applyPaymentsToCaixa({ payments, total, historyAction, paymentLabel: historyPaymentLabel });
+    const receivedValue = safeNumber(total);
+    if (receivedValue > 0) {
+      state.summary.recebimentosCliente = safeNumber(state.summary.recebimentosCliente) + receivedValue;
+      updateSummary();
+    }
+  };
+
+  const buildReceivablesPaymentOperations = (entries, payments, options = {}) => {
+    const methodMap = new Map(state.paymentMethods.map((method) => [method.id, method]));
+    const allocations = payments
+      .map((payment) => {
+        const method =
+          methodMap.get(payment.id) ||
+          state.paymentMethods.find((item) => item.label === payment.label);
+        const rawId = method?.raw?._id ? String(method.raw._id) : method?.id || payment.id || '';
+        return {
+          paymentMethodId: rawId,
+          remainingCents: Math.round(safeNumber(payment.valor) * 100),
+        };
+      })
+      .filter((allocation) => allocation.remainingCents > 0);
+    if (!allocations.length) {
+      throw new Error('Informe as formas de pagamento recebidas.');
+    }
+    const operations = [];
+    const processedEntries = [];
+    const residualDue = typeof options.residualDueDate === 'string' ? options.residualDueDate : '';
+    let residualProcessed = false;
+    let residualTotalValue = 0;
+    for (const entry of entries) {
+      const accountIdSource = entry.accountReceivableId || entry.receivableId || '';
+      const accountId = accountIdSource ? String(accountIdSource) : '';
+      const installmentRaw =
+        entry.installmentNumber ?? entry.parcelNumber ?? entry.numeroParcela ?? entry.parcela;
+      const installmentNumber = Number.parseInt(installmentRaw, 10);
+      const amountCents = Math.round(getReceivableValue(entry) * 100);
+      if (!accountId || !Number.isFinite(installmentNumber) || !(amountCents > 0)) {
+        throw new Error('Não foi possível identificar as parcelas selecionadas para o recebimento.');
+      }
+      const hasAvailableAllocation = allocations.some((item) => item.remainingCents > 0);
+      if (!hasAvailableAllocation) {
+        break;
+      }
+      let allocatedCents = 0;
+      const usedMethods = new Set();
+      while (allocatedCents < amountCents) {
+        const allocation = allocations.find((item) => item.remainingCents > 0);
+        if (!allocation) {
+          break;
+        }
+        const portionCents = Math.min(allocation.remainingCents, amountCents - allocatedCents);
+        if (portionCents <= 0) {
+          break;
+        }
+        allocation.remainingCents -= portionCents;
+        allocatedCents += portionCents;
+        if (allocation.paymentMethodId) {
+          usedMethods.add(allocation.paymentMethodId);
+        }
+        if (allocatedCents >= amountCents) {
+          break;
+        }
+      }
+      if (allocatedCents <= 0) {
+        continue;
+      }
+      const missingCents = Math.max(amountCents - allocatedCents, 0);
+      let residualValue = 0;
+      let residualDueDate = '';
+      if (missingCents > RECEIVABLES_RESIDUAL_THRESHOLD * 100) {
+        if (residualProcessed) {
+          throw new Error('Distribua o valor recebido entre as parcelas selecionadas.');
+        }
+        residualValue = missingCents / 100;
+        residualDueDate = residualDue;
+        if (!residualDueDate) {
+          throw new Error('Informe uma nova data de vencimento para o resíduo.');
+        }
+        residualProcessed = true;
+        residualTotalValue = residualValue;
+      }
+      const methodId = usedMethods.size === 1 ? Array.from(usedMethods)[0] : '';
+      operations.push({
+        accountId,
+        installmentNumber,
+        paidValue: allocatedCents / 100,
+        paymentMethodId: methodId || undefined,
+        residualValue,
+        residualDueDate: residualValue > RECEIVABLES_RESIDUAL_THRESHOLD ? residualDueDate : undefined,
+        entryId: entry.id,
+      });
+      processedEntries.push(entry);
+      if (missingCents > 0) {
+        break;
+      }
+    }
+    if (!operations.length) {
+      throw new Error('Informe as formas de pagamento recebidas.');
+    }
+    return { operations, processedEntries, residualValue: residualTotalValue };
   };
 
   const buildSaleReceivables = ({
@@ -6182,11 +6701,40 @@
         if (!normalizedInstallments.length) {
           return;
         }
+        const installmentMethodIds = [];
+        const installmentMethodLabels = [];
+        installments.forEach((installment) => {
+          const rawId =
+            installment.methodId ||
+            installment.paymentMethodId ||
+            installment.paymentMethod ||
+            '';
+          const normalizedId = rawId !== null && rawId !== undefined ? String(rawId).trim() : '';
+          if (normalizedId) {
+            installmentMethodIds.push(normalizedId);
+          }
+          const rawLabel = installment.methodLabel || installment.paymentMethodLabel || '';
+          const normalizedLabel = rawLabel !== null && rawLabel !== undefined ? String(rawLabel).trim() : '';
+          if (normalizedLabel) {
+            installmentMethodLabels.push(normalizedLabel);
+          }
+        });
+        const uniqueInstallmentMethodIds = Array.from(new Set(installmentMethodIds));
+        const uniqueInstallmentMethodLabels = Array.from(new Set(installmentMethodLabels));
+        const requestPaymentMethodId =
+          uniqueInstallmentMethodIds.length === 1
+            ? uniqueInstallmentMethodIds[0]
+            : paymentMethodId || '';
+        const requestPaymentLabel =
+          uniqueInstallmentMethodLabels.length === 1
+            ? uniqueInstallmentMethodLabels[0]
+            : paymentMethodLabel;
+
         backendRequests.push({
           paymentId: salePaymentId,
-          paymentLabel: paymentMethodLabel,
+          paymentLabel: requestPaymentLabel,
           methodType: paymentMethodType,
-          paymentMethodId: paymentMethodId || '',
+          paymentMethodId: requestPaymentMethodId || '',
           totalValue,
           installments: normalizedInstallments,
           customerId: clienteId ? String(clienteId) : '',
@@ -6868,6 +7416,119 @@
     }
   };
 
+  const finalizeReceivablesPaymentFlow = async () => {
+    const context = state.receivablesPaymentContext || {};
+    const payments = state.vendaPagamentos.map((payment) => ({ ...payment }));
+    const entries = Array.isArray(context.entries) && context.entries.length
+      ? context.entries.map((entry) => ({ ...entry }))
+      : refreshReceivablesSelection();
+    if (!entries.length) {
+      notify('Selecione as parcelas do crediário que deseja receber.', 'warning');
+      closeFinalizeModal();
+      return;
+    }
+    if (!payments.length) {
+      notify('Informe as formas de pagamento recebidas.', 'warning');
+      return;
+    }
+    state.receivablesPaymentLoading = true;
+    renderReceivablesSelectionSummary();
+    try {
+      const { operations, processedEntries, residualValue } = buildReceivablesPaymentOperations(
+        entries,
+        payments,
+        { residualDueDate: state.receivablesResidualDueDate }
+      );
+      if (residualValue > RECEIVABLES_RESIDUAL_THRESHOLD) {
+        const dueValue = state.receivablesResidualDueDate || '';
+        const parsedDue = parseDateInputValue(dueValue);
+        if (!dueValue) {
+          elements.receivablesResidualDue?.focus();
+          throw new Error('Informe uma nova data de vencimento para o resíduo.');
+        }
+        if (!parsedDue) {
+          elements.receivablesResidualDue?.focus();
+          throw new Error('Informe uma data de vencimento válida para o resíduo.');
+        }
+      }
+      if (!operations.length) {
+        throw new Error('Informe as formas de pagamento recebidas.');
+      }
+      const contaCorrente = state.financeSettings?.contaCorrente || null;
+      const bankAccountId = contaCorrente?.id || contaCorrente?.raw?._id || '';
+      if (!bankAccountId) {
+        throw new Error('Configure uma conta corrente para registrar o recebimento.');
+      }
+      const token = getToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      const paymentDateIso = new Date().toISOString();
+      for (const operation of operations) {
+        const response = await fetch(
+          `${API_BASE}/accounts-receivable/${encodeURIComponent(operation.accountId)}/payments`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              installmentNumber: operation.installmentNumber,
+              paymentDate: paymentDateIso,
+              paidValue: operation.paidValue,
+              bankAccount: bankAccountId,
+              paymentMethod: operation.paymentMethodId || undefined,
+              residualValue:
+                operation.residualValue &&
+                operation.residualValue > RECEIVABLES_RESIDUAL_THRESHOLD
+                  ? operation.residualValue
+                  : undefined,
+              residualDueDate: operation.residualDueDate || undefined,
+              allowLockedUpdate: true,
+            }),
+          }
+        );
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          const message =
+            payload?.message ||
+            'Não foi possível registrar o pagamento das parcelas selecionadas.';
+          throw new Error(message);
+        }
+      }
+
+      const customer = context.customer || state.receivablesSelectedCustomer;
+      const receivedTotal = operations.reduce((sum, operation) => sum + operation.paidValue, 0);
+      registerReceivablesOnCaixa(payments, receivedTotal, customer);
+
+      const customerId = resolveCustomerId(customer);
+      if (customerId) {
+        customerReceivablesCache.delete(customerId);
+        customerReceivablesDetailsCache.delete(customerId);
+      }
+
+      const paidIds = new Set(processedEntries.map((entry) => entry.id));
+      state.receivablesSelectedIds = state.receivablesSelectedIds.filter((id) => !paidIds.has(id));
+      state.vendaPagamentos = [];
+      renderSalePaymentsPreview();
+      resetReceivablesResidualState();
+      notify('Recebimento registrado com sucesso.', 'success');
+      if (state.receivablesSelectedCustomer) {
+        await loadReceivablesForCustomer(state.receivablesSelectedCustomer, { force: true });
+        loadReceivablesCustomerDetails(state.receivablesSelectedCustomer, { force: true });
+      }
+      closeFinalizeModal();
+    } catch (error) {
+      console.error('Erro ao registrar recebimento de crediário:', error);
+      notify(
+        error.message || 'Não foi possível registrar o recebimento das parcelas selecionadas.',
+        'error'
+      );
+    } finally {
+      state.receivablesPaymentLoading = false;
+      renderReceivablesSelectionSummary();
+    }
+  };
+
   const finalizeDeliveryFlow = async () => {
     const total = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
@@ -7099,6 +7760,10 @@
       await finalizeRegisteredDeliveryOrder();
       return;
     }
+    if (state.activeFinalizeContext === 'receivables') {
+      await finalizeReceivablesPaymentFlow();
+      return;
+    }
     if (state.activeFinalizeContext === 'orcamento') {
       try {
         await finalizeBudgetFlow();
@@ -7122,11 +7787,97 @@
     notify('Funcionalidade de ajuste por item em desenvolvimento.', 'info');
   };
 
+  const setReceivablesResidualError = (message = '') => {
+    const normalized = typeof message === 'string' ? message : '';
+    state.receivablesResidualError = normalized;
+    if (!elements.receivablesResidualError) return;
+    const hasError = Boolean(normalized);
+    elements.receivablesResidualError.textContent = normalized;
+    elements.receivablesResidualError.classList.toggle('hidden', !hasError);
+    if (elements.receivablesResidualDue) {
+      elements.receivablesResidualDue.classList.toggle('border-red-300', hasError);
+    }
+  };
+
+  const resetReceivablesResidualState = () => {
+    state.receivablesResidualValue = 0;
+    state.receivablesResidualDueDate = '';
+    state.receivablesResidualError = '';
+    if (elements.receivablesResidualContainer) {
+      elements.receivablesResidualContainer.classList.add('hidden');
+    }
+    if (elements.receivablesResidualDue) {
+      elements.receivablesResidualDue.value = '';
+      elements.receivablesResidualDue.classList.remove('border-red-300');
+    }
+    setReceivablesResidualError('');
+  };
+
+  const updateReceivablesResidualSection = (remaining) => {
+    if (!elements.receivablesResidualContainer) return;
+    const isReceivables = state.activeFinalizeContext === 'receivables';
+    const showResidual = isReceivables && remaining > RECEIVABLES_RESIDUAL_THRESHOLD;
+    elements.receivablesResidualContainer.classList.toggle('hidden', !showResidual);
+    if (!showResidual) {
+      state.receivablesResidualValue = 0;
+      state.receivablesResidualDueDate = '';
+      if (elements.receivablesResidualDue) {
+        elements.receivablesResidualDue.value = '';
+        elements.receivablesResidualDue.classList.remove('border-red-300');
+      }
+      setReceivablesResidualError('');
+      return;
+    }
+    const residualValue = Math.max(remaining, 0);
+    state.receivablesResidualValue = residualValue;
+    if (elements.receivablesResidualAmount) {
+      elements.receivablesResidualAmount.textContent = formatCurrency(residualValue);
+    }
+    if (elements.receivablesResidualDue) {
+      if (state.receivablesResidualDueDate) {
+        elements.receivablesResidualDue.value = state.receivablesResidualDueDate;
+      } else if (elements.receivablesResidualDue.value) {
+        elements.receivablesResidualDue.value = '';
+      }
+    }
+    const dueValue = state.receivablesResidualDueDate || '';
+    if (!dueValue) {
+      setReceivablesResidualError('Informe uma nova data de vencimento para o resíduo.');
+      return;
+    }
+    if (!parseDateInputValue(dueValue)) {
+      setReceivablesResidualError('Informe uma data de vencimento válida para o resíduo.');
+      return;
+    }
+    setReceivablesResidualError('');
+  };
+
+  const handleReceivablesResidualDueInput = (event) => {
+    if (state.activeFinalizeContext !== 'receivables') {
+      return;
+    }
+    const value = typeof event?.target?.value === 'string' ? event.target.value : '';
+    state.receivablesResidualDueDate = value;
+    if (!value) {
+      setReceivablesResidualError('Informe uma nova data de vencimento para o resíduo.');
+      updateSaleSummary();
+      return;
+    }
+    if (!parseDateInputValue(value)) {
+      setReceivablesResidualError('Informe uma data de vencimento válida para o resíduo.');
+      updateSaleSummary();
+      return;
+    }
+    setReceivablesResidualError('');
+    updateSaleSummary();
+  };
+
   const updateSaleSummary = () => {
     const totalLiquido = getSaleTotalLiquido();
     const pago = getSalePagoTotal();
     const desconto = state.vendaDesconto > 0 ? state.vendaDesconto : 0;
     const isBudgetContext = state.activeFinalizeContext === 'orcamento';
+    const isReceivablesContext = state.activeFinalizeContext === 'receivables';
     if (elements.saleTotal) {
       elements.saleTotal.textContent = formatCurrency(totalLiquido);
     }
@@ -7137,11 +7888,24 @@
       elements.salePaid.textContent = formatCurrency(pago);
     }
     if (elements.finalizeConfirm) {
-      const tolerance = 0.009;
+      const tolerance = RECEIVABLES_RESIDUAL_THRESHOLD;
       const remaining = totalLiquido - pago;
+      updateReceivablesResidualSection(remaining);
       const hasInsufficient = totalLiquido > 0 && remaining > tolerance;
       const hasChange = totalLiquido > 0 && pago - totalLiquido > tolerance;
-      const canFinalize = totalLiquido > 0 && (isBudgetContext || !hasInsufficient);
+      const residualDueValue = state.receivablesResidualDueDate || '';
+      const residualDueValid = !residualDueValue || Boolean(parseDateInputValue(residualDueValue));
+      const hasPayments = state.vendaPagamentos.length > 0;
+      let canFinalize = false;
+      if (!totalLiquido) {
+        canFinalize = false;
+      } else if (isBudgetContext) {
+        canFinalize = true;
+      } else if (isReceivablesContext) {
+        canFinalize = hasPayments;
+      } else {
+        canFinalize = !hasInsufficient;
+      }
       elements.finalizeConfirm.disabled = !canFinalize;
       elements.finalizeConfirm.classList.toggle('opacity-60', !canFinalize);
       if (elements.finalizeDifference) {
@@ -7154,6 +7918,19 @@
             elements.finalizeDifference.textContent = `Faltam ${formatCurrency(Math.max(remaining, 0))}`;
           } else if (hasChange) {
             elements.finalizeDifference.textContent = `Troco previsto ${formatCurrency(Math.max(pago - totalLiquido, 0))}`;
+          } else {
+            elements.finalizeDifference.textContent = '';
+          }
+        } else if (isReceivablesContext) {
+          if (!state.vendaPagamentos.length) {
+            elements.finalizeDifference.textContent = 'Informe as formas de pagamento recebidas.';
+          } else if (hasInsufficient) {
+            const residualLabel = formatCurrency(Math.max(remaining, 0));
+            elements.finalizeDifference.textContent = residualDueValid
+              ? `Resíduo pendente de ${residualLabel}.`
+              : `Defina o vencimento para o resíduo de ${residualLabel}.`;
+          } else if (hasChange) {
+            elements.finalizeDifference.textContent = `Troco ${formatCurrency(Math.max(pago - totalLiquido, 0))}`;
           } else {
             elements.finalizeDifference.textContent = '';
           }
@@ -7206,9 +7983,14 @@
     lines.push(`Empresa: ${snapshot.meta.store} | PDV: ${snapshot.meta.pdv}`);
     lines.push(`Período: ${snapshot.meta.abertura} → ${snapshot.meta.fechamento}`);
     lines.push('');
+    const recebimentosClienteFormatted =
+      snapshot.resumo?.recebimentosCliente?.formatted ||
+      formatCurrency(snapshot.resumo?.recebimentosCliente?.value || 0);
+
     lines.push('Resumo financeiro');
     lines.push(formatPrintLine('Abertura', snapshot.resumo.abertura.formatted));
     lines.push(formatPrintLine('Recebido', snapshot.resumo.recebido.formatted));
+    lines.push(formatPrintLine('Recebimentos de Cliente', recebimentosClienteFormatted));
     lines.push(formatPrintLine('Saldo', snapshot.resumo.saldo.formatted));
     lines.push('');
     lines.push('Recebimentos por meio');
@@ -7765,6 +8547,10 @@
       .map((line) => `<span class="receipt__meta-item">${escapeHtml(line)}</span>`)
       .join('');
 
+    const resumoRecebimentosCliente =
+      snapshot.resumo?.recebimentosCliente?.formatted ||
+      formatCurrency(snapshot.resumo?.recebimentosCliente?.value || 0);
+
     const resumoCards = `
       <div class="receipt__cards">
         <div class="receipt-card">
@@ -7774,6 +8560,10 @@
         <div class="receipt-card">
           <span class="receipt-card__label">Recebido</span>
           <span class="receipt-card__value">${escapeHtml(snapshot.resumo.recebido.formatted)}</span>
+        </div>
+        <div class="receipt-card">
+          <span class="receipt-card__label">Recebimentos de Cliente</span>
+          <span class="receipt-card__value">${escapeHtml(resumoRecebimentosCliente)}</span>
         </div>
         <div class="receipt-card">
           <span class="receipt-card__label">Saldo</span>
@@ -11131,6 +11921,7 @@
   const resetPagamentos = () => {
     state.pagamentos = state.pagamentos.map((payment) => ({ ...payment, valor: 0 }));
     state.summary.abertura = 0;
+    state.summary.recebimentosCliente = 0;
     state.allowApuradoEdit = false;
     state.caixaInfo.previstoPagamentos = [];
     state.caixaInfo.apuradoPagamentos = [];
@@ -11151,7 +11942,7 @@
     state.vendaCliente = null;
     state.vendaPet = null;
     state.accountsReceivable = [];
-    state.summary = { abertura: 0, recebido: 0, saldo: 0 };
+    state.summary = { abertura: 0, recebido: 0, saldo: 0, recebimentosCliente: 0 };
     state.caixaInfo = {
       aberturaData: null,
       fechamentoData: null,
@@ -11181,6 +11972,11 @@
     state.receivablesSelectedCustomer = null;
     state.receivablesListLoading = false;
     state.receivablesListError = '';
+    state.receivablesSelectedIds = [];
+    state.receivablesSelectedTotal = 0;
+    state.receivablesPaymentLoading = false;
+    state.receivablesPaymentContext = null;
+    state.receivablesSaleBackup = null;
     state.modalSelectedCliente = null;
     state.modalSelectedPet = null;
     state.modalActiveTab = 'cliente';
@@ -11234,6 +12030,7 @@
     }
     abortReceivablesCustomerFetch();
     clearReceivablesCache();
+    renderReceivablesSelectionSummary();
     if (elements.customerSearchInput) {
       elements.customerSearchInput.value = '';
     }
@@ -11379,6 +12176,7 @@
     renderPayments();
     renderSalePaymentMethods();
     populatePaymentSelect();
+    renderReceivablesSelectionSummary();
     if (!storeId) {
       state.paymentMethodsLoading = false;
       updatePaymentMethods([]);
@@ -11450,6 +12248,7 @@
         pdv?.status === 'aberto'
     );
     state.caixaAberto = caixaAberto;
+    renderReceivablesSelectionSummary();
     const summarySource = pdv?.summary || pdv?.caixa?.resumo || {};
     state.summary.abertura = safeNumber(
       summarySource.abertura ||
@@ -11461,6 +12260,14 @@
     );
     state.summary.recebido = safeNumber(summarySource.recebido ?? state.summary.recebido ?? 0);
     state.summary.saldo = safeNumber(summarySource.saldo ?? state.summary.saldo ?? 0);
+    state.summary.recebimentosCliente = safeNumber(
+      summarySource.recebimentosCliente ??
+        summarySource.recebimentosClientes ??
+        summarySource.recebimentoCliente ??
+        summarySource.recebimentoClientes ??
+        state.summary.recebimentosCliente ??
+        0
+    );
     const aberturaData =
       pdv?.caixa?.dataAbertura ||
       pdv?.caixa?.aberturaData ||
@@ -12252,6 +13059,7 @@
     updateSummary();
     updateStatusBadge();
     updateTabAvailability();
+    renderReceivablesSelectionSummary();
     state.selectedAction = null;
     state.allowApuradoEdit = false;
     renderCaixaActions();
@@ -12460,6 +13268,10 @@
     elements.receivablesSearchInput?.addEventListener('input', handleReceivablesSearchInput);
     elements.receivablesSearchResults?.addEventListener('click', handleReceivablesResultsClick);
     elements.receivablesClear?.addEventListener('click', handleReceivablesClear);
+    elements.receivablesList?.addEventListener('change', handleReceivablesListChange);
+    elements.receivablesPayButton?.addEventListener('click', handleReceivablesPay);
+    elements.receivablesResidualDue?.addEventListener('input', handleReceivablesResidualDueInput);
+    elements.receivablesResidualDue?.addEventListener('change', handleReceivablesResidualDueInput);
     Array.from(elements.customerTabButtons || []).forEach((button) => {
       button.addEventListener('click', handleCustomerTabClick);
     });
