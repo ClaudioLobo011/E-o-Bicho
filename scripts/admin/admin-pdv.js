@@ -6531,11 +6531,15 @@
     const recordContribution = (method, amount) => {
       if (!method || amount === 0) return;
       const paymentId = method.id || method.raw?._id || '';
+      const paymentType = String(method.type || method.raw?.tipo || method.raw?.type || '')
+        .toLowerCase()
+        .trim();
       const key = paymentId || method.label || method.raw?.nome || Math.random().toString(16).slice(2);
       if (!contributionsMap.has(key)) {
         contributionsMap.set(key, {
           paymentId: paymentId || '',
           paymentLabel: method.label || method.raw?.nome || 'Pagamento',
+          paymentType,
           amount: 0,
         });
       }
@@ -10338,9 +10342,16 @@
         if (!entry || typeof entry !== 'object') return null;
         const amount = safeNumber(entry.amount ?? entry.valor ?? entry.total ?? 0);
         if (!(amount > 0)) return null;
+        const paymentTypeRaw =
+          entry.paymentType ?? entry.type ?? entry.paymentMethodType ?? entry.methodType ?? entry.forma ?? '';
+        const paymentType =
+          typeof paymentTypeRaw === 'string'
+            ? paymentTypeRaw.toLowerCase().trim()
+            : String(paymentTypeRaw || '').toLowerCase().trim();
         return {
           paymentId: entry.paymentId || entry.id || '',
           paymentLabel: entry.paymentLabel || entry.label || 'Pagamento',
+          paymentType,
           amount,
         };
       })
@@ -12012,9 +12023,45 @@
       totalRemoved += amount;
       const paymentId = entry.paymentId || '';
       const paymentLabel = entry.paymentLabel || '';
-      let method = paymentId ? state.pagamentos.find((item) => item.id === paymentId) : null;
+      const paymentType = entry.paymentType || '';
+      let method = null;
+      if (paymentId) {
+        method =
+          state.pagamentos.find((item) => item.id === paymentId) ||
+          state.pagamentos.find((item) => String(item.raw?._id || '') === paymentId);
+      }
       if (!method && paymentLabel) {
         method = state.pagamentos.find((item) => item.label === paymentLabel);
+      }
+      if (!method && paymentLabel) {
+        const normalizedLabel = String(paymentLabel || '').toLowerCase();
+        method = state.pagamentos.find((item) => {
+          const baseLabel = String(item.label || '').toLowerCase();
+          if (baseLabel === normalizedLabel) {
+            return true;
+          }
+          const rawLabel = String(item.raw?.nome || item.raw?.label || '').toLowerCase();
+          if (rawLabel === normalizedLabel) {
+            return true;
+          }
+          if (Array.isArray(item.aliases)) {
+            return item.aliases.some(
+              (alias) => String(alias || '').toLowerCase() === normalizedLabel
+            );
+          }
+          return false;
+        });
+      }
+      if (!method && paymentType) {
+        const normalizedType = paymentType.toLowerCase();
+        method = state.pagamentos.find((item) => {
+          const baseType = String(item.type || '').toLowerCase();
+          if (baseType === normalizedType) {
+            return true;
+          }
+          const rawType = String(item.raw?.tipo || item.raw?.type || '').toLowerCase();
+          return rawType === normalizedType;
+        });
       }
       if (method) {
         method.valor = Math.max(0, safeNumber(method.valor) - amount);
