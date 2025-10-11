@@ -152,6 +152,7 @@
     saleCodeSequence: 1,
     currentSaleCode: '',
     deliveryFinalizingOrderId: '',
+    finalizeProcessing: false,
     completedSales: [],
     budgets: [],
     selectedBudgetId: '',
@@ -3056,7 +3057,8 @@
     renderItemsList();
   };
 
-  const setSaleCustomer = (cliente, pet = null) => {
+  const setSaleCustomer = (cliente, pet = null, options = {}) => {
+    const skipRecalculate = Boolean(options.skipRecalculate);
     state.vendaCliente = cliente ? { ...cliente } : null;
     state.vendaPet = cliente && pet ? { ...pet } : null;
     if (!cliente) {
@@ -3071,7 +3073,9 @@
       elements.crediarioError.classList.add('hidden');
       elements.crediarioError.textContent = '';
     }
-    recalculateItemsForCustomerChange();
+    if (!skipRecalculate) {
+      recalculateItemsForCustomerChange();
+    }
     if (state.selectedProduct) {
       updateSelectedProductView();
     }
@@ -4934,6 +4938,96 @@
       .join(' • ');
   };
 
+  const resolveDeliveryOrderCustomer = (order) => {
+    if (!order || typeof order !== 'object') return null;
+    if (order.customerDetails && typeof order.customerDetails === 'object') {
+      return { ...order.customerDetails };
+    }
+    const customer = order.customer && typeof order.customer === 'object' ? order.customer : {};
+    const candidateId = order.customerId || resolveCustomerId(customer);
+    const candidateDocument =
+      order.customerDocument || customer.documento || customer.document || '';
+    const candidateName =
+      customer.nome || customer.nomeCompleto || customer.razaoSocial || order.customerName || '';
+    const candidateContact =
+      order.customerContact || customer.contato || customer.telefone || customer.celular || '';
+    if (!candidateId && !candidateDocument && !candidateName && !candidateContact) {
+      return null;
+    }
+    const reference = {};
+    if (candidateId) {
+      reference._id = String(candidateId);
+      reference.id = reference._id;
+      reference.codigo = reference.codigo || reference._id;
+      reference.code = reference.code || reference._id;
+    }
+    if (candidateName) {
+      reference.nome = candidateName;
+      reference.nomeCompleto = reference.nomeCompleto || candidateName;
+      reference.razaoSocial = reference.razaoSocial || candidateName;
+      reference.fantasia = reference.fantasia || candidateName;
+    }
+    if (candidateDocument) {
+      reference.documento = candidateDocument;
+      const digits = String(candidateDocument).replace(/\D+/g, '');
+      if (digits.length === 11) {
+        reference.cpf = reference.cpf || digits;
+      } else if (digits.length === 14) {
+        reference.cnpj = reference.cnpj || digits;
+      }
+    }
+    if (candidateContact) {
+      if (candidateContact.includes('@')) {
+        reference.email = reference.email || candidateContact;
+      } else {
+        reference.telefone = reference.telefone || candidateContact;
+        reference.celular = reference.celular || candidateContact;
+      }
+    }
+    return reference;
+  };
+
+  const normalizeDocumentDigits = (value) => {
+    if (!value) return '';
+    return String(value).replace(/\D+/g, '');
+  };
+
+  const fetchDeliveryCustomerByDocument = async (document) => {
+    const normalized = (document || '').toString().trim();
+    if (!normalized) {
+      return null;
+    }
+    const query = normalizeDocumentDigits(normalized) || normalized;
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    try {
+      const response = await fetch(
+        `${API_BASE}/func/clientes/buscar?q=${encodeURIComponent(query)}&limit=5`,
+        { headers }
+      );
+      if (!response.ok) {
+        return null;
+      }
+      const payload = await response.json().catch(() => []);
+      if (!Array.isArray(payload) || !payload.length) {
+        return null;
+      }
+      const targetDigits = normalizeDocumentDigits(normalized);
+      const matched = payload.find((entry) => {
+        const entryDoc = resolveCustomerDocument(entry) || '';
+        if (!entryDoc) return false;
+        return normalizeDocumentDigits(entryDoc) === targetDigits;
+      });
+      if (targetDigits) {
+        return matched ? { ...matched } : null;
+      }
+      return matched ? { ...matched } : { ...payload[0] };
+    } catch (error) {
+      console.error('Erro ao localizar cliente para o delivery:', error);
+      return null;
+    }
+  };
+
   const createDeliveryOrderRecord = (
     snapshot,
     address,
@@ -4946,6 +5040,27 @@
   ) => {
     const nowIso = new Date().toISOString();
     const clienteBase = snapshot?.cliente || {};
+    const customerDetails = state.vendaCliente ? { ...state.vendaCliente } : null;
+    const customerId = resolveCustomerId(customerDetails);
+    const customerName =
+      resolveCustomerName(customerDetails) ||
+      clienteBase.nome ||
+      state.vendaCliente?.razaoSocial ||
+      state.vendaCliente?.fantasia ||
+      'Cliente';
+    const customerDocument =
+      resolveCustomerDocument(customerDetails) ||
+      clienteBase.documento ||
+      state.vendaCliente?.documento ||
+      '';
+    const customerContact =
+      state.vendaCliente?.telefone ||
+      state.vendaCliente?.celular ||
+      state.vendaCliente?.email ||
+      clienteBase.contato ||
+      '';
+    const customerAddress =
+      clienteBase.endereco || resolveCustomerAddressRecord(state.vendaCliente)?.formatted || '';
     const order = {
       id: createUid(),
       status: 'registrado',
@@ -4960,26 +5075,16 @@
       items: Array.isArray(items) ? items.map((item) => ({ ...item })) : [],
       finalizedAt: null,
       customer: {
-        nome:
-          clienteBase.nome ||
-          state.vendaCliente?.nome ||
-          state.vendaCliente?.razaoSocial ||
-          state.vendaCliente?.fantasia ||
-          'Cliente',
-        documento:
-          clienteBase.documento ||
-          state.vendaCliente?.cpf ||
-          state.vendaCliente?.cnpj ||
-          state.vendaCliente?.documento ||
-          '',
-        contato:
-          clienteBase.contato ||
-          state.vendaCliente?.telefone ||
-          state.vendaCliente?.celular ||
-          state.vendaCliente?.email ||
-          '',
-        endereco: clienteBase.endereco || resolveCustomerAddressRecord(state.vendaCliente)?.formatted || '',
+        id: customerId || '',
+        nome: customerName,
+        documento: customerDocument,
+        contato: customerContact,
+        endereco: customerAddress,
       },
+      customerId: customerId || '',
+      customerDocument,
+      customerContact,
+      customerDetails,
       address: {
         ...address,
         formatted: address.formatted || buildDeliveryAddressLine(address),
@@ -5185,6 +5290,8 @@
     vendaAcrescimo: state.vendaAcrescimo,
     selectedProduct: state.selectedProduct ? { ...state.selectedProduct } : null,
     quantidade: state.quantidade,
+    vendaCliente: state.vendaCliente ? { ...state.vendaCliente } : null,
+    vendaPet: state.vendaPet ? { ...state.vendaPet } : null,
   });
 
   const applySaleStateSnapshot = (snapshot = {}) => {
@@ -5201,6 +5308,12 @@
       : null;
     state.quantidade = snapshot.quantidade && snapshot.quantidade > 0 ? snapshot.quantidade : 1;
     updateSelectedProductView();
+    const snapshotCustomer = snapshot.vendaCliente || null;
+    const snapshotPet = snapshotCustomer ? snapshot.vendaPet || null : null;
+    if (snapshotCustomer || state.vendaCliente) {
+      const skipRecalculate = snapshotCustomer ? Boolean(snapshot.preserveItemTotals) : false;
+      setSaleCustomer(snapshotCustomer, snapshotPet, { skipRecalculate });
+    }
   };
 
   const restoreSaleStateFromBackup = () => {
@@ -5252,6 +5365,7 @@
     }
     state.saleStateBackup = captureSaleStateSnapshot();
     state.deliveryFinalizingOrderId = order.id;
+    const orderCustomer = resolveDeliveryOrderCustomer(order);
     applySaleStateSnapshot({
       itens: order.items,
       vendaPagamentos: order.payments,
@@ -5259,6 +5373,8 @@
       vendaAcrescimo: order.addition,
       selectedProduct: null,
       quantidade: 1,
+      vendaCliente: orderCustomer,
+      preserveItemTotals: true,
     });
     renderItemsList();
     renderSalePaymentsPreview();
@@ -5272,6 +5388,15 @@
     if (context === 'delivery') return 'registrar o delivery';
     if (context === 'delivery-complete') return 'finalizar o delivery';
     return 'finalizar a venda';
+  };
+
+  const syncFinalizeConfirmLabel = () => {
+    if (!elements.finalizeConfirm) return;
+    const label = elements.finalizeConfirm.textContent?.trim() || '';
+    elements.finalizeConfirm.dataset.defaultLabel = label;
+    if (!state.finalizeProcessing) {
+      elements.finalizeConfirm.innerHTML = label;
+    }
   };
 
   const applyFinalizeModalContext = (context) => {
@@ -5333,6 +5458,7 @@
           finalizeModalDefaults.confirm || 'Finalizar venda';
       }
     }
+    syncFinalizeConfirmLabel();
     const hideAdjustments = context === 'receivables';
     if (elements.saleAdjust) {
       elements.saleAdjust.classList.toggle('hidden', hideAdjustments);
@@ -5441,6 +5567,9 @@
   const closeFinalizeModal = () => {
     if (!elements.finalizeModal) return;
     const context = state.activeFinalizeContext;
+    if (state.finalizeProcessing) {
+      setFinalizeProcessing(false);
+    }
     elements.finalizeModal.classList.add('hidden');
     closePaymentValueModal(true);
     if (!elements.deliveryAddressModal || elements.deliveryAddressModal.classList.contains('hidden')) {
@@ -6402,11 +6531,15 @@
     const recordContribution = (method, amount) => {
       if (!method || amount === 0) return;
       const paymentId = method.id || method.raw?._id || '';
+      const paymentType = String(method.type || method.raw?.tipo || method.raw?.type || '')
+        .toLowerCase()
+        .trim();
       const key = paymentId || method.label || method.raw?.nome || Math.random().toString(16).slice(2);
       if (!contributionsMap.has(key)) {
         contributionsMap.set(key, {
           paymentId: paymentId || '',
           paymentLabel: method.label || method.raw?.nome || 'Pagamento',
+          paymentType,
           amount: 0,
         });
       }
@@ -6722,6 +6855,11 @@
         if (!normalizedInstallments.length) {
           return;
         }
+        const installmentsTotal = normalizedInstallments.reduce(
+          (sum, installment) => sum + safeNumber(installment.value ?? installment.valor ?? installment.amount ?? 0),
+          0
+        );
+        const requestTotalValue = installmentsTotal > 0 ? Math.round(installmentsTotal * 100) / 100 : totalValue;
         const installmentMethodIds = [];
         const installmentMethodLabels = [];
         installments.forEach((installment) => {
@@ -6756,7 +6894,7 @@
           paymentLabel: requestPaymentLabel,
           methodType: paymentMethodType,
           paymentMethodId: requestPaymentMethodId || '',
-          totalValue,
+          totalValue: requestTotalValue,
           installments: normalizedInstallments,
           customerId: clienteId ? String(clienteId) : '',
           customerName: clienteNome,
@@ -7015,6 +7153,7 @@
               number: installment.number,
               dueDate: installment.dueDate ? installment.dueDate.toISOString() : saleDateIso,
               bankAccount: bankAccountId,
+              value: safeNumber(installment.value ?? installment.valor ?? installment.amount ?? 0),
             }))
           : [];
         const documentNumberParts = [pdvCode || 'PDV', saleCode || saleId, requestIndex];
@@ -7602,9 +7741,7 @@
       items: itensSnapshot,
       saleDate: orderRecord.createdAt,
     });
-    const cashContributions = normalizeCashContributions(
-      registerSaleOnCaixa(pagamentosVenda, total, saleCode)
-    );
+    const cashContributions = normalizeCashContributions([]);
     const saleRecord = registerCompletedSaleRecord({
       type: 'delivery',
       saleCode,
@@ -7622,17 +7759,6 @@
       saleRecord.cashContributions = cashContributions;
       saleRecord.receivables = saleReceivables.entries.map((entry) => ({ ...entry }));
       scheduleStatePersist();
-      await syncAccountsReceivableForSale(
-        saleRecord,
-        saleReceivables.entries,
-        saleReceivables.backendRequests,
-        {
-          saleCode,
-          customer: state.vendaCliente,
-          items: saleReceivables.saleItems,
-          saleDate: saleReceivables.saleDate,
-        }
-      );
       orderRecord.saleRecordId = saleRecord.id;
     }
     state.deliveryOrders.unshift(orderRecord);
@@ -7683,7 +7809,11 @@
       notify('O valor pago é insuficiente para finalizar o delivery.', 'warning');
       return;
     }
-    const saleCode = state.currentSaleCode || '';
+    const existingSaleCode =
+      order.saleCode ||
+      order.receiptSnapshot?.meta?.saleCode ||
+      '';
+    const saleCode = existingSaleCode || state.currentSaleCode || '';
     const itensSnapshot = state.itens.map((item) => ({ ...item }));
     const pagamentosVenda = state.vendaPagamentos.map((payment) => ({ ...payment }));
     const saleSnapshot = getSaleReceiptSnapshot(itensSnapshot, pagamentosVenda, {
@@ -7694,9 +7824,73 @@
       notify('Não foi possível gerar o comprovante do delivery.', 'error');
       return;
     }
+    const orderCustomer = resolveDeliveryOrderCustomer(order);
+    if (orderCustomer) {
+      order.customerDetails = { ...orderCustomer };
+      const resolvedId = resolveCustomerId(orderCustomer);
+      if (resolvedId) {
+        order.customerId = resolvedId;
+        if (order.customer && typeof order.customer === 'object') {
+          order.customer.id = order.customer.id || resolvedId;
+        }
+      }
+      if (!order.customerDocument) {
+        order.customerDocument = resolveCustomerDocument(orderCustomer) || '';
+      }
+      if (!order.customerContact) {
+        const contactCandidate =
+          orderCustomer.telefone || orderCustomer.celular || orderCustomer.email || '';
+        order.customerContact = contactCandidate;
+        if (order.customer && typeof order.customer === 'object' && !order.customer.contato) {
+          order.customer.contato = contactCandidate;
+        }
+      }
+    }
+    let saleCustomer = state.vendaCliente || orderCustomer;
+    if (!resolveCustomerId(saleCustomer)) {
+      const lookupDocument =
+        resolveCustomerDocument(orderCustomer) ||
+        order.customerDocument ||
+        resolveCustomerDocument(state.vendaCliente) ||
+        '';
+      if (lookupDocument) {
+        const fetchedCustomer = await fetchDeliveryCustomerByDocument(lookupDocument);
+        if (fetchedCustomer && resolveCustomerId(fetchedCustomer)) {
+          saleCustomer = fetchedCustomer;
+          setSaleCustomer(fetchedCustomer, null, { skipRecalculate: true });
+          order.customerDetails = { ...fetchedCustomer };
+          const fetchedId = resolveCustomerId(fetchedCustomer);
+          if (fetchedId) {
+            order.customerId = fetchedId;
+            if (order.customer && typeof order.customer === 'object') {
+              order.customer.id = order.customer.id || fetchedId;
+            }
+          }
+          order.customerDocument =
+            resolveCustomerDocument(fetchedCustomer) || order.customerDocument || '';
+          const fetchedContact =
+            fetchedCustomer.telefone ||
+            fetchedCustomer.celular ||
+            fetchedCustomer.email ||
+            order.customerContact ||
+            '';
+          if (fetchedContact) {
+            order.customerContact = fetchedContact;
+            if (order.customer && typeof order.customer === 'object' && !order.customer.contato) {
+              order.customer.contato = fetchedContact;
+            }
+          }
+        }
+      }
+    }
+    const saleCustomerId = resolveCustomerId(saleCustomer);
+    if (!saleCustomerId) {
+      notify('Selecione novamente o cliente do delivery antes de finalizar.', 'warning');
+      return;
+    }
     const saleReceivables = buildSaleReceivables({
       payments: pagamentosVenda,
-      customer: state.vendaCliente || order.customer,
+      customer: saleCustomer,
       saleCode,
       items: itensSnapshot,
       saleDate: order.createdAt || new Date(),
@@ -7711,7 +7905,7 @@
     order.discount = state.vendaDesconto;
     order.addition = state.vendaAcrescimo;
     order.receiptSnapshot = saleSnapshot;
-    order.saleCode = saleCode || order.saleCode;
+    order.saleCode = saleCode;
     order.status = 'finalizado';
     const nowIso = new Date().toISOString();
     order.statusUpdatedAt = nowIso;
@@ -7727,7 +7921,7 @@
         items: itensSnapshot,
         discount: state.vendaDesconto,
         addition: state.vendaAcrescimo,
-        customer: state.vendaCliente,
+        customer: saleCustomer,
         receivables: saleReceivables.entries,
         cashContributions,
       });
@@ -7741,7 +7935,7 @@
           saleReceivables.backendRequests,
           {
             saleCode,
-            customer: state.vendaCliente || order.customer,
+            customer: saleCustomer,
             items: saleReceivables.saleItems,
             saleDate: saleReceivables.saleDate,
           }
@@ -7756,7 +7950,7 @@
         items: itensSnapshot,
         discount: state.vendaDesconto,
         addition: state.vendaAcrescimo,
-        customer: state.vendaCliente,
+        customer: saleCustomer,
         createdAt: order.createdAt,
         receivables: saleReceivables.entries,
         cashContributions,
@@ -7771,7 +7965,7 @@
           saleReceivables.backendRequests,
           {
             saleCode,
-            customer: state.vendaCliente || order.customer,
+            customer: saleCustomer,
             items: saleReceivables.saleItems,
             saleDate: saleReceivables.saleDate,
           }
@@ -7786,35 +7980,43 @@
     setSaleCustomer(null, null);
     clearSaleSearchAreas();
     closeFinalizeModal();
-    advanceSaleCode();
+    if (!existingSaleCode && saleCode) {
+      advanceSaleCode();
+    }
     promptDeliveryPrint(saleSnapshot);
   };
 
   const handleFinalizeConfirm = async () => {
-    if (state.activeFinalizeContext === 'delivery') {
-      await finalizeDeliveryFlow();
+    if (state.finalizeProcessing) {
       return;
     }
-    if (state.activeFinalizeContext === 'delivery-complete') {
-      await finalizeRegisteredDeliveryOrder();
-      return;
-    }
-    if (state.activeFinalizeContext === 'receivables') {
-      await finalizeReceivablesPaymentFlow();
-      return;
-    }
-    if (state.activeFinalizeContext === 'orcamento') {
-      try {
-        await finalizeBudgetFlow();
-      } catch (error) {
-        console.error('Erro ao salvar orçamento', error);
-      }
-      return;
-    }
+    setFinalizeProcessing(true);
     try {
+      if (state.activeFinalizeContext === 'delivery') {
+        await finalizeDeliveryFlow();
+        return;
+      }
+      if (state.activeFinalizeContext === 'delivery-complete') {
+        await finalizeRegisteredDeliveryOrder();
+        return;
+      }
+      if (state.activeFinalizeContext === 'receivables') {
+        await finalizeReceivablesPaymentFlow();
+        return;
+      }
+      if (state.activeFinalizeContext === 'orcamento') {
+        await finalizeBudgetFlow();
+        return;
+      }
       await finalizeSaleFlow();
     } catch (error) {
-      console.error('Erro ao finalizar venda', error);
+      console.error('Erro ao confirmar finalização', error);
+      const message =
+        (error && typeof error.message === 'string' && error.message) ||
+        'Não foi possível concluir a operação.';
+      notify(message, 'error');
+    } finally {
+      setFinalizeProcessing(false);
     }
   };
 
@@ -7935,6 +8137,7 @@
       const residualDueValue = state.receivablesResidualDueDate || '';
       const residualDueValid = !residualDueValue || Boolean(parseDateInputValue(residualDueValue));
       const hasPayments = state.vendaPagamentos.length > 0;
+      const isProcessing = state.finalizeProcessing;
       let canFinalize = false;
       if (!totalLiquido) {
         canFinalize = false;
@@ -7945,8 +8148,10 @@
       } else {
         canFinalize = !hasInsufficient;
       }
-      elements.finalizeConfirm.disabled = !canFinalize;
-      elements.finalizeConfirm.classList.toggle('opacity-60', !canFinalize);
+      const shouldDisable = !canFinalize || isProcessing;
+      elements.finalizeConfirm.disabled = shouldDisable;
+      elements.finalizeConfirm.classList.toggle('opacity-60', shouldDisable);
+      elements.finalizeConfirm.classList.toggle('cursor-not-allowed', shouldDisable);
       if (elements.finalizeDifference) {
         if (totalLiquido === 0) {
           elements.finalizeDifference.textContent = 'Adicione itens para finalizar a venda.';
@@ -7982,6 +8187,40 @@
         }
       }
     }
+  };
+
+  const setFinalizeProcessing = (processing) => {
+    const normalized = Boolean(processing);
+    state.finalizeProcessing = normalized;
+    if (elements.finalizeConfirm) {
+      const defaultLabel =
+        elements.finalizeConfirm.dataset.defaultLabel ||
+        elements.finalizeConfirm.textContent?.trim() ||
+        '';
+      elements.finalizeConfirm.dataset.defaultLabel = defaultLabel;
+      if (normalized) {
+        elements.finalizeConfirm.innerHTML = `<i class="fas fa-circle-notch fa-sm animate-spin mr-2"></i>${defaultLabel}`;
+      } else {
+        elements.finalizeConfirm.innerHTML = defaultLabel;
+      }
+      elements.finalizeConfirm.setAttribute('aria-busy', normalized ? 'true' : 'false');
+    }
+    if (elements.finalizeBack) {
+      elements.finalizeBack.disabled = normalized;
+      elements.finalizeBack.classList.toggle('opacity-60', normalized);
+      elements.finalizeBack.classList.toggle('cursor-not-allowed', normalized);
+      elements.finalizeBack.setAttribute('aria-disabled', normalized ? 'true' : 'false');
+    }
+    if (elements.finalizeClose) {
+      elements.finalizeClose.disabled = normalized;
+      elements.finalizeClose.classList.toggle('opacity-60', normalized);
+      elements.finalizeClose.classList.toggle('cursor-not-allowed', normalized);
+      elements.finalizeClose.setAttribute('aria-disabled', normalized ? 'true' : 'false');
+    }
+    if (elements.finalizeBackdrop) {
+      elements.finalizeBackdrop.classList.toggle('pointer-events-none', normalized);
+    }
+    updateSaleSummary();
   };
 
   const populatePaymentSelect = () => {
@@ -10109,9 +10348,16 @@
         if (!entry || typeof entry !== 'object') return null;
         const amount = safeNumber(entry.amount ?? entry.valor ?? entry.total ?? 0);
         if (!(amount > 0)) return null;
+        const paymentTypeRaw =
+          entry.paymentType ?? entry.type ?? entry.paymentMethodType ?? entry.methodType ?? entry.forma ?? '';
+        const paymentType =
+          typeof paymentTypeRaw === 'string'
+            ? paymentTypeRaw.toLowerCase().trim()
+            : String(paymentTypeRaw || '').toLowerCase().trim();
         return {
           paymentId: entry.paymentId || entry.id || '',
           paymentLabel: entry.paymentLabel || entry.label || 'Pagamento',
+          paymentType,
           amount,
         };
       })
@@ -11506,6 +11752,7 @@
       fiscalSignature,
       fiscalProtocol,
       fiscalItemsSnapshot,
+      cashContributions,
     } = updates;
     if (saleCode !== undefined) {
       sale.saleCode = saleCode || '';
@@ -11782,15 +12029,52 @@
       totalRemoved += amount;
       const paymentId = entry.paymentId || '';
       const paymentLabel = entry.paymentLabel || '';
-      let method = paymentId ? state.pagamentos.find((item) => item.id === paymentId) : null;
+      const paymentType = entry.paymentType || '';
+      let method = null;
+      if (paymentId) {
+        method =
+          state.pagamentos.find((item) => item.id === paymentId) ||
+          state.pagamentos.find((item) => String(item.raw?._id || '') === paymentId);
+      }
       if (!method && paymentLabel) {
         method = state.pagamentos.find((item) => item.label === paymentLabel);
+      }
+      if (!method && paymentLabel) {
+        const normalizedLabel = String(paymentLabel || '').toLowerCase();
+        method = state.pagamentos.find((item) => {
+          const baseLabel = String(item.label || '').toLowerCase();
+          if (baseLabel === normalizedLabel) {
+            return true;
+          }
+          const rawLabel = String(item.raw?.nome || item.raw?.label || '').toLowerCase();
+          if (rawLabel === normalizedLabel) {
+            return true;
+          }
+          if (Array.isArray(item.aliases)) {
+            return item.aliases.some(
+              (alias) => String(alias || '').toLowerCase() === normalizedLabel
+            );
+          }
+          return false;
+        });
+      }
+      if (!method && paymentType) {
+        const normalizedType = paymentType.toLowerCase();
+        method = state.pagamentos.find((item) => {
+          const baseType = String(item.type || '').toLowerCase();
+          if (baseType === normalizedType) {
+            return true;
+          }
+          const rawType = String(item.raw?.tipo || item.raw?.type || '').toLowerCase();
+          return rawType === normalizedType;
+        });
       }
       if (method) {
         method.valor = Math.max(0, safeNumber(method.valor) - amount);
       }
     });
     renderPayments();
+    updateSummary();
     updateStatusBadge();
     scheduleStatePersist();
     if (totalRemoved > 0) {
@@ -11822,8 +12106,9 @@
       if (entry?.clienteId) {
         customerIds.add(entry.clienteId);
       }
-      if (entry?.accountReceivableId) {
-        accountIds.add(entry.accountReceivableId);
+      const accountIdSource = entry?.accountReceivableId || entry?.receivableId;
+      if (accountIdSource) {
+        accountIds.add(accountIdSource);
       }
     });
     customerIds.forEach((id) => {

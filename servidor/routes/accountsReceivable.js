@@ -542,14 +542,25 @@ async function assembleReceivablePayload(body, { existing = null } = {}) {
   rawInstallments.forEach((item) => {
     const number = Number.parseInt(item?.number, 10);
     if (!Number.isFinite(number) || number < 1 || number > installmentsCount) return;
+
     const dueOverride = parseDate(item?.dueDate || item?.due);
     const bankOverride = normalizeString(item?.bankAccount || item?.bank);
     if (bankOverride && mongoose.Types.ObjectId.isValid(bankOverride)) {
       overrideBankIds.add(bankOverride);
     }
+
+    const valueOverrideRaw = parseLocaleNumber(
+      item?.value ?? item?.valor ?? item?.amount ?? item?.installmentValue ?? item?.valorParcela,
+      NaN
+    );
+    const valueOverride = Number.isFinite(valueOverrideRaw) ? formatCurrency(valueOverrideRaw) : null;
+
+    const existing = detailsMap.get(number) || {};
     detailsMap.set(number, {
-      dueDate: dueOverride || null,
-      bankAccount: bankOverride || null,
+      ...existing,
+      dueDate: dueOverride || existing.dueDate || null,
+      bankAccount: bankOverride || existing.bankAccount || null,
+      ...(valueOverride !== null ? { value: valueOverride } : {}),
     });
   });
 
@@ -577,9 +588,11 @@ async function assembleReceivablePayload(body, { existing = null } = {}) {
   const installments = [];
   for (let index = 0; index < installmentsCount; index += 1) {
     const amountCents = baseCents + (index < remainder ? 1 : 0);
-    const value = amountCents / 100;
+    const baseValue = amountCents / 100;
     const baseDueDate = addMonths(dueDate, index);
     const override = detailsMap.get(index + 1) || {};
+    const hasOverrideValue = typeof override.value === 'number' && Number.isFinite(override.value);
+    const value = hasOverrideValue ? override.value : baseValue;
     installments.push({
       number: index + 1,
       issueDate,
@@ -597,6 +610,17 @@ async function assembleReceivablePayload(body, { existing = null } = {}) {
       residualDueDate: null,
       originInstallmentNumber: undefined,
     });
+  }
+
+  const assignedCents = installments.reduce((sum, installment) => sum + Math.round(installment.value * 100), 0);
+  const targetCents = Math.round(totalValue * 100);
+  const difference = targetCents - assignedCents;
+  if (difference !== 0 && installments.length) {
+    const last = installments[installments.length - 1];
+    const adjustedCents = Math.max(0, Math.round(last.value * 100) + difference);
+    const adjustedValue = adjustedCents / 100;
+    last.value = formatCurrency(adjustedValue);
+    last.originalValue = last.value;
   }
 
   const providedCode = normalizeString(body.code);
