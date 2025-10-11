@@ -6855,6 +6855,11 @@
         if (!normalizedInstallments.length) {
           return;
         }
+        const installmentsTotal = normalizedInstallments.reduce(
+          (sum, installment) => sum + safeNumber(installment.value ?? installment.valor ?? installment.amount ?? 0),
+          0
+        );
+        const requestTotalValue = installmentsTotal > 0 ? Math.round(installmentsTotal * 100) / 100 : totalValue;
         const installmentMethodIds = [];
         const installmentMethodLabels = [];
         installments.forEach((installment) => {
@@ -6889,7 +6894,7 @@
           paymentLabel: requestPaymentLabel,
           methodType: paymentMethodType,
           paymentMethodId: requestPaymentMethodId || '',
-          totalValue,
+          totalValue: requestTotalValue,
           installments: normalizedInstallments,
           customerId: clienteId ? String(clienteId) : '',
           customerName: clienteNome,
@@ -7148,6 +7153,7 @@
               number: installment.number,
               dueDate: installment.dueDate ? installment.dueDate.toISOString() : saleDateIso,
               bankAccount: bankAccountId,
+              value: safeNumber(installment.value ?? installment.valor ?? installment.amount ?? 0),
             }))
           : [];
         const documentNumberParts = [pdvCode || 'PDV', saleCode || saleId, requestIndex];
