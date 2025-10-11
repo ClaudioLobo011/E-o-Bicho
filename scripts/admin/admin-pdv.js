@@ -1548,6 +1548,100 @@
     });
   };
 
+  const resolvePaymentMethodType = (method) => {
+    if (!method) return '';
+    const classify = (value) => {
+      const normalized = normalizeKeyword(value);
+      if (!normalized) {
+        return '';
+      }
+      if (
+        normalized.includes('crediario') ||
+        normalized.includes('fiado') ||
+        normalized.includes('caderneta') ||
+        normalized.includes('carne') ||
+        normalized.includes('carn')
+      ) {
+        return 'crediario';
+      }
+      if (
+        normalized.includes('debito') ||
+        normalized.includes('debit') ||
+        normalized.includes('maestro') ||
+        normalized.includes('electron') ||
+        (normalized.includes('hiper') && normalized.includes('deb')) ||
+        normalized.includes('banricompras') ||
+        (normalized.includes('sodexo') && normalized.includes('deb')) ||
+        normalized.includes('cartao debito') ||
+        normalized.includes('cartao_debito')
+      ) {
+        return 'debito';
+      }
+      if (
+        normalized.includes('credito') ||
+        normalized.includes('credit') ||
+        normalized.includes('parcelad') ||
+        normalized.includes('cartao credito') ||
+        normalized.includes('cartao_credito') ||
+        normalized.includes('cartao') ||
+        normalized.includes('visa') ||
+        normalized.includes('master') ||
+        normalized.includes('amex') ||
+        normalized.includes('elo')
+      ) {
+        return 'credito';
+      }
+      if (
+        normalized.includes('dinheiro') ||
+        normalized.includes('especie') ||
+        normalized.includes('espécie') ||
+        normalized.includes('cash') ||
+        normalized.includes('numerario') ||
+        normalized.includes('avista') ||
+        normalized.includes('a vista') ||
+        normalized.includes('pix') ||
+        normalized.includes('transferencia') ||
+        normalized.includes('boleto') ||
+        normalized.includes('cheque')
+      ) {
+        return 'avista';
+      }
+      return '';
+    };
+    const candidates = [
+      method.type,
+      method.tipo,
+      method.paymentType,
+      method.payment_type,
+      method.formaPagamento,
+      method.forma_pagamento,
+      method.formaRecebimento,
+      method.forma_recebimento,
+      method.modalidade,
+      method.modalidadeRecebimento,
+      method.categoria,
+      method.category,
+      method.codigoTipo,
+      method.codigo_tipo,
+      method.codigo,
+      method.code,
+      method.nome,
+      method.name,
+      method.label,
+      method.slug,
+      method.displayName,
+      method.descricao,
+      method.description,
+    ];
+    for (const candidate of candidates) {
+      const resolved = classify(candidate);
+      if (resolved) {
+        return resolved;
+      }
+    }
+    return '';
+  };
+
   const normalizePaymentMethod = (method) => {
     if (!method) {
       return null;
@@ -1557,7 +1651,8 @@
     const id = idSource ? String(idSource) : createUid();
     const label =
       method.name || method.nome || method.label || method.code || 'Meio de pagamento';
-    const type = (method.type || 'avista').toLowerCase();
+    const resolvedType = resolvePaymentMethodType(method);
+    const type = (resolvedType || 'avista').toLowerCase();
     const code = method.code ? String(method.code) : '';
     const rawInstallments = Array.isArray(method.installmentConfigurations)
       ? method.installmentConfigurations
@@ -1600,8 +1695,23 @@
           method.label,
           method.codigo,
           method.slug,
+          method.displayName,
+          method.descricao,
+          method.description,
           method.tipo,
           method.type,
+          method.paymentType,
+          method.payment_type,
+          method.formaPagamento,
+          method.forma_pagamento,
+          method.formaRecebimento,
+          method.forma_recebimento,
+          method.modalidade,
+          method.modalidadeRecebimento,
+          method.categoria,
+          method.category,
+          method.codigoTipo,
+          method.codigo_tipo,
         ]
           .filter(Boolean)
           .map((value) => String(value))
