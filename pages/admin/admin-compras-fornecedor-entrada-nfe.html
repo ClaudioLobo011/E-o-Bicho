@@ -1501,6 +1501,23 @@
         const ALL_STATUS_CLASSES = Array.from(new Set(Object.values(STATUS_CLASS_MAP).flat()));
         const ALL_VALIDATION_CLASSES = Array.from(new Set(Object.values(VALIDATION_BADGE_STYLES).flat()));
 
+        const SUPPLIER_ACTION_VARIANTS = {
+          primary: [
+            'border-primary',
+            'bg-primary',
+            'text-white',
+            'hover:bg-primary/90',
+            'focus:ring-primary/40',
+          ],
+          secondary: [
+            'border-gray-200',
+            'text-gray-700',
+            'hover:border-primary/40',
+            'hover:text-primary',
+            'focus:ring-primary/20',
+          ],
+        };
+
         const digitsOnly = (value) => String(value ?? '').replace(/\D+/g, '');
 
         const setText = (element, value, fallback = '') => {
@@ -1742,6 +1759,75 @@
           }
           if (importSupplierSummaryContact) {
             importSupplierSummaryContact.textContent = buildContactLine(supplier) || 'Contato não informado';
+          }
+        };
+
+        const updateSupplierStatusCard = (type = 'info', message = '', description = '', actions = []) => {
+          if (!importSupplierStatus) return;
+
+          importSupplierStatus.classList.remove('hidden');
+          applyStatusClasses(importSupplierStatus, type);
+
+          if (importSupplierIcon) {
+            const iconClass = STATUS_ICONS[type] || STATUS_ICONS.info;
+            importSupplierIcon.className = `${iconClass} mt-0.5 text-[12px]`;
+          }
+
+          if (importSupplierMessage) {
+            importSupplierMessage.textContent = message || '';
+          }
+
+          if (importSupplierDescription) {
+            if (description) {
+              importSupplierDescription.textContent = description;
+              importSupplierDescription.classList.remove('hidden');
+            } else {
+              importSupplierDescription.textContent = '';
+              importSupplierDescription.classList.add('hidden');
+            }
+          }
+
+          if (!importSupplierActions) return;
+
+          importSupplierActions.innerHTML = '';
+          if (Array.isArray(actions) && actions.length) {
+            importSupplierActions.classList.remove('hidden');
+            actions.forEach((actionConfig) => {
+              if (!actionConfig || !actionConfig.label) return;
+              const button = document.createElement('button');
+              button.type = 'button';
+              button.classList.add(
+                'inline-flex',
+                'items-center',
+                'gap-1.5',
+                'rounded-lg',
+                'border',
+                'px-3',
+                'py-1.5',
+                'text-[10px]',
+                'font-semibold',
+                'transition',
+                'focus:outline-none',
+                'focus:ring-2',
+                'focus:ring-offset-1'
+              );
+              const variantClasses = SUPPLIER_ACTION_VARIANTS[actionConfig.variant] || SUPPLIER_ACTION_VARIANTS.secondary;
+              button.classList.add(...variantClasses);
+              if (actionConfig.icon) {
+                const icon = document.createElement('i');
+                icon.className = `${actionConfig.icon} text-[11px]`;
+                button.appendChild(icon);
+              }
+              const label = document.createElement('span');
+              label.textContent = actionConfig.label;
+              button.appendChild(label);
+              if (typeof actionConfig.action === 'function') {
+                button.addEventListener('click', actionConfig.action);
+              }
+              importSupplierActions.appendChild(button);
+            });
+          } else {
+            importSupplierActions.classList.add('hidden');
           }
         };
 
