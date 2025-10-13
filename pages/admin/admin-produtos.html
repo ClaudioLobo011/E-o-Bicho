@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin: Produtos - E o Bicho</title>
+    <title>Admin: Produto - E o Bicho</title>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../../src/output.css">
 </head>
@@ -20,90 +21,573 @@
 
             <div class="md:col-span-4">
                 <div class="bg-white p-6 rounded-lg shadow">
-                    <div class="flex justify-between items-center mb-6">
-                        <div>
-                            <h1 class="text-2xl font-bold text-gray-800">Gerir Produtos</h1>
-                            <p class="text-gray-600 mt-1">Adicione, edite ou remova produtos da sua loja.</p>
-                        </div>
-                        <button class="bg-primary hover:bg-secondary text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center space-x-2">
-                            <i class="fas fa-plus"></i>
-                            <span>Adicionar Novo Produto</span>
-                        </button>
-                    </div>
-                    
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center">
-                            <label for="limit-select" class="text-sm font-medium text-gray-700 mr-2">Mostrar:</label>
-                            <select id="limit-select" class="rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary text-sm">
-                                <option value="20">20</option>
-                                <option value="50">50</option>
-                                <option value="200">200</option>
-                            </select>
-                        </div>
-                        <div class="relative w-1/2">
-                            <input type="text" id="search-input" placeholder="Pesquisar por nome ou código..." class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
-                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <i class="fas fa-search text-gray-400"></i>
+                    <h1 id="product-page-title" class="text-2xl font-bold text-gray-800">Editar Produto</h1>
+                    <p class="text-gray-600 mt-1">Altere os dados do produto abaixo.</p>
+
+                    <form id="edit-product-form" class="mt-6 space-y-6">
+                        <div class="space-y-6">
+                            <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+                                <div class="lg:col-span-1">
+                                    <label for="cod" class="block text-sm font-medium text-gray-700">Cod. Interno (SKU)</label>
+                                    <input type="text" id="cod" name="cod" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div class="lg:col-span-2">
+                                    <label for="nome" class="block text-sm font-medium text-gray-700">Descrição</label>
+                                    <input type="text" id="nome" name="nome" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div class="lg:col-span-2">
+                                    <label for="codbarras" class="block text-sm font-medium text-gray-700">Código de Barras</label>
+                                    <input type="text" id="codbarras" name="codbarras" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div class="lg:col-span-1">
+                                    <label for="unidade" class="block text-sm font-medium text-gray-700">Unidade</label>
+                                    <select id="unidade" name="unidade" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Selecionar...</option>
+                                        <option value="UN">Unidade (UN)</option>
+                                        <option value="KG">Quilograma (KG)</option>
+                                        <option value="G">Grama (G)</option>
+                                        <option value="MG">Miligrama (MG)</option>
+                                        <option value="L">Litro (L)</option>
+                                        <option value="ML">Mililitro (ML)</option>
+                                        <option value="CX">Caixa (CX)</option>
+                                        <option value="PCT">Pacote (PCT)</option>
+                                        <option value="SC">Saco (SC)</option>
+                                        <option value="FD">Fardo (FD)</option>
+                                        <option value="DZ">Dúzia (DZ)</option>
+                                    </select>
+                                </div>
+                                <div class="lg:col-span-2">
+                                    <label for="referencia" class="block text-sm font-medium text-gray-700">Referência</label>
+                                    <input type="text" id="referencia" name="referencia" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Informe a referência do fabricante">
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div id="bulk-actions-toolbar" class="hidden bg-gray-100 p-3 rounded-md mb-4 flex items-center justify-between">
-                        <span id="selection-count" class="text-sm font-semibold text-gray-700"></span>
-                        <div class="flex items-center space-x-3">
-                            <label for="bulk-category-select" class="text-sm font-medium">Alterar categoria para:</label>
-                            <select id="bulk-category-select" class="rounded-md border-gray-300 shadow-sm text-sm">
-                                </select>
-                            <button id="apply-bulk-action-btn" class="bg-primary text-white font-bold py-2 px-4 rounded-lg text-sm hover:bg-secondary">Aplicar</button>
+                        <div class="border-b">
+                            <nav id="product-tabs" class="flex flex-wrap gap-3">
+                                <button type="button" class="tab-link text-sm font-semibold text-primary border-b-2 border-primary pb-2" data-tab="tab-prices">Preços</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-barcodes">Código de Barras</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-config">Configurações</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-info">Informações</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-classification">Classificação</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-fiscal">Informações fiscais</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-supplier">Fornecedor</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-stock">Estoque</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-images">Foto do Produto</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-complement">Complemento</button>
+                                <button type="button" class="tab-link text-sm font-semibold text-gray-500 hover:text-primary pb-2 border-b-2 border-transparent" data-tab="tab-integration">Integração</button>
+                            </nav>
                         </div>
-                    </div>
 
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm text-left text-gray-500">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                <tr>
-                                    <th scope="col" class="p-4">
-                                        <input type="checkbox" id="select-all-checkbox" class="form-checkbox h-4 w-4 text-primary rounded border-gray-300">
-                                    </th>
-                                    <th scope="col" class="px-6 py-3">Imagem</th>
-                                    <th scope="col" class="px-6 py-3">Nome do Produto</th>
-                                    <th scope="col" class="px-6 py-3">Preço de Venda</th>
-                                    <th scope="col" class="px-6 py-3">Stock</th>
-                                    <th scope="col" class="px-6 py-3 text-center">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="products-table-body">
-                                </tbody>
-                        </table>
-                    </div>
+                        <div id="tab-prices" class="space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label for="custo" class="block text-sm font-medium text-gray-700">Preço de Custo (R$)</label>
+                                    <input type="number" step="0.01" id="custo" name="custo" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label for="markup" class="block text-sm font-medium text-gray-700">Markup (%)</label>
+                                    <input type="number" step="0.01" id="markup" name="markup" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                    <p class="mt-2 text-xs text-gray-500">O markup é atualizado automaticamente ao alterar o custo ou o preço de venda.</p>
+                                </div>
+                                <div>
+                                    <label for="venda" class="block text-sm font-medium text-gray-700">Preço de Venda (R$)</label>
+                                    <input type="number" step="0.01" id="venda" name="venda" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                            </div>
 
-                    <div id="pagination-controls" class="flex items-center justify-between mt-6">
-                        <div>
-                            <span id="page-info" class="text-sm text-gray-700"></span>
-                            <span id="total-products-info" class="ml-2 text-sm text-gray-500"></span>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="promocional" class="block text-sm font-medium text-gray-700">Preço Promocional (R$)</label>
+                                    <input type="number" step="0.01" id="promocional" name="promocional" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label for="promo-validade" class="block text-sm font-medium text-gray-700">Validade da Promoção</label>
+                                    <input type="date" id="promo-validade" name="promo-validade" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                            </div>
                         </div>
-                        
-                        <div class="flex items-center space-x-2">
-                            <button id="prev-page-btn" class="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button>
-                            <button id="next-page-btn" class="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Próxima</button>
+
+                        <div id="tab-barcodes" class="space-y-6 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="codbarras" class="block text-sm font-medium text-gray-700">Código de Barras Principal</label>
+                                    <input type="text" id="spec-codbarras" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed" disabled>
+                                </div>
+                                <div>
+                                    <label for="barcode-additional" class="block text-sm font-medium text-gray-700">Códigos Complementares</label>
+                                    <textarea id="barcode-additional" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Liste outros códigos de barras separados por linha"></textarea>
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-500">Utilize esta aba para documentar códigos de barras alternativos utilizados em outros sistemas ou embalagens.</p>
                         </div>
-                    </div>
+
+                        <div id="tab-config" class="space-y-6 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="marca" class="block text-sm font-medium text-gray-700">Marca</label>
+                                    <input type="text" id="marca" name="marca" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label for="spec-apresentacao" class="block text-sm font-medium text-gray-700">Apresentação</label>
+                                    <input type="text" id="spec-apresentacao" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                                        <input type="checkbox" id="inativo" name="inativo" class="form-checkbox h-4 w-4 text-primary">
+                                        Produto inativo
+                                    </label>
+                                    <p class="mt-1 text-xs text-gray-500">Marque para ocultar o produto das vendas e listagens públicas.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-info" class="space-y-6 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="data-cadastro" class="block text-sm font-medium text-gray-700">Data de Cadastro</label>
+                                    <input type="date" id="data-cadastro" name="data-cadastro" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label for="peso" class="block text-sm font-medium text-gray-700">Peso (Kg)</label>
+                                    <input type="number" step="0.001" id="peso" name="peso" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Informe o peso em quilogramas">
+                                </div>
+                                <div>
+                                    <label for="iat" class="block text-sm font-medium text-gray-700">IAT</label>
+                                    <select id="iat" name="iat" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Selecionar...</option>
+                                        <option value="Arredondamento">Arredondamento</option>
+                                        <option value="Truncamento">Truncamento</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="tipo-produto" class="block text-sm font-medium text-gray-700">Tipo de Produto</label>
+                                    <select id="tipo-produto" name="tipo-produto" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Selecionar...</option>
+                                        <option value="Revenda">Revenda</option>
+                                        <option value="Consumo Interno">Consumo Interno</option>
+                                        <option value="Bonificação">Bonificação</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-classification" class="space-y-6 hidden">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Categorias Atuais</label>
+                                <div id="category-tags-container" class="flex flex-wrap gap-2 items-center min-h-[2.5rem] p-2 border border-gray-200 rounded-md bg-gray-50"></div>
+                                <button type="button" id="add-category-btn" class="mt-3 text-sm text-primary font-semibold hover:underline flex items-center">
+                                    <i class="fas fa-plus-circle mr-2"></i>
+                                    Adicionar / Remover Categorias
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Idade</label>
+                                    <div class="mt-2 flex flex-wrap gap-3">
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-idade" value="Filhotes" class="form-checkbox"> Filhotes</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-idade" value="Adulto" class="form-checkbox"> Adulto</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-idade" value="Sênior" class="form-checkbox"> Sênior</label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Porte Raça</label>
+                                    <div class="mt-2 flex flex-wrap gap-3">
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-porte" value="Mini" class="form-checkbox"> Mini</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-porte" value="Pequeno" class="form-checkbox"> Pequeno</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-porte" value="Médio" class="form-checkbox"> Médio</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-porte" value="Grande" class="form-checkbox"> Grande</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-porte" value="Gigante" class="form-checkbox"> Gigante</label>
+                                    </div>
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700">Pet</label>
+                                    <div class="mt-2 flex flex-wrap gap-3">
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Cachorro" class="form-checkbox"> Cachorro</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Gato" class="form-checkbox"> Gato</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Pássaros" class="form-checkbox"> Pássaros</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Peixes" class="form-checkbox"> Peixes</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Coelhos" class="form-checkbox"> Coelhos</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Roedores" class="form-checkbox"> Roedores</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Tartarugas" class="form-checkbox"> Tartarugas</label>
+                                        <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="spec-pet" value="Lagartos" class="form-checkbox"> Lagartos</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-fiscal" class="space-y-8 hidden">
+                            <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                                <div class="w-full md:max-w-xs">
+                                    <label for="fiscal-company-select" class="block text-sm font-medium text-gray-700">Empresa</label>
+                                    <select id="fiscal-company-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary text-sm">
+                                        <option value="__general__">Configuração geral</option>
+                                    </select>
+                                    <p class="mt-2 text-xs text-gray-500">Escolha uma empresa para visualizar ou ajustar regras fiscais específicas.</p>
+                                </div>
+                                <div id="fiscal-company-summary" class="flex flex-col items-start gap-2 text-sm text-gray-600 md:items-end"></div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                <div class="md:col-span-1">
+                                    <label for="ncm" class="block text-sm font-medium text-gray-700">NCM</label>
+                                    <input type="text" id="ncm" name="ncm" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Informe o código NCM">
+                                </div>
+                                <div class="md:col-span-1">
+                                    <label for="fiscal-origem" class="block text-sm font-medium text-gray-700">Origem da Mercadoria</label>
+                                    <select id="fiscal-origem" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="0">0 - Nacional</option>
+                                        <option value="1">1 - Estrangeira - Importação direta</option>
+                                        <option value="2">2 - Estrangeira - Adquirida no mercado interno</option>
+                                        <option value="3">3 - Nacional com +40% de importado</option>
+                                        <option value="4">4 - Nacional produzida conforme processos básicos</option>
+                                        <option value="5">5 - Nacional com 40% ou menos importado</option>
+                                        <option value="6">6 - Estrangeira - Importação direta sem similar</option>
+                                        <option value="7">7 - Estrangeira - Mercado interno sem similar</option>
+                                        <option value="8">8 - Nacional com conteúdo importado superior a 70%</option>
+                                    </select>
+                                </div>
+                                <div class="md:col-span-1">
+                                    <label for="fiscal-csosn" class="block text-sm font-medium text-gray-700">CSOSN</label>
+                                    <input type="text" id="fiscal-csosn" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Ex.: 102">
+                                </div>
+                                <div class="md:col-span-1">
+                                    <label for="fiscal-cst" class="block text-sm font-medium text-gray-700">CST</label>
+                                    <input type="text" id="fiscal-cst" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Ex.: 000">
+                                </div>
+                                <div class="md:col-span-1">
+                                    <label for="fiscal-cest" class="block text-sm font-medium text-gray-700">CEST</label>
+                                    <input type="text" id="fiscal-cest" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Informe o CEST">
+                                </div>
+                                <div class="md:col-span-1">
+                                    <label for="fiscal-status-nfe" class="block text-sm font-medium text-gray-700">Status NF-e</label>
+                                    <select id="fiscal-status-nfe" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="pendente">Pendente</option>
+                                        <option value="parcial">Parcial</option>
+                                        <option value="aprovado">Aprovado</option>
+                                    </select>
+                                </div>
+                                <div class="md:col-span-1">
+                                    <label for="fiscal-status-nfce" class="block text-sm font-medium text-gray-700">Status NFC-e</label>
+                                    <select id="fiscal-status-nfce" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="pendente">Pendente</option>
+                                        <option value="parcial">Parcial</option>
+                                        <option value="aprovado">Aprovado</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="space-y-4">
+                                <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">CFOP</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div class="rounded-lg border border-gray-200 p-4">
+                                        <h4 class="text-sm font-semibold text-gray-800 mb-3">NF-e</h4>
+                                        <div class="space-y-3">
+                                            <label class="block text-sm">
+                                                <span class="text-gray-600">Operação dentro do estado</span>
+                                                <input type="text" id="fiscal-cfop-nfe-interno" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 5102">
+                                            </label>
+                                            <label class="block text-sm">
+                                                <span class="text-gray-600">Operação fora do estado</span>
+                                                <input type="text" id="fiscal-cfop-nfe-interestadual" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 6102">
+                                            </label>
+                                            <label class="block text-sm">
+                                                <span class="text-gray-600">Transferência</span>
+                                                <input type="text" id="fiscal-cfop-nfe-transferencia" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 5152">
+                                            </label>
+                                            <label class="block text-sm">
+                                                <span class="text-gray-600">Devolução</span>
+                                                <input type="text" id="fiscal-cfop-nfe-devolucao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 5202">
+                                            </label>
+                                            <label class="block text-sm">
+                                                <span class="text-gray-600">Industrialização</span>
+                                                <input type="text" id="fiscal-cfop-nfe-industrializacao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 5101">
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="rounded-lg border border-gray-200 p-4">
+                                        <h4 class="text-sm font-semibold text-gray-800 mb-3">NFC-e</h4>
+                                        <div class="space-y-3">
+                                            <label class="block text-sm">
+                                                <span class="text-gray-600">Operação dentro do estado</span>
+                                                <input type="text" id="fiscal-cfop-nfce-interno" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 5102">
+                                            </label>
+                                            <label class="block text-sm">
+                                                <span class="text-gray-600">Operação fora do estado</span>
+                                                <input type="text" id="fiscal-cfop-nfce-interestadual" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 6108">
+                                            </label>
+                                            <label class="block text-sm">
+                                                <span class="text-gray-600">Transferência</span>
+                                                <input type="text" id="fiscal-cfop-nfce-transferencia" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 5656">
+                                            </label>
+                                            <label class="block text-sm">
+                                                <span class="text-gray-600">Devolução</span>
+                                                <input type="text" id="fiscal-cfop-nfce-devolucao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 5202">
+                                            </label>
+                                            <label class="block text-sm">
+                                                <span class="text-gray-600">Industrialização</span>
+                                                <input type="text" id="fiscal-cfop-nfce-industrializacao" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="Ex.: 5101">
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                                    <h3 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">PIS</h3>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">Código</span>
+                                            <input type="text" id="fiscal-pis-codigo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="01">
+                                        </label>
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">CST</span>
+                                            <input type="text" id="fiscal-pis-cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="01">
+                                        </label>
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">Alíquota (%)</span>
+                                            <input type="number" step="0.01" id="fiscal-pis-aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="1,65">
+                                        </label>
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">Tipo de cálculo</span>
+                                            <select id="fiscal-pis-tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                                                <option value="percentual">Percentual</option>
+                                                <option value="valor">Valor</option>
+                                                <option value="isento">Isento</option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                                    <h3 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">COFINS</h3>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">Código</span>
+                                            <input type="text" id="fiscal-cofins-codigo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="01">
+                                        </label>
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">CST</span>
+                                            <input type="text" id="fiscal-cofins-cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="01">
+                                        </label>
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">Alíquota (%)</span>
+                                            <input type="number" step="0.01" id="fiscal-cofins-aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="7,60">
+                                        </label>
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">Tipo de cálculo</span>
+                                            <select id="fiscal-cofins-tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                                                <option value="percentual">Percentual</option>
+                                                <option value="valor">Valor</option>
+                                                <option value="isento">Isento</option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                                    <h3 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">IPI</h3>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">CST</span>
+                                            <input type="text" id="fiscal-ipi-cst" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="53">
+                                        </label>
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">Enquadramento</span>
+                                            <input type="text" id="fiscal-ipi-enquadramento" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="999">
+                                        </label>
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">Alíquota (%)</span>
+                                            <input type="number" step="0.01" id="fiscal-ipi-aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="0,00">
+                                        </label>
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">Tipo de cálculo</span>
+                                            <select id="fiscal-ipi-tipo" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                                                <option value="percentual">Percentual</option>
+                                                <option value="valor">Valor</option>
+                                                <option value="isento">Isento</option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                                    <h3 class="text-sm font-semibold text-gray-800 uppercase tracking-wide">FCP</h3>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">Indicador</span>
+                                            <select id="fiscal-fcp-indicador" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary">
+                                                <option value="0">0 - Não aplicável</option>
+                                                <option value="1">1 - FCP interno</option>
+                                                <option value="2">2 - FCP interestadual</option>
+                                            </select>
+                                        </label>
+                                        <label class="block text-sm">
+                                            <span class="text-gray-600">Alíquota (%)</span>
+                                            <input type="number" step="0.01" id="fiscal-fcp-aliquota" class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:ring-primary" placeholder="0,00">
+                                        </label>
+                                        <div class="flex items-center gap-2 md:col-span-2">
+                                            <input type="checkbox" id="fiscal-fcp-aplica" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary">
+                                            <label for="fiscal-fcp-aplica" class="text-sm text-gray-600">Aplicar FCP para este produto</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-supplier" class="space-y-6 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label for="supplier-name" class="block text-sm font-medium text-gray-700">Fornecedor</label>
+                                    <input type="text" id="supplier-name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Nome do fornecedor">
+                                </div>
+                                <div>
+                                    <label for="supplier-product-code" class="block text-sm font-medium text-gray-700">Cod. Produto do Fornecedor</label>
+                                    <input type="text" id="supplier-product-code" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Código usado pelo fornecedor">
+                                </div>
+                                <div>
+                                    <label for="supplier-entry-unit" class="block text-sm font-medium text-gray-700">Unidade de Entrada</label>
+                                    <select id="supplier-entry-unit" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Selecionar...</option>
+                                        <option value="UN">Unidade (UN)</option>
+                                        <option value="KG">Quilograma (KG)</option>
+                                        <option value="G">Grama (G)</option>
+                                        <option value="MG">Miligrama (MG)</option>
+                                        <option value="L">Litro (L)</option>
+                                        <option value="ML">Mililitro (ML)</option>
+                                        <option value="CX">Caixa (CX)</option>
+                                        <option value="PCT">Pacote (PCT)</option>
+                                        <option value="SC">Saco (SC)</option>
+                                        <option value="FD">Fardo (FD)</option>
+                                        <option value="DZ">Dúzia (DZ)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label for="supplier-calc-type" class="block text-sm font-medium text-gray-700">Tipo de Cálculo</label>
+                                    <select id="supplier-calc-type" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Selecionar...</option>
+                                        <option value="Multiplicar">Multiplicar</option>
+                                        <option value="Dividir">Dividir</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="supplier-calc-value" class="block text-sm font-medium text-gray-700">Valor do Cálculo</label>
+                                    <input type="number" step="0.0001" id="supplier-calc-value" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Informe o fator">
+                                </div>
+                                <div class="flex items-end">
+                                    <button type="button" id="add-supplier-btn" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-semibold rounded-md shadow-sm text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary w-full">
+                                        <i class="fas fa-plus mr-2"></i>
+                                        Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="supplier-list" class="space-y-4">
+                                <p class="text-sm text-gray-500">Nenhum fornecedor adicional adicionado.</p>
+                            </div>
+                        </div>
+
+                        <div id="tab-stock" class="space-y-6 hidden">
+                            <div class="space-y-4">
+                                <p class="text-sm text-gray-600">Distribua as quantidades em cada depósito cadastrado para manter o saldo de estoque atualizado por local.</p>
+
+                                <div id="deposit-empty-state" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-600 hidden">
+                                    <p>Nenhum depósito cadastrado até o momento.</p>
+                                    <a href="admin-depositos.html" class="mt-3 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90">Cadastrar primeiro depósito</a>
+                                </div>
+
+                                <div id="deposit-table-wrapper" class="overflow-x-auto hidden">
+                                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Depósito</th>
+                                                <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Quantidade</th>
+                                                <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Unidade</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="deposit-stock-tbody" class="divide-y divide-gray-100 bg-white"></tbody>
+                                    </table>
+                                </div>
+
+                                <div class="flex justify-end">
+                                    <span class="text-sm font-semibold text-gray-700">Total em estoque: <span id="deposit-total-display" class="text-primary">0</span></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-images" class="space-y-6 hidden">
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-800">Galeria do Produto</h3>
+                                <div id="existing-images-grid" class="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4"></div>
+                            </div>
+                            <div>
+                                <label for="imageUpload" class="block text-sm font-medium text-gray-700">Adicionar novas imagens</label>
+                                <input type="file" id="imageUpload" name="imagens" multiple class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20">
+                            </div>
+                        </div>
+
+                        <div id="tab-complement" class="space-y-6 hidden">
+                            <div>
+                                <label for="descricao" class="block text-sm font-medium text-gray-700">Descrição Detalhada</label>
+                                <textarea id="descricao" name="descricao" rows="6" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Inclua informações adicionais, instruções de uso ou observações relevantes"></textarea>
+                            </div>
+                        </div>
+
+                        <div id="tab-integration" class="space-y-6 hidden">
+                            <p class="text-sm text-gray-500">Configure parâmetros específicos de integrações externas, como marketplaces ou ERP, quando disponíveis.</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="integration-sku" class="block text-sm font-medium text-gray-700">SKU Externo</label>
+                                    <input type="text" id="integration-sku" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Identificador utilizado em sistemas externos">
+                                </div>
+                                <div>
+                                    <label for="integration-status" class="block text-sm font-medium text-gray-700">Status de Integração</label>
+                                    <select id="integration-status" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                                        <option value="">Não sincronizado</option>
+                                        <option value="synced">Sincronizado</option>
+                                        <option value="pending">Pendente de sincronização</option>
+                                        <option value="error">Erro na última sincronização</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end space-x-3 border-t pt-6">
+                            <a href="admin.html" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">Cancelar</a>
+                            <button type="submit" class="bg-primary text-white font-bold py-2 px-4 rounded-lg hover:bg-secondary">Salvar Alterações</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </main>
 
+    <div id="admin-footer-placeholder"></div>
+
+    <div id="category-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full flex flex-col">
+            <div class="p-4 border-b flex justify-between items-center">
+                <h3 class="text-lg font-semibold text-gray-800">Selecionar Categorias</h3>
+                <button type="button" id="close-category-modal-btn" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <div id="category-tree-container" class="p-6 overflow-y-auto" style="max-height: 60vh;"></div>
+            <div class="p-4 bg-gray-50 border-t flex justify-end space-x-3">
+                <button type="button" id="cancel-category-modal-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">Cancelar</button>
+                <button type="button" id="save-category-modal-btn" class="bg-primary text-white font-bold py-2 px-4 rounded-lg hover:bg-secondary">Confirmar Seleção</button>
+            </div>
+        </div>
+    </div>
+
     <div id="modal-placeholder"></div>
     <div id="confirm-modal-placeholder"></div>
 
-    <div id="admin-footer-placeholder"></div>
-    
     <script>var basePath = '../../';</script>
     <script src="../../scripts/core/config.js"></script>
     <script src="../../scripts/core/ui.js"></script>
     <script src="../../scripts/core/main.js"></script>
-    <script src="../../scripts/admin/admin.js"></script> 
-    <script src="../../scripts/admin/admin-produtos.js"></script> 
+    <script src="../../scripts/admin/admin.js"></script>
+    <script src="../../scripts/admin/admin-produto-form.js"></script>
   <script src="/scripts/common/modal-bridge.js"></script>
 </body>
 </html>

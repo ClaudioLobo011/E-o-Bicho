@@ -2095,7 +2095,7 @@
         };
 
         const buildProductRegistrationUrl = (item, nfeData) => {
-          const url = new URL('admin-produto-editar.html', window.location.href);
+          const url = new URL('admin-produtos.html', window.location.href);
           url.searchParams.set('from', 'nfe-import');
           if (nfeData?.accessKey) {
             url.searchParams.set('nfe', nfeData.accessKey);
