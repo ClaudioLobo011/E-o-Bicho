@@ -447,11 +447,23 @@ document.addEventListener('DOMContentLoaded', () => {
     let allDeposits = [];
     const depositStockMap = new Map();
     let lastSelectedProductUnit = getSelectedProductUnit();
+    let duplicateCheckInProgress = false;
 
     const makeFieldEditable = (input) => {
         if (!input) return;
         input.disabled = false;
         input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+    };
+
+    const lockField = (input) => {
+        if (!input) return;
+        input.disabled = true;
+        if (!input.classList.contains('bg-gray-100')) {
+            input.classList.add('bg-gray-100');
+        }
+        if (!input.classList.contains('cursor-not-allowed')) {
+            input.classList.add('cursor-not-allowed');
+        }
     };
 
     const setSubmitButtonIdleText = () => {
@@ -783,6 +795,80 @@ document.addEventListener('DOMContentLoaded', () => {
         setSubmitButtonIdleText();
     };
 
+    const fetchProductSummaryByIdentifier = async (identifierType, identifierValue) => {
+        const params = new URLSearchParams();
+        params.set(identifierType, identifierValue);
+        const response = await fetch(`${API_CONFIG.BASE_URL}/products/check-unique?${params.toString()}`);
+        if (!response.ok) {
+            throw new Error('Não foi possível verificar o produto informado.');
+        }
+        const payload = await response.json();
+        if (!payload?.exists || !payload?.product) {
+            return null;
+        }
+        return payload.product;
+    };
+
+    const loadProductForEditing = async (targetProductId) => {
+        if (!targetProductId) {
+            throw new Error('Produto não informado.');
+        }
+        const productResponse = await fetch(`${API_CONFIG.BASE_URL}/products/${targetProductId}`);
+        if (!productResponse.ok) {
+            throw new Error('Não foi possível carregar o produto selecionado.');
+        }
+        const productPayload = await productResponse.json();
+        populateForm(productPayload);
+    };
+
+    const handleDuplicateIdentifier = (identifierType) => async () => {
+        if (isEditMode || duplicateCheckInProgress) return;
+
+        const inputRef = identifierType === 'cod' ? skuInput : barcodeInput;
+        const rawValue = inputRef?.value ?? '';
+        const trimmedValue = rawValue.trim();
+        if (!trimmedValue) return;
+
+        duplicateCheckInProgress = true;
+
+        try {
+            const productSummary = await fetchProductSummaryByIdentifier(identifierType, trimmedValue);
+            if (!productSummary) {
+                return;
+            }
+
+            await showModal({
+                title: 'Produto já cadastrado',
+                message: `O produto "${productSummary.nome}" já está cadastrado. Deseja visualizá-lo?`,
+                confirmText: 'Sim',
+                cancelText: 'Não',
+                onConfirm: async () => {
+                    productId = productSummary._id;
+                    isEditMode = true;
+                    lockField(skuInput);
+                    lockField(barcodeInput);
+                    setSubmitButtonIdleText();
+                    try {
+                        await loadProductForEditing(productId);
+                    } catch (error) {
+                        console.error('Falha ao carregar produto existente:', error);
+                        showModal({ title: 'Erro', message: error.message || 'Não foi possível carregar o produto selecionado.', confirmText: 'Entendi' });
+                    }
+                },
+                onCancel: () => {
+                    productId = null;
+                    isEditMode = false;
+                    prepareFormForCreation();
+                },
+            });
+        } catch (error) {
+            console.error('Erro ao verificar duplicidade de produto:', error);
+            showModal({ title: 'Erro', message: error.message || 'Não foi possível verificar o produto informado.', confirmText: 'Entendi' });
+        } finally {
+            duplicateCheckInProgress = false;
+        }
+    };
+
     const populateForm = (product) => {
         pageTitle.textContent = `Editar Produto: ${product.nome}`;
         if (pageDescription) {
@@ -1080,6 +1166,9 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     addSupplierBtn?.addEventListener('click', handleAddSupplier);
+
+    skuInput?.addEventListener('blur', handleDuplicateIdentifier('cod'));
+    barcodeInput?.addEventListener('blur', handleDuplicateIdentifier('codbarras'));
 
     unitSelect?.addEventListener('change', () => {
         const newUnit = getSelectedProductUnit();
