@@ -35,7 +35,7 @@
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+            <button type="button" data-open-import-modal class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
               <i class="fas fa-file-upload"></i>
               Importar XML
             </button>
@@ -747,7 +747,7 @@
               </div>
 
               <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                <button type="button" data-open-import-modal class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
                   <i class="fas fa-file-import"></i>
                   Importar XML
                 </button>
@@ -830,6 +830,492 @@
     </div>
   </main>
 
+  <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-import-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div data-import-modal-card class="relative flex w-full max-w-6xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh] min-h-0 text-[12px] leading-[1.35]">
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-file-import"></i>
+              Importação de NF-e
+            </span>
+            <h2 class="mt-1.5 text-lg font-semibold text-gray-900">Importar XML autorizado na SEFAZ</h2>
+            <p class="mt-1 max-w-3xl text-[11px] text-gray-600">Utilize um XML emitido conforme o Manual de Orientação do Contribuinte 4.0 ou informe a chave de acesso válida (44 dígitos) para recuperar automaticamente dados oficiais da NF-e, NFC-e ou NFS-e.</p>
+          </div>
+          <button type="button" data-close-import-modal class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700">
+            <span class="sr-only">Fechar modal</span>
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
+
+        <nav class="flex flex-wrap gap-2 border-b border-gray-100 px-4 pt-2.5">
+          <button type="button" data-import-tab="pending" class="import-tab-button active">Notas Pendentes</button>
+          <button type="button" data-import-tab="xml" class="import-tab-button">Importar XML</button>
+        </nav>
+
+        <div class="flex-1 overflow-y-auto px-4 py-4">
+          <div data-import-tab-panel="pending" class="space-y-3.5">
+            <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <article class="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="space-y-0.5">
+                    <h3 class="text-[12px] font-semibold text-amber-900">NF-e 35240730290856000160550010000100011999999999</h3>
+                    <p class="text-[10px] text-amber-800">Autorizada em 02/07/2024 · SEFAZ/SP · Distribuidora Nacional de Produtos Veterinários Ltda</p>
+                  </div>
+                  <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700">Pendência</span>
+                </div>
+                <dl class="mt-2.5 grid grid-cols-2 gap-2 text-[10px] text-amber-900">
+                  <div>
+                    <dt class="font-medium">Valor total</dt>
+                    <dd class="text-[12px] font-semibold">R$ 15.487,32</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">CFOP predominante</dt>
+                    <dd>1.102 · Compra para comercialização</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Modelo</dt>
+                    <dd>55 – NF-e</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Origem</dt>
+                    <dd>Portal Nacional da NF-e</dd>
+                  </div>
+                </dl>
+                <div class="mt-2.5 flex flex-wrap items-center gap-2">
+                  <button type="button" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[10px] font-semibold text-white shadow-sm transition hover:bg-primary/90">
+                    <i class="fas fa-download"></i>
+                    Baixar XML autorizado
+                  </button>
+                  <span class="text-[9px] text-amber-700">Baseado em XML de exemplo oficial SEFAZ/SP.</span>
+                </div>
+              </article>
+
+              <article class="rounded-xl border border-sky-200 bg-sky-50/60 p-3.5">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="space-y-0.5">
+                    <h3 class="text-[12px] font-semibold text-sky-900">NFC-e 41230676107918000173550010012345678901234567</h3>
+                    <p class="text-[10px] text-sky-800">Autorizada em 18/06/2024 · SEFAZ/PR · Contingência NFC-e homologação</p>
+                  </div>
+                  <span class="rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-700">Pendente</span>
+                </div>
+                <dl class="mt-2.5 grid grid-cols-2 gap-2 text-[10px] text-sky-900">
+                  <div>
+                    <dt class="font-medium">Valor total</dt>
+                    <dd class="text-[12px] font-semibold">R$ 289,40</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Destinatário</dt>
+                    <dd>Consumidor final</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Modelo</dt>
+                    <dd>65 – NFC-e</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Prazo</dt>
+                    <dd>Pagamento imediato</dd>
+                  </div>
+                </dl>
+                <div class="mt-2.5 flex flex-wrap items-center gap-2">
+                  <button type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 px-2.5 py-1.5 text-[10px] font-semibold text-sky-800 transition hover:bg-sky-100">
+                    <i class="fas fa-eye"></i>
+                    Visualizar DANFE NFC-e
+                  </button>
+                  <span class="text-[9px] text-sky-700">Com base em arquivo de contingência SEFAZ/PR.</span>
+                </div>
+              </article>
+
+              <article class="lg:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="space-y-0.5">
+                    <h3 class="text-[12px] font-semibold text-emerald-900">NFS-e padrão nacional · Exemplo ABRASF</h3>
+                    <p class="text-[10px] text-emerald-800">Competência 06/2024 · Prefeitura do Rio de Janeiro · RPS 23145</p>
+                  </div>
+                  <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700">Pendente</span>
+                </div>
+                <dl class="mt-2.5 grid grid-cols-2 gap-2 text-[10px] text-emerald-900 sm:grid-cols-4">
+                  <div>
+                    <dt class="font-medium">Valor total</dt>
+                    <dd class="text-[12px] font-semibold">R$ 1.250,00</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Alíquota ISS</dt>
+                    <dd>3,00%</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Natureza</dt>
+                    <dd>Código LC 116 · Serviços veterinários</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Município</dt>
+                    <dd>Rio de Janeiro/RJ</dd>
+                  </div>
+                </dl>
+                <div class="mt-2.5 flex flex-wrap items-center gap-2">
+                  <button type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-800 transition hover:bg-emerald-100">
+                    <i class="fas fa-eye"></i>
+                    Visualizar RPS
+                  </button>
+                  <span class="text-[9px] text-emerald-700">Layout Simpliss/ABRASF 2.03 em ambiente oficial.</span>
+                </div>
+              </article>
+            </div>
+
+            <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 text-[10px] text-gray-600">
+              <h4 class="text-xs font-semibold text-gray-800">Fluxo resumido</h4>
+              <ul class="mt-1.5 space-y-1">
+                <li class="flex items-start gap-2">
+                  <i class="fas fa-check-circle text-[9px] text-primary mt-0.5"></i>
+                  <span>Consulta portal nacional NF-e/NFC-e ou NFSe Nacional.</span>
+                </li>
+                <li class="flex items-start gap-2">
+                  <i class="fas fa-check-circle text-[9px] text-primary mt-0.5"></i>
+                  <span>Validação XML conforme MOC 4.0, NT 2023.004 e padrão ABRASF.</span>
+                </li>
+                <li class="flex items-start gap-2">
+                  <i class="fas fa-check-circle text-[9px] text-primary mt-0.5"></i>
+                  <span>Itens e tributos são conciliados antes da escrituração.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div data-import-tab-panel="xml" class="hidden space-y-3.5">
+            <section class="rounded-xl border border-gray-200">
+              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                <div class="space-y-0.5">
+                  <h3 class="text-[12px] font-semibold text-gray-900">Selecione como deseja importar</h3>
+                  <p class="text-[11px] text-gray-600">Utilize uma chave de acesso autorizada, ou faça upload de um XML oficial baixado no Portal Nacional.</p>
+                </div>
+                <div class="flex flex-col gap-0.5 text-[10px] text-gray-600 sm:flex-row sm:items-center">
+                  <span class="inline-flex items-center gap-1 text-primary">
+                    <i class="fas fa-shield-check text-[11px]"></i>
+                    Validação XSD oficial
+                  </span>
+                  <span class="inline-flex items-center gap-1 text-emerald-600">
+                    <i class="fas fa-file-code text-[11px]"></i>
+                    NF-e 4.0 · NFC-e 4.0 · NFS-e ABRASF
+                  </span>
+                </div>
+              </header>
+              <div class="grid grid-cols-1 gap-2.5 p-3.5 lg:grid-cols-3">
+                <div class="space-y-1.5">
+                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Tipo de importação</label>
+                  <div class="grid grid-cols-2 gap-1.5 text-[10px] font-medium text-gray-600">
+                    <label class="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1.5">
+                      <input type="radio" name="import-mode" value="access-key" class="h-3 w-3 text-primary focus:ring-primary/40" checked>
+                      Chave de acesso
+                    </label>
+                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary">
+                      <input type="radio" name="import-mode" value="file" class="h-3 w-3 text-primary focus:ring-primary/40">
+                      Arquivo XML
+                    </label>
+                  </div>
+                </div>
+                <div class="space-y-1.5" data-import-mode-panel="access-key">
+                  <label for="import-access-key" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Informe a chave</label>
+                  <div class="flex gap-1.5">
+                    <input type="text" id="import-access-key" maxlength="44" class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="35240730290856000160550010000100011999999999">
+                    <button type="button" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-primary/90">
+                      <i class="fas fa-search"></i>
+                      Consultar portal
+                    </button>
+                  </div>
+                  <p class="text-[9px] text-gray-500">Consulta automática ao Portal Nacional da NF-e/NFC-e ou NFSe Nacional.</p>
+                </div>
+                <div class="space-y-1.5 hidden" data-import-mode-panel="file">
+                  <label for="import-file-input" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Envie o XML</label>
+                  <label for="import-file-input" class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-3 py-5 text-center text-[10px] text-gray-500 transition hover:border-primary hover:text-primary">
+                    <i class="fas fa-cloud-upload-alt text-lg"></i>
+                    <span>Selecione ou arraste o arquivo XML autorizado</span>
+                    <input id="import-file-input" type="file" accept=".xml" class="hidden">
+                  </label>
+                  <p class="text-[9px] text-gray-500">Validação com esquemas oficiais (XSD) e regras de negócio SEFAZ.</p>
+                  <div data-file-feedback class="hidden rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] text-emerald-800"></div>
+                </div>
+                <div class="space-y-1.5">
+                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</label>
+                  <div class="grid grid-cols-1 gap-1.5 text-[10px] font-medium text-gray-600 sm:grid-cols-2">
+                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary">
+                      <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
+                      Importar automaticamente produtos novos
+                    </label>
+                    <label class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 transition hover:border-primary/40 hover:text-primary">
+                      <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
+                      Atualizar preços de compra existentes
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="rounded-xl border border-gray-200">
+              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                <div class="space-y-0.5">
+                  <h3 class="text-[12px] font-semibold text-gray-900">Dados da nota fiscal</h3>
+                  <p class="text-[11px] text-gray-600">Resumo preenchido automaticamente conforme leiaute nacional 4.0 da NF-e.</p>
+                </div>
+                <div class="text-right text-[10px] text-gray-500">
+                  <span class="block font-semibold text-gray-700">MOC 4.0</span>
+                  <span>NT 2023.003 · NT 2023.004</span>
+                </div>
+              </header>
+              <div class="grid grid-cols-1 gap-2.5 p-3.5 text-[10px] text-gray-600 lg:grid-cols-4">
+                <div class="lg:col-span-2">
+                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Emitente</label>
+                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
+                    <p class="font-semibold text-gray-700">Distribuidora Nacional de Produtos Veterinários Ltda</p>
+                    <p>CNPJ 30.290.856/0001-60 · IE 123.456.789.112</p>
+                  </div>
+                </div>
+                <div>
+                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Chave de acesso</label>
+                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
+                    <p class="font-mono text-[12px] text-gray-700">35240730290856000160550010000100011999999999</p>
+                    <p>DV 99 · Ambiente produção</p>
+                  </div>
+                </div>
+                <div>
+                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Protocolo</label>
+                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
+                    <p>152407845932110</p>
+                    <p>Recebido em 02/07/2024 14:26:54</p>
+                  </div>
+                </div>
+                <div class="lg:col-span-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+                  <label class="space-y-1">
+                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">NF</span>
+                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="10245" readonly>
+                  </label>
+                  <label class="space-y-1">
+                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Série</span>
+                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="1" readonly>
+                  </label>
+                  <label class="space-y-1">
+                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Emissão</span>
+                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="02/07/2024" readonly>
+                  </label>
+                  <label class="space-y-1">
+                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Entrada</span>
+                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="03/07/2024" readonly>
+                  </label>
+                </div>
+                <div class="lg:col-span-2">
+                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Fornecedor</label>
+                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
+                    <p class="font-semibold text-gray-700">Distribuidora Nacional de Produtos Veterinários Ltda</p>
+                    <p>CNPJ 30.290.856/0001-60 · IE 123.456.789.112</p>
+                  </div>
+                </div>
+                <div>
+                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor total</label>
+                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-right text-gray-700">
+                    <p class="text-sm font-semibold">R$ 15.487,32</p>
+                    <p class="text-[10px] text-emerald-600">Conferido com XML</p>
+                  </div>
+                </div>
+                <div>
+                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Destinatário</label>
+                  <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
+                    <p class="font-semibold text-gray-700">Vila e o Bicho Comércio de Produtos Pet Ltda</p>
+                    <p>CNPJ 11.222.333/0001-44 · IE 85.963.147</p>
+                  </div>
+                </div>
+                <div class="lg:col-span-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+                  <label class="space-y-1">
+                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">CFOP predominante</span>
+                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="1.102" readonly>
+                  </label>
+                  <label class="space-y-1">
+                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Natureza da operação</span>
+                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="Compra para comercialização" readonly>
+                  </label>
+                  <label class="space-y-1">
+                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Modalidade frete</span>
+                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="9 - Sem frete" readonly>
+                  </label>
+                  <label class="space-y-1">
+                    <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Indicador IE destinatário</span>
+                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="1 - Contribuinte ICMS" readonly>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <section class="rounded-xl border border-gray-200">
+              <header class="flex flex-col gap-2.5 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                <div class="space-y-0.5">
+                  <h3 class="text-[12px] font-semibold text-gray-900">Produtos importados</h3>
+                  <p class="text-[11px] text-gray-600">Itens conforme o XML, com tributos ICMS, ST, IPI, PIS e COFINS.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
+                  <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2 py-0.5">
+                    <i class="fas fa-layer-group text-[11px]"></i>
+                    XML nº 35240730290856000160550010000100011999999999
+                  </span>
+                  <span class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700">
+                    <i class="fas fa-check text-[11px]"></i>
+                    Validação fiscal ok
+                  </span>
+                </div>
+              </header>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-[10px]">
+                  <thead class="bg-gray-50 text-[9px] uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th class="sticky left-0 z-10 bg-gray-50 px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500 shadow-sm">Cadastrar</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Unitarizar</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Selecionar</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Cod</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Nome</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Cod_Fornecedor</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Cod_Barras</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Nome no Fornecedor</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Multiplicador/Divisão</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Unidade</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Quantidade</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Unitário (R$)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Desconto (R$)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Total</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">CFOP</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">CST</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">ICMS (%)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Base ICMS (R$)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor ICMS (R$)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">IVA (%)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">ICMS ST (%)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor ICMS ST (R$)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">IPI (%)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Base IPI (R$)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor IPI (R$)</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">ST IPI</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Alíquota PIS (%)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Base PIS (R$)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor PIS (R$)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">ST CONFINS (%)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Base CONFINS (R$)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor CONFINS (R$)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Frete (R$)</th>
+                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor Outros (R$)</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-200 bg-white">
+                    <tr class="hover:bg-primary/5">
+                      <td class="px-2 py-1.5">
+                        <button type="button" class="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                          <i class="fas fa-plus"></i>
+                          Cadastrar
+                        </button>
+                      </td>
+                      <td class="px-2 py-1.5">
+                        <label class="inline-flex items-center gap-2 text-[9px] text-gray-600">
+                          <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40">
+                          Lote
+                        </label>
+                      </td>
+                      <td class="px-2 py-1.5">
+                        <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40">
+                      </td>
+                      <td class="px-2 py-1.5 font-semibold text-gray-700">PROD-0001</td>
+                      <td class="px-2 py-1.5 text-gray-700">Vacina Polivalente V8 50ml</td>
+                      <td class="px-2 py-1.5 text-gray-600">789123456</td>
+                      <td class="px-2 py-1.5 text-gray-600">7891234567890</td>
+                      <td class="px-2 py-1.5 text-gray-600">VACINA POLIVALENTE V8 50ML</td>
+                      <td class="px-2 py-1.5 text-gray-600">1,000</td>
+                      <td class="px-2 py-1.5 text-gray-600">FR</td>
+                      <td class="px-2 py-1.5 text-right text-gray-600">12,000</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">48,90</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">0,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">586,80</td>
+                      <td class="px-2 py-1.5 text-gray-600">1.102</td>
+                      <td class="px-2 py-1.5 text-gray-600">00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">18,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">586,80</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">105,62</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">40,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">12,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">70,42</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">0,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">0,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">0,00</td>
+                      <td class="px-2 py-1.5 text-gray-600">Não tributado</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">1,65</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">586,80</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">9,69</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">7,60</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">586,80</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">44,59</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">45,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">12,50</td>
+                    </tr>
+                    <tr class="hover:bg-primary/5">
+                      <td class="px-2 py-1.5">
+                        <button type="button" class="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                          <i class="fas fa-plus"></i>
+                          Cadastrar
+                        </button>
+                      </td>
+                      <td class="px-2 py-1.5">
+                        <label class="inline-flex items-center gap-2 text-[9px] text-gray-600">
+                          <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40">
+                          Unitário
+                        </label>
+                      </td>
+                      <td class="px-2 py-1.5">
+                        <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
+                      </td>
+                      <td class="px-2 py-1.5 font-semibold text-gray-700">PROD-0002</td>
+                      <td class="px-2 py-1.5 text-gray-700">Ração Premium Cães Adultos 15kg</td>
+                      <td class="px-2 py-1.5 text-gray-600">789654321</td>
+                      <td class="px-2 py-1.5 text-gray-600">7896543210987</td>
+                      <td class="px-2 py-1.5 text-gray-600">RACAO PREMIUM CAES ADULTOS 15KG</td>
+                      <td class="px-2 py-1.5 text-gray-600">1,000</td>
+                      <td class="px-2 py-1.5 text-gray-600">SC</td>
+                      <td class="px-2 py-1.5 text-right text-gray-600">8,000</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">126,50</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">3,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">1.008,00</td>
+                      <td class="px-2 py-1.5 text-gray-600">1.403</td>
+                      <td class="px-2 py-1.5 text-gray-600">20</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">12,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">960,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">115,20</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">45,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">18,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">172,80</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">5,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">1.008,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">50,40</td>
+                      <td class="px-2 py-1.5 text-gray-600">Tributado</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">1,65</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">1.008,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">16,63</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">7,60</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">1.008,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">76,61</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">120,00</td>
+                      <td class="px-2 py-1.5 text-right text-gray-700">45,00</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+          <footer class="flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-end">
+            <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <button type="button" data-close-import-modal class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
+              <button type="button" class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
+                <i class="fas fa-file-import"></i>
+                Importar
+              </button>
+            </div>
+          </footer>
+      </div>
+    </div>
+  </div>
+
   <div id="admin-footer-placeholder"></div>
 
   <script>var basePath = '../../';</script>
@@ -872,6 +1358,200 @@
           activateTab(button.dataset.tab);
         });
       });
+
+      const importModal = document.getElementById('import-xml-modal');
+      if (importModal) {
+        const importModalCard = importModal.querySelector('[data-import-modal-card]');
+        const openImportModalButtons = document.querySelectorAll('[data-open-import-modal]');
+        const closeImportModalButtons = importModal.querySelectorAll('[data-close-import-modal]');
+        const importTabButtons = importModal.querySelectorAll('.import-tab-button');
+        const importTabPanels = importModal.querySelectorAll('[data-import-tab-panel]');
+        const importModeRadios = importModal.querySelectorAll('input[name="import-mode"]');
+        const importModePanels = importModal.querySelectorAll('[data-import-mode-panel]');
+        const importFilePanel = importModal.querySelector('[data-import-mode-panel="file"]');
+        const importFileInput = document.getElementById('import-file-input');
+        const importFileFeedback = importModal.querySelector('[data-file-feedback]');
+        let previouslyFocusedElement = null;
+
+        const focusableSelectors = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
+        function trapFocus(event) {
+          if (!importModal || importModal.classList.contains('hidden')) return;
+          if (event.key !== 'Tab') return;
+
+          const focusableElements = importModalCard ? Array.from(importModalCard.querySelectorAll(focusableSelectors)).filter((element) => element.offsetParent !== null) : [];
+          if (focusableElements.length === 0) return;
+
+          const firstElement = focusableElements[0];
+          const lastElement = focusableElements[focusableElements.length - 1];
+
+          if (event.shiftKey && document.activeElement === firstElement) {
+            event.preventDefault();
+            lastElement.focus();
+          } else if (!event.shiftKey && document.activeElement === lastElement) {
+            event.preventDefault();
+            firstElement.focus();
+          }
+        }
+
+        function openImportModal() {
+          previouslyFocusedElement = document.activeElement;
+          importModal.classList.remove('hidden');
+          document.body.classList.add('overflow-hidden');
+
+          if (importModalCard) {
+            importModalCard.classList.add('opacity-0', 'scale-95');
+            requestAnimationFrame(() => {
+              importModalCard.classList.remove('opacity-0', 'scale-95');
+              importModalCard.classList.add('opacity-100', 'scale-100');
+            });
+
+            const focusableElements = importModalCard.querySelectorAll(focusableSelectors);
+            if (focusableElements.length) {
+              focusableElements[0].focus();
+            }
+          }
+
+          document.addEventListener('keydown', trapFocus);
+        }
+
+        function closeImportModal() {
+          if (importModalCard) {
+            importModalCard.classList.remove('opacity-100', 'scale-100');
+            importModalCard.classList.add('opacity-0', 'scale-95');
+          }
+
+          document.body.classList.remove('overflow-hidden');
+          document.removeEventListener('keydown', trapFocus);
+
+          setTimeout(() => {
+            importModal.classList.add('hidden');
+            if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+              previouslyFocusedElement.focus();
+            }
+          }, 180);
+        }
+
+        function activateImportTab(tabId) {
+          importTabButtons.forEach((button) => {
+            const isActive = button.dataset.importTab === tabId;
+            button.classList.toggle('active', isActive);
+            button.classList.toggle('bg-primary/10', isActive);
+            button.classList.toggle('text-primary', isActive);
+            button.classList.toggle('border', true);
+            button.classList.toggle('border-transparent', isActive);
+            button.classList.toggle('border-gray-200', !isActive);
+            button.classList.toggle('text-gray-600', !isActive);
+            button.classList.add('inline-flex', 'items-center', 'gap-2', 'rounded-lg', 'px-3', 'py-2', 'text-xs', 'font-semibold', 'transition');
+          });
+
+          importTabPanels.forEach((panel) => {
+            panel.classList.toggle('hidden', panel.dataset.importTabPanel !== tabId);
+          });
+        }
+
+        function updateImportMode() {
+          const selectedRadio = importModal.querySelector('input[name="import-mode"]:checked');
+          const selectedValue = selectedRadio ? selectedRadio.value : null;
+
+          importModePanels.forEach((panel) => {
+            const isActive = panel.dataset.importModePanel === selectedValue;
+            panel.classList.toggle('hidden', !isActive);
+          });
+
+          if (importFileFeedback) {
+            importFileFeedback.classList.add('hidden');
+            importFileFeedback.textContent = '';
+          }
+          if (importFileInput) {
+            importFileInput.value = '';
+          }
+        }
+
+        openImportModalButtons.forEach((button) => {
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            openImportModal();
+            activateImportTab('xml');
+            updateImportMode();
+          });
+        });
+
+        closeImportModalButtons.forEach((button) => {
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            closeImportModal();
+          });
+        });
+
+        importModal.addEventListener('click', (event) => {
+          const target = event.target;
+          if (target instanceof Element && target.hasAttribute('data-close-import-modal')) {
+            closeImportModal();
+          }
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && !importModal.classList.contains('hidden')) {
+            closeImportModal();
+          }
+        });
+
+        importTabButtons.forEach((button) => {
+          button.addEventListener('click', () => {
+            activateImportTab(button.dataset.importTab);
+          });
+        });
+
+        importModeRadios.forEach((radio) => {
+          radio.addEventListener('change', updateImportMode);
+        });
+
+        if (importFilePanel && importFileInput) {
+          const toggleHover = (isActive) => {
+            importFilePanel.classList.toggle('border-primary/60', isActive);
+            importFilePanel.classList.toggle('bg-primary/5', isActive);
+          };
+
+          ['dragenter', 'dragover'].forEach((eventName) => {
+            importFilePanel.addEventListener(eventName, (event) => {
+              event.preventDefault();
+              toggleHover(true);
+            });
+          });
+
+          ['dragleave', 'dragend'].forEach((eventName) => {
+            importFilePanel.addEventListener(eventName, (event) => {
+              event.preventDefault();
+              toggleHover(false);
+            });
+          });
+
+          importFilePanel.addEventListener('drop', (event) => {
+            event.preventDefault();
+            toggleHover(false);
+            if (!event.dataTransfer) return;
+            const [file] = event.dataTransfer.files;
+            if (file) {
+              importFileInput.files = event.dataTransfer.files;
+              if (importFileFeedback) {
+                importFileFeedback.textContent = `Arquivo selecionado: ${file.name}`;
+                importFileFeedback.classList.remove('hidden');
+              }
+            }
+          });
+
+          importFileInput.addEventListener('change', () => {
+            if (importFileInput.files && importFileInput.files[0] && importFileFeedback) {
+              importFileFeedback.textContent = `Arquivo selecionado: ${importFileInput.files[0].name}`;
+              importFileFeedback.classList.remove('hidden');
+            }
+          });
+        }
+
+        activateImportTab('pending');
+        updateImportMode();
+      }
     });
   </script>
 </body>
