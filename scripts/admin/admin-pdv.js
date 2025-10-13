@@ -179,6 +179,8 @@
   const customerPetsCache = new Map();
   const customerAddressesCache = new Map();
   const appointmentCache = new Map();
+  const appointmentCustomerCache = new Map();
+  const appointmentCustomerRequestCache = new Map();
   const customerReceivablesCache = new Map();
   const customerReceivablesDetailsCache = new Map();
 
@@ -7507,6 +7509,7 @@
       createdAt: saleReceivables.saleDate,
       receivables: saleReceivables.entries,
       cashContributions,
+      appointmentId: state.activeAppointmentId || '',
     });
     if (saleRecord) {
       saleRecord.cashContributions = cashContributions;
@@ -10376,9 +10379,11 @@
     createdAt = null,
     receivables = [],
     cashContributions = [],
+    appointmentId = '',
   } = {}) => {
     const normalizedType = type === 'delivery' ? 'delivery' : 'venda';
     const typeLabel = normalizedType === 'delivery' ? 'Delivery' : 'Venda';
+    const normalizedAppointmentId = normalizeId(appointmentId);
     const saleItems = Array.isArray(items) ? items : [];
     const paymentTags = Array.from(
       new Set(
@@ -10493,6 +10498,7 @@
       inventoryProcessed: false,
       inventoryProcessedAt: null,
       cashContributions: normalizedCashContributions,
+      appointmentId: normalizedAppointmentId,
     };
   };
 
@@ -11062,6 +11068,7 @@
         appointment.clienteId ||
           appointment.customerId ||
           appointment.cliente?._id ||
+          appointment.cliente?.id ||
           appointment.cliente?._id
       ),
       customerName:
@@ -11082,6 +11089,7 @@
         appointment.cliente?.cpf ||
         appointment.cliente?.cnpj ||
         appointment.cliente?.documento ||
+        appointment.clienteDocumento ||
         appointment.documento ||
         '',
       customerEmail:
@@ -11089,6 +11097,7 @@
         appointment.email ||
         appointment.tutorEmail ||
         appointment.emailTutor ||
+        appointment.clienteEmail ||
         '',
       customerPhone:
         appointment.cliente?.celular ||
@@ -11099,6 +11108,8 @@
         appointment.celularTutor ||
         appointment.tutorTelefone ||
         appointment.tutorCelular ||
+        appointment.clienteCelular ||
+        appointment.clienteTelefone ||
         '',
       petId: normalizeId(appointment.petId || appointment.pet?._id),
       petName:
@@ -11431,7 +11442,316 @@
     if (!elements.appointmentModal) return;
     elements.appointmentModal.classList.add('hidden');
   };
-  const applyAppointmentToSale = (appointment) => {
+  const cloneCustomerDetailsForAppointment = (customer) => {
+    if (!customer || typeof customer !== 'object') return null;
+    const clone = { ...customer };
+    if (customer.financeiro && typeof customer.financeiro === 'object') {
+      clone.financeiro = { ...customer.financeiro };
+    }
+    if (customer.contato && typeof customer.contato === 'object') {
+      clone.contato = { ...customer.contato };
+    }
+    return clone;
+  };
+  const matchesCustomerId = (record, targetId) => {
+    if (!record || !targetId) return false;
+    const recordId =
+      resolveCustomerId(record) ||
+      normalizeId(record._id || record.id || record.codigo || record.codigoInterno);
+    return recordId === targetId;
+  };
+  const getCachedCustomerDetailsForAppointment = (customerId) => {
+    const normalizedId = normalizeId(customerId);
+    if (!normalizedId) return null;
+    const directCandidates = [
+      state.vendaCliente,
+      state.modalSelectedCliente,
+      state.receivablesSelectedCustomer,
+    ];
+    for (const candidate of directCandidates) {
+      if (matchesCustomerId(candidate, normalizedId)) {
+        return cloneCustomerDetailsForAppointment(candidate);
+      }
+    }
+    if (Array.isArray(state.customerSearchResults)) {
+      for (const entry of state.customerSearchResults) {
+        if (matchesCustomerId(entry, normalizedId)) {
+          return cloneCustomerDetailsForAppointment(entry);
+        }
+      }
+    }
+    if (customerReceivablesDetailsCache.has(normalizedId)) {
+      return cloneReceivablesCustomerDetails(customerReceivablesDetailsCache.get(normalizedId));
+    }
+    if (appointmentCustomerCache.has(normalizedId)) {
+      return cloneCustomerDetailsForAppointment(appointmentCustomerCache.get(normalizedId));
+    }
+    return null;
+  };
+  const fetchAppointmentCustomerDetails = async (customerId) => {
+    const normalizedId = normalizeId(customerId);
+    if (!normalizedId) return null;
+    if (appointmentCustomerCache.has(normalizedId)) {
+      return cloneCustomerDetailsForAppointment(appointmentCustomerCache.get(normalizedId));
+    }
+    if (appointmentCustomerRequestCache.has(normalizedId)) {
+      const pending = await appointmentCustomerRequestCache.get(normalizedId);
+      return pending ? cloneCustomerDetailsForAppointment(pending) : null;
+    }
+    const token = getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const request = (async () => {
+      try {
+        const response = await fetch(`${API_BASE}/func/clientes/${normalizedId}`, { headers });
+        if (!response.ok) {
+          return null;
+        }
+        const payload = await response.json();
+        if (!payload || typeof payload !== 'object') {
+          return null;
+        }
+        const details = cloneReceivablesCustomerDetails(payload);
+        appointmentCustomerCache.set(normalizedId, details);
+        if (!customerReceivablesDetailsCache.has(normalizedId)) {
+          customerReceivablesDetailsCache.set(normalizedId, details);
+        }
+        return details;
+      } catch (error) {
+        console.error('Erro ao carregar detalhes do cliente do atendimento:', error);
+        return null;
+      } finally {
+        appointmentCustomerRequestCache.delete(normalizedId);
+      }
+    })();
+    appointmentCustomerRequestCache.set(normalizedId, request);
+    const resolved = await request;
+    return resolved ? cloneCustomerDetailsForAppointment(resolved) : null;
+  };
+  const mergeCustomerDetailsIntoSaleCustomer = (customer, details) => {
+    if (!customer || !details) return customer;
+    const resolvedId =
+      resolveCustomerId(details) ||
+      normalizeId(details._id || details.id || details.codigo || details.codigoInterno);
+    if (resolvedId) {
+      customer._id = customer._id || resolvedId;
+      customer.id = customer.id || resolvedId;
+      customer.codigo = customer.codigo || resolvedId;
+      customer.codigoInterno = customer.codigoInterno || resolvedId;
+    }
+    const nameCandidate =
+      resolveCustomerName(details) ||
+      details.nomeCompleto ||
+      details.nomeContato ||
+      details.razaoSocial ||
+      details.fantasia ||
+      details.nome ||
+      '';
+    if (nameCandidate) {
+      if (!customer.nome || customer.nome === 'Cliente da agenda') {
+        customer.nome = nameCandidate;
+      }
+      customer.nomeCompleto = nameCandidate;
+    }
+    const documentCandidate =
+      resolveCustomerDocument(details) ||
+      details.documento ||
+      details.doc ||
+      details.cpf ||
+      details.cnpj ||
+      (details.document && details.document.numero) ||
+      (details.pessoaFisica && details.pessoaFisica.cpf) ||
+      (details.pessoaJuridica && details.pessoaJuridica.cnpj) ||
+      '';
+    if (!documentCandidate && Array.isArray(details.documentos)) {
+      const docEntry = details.documentos.find((entry) => entry && entry.numero);
+      if (docEntry && docEntry.numero) {
+        customer.doc = String(docEntry.numero).trim();
+      }
+    }
+    if (documentCandidate) {
+      const normalizedDoc = String(documentCandidate).trim();
+      if (normalizedDoc) {
+        customer.doc = normalizedDoc;
+        customer.documento = normalizedDoc;
+        customer.document = normalizedDoc;
+        const digits = normalizeDocumentDigits(normalizedDoc);
+        if (digits.length === 11) {
+          customer.cpf = normalizedDoc;
+          delete customer.cnpj;
+        } else if (digits.length === 14) {
+          customer.cnpj = normalizedDoc;
+          delete customer.cpf;
+        }
+      }
+    }
+    const emailCandidates = [];
+    const addEmail = (value) => {
+      if (!value) return;
+      const email = String(value).trim();
+      if (!email) return;
+      if (!emailCandidates.includes(email)) {
+        emailCandidates.push(email);
+      }
+    };
+    addEmail(customer.email);
+    addEmail(details.email);
+    addEmail(details.emailPrincipal);
+    addEmail(details.emailContato);
+    if (details.contato && typeof details.contato === 'object') {
+      addEmail(details.contato.email);
+    }
+    if (Array.isArray(details.emails)) {
+      details.emails.forEach((entry) => {
+        if (!entry) return;
+        if (typeof entry === 'string') {
+          addEmail(entry);
+        } else {
+          addEmail(entry.email || entry.contato || entry.valor);
+        }
+      });
+    }
+    if (Array.isArray(details.contatos)) {
+      details.contatos.forEach((entry) => {
+        if (entry && typeof entry === 'object') {
+          addEmail(entry.email);
+        }
+      });
+    }
+    if (emailCandidates.length) {
+      customer.email = emailCandidates[0];
+    }
+    const phoneCandidates = [];
+    const addPhone = (value) => {
+      if (!value && value !== 0) return;
+      const phone = String(value).trim();
+      if (!phone) return;
+      if (!phoneCandidates.includes(phone)) {
+        phoneCandidates.push(phone);
+      }
+    };
+    addPhone(customer.telefone);
+    addPhone(customer.celular);
+    addPhone(details.telefone);
+    addPhone(details.celular);
+    addPhone(details.telefoneContato);
+    addPhone(details.celularContato);
+    addPhone(details.telefonePrincipal);
+    addPhone(details.celularPrincipal);
+    addPhone(details.telefoneComercial);
+    addPhone(details.telefoneResidencial);
+    addPhone(details.telefoneSecundario);
+    addPhone(details.telefone1);
+    addPhone(details.telefone2);
+    addPhone(details.telefone3);
+    addPhone(details.fone);
+    addPhone(details.phone);
+    addPhone(details.mobile);
+    addPhone(details.whatsapp);
+    addPhone(details.whatsApp);
+    addPhone(details.whatsappNumber);
+    addPhone(details.contactPhone);
+    if (details.contato && typeof details.contato === 'object') {
+      addPhone(details.contato.telefone);
+      addPhone(details.contato.celular);
+      addPhone(details.contato.whatsapp);
+    }
+    const collectPhoneEntries = (entries) => {
+      if (!Array.isArray(entries)) return;
+      entries.forEach((entry) => {
+        if (!entry) return;
+        if (typeof entry === 'string') {
+          addPhone(entry);
+        } else if (typeof entry === 'object') {
+          addPhone(entry.telefone || entry.celular || entry.whatsapp || entry.numero || entry.number || entry.fone || entry.phone || entry.mobile);
+          if (entry.email) {
+            addEmail(entry.email);
+          }
+        }
+      });
+    };
+    collectPhoneEntries(details.telefones);
+    collectPhoneEntries(details.phones);
+    collectPhoneEntries(details.contatos);
+    collectPhoneEntries(details.contatosPrincipais);
+    collectPhoneEntries(details.meiosContato);
+    if (phoneCandidates.length) {
+      customer.telefone = phoneCandidates[0];
+      const secondary = phoneCandidates.find((value) => value !== customer.telefone) || phoneCandidates[0];
+      customer.celular = secondary;
+    }
+    return customer;
+  };
+  const enrichSaleCustomerFromAppointment = async (customer, appointment) => {
+    if (!customer || !appointment) return customer;
+    const candidateId =
+      appointment.customerId ||
+      appointment.clienteId ||
+      (appointment.cliente && (appointment.cliente._id || appointment.cliente.id));
+    const normalizedId = normalizeId(candidateId);
+    let hasDocument = Boolean(
+      customer.doc || customer.documento || customer.document || customer.cpf || customer.cnpj
+    );
+    let hasContact = Boolean(customer.email || customer.telefone || customer.celular);
+    let hasName = Boolean(customer.nome && customer.nome !== 'Cliente da agenda');
+    let cachedDetails = null;
+    if (normalizedId) {
+      cachedDetails = getCachedCustomerDetailsForAppointment(normalizedId);
+      if (cachedDetails) {
+        mergeCustomerDetailsIntoSaleCustomer(customer, cachedDetails);
+        hasDocument = Boolean(
+          customer.doc || customer.documento || customer.document || customer.cpf || customer.cnpj
+        );
+        hasContact = Boolean(customer.email || customer.telefone || customer.celular);
+        hasName = Boolean(customer.nome && customer.nome !== 'Cliente da agenda');
+      }
+    }
+    if (normalizedId && (!hasDocument || !hasContact || !hasName)) {
+      const fetched = await fetchAppointmentCustomerDetails(normalizedId);
+      if (fetched) {
+        mergeCustomerDetailsIntoSaleCustomer(customer, fetched);
+        hasDocument = Boolean(
+          customer.doc || customer.documento || customer.document || customer.cpf || customer.cnpj
+        );
+        hasContact = Boolean(customer.email || customer.telefone || customer.celular);
+        hasName = Boolean(customer.nome && customer.nome !== 'Cliente da agenda');
+      }
+    }
+    if (normalizedId) {
+      customer._id = customer._id || normalizedId;
+      customer.id = customer.id || normalizedId;
+      customer.codigo = customer.codigo || normalizedId;
+      customer.codigoInterno = customer.codigoInterno || normalizedId;
+    }
+    const finalDocument =
+      customer.doc || customer.documento || customer.document || customer.cpf || customer.cnpj || '';
+    if (finalDocument) {
+      const normalizedDoc = String(finalDocument).trim();
+      if (normalizedDoc) {
+        customer.doc = normalizedDoc;
+        customer.documento = normalizedDoc;
+        customer.document = normalizedDoc;
+        const digits = normalizeDocumentDigits(normalizedDoc);
+        if (digits.length === 11) {
+          customer.cpf = normalizedDoc;
+          delete customer.cnpj;
+        } else if (digits.length === 14) {
+          customer.cnpj = normalizedDoc;
+          delete customer.cpf;
+        }
+      }
+    }
+    if (!customer.nomeCompleto && customer.nome) {
+      customer.nomeCompleto = customer.nome;
+    }
+    if (!customer.telefone && customer.celular) {
+      customer.telefone = customer.celular;
+    }
+    if (!customer.celular && customer.telefone) {
+      customer.celular = customer.telefone;
+    }
+    return customer;
+  };
+  const applyAppointmentToSale = async (appointment) => {
     if (!appointment) return false;
     const services = Array.isArray(appointment.services) ? appointment.services : [];
     if (!services.length && safeNumber(appointment.total) <= 0) {
@@ -11487,13 +11807,45 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    const documentValue = appointment.customerDocument || '';
+    const documentDigits = normalizeDocumentDigits(documentValue);
+    const normalizedDocument = documentValue || '';
+    const customerId = normalizeId(
+      appointment.customerId ||
+        appointment.clienteId ||
+        (appointment.cliente && (appointment.cliente._id || appointment.cliente.id))
+    );
     const customer = {
       nome: appointment.customerName || 'Cliente da agenda',
-      doc: appointment.customerDocument || '',
+      nomeCompleto: appointment.customerName || 'Cliente da agenda',
+      doc: normalizedDocument,
+      documento: normalizedDocument,
+      document: normalizedDocument,
       email: appointment.customerEmail || '',
       celular: appointment.customerPhone || '',
+      telefone: appointment.customerPhone || '',
     };
-    const pet = appointment.petName ? { nome: appointment.petName } : null;
+    if (customerId) {
+      customer._id = customerId;
+      customer.id = customerId;
+      customer.codigo = customerId;
+      customer.codigoInterno = customerId;
+    }
+    if (documentDigits && documentDigits.length === 11) {
+      customer.cpf = normalizedDocument;
+    } else if (documentDigits && documentDigits.length === 14) {
+      customer.cnpj = normalizedDocument;
+    }
+    await enrichSaleCustomerFromAppointment(customer, appointment);
+    const pet = appointment.petName
+      ? {
+          nome: appointment.petName,
+        }
+      : null;
+    if (pet && appointment.petId) {
+      pet._id = appointment.petId;
+      pet.id = appointment.petId;
+    }
     setSaleCustomer(customer, pet);
     renderItemsList();
     renderSalePaymentsPreview();
@@ -11605,7 +11957,7 @@
     renderAppointmentFilters();
     await loadAppointmentsForCurrentFilter({ forceReload: true });
   };
-  const handleAppointmentListClick = (event) => {
+  const handleAppointmentListClick = async (event) => {
     const button = event.target.closest('[data-appointment-import]');
     if (!button) return;
     const appointmentId = button.getAttribute('data-appointment-import');
@@ -11619,9 +11971,39 @@
       notify('Este atendimento já foi faturado e não pode ser importado novamente.', 'info');
       return;
     }
-    const applied = applyAppointmentToSale(appointment);
-    if (applied) {
-      closeAppointmentModal();
+    const wasDisabled = button.disabled;
+    const hadCursorWait = button.classList.contains('cursor-wait');
+    const hadOpacity = button.classList.contains('opacity-60');
+    if (!wasDisabled) {
+      button.disabled = true;
+      if (!hadCursorWait) {
+        button.classList.add('cursor-wait');
+      }
+      if (!hadOpacity) {
+        button.classList.add('opacity-60');
+      }
+    }
+    let applied = false;
+    try {
+      applied = await applyAppointmentToSale(appointment);
+      if (applied) {
+        closeAppointmentModal();
+      }
+    } catch (error) {
+      console.error('Erro ao importar atendimento no PDV:', error);
+      notify('Não foi possível importar os serviços do atendimento selecionado.', 'error');
+    } finally {
+      if (!applied && button.isConnected) {
+        button.disabled = wasDisabled;
+        if (!wasDisabled) {
+          if (!hadCursorWait) {
+            button.classList.remove('cursor-wait');
+          }
+          if (!hadOpacity) {
+            button.classList.remove('opacity-60');
+          }
+        }
+      }
     }
   };
   const handleAppointmentRefresh = () => {
@@ -11712,6 +12094,49 @@
     }
   };
 
+  const revertAppointmentAfterSaleCancellation = async (sale) => {
+    if (!sale) return false;
+    const normalizedAppointmentId = normalizeId(
+      sale.appointmentId || sale.receiptSnapshot?.meta?.appointmentId || ''
+    );
+    if (!normalizedAppointmentId) {
+      return false;
+    }
+    const previousState = findAppointmentById(normalizedAppointmentId);
+    updateAppointmentRecord(normalizedAppointmentId, {
+      paid: false,
+      saleCode: '',
+    });
+    const token = getToken();
+    try {
+      await fetchWithOptionalAuth(`${API_BASE}/func/agendamentos/${normalizedAppointmentId}`, {
+        token,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigoVenda: '', pago: false }),
+        errorMessage: 'Não foi possível atualizar o atendimento após cancelar a venda.',
+      });
+      refreshAppointmentMetrics({ force: true }).catch((error) =>
+        console.error('Erro ao atualizar indicadores após cancelar venda do atendimento:', error)
+      );
+      return true;
+    } catch (error) {
+      console.error('Erro ao sincronizar atendimento após cancelar a venda:', error);
+      if (previousState) {
+        updateAppointmentRecord(normalizedAppointmentId, {
+          paid: Boolean(previousState.paid),
+          saleCode: previousState.saleCode || '',
+          status: previousState.status || 'agendado',
+        });
+      }
+      notify(
+        'Venda cancelada, porém não foi possível atualizar o atendimento na agenda.',
+        'warning'
+      );
+      return false;
+    }
+  };
+
   const registerCompletedSaleRecord = (options = {}) => {
     const record = createCompletedSaleRecord(options);
     if (!record) return null;
@@ -11753,6 +12178,7 @@
       fiscalProtocol,
       fiscalItemsSnapshot,
       cashContributions,
+      appointmentId,
     } = updates;
     if (saleCode !== undefined) {
       sale.saleCode = saleCode || '';
@@ -11760,6 +12186,12 @@
     }
     if (snapshot !== undefined) {
       sale.receiptSnapshot = snapshot || null;
+      if (!updates.appointmentId && snapshot?.meta?.appointmentId) {
+        sale.appointmentId = normalizeId(snapshot.meta.appointmentId);
+      }
+    }
+    if (appointmentId !== undefined) {
+      sale.appointmentId = normalizeId(appointmentId);
     }
     if (fiscalStatus !== undefined) {
       sale.fiscalStatus = fiscalStatus || 'pending';
@@ -12187,6 +12619,7 @@
       revertSaleCashMovements(sale);
       await removeSaleAccountsReceivable(sale);
       renderSalesList();
+      await revertAppointmentAfterSaleCancellation(sale);
       closeSaleCancelModal();
       notify('Venda cancelada com sucesso.', 'success');
       scheduleStatePersist({ immediate: true });

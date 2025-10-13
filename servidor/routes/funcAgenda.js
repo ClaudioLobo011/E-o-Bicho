@@ -217,6 +217,128 @@ function extractAllowedStaffTypes(serviceDoc) {
   return [...new Set(raw.map(v => String(v || '').trim()).filter(Boolean))];
 }
 
+function mapAppointmentCustomer(userDoc) {
+  if (!userDoc || typeof userDoc !== 'object') {
+    return null;
+  }
+
+  const normalizeString = value => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+  };
+
+  const documentCandidates = [];
+  const addDocument = value => {
+    const doc = normalizeString(value);
+    if (doc && !documentCandidates.includes(doc)) {
+      documentCandidates.push(doc);
+    }
+  };
+
+  addDocument(userDoc.documento);
+  addDocument(userDoc.cpf);
+  addDocument(userDoc.cnpj);
+  if (Array.isArray(userDoc.documentos)) {
+    userDoc.documentos.forEach(entry => {
+      if (!entry) return;
+      if (typeof entry === 'string') {
+        addDocument(entry);
+      } else if (typeof entry === 'object') {
+        addDocument(entry.numero || entry.valor || entry.documento || entry.code);
+      }
+    });
+  }
+
+  const phoneCandidates = [];
+  const addPhone = value => {
+    const phone = normalizeString(value);
+    if (phone && !phoneCandidates.includes(phone)) {
+      phoneCandidates.push(phone);
+    }
+  };
+
+  addPhone(userDoc.telefone);
+  addPhone(userDoc.celular);
+  addPhone(userDoc.telefoneSecundario);
+  addPhone(userDoc.celularSecundario);
+
+  const collectPhonesFromArray = entries => {
+    if (!Array.isArray(entries)) return;
+    entries.forEach(entry => {
+      if (!entry) return;
+      if (typeof entry === 'string') {
+        addPhone(entry);
+      } else if (typeof entry === 'object') {
+        addPhone(entry.telefone || entry.celular || entry.whatsapp || entry.numero || entry.number || entry.mobile);
+      }
+    });
+  };
+
+  collectPhonesFromArray(userDoc.telefones);
+  collectPhonesFromArray(userDoc.meiosContato);
+
+  const emailCandidates = [];
+  const addEmail = value => {
+    const email = normalizeString(value).toLowerCase();
+    if (email && !emailCandidates.includes(email)) {
+      emailCandidates.push(email);
+    }
+  };
+
+  addEmail(userDoc.email);
+
+  const collectContactsFromArray = entries => {
+    if (!Array.isArray(entries)) return [];
+    return entries.filter(Boolean).map(entry => {
+      if (typeof entry === 'string') {
+        addEmail(entry);
+        addPhone(entry);
+        return entry;
+      }
+      if (typeof entry === 'object') {
+        addEmail(entry.email);
+        addPhone(entry.telefone || entry.celular || entry.whatsapp || entry.numero || entry.number || entry.mobile);
+        return { ...entry };
+      }
+      return null;
+    }).filter(Boolean);
+  };
+
+  const contatos = [
+    ...collectContactsFromArray(userDoc.contatos),
+    ...collectContactsFromArray(userDoc.contatosPrincipais),
+    ...collectContactsFromArray(userDoc.meiosContato),
+  ];
+
+  const primaryPhone = phoneCandidates.length ? phoneCandidates[0] : normalizeString(userDoc.telefone) || null;
+  const secondaryPhone = phoneCandidates.find(value => value !== primaryPhone) || normalizeString(userDoc.celular) || primaryPhone || null;
+
+  const documento = documentCandidates.length ? documentCandidates[0] : '';
+
+  return {
+    _id: userDoc._id || null,
+    id: userDoc._id || null,
+    nomeCompleto: userDoc.nomeCompleto || null,
+    nomeContato: userDoc.nomeContato || null,
+    razaoSocial: userDoc.razaoSocial || null,
+    nomeFantasia: userDoc.nomeFantasia || null,
+    email: emailCandidates[0] || userDoc.email || null,
+    emails: emailCandidates,
+    cpf: userDoc.cpf || null,
+    cnpj: userDoc.cnpj || null,
+    documento: documento || null,
+    documentos: Array.isArray(userDoc.documentos)
+      ? userDoc.documentos
+          .filter(Boolean)
+          .map(entry => (typeof entry === 'object' ? { ...entry } : entry))
+      : [],
+    telefone: primaryPhone || null,
+    celular: secondaryPhone || null,
+    telefones: phoneCandidates,
+    contatos,
+  };
+}
+
 router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) => {
   try {
     const { id } = req.params;
@@ -1035,7 +1157,28 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
 
     const list = await Appointment.find(filter)
       .select('_id store cliente pet servico itens profissional scheduledAt valor pago codigoVenda status observacoes')
-      .populate('cliente', 'nomeCompleto nomeContato razaoSocial email')
+      .populate(
+        'cliente',
+        [
+          'nomeCompleto',
+          'nomeContato',
+          'razaoSocial',
+          'nomeFantasia',
+          'email',
+          'cpf',
+          'cnpj',
+          'documento',
+          'documentos',
+          'telefone',
+          'celular',
+          'telefoneSecundario',
+          'celularSecundario',
+          'telefones',
+          'contatos',
+          'contatosPrincipais',
+          'meiosContato',
+        ].join(' ')
+      )
       .populate('pet', 'nome')
       .populate({
         path: 'servico',
@@ -1052,7 +1195,12 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       .lean();
 
     const map = (list || []).map(a => {
-      const clienteNome = a.cliente ? (a.cliente.nomeCompleto || a.cliente.nomeContato || a.cliente.razaoSocial || a.cliente.email || null) : null;
+      const clienteInfo = mapAppointmentCustomer(a.cliente);
+      const clienteNome = clienteInfo?.nomeCompleto
+        || clienteInfo?.nomeContato
+        || clienteInfo?.razaoSocial
+        || clienteInfo?.email
+        || null;
 
       const itens = Array.isArray(a.itens) ? a.itens : [];
       const servicosList = itens.length
@@ -1080,8 +1228,14 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       return {
         _id: a._id,
         storeId: a.store?._id || a.store || null,
-        clienteId: a.cliente?._id || null,
+        clienteId: clienteInfo?._id || a.cliente?._id || null,
         clienteNome,
+        clienteDocumento: clienteInfo?.documento || null,
+        clienteEmail: clienteInfo?.email || null,
+        clienteTelefone: clienteInfo?.telefone || null,
+        clienteCelular: clienteInfo?.celular || null,
+        clienteContatos: clienteInfo?.contatos || [],
+        cliente: clienteInfo,
         pet: a.pet ? a.pet.nome : '—',
         petId: a.pet?._id || null,
         servico: servicosStr,             // compat: texto p/ exibição
@@ -1121,7 +1275,28 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
 
     const list = await Appointment.find(filter)
       .select('_id store cliente pet servico itens profissional scheduledAt valor pago codigoVenda status observacoes')
-      .populate('cliente', 'nomeCompleto nomeContato razaoSocial email')
+      .populate(
+        'cliente',
+        [
+          'nomeCompleto',
+          'nomeContato',
+          'razaoSocial',
+          'nomeFantasia',
+          'email',
+          'cpf',
+          'cnpj',
+          'documento',
+          'documentos',
+          'telefone',
+          'celular',
+          'telefoneSecundario',
+          'celularSecundario',
+          'telefones',
+          'contatos',
+          'contatosPrincipais',
+          'meiosContato',
+        ].join(' ')
+      )
       .populate('pet', 'nome')
       .populate({
         path: 'servico',
@@ -1159,9 +1334,11 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
         });
       }
       const valorTotal = servicosList.reduce((acc, s) => acc + Number(s.valor || 0), 0) || Number(a.valor || 0) || 0;
-      const tutorNome = a.cliente
-        ? (a.cliente.nomeCompleto || a.cliente.nomeContato || a.cliente.razaoSocial || '')
-        : '';
+      const clienteInfo = mapAppointmentCustomer(a.cliente);
+      const tutorNome = clienteInfo?.nomeCompleto
+        || clienteInfo?.nomeContato
+        || clienteInfo?.razaoSocial
+        || '';
       return {
         _id: a._id,
         pet: a.pet ? a.pet.nome : null,
@@ -1170,6 +1347,13 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
         profissionalId: a.profissional?._id || null,
         profissional: a.profissional ? (a.profissional.nomeCompleto || a.profissional.nomeContato || a.profissional.razaoSocial) : null,
         tutor: tutorNome,
+        cliente: clienteInfo,
+        clienteId: clienteInfo?._id || a.cliente?._id || null,
+        clienteDocumento: clienteInfo?.documento || null,
+        clienteEmail: clienteInfo?.email || null,
+        clienteTelefone: clienteInfo?.telefone || null,
+        clienteCelular: clienteInfo?.celular || null,
+        clienteContatos: clienteInfo?.contatos || [],
         h: new Date(a.scheduledAt).toISOString(),
         valor: valorTotal,
         pago: !!a.pago,
