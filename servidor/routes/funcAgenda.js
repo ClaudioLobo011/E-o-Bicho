@@ -357,10 +357,12 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
     if (servicoId && mongoose.Types.ObjectId.isValid(servicoId)) set.servico = servicoId; // compat
     if (profissionalId && mongoose.Types.ObjectId.isValid(profissionalId)) set.profissional = profissionalId;
     if (typeof valor !== 'undefined') set.valor = Number(valor);
-    if (typeof pago !== 'undefined') set.pago = !!pago;
     if (typeof codigoVenda !== 'undefined') {
-      set.codigoVenda = String(codigoVenda || '').trim();
-      if (set.codigoVenda) set.pago = true; // ao registrar código, marca como pago
+      const normalizedSaleCode = String(codigoVenda || '').trim();
+      set.codigoVenda = normalizedSaleCode;
+      set.pago = !!normalizedSaleCode; // paga somente quando há código vinculado
+    } else if (typeof pago !== 'undefined') {
+      set.pago = !!pago;
     }
 
     if (scheduledAt) {
