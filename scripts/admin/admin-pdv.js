@@ -11487,13 +11487,40 @@
     state.vendaPagamentos = [];
     state.vendaDesconto = 0;
     state.vendaAcrescimo = 0;
+    const documentValue = appointment.customerDocument || '';
+    const documentDigits = normalizeDocumentDigits(documentValue);
+    const normalizedDocument = documentValue || '';
+    const customerId = appointment.customerId || '';
     const customer = {
       nome: appointment.customerName || 'Cliente da agenda',
-      doc: appointment.customerDocument || '',
+      nomeCompleto: appointment.customerName || 'Cliente da agenda',
+      doc: normalizedDocument,
+      documento: normalizedDocument,
+      document: normalizedDocument,
       email: appointment.customerEmail || '',
       celular: appointment.customerPhone || '',
+      telefone: appointment.customerPhone || '',
     };
-    const pet = appointment.petName ? { nome: appointment.petName } : null;
+    if (customerId) {
+      customer._id = customerId;
+      customer.id = customerId;
+      customer.codigo = customerId;
+      customer.codigoInterno = customerId;
+    }
+    if (documentDigits && documentDigits.length === 11) {
+      customer.cpf = normalizedDocument;
+    } else if (documentDigits && documentDigits.length === 14) {
+      customer.cnpj = normalizedDocument;
+    }
+    const pet = appointment.petName
+      ? {
+          nome: appointment.petName,
+        }
+      : null;
+    if (pet && appointment.petId) {
+      pet._id = appointment.petId;
+      pet.id = appointment.petId;
+    }
     setSaleCustomer(customer, pet);
     renderItemsList();
     renderSalePaymentsPreview();
