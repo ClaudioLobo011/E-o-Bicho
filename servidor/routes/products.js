@@ -191,6 +191,43 @@ router.get('/by-barcode/:barcode', async (req, res) => {
     }
 });
 
+// GET /api/products/check-unique (pública)
+router.get('/check-unique', async (req, res) => {
+    try {
+        const rawCod = typeof req.query.cod === 'string' ? req.query.cod.trim() : '';
+        const rawBarcode = typeof req.query.codbarras === 'string' ? req.query.codbarras.trim() : '';
+
+        if (!rawCod && !rawBarcode) {
+            return res.status(400).json({ message: 'Informe o código interno ou o código de barras.' });
+        }
+
+        const filters = [];
+        if (rawCod) filters.push({ cod: rawCod });
+        if (rawBarcode) filters.push({ codbarras: rawBarcode });
+
+        const query = filters.length > 1 ? { $or: filters } : filters[0];
+
+        const product = await Product.findOne(query, { nome: 1, cod: 1, codbarras: 1 }).lean();
+
+        if (!product) {
+            return res.json({ exists: false });
+        }
+
+        return res.json({
+            exists: true,
+            product: {
+                _id: product._id,
+                nome: product.nome,
+                cod: product.cod,
+                codbarras: product.codbarras,
+            },
+        });
+    } catch (error) {
+        console.error('Erro ao verificar duplicidade de produto:', error);
+        res.status(500).json({ message: 'Erro no servidor.' });
+    }
+});
+
 // ========================================================================
 // ========= FUNÇÃO AUXILIAR PARA BREADCRUMB ===============================
 // ========================================================================

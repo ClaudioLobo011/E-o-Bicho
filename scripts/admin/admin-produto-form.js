@@ -2,9 +2,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- REFERÊNCIAS AO DOM ---
     const form = document.getElementById('edit-product-form');
+    const submitButton = form?.querySelector('button[type="submit"]');
+    const clearFormButton = document.getElementById('clear-form-button');
     const imageUploadInput = document.getElementById('imageUpload');
     const existingImagesGrid = document.getElementById('existing-images-grid');
     const pageTitle = document.getElementById('product-page-title');
+    const pageDescription = document.getElementById('product-page-description');
     const categoryTagsContainer = document.getElementById('category-tags-container');
     const addCategoryBtn = document.getElementById('add-category-btn');
     const categoryModal = document.getElementById('category-modal');
@@ -23,6 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const depositEmptyState = document.getElementById('deposit-empty-state');
     const depositTableWrapper = document.getElementById('deposit-table-wrapper');
     const depositTotalDisplay = document.getElementById('deposit-total-display');
+    const skuInput = document.getElementById('cod');
+    const nameInput = document.getElementById('nome');
+    const barcodeInput = document.getElementById('codbarras');
+    const detailedDescriptionInput = document.getElementById('descricao');
     const unitSelect = document.getElementById('unidade');
     const inactiveCheckbox = document.getElementById('inativo');
     const fiscalCompanySelect = document.getElementById('fiscal-company-select');
@@ -432,7 +439,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ESTADO DA PÁGINA ---
     const urlParams = new URLSearchParams(window.location.search);
-    const productId = urlParams.get('id');
+    let productId = urlParams.get('id');
+    let isEditMode = Boolean(productId);
     let productCategories = []; // Array de IDs das categorias selecionadas
     let allHierarchicalCategories = []; // Guarda a árvore de categorias
     let allFlatCategories = []; // Lista plana de categorias para consultas rápidas
@@ -440,6 +448,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let allDeposits = [];
     const depositStockMap = new Map();
     let lastSelectedProductUnit = getSelectedProductUnit();
+    let duplicateCheckInProgress = false;
+
+    const makeFieldEditable = (input) => {
+        if (!input) return;
+        input.disabled = false;
+        input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+    };
+
+    const setSubmitButtonIdleText = () => {
+        if (!submitButton) return;
+        submitButton.innerHTML = isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto';
+    };
+
+    setSubmitButtonIdleText();
 
     const ensureDepositEntry = (depositId) => {
         if (!depositStockMap.has(depositId)) {
@@ -662,12 +684,6 @@ document.addEventListener('DOMContentLoaded', () => {
     saleInput?.addEventListener('input', updateMarkupFromValues);
     markupInput?.addEventListener('input', updateSaleFromMarkup);
 
-    if (!productId) {
-        alert("ID do produto não encontrado!");
-        window.location.href = 'admin-produtos.html';
-        return;
-    }
-
     // --- FUNÇÕES DE LÓGICA ---
     const renderCategoryTags = (categories) => {
         categoryTagsContainer.innerHTML = '';
@@ -719,8 +735,154 @@ document.addEventListener('DOMContentLoaded', () => {
         categoryTreeContainer.appendChild(createList(categories));
     };
 
+    const prepareFormForCreation = () => {
+        duplicateCheckInProgress = false;
+        form?.reset();
+        pageTitle.textContent = 'Cadastrar Produto';
+        if (pageDescription) {
+            pageDescription.textContent = 'Preencha os dados do novo produto abaixo.';
+        }
+
+        makeFieldEditable(skuInput);
+        makeFieldEditable(nameInput);
+        makeFieldEditable(barcodeInput);
+
+        if (skuInput) skuInput.value = '';
+        if (nameInput) nameInput.value = '';
+        if (barcodeInput) barcodeInput.value = '';
+        if (detailedDescriptionInput) detailedDescriptionInput.value = '';
+        if (imageUploadInput) imageUploadInput.value = '';
+
+        productCategories = [];
+        renderCategoryTags([]);
+
+        supplierEntries = [];
+        renderSupplierEntries();
+        resetSupplierForm();
+
+        fiscalByCompany = new Map();
+        fiscalByCompany.set(FISCAL_GENERAL_KEY, getDefaultFiscalSnapshot());
+        activeFiscalCompanyKey = FISCAL_GENERAL_KEY;
+        populateFiscalCompanySelect(FISCAL_GENERAL_KEY);
+        populateFiscalFields(fiscalByCompany.get(FISCAL_GENERAL_KEY));
+        updateFiscalCompanySummary();
+
+        depositStockMap.clear();
+        renderDepositStockRows();
+        updateDepositTotalDisplay();
+        lastSelectedProductUnit = getSelectedProductUnit();
+
+        if (existingImagesGrid) {
+            existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada até o momento.</p>';
+        }
+
+        document.querySelectorAll('input[name="spec-idade"], input[name="spec-pet"], input[name="spec-porte"]').forEach((input) => {
+            if (input instanceof HTMLInputElement) {
+                input.checked = false;
+            }
+        });
+
+        updateMarkupFromValues();
+        setSubmitButtonIdleText();
+    };
+
+    const fetchProductSummaryByIdentifier = async (identifierType, identifierValue) => {
+        const params = new URLSearchParams();
+        params.set(identifierType, identifierValue);
+        const response = await fetch(`${API_CONFIG.BASE_URL}/products/check-unique?${params.toString()}`);
+        if (!response.ok) {
+            throw new Error('Não foi possível verificar o produto informado.');
+        }
+        const payload = await response.json();
+        if (!payload?.exists || !payload?.product) {
+            return null;
+        }
+        return payload.product;
+    };
+
+    const loadProductForEditing = async (targetProductId) => {
+        if (!targetProductId) {
+            throw new Error('Produto não informado.');
+        }
+        const productResponse = await fetch(`${API_CONFIG.BASE_URL}/products/${targetProductId}`);
+        if (!productResponse.ok) {
+            throw new Error('Não foi possível carregar o produto selecionado.');
+        }
+        const productPayload = await productResponse.json();
+        populateForm(productPayload);
+    };
+
+    const handleDuplicateIdentifier = (identifierType) => async () => {
+        if (duplicateCheckInProgress) return;
+
+        const inputRef = identifierType === 'cod' ? skuInput : barcodeInput;
+        const rawValue = inputRef?.value ?? '';
+        const trimmedValue = rawValue.trim();
+        if (!trimmedValue) return;
+
+        duplicateCheckInProgress = true;
+
+        try {
+            const productSummary = await fetchProductSummaryByIdentifier(identifierType, trimmedValue);
+            if (!productSummary) {
+                if (identifierType === 'cod') {
+                    if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+                        window.showToast('Produto não foi encontrado.', 'warning', 4000);
+                    }
+                    if (inputRef) {
+                        inputRef.value = '';
+                        inputRef.focus();
+                    }
+                }
+                return;
+            }
+
+            const currentProductId = productId ? String(productId) : null;
+            const duplicateProductId = productSummary?._id ? String(productSummary._id) : null;
+            if (currentProductId && duplicateProductId && currentProductId === duplicateProductId) {
+                return;
+            }
+
+            await showModal({
+                title: 'Produto já cadastrado',
+                message: `O produto "${productSummary.nome}" já está cadastrado. Deseja visualizá-lo?`,
+                confirmText: 'Sim',
+                cancelText: 'Não',
+                onConfirm: async () => {
+                    productId = productSummary._id;
+                    isEditMode = true;
+                    setSubmitButtonIdleText();
+                    try {
+                        await loadProductForEditing(productId);
+                    } catch (error) {
+                        console.error('Falha ao carregar produto existente:', error);
+                        showModal({ title: 'Erro', message: error.message || 'Não foi possível carregar o produto selecionado.', confirmText: 'Entendi' });
+                    }
+                },
+                onCancel: () => {
+                    productId = null;
+                    isEditMode = false;
+                    prepareFormForCreation();
+                },
+            });
+        } catch (error) {
+            console.error('Erro ao verificar duplicidade de produto:', error);
+            showModal({ title: 'Erro', message: error.message || 'Não foi possível verificar o produto informado.', confirmText: 'Entendi' });
+        } finally {
+            duplicateCheckInProgress = false;
+        }
+    };
+
     const populateForm = (product) => {
+        duplicateCheckInProgress = false;
+        makeFieldEditable(skuInput);
+        makeFieldEditable(nameInput);
+        makeFieldEditable(barcodeInput);
+        setSubmitButtonIdleText();
         pageTitle.textContent = `Editar Produto: ${product.nome}`;
+        if (pageDescription) {
+            pageDescription.textContent = 'Altere os dados do produto abaixo.';
+        }
         form.querySelector('#nome').value = product.nome || '';
         form.querySelector('#marca').value = product.marca || '';
         form.querySelector('#cod').value = product.cod || '';
@@ -821,14 +983,20 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCategoryTags(categoriasAtuais);
 
         const imagens = Array.isArray(product.imagens) ? product.imagens : [];
-        existingImagesGrid.innerHTML = imagens.map(imgUrl => `
-            <div class="relative group">
-                <img src="${API_CONFIG.SERVER_URL}${imgUrl}" alt="Imagem do produto" class="w-full h-24 object-cover rounded-md border">
-                <div class="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button type="button" class="delete-image-btn text-white text-xs bg-red-600 hover:bg-red-700 px-2 py-1 rounded" data-image-url="${imgUrl}">Apagar</button>
-                </div>
-            </div>
-        `).join('');
+        if (existingImagesGrid) {
+            if (imagens.length > 0) {
+                existingImagesGrid.innerHTML = imagens.map(imgUrl => `
+                    <div class="relative group">
+                        <img src="${API_CONFIG.SERVER_URL}${imgUrl}" alt="Imagem do produto" class="w-full h-24 object-cover rounded-md border">
+                        <div class="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button type="button" class="delete-image-btn text-white text-xs bg-red-600 hover:bg-red-700 px-2 py-1 rounded" data-image-url="${imgUrl}">Apagar</button>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada até o momento.</p>';
+            }
+        }
 
         // --- Especificações ---
         const espec = product.especificacoes || {};
@@ -872,20 +1040,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const initializePage = async () => {
         try {
-            // Usa Promise.all para buscar dados do produto, depósitos e categorias em paralelo
-            const [productRes, hierarchicalRes, flatRes, depositsRes, storesRes] = await Promise.all([
-                fetch(`${API_CONFIG.BASE_URL}/products/${productId}`),
+            const fetchers = [
                 fetch(`${API_CONFIG.BASE_URL}/categories/hierarchical`),
                 fetch(`${API_CONFIG.BASE_URL}/categories`),
                 fetch(`${API_CONFIG.BASE_URL}/deposits`),
-                fetch(`${API_CONFIG.BASE_URL}/stores`)
-            ]);
+                fetch(`${API_CONFIG.BASE_URL}/stores`),
+            ];
 
-            if (!productRes.ok || !hierarchicalRes.ok || !flatRes.ok || !depositsRes.ok || !storesRes.ok) {
+            let productPromise = null;
+            if (isEditMode && productId) {
+                productPromise = fetch(`${API_CONFIG.BASE_URL}/products/${productId}`);
+                fetchers.unshift(productPromise);
+            }
+
+            const responses = await Promise.all(fetchers);
+
+            let index = 0;
+            let productResponse = null;
+            if (isEditMode && productId) {
+                productResponse = responses[index++];
+            }
+
+            const hierarchicalRes = responses[index++];
+            const flatRes = responses[index++];
+            const depositsRes = responses[index++];
+            const storesRes = responses[index++];
+
+            if (isEditMode && productId && productResponse?.status === 404) {
+                console.warn('Produto não encontrado. A página será aberta para cadastro de um novo item.');
+                isEditMode = false;
+                productId = null;
+                productResponse = null;
+            }
+
+            const hasErrored =
+                !hierarchicalRes.ok ||
+                !flatRes.ok ||
+                !depositsRes.ok ||
+                !storesRes.ok ||
+                (isEditMode && productId && !productResponse?.ok);
+
+            if (hasErrored) {
                 throw new Error('Falha ao carregar os dados iniciais da página.');
             }
 
-            const product = await productRes.json();
             allHierarchicalCategories = await hierarchicalRes.json();
             allFlatCategories = await flatRes.json();
             const depositsPayload = await depositsRes.json();
@@ -898,11 +1096,17 @@ document.addEventListener('DOMContentLoaded', () => {
             storesList = Array.isArray(storesPayload) ? storesPayload : [];
             storeNameMap = new Map(storesList.map((store) => [store._id, getStoreDisplayName(store)]));
 
-            populateForm(product);
+            if (isEditMode && productId && productResponse) {
+                const product = await productResponse.json();
+                populateForm(product);
+            } else {
+                prepareFormForCreation();
+            }
+
             populateCategoryTree(allHierarchicalCategories, productCategories);
 
         } catch (error) {
-            console.error("Erro ao inicializar a página:", error);
+            console.error('Erro ao inicializar a página:', error);
             showModal({ title: 'Erro', message: error.message, confirmText: 'Voltar', onConfirm: () => window.location.href = 'admin-produtos.html' });
         }
 
@@ -972,6 +1176,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     addSupplierBtn?.addEventListener('click', handleAddSupplier);
 
+    skuInput?.addEventListener('blur', handleDuplicateIdentifier('cod'));
+    barcodeInput?.addEventListener('blur', handleDuplicateIdentifier('codbarras'));
+
+    clearFormButton?.addEventListener('click', () => {
+        productId = null;
+        isEditMode = false;
+        duplicateCheckInProgress = false;
+        prepareFormForCreation();
+        try {
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.delete('id');
+            window.history.replaceState({}, '', currentUrl.toString());
+        } catch (urlError) {
+            console.warn('Não foi possível atualizar a URL ao limpar o formulário.', urlError);
+        }
+    });
+
     unitSelect?.addEventListener('change', () => {
         const newUnit = getSelectedProductUnit();
         depositStockMap.forEach((entry, depositId) => {
@@ -1006,10 +1227,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        const submitButton = form.querySelector('button[type="submit"]');
+        if (!submitButton) return;
+
         submitButton.disabled = true;
-        submitButton.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>A Salvar...`;
-        
+        const loadingText = isEditMode ? 'Salvando...' : 'Cadastrando...';
+        submitButton.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>${loadingText}`;
+
         const formData = new FormData(form);
         const additionalBarcodesRaw = (formData.get('barcode-additional') || '')
             .split('\n')
@@ -1042,7 +1265,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         const updateData = {
-            descricao: formData.get('descricao'),
+            nome: (formData.get('nome') || '').trim(),
+            cod: (formData.get('cod') || '').trim(),
+            codbarras: (formData.get('codbarras') || '').trim(),
+            descricao: detailedDescriptionInput ? detailedDescriptionInput.value : formData.get('descricao'),
             marca: formData.get('marca'),
             unidade: formData.get('unidade'),
             referencia: formData.get('referencia'),
@@ -1083,27 +1309,63 @@ document.addEventListener('DOMContentLoaded', () => {
         updateData.tipoProduto = tipoProdutoValue || null;
         updateData.ncm = ncmValue ? ncmValue.trim() : null;
 
+        let responseJson = null;
+        let createdProductId = null;
+
         try {
             const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
             const token = loggedInUser?.token;
 
-            const textResponse = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`, {
-                method: 'PUT',
+            const endpoint = isEditMode
+                ? `${API_CONFIG.BASE_URL}/products/${productId}`
+                : `${API_CONFIG.BASE_URL}/products`;
+            const method = isEditMode ? 'PUT' : 'POST';
+            const textResponse = await fetch(endpoint, {
+                method,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify(updateData),
             });
-            if (!textResponse.ok) throw new Error('Falha ao salvar os dados do produto.');
 
-            const files = imageUploadInput.files;
+            if (!textResponse.ok) {
+                const actionLabel = isEditMode ? 'salvar os dados do produto' : 'cadastrar o produto';
+                throw new Error(`Falha ao ${actionLabel}.`);
+            }
+
+            try {
+                responseJson = await textResponse.json();
+            } catch (parseError) {
+                responseJson = null;
+            }
+
+            if (!isEditMode) {
+                const extractedId = responseJson?.product?._id
+                    || responseJson?.product?.id
+                    || responseJson?._id
+                    || responseJson?.id;
+                createdProductId = extractedId || null;
+                if (!createdProductId) {
+                    const locationHeader = textResponse.headers.get('Location');
+                    if (locationHeader) {
+                        const segments = locationHeader.split('/').filter(Boolean);
+                        createdProductId = segments[segments.length - 1] || null;
+                    }
+                }
+            }
+
+            const files = imageUploadInput?.files || [];
+            const targetProductId = isEditMode ? productId : createdProductId;
             if (files.length > 0) {
+                if (!targetProductId) {
+                    throw new Error('Não foi possível identificar o produto para enviar as imagens.');
+                }
                 const imageFormData = new FormData();
                 for (const file of files) {
                     imageFormData.append('imagens', file);
                 }
-                const uploadResponse = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}/upload`, {
+                const uploadResponse = await fetch(`${API_CONFIG.BASE_URL}/products/${targetProductId}/upload`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -1112,29 +1374,63 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 if (!uploadResponse.ok) throw new Error('Falha ao enviar as imagens.');
             }
-            
-            try {
-            const productRes = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`);
-            if (productRes.ok) {
-                const updatedProduct = await productRes.json();
-                // Reaproveita sua função que preenche o formulário e a galeria
-                populateForm(updatedProduct);
-            }
-            } catch (e) {
-            console.warn('Não foi possível recarregar o produto após salvar.', e);
-            }
 
-            showModal({
-            title: 'Sucesso!',
-            message: 'Produto atualizado com sucesso.',
-            confirmText: 'OK'
-            });
+            if (isEditMode) {
+                try {
+                    const productRes = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`);
+                    if (productRes.ok) {
+                        const updatedProduct = await productRes.json();
+                        populateForm(updatedProduct);
+                    }
+                } catch (e) {
+                    console.warn('Não foi possível recarregar o produto após salvar.', e);
+                }
+
+                showModal({
+                    title: 'Sucesso!',
+                    message: 'Produto atualizado com sucesso.',
+                    confirmText: 'OK'
+                });
+            } else {
+                if (createdProductId) {
+                    productId = createdProductId;
+                    isEditMode = true;
+                    try {
+                        const productRes = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`);
+                        if (productRes.ok) {
+                            const createdProduct = await productRes.json();
+                            populateForm(createdProduct);
+                        }
+                    } catch (e) {
+                        console.warn('Não foi possível carregar o produto recém-criado.', e);
+                    }
+
+                    try {
+                        const currentUrl = new URL(window.location.href);
+                        currentUrl.searchParams.set('id', productId);
+                        window.history.replaceState({}, '', currentUrl.toString());
+                    } catch (urlError) {
+                        console.warn('Não foi possível atualizar a URL após o cadastro do produto.', urlError);
+                    }
+                } else {
+                    console.warn('Produto criado, mas nenhum identificador foi retornado pela API.');
+                }
+
+                showModal({
+                    title: 'Sucesso!',
+                    message: createdProductId
+                        ? 'Produto cadastrado com sucesso. Continue preenchendo as demais informações.'
+                        : 'Produto cadastrado com sucesso.',
+                    confirmText: 'OK'
+                });
+            }
 
         } catch (error) {
-            showModal({ title: 'Erro', message: `Não foi possível salvar: ${error.message}`, confirmText: 'Tentar Novamente' });
+            const baseMessage = isEditMode ? 'Não foi possível salvar' : 'Não foi possível cadastrar';
+            showModal({ title: 'Erro', message: `${baseMessage}: ${error.message}`, confirmText: 'Tentar Novamente' });
         } finally {
             submitButton.disabled = false;
-            submitButton.innerHTML = 'Salvar Alterações';
+            setSubmitButtonIdleText();
         }
     });
 
