@@ -1568,11 +1568,11 @@
 
         const getProductCodeFromRecord = (product) =>
           product?.codigoInterno ||
+          product?.cod ||
           product?.codigo ||
           product?.codInterno ||
           product?.codigoReferencia ||
           product?.sku ||
-          product?._id ||
           product?.id ||
           '';
 
