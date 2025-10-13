@@ -1767,6 +1767,140 @@
     elements.cep.addEventListener('blur', () => lookupCep(elements.cep.value));
   };
 
+  const prefillSupplierFromParams = () => {
+    if (typeof window === 'undefined') return;
+    if (!elements.form) return;
+
+    let params;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch (error) {
+      console.error('Não foi possível ler os parâmetros da URL para preencher o fornecedor.', error);
+      return;
+    }
+
+    const hasPrefill = [
+      'supplierCnpj',
+      'supplierRazaoSocial',
+      'supplierNomeFantasia',
+      'supplierCEP',
+      'supplierLogradouro',
+      'supplierCidade',
+      'supplierPais',
+    ].some((key) => params.has(key));
+
+    if (!hasPrefill) return;
+
+    const decodeParam = (value) => {
+      if (typeof value !== 'string') return '';
+      try {
+        return decodeURIComponent(value.replace(/\+/g, ' '));
+      } catch (error) {
+        return value;
+      }
+    };
+
+    const getParam = (key) => decodeParam(params.get(key) || '');
+
+    const typeFromParam = getParam('supplierType');
+    const allowedTypes = ['fisico', 'juridico', 'mei', 'produtor-rural'];
+    const supplierType = allowedTypes.includes(typeFromParam) ? typeFromParam : 'juridico';
+
+    if (Array.isArray(elements.typeRadios)) {
+      const radio = elements.typeRadios.find((input) => input.value === supplierType);
+      if (radio) {
+        radio.checked = true;
+        applyTypeSelectionUpdates();
+      }
+    }
+
+    const documentDigits = digitsOnly(getParam('supplierCnpj'));
+    if (documentDigits) {
+      setMaskedDigits('document', elements.cnpj, documentDigits);
+      state.currentDocumentLookupKey = getDocumentLookupKey(supplierType, documentDigits);
+      setDocumentStatus('Documento preenchido automaticamente a partir do XML importado.', 'success');
+    }
+
+    const legalName = getParam('supplierRazaoSocial');
+    if (elements.legalName && legalName) {
+      elements.legalName.value = legalName;
+    }
+
+    const fantasyName = getParam('supplierNomeFantasia');
+    if (elements.fantasyName && fantasyName) {
+      elements.fantasyName.value = fantasyName;
+    }
+
+    const stateRegistration = getParam('supplierIe');
+    if (elements.stateRegistration && stateRegistration) {
+      elements.stateRegistration.value = stateRegistration;
+    }
+
+    const email = getParam('supplierEmail');
+    if (elements.email && email) {
+      elements.email.value = email;
+    }
+
+    const phoneDigits = digitsOnly(getParam('supplierTelefone'));
+    if (phoneDigits) {
+      setMaskedDigits('phone', elements.phone, phoneDigits);
+    }
+
+    const mobileDigits = digitsOnly(getParam('supplierCelular'));
+    if (mobileDigits) {
+      setMaskedDigits('mobile', elements.mobile, mobileDigits);
+    }
+
+    const cepDigits = digitsOnly(getParam('supplierCEP'));
+    if (cepDigits) {
+      setMaskedDigits('cep', elements.cep, cepDigits);
+      state.currentCep = cepDigits;
+      setCepStatus('CEP preenchido automaticamente a partir do XML importado.', 'success');
+    }
+
+    const logradouro = getParam('supplierLogradouro');
+    if (elements.logradouro && logradouro) {
+      elements.logradouro.value = logradouro;
+    }
+
+    const numero = getParam('supplierNumero');
+    if (elements.numero && numero) {
+      elements.numero.value = numero;
+    }
+
+    const complemento = getParam('supplierComplemento');
+    if (elements.complemento && complemento) {
+      elements.complemento.value = complemento;
+    }
+
+    const bairro = getParam('supplierBairro');
+    if (elements.bairro && bairro) {
+      elements.bairro.value = bairro;
+    }
+
+    const cidade = getParam('supplierCidade');
+    if (elements.cidade && cidade) {
+      elements.cidade.value = cidade;
+    }
+
+    const uf = getParam('supplierUF').toUpperCase();
+    if (elements.uf && uf) {
+      elements.uf.value = uf;
+    }
+
+    const country = getParam('supplierPais') || 'Brasil';
+    if (elements.country && country) {
+      elements.country.value = country;
+    }
+
+    const observation = getParam('supplierObservacao');
+    if (elements.observation && observation) {
+      elements.observation.value = observation;
+    }
+
+    notify('Dados do fornecedor preenchidos automaticamente a partir do XML importado.', 'success');
+  };
+
   const init = async () => {
     initElements();
     setFormMode('create');
@@ -1780,6 +1914,7 @@
     setupSuppliersTableActions();
     setupDocumentLookup();
     setupCepLookup();
+    prefillSupplierFromParams();
     updateRetencoesHiddenField();
     renderSuppliers();
     await Promise.all([loadCompanies(), loadAccountingAccounts(), loadBanks(), loadSuppliers(), loadNextSupplierCode()]);
