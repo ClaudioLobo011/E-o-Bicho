@@ -54,7 +54,7 @@
             </div>
             <div class="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-2 text-right">
               <span class="text-xs font-medium text-emerald-700 block">Total da Nota</span>
-              <span class="text-xl font-bold text-emerald-900">R$ 15.487,32</span>
+              <span class="text-xl font-bold text-emerald-900" data-nfe-total>R$ 0,00</span>
               <p class="text-[11px] text-emerald-700">Somatório automático dos itens</p>
             </div>
           </div>
@@ -1033,7 +1033,38 @@
                     <input id="import-file-input" type="file" accept=".xml" class="hidden">
                   </label>
                   <p class="text-[9px] text-gray-500">Validação com esquemas oficiais (XSD) e regras de negócio SEFAZ.</p>
-                  <div data-file-feedback class="hidden rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] text-emerald-800"></div>
+                  <div data-file-feedback class="hidden rounded-lg border px-3 py-2 text-[10px] font-medium"></div>
+                  <div data-import-supplier-status class="hidden rounded-lg border px-3 py-3 text-[10px] space-y-2">
+                    <div class="flex items-start gap-2">
+                      <i data-supplier-status-icon class="fas fa-circle-info mt-0.5 text-[12px]"></i>
+                      <div class="space-y-1">
+                        <p data-supplier-message class="text-[11px] font-semibold text-gray-700"></p>
+                        <p data-supplier-description class="text-[10px] text-gray-600"></p>
+                      </div>
+                    </div>
+                    <div data-supplier-actions class="mt-1 flex flex-wrap gap-2"></div>
+                  </div>
+                  <div data-import-supplier-summary class="hidden rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] text-gray-600 space-y-2">
+                    <p data-supplier-summary-name class="text-[11px] font-semibold text-gray-700"></p>
+                    <dl class="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                      <div>
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Documento</dt>
+                        <dd data-supplier-summary-document class="text-gray-700"></dd>
+                      </div>
+                      <div>
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Inscrição Estadual</dt>
+                        <dd data-supplier-summary-ie class="text-gray-700"></dd>
+                      </div>
+                      <div class="sm:col-span-2">
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Endereço</dt>
+                        <dd data-supplier-summary-address class="text-gray-700"></dd>
+                      </div>
+                      <div class="sm:col-span-2">
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Contato</dt>
+                        <dd data-supplier-summary-contact class="text-gray-700"></dd>
+                      </div>
+                    </dl>
+                  </div>
                 </div>
                 <div class="space-y-1.5">
                   <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</label>
@@ -1066,79 +1097,79 @@
                 <div class="lg:col-span-2">
                   <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Emitente</label>
                   <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
-                    <p class="font-semibold text-gray-700">Distribuidora Nacional de Produtos Veterinários Ltda</p>
-                    <p>CNPJ 30.290.856/0001-60 · IE 123.456.789.112</p>
+                    <p class="font-semibold text-gray-700" data-import-emitente-nome>Informe a chave ou importe o XML</p>
+                    <p data-import-emitente-document>Documento não identificado</p>
                   </div>
                 </div>
                 <div>
                   <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Chave de acesso</label>
                   <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
-                    <p class="font-mono text-[12px] text-gray-700">35240730290856000160550010000100011999999999</p>
-                    <p>DV 99 · Ambiente produção</p>
+                    <p class="font-mono text-[12px] text-gray-700" data-import-access-key>------------------------------</p>
+                    <p data-import-access-key-details>DV -- · Ambiente não identificado</p>
                   </div>
                 </div>
                 <div>
                   <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Protocolo</label>
                   <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
-                    <p>152407845932110</p>
-                    <p>Recebido em 02/07/2024 14:26:54</p>
+                    <p data-import-protocol>Protocolo não informado</p>
+                    <p data-import-protocol-received>Recebimento não disponível</p>
                   </div>
                 </div>
                 <div class="lg:col-span-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
                   <label class="space-y-1">
                     <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">NF</span>
-                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="10245" readonly>
+                    <input type="text" data-import-summary-field="nf-number" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
                   </label>
                   <label class="space-y-1">
                     <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Série</span>
-                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="1" readonly>
+                    <input type="text" data-import-summary-field="nf-serie" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
                   </label>
                   <label class="space-y-1">
                     <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Emissão</span>
-                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="02/07/2024" readonly>
+                    <input type="text" data-import-summary-field="nf-emissao" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
                   </label>
                   <label class="space-y-1">
                     <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Entrada</span>
-                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="03/07/2024" readonly>
+                    <input type="text" data-import-summary-field="nf-entrada" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
                   </label>
                 </div>
                 <div class="lg:col-span-2">
                   <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Fornecedor</label>
                   <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
-                    <p class="font-semibold text-gray-700">Distribuidora Nacional de Produtos Veterinários Ltda</p>
-                    <p>CNPJ 30.290.856/0001-60 · IE 123.456.789.112</p>
+                    <p class="font-semibold text-gray-700" data-import-supplier-name>Fornecedor não localizado</p>
+                    <p data-import-supplier-document>Documento não disponível</p>
                   </div>
                 </div>
                 <div>
                   <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Valor total</label>
                   <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-right text-gray-700">
-                    <p class="text-sm font-semibold">R$ 15.487,32</p>
-                    <p class="text-[10px] text-emerald-600">Conferido com XML</p>
+                    <p class="text-sm font-semibold" data-import-total>R$ 0,00</p>
+                    <p class="text-[10px] text-emerald-600" data-import-total-status>Aguardando importação do XML</p>
                   </div>
                 </div>
                 <div>
                   <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Destinatário</label>
                   <div class="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5">
-                    <p class="font-semibold text-gray-700">Vila e o Bicho Comércio de Produtos Pet Ltda</p>
-                    <p>CNPJ 11.222.333/0001-44 · IE 85.963.147</p>
+                    <p class="font-semibold text-gray-700" data-import-destinatario-nome>Destinatário não identificado</p>
+                    <p data-import-destinatario-document>Documento não disponível</p>
                   </div>
                 </div>
                 <div class="lg:col-span-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
                   <label class="space-y-1">
                     <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">CFOP predominante</span>
-                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="1.102" readonly>
+                    <input type="text" data-import-summary-field="cfop" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
                   </label>
                   <label class="space-y-1">
                     <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Natureza da operação</span>
-                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="Compra para comercialização" readonly>
+                    <input type="text" data-import-summary-field="natureza" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
                   </label>
                   <label class="space-y-1">
                     <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Modalidade frete</span>
-                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="9 - Sem frete" readonly>
+                    <input type="text" data-import-summary-field="modalidade-frete" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
                   </label>
                   <label class="space-y-1">
                     <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Indicador IE destinatário</span>
-                    <input type="text" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="1 - Contribuinte ICMS" readonly>
+                    <input type="text" data-import-summary-field="indicador-ie" class="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] text-gray-700" value="" readonly>
                   </label>
                 </div>
               </div>
@@ -1151,13 +1182,13 @@
                   <p class="text-[11px] text-gray-600">Itens conforme o XML, com tributos ICMS, ST, IPI, PIS e COFINS.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
-                  <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2 py-0.5">
+                  <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2 py-0.5" data-import-xml-label>
                     <i class="fas fa-layer-group text-[11px]"></i>
-                    XML nº 35240730290856000160550010000100011999999999
+                    <span data-import-xml-number>XML não importado</span>
                   </span>
-                  <span class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700">
-                    <i class="fas fa-check text-[11px]"></i>
-                    Validação fiscal ok
+                  <span class="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-sky-700" data-import-xml-validation>
+                    <i class="fas fa-circle-info text-[11px]" data-import-xml-validation-icon></i>
+                    <span data-import-xml-validation-text>Aguardando validação fiscal</span>
                   </span>
                 </div>
               </header>
@@ -1371,7 +1402,684 @@
         const importFilePanel = importModal.querySelector('[data-import-mode-panel="file"]');
         const importFileInput = document.getElementById('import-file-input');
         const importFileFeedback = importModal.querySelector('[data-file-feedback]');
+        const importSupplierStatus = importModal.querySelector('[data-import-supplier-status]');
+        const importSupplierMessage = importSupplierStatus ? importSupplierStatus.querySelector('[data-supplier-message]') : null;
+        const importSupplierDescription = importSupplierStatus
+          ? importSupplierStatus.querySelector('[data-supplier-description]')
+          : null;
+        const importSupplierActions = importSupplierStatus
+          ? importSupplierStatus.querySelector('[data-supplier-actions]')
+          : null;
+        const importSupplierIcon = importSupplierStatus
+          ? importSupplierStatus.querySelector('[data-supplier-status-icon]')
+          : null;
+        const importSupplierSummary = importModal.querySelector('[data-import-supplier-summary]');
+        const importSupplierSummaryName = importSupplierSummary
+          ? importSupplierSummary.querySelector('[data-supplier-summary-name]')
+          : null;
+        const importSupplierSummaryDocument = importSupplierSummary
+          ? importSupplierSummary.querySelector('[data-supplier-summary-document]')
+          : null;
+        const importSupplierSummaryIe = importSupplierSummary
+          ? importSupplierSummary.querySelector('[data-supplier-summary-ie]')
+          : null;
+        const importSupplierSummaryAddress = importSupplierSummary
+          ? importSupplierSummary.querySelector('[data-supplier-summary-address]')
+          : null;
+        const importSupplierSummaryContact = importSupplierSummary
+          ? importSupplierSummary.querySelector('[data-supplier-summary-contact]')
+          : null;
+        const importSummaryEmitenteName = importModal.querySelector('[data-import-emitente-nome]');
+        const importSummaryEmitenteDocument = importModal.querySelector('[data-import-emitente-document]');
+        const importSummaryAccessKey = importModal.querySelector('[data-import-access-key]');
+        const importSummaryAccessKeyDetails = importModal.querySelector('[data-import-access-key-details]');
+        const importSummaryProtocol = importModal.querySelector('[data-import-protocol]');
+        const importSummaryProtocolReceived = importModal.querySelector('[data-import-protocol-received]');
+        const importSummarySupplierName = importModal.querySelector('[data-import-supplier-name]');
+        const importSummarySupplierDocument = importModal.querySelector('[data-import-supplier-document]');
+        const importSummaryTotal = importModal.querySelector('[data-import-total]');
+        const importSummaryTotalStatus = importModal.querySelector('[data-import-total-status]');
+        const importSummaryDestName = importModal.querySelector('[data-import-destinatario-nome]');
+        const importSummaryDestDocument = importModal.querySelector('[data-import-destinatario-document]');
+        const importXmlLabelWrapper = importModal.querySelector('[data-import-xml-label]');
+        const importXmlNumber = importModal.querySelector('[data-import-xml-number]');
+        const importXmlValidationBadge = importModal.querySelector('[data-import-xml-validation]');
+        const importXmlValidationText = importModal.querySelector('[data-import-xml-validation-text]');
+        const importXmlValidationIcon = importModal.querySelector('[data-import-xml-validation-icon]');
+        const importSummaryFields = Array.from(importModal.querySelectorAll('[data-import-summary-field]')).reduce(
+          (accumulator, element) => {
+            accumulator[element.dataset.importSummaryField] = element;
+            return accumulator;
+          },
+          {}
+        );
+        const supplierSelect = document.getElementById('nfe-supplier');
+        const companySelect = document.getElementById('company');
+        const nfeNumberInput = document.getElementById('nfe-number');
+        const nfeSeriesInput = document.getElementById('nfe-series');
+        const nfeProtocolInput = document.getElementById('nfe-protocol');
+        const nfeReferenceInput = document.getElementById('nfe-reference');
+        const issueDateInput = document.getElementById('issue-date');
+        const entryDateInput = document.getElementById('entry-date');
+        const nfeModelSelect = document.getElementById('nfe-model');
+        const nfeTypeSelect = document.getElementById('nfe-type');
+        const importAccessKeyInput = document.getElementById('import-access-key');
+        const accessKeyInput = document.getElementById('access-key');
+        const totalAmountDisplay = document.querySelector('[data-nfe-total]');
         let previouslyFocusedElement = null;
+        let lastSupplierData = null;
+        let lastNfeData = null;
+
+        const STATUS_CLASS_MAP = {
+          success: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-800'],
+          warning: ['border-amber-200', 'bg-amber-50', 'text-amber-800'],
+          error: ['border-rose-200', 'bg-rose-50', 'text-rose-800'],
+          info: ['border-sky-200', 'bg-sky-50', 'text-sky-800'],
+        };
+
+        const STATUS_ICONS = {
+          success: 'fas fa-circle-check',
+          warning: 'fas fa-triangle-exclamation',
+          error: 'fas fa-circle-exclamation',
+          info: 'fas fa-circle-info',
+        };
+
+        const VALIDATION_BADGE_STYLES = {
+          success: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-700'],
+          warning: ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
+          error: ['border-rose-200', 'bg-rose-50', 'text-rose-700'],
+          info: ['border-sky-200', 'bg-sky-50', 'text-sky-700'],
+        };
+
+        const VALIDATION_ICONS = {
+          success: 'fas fa-check',
+          warning: 'fas fa-triangle-exclamation',
+          error: 'fas fa-circle-exclamation',
+          info: 'fas fa-circle-info',
+        };
+
+        const ALL_STATUS_CLASSES = Array.from(new Set(Object.values(STATUS_CLASS_MAP).flat()));
+        const ALL_VALIDATION_CLASSES = Array.from(new Set(Object.values(VALIDATION_BADGE_STYLES).flat()));
+
+        const digitsOnly = (value) => String(value ?? '').replace(/\D+/g, '');
+
+        const setText = (element, value, fallback = '') => {
+          if (!element) return;
+          element.textContent = value || fallback;
+        };
+
+        const setInputValue = (element, value) => {
+          if (!element) return;
+          element.value = value ?? '';
+        };
+
+        const setSummaryInput = (key, value) => {
+          const element = importSummaryFields[key];
+          if (!element) return;
+          element.value = value ?? '';
+        };
+
+        const formatDocument = (value) => {
+          const digits = digitsOnly(value);
+          if (digits.length === 14) {
+            return `CNPJ ${digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')}`;
+          }
+          if (digits.length === 11) {
+            return `CPF ${digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}`;
+          }
+          return digits || value || '';
+        };
+
+        const composeDocumentLine = (documentValue, stateRegistration) => {
+          const documentText = formatDocument(documentValue);
+          if (documentText && stateRegistration) {
+            return `${documentText} · IE ${stateRegistration}`;
+          }
+          if (documentText) return documentText;
+          if (stateRegistration) return `IE ${stateRegistration}`;
+          return '';
+        };
+
+        const formatCep = (value) => {
+          const digits = digitsOnly(value);
+          if (digits.length === 8) {
+            return digits.replace(/(\d{5})(\d{3})/, '$1-$2');
+          }
+          return digits || '';
+        };
+
+        const formatPhone = (value) => {
+          const digits = digitsOnly(value);
+          if (digits.length === 11) {
+            return digits.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+          }
+          if (digits.length === 10) {
+            return digits.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+          }
+          return digits || '';
+        };
+
+        const formatCurrencyBRL = (value) => {
+          const numeric = Number.parseFloat(String(value || '').replace(',', '.'));
+          if (Number.isFinite(numeric)) {
+            return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+          }
+          return 'R$ 0,00';
+        };
+
+        const formatAddressLine = (address = {}) => {
+          if (!address || typeof address !== 'object') return '';
+          const parts = [];
+          const streetParts = [];
+          if (address.street) streetParts.push(address.street);
+          if (address.number) streetParts.push(address.number);
+          const streetLine = streetParts.join(', ');
+          if (streetLine) parts.push(streetLine);
+          if (address.complement) parts.push(address.complement);
+          if (address.neighborhood) parts.push(address.neighborhood);
+          const cityState = [address.city, address.state].filter(Boolean).join(' - ');
+          if (cityState) parts.push(cityState);
+          const cep = formatCep(address.cep);
+          if (cep) parts.push(`CEP ${cep}`);
+          if (address.country) parts.push(address.country);
+          return parts.join(' · ');
+        };
+
+        const buildContactLine = (entity = {}) => {
+          const parts = [];
+          if (entity.email) parts.push(entity.email);
+          const phone = formatPhone(entity.phone);
+          if (phone) parts.push(phone);
+          const mobile = formatPhone(entity.mobile);
+          if (mobile && mobile !== phone) parts.push(mobile);
+          return parts.length ? parts.join(' · ') : '';
+        };
+
+        const mapEnvironment = (value) => {
+          if (value === '1') return 'Ambiente produção';
+          if (value === '2') return 'Ambiente homologação';
+          return 'Ambiente não identificado';
+        };
+
+        const mapFrete = (value) => {
+          const map = {
+            '0': '0 - Contratação do frete por conta do remetente (CIF)',
+            '1': '1 - Contratação do frete por conta do destinatário/remetente (FOB)',
+            '2': '2 - Contratação do frete por conta de terceiros',
+            '3': '3 - Transporte próprio por conta do remetente',
+            '4': '4 - Transporte próprio por conta do destinatário',
+            '9': '9 - Sem frete',
+          };
+          return map[value] || value || '';
+        };
+
+        const formatIndIe = (value) => {
+          const map = {
+            '1': '1 - Contribuinte ICMS',
+            '2': '2 - Contribuinte isento',
+            '9': '9 - Não contribuinte ICMS',
+          };
+          return map[value] || value || '';
+        };
+
+        const mapModelToType = (model) => {
+          if (model === '65') return 'NFCe';
+          if (model === '55') return 'NF';
+          return 'NF';
+        };
+
+        const normalizeDate = (value) => {
+          if (!value) {
+            return { dateInput: '', display: '', displayDateTime: '' };
+          }
+          let date = null;
+          if (value.includes('T')) {
+            date = new Date(value);
+          } else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            date = new Date(`${value}T00:00:00`);
+          } else if (/^\d{8}$/.test(value)) {
+            const formatted = `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+            date = new Date(`${formatted}T00:00:00`);
+          }
+          if (date && !Number.isNaN(date.getTime())) {
+            return {
+              dateInput: date.toISOString().slice(0, 10),
+              display: date.toLocaleDateString('pt-BR'),
+              displayDateTime: date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }),
+            };
+          }
+          return { dateInput: '', display: value, displayDateTime: value };
+        };
+
+        const setSelectValue = (select, value) => {
+          if (!select || typeof value === 'undefined' || value === null) return;
+          const option = Array.from(select.options || []).find((item) => item.value === value);
+          if (option) {
+            select.value = option.value;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        };
+
+        const clearStatusClasses = (element, classes) => {
+          if (!element) return;
+          const targetClasses = classes && classes.length ? classes : ALL_STATUS_CLASSES;
+          if (targetClasses.length) {
+            element.classList.remove(...targetClasses);
+          }
+        };
+
+        const applyStatusClasses = (element, type = 'info') => {
+          if (!element) return;
+          clearStatusClasses(element, ALL_STATUS_CLASSES);
+          const classes = STATUS_CLASS_MAP[type] || STATUS_CLASS_MAP.info;
+          element.classList.add(...classes);
+        };
+
+        const applyValidationStyles = (type = 'info') => {
+          if (!importXmlValidationBadge) return;
+          importXmlValidationBadge.classList.remove(...ALL_VALIDATION_CLASSES);
+          importXmlValidationBadge.classList.add(...(VALIDATION_BADGE_STYLES[type] || VALIDATION_BADGE_STYLES.info));
+          if (importXmlValidationIcon) {
+            importXmlValidationIcon.className = `${VALIDATION_ICONS[type] || VALIDATION_ICONS.info} text-[11px]`;
+          }
+        };
+
+        const clearStatusMessages = () => {
+          if (importFileFeedback) {
+            importFileFeedback.classList.add('hidden');
+            importFileFeedback.textContent = '';
+            clearStatusClasses(importFileFeedback, ALL_STATUS_CLASSES);
+          }
+          if (importSupplierStatus) {
+            importSupplierStatus.classList.add('hidden');
+            if (importSupplierMessage) importSupplierMessage.textContent = '';
+            if (importSupplierDescription) {
+              importSupplierDescription.textContent = '';
+              importSupplierDescription.classList.remove('hidden');
+            }
+            if (importSupplierActions) {
+              importSupplierActions.innerHTML = '';
+              importSupplierActions.classList.add('hidden');
+            }
+            if (importSupplierIcon) {
+              importSupplierIcon.className = 'fas fa-circle-info mt-0.5 text-[12px]';
+            }
+            clearStatusClasses(importSupplierStatus, ALL_STATUS_CLASSES);
+          }
+        };
+
+        const showFileFeedback = (message, type = 'info') => {
+          if (!importFileFeedback) return;
+          importFileFeedback.textContent = message;
+          importFileFeedback.classList.remove('hidden');
+          applyStatusClasses(importFileFeedback, type);
+        };
+
+        const setSupplierSummary = (supplier) => {
+          if (!importSupplierSummary) return;
+          if (!supplier || (!supplier.name && !supplier.document)) {
+            importSupplierSummary.classList.add('hidden');
+            if (importSupplierSummaryName) importSupplierSummaryName.textContent = '';
+            if (importSupplierSummaryDocument) importSupplierSummaryDocument.textContent = '';
+            if (importSupplierSummaryIe) importSupplierSummaryIe.textContent = '';
+            if (importSupplierSummaryAddress) importSupplierSummaryAddress.textContent = '';
+            if (importSupplierSummaryContact) importSupplierSummaryContact.textContent = '';
+            return;
+          }
+          importSupplierSummary.classList.remove('hidden');
+          if (importSupplierSummaryName) {
+            importSupplierSummaryName.textContent = supplier.name || 'Emitente não identificado';
+          }
+          if (importSupplierSummaryDocument) {
+            importSupplierSummaryDocument.textContent = formatDocument(supplier.document) || 'Documento não informado';
+          }
+          if (importSupplierSummaryIe) {
+            importSupplierSummaryIe.textContent = supplier.stateRegistration || 'IE não informada';
+          }
+          if (importSupplierSummaryAddress) {
+            importSupplierSummaryAddress.textContent =
+              formatAddressLine(supplier.address) || 'Endereço não informado';
+          }
+          if (importSupplierSummaryContact) {
+            importSupplierSummaryContact.textContent = buildContactLine(supplier) || 'Contato não informado';
+          }
+        };
+
+        const buildSupplierRegistrationUrl = (supplier, nfeData) => {
+          const url = new URL('admin-compras-fornecedor-cadastro.html', window.location.href);
+          const params = new URLSearchParams();
+          const documentDigits = digitsOnly(supplier?.document);
+          if (documentDigits) {
+            params.set('supplierCnpj', documentDigits);
+            params.set('supplierType', documentDigits.length === 11 ? 'fisico' : 'juridico');
+          }
+          if (supplier?.name) params.set('supplierRazaoSocial', supplier.name);
+          if (supplier?.fantasyName) params.set('supplierNomeFantasia', supplier.fantasyName);
+          if (supplier?.stateRegistration) params.set('supplierIe', supplier.stateRegistration);
+          if (supplier?.email) params.set('supplierEmail', supplier.email);
+          if (supplier?.phone) params.set('supplierTelefone', digitsOnly(supplier.phone));
+          if (supplier?.address?.cep) params.set('supplierCEP', digitsOnly(supplier.address.cep));
+          if (supplier?.address?.street) params.set('supplierLogradouro', supplier.address.street);
+          if (supplier?.address?.number) params.set('supplierNumero', supplier.address.number);
+          if (supplier?.address?.complement) params.set('supplierComplemento', supplier.address.complement);
+          if (supplier?.address?.neighborhood) params.set('supplierBairro', supplier.address.neighborhood);
+          if (supplier?.address?.city) params.set('supplierCidade', supplier.address.city);
+          if (supplier?.address?.state) params.set('supplierUF', supplier.address.state);
+          if (supplier?.address?.country) params.set('supplierPais', supplier.address.country);
+          if (nfeData?.accessKey) params.set('supplierObservacao', `Origem: XML NF-e ${nfeData.accessKey}`);
+          params.set('from', 'nfe-import');
+          url.search = params.toString();
+          return url.toString();
+        };
+
+        const updateSummaryFromData = (data) => {
+          if (!data) {
+            setText(importSummaryEmitenteName, 'Informe a chave ou importe o XML');
+            setText(importSummaryEmitenteDocument, 'Documento não identificado');
+            setText(importSummaryAccessKey, '------------------------------');
+            setText(importSummaryAccessKeyDetails, 'DV -- · Ambiente não identificado');
+            setText(importSummaryProtocol, 'Protocolo não informado');
+            setText(importSummaryProtocolReceived, 'Recebimento não disponível');
+            setText(importSummarySupplierName, 'Fornecedor não localizado');
+            setText(importSummarySupplierDocument, 'Documento não disponível');
+            setText(importSummaryTotal, 'R$ 0,00');
+            setText(importSummaryTotalStatus, 'Aguardando importação do XML');
+            setText(importSummaryDestName, 'Destinatário não identificado');
+            setText(importSummaryDestDocument, 'Documento não disponível');
+            ['nf-number', 'nf-serie', 'nf-emissao', 'nf-entrada', 'cfop', 'natureza', 'modalidade-frete', 'indicador-ie'].forEach(
+              (key) => setSummaryInput(key, '')
+            );
+            if (importXmlNumber) {
+              importXmlNumber.textContent = 'XML não importado';
+            }
+            if (importXmlValidationText) {
+              importXmlValidationText.textContent = 'Aguardando validação fiscal';
+            }
+            applyValidationStyles('info');
+            if (totalAmountDisplay) {
+              totalAmountDisplay.textContent = 'R$ 0,00';
+            }
+            return;
+          }
+
+          const supplierDoc = composeDocumentLine(data.emit?.document, data.emit?.stateRegistration);
+          const destDoc = composeDocumentLine(data.dest?.document, data.dest?.stateRegistration);
+
+          setText(importSummaryEmitenteName, data.emit?.name || 'Emitente não identificado');
+          setText(importSummaryEmitenteDocument, supplierDoc || 'Documento não identificado');
+
+          if (data.accessKey) {
+            setText(importSummaryAccessKey, data.accessKey);
+            setText(importSummaryAccessKeyDetails, `DV ${data.accessKey.slice(-1)} · ${mapEnvironment(data.ambient)}`);
+            if (importXmlNumber) {
+              importXmlNumber.textContent = `XML nº ${data.accessKey}`;
+            }
+          } else {
+            setText(importSummaryAccessKey, '------------------------------');
+            setText(importSummaryAccessKeyDetails, 'DV -- · Ambiente não identificado');
+            if (importXmlNumber) {
+              importXmlNumber.textContent = 'XML importado';
+            }
+          }
+
+          const protocolNumber = data.protocol?.number || '';
+          if (protocolNumber) {
+            setText(importSummaryProtocol, protocolNumber);
+            const received = normalizeDate(data.protocol?.receivedAt);
+            const receivedText = received.displayDateTime || received.display || received.dateInput || '';
+            setText(
+              importSummaryProtocolReceived,
+              receivedText ? `Recebido em ${receivedText}` : 'Recebimento registrado pela SEFAZ'
+            );
+            if (importXmlValidationText) {
+              importXmlValidationText.textContent = 'XML autorizado na SEFAZ';
+            }
+            applyValidationStyles('success');
+          } else {
+            setText(importSummaryProtocol, 'Protocolo não informado');
+            setText(importSummaryProtocolReceived, 'Recebimento não disponível');
+            if (importXmlValidationText) {
+              importXmlValidationText.textContent = 'XML importado (aguardando protocolo)';
+            }
+            applyValidationStyles('warning');
+          }
+
+          setText(importSummarySupplierName, data.emit?.name || 'Fornecedor não localizado');
+          setText(importSummarySupplierDocument, supplierDoc || 'Documento não disponível');
+
+          const totalFormatted = formatCurrencyBRL(data.totals?.totalValue);
+          setText(importSummaryTotal, totalFormatted);
+          setText(importSummaryTotalStatus, 'Valor informado pelo XML autorizado');
+          if (totalAmountDisplay) {
+            totalAmountDisplay.textContent = totalFormatted;
+          }
+
+          setText(importSummaryDestName, data.dest?.name || 'Destinatário não identificado');
+          setText(importSummaryDestDocument, destDoc || 'Documento não disponível');
+
+          const emission = normalizeDate(data.ide?.emissionDate);
+          const entry = normalizeDate(data.ide?.entryDate);
+
+          setSummaryInput('nf-number', data.ide?.number || '');
+          setSummaryInput('nf-serie', data.ide?.serie || '');
+          setSummaryInput('nf-emissao', emission.display || emission.dateInput || '');
+          setSummaryInput('nf-entrada', entry.display || entry.dateInput || '');
+          setSummaryInput('cfop', data.ide?.cfop || '');
+          setSummaryInput('natureza', data.ide?.natOp || '');
+          setSummaryInput('modalidade-frete', mapFrete(data.ide?.freightMode));
+          setSummaryInput('indicador-ie', formatIndIe(data.dest?.indIEDest));
+        };
+
+        const fillMainFormFromNfeData = (data) => {
+          if (!data) return;
+          if (nfeNumberInput && data.ide?.number) nfeNumberInput.value = data.ide.number;
+          if (nfeSeriesInput) nfeSeriesInput.value = data.ide?.serie || '';
+          if (nfeProtocolInput) nfeProtocolInput.value = data.protocol?.number || '';
+          if (nfeReferenceInput) nfeReferenceInput.value = data.ide?.natOp || '';
+          const emission = normalizeDate(data.ide?.emissionDate);
+          if (issueDateInput) issueDateInput.value = emission.dateInput || '';
+          const entry = normalizeDate(data.ide?.entryDate);
+          if (entryDateInput) entryDateInput.value = entry.dateInput || '';
+          if (nfeModelSelect && data.ide?.model) setSelectValue(nfeModelSelect, data.ide.model);
+          if (nfeTypeSelect) setSelectValue(nfeTypeSelect, mapModelToType(data.ide?.model));
+          if (accessKeyInput && data.accessKey) accessKeyInput.value = data.accessKey;
+          if (importAccessKeyInput && data.accessKey) importAccessKeyInput.value = data.accessKey;
+          if (companySelect && data.dest?.document) {
+            const companyDigits = digitsOnly(data.dest.document);
+            const matchedCompany = Array.from(companySelect.options || []).find((option) => {
+              const optionDigits = digitsOnly(`${option.value}${option.textContent || ''}`);
+              return optionDigits.includes(companyDigits) || optionDigits === companyDigits;
+            });
+            if (matchedCompany) {
+              companySelect.value = matchedCompany.value;
+              companySelect.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          }
+        };
+
+        const handleSupplierSelection = (supplier) => {
+          setSupplierSummary(supplier);
+          lastSupplierData = supplier || null;
+          if (!supplier || !supplier.document) {
+            updateSupplierStatusCard(
+              'warning',
+              'Documento do emitente não encontrado no XML.',
+              'Revise o arquivo para garantir que os dados do fornecedor estejam completos.'
+            );
+            return;
+          }
+          const documentDigits = digitsOnly(supplier.document);
+          if (!documentDigits) {
+            updateSupplierStatusCard(
+              'warning',
+              'Documento do emitente não encontrado no XML.',
+              'Revise o arquivo para garantir que os dados do fornecedor estejam completos.'
+            );
+            return;
+          }
+          const formattedDocument = formatDocument(documentDigits);
+          let matchedOption = null;
+          if (supplierSelect) {
+            matchedOption = Array.from(supplierSelect.options || []).find(
+              (option) => digitsOnly(option.value || option.textContent || '') === documentDigits
+            );
+          }
+          if (matchedOption) {
+            supplierSelect.value = matchedOption.value;
+            supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            updateSupplierStatusCard(
+              'success',
+              `Fornecedor localizado: ${supplier.name || formattedDocument}`,
+              `Aplicamos automaticamente o fornecedor cadastrado (${formattedDocument}).`
+            );
+            return;
+          }
+          const registerUrl = buildSupplierRegistrationUrl(supplier, lastNfeData);
+          updateSupplierStatusCard(
+            'warning',
+            `Fornecedor não cadastrado (${formattedDocument})`,
+            'Abriremos o cadastro de fornecedores em nova aba com os dados importados do XML.',
+            [
+              {
+                label: 'Cadastrar fornecedor',
+                icon: 'fas fa-user-plus',
+                variant: 'primary',
+                action: () => {
+                  window.open(registerUrl, '_blank', 'noopener');
+                },
+              },
+            ]
+          );
+        };
+
+        const parseNfeXml = (xmlText) => {
+          const parser = new DOMParser();
+          const xml = parser.parseFromString(xmlText, 'application/xml');
+          if (xml.querySelector('parsererror')) {
+            throw new Error('O arquivo XML está inválido ou corrompido.');
+          }
+          const infNFe = xml.getElementsByTagName('infNFe')[0];
+          if (!infNFe) {
+            throw new Error('Não foi possível localizar os dados principais da NF-e (infNFe).');
+          }
+          const getText = (context, tagName) => {
+            if (!context) return '';
+            const element = context.getElementsByTagName(tagName)[0];
+            return element ? element.textContent.trim() : '';
+          };
+          const ide = infNFe.getElementsByTagName('ide')[0];
+          const emit = infNFe.getElementsByTagName('emit')[0];
+          const dest = infNFe.getElementsByTagName('dest')[0];
+          const total = infNFe.getElementsByTagName('ICMSTot')[0];
+          const transp = infNFe.getElementsByTagName('transp')[0];
+          const det = infNFe.getElementsByTagName('det')[0];
+          const prot = xml.getElementsByTagName('protNFe')[0];
+          const infProt = prot ? prot.getElementsByTagName('infProt')[0] : null;
+
+          const accessKey = (infNFe.getAttribute('Id') || infNFe.getAttribute('id') || '').replace(/^NFe/i, '');
+          const emissionDate = getText(ide, 'dhEmi') || getText(ide, 'dEmi');
+          const entryDate = getText(ide, 'dhSaiEnt') || getText(ide, 'dSaiEnt');
+          const cfop = det ? getText(det.getElementsByTagName('prod')[0], 'CFOP') : '';
+          const addressFrom = (element) => {
+            if (!element) return {};
+            return {
+              street: getText(element, 'xLgr'),
+              number: getText(element, 'nro'),
+              complement: getText(element, 'xCpl'),
+              neighborhood: getText(element, 'xBairro'),
+              city: getText(element, 'xMun'),
+              state: getText(element, 'UF'),
+              cep: getText(element, 'CEP'),
+              country: getText(element, 'xPais') || 'Brasil',
+            };
+          };
+
+          return {
+            accessKey,
+            ambient: getText(ide, 'tpAmb'),
+            ide: {
+              number: getText(ide, 'nNF'),
+              serie: getText(ide, 'serie'),
+              emissionDate,
+              entryDate,
+              natOp: getText(ide, 'natOp'),
+              model: getText(ide, 'mod'),
+              tpNF: getText(ide, 'tpNF'),
+              cfop,
+              freightMode: getText(transp, 'modFrete'),
+            },
+            emit: {
+              name: getText(emit, 'xNome'),
+              fantasyName: getText(emit, 'xFant'),
+              document: getText(emit, 'CNPJ') || getText(emit, 'CPF'),
+              stateRegistration: getText(emit, 'IE'),
+              email: getText(emit, 'email'),
+              phone: getText(emit, 'fone'),
+              address: addressFrom(emit?.getElementsByTagName('enderEmit')[0]),
+            },
+            dest: {
+              name: getText(dest, 'xNome') || getText(dest, 'xFant'),
+              document: getText(dest, 'CNPJ') || getText(dest, 'CPF'),
+              stateRegistration: getText(dest, 'IE'),
+              indIEDest: getText(dest, 'indIEDest'),
+              email: getText(dest, 'email'),
+              phone: getText(dest, 'fone'),
+              address: addressFrom(dest?.getElementsByTagName('enderDest')[0]),
+            },
+            totals: {
+              totalValue: getText(total, 'vNF'),
+            },
+            protocol: {
+              number: getText(infProt, 'nProt'),
+              receivedAt: getText(infProt, 'dhRecbto'),
+              status: getText(infProt, 'cStat'),
+            },
+          };
+        };
+
+        const processXmlFile = (file) => {
+          if (!file) return;
+          clearStatusMessages();
+          const extension = file.name.split('.').pop()?.toLowerCase();
+          if (extension !== 'xml') {
+            showFileFeedback('Selecione um arquivo XML autorizado pela SEFAZ (extensão .xml).', 'error');
+            return;
+          }
+          showFileFeedback(`Lendo o arquivo ${file.name}...`, 'info');
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const result =
+                typeof reader.result === 'string'
+                  ? reader.result
+                  : typeof TextDecoder !== 'undefined'
+                  ? new TextDecoder('utf-8').decode(reader.result)
+                  : '';
+              if (!result) {
+                throw new Error('Não foi possível interpretar o conteúdo do XML informado.');
+              }
+              const parsed = parseNfeXml(result);
+              lastNfeData = parsed;
+              fillMainFormFromNfeData(parsed);
+              updateSummaryFromData(parsed);
+              handleSupplierSelection(parsed.emit);
+              showFileFeedback(
+                `XML importado com sucesso. NF ${parsed.ide?.number || ''} - ${
+                  parsed.emit?.name || 'Emitente não identificado'
+                }.`,
+                'success'
+              );
+            } catch (error) {
+              console.error('Erro ao processar XML da NF-e:', error);
+              showFileFeedback(error.message || 'Não foi possível processar o XML informado.', 'error');
+            }
+          };
+          reader.onerror = () => {
+            console.error('Erro ao ler o arquivo XML selecionado.', reader.error);
+            showFileFeedback('Não foi possível ler o arquivo XML selecionado.', 'error');
+          };
+          reader.readAsText(file);
+        };
 
         const focusableSelectors = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
 
@@ -1459,10 +2167,8 @@
             panel.classList.toggle('hidden', !isActive);
           });
 
-          if (importFileFeedback) {
-            importFileFeedback.classList.add('hidden');
-            importFileFeedback.textContent = '';
-          }
+          clearStatusMessages();
+
           if (importFileInput) {
             importFileInput.value = '';
           }
@@ -1534,21 +2240,25 @@
             const [file] = event.dataTransfer.files;
             if (file) {
               importFileInput.files = event.dataTransfer.files;
-              if (importFileFeedback) {
-                importFileFeedback.textContent = `Arquivo selecionado: ${file.name}`;
-                importFileFeedback.classList.remove('hidden');
-              }
+              processXmlFile(file);
+            } else {
+              clearStatusMessages();
             }
           });
 
           importFileInput.addEventListener('change', () => {
-            if (importFileInput.files && importFileInput.files[0] && importFileFeedback) {
-              importFileFeedback.textContent = `Arquivo selecionado: ${importFileInput.files[0].name}`;
-              importFileFeedback.classList.remove('hidden');
+            const file = importFileInput.files && importFileInput.files[0];
+            if (file) {
+              processXmlFile(file);
+            } else {
+              clearStatusMessages();
             }
           });
         }
 
+        updateSummaryFromData(null);
+        setSupplierSummary(null);
+        applyValidationStyles('info');
         activateImportTab('pending');
         updateImportMode();
       }
