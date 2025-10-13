@@ -1469,7 +1469,7 @@
         let previouslyFocusedElement = null;
         const apiBaseUrl =
           typeof API_CONFIG !== 'undefined' && API_CONFIG?.BASE_URL
-            ? API_CONFIG.BASE_URL.replace(/\/+$, '')
+            ? API_CONFIG.BASE_URL.replace(/\/+$/, '')
             : '/api';
         const suppliersEndpoint = `${apiBaseUrl}/suppliers`;
 
