@@ -825,6 +825,15 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const productSummary = await fetchProductSummaryByIdentifier(identifierType, trimmedValue);
             if (!productSummary) {
+                if (identifierType === 'cod') {
+                    if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+                        window.showToast('Produto não foi encontrado.', 'warning', 4000);
+                    }
+                    if (inputRef) {
+                        inputRef.value = '';
+                        inputRef.focus();
+                    }
+                }
                 return;
             }
 
