@@ -7509,6 +7509,7 @@
       createdAt: saleReceivables.saleDate,
       receivables: saleReceivables.entries,
       cashContributions,
+      appointmentId: state.activeAppointmentId || '',
     });
     if (saleRecord) {
       saleRecord.cashContributions = cashContributions;
@@ -10378,9 +10379,11 @@
     createdAt = null,
     receivables = [],
     cashContributions = [],
+    appointmentId = '',
   } = {}) => {
     const normalizedType = type === 'delivery' ? 'delivery' : 'venda';
     const typeLabel = normalizedType === 'delivery' ? 'Delivery' : 'Venda';
+    const normalizedAppointmentId = normalizeId(appointmentId);
     const saleItems = Array.isArray(items) ? items : [];
     const paymentTags = Array.from(
       new Set(
@@ -10495,6 +10498,7 @@
       inventoryProcessed: false,
       inventoryProcessedAt: null,
       cashContributions: normalizedCashContributions,
+      appointmentId: normalizedAppointmentId,
     };
   };
 
@@ -12090,6 +12094,49 @@
     }
   };
 
+  const revertAppointmentAfterSaleCancellation = async (sale) => {
+    if (!sale) return false;
+    const normalizedAppointmentId = normalizeId(
+      sale.appointmentId || sale.receiptSnapshot?.meta?.appointmentId || ''
+    );
+    if (!normalizedAppointmentId) {
+      return false;
+    }
+    const previousState = findAppointmentById(normalizedAppointmentId);
+    updateAppointmentRecord(normalizedAppointmentId, {
+      paid: false,
+      saleCode: '',
+    });
+    const token = getToken();
+    try {
+      await fetchWithOptionalAuth(`${API_BASE}/func/agendamentos/${normalizedAppointmentId}`, {
+        token,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigoVenda: '', pago: false }),
+        errorMessage: 'Não foi possível atualizar o atendimento após cancelar a venda.',
+      });
+      refreshAppointmentMetrics({ force: true }).catch((error) =>
+        console.error('Erro ao atualizar indicadores após cancelar venda do atendimento:', error)
+      );
+      return true;
+    } catch (error) {
+      console.error('Erro ao sincronizar atendimento após cancelar a venda:', error);
+      if (previousState) {
+        updateAppointmentRecord(normalizedAppointmentId, {
+          paid: Boolean(previousState.paid),
+          saleCode: previousState.saleCode || '',
+          status: previousState.status || 'agendado',
+        });
+      }
+      notify(
+        'Venda cancelada, porém não foi possível atualizar o atendimento na agenda.',
+        'warning'
+      );
+      return false;
+    }
+  };
+
   const registerCompletedSaleRecord = (options = {}) => {
     const record = createCompletedSaleRecord(options);
     if (!record) return null;
@@ -12131,6 +12178,7 @@
       fiscalProtocol,
       fiscalItemsSnapshot,
       cashContributions,
+      appointmentId,
     } = updates;
     if (saleCode !== undefined) {
       sale.saleCode = saleCode || '';
@@ -12138,6 +12186,12 @@
     }
     if (snapshot !== undefined) {
       sale.receiptSnapshot = snapshot || null;
+      if (!updates.appointmentId && snapshot?.meta?.appointmentId) {
+        sale.appointmentId = normalizeId(snapshot.meta.appointmentId);
+      }
+    }
+    if (appointmentId !== undefined) {
+      sale.appointmentId = normalizeId(appointmentId);
     }
     if (fiscalStatus !== undefined) {
       sale.fiscalStatus = fiscalStatus || 'pending';
@@ -12565,6 +12619,7 @@
       revertSaleCashMovements(sale);
       await removeSaleAccountsReceivable(sale);
       renderSalesList();
+      await revertAppointmentAfterSaleCancellation(sale);
       closeSaleCancelModal();
       notify('Venda cancelada com sucesso.', 'success');
       scheduleStatePersist({ immediate: true });
