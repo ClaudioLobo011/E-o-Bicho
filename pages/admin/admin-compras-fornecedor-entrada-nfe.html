@@ -35,7 +35,7 @@
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+            <button type="button" data-open-import-modal class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
               <i class="fas fa-file-upload"></i>
               Importar XML
             </button>
@@ -747,7 +747,7 @@
               </div>
 
               <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                <button type="button" data-open-import-modal class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
                   <i class="fas fa-file-import"></i>
                   Importar XML
                 </button>
@@ -830,6 +830,392 @@
     </div>
   </main>
 
+  <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-import-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-center justify-center px-4 py-10">
+      <div data-import-modal-card class="relative flex w-full max-w-6xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95">
+        <header class="flex flex-col gap-3 border-b border-gray-100 px-6 py-6 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-file-import"></i>
+              Importação de NF-e
+            </span>
+            <h2 class="mt-3 text-2xl font-bold text-gray-900">Importar XML autorizado na SEFAZ</h2>
+            <p class="mt-1 max-w-3xl text-sm text-gray-600">Utilize um XML emitido conforme o Manual de Orientação do Contribuinte 4.0 ou informe a chave de acesso válida (44 dígitos) para recuperar automaticamente dados oficiais da NF-e, NFC-e ou NFS-e.</p>
+          </div>
+          <button type="button" data-close-import-modal class="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700">
+            <span class="sr-only">Fechar modal</span>
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
+
+        <nav class="flex flex-wrap gap-2 border-b border-gray-100 px-6 pt-4">
+          <button type="button" data-import-tab="pending" class="import-tab-button active">Notas Pendentes</button>
+          <button type="button" data-import-tab="xml" class="import-tab-button">Importar XML</button>
+        </nav>
+
+        <div class="max-h-[70vh] overflow-y-auto px-6 py-6">
+          <div data-import-tab-panel="pending" class="space-y-6">
+            <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <article class="rounded-xl border border-amber-200 bg-amber-50/60 p-5">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 class="text-sm font-semibold text-amber-900">NF-e 35240730290856000160550010000100011999999999</h3>
+                    <p class="mt-1 text-xs text-amber-800">Autorizada em 02/07/2024 - SEFAZ/SP · Distribuidora Nacional de Produtos Veterinários Ltda</p>
+                  </div>
+                  <span class="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">Pendência</span>
+                </div>
+                <dl class="mt-4 grid grid-cols-2 gap-3 text-xs text-amber-900">
+                  <div>
+                    <dt class="font-medium">Valor total</dt>
+                    <dd class="text-sm font-semibold">R$ 15.487,32</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">CFOP predominante</dt>
+                    <dd>1.102 · Compra para comercialização</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Modalidade</dt>
+                    <dd>Modelo 55 (NF-e)</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Chave consultada</dt>
+                    <dd>Portal Nacional da NF-e</dd>
+                  </div>
+                </dl>
+                <div class="mt-4 flex flex-wrap items-center gap-2">
+                  <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary/90">
+                    <i class="fas fa-download"></i>
+                    Baixar XML autorizado
+                  </button>
+                  <span class="text-[11px] text-amber-700">Dados baseados em exemplos oficiais SEFAZ/SP.</span>
+                </div>
+              </article>
+
+              <article class="rounded-xl border border-sky-200 bg-sky-50/60 p-5">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 class="text-sm font-semibold text-sky-900">NFC-e 41230676107918000173550010012345678901234567</h3>
+                    <p class="mt-1 text-xs text-sky-800">Autorizada em 18/06/2024 - SEFAZ/PR · Exemplo oficial de contingência NFC-e</p>
+                  </div>
+                  <span class="rounded-full bg-sky-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-sky-700">Pendente</span>
+                </div>
+                <dl class="mt-4 grid grid-cols-2 gap-3 text-xs text-sky-900">
+                  <div>
+                    <dt class="font-medium">Valor total</dt>
+                    <dd class="text-sm font-semibold">R$ 289,40</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Destinatário</dt>
+                    <dd>Consumidor final</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Modelo</dt>
+                    <dd>65 – NFC-e</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Vencimento</dt>
+                    <dd>Prazo imediato</dd>
+                  </div>
+                </dl>
+                <div class="mt-4 flex flex-wrap items-center gap-2">
+                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-100">
+                    <i class="fas fa-eye"></i>
+                    Visualizar DANFE NFC-e
+                  </button>
+                  <span class="text-[11px] text-sky-700">Exemplo baseado em ambiente de homologação SEFAZ/PR.</span>
+                </div>
+              </article>
+
+              <article class="lg:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 class="text-sm font-semibold text-emerald-900">NFS-e padrão nacional · ABRASF</h3>
+                    <p class="mt-1 text-xs text-emerald-800">Referência de layout SINTEGRA · RPS 2024/000045, Município São Paulo/SP</p>
+                  </div>
+                  <span class="rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Importação parcial</span>
+                </div>
+                <div class="mt-4 grid gap-3 text-xs text-emerald-900 md:grid-cols-3">
+                  <div>
+                    <span class="font-medium">Prestador</span>
+                    <p>Prefeitura de São Paulo · CNPJ 12.345.678/0001-90</p>
+                  </div>
+                  <div>
+                    <span class="font-medium">Serviço</span>
+                    <p>Código 07.02 – Assistência veterinária</p>
+                  </div>
+                  <div>
+                    <span class="font-medium">Valor ISS (R$)</span>
+                    <p class="text-sm font-semibold">R$ 245,00</p>
+                  </div>
+                </div>
+                <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <div class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[11px] font-medium text-emerald-700 shadow-sm">
+                    <i class="fas fa-circle-info"></i>
+                    Sincronize lotes emitidos no padrão nacional.
+                  </div>
+                  <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-500">
+                    <i class="fas fa-sync-alt"></i>
+                    Sincronizar NFSe oficial
+                  </button>
+                </div>
+              </article>
+            </div>
+
+            <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-5 text-sm text-gray-600">
+              <h4 class="text-base font-semibold text-gray-800">Como funciona a importação?</h4>
+              <ul class="mt-2 list-disc space-y-1 pl-5">
+                <li>Verificamos a autorização no Portal Nacional da NF-e/NFC-e ou no Portal NFSe Nacional.</li>
+                <li>Validamos o XML com base no Manual de Orientação do Contribuinte (MOC) 4.0 e nas notas técnicas vigentes.</li>
+                <li>Os itens e tributos são disponibilizados para conferência antes da escrituração.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div data-import-tab-panel="xml" class="hidden space-y-6">
+            <section class="space-y-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <span class="text-sm font-medium text-gray-700">Tipo de importação</span>
+                <label class="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary">
+                  <input type="radio" name="import-mode" value="access-key" class="h-3 w-3 border-primary text-primary focus:ring-primary/40" checked>
+                  Chave de Acesso
+                </label>
+                <label class="flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 hover:border-primary/40 hover:text-primary transition">
+                  <input type="radio" name="import-mode" value="file" class="h-3 w-3 border-primary text-primary focus:ring-primary/40">
+                  Arquivo XML
+                </label>
+              </div>
+
+              <div data-import-mode-panel="access-key" class="rounded-xl border border-primary/20 bg-primary/5 p-5">
+                <label for="import-access-key" class="block text-sm font-semibold text-primary">Informe a chave de acesso (44 dígitos)</label>
+                <div class="mt-2 flex flex-col gap-3 lg:flex-row lg:items-center">
+                  <input id="import-access-key" type="text" maxlength="44" class="w-full rounded-lg border border-primary/40 px-4 py-3 text-sm tracking-[0.25em] text-gray-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="35240730290856000160550010000100011999999999">
+                  <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
+                    <i class="fas fa-magnifying-glass"></i>
+                    Consultar chave
+                  </button>
+                </div>
+                <p class="mt-2 text-xs text-primary/80">Chave consultada diretamente na SEFAZ ou portal municipal autorizado.</p>
+              </div>
+
+              <div data-import-mode-panel="file" class="hidden rounded-xl border border-dashed border-gray-300 p-6 text-center">
+                <input id="import-file-input" type="file" accept=".xml" class="sr-only">
+                <label for="import-file-input" class="flex flex-col items-center gap-3">
+                  <span class="flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+                    <i class="fas fa-cloud-upload-alt text-2xl"></i>
+                  </span>
+                  <div class="text-sm text-gray-600">
+                    <strong class="font-semibold text-gray-800">Selecione ou solte o XML da NF-e/NFC-e/NFS-e aqui</strong>
+                    <p class="mt-1 text-xs text-gray-500">Aceitamos arquivos assinados digitalmente de até 5MB.</p>
+                  </div>
+                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 transition hover:border-primary/50 hover:text-primary">
+                    <i class="fas fa-folder-open"></i>
+                    Procurar arquivo
+                  </button>
+                </label>
+                <p data-file-feedback class="mt-3 hidden text-xs font-semibold text-primary"></p>
+              </div>
+            </section>
+
+            <section class="rounded-xl border border-gray-100 bg-white shadow-sm">
+              <header class="border-b border-gray-100 px-5 py-4">
+                <h3 class="text-base font-semibold text-gray-800">Resumo da nota fiscal importada</h3>
+                <p class="text-xs text-gray-500">Os campos são preenchidos automaticamente após validar o XML ou chave de acesso.</p>
+              </header>
+              <div class="grid gap-4 px-5 py-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <label class="text-xs font-medium text-gray-500">NF</label>
+                  <input type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" placeholder="10245" readonly>
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-500">Série</label>
+                  <input type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" placeholder="1" readonly>
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-500">Emissão</label>
+                  <input type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" placeholder="02/07/2024" readonly>
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-500">Entrada</label>
+                  <input type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" placeholder="03/07/2024" readonly>
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-500">Fornecedor</label>
+                  <input type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" placeholder="Distribuidora Nacional de Produtos Veterinários Ltda" readonly>
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-500">Chave de Acesso</label>
+                  <input type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" placeholder="35240730290856000160550010000100011999999999" readonly>
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-500">Valor total</label>
+                  <input type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" placeholder="R$ 15.487,32" readonly>
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-500">Modelo</label>
+                  <input type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600" placeholder="55 – NF-e" readonly>
+                </div>
+              </div>
+            </section>
+
+            <section class="space-y-4">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-gray-700">Produtos do XML</h3>
+                <div class="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+                  <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1">Fonte: XML SEFAZ</span>
+                  <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-50">
+                    <i class="fas fa-file-excel"></i>
+                    Exportar grade
+                  </button>
+                </div>
+              </div>
+              <div class="overflow-x-auto rounded-xl border border-gray-200">
+                <table class="min-w-[1800px] divide-y divide-gray-200 text-xs">
+                  <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600">
+                    <tr>
+                      <th class="px-3 py-3 text-left font-semibold">Cadastrar</th>
+                      <th class="px-3 py-3 text-left font-semibold">Unitarizar</th>
+                      <th class="px-3 py-3 text-left font-semibold">Selecionar</th>
+                      <th class="px-3 py-3 text-left font-semibold">Cod</th>
+                      <th class="px-3 py-3 text-left font-semibold">Nome</th>
+                      <th class="px-3 py-3 text-left font-semibold">Cod_Fornecedor</th>
+                      <th class="px-3 py-3 text-left font-semibold">Cod_Barras</th>
+                      <th class="px-3 py-3 text-left font-semibold">Nome no Fornecedor</th>
+                      <th class="px-3 py-3 text-left font-semibold">Multiplicador/Divisão</th>
+                      <th class="px-3 py-3 text-left font-semibold">Unidade</th>
+                      <th class="px-3 py-3 text-right font-semibold">Quantidade</th>
+                      <th class="px-3 py-3 text-right font-semibold">Unitário (R$)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Desconto (R$)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Total</th>
+                      <th class="px-3 py-3 text-left font-semibold">CFOP</th>
+                      <th class="px-3 py-3 text-left font-semibold">CST</th>
+                      <th class="px-3 py-3 text-right font-semibold">ICMS (%)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Base ICMS (R$)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Valor ICMS (R$)</th>
+                      <th class="px-3 py-3 text-right font-semibold">IVA (%)</th>
+                      <th class="px-3 py-3 text-right font-semibold">ICMS ST (%)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Valor ICMS ST (R$)</th>
+                      <th class="px-3 py-3 text-right font-semibold">IPI (%)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Base IPI (R$)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Valor IPI (R$)</th>
+                      <th class="px-3 py-3 text-left font-semibold">ST IPI</th>
+                      <th class="px-3 py-3 text-right font-semibold">Alíquota PIS (%)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Base PIS (R$)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Valor PIS (R$)</th>
+                      <th class="px-3 py-3 text-right font-semibold">ST CONFINS (%)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Base CONFINS (R$)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Valor CONFINS (R$)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Frete (R$)</th>
+                      <th class="px-3 py-3 text-right font-semibold">Valor Outros (R$)</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 bg-white">
+                    <tr class="hover:bg-primary/5">
+                      <td class="px-3 py-3">
+                        <button type="button" class="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                          <i class="fas fa-plus"></i>
+                          Cadastrar
+                        </button>
+                      </td>
+                      <td class="px-3 py-3">
+                        <label class="inline-flex items-center gap-2 text-[11px] text-gray-600">
+                          <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40">
+                          Lote
+                        </label>
+                      </td>
+                      <td class="px-3 py-3">
+                        <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40">
+                      </td>
+                      <td class="px-3 py-3 font-semibold text-gray-700">PROD-0001</td>
+                      <td class="px-3 py-3 text-gray-700">Vacina Polivalente V8 50ml</td>
+                      <td class="px-3 py-3 text-gray-600">789123456</td>
+                      <td class="px-3 py-3 text-gray-600">7891234567890</td>
+                      <td class="px-3 py-3 text-gray-600">VACINA POLIVALENTE V8 50ML</td>
+                      <td class="px-3 py-3 text-gray-600">1,000</td>
+                      <td class="px-3 py-3 text-gray-600">FR</td>
+                      <td class="px-3 py-3 text-right text-gray-700">12,000</td>
+                      <td class="px-3 py-3 text-right text-gray-700">48,90</td>
+                      <td class="px-3 py-3 text-right text-gray-700">0,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">586,80</td>
+                      <td class="px-3 py-3 text-gray-600">1.102</td>
+                      <td class="px-3 py-3 text-gray-600">00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">18,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">586,80</td>
+                      <td class="px-3 py-3 text-right text-gray-700">105,62</td>
+                      <td class="px-3 py-3 text-right text-gray-700">40,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">12,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">70,42</td>
+                      <td class="px-3 py-3 text-right text-gray-700">0,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">0,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">0,00</td>
+                      <td class="px-3 py-3 text-gray-600">Não tributado</td>
+                      <td class="px-3 py-3 text-right text-gray-700">1,65</td>
+                      <td class="px-3 py-3 text-right text-gray-700">586,80</td>
+                      <td class="px-3 py-3 text-right text-gray-700">9,69</td>
+                      <td class="px-3 py-3 text-right text-gray-700">7,60</td>
+                      <td class="px-3 py-3 text-right text-gray-700">586,80</td>
+                      <td class="px-3 py-3 text-right text-gray-700">44,59</td>
+                      <td class="px-3 py-3 text-right text-gray-700">45,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">12,50</td>
+                    </tr>
+                    <tr class="hover:bg-primary/5">
+                      <td class="px-3 py-3">
+                        <button type="button" class="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                          <i class="fas fa-plus"></i>
+                          Cadastrar
+                        </button>
+                      </td>
+                      <td class="px-3 py-3">
+                        <label class="inline-flex items-center gap-2 text-[11px] text-gray-600">
+                          <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40">
+                          Unitário
+                        </label>
+                      </td>
+                      <td class="px-3 py-3">
+                        <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
+                      </td>
+                      <td class="px-3 py-3 font-semibold text-gray-700">PROD-0002</td>
+                      <td class="px-3 py-3 text-gray-700">Ração Premium Cães Adultos 15kg</td>
+                      <td class="px-3 py-3 text-gray-600">789654321</td>
+                      <td class="px-3 py-3 text-gray-600">7896543210987</td>
+                      <td class="px-3 py-3 text-gray-600">RACAO PREMIUM CAES ADULTOS 15KG</td>
+                      <td class="px-3 py-3 text-gray-600">1,000</td>
+                      <td class="px-3 py-3 text-gray-600">SC</td>
+                      <td class="px-3 py-3 text-right text-gray-700">8,000</td>
+                      <td class="px-3 py-3 text-right text-gray-700">126,50</td>
+                      <td class="px-3 py-3 text-right text-gray-700">3,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">1.008,00</td>
+                      <td class="px-3 py-3 text-gray-600">1.403</td>
+                      <td class="px-3 py-3 text-gray-600">20</td>
+                      <td class="px-3 py-3 text-right text-gray-700">12,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">960,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">115,20</td>
+                      <td class="px-3 py-3 text-right text-gray-700">45,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">18,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">172,80</td>
+                      <td class="px-3 py-3 text-right text-gray-700">5,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">1.008,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">50,40</td>
+                      <td class="px-3 py-3 text-gray-600">Tributado</td>
+                      <td class="px-3 py-3 text-right text-gray-700">1,65</td>
+                      <td class="px-3 py-3 text-right text-gray-700">1.008,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">16,63</td>
+                      <td class="px-3 py-3 text-right text-gray-700">7,60</td>
+                      <td class="px-3 py-3 text-right text-gray-700">1.008,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">76,61</td>
+                      <td class="px-3 py-3 text-right text-gray-700">120,00</td>
+                      <td class="px-3 py-3 text-right text-gray-700">45,00</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="admin-footer-placeholder"></div>
 
   <script>var basePath = '../../';</script>
@@ -872,6 +1258,200 @@
           activateTab(button.dataset.tab);
         });
       });
+
+      const importModal = document.getElementById('import-xml-modal');
+      if (importModal) {
+        const importModalCard = importModal.querySelector('[data-import-modal-card]');
+        const openImportModalButtons = document.querySelectorAll('[data-open-import-modal]');
+        const closeImportModalButtons = importModal.querySelectorAll('[data-close-import-modal]');
+        const importTabButtons = importModal.querySelectorAll('.import-tab-button');
+        const importTabPanels = importModal.querySelectorAll('[data-import-tab-panel]');
+        const importModeRadios = importModal.querySelectorAll('input[name="import-mode"]');
+        const importModePanels = importModal.querySelectorAll('[data-import-mode-panel]');
+        const importFilePanel = importModal.querySelector('[data-import-mode-panel="file"]');
+        const importFileInput = document.getElementById('import-file-input');
+        const importFileFeedback = importModal.querySelector('[data-file-feedback]');
+        let previouslyFocusedElement = null;
+
+        const focusableSelectors = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
+        function trapFocus(event) {
+          if (!importModal || importModal.classList.contains('hidden')) return;
+          if (event.key !== 'Tab') return;
+
+          const focusableElements = importModalCard ? Array.from(importModalCard.querySelectorAll(focusableSelectors)).filter((element) => element.offsetParent !== null) : [];
+          if (focusableElements.length === 0) return;
+
+          const firstElement = focusableElements[0];
+          const lastElement = focusableElements[focusableElements.length - 1];
+
+          if (event.shiftKey && document.activeElement === firstElement) {
+            event.preventDefault();
+            lastElement.focus();
+          } else if (!event.shiftKey && document.activeElement === lastElement) {
+            event.preventDefault();
+            firstElement.focus();
+          }
+        }
+
+        function openImportModal() {
+          previouslyFocusedElement = document.activeElement;
+          importModal.classList.remove('hidden');
+          document.body.classList.add('overflow-hidden');
+
+          if (importModalCard) {
+            importModalCard.classList.add('opacity-0', 'scale-95');
+            requestAnimationFrame(() => {
+              importModalCard.classList.remove('opacity-0', 'scale-95');
+              importModalCard.classList.add('opacity-100', 'scale-100');
+            });
+
+            const focusableElements = importModalCard.querySelectorAll(focusableSelectors);
+            if (focusableElements.length) {
+              focusableElements[0].focus();
+            }
+          }
+
+          document.addEventListener('keydown', trapFocus);
+        }
+
+        function closeImportModal() {
+          if (importModalCard) {
+            importModalCard.classList.remove('opacity-100', 'scale-100');
+            importModalCard.classList.add('opacity-0', 'scale-95');
+          }
+
+          document.body.classList.remove('overflow-hidden');
+          document.removeEventListener('keydown', trapFocus);
+
+          setTimeout(() => {
+            importModal.classList.add('hidden');
+            if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+              previouslyFocusedElement.focus();
+            }
+          }, 180);
+        }
+
+        function activateImportTab(tabId) {
+          importTabButtons.forEach((button) => {
+            const isActive = button.dataset.importTab === tabId;
+            button.classList.toggle('active', isActive);
+            button.classList.toggle('bg-primary/10', isActive);
+            button.classList.toggle('text-primary', isActive);
+            button.classList.toggle('border', true);
+            button.classList.toggle('border-transparent', isActive);
+            button.classList.toggle('border-gray-200', !isActive);
+            button.classList.toggle('text-gray-600', !isActive);
+            button.classList.add('inline-flex', 'items-center', 'gap-2', 'rounded-lg', 'px-3', 'py-2', 'text-xs', 'font-semibold', 'transition');
+          });
+
+          importTabPanels.forEach((panel) => {
+            panel.classList.toggle('hidden', panel.dataset.importTabPanel !== tabId);
+          });
+        }
+
+        function updateImportMode() {
+          const selectedRadio = importModal.querySelector('input[name="import-mode"]:checked');
+          const selectedValue = selectedRadio ? selectedRadio.value : null;
+
+          importModePanels.forEach((panel) => {
+            const isActive = panel.dataset.importModePanel === selectedValue;
+            panel.classList.toggle('hidden', !isActive);
+          });
+
+          if (importFileFeedback) {
+            importFileFeedback.classList.add('hidden');
+            importFileFeedback.textContent = '';
+          }
+          if (importFileInput) {
+            importFileInput.value = '';
+          }
+        }
+
+        openImportModalButtons.forEach((button) => {
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            openImportModal();
+            activateImportTab('xml');
+            updateImportMode();
+          });
+        });
+
+        closeImportModalButtons.forEach((button) => {
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            closeImportModal();
+          });
+        });
+
+        importModal.addEventListener('click', (event) => {
+          const target = event.target;
+          if (target instanceof Element && target.hasAttribute('data-close-import-modal')) {
+            closeImportModal();
+          }
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && !importModal.classList.contains('hidden')) {
+            closeImportModal();
+          }
+        });
+
+        importTabButtons.forEach((button) => {
+          button.addEventListener('click', () => {
+            activateImportTab(button.dataset.importTab);
+          });
+        });
+
+        importModeRadios.forEach((radio) => {
+          radio.addEventListener('change', updateImportMode);
+        });
+
+        if (importFilePanel && importFileInput) {
+          const toggleHover = (isActive) => {
+            importFilePanel.classList.toggle('border-primary/60', isActive);
+            importFilePanel.classList.toggle('bg-primary/5', isActive);
+          };
+
+          ['dragenter', 'dragover'].forEach((eventName) => {
+            importFilePanel.addEventListener(eventName, (event) => {
+              event.preventDefault();
+              toggleHover(true);
+            });
+          });
+
+          ['dragleave', 'dragend'].forEach((eventName) => {
+            importFilePanel.addEventListener(eventName, (event) => {
+              event.preventDefault();
+              toggleHover(false);
+            });
+          });
+
+          importFilePanel.addEventListener('drop', (event) => {
+            event.preventDefault();
+            toggleHover(false);
+            if (!event.dataTransfer) return;
+            const [file] = event.dataTransfer.files;
+            if (file) {
+              importFileInput.files = event.dataTransfer.files;
+              if (importFileFeedback) {
+                importFileFeedback.textContent = `Arquivo selecionado: ${file.name}`;
+                importFileFeedback.classList.remove('hidden');
+              }
+            }
+          });
+
+          importFileInput.addEventListener('change', () => {
+            if (importFileInput.files && importFileInput.files[0] && importFileFeedback) {
+              importFileFeedback.textContent = `Arquivo selecionado: ${importFileInput.files[0].name}`;
+              importFileFeedback.classList.remove('hidden');
+            }
+          });
+        }
+
+        activateImportTab('pending');
+        updateImportMode();
+      }
     });
   </script>
 </body>
