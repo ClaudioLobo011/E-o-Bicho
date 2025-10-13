@@ -91,6 +91,7 @@ const productSchema = new mongoose.Schema({
     fornecedores: {
         type: [{
             fornecedor: { type: String, trim: true, required: true },
+            nomeProdutoFornecedor: { type: String, trim: true, default: '' },
             codigoProduto: { type: String, trim: true },
             unidadeEntrada: { type: String, trim: true },
             tipoCalculo: { type: String, trim: true },

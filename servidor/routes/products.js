@@ -380,6 +380,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
                     const valorCalculo = parseNumber(item?.valorCalculo);
                     return {
                         fornecedor,
+                        nomeProdutoFornecedor: normalizeString(item?.nomeProdutoFornecedor),
                         codigoProduto: normalizeString(item?.codigoProduto),
                         unidadeEntrada: normalizeString(item?.unidadeEntrada),
                         tipoCalculo: normalizeString(item?.tipoCalculo),
