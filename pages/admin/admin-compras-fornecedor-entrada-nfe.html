@@ -832,8 +832,8 @@
 
   <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden">
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-import-modal></div>
-    <div class="relative mx-auto flex min-h-full w-full items-center justify-center px-4 py-10">
-      <div data-import-modal-card class="relative flex w-full max-w-6xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-4 py-10 sm:items-center">
+      <div data-import-modal-card class="relative flex w-full max-w-6xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[88vh]">
         <header class="flex flex-col gap-3 border-b border-gray-100 px-6 py-6 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
@@ -854,7 +854,7 @@
           <button type="button" data-import-tab="xml" class="import-tab-button">Importar XML</button>
         </nav>
 
-        <div class="max-h-[70vh] overflow-y-auto px-6 py-6">
+        <div class="flex-1 overflow-y-auto px-6 py-6">
           <div data-import-tab-panel="pending" class="space-y-6">
             <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <article class="rounded-xl border border-amber-200 bg-amber-50/60 p-5">
@@ -1212,6 +1212,16 @@
             </section>
           </div>
         </div>
+
+        <footer class="flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-end">
+          <div class="flex w-full flex-col-reverse gap-3 sm:w-auto sm:flex-row sm:items-center">
+            <button type="button" data-close-import-modal class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-5 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
+            <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
+              <i class="fas fa-file-import"></i>
+              Importar
+            </button>
+          </div>
+        </footer>
       </div>
     </div>
   </div>
