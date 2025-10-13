@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- REFERÊNCIAS AO DOM ---
     const form = document.getElementById('edit-product-form');
     const submitButton = form?.querySelector('button[type="submit"]');
+    const clearFormButton = document.getElementById('clear-form-button');
     const imageUploadInput = document.getElementById('imageUpload');
     const existingImagesGrid = document.getElementById('existing-images-grid');
     const pageTitle = document.getElementById('product-page-title');
@@ -455,17 +456,6 @@ document.addEventListener('DOMContentLoaded', () => {
         input.classList.remove('bg-gray-100', 'cursor-not-allowed');
     };
 
-    const lockField = (input) => {
-        if (!input) return;
-        input.disabled = true;
-        if (!input.classList.contains('bg-gray-100')) {
-            input.classList.add('bg-gray-100');
-        }
-        if (!input.classList.contains('cursor-not-allowed')) {
-            input.classList.add('cursor-not-allowed');
-        }
-    };
-
     const setSubmitButtonIdleText = () => {
         if (!submitButton) return;
         submitButton.innerHTML = isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto';
@@ -746,6 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const prepareFormForCreation = () => {
+        duplicateCheckInProgress = false;
         form?.reset();
         pageTitle.textContent = 'Cadastrar Produto';
         if (pageDescription) {
@@ -822,7 +813,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const handleDuplicateIdentifier = (identifierType) => async () => {
-        if (isEditMode || duplicateCheckInProgress) return;
+        if (duplicateCheckInProgress) return;
 
         const inputRef = identifierType === 'cod' ? skuInput : barcodeInput;
         const rawValue = inputRef?.value ?? '';
@@ -837,6 +828,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            const currentProductId = productId ? String(productId) : null;
+            const duplicateProductId = productSummary?._id ? String(productSummary._id) : null;
+            if (currentProductId && duplicateProductId && currentProductId === duplicateProductId) {
+                return;
+            }
+
             await showModal({
                 title: 'Produto já cadastrado',
                 message: `O produto "${productSummary.nome}" já está cadastrado. Deseja visualizá-lo?`,
@@ -845,8 +842,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 onConfirm: async () => {
                     productId = productSummary._id;
                     isEditMode = true;
-                    lockField(skuInput);
-                    lockField(barcodeInput);
                     setSubmitButtonIdleText();
                     try {
                         await loadProductForEditing(productId);
@@ -870,6 +865,11 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const populateForm = (product) => {
+        duplicateCheckInProgress = false;
+        makeFieldEditable(skuInput);
+        makeFieldEditable(nameInput);
+        makeFieldEditable(barcodeInput);
+        setSubmitButtonIdleText();
         pageTitle.textContent = `Editar Produto: ${product.nome}`;
         if (pageDescription) {
             pageDescription.textContent = 'Altere os dados do produto abaixo.';
@@ -1169,6 +1169,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     skuInput?.addEventListener('blur', handleDuplicateIdentifier('cod'));
     barcodeInput?.addEventListener('blur', handleDuplicateIdentifier('codbarras'));
+
+    clearFormButton?.addEventListener('click', () => {
+        productId = null;
+        isEditMode = false;
+        duplicateCheckInProgress = false;
+        prepareFormForCreation();
+        try {
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.delete('id');
+            window.history.replaceState({}, '', currentUrl.toString());
+        } catch (urlError) {
+            console.warn('Não foi possível atualizar a URL ao limpar o formulário.', urlError);
+        }
+    });
 
     unitSelect?.addEventListener('change', () => {
         const newUnit = getSelectedProductUnit();
