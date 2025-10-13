@@ -436,10 +436,14 @@
                         </div>
 
                         <div id="tab-supplier" class="space-y-6 hidden">
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                                 <div>
                                     <label for="supplier-name" class="block text-sm font-medium text-gray-700">Fornecedor</label>
                                     <input type="text" id="supplier-name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Nome do fornecedor">
+                                </div>
+                                <div>
+                                    <label for="supplier-product-name" class="block text-sm font-medium text-gray-700">Nome do Produto no Fornecedor</label>
+                                    <input type="text" id="supplier-product-name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Descrição utilizada pelo fornecedor">
                                 </div>
                                 <div>
                                     <label for="supplier-product-code" class="block text-sm font-medium text-gray-700">Cod. Produto do Fornecedor</label>
@@ -463,7 +467,7 @@
                                     </select>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                                 <div>
                                     <label for="supplier-calc-type" class="block text-sm font-medium text-gray-700">Tipo de Cálculo</label>
                                     <select id="supplier-calc-type" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">

@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelCategoryModalBtn = document.getElementById('cancel-category-modal-btn');
     const closeCategoryModalBtn = document.getElementById('close-category-modal-btn');
     const supplierNameInput = document.getElementById('supplier-name');
+    const supplierProductNameInput = document.getElementById('supplier-product-name');
     const supplierProductCodeInput = document.getElementById('supplier-product-code');
     const supplierEntryUnitSelect = document.getElementById('supplier-entry-unit');
     const supplierCalcTypeSelect = document.getElementById('supplier-calc-type');
@@ -587,6 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const resetSupplierForm = () => {
         if (supplierNameInput) supplierNameInput.value = '';
+        if (supplierProductNameInput) supplierProductNameInput.value = '';
         if (supplierProductCodeInput) supplierProductCodeInput.value = '';
         if (supplierEntryUnitSelect) supplierEntryUnitSelect.value = '';
         if (supplierCalcTypeSelect) supplierCalcTypeSelect.value = '';
@@ -614,6 +616,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const supplierLine = document.createElement('p');
             supplierLine.innerHTML = `<span class="font-semibold">Fornecedor:</span> ${entry.fornecedor}`;
+            const productNameLine = document.createElement('p');
+            productNameLine.innerHTML = `<span class="font-semibold">Nome do produto no fornecedor:</span> ${entry.nomeProdutoFornecedor || '—'}`;
             const codeLine = document.createElement('p');
             codeLine.innerHTML = `<span class="font-semibold">Código do produto:</span> ${entry.codigoProduto || '—'}`;
             const unitLine = document.createElement('p');
@@ -623,6 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
             calcLine.innerHTML = `<span class="font-semibold">Cálculo:</span> ${entry.tipoCalculo || '—'} ${valorCalculo !== '—' ? `(${valorCalculo})` : ''}`;
 
             infoContainer.appendChild(supplierLine);
+            infoContainer.appendChild(productNameLine);
             infoContainer.appendChild(codeLine);
             infoContainer.appendChild(unitLine);
             infoContainer.appendChild(calcLine);
@@ -951,6 +956,7 @@ document.addEventListener('DOMContentLoaded', () => {
         supplierEntries = Array.isArray(product.fornecedores)
             ? product.fornecedores.map((item) => ({
                 fornecedor: item.fornecedor || '',
+                nomeProdutoFornecedor: item.nomeProdutoFornecedor || '',
                 codigoProduto: item.codigoProduto || item.codigo || '',
                 unidadeEntrada: item.unidadeEntrada || item.unidade || '',
                 tipoCalculo: item.tipoCalculo || '',
@@ -1141,6 +1147,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const handleAddSupplier = () => {
         const fornecedor = supplierNameInput?.value.trim();
+        const nomeProdutoFornecedor = supplierProductNameInput?.value.trim();
         const codigoProduto = supplierProductCodeInput?.value.trim();
         const unidadeEntrada = supplierEntryUnitSelect?.value;
         const tipoCalculo = supplierCalcTypeSelect?.value;
@@ -1169,7 +1176,7 @@ document.addEventListener('DOMContentLoaded', () => {
             valorCalculo = parsed;
         }
 
-        supplierEntries.push({ fornecedor, codigoProduto, unidadeEntrada, tipoCalculo, valorCalculo });
+        supplierEntries.push({ fornecedor, nomeProdutoFornecedor, codigoProduto, unidadeEntrada, tipoCalculo, valorCalculo });
         renderSupplierEntries();
         resetSupplierForm();
     };
@@ -1277,6 +1284,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categorias: productCategories,
             fornecedores: supplierEntries.map((item) => ({
                 fornecedor: item.fornecedor,
+                nomeProdutoFornecedor: item.nomeProdutoFornecedor || null,
                 codigoProduto: item.codigoProduto || null,
                 unidadeEntrada: item.unidadeEntrada || null,
                 tipoCalculo: item.tipoCalculo || null,
