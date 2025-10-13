@@ -1467,6 +1467,20 @@
         const accessKeyInput = document.getElementById('access-key');
         const totalAmountDisplay = document.querySelector('[data-nfe-total]');
         let previouslyFocusedElement = null;
+        const apiBaseUrl =
+          typeof API_CONFIG !== 'undefined' && API_CONFIG?.BASE_URL
+            ? API_CONFIG.BASE_URL.replace(/\/+$, '')
+            : '/api';
+        const suppliersEndpoint = `${apiBaseUrl}/suppliers`;
+
+        const supplierRegistry = {
+          loaded: false,
+          loadingPromise: null,
+          byDocument: new Map(),
+          lastLoadedAt: 0,
+          error: null,
+        };
+
         let lastSupplierData = null;
         let lastNfeData = null;
 
@@ -1519,6 +1533,141 @@
         };
 
         const digitsOnly = (value) => String(value ?? '').replace(/\D+/g, '');
+
+        const getOptionDocument = (option) => {
+          if (!option) return '';
+          const existingDataset = option.dataset?.supplierDocument;
+          if (existingDataset) {
+            return existingDataset;
+          }
+          const digits = digitsOnly(`${option.value}${option.textContent || ''}`);
+          if (digits && option.dataset) {
+            option.dataset.supplierDocument = digits;
+          }
+          return digits;
+        };
+
+        const formatDocumentForOption = (value) => {
+          const digits = digitsOnly(value);
+          if (digits.length === 14) {
+            return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+          }
+          if (digits.length === 11) {
+            return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+          }
+          return digits;
+        };
+
+        const buildSupplierOptionLabel = (supplier, documentDigits) => {
+          const formattedDocument = formatDocumentForOption(documentDigits);
+          const name =
+            supplier?.legalName ||
+            supplier?.fantasyName ||
+            supplier?.name ||
+            formattedDocument;
+          const codeValue = supplier?.code ?? supplier?.codeNumber;
+          let codeText = '';
+          if (typeof codeValue === 'number' && Number.isFinite(codeValue)) {
+            codeText = `Código ${String(codeValue).padStart(4, '0')}`;
+          } else if (typeof codeValue === 'string' && codeValue.trim()) {
+            codeText = `Código ${codeValue.trim()}`;
+          }
+          return [formattedDocument, name, codeText].filter(Boolean).join(' · ');
+        };
+
+        const findSupplierOptionByDocument = (documentDigits) => {
+          if (!supplierSelect || !documentDigits) return null;
+          return (
+            Array.from(supplierSelect.options || []).find(
+              (option) => getOptionDocument(option) === documentDigits
+            ) || null
+          );
+        };
+
+        const ensureSupplierOption = (supplier, documentDigits) => {
+          if (!supplierSelect || !documentDigits) return null;
+          const existingOption = findSupplierOptionByDocument(documentDigits);
+          const option = existingOption || document.createElement('option');
+          const optionValue = supplier?._id || documentDigits;
+          option.value = optionValue;
+          option.textContent = buildSupplierOptionLabel(supplier, documentDigits);
+          option.dataset.supplierDocument = documentDigits;
+          if (supplier?._id) {
+            option.dataset.supplierId = supplier._id;
+          }
+          option.dataset.supplierName =
+            supplier?.legalName || supplier?.fantasyName || supplier?.name || '';
+          if (!existingOption) {
+            supplierSelect.appendChild(option);
+          }
+          return option;
+        };
+
+        const registerSupplierRecord = (supplier) => {
+          if (!supplier) return null;
+          const documentDigits = digitsOnly(supplier.cnpj || supplier.document);
+          if (!documentDigits) return null;
+          supplierRegistry.byDocument.set(documentDigits, supplier);
+          return ensureSupplierOption(supplier, documentDigits);
+        };
+
+        const indexExistingSupplierOptions = () => {
+          if (!supplierSelect) return;
+          Array.from(supplierSelect.options || []).forEach((option) => {
+            const digits = getOptionDocument(option);
+            if (!digits) return;
+            option.dataset.supplierDocument = digits;
+          });
+        };
+
+        const loadSuppliersFromApi = async (forceReload = false) => {
+          if (!suppliersEndpoint) return supplierRegistry.byDocument;
+          if (forceReload) {
+            supplierRegistry.loaded = false;
+          }
+          if (supplierRegistry.loaded && !forceReload) {
+            return supplierRegistry.byDocument;
+          }
+          if (supplierRegistry.loadingPromise) {
+            try {
+              await supplierRegistry.loadingPromise;
+            } catch (_) {
+              // Ignorar erros anteriores, o estado já foi atualizado
+            }
+            return supplierRegistry.byDocument;
+          }
+          supplierRegistry.loadingPromise = (async () => {
+            try {
+              supplierRegistry.error = null;
+              const response = await fetch(suppliersEndpoint, {
+                credentials: 'include',
+              });
+              if (!response.ok) {
+                throw new Error(`Falha ao consultar fornecedores (status ${response.status})`);
+              }
+              const data = await response.json().catch(() => ({}));
+              const suppliers = Array.isArray(data?.suppliers) ? data.suppliers : [];
+              supplierRegistry.byDocument.clear();
+              suppliers.forEach((entry) => {
+                registerSupplierRecord(entry);
+              });
+              supplierRegistry.loaded = true;
+              supplierRegistry.lastLoadedAt = Date.now();
+            } catch (error) {
+              supplierRegistry.error = error;
+              supplierRegistry.loaded = false;
+              console.error('Erro ao carregar fornecedores cadastrados:', error);
+            } finally {
+              supplierRegistry.loadingPromise = null;
+            }
+          })();
+          try {
+            await supplierRegistry.loadingPromise;
+          } catch (_) {
+            // Erro já tratado no bloco acima
+          }
+          return supplierRegistry.byDocument;
+        };
 
         const setText = (element, value, fallback = '') => {
           if (!element) return;
@@ -1983,7 +2132,7 @@
           }
         };
 
-        const handleSupplierSelection = (supplier) => {
+        const handleSupplierSelection = async (supplier) => {
           setSupplierSummary(supplier);
           lastSupplierData = supplier || null;
           if (!supplier || !supplier.document) {
@@ -2004,18 +2153,32 @@
             return;
           }
           const formattedDocument = formatDocument(documentDigits);
-          let matchedOption = null;
-          if (supplierSelect) {
-            matchedOption = Array.from(supplierSelect.options || []).find(
-              (option) => digitsOnly(option.value || option.textContent || '') === documentDigits
-            );
+          let matchedOption = supplierSelect ? findSupplierOptionByDocument(documentDigits) : null;
+
+          await loadSuppliersFromApi();
+          let registeredSupplier = supplierRegistry.byDocument.get(documentDigits) || null;
+
+          if (!registeredSupplier && !matchedOption) {
+            await loadSuppliersFromApi(true);
+            registeredSupplier = supplierRegistry.byDocument.get(documentDigits) || null;
           }
+
+          if (!matchedOption && registeredSupplier) {
+            matchedOption = ensureSupplierOption(registeredSupplier, documentDigits);
+          }
+
           if (matchedOption) {
             supplierSelect.value = matchedOption.value;
             supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            const supplierName =
+              registeredSupplier?.legalName ||
+              registeredSupplier?.fantasyName ||
+              matchedOption.dataset?.supplierName ||
+              supplier.name ||
+              formattedDocument;
             updateSupplierStatusCard(
               'success',
-              `Fornecedor localizado: ${supplier.name || formattedDocument}`,
+              `Fornecedor localizado: ${supplierName}`,
               `Aplicamos automaticamente o fornecedor cadastrado (${formattedDocument}).`
             );
             return;
@@ -2023,18 +2186,36 @@
           const registerUrl = buildSupplierRegistrationUrl(supplier, lastNfeData);
           updateSupplierStatusCard(
             'warning',
-            `Fornecedor não cadastrado (${formattedDocument})`,
-            'Abriremos o cadastro de fornecedores em nova aba com os dados importados do XML.',
+            supplierRegistry.error
+              ? `Não foi possível confirmar o cadastro do fornecedor (${formattedDocument}).`
+              : `Fornecedor não cadastrado (${formattedDocument})`,
+            supplierRegistry.error
+              ? 'Tente novamente em instantes ou atualize a página para sincronizar a base de fornecedores.'
+              : 'Abriremos o cadastro de fornecedores em nova aba com os dados importados do XML.',
             [
               {
-                label: 'Cadastrar fornecedor',
-                icon: 'fas fa-user-plus',
-                variant: 'primary',
+                label: supplierRegistry.error ? 'Tentar novamente' : 'Cadastrar fornecedor',
+                icon: supplierRegistry.error ? 'fas fa-sync' : 'fas fa-user-plus',
+                variant: supplierRegistry.error ? 'secondary' : 'primary',
                 action: () => {
-                  window.open(registerUrl, '_blank', 'noopener');
+                  if (supplierRegistry.error) {
+                    loadSuppliersFromApi(true);
+                  } else {
+                    window.open(registerUrl, '_blank', 'noopener');
+                  }
                 },
               },
-            ]
+              !supplierRegistry.error
+                ? null
+                : {
+                    label: 'Cadastrar fornecedor',
+                    icon: 'fas fa-user-plus',
+                    variant: 'primary',
+                    action: () => {
+                      window.open(registerUrl, '_blank', 'noopener');
+                    },
+                  },
+            ].filter(Boolean)
           );
         };
 
@@ -2133,7 +2314,7 @@
           }
           showFileFeedback(`Lendo o arquivo ${file.name}...`, 'info');
           const reader = new FileReader();
-          reader.onload = () => {
+          reader.onload = async () => {
             try {
               const result =
                 typeof reader.result === 'string'
@@ -2148,7 +2329,7 @@
               lastNfeData = parsed;
               fillMainFormFromNfeData(parsed);
               updateSummaryFromData(parsed);
-              handleSupplierSelection(parsed.emit);
+              await handleSupplierSelection(parsed.emit);
               showFileFeedback(
                 `XML importado com sucesso. NF ${parsed.ide?.number || ''} - ${
                   parsed.emit?.name || 'Emitente não identificado'
@@ -2341,6 +2522,16 @@
             }
           });
         }
+
+        indexExistingSupplierOptions();
+        loadSuppliersFromApi().catch(() => {});
+
+        window.addEventListener('focus', () => {
+          const now = Date.now();
+          if (now - supplierRegistry.lastLoadedAt > 15000) {
+            loadSuppliersFromApi(true).catch(() => {});
+          }
+        });
 
         updateSummaryFromData(null);
         setSupplierSummary(null);
