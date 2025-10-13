@@ -1199,7 +1199,7 @@
                       <th class="sticky left-0 z-10 bg-gray-50 px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500 shadow-sm">Cadastrar</th>
                       <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Unitarizar</th>
                       <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Selecionar</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Cod</th>
+                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Cod. Interno (SKU)</th>
                       <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Nome</th>
                       <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Cod_Fornecedor</th>
                       <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Cod_Barras</th>
@@ -1521,6 +1521,50 @@
         const formatMoneyValue = (value) => formatDecimal(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         const formatPercentValue = (value) => formatDecimal(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        const INTERNAL_CODE_PREFIX = 'SKU-';
+
+        const normalizeInternalCode = (value) => {
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            return String(value);
+          }
+          if (typeof value === 'string') {
+            return value.trim();
+          }
+          return '';
+        };
+
+        const buildTemporaryInternalCode = (index = 0) => {
+          const sequence = Number.isFinite(index) ? index + 1 : 1;
+          return `${INTERNAL_CODE_PREFIX}${String(sequence).padStart(5, '0')}`;
+        };
+
+        const ensureUniqueInternalCodes = (items) => {
+          if (!Array.isArray(items) || !items.length) return;
+
+          const usedCodes = new Set();
+
+          items.forEach((item) => {
+            const matchedCode = normalizeInternalCode(getProductCodeFromRecord(item?.matchedProduct));
+            if (matchedCode) {
+              item.internalCode = matchedCode;
+            }
+          });
+
+          items.forEach((item, index) => {
+            const baseCode = normalizeInternalCode(item.internalCode) || buildTemporaryInternalCode(item.index ?? index);
+            let candidate = baseCode;
+            let attempt = 1;
+
+            while (usedCodes.has(candidate)) {
+              attempt += 1;
+              candidate = `${baseCode}-${String(attempt).padStart(2, '0')}`;
+            }
+
+            item.internalCode = candidate;
+            usedCodes.add(candidate);
+          });
+        };
 
         const getProductCodeFromRecord = (product) =>
           product?.codigoInterno ||
@@ -2131,6 +2175,8 @@
             return;
           }
 
+          ensureUniqueInternalCodes(items);
+
           const fragment = document.createDocumentFragment();
 
           items.forEach((item, index) => {
@@ -2257,7 +2303,7 @@
             selectCell.appendChild(selectCheckbox);
             row.appendChild(selectCell);
 
-            const productCode = getProductCodeFromRecord(item.matchedProduct) || '—';
+            const productCode = normalizeInternalCode(item.internalCode) || '—';
             const systemName = item.matchedProduct?.nome || item.description || '—';
             const supplierCode = item.supplierCode || '—';
             const barcodeText = item.barcodeDisplay || 'SEM GTIN';
