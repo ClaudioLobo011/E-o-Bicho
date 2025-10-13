@@ -11064,6 +11064,7 @@
         appointment.clienteId ||
           appointment.customerId ||
           appointment.cliente?._id ||
+          appointment.cliente?.id ||
           appointment.cliente?._id
       ),
       customerName:
@@ -11084,6 +11085,7 @@
         appointment.cliente?.cpf ||
         appointment.cliente?.cnpj ||
         appointment.cliente?.documento ||
+        appointment.clienteDocumento ||
         appointment.documento ||
         '',
       customerEmail:
@@ -11091,6 +11093,7 @@
         appointment.email ||
         appointment.tutorEmail ||
         appointment.emailTutor ||
+        appointment.clienteEmail ||
         '',
       customerPhone:
         appointment.cliente?.celular ||
@@ -11101,6 +11104,8 @@
         appointment.celularTutor ||
         appointment.tutorTelefone ||
         appointment.tutorCelular ||
+        appointment.clienteCelular ||
+        appointment.clienteTelefone ||
         '',
       petId: normalizeId(appointment.petId || appointment.pet?._id),
       petName:
