@@ -1473,6 +1473,41 @@
             : '/api';
         const suppliersEndpoint = `${apiBaseUrl}/suppliers`;
 
+        const notify = (message, type = 'info') => {
+          if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+          } else if (type === 'error') {
+            console.error(message);
+          } else {
+            console.log(message);
+          }
+        };
+
+        const handleAuthError = () => {
+          notify('Sessão expirada. Faça login novamente para continuar.', 'error');
+        };
+
+        const getToken = () => {
+          try {
+            const raw = localStorage.getItem('loggedInUser');
+            if (!raw) return '';
+            const parsed = JSON.parse(raw);
+            return parsed?.token || '';
+          } catch (error) {
+            console.warn('Não foi possível recuperar o token de autenticação.', error);
+            return '';
+          }
+        };
+
+        const buildAuthHeaders = () => {
+          const headers = new Headers({ Accept: 'application/json' });
+          const token = getToken();
+          if (token) {
+            headers.set('Authorization', `Bearer ${token}`);
+          }
+          return headers;
+        };
+
         const supplierRegistry = {
           loaded: false,
           loadingPromise: null,
@@ -1640,12 +1675,15 @@
             try {
               supplierRegistry.error = null;
               const response = await fetch(suppliersEndpoint, {
-                credentials: 'include',
+                headers: buildAuthHeaders(),
               });
-              if (!response.ok) {
-                throw new Error(`Falha ao consultar fornecedores (status ${response.status})`);
-              }
               const data = await response.json().catch(() => ({}));
+              if (!response.ok) {
+                if (response.status === 401) {
+                  handleAuthError();
+                }
+                throw new Error(data?.message || `Falha ao consultar fornecedores (status ${response.status})`);
+              }
               const suppliers = Array.isArray(data?.suppliers) ? data.suppliers : [];
               supplierRegistry.byDocument.clear();
               suppliers.forEach((entry) => {
