@@ -1195,46 +1195,8 @@
                 </div>
               </header>
               <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 text-[10px]" data-import-products-table>
-                  <thead class="bg-gray-50 text-[9px] uppercase tracking-wide text-gray-500">
-                    <tr>
-                      <th class="sticky left-0 z-10 bg-gray-50 px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500 shadow-sm">Cadastrar</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Unitarizar</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Selecionar</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Cod. Interno (SKU)</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Nome</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Cod_Fornecedor</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Cod_Barras</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Nome no Fornecedor</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Multiplicador/Divisão</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">Unidade</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Quantidade</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Unitário (R$)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Desconto (R$)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Total</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">NCM</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">CFOP</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">CST</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">ICMS (%)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Base ICMS (R$)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor ICMS (R$)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">IVA (%)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">ICMS ST (%)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor ICMS ST (R$)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">IPI (%)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Base IPI (R$)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor IPI (R$)</th>
-                      <th class="px-2 py-1.5 text-left font-semibold uppercase tracking-wide text-gray-500">ST IPI</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Alíquota PIS (%)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Base PIS (R$)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor PIS (R$)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">ST CONFINS (%)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Base CONFINS (R$)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor CONFINS (R$)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Frete (R$)</th>
-                      <th class="px-2 py-1.5 text-right font-semibold uppercase tracking-wide text-gray-500">Valor Outros (R$)</th>
-                    </tr>
-                  </thead>
+                <table class="min-w-full table-auto divide-y divide-gray-200 text-[10px]" data-import-products-table>
+                  <thead class="bg-gray-50 text-[9px] uppercase tracking-wide text-gray-500" data-import-products-head></thead>
                   <tbody class="divide-y divide-gray-200 bg-white" data-import-products-body></tbody>
                 </table>
               </div>
@@ -1352,6 +1314,7 @@
         const importXmlValidationBadge = importModal.querySelector('[data-import-xml-validation]');
         const importXmlValidationText = importModal.querySelector('[data-import-xml-validation-text]');
         const importXmlValidationIcon = importModal.querySelector('[data-import-xml-validation-icon]');
+        const importProductsTableHead = importModal.querySelector('[data-import-products-head]');
         const importProductsTableBody = importModal.querySelector('[data-import-products-body]');
         const importSummaryFields = Array.from(importModal.querySelectorAll('[data-import-summary-field]')).reduce(
           (accumulator, element) => {
@@ -1429,7 +1392,6 @@
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
         let productValidationSequence = 0;
-        const PRODUCT_TABLE_COLUMN_COUNT = 35;
 
         const STATUS_CLASS_MAP = {
           success: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-800'],
@@ -2163,6 +2125,833 @@
           window.open(url, '_blank', 'noopener');
         };
 
+        const getProductStatusLabel = (item) => {
+          if (!item) return '';
+          if (item.validationStatus === 'matched' && item.matchedProduct) return 'Cadastrado';
+          if (item.validationStatus === 'pending' || item.validationStatus === 'checking') return 'Validando';
+          if (item.validationStatus === 'error') return 'Erro';
+          if (item.validationStatus === 'no-barcode') return 'Sem GTIN';
+          if (!Array.isArray(item.barcodeCandidates) || item.barcodeCandidates.length === 0) return 'Sem GTIN';
+          return 'Cadastrar';
+        };
+
+        const createStatusBadge = (classes, iconClass, text) => {
+          const badge = document.createElement('span');
+          badge.classList.add(
+            'inline-flex',
+            'items-center',
+            'gap-1',
+            'rounded-full',
+            'border',
+            'px-1.5',
+            'py-0.5',
+            'text-[9px]',
+            'font-semibold',
+            'whitespace-nowrap'
+          );
+          classes.forEach((cls) => badge.classList.add(cls));
+          const icon = document.createElement('i');
+          icon.className = `${iconClass} text-[10px]`;
+          badge.appendChild(icon);
+          const label = document.createElement('span');
+          label.textContent = text;
+          badge.appendChild(label);
+          return badge;
+        };
+
+        const buildStatusCell = (item) => {
+          const cell = document.createElement('td');
+          cell.className = 'px-2 py-1.5 bg-white sticky left-0 z-10 whitespace-nowrap';
+          cell.dataset.validationStatus = item?.validationStatus || '';
+
+          if (item?.validationStatus === 'matched' && item.matchedProduct) {
+            cell.appendChild(
+              createStatusBadge(
+                ['border-emerald-200', 'bg-emerald-50', 'text-emerald-700'],
+                'fas fa-check',
+                'Cadastrado'
+              )
+            );
+            return cell;
+          }
+
+          if (item?.validationStatus === 'pending' || item?.validationStatus === 'checking') {
+            cell.appendChild(
+              createStatusBadge(
+                ['border-sky-200', 'bg-sky-50', 'text-sky-700'],
+                'fas fa-spinner fa-spin',
+                'Validando'
+              )
+            );
+            return cell;
+          }
+
+          if (item?.validationStatus === 'error') {
+            cell.appendChild(
+              createStatusBadge(
+                ['border-rose-200', 'bg-rose-50', 'text-rose-700'],
+                'fas fa-circle-exclamation',
+                'Erro'
+              )
+            );
+            return cell;
+          }
+
+          if (!Array.isArray(item?.barcodeCandidates) || item.barcodeCandidates.length === 0) {
+            cell.appendChild(
+              createStatusBadge(
+                ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
+                'fas fa-barcode',
+                'Sem GTIN'
+              )
+            );
+            return cell;
+          }
+
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.classList.add(
+            'inline-flex',
+            'items-center',
+            'gap-1',
+            'rounded-full',
+            'border',
+            'border-primary/40',
+            'bg-primary/10',
+            'px-1.5',
+            'py-0.5',
+            'text-[9px]',
+            'font-semibold',
+            'text-primary',
+            'hover:bg-primary/20',
+            'focus:outline-none',
+            'focus:ring-2',
+            'focus:ring-primary/30',
+            'whitespace-nowrap'
+          );
+          button.dataset.productBarcode = item?.barcodeCandidates?.[0] || '';
+          const icon = document.createElement('i');
+          icon.className = 'fas fa-plus';
+          const label = document.createElement('span');
+          label.textContent = 'Cadastrar';
+          button.append(icon, label);
+          button.addEventListener('click', () => openProductRegistration(item));
+          cell.appendChild(button);
+          return cell;
+        };
+
+        const buildUnitarizeCell = () => {
+          const cell = document.createElement('td');
+          cell.className = 'px-2 py-1.5 whitespace-nowrap';
+          const label = document.createElement('label');
+          label.className = 'inline-flex items-center gap-2 text-[9px] text-gray-600 whitespace-nowrap';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.className = 'h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40';
+          const text = document.createElement('span');
+          text.textContent = 'Unitário';
+          label.append(checkbox, text);
+          cell.appendChild(label);
+          return cell;
+        };
+
+        const buildSelectCell = () => {
+          const cell = document.createElement('td');
+          cell.className = 'px-2 py-1.5 whitespace-nowrap';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = true;
+          checkbox.className = 'h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40';
+          cell.appendChild(checkbox);
+          return cell;
+        };
+
+        const buildNumericFilterValue = (displayText, rawValue) => {
+          const numericValue = Number.isFinite(rawValue) ? rawValue : parseNumber(rawValue);
+          if (!Number.isFinite(numericValue)) {
+            return displayText || '';
+          }
+          const plain = String(numericValue).replace('.', ',');
+          const digits = plain.replace(/\D+/g, '');
+          return [displayText || '', plain, digits].filter(Boolean).join(' ');
+        };
+
+        const PRODUCT_TABLE_COLUMNS = [
+          {
+            key: 'status',
+            label: 'Cadastrar',
+            headerClass: 'sticky left-0 z-20 bg-gray-50 px-2 py-1.5 text-left shadow-sm',
+            renderCell: (item) => buildStatusCell(item),
+            getDisplayText: (item) => getProductStatusLabel(item),
+            getFilterValue: (item) => getProductStatusLabel(item),
+            getSortValue: (item) => getProductStatusLabel(item),
+          },
+          {
+            key: 'unitarize',
+            label: 'Unitarizar',
+            headerClass: 'px-2 py-1.5 text-left',
+            renderCell: () => buildUnitarizeCell(),
+            getDisplayText: () => 'Unitário',
+          },
+          {
+            key: 'select',
+            label: 'Selecionar',
+            headerClass: 'px-2 py-1.5 text-left',
+            renderCell: () => buildSelectCell(),
+            getDisplayText: () => 'Selecionado',
+          },
+          {
+            key: 'internalCode',
+            label: 'Cod. Interno (SKU)',
+            headerClass: 'px-2 py-1.5 text-left',
+            cellClass: 'px-2 py-1.5 font-semibold text-gray-700 whitespace-nowrap',
+            getDisplayText: (item) => normalizeInternalCode(item?.internalCode) || '—',
+          },
+          {
+            key: 'systemName',
+            label: 'Nome',
+            headerClass: 'px-2 py-1.5 text-left',
+            cellClass: 'px-2 py-1.5 text-gray-700 whitespace-nowrap',
+            getDisplayText: (item) => item?.matchedProduct?.nome || item?.description || '—',
+          },
+          {
+            key: 'supplierCode',
+            label: 'Cod_Fornecedor',
+            headerClass: 'px-2 py-1.5 text-left',
+            getDisplayText: (item) => item?.supplierCode || '—',
+          },
+          {
+            key: 'barcode',
+            label: 'Cod_Barras',
+            headerClass: 'px-2 py-1.5 text-left',
+            getDisplayText: (item) => item?.barcodeDisplay || 'SEM GTIN',
+          },
+          {
+            key: 'supplierName',
+            label: 'Nome no Fornecedor',
+            headerClass: 'px-2 py-1.5 text-left',
+            getDisplayText: (item) => item?.description || '—',
+          },
+          {
+            key: 'conversion',
+            label: 'Multiplicador/Divisão',
+            headerClass: 'px-2 py-1.5 text-left',
+            cellClass: 'px-2 py-1.5 text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) =>
+              formatDecimal(item?.conversion, { minimumFractionDigits: 3, maximumFractionDigits: 3 }),
+            getFilterValue: (item) =>
+              buildNumericFilterValue(
+                formatDecimal(item?.conversion, { minimumFractionDigits: 3, maximumFractionDigits: 3 }),
+                item?.conversion
+              ),
+            getSortValue: (item) =>
+              Number.isFinite(item?.conversion) ? item.conversion : parseNumber(item?.conversion) || 0,
+          },
+          {
+            key: 'unit',
+            label: 'Unidade',
+            headerClass: 'px-2 py-1.5 text-left',
+            getDisplayText: (item) => item?.unit || '—',
+          },
+          {
+            key: 'quantity',
+            label: 'Quantidade',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatQuantity(item?.quantity),
+            getFilterValue: (item) => buildNumericFilterValue(formatQuantity(item?.quantity), item?.quantity),
+            getSortValue: (item) => (Number.isFinite(item?.quantity) ? item.quantity : parseNumber(item?.quantity) || 0),
+          },
+          {
+            key: 'unitPrice',
+            label: 'Unitário (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-700 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.unitPrice),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.unitPrice), item?.unitPrice),
+            getSortValue: (item) =>
+              Number.isFinite(item?.unitPrice) ? item.unitPrice : parseNumber(item?.unitPrice) || 0,
+          },
+          {
+            key: 'discount',
+            label: 'Desconto (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-700 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.discount),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.discount), item?.discount),
+            getSortValue: (item) => (Number.isFinite(item?.discount) ? item.discount : parseNumber(item?.discount) || 0),
+          },
+          {
+            key: 'total',
+            label: 'Total',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-700 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.total),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.total), item?.total),
+            getSortValue: (item) => (Number.isFinite(item?.total) ? item.total : parseNumber(item?.total) || 0),
+          },
+          {
+            key: 'ncm',
+            label: 'NCM',
+            headerClass: 'px-2 py-1.5 text-left',
+            getDisplayText: (item) => item?.ncm || '—',
+          },
+          {
+            key: 'cfop',
+            label: 'CFOP',
+            headerClass: 'px-2 py-1.5 text-left',
+            getDisplayText: (item) => item?.cfop || '—',
+          },
+          {
+            key: 'cst',
+            label: 'CST',
+            headerClass: 'px-2 py-1.5 text-left',
+            getDisplayText: (item) => item?.cst || '—',
+          },
+          {
+            key: 'icmsRate',
+            label: 'ICMS (%)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatPercentValue(item?.icmsRate),
+            getFilterValue: (item) => buildNumericFilterValue(formatPercentValue(item?.icmsRate), item?.icmsRate),
+            getSortValue: (item) => (Number.isFinite(item?.icmsRate) ? item.icmsRate : parseNumber(item?.icmsRate) || 0),
+          },
+          {
+            key: 'icmsBase',
+            label: 'Base ICMS (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.icmsBase),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.icmsBase), item?.icmsBase),
+            getSortValue: (item) => (Number.isFinite(item?.icmsBase) ? item.icmsBase : parseNumber(item?.icmsBase) || 0),
+          },
+          {
+            key: 'icmsValue',
+            label: 'Valor ICMS (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.icmsValue),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.icmsValue), item?.icmsValue),
+            getSortValue: (item) => (Number.isFinite(item?.icmsValue) ? item.icmsValue : parseNumber(item?.icmsValue) || 0),
+          },
+          {
+            key: 'iva',
+            label: 'IVA (%)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatPercentValue(item?.iva),
+            getFilterValue: (item) => buildNumericFilterValue(formatPercentValue(item?.iva), item?.iva),
+            getSortValue: (item) => (Number.isFinite(item?.iva) ? item.iva : parseNumber(item?.iva) || 0),
+          },
+          {
+            key: 'icmsStRate',
+            label: 'ICMS ST (%)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatPercentValue(item?.icmsStRate),
+            getFilterValue: (item) => buildNumericFilterValue(formatPercentValue(item?.icmsStRate), item?.icmsStRate),
+            getSortValue: (item) =>
+              Number.isFinite(item?.icmsStRate) ? item.icmsStRate : parseNumber(item?.icmsStRate) || 0,
+          },
+          {
+            key: 'icmsStValue',
+            label: 'Valor ICMS ST (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.icmsStValue),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.icmsStValue), item?.icmsStValue),
+            getSortValue: (item) =>
+              Number.isFinite(item?.icmsStValue) ? item.icmsStValue : parseNumber(item?.icmsStValue) || 0,
+          },
+          {
+            key: 'ipiRate',
+            label: 'IPI (%)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatPercentValue(item?.ipiRate),
+            getFilterValue: (item) => buildNumericFilterValue(formatPercentValue(item?.ipiRate), item?.ipiRate),
+            getSortValue: (item) => (Number.isFinite(item?.ipiRate) ? item.ipiRate : parseNumber(item?.ipiRate) || 0),
+          },
+          {
+            key: 'ipiBase',
+            label: 'Base IPI (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.ipiBase),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.ipiBase), item?.ipiBase),
+            getSortValue: (item) => (Number.isFinite(item?.ipiBase) ? item.ipiBase : parseNumber(item?.ipiBase) || 0),
+          },
+          {
+            key: 'ipiValue',
+            label: 'Valor IPI (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.ipiValue),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.ipiValue), item?.ipiValue),
+            getSortValue: (item) => (Number.isFinite(item?.ipiValue) ? item.ipiValue : parseNumber(item?.ipiValue) || 0),
+          },
+          {
+            key: 'ipiCst',
+            label: 'ST IPI',
+            headerClass: 'px-2 py-1.5 text-left',
+            getDisplayText: (item) => item?.ipiCst || '—',
+          },
+          {
+            key: 'pisRate',
+            label: 'Alíquota PIS (%)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatPercentValue(item?.pisRate),
+            getFilterValue: (item) => buildNumericFilterValue(formatPercentValue(item?.pisRate), item?.pisRate),
+            getSortValue: (item) => (Number.isFinite(item?.pisRate) ? item.pisRate : parseNumber(item?.pisRate) || 0),
+          },
+          {
+            key: 'pisBase',
+            label: 'Base PIS (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.pisBase),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.pisBase), item?.pisBase),
+            getSortValue: (item) => (Number.isFinite(item?.pisBase) ? item.pisBase : parseNumber(item?.pisBase) || 0),
+          },
+          {
+            key: 'pisValue',
+            label: 'Valor PIS (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.pisValue),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.pisValue), item?.pisValue),
+            getSortValue: (item) => (Number.isFinite(item?.pisValue) ? item.pisValue : parseNumber(item?.pisValue) || 0),
+          },
+          {
+            key: 'cofinsRate',
+            label: 'ST CONFINS (%)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatPercentValue(item?.cofinsRate),
+            getFilterValue: (item) => buildNumericFilterValue(formatPercentValue(item?.cofinsRate), item?.cofinsRate),
+            getSortValue: (item) =>
+              Number.isFinite(item?.cofinsRate) ? item.cofinsRate : parseNumber(item?.cofinsRate) || 0,
+          },
+          {
+            key: 'cofinsBase',
+            label: 'Base CONFINS (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.cofinsBase),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.cofinsBase), item?.cofinsBase),
+            getSortValue: (item) =>
+              Number.isFinite(item?.cofinsBase) ? item.cofinsBase : parseNumber(item?.cofinsBase) || 0,
+          },
+          {
+            key: 'cofinsValue',
+            label: 'Valor CONFINS (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.cofinsValue),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.cofinsValue), item?.cofinsValue),
+            getSortValue: (item) =>
+              Number.isFinite(item?.cofinsValue) ? item.cofinsValue : parseNumber(item?.cofinsValue) || 0,
+          },
+          {
+            key: 'freight',
+            label: 'Frete (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.freight),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.freight), item?.freight),
+            getSortValue: (item) => (Number.isFinite(item?.freight) ? item.freight : parseNumber(item?.freight) || 0),
+          },
+          {
+            key: 'other',
+            label: 'Valor Outros (R$)',
+            headerClass: 'px-2 py-1.5 text-right',
+            cellClass: 'px-2 py-1.5 text-right text-gray-600 whitespace-nowrap',
+            isNumeric: true,
+            sortType: 'numeric',
+            getDisplayText: (item) => formatMoneyValue(item?.other),
+            getFilterValue: (item) => buildNumericFilterValue(formatMoneyValue(item?.other), item?.other),
+            getSortValue: (item) => (Number.isFinite(item?.other) ? item.other : parseNumber(item?.other) || 0),
+          },
+        ];
+
+        const PRODUCT_TABLE_COLUMNS_MAP = new Map(PRODUCT_TABLE_COLUMNS.map((column) => [column.key, column]));
+        const PRODUCT_TABLE_COLUMN_COUNT = PRODUCT_TABLE_COLUMNS.length;
+        const productTableState = {
+          filters: {},
+          sortKey: null,
+          sortDirection: 'asc',
+        };
+        const productTableFilterInputs = new Map();
+        const productTableSortButtons = new Map();
+        let productTableOriginalItems = [];
+        let productTableHeaderInitialized = false;
+
+        const normalizeFilterText = (value) =>
+          String(value ?? '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+
+        const createTextCell = (value, className = 'px-2 py-1.5 text-gray-600 whitespace-nowrap') => {
+          const cell = document.createElement('td');
+          cell.className = className;
+          if (!cell.classList.contains('whitespace-nowrap')) {
+            cell.classList.add('whitespace-nowrap');
+          }
+          cell.textContent = value && value !== '' ? value : '—';
+          return cell;
+        };
+
+        const setSortButtonState = (button, isActive) => {
+          if (!button) return;
+          if (isActive) {
+            button.classList.add('text-primary', 'border-primary/40', 'bg-primary/10');
+            button.classList.remove('text-gray-400');
+            button.setAttribute('aria-pressed', 'true');
+          } else {
+            button.classList.remove('text-primary', 'border-primary/40', 'bg-primary/10');
+            button.classList.add('text-gray-400');
+            button.setAttribute('aria-pressed', 'false');
+          }
+        };
+
+        const updateProductTableSortIndicators = () => {
+          productTableSortButtons.forEach(({ ascButton, descButton }, key) => {
+            const isActive = productTableState.sortKey === key;
+            setSortButtonState(ascButton, isActive && productTableState.sortDirection === 'asc');
+            setSortButtonState(descButton, isActive && productTableState.sortDirection === 'desc');
+          });
+        };
+
+        const toggleProductTableSort = (columnKey, direction) => {
+          if (!columnKey) return;
+          const isSameColumn = productTableState.sortKey === columnKey && productTableState.sortDirection === direction;
+          if (isSameColumn) {
+            productTableState.sortKey = null;
+            productTableState.sortDirection = 'asc';
+          } else {
+            productTableState.sortKey = columnKey;
+            productTableState.sortDirection = direction === 'desc' ? 'desc' : 'asc';
+          }
+          updateProductTableSortIndicators();
+          updateProductTableDisplay();
+        };
+
+        const setProductTableFilter = (columnKey, value) => {
+          if (!columnKey) return;
+          productTableState.filters[columnKey] = value || '';
+          updateProductTableDisplay();
+        };
+
+        const applyProductTableState = (items) => {
+          if (!Array.isArray(items)) return [];
+          const activeFilters = Object.entries(productTableState.filters || {}).filter(
+            ([, raw]) => normalizeFilterText(raw).length > 0
+          );
+
+          let filteredItems = items;
+          if (activeFilters.length) {
+            filteredItems = items.filter((item) =>
+              activeFilters.every(([key, raw]) => {
+                const filterValue = normalizeFilterText(raw);
+                if (!filterValue) return true;
+                const column = PRODUCT_TABLE_COLUMNS_MAP.get(key);
+                if (!column) return true;
+                const columnValue =
+                  (typeof column.getFilterValue === 'function'
+                    ? column.getFilterValue(item)
+                    : typeof column.getDisplayText === 'function'
+                    ? column.getDisplayText(item)
+                    : '') ?? '';
+                const normalizedColumn = normalizeFilterText(columnValue);
+                return normalizedColumn.includes(filterValue);
+              })
+            );
+          } else {
+            filteredItems = items.slice();
+          }
+
+          const { sortKey, sortDirection } = productTableState;
+          if (!sortKey) {
+            return filteredItems;
+          }
+
+          const column = PRODUCT_TABLE_COLUMNS_MAP.get(sortKey);
+          if (!column) {
+            return filteredItems;
+          }
+
+          const directionMultiplier = sortDirection === 'desc' ? -1 : 1;
+          const sortedItems = filteredItems.slice().sort((a, b) => {
+            const valueA =
+              typeof column.getSortValue === 'function'
+                ? column.getSortValue(a)
+                : typeof column.getFilterValue === 'function'
+                ? column.getFilterValue(a)
+                : typeof column.getDisplayText === 'function'
+                ? column.getDisplayText(a)
+                : '';
+            const valueB =
+              typeof column.getSortValue === 'function'
+                ? column.getSortValue(b)
+                : typeof column.getFilterValue === 'function'
+                ? column.getFilterValue(b)
+                : typeof column.getDisplayText === 'function'
+                ? column.getDisplayText(b)
+                : '';
+
+            if (column.sortType === 'numeric') {
+              const numericA = Number.isFinite(valueA) ? valueA : parseNumber(valueA);
+              const numericB = Number.isFinite(valueB) ? valueB : parseNumber(valueB);
+              const safeA = Number.isFinite(numericA) ? numericA : Number.NEGATIVE_INFINITY;
+              const safeB = Number.isFinite(numericB) ? numericB : Number.NEGATIVE_INFINITY;
+              if (safeA === safeB) {
+                const indexA = Number.isFinite(a?.index) ? a.index : 0;
+                const indexB = Number.isFinite(b?.index) ? b.index : 0;
+                return indexA - indexB;
+              }
+              return safeA > safeB ? directionMultiplier : -directionMultiplier;
+            }
+
+            const textA = String(valueA ?? '');
+            const textB = String(valueB ?? '');
+            const comparison = textA.localeCompare(textB, 'pt-BR', { sensitivity: 'base', numeric: true });
+            if (comparison === 0) {
+              const indexA = Number.isFinite(a?.index) ? a.index : 0;
+              const indexB = Number.isFinite(b?.index) ? b.index : 0;
+              return indexA - indexB;
+            }
+            return comparison * directionMultiplier;
+          });
+
+          return sortedItems;
+        };
+
+        const initializeProductTableHeader = () => {
+          if (!importProductsTableHead || productTableHeaderInitialized) return;
+          productTableHeaderInitialized = true;
+          importProductsTableHead.innerHTML = '';
+          const headerRow = document.createElement('tr');
+
+          PRODUCT_TABLE_COLUMNS.forEach((column) => {
+            const th = document.createElement('th');
+            th.dataset.columnKey = column.key;
+            const baseClasses = column.headerClass ? column.headerClass.split(/\s+/) : [];
+            if (baseClasses.length) {
+              th.classList.add(...baseClasses);
+            }
+            th.classList.add('align-top', 'bg-gray-50', 'whitespace-nowrap');
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex flex-col gap-1';
+
+            const labelRow = document.createElement('div');
+            labelRow.className = 'flex items-center justify-between gap-1';
+            if (column.isNumeric) {
+              labelRow.classList.add('justify-end');
+            }
+
+            const label = document.createElement('span');
+            label.textContent = column.label;
+            label.className = 'text-[9px] font-semibold uppercase tracking-wide text-gray-600';
+            if (column.isNumeric) {
+              label.classList.add('text-right');
+            }
+            labelRow.appendChild(label);
+
+            const sortGroup = document.createElement('div');
+            sortGroup.className = 'flex flex-col';
+
+            const createSortButton = (direction) => {
+              const button = document.createElement('button');
+              button.type = 'button';
+              button.dataset.sortDirection = direction;
+              button.classList.add(
+                'flex',
+                'h-4',
+                'w-4',
+                'items-center',
+                'justify-center',
+                'rounded',
+                'border',
+                'border-transparent',
+                'text-gray-400',
+                'transition',
+                'hover:text-primary',
+                'focus:outline-none',
+                'focus:ring-1',
+                'focus:ring-primary/40'
+              );
+              button.setAttribute(
+                'aria-label',
+                `Ordenar ${direction === 'asc' ? 'crescente' : 'decrescente'} pela coluna ${column.label}`
+              );
+              const icon = document.createElement('i');
+              icon.className = direction === 'asc' ? 'fas fa-sort-up text-[10px]' : 'fas fa-sort-down text-[10px]';
+              button.appendChild(icon);
+              button.addEventListener('click', () => toggleProductTableSort(column.key, direction));
+              return button;
+            };
+
+            const ascButton = createSortButton('asc');
+            const descButton = createSortButton('desc');
+            sortGroup.append(ascButton, descButton);
+            labelRow.appendChild(sortGroup);
+
+            const filterInput = document.createElement('input');
+            filterInput.type = 'text';
+            filterInput.placeholder = 'Filtrar';
+            filterInput.value = productTableState.filters[column.key] || '';
+            filterInput.classList.add(
+              'rounded',
+              'border',
+              'border-gray-200',
+              'bg-white',
+              'px-1.5',
+              'py-1',
+              'text-[9px]',
+              'font-medium',
+              'text-gray-600',
+              'placeholder:text-gray-400',
+              'focus:border-primary',
+              'focus:outline-none',
+              'focus:ring-2',
+              'focus:ring-primary/20'
+            );
+            if (column.isNumeric) {
+              filterInput.classList.add('text-right');
+            }
+            filterInput.addEventListener('input', (event) => {
+              setProductTableFilter(column.key, event.target.value || '');
+            });
+
+            wrapper.append(labelRow, filterInput);
+            th.appendChild(wrapper);
+            headerRow.appendChild(th);
+
+            productTableFilterInputs.set(column.key, filterInput);
+            productTableSortButtons.set(column.key, { ascButton, descButton });
+          });
+
+          importProductsTableHead.appendChild(headerRow);
+          updateProductTableSortIndicators();
+        };
+
+        const updateProductTableDisplay = () => {
+          if (!importProductsTableBody) return;
+
+          importProductsTableBody.innerHTML = '';
+
+          if (!Array.isArray(productTableOriginalItems) || !productTableOriginalItems.length) {
+            const emptyRow = document.createElement('tr');
+            const emptyCell = document.createElement('td');
+            emptyCell.colSpan = PRODUCT_TABLE_COLUMN_COUNT;
+            emptyCell.className = 'px-3 py-6 text-center text-[10px] text-gray-500';
+            emptyCell.textContent = 'Importe um XML autorizado para listar os itens da NF-e.';
+            emptyRow.appendChild(emptyCell);
+            importProductsTableBody.appendChild(emptyRow);
+            updateProductValidationBadge([]);
+            return;
+          }
+
+          const itemsToRender = applyProductTableState(productTableOriginalItems);
+
+          if (!itemsToRender.length) {
+            const emptyRow = document.createElement('tr');
+            const emptyCell = document.createElement('td');
+            emptyCell.colSpan = PRODUCT_TABLE_COLUMN_COUNT;
+            emptyCell.className = 'px-3 py-6 text-center text-[10px] text-gray-500';
+            emptyCell.textContent = 'Nenhum item encontrado com os filtros aplicados.';
+            emptyRow.appendChild(emptyCell);
+            importProductsTableBody.appendChild(emptyRow);
+            updateProductValidationBadge(productTableOriginalItems);
+            return;
+          }
+
+          const fragment = document.createDocumentFragment();
+
+          itemsToRender.forEach((item) => {
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-primary/5';
+            const rowIndex = Number.isFinite(item?.index) ? item.index : productTableOriginalItems.indexOf(item);
+            row.dataset.itemIndex = String(rowIndex >= 0 ? rowIndex : 0);
+
+            if (item?.validationStatus === 'not-found') {
+              row.classList.add('bg-amber-50/60');
+            } else if (item?.validationStatus === 'error') {
+              row.classList.add('bg-rose-50/60');
+            }
+
+            PRODUCT_TABLE_COLUMNS.forEach((column) => {
+              let cell = null;
+              if (typeof column.renderCell === 'function') {
+                cell = column.renderCell(item);
+              } else {
+                const value =
+                  typeof column.getDisplayText === 'function' ? column.getDisplayText(item) : item?.[column.key] || '—';
+                const className = column.cellClass || 'px-2 py-1.5 text-gray-600 whitespace-nowrap';
+                cell = createTextCell(value, className);
+              }
+              if (!cell) return;
+              if (!cell.classList.contains('whitespace-nowrap')) {
+                cell.classList.add('whitespace-nowrap');
+              }
+              row.appendChild(cell);
+            });
+
+            fragment.appendChild(row);
+          });
+
+          importProductsTableBody.appendChild(fragment);
+          updateProductValidationBadge(productTableOriginalItems);
+        };
+
         const updateProductValidationBadge = (items) => {
           if (!importXmlValidationText) return;
           if (!Array.isArray(items) || !items.length) {
@@ -2208,224 +2997,16 @@
 
         function renderImportedProducts(items = []) {
           if (!importProductsTableBody) return;
-          importProductsTableBody.innerHTML = '';
-
-          if (!Array.isArray(items) || !items.length) {
-            const emptyRow = document.createElement('tr');
-            const emptyCell = document.createElement('td');
-            emptyCell.colSpan = PRODUCT_TABLE_COLUMN_COUNT;
-            emptyCell.className = 'px-3 py-6 text-center text-[10px] text-gray-500';
-            emptyCell.textContent = 'Importe um XML autorizado para listar os itens da NF-e.';
-            emptyRow.appendChild(emptyCell);
-            importProductsTableBody.appendChild(emptyRow);
-            updateProductValidationBadge([]);
-            return;
+          if (!productTableHeaderInitialized) {
+            initializeProductTableHeader();
           }
 
-          ensureUniqueInternalCodes(items);
+          productTableOriginalItems = Array.isArray(items) ? items : [];
+          if (productTableOriginalItems.length) {
+            ensureUniqueInternalCodes(productTableOriginalItems);
+          }
 
-          const fragment = document.createDocumentFragment();
-
-          items.forEach((item, index) => {
-            const row = document.createElement('tr');
-            row.className = 'hover:bg-primary/5';
-            row.dataset.itemIndex = String(index);
-
-            if (item.validationStatus === 'not-found') {
-              row.classList.add('bg-amber-50/60');
-            } else if (item.validationStatus === 'error') {
-              row.classList.add('bg-rose-50/60');
-            }
-
-            const createBadge = (classes, iconClass, text) => {
-              const badge = document.createElement('span');
-              badge.classList.add(
-                'inline-flex',
-                'items-center',
-                'gap-1',
-                'rounded-full',
-                'border',
-                'px-1.5',
-                'py-0.5',
-                'text-[9px]',
-                'font-semibold'
-              );
-              classes.forEach((cls) => badge.classList.add(cls));
-              const icon = document.createElement('i');
-              icon.className = `${iconClass} text-[10px]`;
-              badge.appendChild(icon);
-              const label = document.createElement('span');
-              label.textContent = text;
-              badge.appendChild(label);
-              return badge;
-            };
-
-            const actionCell = document.createElement('td');
-            actionCell.className = 'px-2 py-1.5 bg-white sticky left-0 z-10';
-            actionCell.dataset.validationStatus = item.validationStatus || '';
-
-            if (item.validationStatus === 'matched' && item.matchedProduct) {
-              actionCell.appendChild(
-                createBadge(
-                  ['border-emerald-200', 'bg-emerald-50', 'text-emerald-700'],
-                  'fas fa-check',
-                  'Cadastrado'
-                )
-              );
-            } else if (item.validationStatus === 'pending' || item.validationStatus === 'checking') {
-              actionCell.appendChild(
-                createBadge(
-                  ['border-sky-200', 'bg-sky-50', 'text-sky-700'],
-                  'fas fa-spinner fa-spin',
-                  'Validando'
-                )
-              );
-            } else if (item.validationStatus === 'error') {
-              actionCell.appendChild(
-                createBadge(
-                  ['border-rose-200', 'bg-rose-50', 'text-rose-700'],
-                  'fas fa-circle-exclamation',
-                  'Erro'
-                )
-              );
-            } else if (!item.barcodeCandidates || item.barcodeCandidates.length === 0) {
-              actionCell.appendChild(
-                createBadge(
-                  ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
-                  'fas fa-barcode',
-                  'Sem GTIN'
-                )
-              );
-            } else {
-              const button = document.createElement('button');
-              button.type = 'button';
-              button.classList.add(
-                'inline-flex',
-                'items-center',
-                'gap-1',
-                'rounded-full',
-                'border',
-                'border-primary/40',
-                'bg-primary/10',
-                'px-1.5',
-                'py-0.5',
-                'text-[9px]',
-                'font-semibold',
-                'text-primary',
-                'hover:bg-primary/20',
-                'focus:outline-none',
-                'focus:ring-2',
-                'focus:ring-primary/30'
-              );
-              button.dataset.productBarcode = item.barcodeCandidates?.[0] || '';
-              const icon = document.createElement('i');
-              icon.className = 'fas fa-plus';
-              const label = document.createElement('span');
-              label.textContent = 'Cadastrar';
-              button.append(icon, label);
-              button.addEventListener('click', () => openProductRegistration(item));
-              actionCell.appendChild(button);
-            }
-            row.appendChild(actionCell);
-
-            const unitarCell = document.createElement('td');
-            unitarCell.className = 'px-2 py-1.5';
-            const unitarLabel = document.createElement('label');
-            unitarLabel.className = 'inline-flex items-center gap-2 text-[9px] text-gray-600';
-            const unitarCheckbox = document.createElement('input');
-            unitarCheckbox.type = 'checkbox';
-            unitarCheckbox.className = 'h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40';
-            const unitarText = document.createElement('span');
-            unitarText.textContent = 'Unitário';
-            unitarLabel.append(unitarCheckbox, unitarText);
-            unitarCell.appendChild(unitarLabel);
-            row.appendChild(unitarCell);
-
-            const selectCell = document.createElement('td');
-            selectCell.className = 'px-2 py-1.5';
-            const selectCheckbox = document.createElement('input');
-            selectCheckbox.type = 'checkbox';
-            selectCheckbox.checked = true;
-            selectCheckbox.className = 'h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40';
-            selectCell.appendChild(selectCheckbox);
-            row.appendChild(selectCell);
-
-            const productCode = normalizeInternalCode(item.internalCode) || '—';
-            const systemName = item.matchedProduct?.nome || item.description || '—';
-            const supplierCode = item.supplierCode || '—';
-            const barcodeText = item.barcodeDisplay || 'SEM GTIN';
-            const supplierName = item.description || '—';
-            const conversionText = formatDecimal(item.conversion, {
-              minimumFractionDigits: 3,
-              maximumFractionDigits: 3,
-            });
-            const quantityText = formatQuantity(item.quantity);
-            const unitPriceText = formatMoneyValue(item.unitPrice);
-            const discountText = formatMoneyValue(item.discount);
-            const totalText = formatMoneyValue(item.total);
-            const icmsRateText = formatPercentValue(item.icmsRate);
-            const icmsBaseText = formatMoneyValue(item.icmsBase);
-            const icmsValueText = formatMoneyValue(item.icmsValue);
-            const ivaText = formatPercentValue(item.iva);
-            const icmsStRateText = formatPercentValue(item.icmsStRate);
-            const icmsStValueText = formatMoneyValue(item.icmsStValue);
-            const ipiRateText = formatPercentValue(item.ipiRate);
-            const ipiBaseText = formatMoneyValue(item.ipiBase);
-            const ipiValueText = formatMoneyValue(item.ipiValue);
-            const pisRateText = formatPercentValue(item.pisRate);
-            const pisBaseText = formatMoneyValue(item.pisBase);
-            const pisValueText = formatMoneyValue(item.pisValue);
-            const cofinsRateText = formatPercentValue(item.cofinsRate);
-            const cofinsBaseText = formatMoneyValue(item.cofinsBase);
-            const cofinsValueText = formatMoneyValue(item.cofinsValue);
-            const freightText = formatMoneyValue(item.freight);
-            const otherText = formatMoneyValue(item.other);
-
-            const appendCell = (value, className = 'px-2 py-1.5 text-gray-600') => {
-              const cell = document.createElement('td');
-              cell.className = className;
-              cell.textContent = value && value !== '' ? value : '—';
-              row.appendChild(cell);
-            };
-
-            appendCell(productCode, 'px-2 py-1.5 font-semibold text-gray-700');
-            appendCell(systemName, 'px-2 py-1.5 text-gray-700');
-            appendCell(supplierCode);
-            appendCell(barcodeText);
-            appendCell(supplierName);
-            appendCell(conversionText);
-            appendCell(item.unit || '—');
-            appendCell(quantityText, 'px-2 py-1.5 text-right text-gray-600');
-            appendCell(unitPriceText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(discountText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(totalText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(item.ncm || '—');
-            appendCell(item.cfop || '—');
-            appendCell(item.cst || '—');
-            appendCell(icmsRateText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(icmsBaseText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(icmsValueText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(ivaText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(icmsStRateText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(icmsStValueText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(ipiRateText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(ipiBaseText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(ipiValueText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(item.ipiCst || '—');
-            appendCell(pisRateText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(pisBaseText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(pisValueText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(cofinsRateText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(cofinsBaseText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(cofinsValueText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(freightText, 'px-2 py-1.5 text-right text-gray-700');
-            appendCell(otherText, 'px-2 py-1.5 text-right text-gray-700');
-
-            fragment.appendChild(row);
-          });
-
-          importProductsTableBody.appendChild(fragment);
-          updateProductValidationBadge(items);
+          updateProductTableDisplay();
         }
 
         const findProductByBarcode = async (barcodeDigits) => {
