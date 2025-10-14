@@ -392,50 +392,16 @@
                       <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Descrição</th>
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Qtde.</th>
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Multiplicador</th>
+                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Divisor</th>
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Unitário (R$)</th>
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Desc (%)</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-gray-100 bg-white">
-                    <tr>
-                      <td class="px-4 py-3 text-gray-600">1</td>
-                      <td class="px-4 py-3">
-                        <label class="inline-flex items-center gap-2 text-xs text-gray-600">
-                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                          Não
-                        </label>
+                  <tbody class="divide-y divide-gray-100 bg-white" data-nfe-products-body>
+                    <tr class="hidden" data-nfe-products-empty>
+                      <td class="px-4 py-3 text-center text-gray-500" colspan="9">
+                        Nenhum produto importado do XML.
                       </td>
-                      <td class="px-4 py-3 text-gray-600">PROD-0001</td>
-                      <td class="px-4 py-3 text-gray-700">
-                        Vacina Polivalente V8 50ml
-                        <p class="text-xs text-gray-500">UN: FR · NCM 3002.20.29 · CEST 13.001.00</p>
-                        <p class="text-xs text-gray-500">CFOP 1.102 · CST 00 · ICMS 18% · IPI 0%</p>
-                        <p class="text-xs text-gray-500">PIS/COFINS: CST 01 · Alíquotas 1,65% / 7,60%</p>
-                      </td>
-                      <td class="px-4 py-3 text-right text-gray-600">12</td>
-                      <td class="px-4 py-3 text-right text-gray-600">1,000</td>
-                      <td class="px-4 py-3 text-right text-gray-600">48,90</td>
-                      <td class="px-4 py-3 text-right text-gray-600">0,00</td>
-                    </tr>
-                    <tr>
-                      <td class="px-4 py-3 text-gray-600">2</td>
-                      <td class="px-4 py-3">
-                        <label class="inline-flex items-center gap-2 text-xs text-gray-600">
-                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/30">
-                          Sim
-                        </label>
-                      </td>
-                      <td class="px-4 py-3 text-gray-600">PROD-0002</td>
-                      <td class="px-4 py-3 text-gray-700">
-                        Ração Premium Cães Adultos 15kg
-                        <p class="text-xs text-gray-500">UN: SC · NCM 2309.10.90 · CEST 07.002.00</p>
-                        <p class="text-xs text-gray-500">CFOP 1.403 · CST 20 · ICMS 12% (BC R$ 960,00)</p>
-                        <p class="text-xs text-gray-500">Frete R$ 120,00 · Seguro R$ 45,00</p>
-                      </td>
-                      <td class="px-4 py-3 text-right text-gray-600">8</td>
-                      <td class="px-4 py-3 text-right text-gray-600">1,000</td>
-                      <td class="px-4 py-3 text-right text-gray-600">126,50</td>
-                      <td class="px-4 py-3 text-right text-gray-600">3,00</td>
                     </tr>
                   </tbody>
                 </table>
@@ -600,39 +566,11 @@
                       <th class="px-4 py-3 text-left font-semibold text-gray-700">Conta Corrente</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-gray-100 bg-white">
-                    <tr>
-                      <td class="px-4 py-3 text-gray-600">1/3</td>
-                      <td class="px-4 py-3 text-gray-600">30</td>
-                      <td class="px-4 py-3 text-gray-600">05/08/2024</td>
-                      <td class="px-4 py-3 text-right text-gray-800 font-semibold">R$ 5.162,44</td>
-                      <td class="px-4 py-3 text-gray-600">Pagamento via boleto</td>
-                      <td class="px-4 py-3 text-gray-600">Fornecedores Nacionais</td>
-                      <td class="px-4 py-3 text-gray-600">1.1.3.01</td>
-                      <td class="px-4 py-3 text-gray-600">BOLETO</td>
-                      <td class="px-4 py-3 text-gray-600">001-12345-6</td>
-                    </tr>
-                    <tr>
-                      <td class="px-4 py-3 text-gray-600">2/3</td>
-                      <td class="px-4 py-3 text-gray-600">60</td>
-                      <td class="px-4 py-3 text-gray-600">04/09/2024</td>
-                      <td class="px-4 py-3 text-right text-gray-800 font-semibold">R$ 5.162,44</td>
-                      <td class="px-4 py-3 text-gray-600">Pagamento via boleto</td>
-                      <td class="px-4 py-3 text-gray-600">Fornecedores Nacionais</td>
-                      <td class="px-4 py-3 text-gray-600">1.1.3.01</td>
-                      <td class="px-4 py-3 text-gray-600">BOLETO</td>
-                      <td class="px-4 py-3 text-gray-600">001-12345-6</td>
-                    </tr>
-                    <tr>
-                      <td class="px-4 py-3 text-gray-600">3/3</td>
-                      <td class="px-4 py-3 text-gray-600">90</td>
-                      <td class="px-4 py-3 text-gray-600">04/10/2024</td>
-                      <td class="px-4 py-3 text-right text-gray-800 font-semibold">R$ 5.162,44</td>
-                      <td class="px-4 py-3 text-gray-600">Pagamento via boleto</td>
-                      <td class="px-4 py-3 text-gray-600">Fornecedores Nacionais</td>
-                      <td class="px-4 py-3 text-gray-600">1.1.3.01</td>
-                      <td class="px-4 py-3 text-gray-600">BOLETO</td>
-                      <td class="px-4 py-3 text-gray-600">001-12345-6</td>
+                  <tbody class="divide-y divide-gray-100 bg-white" data-nfe-duplicatas-body>
+                    <tr class="hidden" data-nfe-duplicatas-empty>
+                      <td class="px-4 py-3 text-center text-gray-500" colspan="9">
+                        Nenhuma duplicata foi informada no XML.
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -734,13 +672,11 @@
                       <th class="px-4 py-3 text-left font-semibold text-gray-700">Data Emissão</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-gray-100 bg-white">
-                    <tr>
-                      <td class="px-4 py-3 text-gray-600">Pedido de Compra</td>
-                      <td class="px-4 py-3 text-gray-600">55</td>
-                      <td class="px-4 py-3 text-gray-600">45001234</td>
-                      <td class="px-4 py-3 text-gray-600">35240730290856000160550010000100011999999999</td>
-                      <td class="px-4 py-3 text-gray-600">02/07/2024</td>
+                  <tbody class="divide-y divide-gray-100 bg-white" data-nfe-documents-body>
+                    <tr class="hidden" data-nfe-documents-empty>
+                      <td class="px-4 py-3 text-center text-gray-500" colspan="5">
+                        Nenhum documento vinculado pelo XML.
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -1213,7 +1149,11 @@
           <footer class="flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-end">
             <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button type="button" data-close-import-modal class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
-              <button type="button" class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
+              <button
+                type="button"
+                class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+                data-confirm-import
+              >
                 <i class="fas fa-file-import"></i>
                 Importar
               </button>
@@ -1541,9 +1481,50 @@
         const entryDateInput = document.getElementById('entry-date');
         const nfeModelSelect = document.getElementById('nfe-model');
         const nfeTypeSelect = document.getElementById('nfe-type');
+        const tipoEmissaoSelect = document.getElementById('tipo-emissao');
         const importAccessKeyInput = document.getElementById('import-access-key');
         const accessKeyInput = document.getElementById('access-key');
         const totalAmountDisplay = document.querySelector('[data-nfe-total]');
+        const supplierCnpjInput = document.getElementById('supplier-cnpj');
+        const supplierIeInput = document.getElementById('supplier-ie');
+        const supplierUfSelect = document.getElementById('supplier-uf');
+        const supplierEmailInput = document.getElementById('supplier-email');
+        const supplierAddressInput = document.getElementById('supplier-address');
+        const transportCnpjInput = document.getElementById('transportadora-cnpj');
+        const transportIeInput = document.getElementById('transportadora-ie');
+        const transportUfSelect = document.getElementById('transportadora-uf');
+        const transportPlateInput = document.getElementById('transportadora-placa');
+        const transportPlateUfSelect = document.getElementById('transportadora-uf-placa');
+        const transportNameInput = document.getElementById('transportadora-razao');
+        const weightGrossInput = document.getElementById('peso-bruto');
+        const weightNetInput = document.getElementById('peso-liquido');
+        const freightModeSelect = document.getElementById('modalidade-frete');
+        const totalsProductsInput = document.getElementById('valor-produtos');
+        const totalsIcmsBaseInput = document.getElementById('base-icms');
+        const totalsIcmsValueInput = document.getElementById('valor-icms');
+        const totalsIcmsStInput = document.getElementById('icms-st');
+        const totalsFcpStInput = document.getElementById('valor-fcp-st');
+        const totalsServicesInput = document.getElementById('total-servicos');
+        const totalsAdjustmentInput = document.getElementById('valor-ajuste-esquerda');
+        const totalsDiscountInput = document.getElementById('desconto');
+        const totalsOtherInput = document.getElementById('outras-despesas');
+        const totalsFreightInput = document.getElementById('valor-frete');
+        const totalsIpiInput = document.getElementById('valor-ipi');
+        const totalsUnitDiscountInput = document.getElementById('desconto-unitario');
+        const totalsInsuranceInput = document.getElementById('valor-seguro');
+        const totalsDollarInput = document.getElementById('valor-dolar');
+        const duplicataEmissionInput = document.getElementById('duplicata-data-emissao');
+        const duplicataCountInput = document.getElementById('parcelas');
+        const duplicataFirstDueInput = document.getElementById('vencimento-inicial');
+        const duplicataDaysInput = document.getElementById('dias');
+        const duplicataInitialDaysInput = document.getElementById('dias-vencimento');
+        const duplicataDaysTypeSelect = document.getElementById('tipo-dias');
+        const documentsTableBody = document.querySelector('[data-nfe-documents-body]');
+        const documentsEmptyRow = document.querySelector('[data-nfe-documents-empty]');
+        const mainProductsTableBody = document.querySelector('[data-nfe-products-body]');
+        const mainProductsEmptyRow = document.querySelector('[data-nfe-products-empty]');
+        const duplicatasTableBody = document.querySelector('[data-nfe-duplicatas-body]');
+        const duplicatasEmptyRow = document.querySelector('[data-nfe-duplicatas-empty]');
         const MODAL_FOCUSABLE_SELECTORS =
           'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
         let previouslyFocusedElement = null;
@@ -4994,9 +4975,6 @@
               importXmlValidationText.textContent = 'Aguardando validação fiscal';
             }
             applyValidationStyles('info');
-            if (totalAmountDisplay) {
-              totalAmountDisplay.textContent = 'R$ 0,00';
-            }
             productValidationSequence += 1;
             renderImportedProducts([]);
             return;
@@ -5050,9 +5028,6 @@
           const totalFormatted = formatCurrencyBRL(data.totals?.totalValue);
           setText(importSummaryTotal, totalFormatted);
           setText(importSummaryTotalStatus, 'Valor informado pelo XML autorizado');
-          if (totalAmountDisplay) {
-            totalAmountDisplay.textContent = totalFormatted;
-          }
 
           setText(importSummaryDestName, data.dest?.name || 'Destinatário não identificado');
           setText(importSummaryDestDocument, destDoc || 'Documento não disponível');
@@ -5085,6 +5060,7 @@
           if (entryDateInput) entryDateInput.value = entry.dateInput || '';
           if (nfeModelSelect && data.ide?.model) setSelectValue(nfeModelSelect, data.ide.model);
           if (nfeTypeSelect) setSelectValue(nfeTypeSelect, mapModelToType(data.ide?.model));
+          if (tipoEmissaoSelect && data.ide?.tpEmis) setSelectValue(tipoEmissaoSelect, data.ide.tpEmis);
           if (accessKeyInput && data.accessKey) accessKeyInput.value = data.accessKey;
           if (importAccessKeyInput && data.accessKey) importAccessKeyInput.value = data.accessKey;
           if (companySelect && data.dest?.document) {
@@ -5097,6 +5073,396 @@
               companySelect.value = matchedCompany.value;
               companySelect.dispatchEvent(new Event('change', { bubbles: true }));
             }
+          }
+        };
+
+        const setInputValue = (input, value) => {
+          if (!input) return;
+          input.value = value ?? '';
+        };
+
+        const setNumericInputValue = (input, value, fractionDigits = 2) => {
+          if (!input) return;
+          const numericValue = parseNumber(value);
+          if (Number.isFinite(numericValue)) {
+            input.value = numericValue.toFixed(fractionDigits);
+          } else {
+            input.value = '';
+          }
+        };
+
+        const fillSupplierFieldsFromNfe = (data) => {
+          const supplier = data?.emit;
+          if (!supplier) return;
+          setInputValue(
+            supplierCnpjInput,
+            supplier.document ? formatDocument(supplier.document) : ''
+          );
+          setInputValue(supplierIeInput, supplier.stateRegistration || '');
+          if (supplierUfSelect && supplier.address?.state) {
+            setSelectValue(supplierUfSelect, supplier.address.state);
+          }
+          setInputValue(supplierEmailInput, supplier.email || '');
+          setInputValue(supplierAddressInput, formatAddressLine(supplier.address));
+        };
+
+        const fillTotalsFromNfeData = (data) => {
+          const totals = data?.totals || {};
+          setNumericInputValue(totalsProductsInput, totals.products);
+          setNumericInputValue(totalsIcmsBaseInput, totals.icmsBase);
+          setNumericInputValue(totalsIcmsValueInput, totals.icmsValue);
+          setNumericInputValue(totalsIcmsStInput, totals.icmsSt);
+          setNumericInputValue(totalsFcpStInput, totals.fcpSt);
+          setNumericInputValue(totalsServicesInput, totals.services);
+          setNumericInputValue(totalsDiscountInput, totals.discount);
+          setNumericInputValue(totalsOtherInput, totals.other);
+          setNumericInputValue(totalsFreightInput, totals.freight);
+          setNumericInputValue(totalsIpiInput, totals.ipi);
+          setNumericInputValue(totalsInsuranceInput, totals.insurance);
+          setInputValue(totalsAdjustmentInput, '');
+          setInputValue(totalsUnitDiscountInput, '');
+          setInputValue(totalsDollarInput, '');
+        };
+
+        const fillTransportFromNfeData = (data) => {
+          const transport = data?.transport || {};
+          const transporter = transport.transporter || {};
+          const vehicle = transport.vehicle || {};
+          const volume = transport.volume || {};
+
+          setInputValue(
+            transportCnpjInput,
+            transporter.document ? formatDocument(transporter.document) : ''
+          );
+          setInputValue(transportIeInput, transporter.stateRegistration || '');
+          if (transportUfSelect && transporter.uf) {
+            setSelectValue(transportUfSelect, transporter.uf);
+          }
+          setInputValue(transportNameInput, transporter.name || '');
+          setInputValue(transportPlateInput, vehicle.plate || '');
+          if (transportPlateUfSelect && vehicle.uf) {
+            setSelectValue(transportPlateUfSelect, vehicle.uf);
+          }
+          setNumericInputValue(weightGrossInput, volume.weightGross, 3);
+          setNumericInputValue(weightNetInput, volume.weightNet, 3);
+          if (freightModeSelect) {
+            const modeValue = transport.mode || data?.ide?.freightMode || '';
+            if (modeValue) {
+              setSelectValue(freightModeSelect, modeValue);
+            }
+          }
+        };
+
+        const renderDocumentsFromNfe = (references = []) => {
+          if (!documentsTableBody) return;
+          const existingRows = documentsTableBody.querySelectorAll(
+            'tr:not([data-nfe-documents-empty])'
+          );
+          existingRows.forEach((row) => row.remove());
+
+          const hasReferences = Array.isArray(references) && references.length > 0;
+          if (documentsEmptyRow) {
+            documentsEmptyRow.classList.toggle('hidden', hasReferences);
+          }
+          if (!hasReferences) {
+            return;
+          }
+
+          const fragment = document.createDocumentFragment();
+          references.forEach((reference) => {
+            const row = document.createElement('tr');
+
+            const typeCell = document.createElement('td');
+            typeCell.className = 'px-4 py-3 text-gray-600';
+            typeCell.textContent = reference?.type || 'Documento referenciado';
+            if (reference?.issuerUf || reference?.document) {
+              const extra = document.createElement('p');
+              extra.className = 'text-xs text-gray-500';
+              const details = [];
+              if (reference.issuerUf) details.push(`UF ${reference.issuerUf}`);
+              if (reference.document) details.push(formatDocument(reference.document));
+              extra.textContent = details.join(' · ');
+              if (extra.textContent) {
+                typeCell.appendChild(extra);
+              }
+            }
+
+            const modelCell = document.createElement('td');
+            modelCell.className = 'px-4 py-3 text-gray-600';
+            modelCell.textContent = reference?.model || '—';
+
+            const numberCell = document.createElement('td');
+            numberCell.className = 'px-4 py-3 text-gray-600';
+            const numberParts = [];
+            if (reference?.number) numberParts.push(reference.number);
+            if (reference?.series) numberParts.push(`Série ${reference.series}`);
+            if (!numberParts.length) numberParts.push('—');
+            numberCell.textContent = numberParts.join(' · ');
+
+            const keyCell = document.createElement('td');
+            keyCell.className = 'px-4 py-3 text-gray-600 font-mono text-xs';
+            keyCell.textContent = reference?.accessKey || '—';
+
+            const emissionCell = document.createElement('td');
+            emissionCell.className = 'px-4 py-3 text-gray-600';
+            const emission = normalizeDate(reference?.emissionDate);
+            emissionCell.textContent = emission.display || emission.dateInput || '—';
+
+            row.append(typeCell, modelCell, numberCell, keyCell, emissionCell);
+            fragment.appendChild(row);
+          });
+
+          documentsTableBody.appendChild(fragment);
+        };
+
+        const renderDuplicatasFromNfe = (duplicates = [], data = null) => {
+          if (!duplicatasTableBody) return;
+          const existingRows = duplicatasTableBody.querySelectorAll(
+            'tr:not([data-nfe-duplicatas-empty])'
+          );
+          existingRows.forEach((row) => row.remove());
+
+          const hasDuplicates = Array.isArray(duplicates) && duplicates.length > 0;
+          if (duplicatasEmptyRow) {
+            duplicatasEmptyRow.classList.toggle('hidden', hasDuplicates);
+          }
+          if (!hasDuplicates) {
+            return;
+          }
+
+          const emission = normalizeDate(data?.ide?.emissionDate);
+          const emissionDateObj = emission.dateInput ? new Date(`${emission.dateInput}T00:00:00`) : null;
+
+          const fragment = document.createDocumentFragment();
+          duplicates.forEach((dup, index) => {
+            const row = document.createElement('tr');
+
+            const parcelCell = document.createElement('td');
+            parcelCell.className = 'px-4 py-3 text-gray-600';
+            parcelCell.textContent = dup?.number || `Parcela ${index + 1}`;
+
+            const daysCell = document.createElement('td');
+            daysCell.className = 'px-4 py-3 text-gray-600';
+            let diffText = '—';
+            const dueInfo = normalizeDate(dup?.dueDate);
+            if (emissionDateObj && dueInfo.dateInput) {
+              const dueDateObj = new Date(`${dueInfo.dateInput}T00:00:00`);
+              const diff = Math.round((dueDateObj - emissionDateObj) / (24 * 60 * 60 * 1000));
+              if (Number.isFinite(diff)) {
+                diffText = String(diff);
+              }
+            }
+            daysCell.textContent = diffText;
+
+            const dueCell = document.createElement('td');
+            dueCell.className = 'px-4 py-3 text-gray-600';
+            dueCell.textContent = dueInfo.display || dueInfo.dateInput || '—';
+
+            const valueCell = document.createElement('td');
+            valueCell.className = 'px-4 py-3 text-right text-gray-800 font-semibold';
+            valueCell.textContent = formatCurrencyBRL(dup?.value);
+
+            const observationCell = document.createElement('td');
+            observationCell.className = 'px-4 py-3 text-gray-600';
+            observationCell.textContent = '—';
+
+            const accountCell = document.createElement('td');
+            accountCell.className = 'px-4 py-3 text-gray-600';
+            accountCell.textContent = '—';
+
+            const accountCodeCell = document.createElement('td');
+            accountCodeCell.className = 'px-4 py-3 text-gray-600';
+            accountCodeCell.textContent = '—';
+
+            const documentCell = document.createElement('td');
+            documentCell.className = 'px-4 py-3 text-gray-600';
+            documentCell.textContent = '—';
+
+            const bankCell = document.createElement('td');
+            bankCell.className = 'px-4 py-3 text-gray-600';
+            bankCell.textContent = '—';
+
+            row.append(
+              parcelCell,
+              daysCell,
+              dueCell,
+              valueCell,
+              observationCell,
+              accountCell,
+              accountCodeCell,
+              documentCell,
+              bankCell
+            );
+            fragment.appendChild(row);
+          });
+
+          duplicatasTableBody.appendChild(fragment);
+        };
+
+        const renderMainProductsFromNfe = (items = []) => {
+          if (!mainProductsTableBody) return;
+          const existingRows = mainProductsTableBody.querySelectorAll(
+            'tr:not([data-nfe-products-empty])'
+          );
+          existingRows.forEach((row) => row.remove());
+
+          const hasItems = Array.isArray(items) && items.length > 0;
+          if (mainProductsEmptyRow) {
+            mainProductsEmptyRow.classList.toggle('hidden', hasItems);
+          }
+          if (!hasItems) {
+            return;
+          }
+
+          const fragment = document.createDocumentFragment();
+
+          items.forEach((item, index) => {
+            const row = document.createElement('tr');
+
+            const indexCell = document.createElement('td');
+            indexCell.className = 'px-4 py-3 text-gray-600';
+            indexCell.textContent = String(index + 1);
+
+            const icmsCell = document.createElement('td');
+            icmsCell.className = 'px-4 py-3';
+            const icmsLabel = document.createElement('label');
+            icmsLabel.className = 'inline-flex items-center gap-2 text-xs text-gray-600';
+            const icmsCheckbox = document.createElement('input');
+            icmsCheckbox.type = 'checkbox';
+            icmsCheckbox.disabled = true;
+            icmsCheckbox.className = 'rounded border-gray-300 text-primary focus:ring-primary/30';
+            icmsLabel.append(icmsCheckbox, document.createTextNode('Não'));
+            icmsCell.appendChild(icmsLabel);
+
+            const codeCell = document.createElement('td');
+            codeCell.className = 'px-4 py-3 text-gray-600';
+            const matchedCode = item?.matchedProduct
+              ? normalizeInternalCode(getProductCodeFromRecord(item.matchedProduct))
+              : '';
+            const supplierCode = item?.supplierCode || '';
+            codeCell.textContent = matchedCode || supplierCode || '—';
+
+            const descriptionCell = document.createElement('td');
+            descriptionCell.className = 'px-4 py-3 text-gray-700';
+            descriptionCell.textContent = item?.description || 'Item sem descrição';
+
+            const detailLine1 = document.createElement('p');
+            detailLine1.className = 'text-xs text-gray-500';
+            const line1Parts = [];
+            if (item?.unit) line1Parts.push(`UN: ${item.unit}`);
+            if (item?.unitTrib && item.unitTrib !== item.unit) line1Parts.push(`Trib: ${item.unitTrib}`);
+            if (item?.ncm) line1Parts.push(`NCM ${item.ncm}`);
+            if (item?.cest) line1Parts.push(`CEST ${item.cest}`);
+            detailLine1.textContent = line1Parts.join(' · ') || '—';
+
+            const detailLine2 = document.createElement('p');
+            detailLine2.className = 'text-xs text-gray-500';
+            const line2Parts = [];
+            if (item?.cfop) line2Parts.push(`CFOP ${item.cfop}`);
+            if (item?.cst) line2Parts.push(`CST ${item.cst}`);
+            line2Parts.push(`ICMS ${formatPercentValue(item?.icmsRate)}`);
+            line2Parts.push(`ICMS ST ${formatPercentValue(item?.icmsStRate)}`);
+            detailLine2.textContent = line2Parts.join(' · ');
+
+            const detailLine3 = document.createElement('p');
+            detailLine3.className = 'text-xs text-gray-500';
+            detailLine3.textContent = `IPI ${formatPercentValue(item?.ipiRate)} · PIS ${formatPercentValue(
+              item?.pisRate
+            )} · COFINS ${formatPercentValue(item?.cofinsRate)}`;
+
+            const detailLine4 = document.createElement('p');
+            detailLine4.className = 'text-xs text-gray-500';
+            detailLine4.textContent = `GTIN: ${item?.barcodeDisplay || formatGtinDisplay(item?.ean || item?.eanTrib) || 'SEM GTIN'}`;
+
+            descriptionCell.append(detailLine1, detailLine2, detailLine3, detailLine4);
+
+            const quantityCell = document.createElement('td');
+            quantityCell.className = 'px-4 py-3 text-right text-gray-600';
+            quantityCell.textContent = formatQuantity(item?.quantity);
+
+            const multiplierCell = document.createElement('td');
+            multiplierCell.className = 'px-4 py-3 text-right text-gray-600';
+            multiplierCell.textContent = formatQuantity(item?.conversionMultiplier);
+
+            const dividerCell = document.createElement('td');
+            dividerCell.className = 'px-4 py-3 text-right text-gray-600';
+            dividerCell.textContent = formatQuantity(item?.conversionDivider);
+
+            const unitPriceCell = document.createElement('td');
+            unitPriceCell.className = 'px-4 py-3 text-right text-gray-600';
+            unitPriceCell.textContent = formatMoneyValue(item?.unitPrice);
+
+            const discountCell = document.createElement('td');
+            discountCell.className = 'px-4 py-3 text-right text-gray-600';
+            discountCell.textContent = formatPercentValue(item?.discountPercent);
+
+            row.append(
+              indexCell,
+              icmsCell,
+              codeCell,
+              descriptionCell,
+              quantityCell,
+              multiplierCell,
+              dividerCell,
+              unitPriceCell,
+              discountCell
+            );
+            fragment.appendChild(row);
+          });
+
+          mainProductsTableBody.appendChild(fragment);
+        };
+
+        const fillDuplicatasFromNfeData = (data) => {
+          const duplicates = Array.isArray(data?.duplicates) ? data.duplicates : [];
+          const emission = normalizeDate(data?.ide?.emissionDate);
+          if (duplicataEmissionInput) {
+            duplicataEmissionInput.value = emission.dateInput || '';
+          }
+          if (duplicataCountInput) {
+            duplicataCountInput.value = duplicates.length ? String(duplicates.length) : '';
+          }
+          if (duplicataFirstDueInput) {
+            const first = duplicates[0];
+            const due = normalizeDate(first?.dueDate);
+            duplicataFirstDueInput.value = due.dateInput || '';
+          }
+          if (duplicataInitialDaysInput) {
+            const first = duplicates[0];
+            if (first) {
+              const due = normalizeDate(first?.dueDate);
+              if (emission.dateInput && due.dateInput) {
+                const emissionDateObj = new Date(`${emission.dateInput}T00:00:00`);
+                const dueDateObj = new Date(`${due.dateInput}T00:00:00`);
+                const diff = Math.round((dueDateObj - emissionDateObj) / (24 * 60 * 60 * 1000));
+                duplicataInitialDaysInput.value = Number.isFinite(diff) ? String(diff) : '';
+              } else {
+                duplicataInitialDaysInput.value = '';
+              }
+            } else {
+              duplicataInitialDaysInput.value = '';
+            }
+          }
+          if (duplicataDaysInput) {
+            duplicataDaysInput.value = '';
+          }
+          if (duplicataDaysTypeSelect && duplicates.length) {
+            setSelectValue(duplicataDaysTypeSelect, 'data');
+          }
+          renderDuplicatasFromNfe(duplicates, data);
+        };
+
+        const applyImportedDataToMainForm = (data) => {
+          if (!data) return;
+          fillMainFormFromNfeData(data);
+          fillSupplierFieldsFromNfe(data);
+          fillTotalsFromNfeData(data);
+          fillTransportFromNfeData(data);
+          fillDuplicatasFromNfeData(data);
+          renderDocumentsFromNfe(data.references);
+          renderMainProductsFromNfe(data.items);
+          if (totalAmountDisplay) {
+            totalAmountDisplay.textContent = formatCurrencyBRL(data.totals?.totalValue);
           }
         };
 
@@ -5222,9 +5588,15 @@
           const dest = infNFe.getElementsByTagName('dest')[0];
           const total = infNFe.getElementsByTagName('ICMSTot')[0];
           const transp = infNFe.getElementsByTagName('transp')[0];
+          const transporta = transp ? transp.getElementsByTagName('transporta')[0] : null;
+          const veicTransp = transp ? transp.getElementsByTagName('veicTransp')[0] : null;
+          const volElement = transp ? transp.getElementsByTagName('vol')[0] : null;
           const detElements = Array.from(infNFe.getElementsByTagName('det'));
           const prot = xml.getElementsByTagName('protNFe')[0];
           const infProt = prot ? prot.getElementsByTagName('infProt')[0] : null;
+          const cobr = infNFe.getElementsByTagName('cobr')[0];
+          const dupElements = cobr ? Array.from(cobr.getElementsByTagName('dup')) : [];
+          const nfRefElements = ide ? Array.from(ide.getElementsByTagName('NFref')) : [];
 
           const accessKey = (infNFe.getAttribute('Id') || infNFe.getAttribute('id') || '').replace(/^NFe/i, '');
           const emissionDate = getText(ide, 'dhEmi') || getText(ide, 'dEmi');
@@ -5264,6 +5636,7 @@
             const total = Number.isFinite(totalRaw) ? totalRaw : quantity * unitPrice;
             const ncm = getText(prod, 'NCM');
             const cfopItem = getText(prod, 'CFOP');
+            const cest = getText(prod, 'CEST');
             const ean = getText(prod, 'cEAN');
             const eanTrib = getText(prod, 'cEANTrib');
             const barcodeCandidates = Array.from(new Set([normalizeGtin(ean), normalizeGtin(eanTrib)].filter(Boolean)));
@@ -5281,6 +5654,9 @@
             const insurance = Number.isFinite(insuranceRaw) ? insuranceRaw : 0;
             const otherRaw = parseNumber(getText(prod, 'vOutro'));
             const other = (Number.isFinite(otherRaw) ? otherRaw : 0) + (Number.isFinite(insurance) ? insurance : 0);
+            const grossAmount = Number.isFinite(quantity) && Number.isFinite(unitPrice) ? quantity * unitPrice : total;
+            const discountPercent =
+              Number.isFinite(grossAmount) && grossAmount > 0 ? (discount / grossAmount) * 100 : 0;
 
             const icmsCst = getText(icmsNode, 'CST') || getText(icmsNode, 'CSOSN') || '';
             const icmsRateRaw = parseNumber(getText(icmsNode, 'pICMS'));
@@ -5330,6 +5706,7 @@
               total,
               ncm,
               cfop: cfopItem,
+              cest,
               cst: icmsCst,
               icmsRate,
               icmsBase,
@@ -5353,6 +5730,9 @@
               barcodeCandidates,
               unitTrib: getText(prod, 'uTrib'),
               qTrib,
+              discountPercent,
+              ean,
+              eanTrib,
               conversionMultiplier: Number.isFinite(conversionMultiplier) ? conversionMultiplier : 1,
               conversionDivider: Number.isFinite(conversionDivider) ? conversionDivider : 1,
               conversion: Number.isFinite(conversion) ? conversion : 1,
@@ -5376,6 +5756,68 @@
             };
           };
 
+          const duplicates = dupElements.map((dup, index) => ({
+            index,
+            number: getText(dup, 'nDup'),
+            dueDate: getText(dup, 'dVenc'),
+            value: getText(dup, 'vDup'),
+          }));
+
+          const references = nfRefElements
+            .map((ref) => {
+              const key = getText(ref, 'refNFe');
+              if (key) {
+                return {
+                  type: 'NF-e referenciada',
+                  model: '55',
+                  accessKey: key,
+                };
+              }
+              const refNF = ref.getElementsByTagName('refNF')[0];
+              if (refNF) {
+                return {
+                  type: 'NF modelo 1/1A',
+                  model: getText(refNF, 'mod'),
+                  series: getText(refNF, 'serie'),
+                  number: getText(refNF, 'nNF'),
+                  emissionDate: getText(refNF, 'dEmi'),
+                  issuerUf: getText(refNF, 'UF'),
+                };
+              }
+              const refNFP = ref.getElementsByTagName('refNFP')[0];
+              if (refNFP) {
+                return {
+                  type: 'NF produtor rural',
+                  model: getText(refNFP, 'mod'),
+                  series: getText(refNFP, 'serie'),
+                  number: getText(refNFP, 'nNF'),
+                  emissionDate: getText(refNFP, 'dEmi'),
+                  issuerUf: getText(refNFP, 'UF'),
+                  document: getText(refNFP, 'CPF') || getText(refNFP, 'CNPJ'),
+                };
+              }
+              const refCTe = getText(ref, 'refCTe');
+              if (refCTe) {
+                return {
+                  type: 'CT-e referenciado',
+                  model: '57',
+                  accessKey: refCTe,
+                };
+              }
+              const refECF = ref.getElementsByTagName('refECF')[0];
+              if (refECF) {
+                return {
+                  type: 'ECF referenciado',
+                  model: getText(refECF, 'mod'),
+                  number: getText(refECF, 'nECF'),
+                  coo: getText(refECF, 'nCOO'),
+                  series: getText(refECF, 'nserie'),
+                };
+              }
+              return null;
+            })
+            .filter(Boolean);
+
           return {
             accessKey,
             ambient: getText(ide, 'tpAmb'),
@@ -5387,6 +5829,7 @@
               natOp: getText(ide, 'natOp'),
               model: getText(ide, 'mod'),
               tpNF: getText(ide, 'tpNF'),
+              tpEmis: getText(ide, 'tpEmis'),
               cfop,
               freightMode: getText(transp, 'modFrete'),
             },
@@ -5410,12 +5853,46 @@
             },
             totals: {
               totalValue: getText(total, 'vNF'),
+              products: getText(total, 'vProd'),
+              icmsBase: getText(total, 'vBC'),
+              icmsValue: getText(total, 'vICMS'),
+              icmsSt: getText(total, 'vST'),
+              fcpSt: getText(total, 'vFCPST'),
+              discount: getText(total, 'vDesc'),
+              other: getText(total, 'vOutro'),
+              freight: getText(total, 'vFrete'),
+              ipi: getText(total, 'vIPI'),
+              insurance: getText(total, 'vSeg'),
+              services: getText(total, 'vServ'),
             },
             protocol: {
               number: getText(infProt, 'nProt'),
               receivedAt: getText(infProt, 'dhRecbto'),
               status: getText(infProt, 'cStat'),
             },
+            transport: {
+              mode: getText(transp, 'modFrete'),
+              transporter: {
+                name: getText(transporta, 'xNome'),
+                document: getText(transporta, 'CNPJ') || getText(transporta, 'CPF'),
+                stateRegistration: getText(transporta, 'IE'),
+                uf: getText(transporta, 'UF'),
+              },
+              vehicle: {
+                plate: getText(veicTransp, 'placa'),
+                uf: getText(veicTransp, 'UF'),
+              },
+              volume: {
+                quantity: getText(volElement, 'qVol'),
+                species: getText(volElement, 'esp'),
+                brand: getText(volElement, 'marca'),
+                number: getText(volElement, 'nVol'),
+                weightGross: getText(volElement, 'pesoB'),
+                weightNet: getText(volElement, 'pesoL'),
+              },
+            },
+            duplicates,
+            references,
             items,
           };
         };
@@ -5448,7 +5925,6 @@
               }
               const parsed = parseNfeXml(result);
               lastNfeData = parsed;
-              fillMainFormFromNfeData(parsed);
               updateSummaryFromData(parsed);
               showFileFeedback('Validando fornecedor importado...', 'info');
               await handleSupplierSelection(parsed.emit);
@@ -5677,6 +6153,43 @@
               processXmlFile(file);
             } else {
               clearStatusMessages();
+            }
+          });
+        }
+
+        const confirmImportButton = importModal.querySelector('[data-confirm-import]');
+        if (confirmImportButton) {
+          confirmImportButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (!lastNfeData) {
+              notify('Importe um XML autorizado antes de aplicar os dados na nota.', 'warning');
+              return;
+            }
+
+            const items = Array.isArray(lastNfeData.items) ? lastNfeData.items : [];
+            if (!items.length) {
+              notify('O XML informado não possui itens para importar.', 'warning');
+              return;
+            }
+
+            const unresolvedItems = items.filter(
+              (item) => item?.validationStatus !== 'matched' || !item?.matchedProduct
+            );
+            if (unresolvedItems.length) {
+              notify(
+                'Existem produtos sem cadastro confirmado. Cadastre ou vincule todos os itens antes de importar.',
+                'warning'
+              );
+              return;
+            }
+
+            try {
+              applyImportedDataToMainForm(lastNfeData);
+              notify('Dados do XML aplicados à entrada da nota.', 'success');
+              closeImportModal();
+            } catch (error) {
+              console.error('Erro ao aplicar dados importados na nota:', error);
+              notify('Não foi possível aplicar os dados do XML na nota. Tente novamente.', 'error');
             }
           });
         }
