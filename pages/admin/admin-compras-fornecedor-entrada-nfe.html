@@ -1390,7 +1390,10 @@
         );
         const productIframeModal = document.getElementById('product-registration-iframe-modal');
         const productIframe = productIframeModal?.querySelector('[data-product-frame]') || null;
-        const productIframeLoading = productIframeModal?.querySelector('[data-product-frame-loading]') || null;
+        const productIframeLoading =
+          productIframeModal?.querySelector('[data-product-frame-loading]') || null;
+        const productIframeShell =
+          productIframeModal?.querySelector('[data-product-frame-shell]') || null;
         const productIframeTitle = productIframeModal?.querySelector('[data-product-modal-title]') || null;
         const productIframeSubtitle = productIframeModal?.querySelector('[data-product-modal-subtitle]') || null;
         const productIframeHelper = productIframeModal?.querySelector('[data-product-modal-helper]') || null;
@@ -2255,6 +2258,83 @@
           }
         };
 
+        const clearProductModalHeight = () => {
+          if (!productIframeShell) return;
+          productIframeShell.style.removeProperty('min-height');
+          productIframeShell.style.removeProperty('height');
+          productIframeShell.style.removeProperty('max-height');
+        };
+
+        const syncProductModalHeight = () => {
+          if (!productIframeShell || !productIframeModal) return;
+          if (productIframeModal.classList.contains('hidden')) {
+            clearProductModalHeight();
+            return;
+          }
+
+          const importModalCard = importModal?.querySelector('[data-import-modal-card]') || null;
+          if (!importModalCard) {
+            clearProductModalHeight();
+            return;
+          }
+
+          const { height } = importModalCard.getBoundingClientRect();
+          if (!Number.isFinite(height) || height <= 0) {
+            clearProductModalHeight();
+            return;
+          }
+
+          const viewportLimit = Number.isFinite(window.innerHeight)
+            ? Math.max(0, window.innerHeight * 0.9)
+            : height;
+          const targetHeight = Math.max(0, Math.min(height, viewportLimit));
+
+          if (targetHeight === 0) {
+            clearProductModalHeight();
+            return;
+          }
+
+          const heightValue = `${targetHeight}px`;
+          productIframeShell.style.minHeight = heightValue;
+          productIframeShell.style.height = heightValue;
+          productIframeShell.style.maxHeight = heightValue;
+        };
+
+        let productModalHeightSyncBound = false;
+        let productModalHeightObserver = null;
+
+        const ensureProductModalHeightSync = () => {
+          syncProductModalHeight();
+          if (productModalHeightSyncBound) return;
+          window.addEventListener('resize', syncProductModalHeight);
+          productModalHeightSyncBound = true;
+          if (typeof ResizeObserver === 'function') {
+            const importModalCard = importModal?.querySelector('[data-import-modal-card]') || null;
+            if (importModalCard) {
+              productModalHeightObserver = new ResizeObserver(() => {
+                syncProductModalHeight();
+              });
+              productModalHeightObserver.observe(importModalCard);
+            }
+          }
+        };
+
+        const teardownProductModalHeightSync = () => {
+          if (productModalHeightSyncBound) {
+            window.removeEventListener('resize', syncProductModalHeight);
+            productModalHeightSyncBound = false;
+          }
+          if (productModalHeightObserver) {
+            try {
+              productModalHeightObserver.disconnect();
+            } catch (observerError) {
+              console.debug('Não foi possível desconectar o observador de altura do modal.', observerError);
+            }
+            productModalHeightObserver = null;
+          }
+          clearProductModalHeight();
+        };
+
         const resetProductIframeModal = () => {
           if (productIframeLoading) {
             productIframeLoading.classList.remove('hidden');
@@ -2267,11 +2347,13 @@
               console.debug('Não foi possível redefinir o iframe do produto.', iframeResetError);
             }
           }
+          clearProductModalHeight();
         };
 
         const closeProductIframeModal = () => {
           if (!productIframeModal) return;
           resetProductIframeModal();
+          teardownProductModalHeightSync();
           productIframeModal.classList.add('hidden');
           productIframeModal.removeAttribute('data-modal-open');
           if (!isImportModalOpen()) {
@@ -2303,6 +2385,8 @@
           productIframeModal.setAttribute('data-modal-open', 'true');
           document.body.classList.add('overflow-hidden');
           productIframe.src = url;
+          ensureProductModalHeightSync();
+          requestAnimationFrame(syncProductModalHeight);
 
           requestAnimationFrame(() => {
             if (!productIframeModal) return;
@@ -2331,6 +2415,7 @@
               productIframeLoading.classList.add('hidden');
             }
             productIframe.classList.remove('hidden');
+            syncProductModalHeight();
           });
         }
 
