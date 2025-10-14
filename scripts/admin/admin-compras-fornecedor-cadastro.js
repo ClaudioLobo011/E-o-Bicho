@@ -48,7 +48,9 @@
     secondaryPhone: '#supplier-secondary-phone',
     responsible: '#supplier-responsible',
     supplierKind: '#supplier-kind',
-    chartAccount: '#supplier-chart-account',
+    chartAccountInput: '#supplier-chart-account',
+    chartAccountId: '#supplier-chart-account-id',
+    chartAccountList: '#supplier-chart-account-list',
     chartAccountStatus: '#supplier-chart-account-status',
     icms: '#supplier-icms',
     observation: '#supplier-observation',
@@ -78,6 +80,7 @@
     editingSupplier: null,
     pendingCompanies: null,
     pendingAccountingAccount: null,
+    pendingAccountingAccountData: null,
     pendingBank: null,
     nextSuggestedCode: '',
     deletingSupplierId: null,
@@ -97,6 +100,7 @@
     loadingSuppliers: false,
     loadingCompanies: false,
     loadingAccounts: false,
+    accountingAccounts: [],
     saving: false,
     currentCep: '',
     cepAbort: null,
@@ -348,6 +352,101 @@
       elements.chartAccountStatus.classList.add('text-red-600');
     } else {
       elements.chartAccountStatus.classList.add('text-gray-500');
+    }
+  };
+
+  const normalizeText = (value) => String(value || '').trim();
+
+  const normalizeComparableText = (value) => normalizeText(value).toLowerCase();
+
+  const buildChartAccountLabel = (account = {}) => {
+    const code = normalizeText(account.code);
+    const name = normalizeText(account.name);
+    const labelParts = [code, name].filter(Boolean);
+    if (labelParts.length) {
+      return labelParts.join(' - ');
+    }
+    const description = normalizeText(account.description);
+    if (description) {
+      return description;
+    }
+    return 'Conta contábil';
+  };
+
+  const getChartAccountId = (account = {}) => normalizeText(account._id || account.id);
+
+  const isPayableAccount = (account = {}) => {
+    const paymentNature = normalizeComparableText(account.paymentNature);
+    if (paymentNature) {
+      return paymentNature === 'contas_pagar' || paymentNature === 'contas a pagar';
+    }
+
+    const systemOriginRaw = account.systemOrigin;
+    if (systemOriginRaw !== undefined && systemOriginRaw !== null && systemOriginRaw !== '') {
+      const systemOrigin = normalizeText(systemOriginRaw);
+      if (systemOrigin === '2') {
+        return true;
+      }
+      const normalizedOrigin = systemOrigin.toLowerCase();
+      if (normalizedOrigin === 'contas_pagar' || normalizedOrigin === 'contas a pagar') {
+        return true;
+      }
+    }
+
+    const accountingOrigin = normalizeComparableText(account.accountingOrigin);
+    if (accountingOrigin === 'contas_pagar' || accountingOrigin === 'contas a pagar') {
+      return true;
+    }
+
+    const name = normalizeComparableText(account.name);
+    if (name.includes('contas a pagar')) {
+      return true;
+    }
+
+    const code = normalizeComparableText(account.code);
+    return code.includes('contas a pagar');
+  };
+
+  const findChartAccountById = (accountId = '') => {
+    const targetId = normalizeText(accountId);
+    if (!targetId) return null;
+    return (
+      state.accountingAccounts.find((account) => getChartAccountId(account) === targetId) || null
+    );
+  };
+
+  const findChartAccountByLabel = (label = '') => {
+    const normalized = normalizeComparableText(label);
+    if (!normalized) return null;
+    return (
+      state.accountingAccounts.find(
+        (account) => normalizeComparableText(buildChartAccountLabel(account)) === normalized
+      ) || null
+    );
+  };
+
+  const populateChartAccountList = (accounts = []) => {
+    if (elements.chartAccountList) {
+      elements.chartAccountList.innerHTML = '';
+      accounts.forEach((account) => {
+        const option = document.createElement('option');
+        const label = buildChartAccountLabel(account);
+        option.value = label;
+        option.label = label;
+        option.textContent = label;
+        const id = getChartAccountId(account);
+        if (id) {
+          option.dataset.id = id;
+        }
+        elements.chartAccountList.appendChild(option);
+      });
+    }
+
+    if (elements.chartAccountInput) {
+      elements.chartAccountInput.placeholder = accounts.length
+        ? 'Digite para localizar contas a pagar'
+        : 'Nenhuma conta contábil de Contas a Pagar disponível';
+      elements.chartAccountInput.disabled = accounts.length === 0;
     }
   };
 
@@ -687,32 +786,56 @@
   const loadAccountingAccounts = async () => {
     if (state.loadingAccounts) return;
     state.loadingAccounts = true;
-    setChartAccountStatus('Carregando contas contábeis...', 'info');
-    if (elements.chartAccount) {
-      elements.chartAccount.innerHTML = '<option value="">Carregando contas contábeis...</option>';
+    setChartAccountStatus('Carregando contas contábeis de Contas a Pagar...', 'info');
+    if (elements.chartAccountInput) {
+      elements.chartAccountInput.disabled = true;
+      elements.chartAccountInput.placeholder = 'Carregando contas de Contas a Pagar...';
+    }
+    if (elements.chartAccountList) {
+      elements.chartAccountList.innerHTML = '';
     }
     try {
       const data = await request(ACCOUNTING_ENDPOINT, { method: 'GET' }, { requiresAuth: true });
       const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
-      if (!accounts.length) {
-        if (elements.chartAccount) {
-          elements.chartAccount.innerHTML = '<option value="">Nenhuma conta contábil cadastrada</option>';
+      const payableAccounts = accounts.filter((account) => {
+        try {
+          return isPayableAccount(account);
+        } catch (error) {
+          console.error('Erro ao avaliar conta contábil', error, account);
+          return false;
         }
-        setChartAccountStatus('Cadastre uma conta contábil para vinculá-la ao fornecedor.', 'info');
+      });
+
+      payableAccounts.sort((a, b) =>
+        buildChartAccountLabel(a).localeCompare(buildChartAccountLabel(b), 'pt-BR', {
+          sensitivity: 'base',
+          ignorePunctuation: true,
+        })
+      );
+
+      state.accountingAccounts = payableAccounts;
+
+      if (!state.accountingAccounts.length) {
+        populateChartAccountList([]);
+        setChartAccountStatus(
+          'Cadastre uma conta contábil de Contas a Pagar para vinculá-la ao fornecedor.',
+          'info'
+        );
         state.pendingAccountingAccount = null;
-      } else if (elements.chartAccount) {
-        const options = [
-          '<option value="">Selecione uma conta contábil</option>',
-          ...accounts.map((account) => {
-            const label = `${account.code || ''} - ${account.name || ''}`.trim();
-            return `<option value="${account._id}">${label}</option>`;
-          }),
-        ].join('');
-        elements.chartAccount.innerHTML = options;
-        setChartAccountStatus('Selecione a conta contábil vinculada ao fornecedor.', 'info');
+        state.pendingAccountingAccountData = null;
+        if (elements.chartAccountInput) {
+          elements.chartAccountInput.value = '';
+        }
+      } else {
+        populateChartAccountList(state.accountingAccounts);
+        setChartAccountStatus(
+          'Digite para localizar e selecionar uma conta contábil de Contas a Pagar.',
+          'info'
+        );
         if (state.pendingAccountingAccount) {
           const pendingAccount = state.pendingAccountingAccount;
-          setChartAccountValue(pendingAccount);
+          const pendingData = state.pendingAccountingAccountData;
+          setChartAccountValue(pendingAccount, pendingData);
         }
       }
     } catch (error) {
@@ -720,10 +843,17 @@
       if (error.status === 401) {
         handleAuthError();
       }
-      if (elements.chartAccount) {
-        elements.chartAccount.innerHTML = '<option value="">Erro ao carregar contas contábeis</option>';
+      state.accountingAccounts = [];
+      populateChartAccountList([]);
+      if (elements.chartAccountInput) {
+        elements.chartAccountInput.value = '';
+        elements.chartAccountInput.placeholder = 'Erro ao carregar contas de Contas a Pagar';
+        elements.chartAccountInput.disabled = true;
       }
-      setChartAccountStatus(error?.message || 'Erro ao carregar as contas contábeis.', 'error');
+      setChartAccountStatus(
+        error?.message || 'Erro ao carregar as contas contábeis de Contas a Pagar.',
+        'error'
+      );
     } finally {
       state.loadingAccounts = false;
     }
@@ -850,24 +980,125 @@
     state.pendingCompanies = null;
   };
 
-  const setChartAccountValue = (accountId = '') => {
+  const setChartAccountValue = (accountId = '', accountData = null) => {
     const value = accountId ? String(accountId) : '';
-    if (!elements.chartAccount) {
+    const input = elements.chartAccountInput;
+    const hidden = elements.chartAccountId;
+
+    if (!input || !hidden) {
       state.pendingAccountingAccount = value || null;
+      state.pendingAccountingAccountData = accountData || null;
       return;
     }
+
     if (!value) {
-      elements.chartAccount.value = '';
+      hidden.value = '';
+      input.value = '';
       state.pendingAccountingAccount = null;
+      state.pendingAccountingAccountData = null;
       return;
     }
-    const options = Array.from(elements.chartAccount.options || []);
-    if (!options.length || !options.some((option) => option.value === value)) {
+
+    const account = findChartAccountById(value);
+
+    if (!account) {
+      hidden.value = '';
+      input.value = '';
       state.pendingAccountingAccount = value;
+      state.pendingAccountingAccountData = accountData || null;
+      if (!state.loadingAccounts && state.accountingAccounts.length) {
+        const previousLabel = accountData ? buildChartAccountLabel(accountData) : '';
+        const message = previousLabel
+          ? `A conta "${previousLabel}" não está categorizada como Contas a Pagar. Escolha outra opção.`
+          : 'A conta vinculada anteriormente não está categorizada como Contas a Pagar. Escolha outra opção.';
+        setChartAccountStatus(message, 'error');
+      }
       return;
     }
-    elements.chartAccount.value = value;
+
+    hidden.value = value;
+    input.value = buildChartAccountLabel(account);
     state.pendingAccountingAccount = null;
+    state.pendingAccountingAccountData = null;
+    if (state.accountingAccounts.length) {
+      setChartAccountStatus('Conta contábil de Contas a Pagar selecionada.', 'info');
+    }
+  };
+
+  const setupChartAccountInput = () => {
+    const input = elements.chartAccountInput;
+    const hidden = elements.chartAccountId;
+    if (!input) return;
+
+    input.addEventListener('input', () => {
+      if (hidden) {
+        hidden.value = '';
+      }
+
+      if (!state.accountingAccounts.length) {
+        return;
+      }
+
+      const label = normalizeText(input.value);
+      if (!label) {
+        setChartAccountStatus(
+          'Digite para localizar e selecionar uma conta contábil de Contas a Pagar.',
+          'info'
+        );
+        return;
+      }
+
+      const account = findChartAccountByLabel(label);
+      if (account) {
+        const id = getChartAccountId(account);
+        if (hidden) {
+          hidden.value = id;
+        }
+        input.value = buildChartAccountLabel(account);
+        setChartAccountStatus('Conta contábil de Contas a Pagar selecionada.', 'info');
+      } else {
+        setChartAccountStatus(
+          'Continue digitando e selecione uma conta contábil de Contas a Pagar sugerida.',
+          'info'
+        );
+      }
+    });
+
+    input.addEventListener('blur', () => {
+      if (!state.accountingAccounts.length) {
+        return;
+      }
+
+      const label = normalizeText(input.value);
+      if (!label) {
+        if (hidden) {
+          hidden.value = '';
+        }
+        setChartAccountStatus(
+          'Digite para localizar e selecionar uma conta contábil de Contas a Pagar.',
+          'info'
+        );
+        return;
+      }
+
+      const account = findChartAccountByLabel(label);
+      if (account) {
+        const id = getChartAccountId(account);
+        if (hidden) {
+          hidden.value = id;
+        }
+        input.value = buildChartAccountLabel(account);
+        setChartAccountStatus('Conta contábil de Contas a Pagar selecionada.', 'info');
+      } else {
+        if (hidden) {
+          hidden.value = '';
+        }
+        setChartAccountStatus(
+          'Selecione uma conta contábil de Contas a Pagar a partir da lista sugerida.',
+          'error'
+        );
+      }
+    });
   };
 
   const setBankValue = (bankValue = '') => {
@@ -1080,6 +1311,7 @@
 
     state.pendingCompanies = null;
     state.pendingAccountingAccount = null;
+    state.pendingAccountingAccountData = null;
     state.pendingBank = null;
 
     if (elements.supplierKind) {
@@ -1136,7 +1368,7 @@
       },
       otherInfo: {
         supplierKind: elements.supplierKind?.value || 'distribuidora',
-        accountingAccount: elements.chartAccount?.value || '',
+        accountingAccount: elements.chartAccountId?.value || '',
         icmsContribution: elements.icms?.value || '2',
         observation: elements.observation?.value?.trim() || '',
         bank: elements.bank?.value || '',
@@ -1290,9 +1522,10 @@
     if (elements.supplierKind) {
       elements.supplierKind.value = otherInfo.supplierKind || 'distribuidora';
     }
+    const accountingAccountData = otherInfo.accountingAccount || null;
     const accountingAccountId =
-      otherInfo.accountingAccount?._id || otherInfo.accountingAccount?.id || otherInfo.accountingAccount || '';
-    setChartAccountValue(accountingAccountId);
+      accountingAccountData?._id || accountingAccountData?.id || accountingAccountData || '';
+    setChartAccountValue(accountingAccountId, accountingAccountData);
     if (elements.icms) {
       elements.icms.value = otherInfo.icmsContribution || '2';
     }
@@ -1909,6 +2142,7 @@
     initializeMasks();
     setupRetentionButtons();
     setupRepresentatives();
+    setupChartAccountInput();
     setupForm();
     setupFilters();
     setupSuppliersTableActions();
