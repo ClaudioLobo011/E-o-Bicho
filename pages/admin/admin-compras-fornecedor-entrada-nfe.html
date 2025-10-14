@@ -2245,64 +2245,62 @@
           const toNumeric = (value) => (Number.isFinite(value) ? value : parseNumber(value));
 
           const multiplierFromData = toNumeric(item.conversionMultiplier);
-          const quantityFromData = toNumeric(item.quantity);
-          if (!Object.prototype.hasOwnProperty.call(item, 'originalConversionMultiplier')) {
-            const originalMultiplier = Number.isFinite(multiplierFromData)
-              ? multiplierFromData
-              : Number.isFinite(quantityFromData)
-              ? quantityFromData
-              : null;
-            if (Number.isFinite(originalMultiplier)) {
-              item.originalConversionMultiplier = originalMultiplier;
-            }
-          }
-
           const dividerFromData = toNumeric(item.conversionDivider);
+          const quantityFromData = toNumeric(item.quantity);
           const qTribFromData = toNumeric(item.qTrib);
-          if (!Object.prototype.hasOwnProperty.call(item, 'originalConversionDivider')) {
-            const originalDivider =
-              Number.isFinite(dividerFromData) && dividerFromData > 0
-                ? dividerFromData
-                : Number.isFinite(qTribFromData) && qTribFromData > 0
-                ? qTribFromData
-                : null;
-            if (Number.isFinite(originalDivider)) {
-              item.originalConversionDivider = originalDivider;
-            }
+
+          if (!Object.prototype.hasOwnProperty.call(item, 'originalConversionMultiplier') && Number.isFinite(multiplierFromData)) {
+            item.originalConversionMultiplier = multiplierFromData;
           }
 
-          const hasMultiplier = Number.isFinite(multiplierFromData);
-          if (!hasMultiplier) {
-            item.conversionMultiplier = Number.isFinite(quantityFromData) ? quantityFromData : 1;
+          if (
+            !Object.prototype.hasOwnProperty.call(item, 'originalConversionDivider') &&
+            Number.isFinite(dividerFromData) &&
+            dividerFromData > 0
+          ) {
+            item.originalConversionDivider = dividerFromData;
           }
-          const hasDivider = Number.isFinite(dividerFromData) && dividerFromData > 0;
-          if (!hasDivider) {
-            const derivedDivider = Number.isFinite(qTribFromData) && qTribFromData > 0 ? qTribFromData : 1;
-            item.conversionDivider = derivedDivider;
+
+          const numerator = Number.isFinite(multiplierFromData)
+            ? multiplierFromData
+            : Number.isFinite(quantityFromData)
+            ? quantityFromData
+            : null;
+          const denominator = Number.isFinite(dividerFromData) && dividerFromData > 0
+            ? dividerFromData
+            : Number.isFinite(qTribFromData) && qTribFromData > 0
+            ? qTribFromData
+            : 1;
+
+          const conversionFactor = Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0
+            ? numerator / denominator
+            : null;
+
+          if (!Object.prototype.hasOwnProperty.call(item, 'originalConversionFactor') && Number.isFinite(conversionFactor)) {
+            item.originalConversionFactor = conversionFactor;
           }
-          const numerator = Number.isFinite(toNumeric(item.conversionMultiplier)) ? toNumeric(item.conversionMultiplier) : null;
-          const denominator =
-            Number.isFinite(toNumeric(item.conversionDivider)) && toNumeric(item.conversionDivider) > 0
-              ? toNumeric(item.conversionDivider)
-              : null;
-          if (numerator !== null && denominator !== null) {
-            item.conversion = numerator / denominator;
+
+          if (Number.isFinite(conversionFactor)) {
+            item.conversion = conversionFactor;
+            item.conversionMultiplier = conversionFactor;
+            item.conversionDivider = 1;
+          } else {
+            item.conversion = null;
+            if (!Number.isFinite(item.conversionMultiplier)) {
+              item.conversionMultiplier = Number.isFinite(quantityFromData) ? quantityFromData : 1;
+            }
+            if (!Number.isFinite(item.conversionDivider) || item.conversionDivider <= 0) {
+              item.conversionDivider = Number.isFinite(qTribFromData) && qTribFromData > 0 ? qTribFromData : 1;
+            }
           }
         };
 
-        const updateItemConversion = (item, { multiplier, divider }) => {
+        const updateItemConversion = (item, factor) => {
           if (!item) return;
-          if (Number.isFinite(multiplier)) {
-            item.conversionMultiplier = multiplier;
-          }
-          if (Number.isFinite(divider) && divider > 0) {
-            item.conversionDivider = divider;
-          }
-          const numerator = Number.isFinite(item.conversionMultiplier) ? item.conversionMultiplier : null;
-          const denominator =
-            Number.isFinite(item.conversionDivider) && item.conversionDivider > 0 ? item.conversionDivider : null;
-          if (numerator !== null && denominator !== null) {
-            item.conversion = numerator / denominator;
+          if (Number.isFinite(factor)) {
+            item.conversion = factor;
+            item.conversionMultiplier = factor;
+            item.conversionDivider = 1;
           } else {
             item.conversion = null;
           }
@@ -2340,8 +2338,8 @@
             }
           };
 
-          const commitConversionChange = (changes) => {
-            updateItemConversion(item, changes);
+          const commitConversionChange = (factor) => {
+            updateItemConversion(item, factor);
             updateFactorText();
             handleTableRefresh();
           };
@@ -2494,62 +2492,44 @@
             return container;
           };
 
-          let multiplierInitial = toNumeric(item?.conversionMultiplier);
-          if (!Number.isFinite(multiplierInitial)) {
-            multiplierInitial = toNumeric(item?.quantity);
-          }
-          let dividerInitial = toNumeric(item?.conversionDivider);
-          if (!Number.isFinite(dividerInitial)) {
-            dividerInitial = toNumeric(item?.qTrib);
-          }
-
           const xmlMultiplier = toNumeric(item?.originalConversionMultiplier);
-          const nfQuantity = toNumeric(item?.quantity);
-          const multiplierQuickActions = [];
-          if (Number.isFinite(xmlMultiplier)) {
-            multiplierQuickActions.push({ label: 'XML', getValue: () => xmlMultiplier, title: 'Valor informado no XML' });
-          }
-          if (Number.isFinite(nfQuantity) && nfQuantity !== xmlMultiplier) {
-            multiplierQuickActions.push({ label: 'Qtd NF', getValue: () => nfQuantity, title: 'Quantidade do item na NF-e' });
-          }
-          multiplierQuickActions.push({ label: '1', value: 1, title: 'Definir multiplicador como 1' });
-
           const xmlDivider = toNumeric(item?.originalConversionDivider);
-          const qTribValue = toNumeric(item?.qTrib);
-          const dividerQuickActions = [];
-          if (Number.isFinite(xmlDivider)) {
-            dividerQuickActions.push({ label: 'XML', getValue: () => xmlDivider, title: 'Valor informado no XML' });
-          }
-          if (Number.isFinite(qTribValue) && qTribValue !== xmlDivider) {
-            dividerQuickActions.push({ label: 'Qtd Trib', getValue: () => qTribValue, title: 'Quantidade tributável (qTrib)' });
-          }
-          dividerQuickActions.push({ label: '1', value: 1, title: 'Definir divisor como 1' });
+          const xmlFactor = (() => {
+            const storedFactor = toNumeric(item?.originalConversionFactor);
+            if (Number.isFinite(storedFactor)) {
+              return storedFactor;
+            }
+            if (Number.isFinite(xmlMultiplier) && Number.isFinite(xmlDivider) && xmlDivider > 0) {
+              return xmlMultiplier / xmlDivider;
+            }
+            return null;
+          })();
 
-          const editorsRow = document.createElement('div');
-          editorsRow.className = 'grid grid-cols-2 gap-2';
+          let conversionInitial = toNumeric(item?.conversion);
+          if (!Number.isFinite(conversionInitial)) {
+            conversionInitial = 1;
+          }
+          const quickActions = [];
+          if (Number.isFinite(xmlFactor)) {
+            quickActions.push({ label: 'XML', value: Number.parseFloat(xmlFactor.toFixed(3)), title: 'Valor informado no XML' });
+          }
+          quickActions.push({ label: '0', value: 0, title: 'Definir como divisão (0)' });
+          quickActions.push({ label: formatDecimal(0.5, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), value: 0.5 });
+          quickActions.push({ label: '1', value: 1, title: 'Fator 1 (sem conversão)' });
+          quickActions.push({ label: '2', value: 2 });
+          quickActions.push({ label: '3', value: 3 });
 
-          const multiplierEditor = createNumericEditor('Multiplicador', {
-            initialValue: multiplierInitial,
+          const conversionEditor = createNumericEditor('Fator', {
+            initialValue: conversionInitial,
             allowZero: true,
-            step: 1,
-            quickActions: multiplierQuickActions,
+            step: 0.5,
+            quickActions,
             onCommit: (value) => {
-              commitConversionChange({ multiplier: value });
+              commitConversionChange(value);
             },
           });
 
-          const dividerEditor = createNumericEditor('Divisor', {
-            initialValue: dividerInitial,
-            step: 1,
-            quickActions: dividerQuickActions,
-            onCommit: (value) => {
-              commitConversionChange({ divider: value });
-            },
-          });
-
-          editorsRow.append(multiplierEditor, dividerEditor);
-
-          wrapper.append(editorsRow, factorText);
+          wrapper.append(conversionEditor, factorText);
           updateFactorText();
 
           cell.appendChild(wrapper);
@@ -3804,6 +3784,7 @@
               conversionMultiplier: Number.isFinite(conversionMultiplier) ? conversionMultiplier : 1,
               conversionDivider: Number.isFinite(conversionDivider) ? conversionDivider : 1,
               conversion: Number.isFinite(conversion) ? conversion : 1,
+              originalConversionFactor: Number.isFinite(conversion) ? conversion : null,
               validationStatus: barcodeCandidates.length ? 'pending' : 'no-barcode',
               matchedProduct: null,
             };
