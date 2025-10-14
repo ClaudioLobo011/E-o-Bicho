@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const supplierCalcValueInput = document.getElementById('supplier-calc-value');
     const addSupplierBtn = document.getElementById('add-supplier-btn');
     const supplierListContainer = document.getElementById('supplier-list');
+    const supplierSuggestionsContainer = document.getElementById('supplier-suggestions');
     const depositTableBody = document.getElementById('deposit-stock-tbody');
     const depositEmptyState = document.getElementById('deposit-empty-state');
     const depositTableWrapper = document.getElementById('deposit-table-wrapper');
@@ -451,6 +452,373 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastSelectedProductUnit = getSelectedProductUnit();
     let duplicateCheckInProgress = false;
 
+    const supplierDirectoryState = {
+        items: [],
+        loadingPromise: null,
+        error: null,
+        matches: [],
+    };
+    let supplierSearchDebounce = null;
+
+    const digitsOnly = (value = '') => {
+        if (value === null || value === undefined) return '';
+        return String(value).replace(/\D+/g, '');
+    };
+
+    const normalizeSearchText = (value = '') => {
+        if (value === null || value === undefined) return '';
+        return String(value)
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+    };
+
+    const escapeHtml = (value) => {
+        if (value === null || value === undefined) return '';
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
+
+    const formatDocument = (value) => {
+        const digits = digitsOnly(value);
+        if (digits.length === 14) {
+            return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+        }
+        if (digits.length === 11) {
+            return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        }
+        return digits;
+    };
+
+    const formatPhone = (value) => {
+        const digits = digitsOnly(value);
+        if (digits.length === 11) {
+            return digits.replace(/(\d{2})(\d{1})(\d{4})(\d{4})/, '($1) $2$3-$4');
+        }
+        if (digits.length === 10) {
+            return digits.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+        }
+        if (digits.length === 9) {
+            return digits.replace(/(\d{5})(\d{4})/, '$1-$2');
+        }
+        if (digits.length === 8) {
+            return digits.replace(/(\d{4})(\d{4})/, '$1-$2');
+        }
+        return digits;
+    };
+
+    const getSupplierDisplayName = (supplier) => {
+        if (!supplier || typeof supplier !== 'object') return '';
+        const fantasy = typeof supplier.fantasyName === 'string' ? supplier.fantasyName.trim() : '';
+        const legal = typeof supplier.legalName === 'string' ? supplier.legalName.trim() : '';
+        const generic = typeof supplier.name === 'string' ? supplier.name.trim() : '';
+        return fantasy || legal || generic;
+    };
+
+    const getSupplierInitials = (supplier) => {
+        const displayName = getSupplierDisplayName(supplier);
+        if (!displayName) return 'F';
+        const parts = displayName.trim().split(/\s+/).slice(0, 2);
+        const initials = parts
+            .map((part) => part.charAt(0).toUpperCase())
+            .join('');
+        return initials || displayName.charAt(0).toUpperCase();
+    };
+
+    const loadSupplierDirectory = async () => {
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/suppliers`);
+            if (!response.ok) {
+                throw new Error(`Erro ao carregar fornecedores (${response.status})`);
+            }
+            const payload = await response.json();
+            const suppliers = Array.isArray(payload?.suppliers) ? payload.suppliers : [];
+            supplierDirectoryState.items = suppliers;
+            supplierDirectoryState.error = null;
+            return suppliers;
+        } catch (error) {
+            supplierDirectoryState.items = [];
+            supplierDirectoryState.error = error;
+            throw error;
+        }
+    };
+
+    const ensureSuppliersLoaded = async () => {
+        if (supplierDirectoryState.items.length) return supplierDirectoryState.items;
+        if (!supplierDirectoryState.loadingPromise) {
+            supplierDirectoryState.loadingPromise = loadSupplierDirectory().finally(() => {
+                supplierDirectoryState.loadingPromise = null;
+            });
+        }
+        return supplierDirectoryState.loadingPromise;
+    };
+
+    const setSupplierInputExpanded = (expanded) => {
+        if (!supplierNameInput) return;
+        supplierNameInput.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    };
+
+    const hideSupplierSuggestions = () => {
+        if (!supplierSuggestionsContainer) return;
+        supplierSuggestionsContainer.classList.add('hidden');
+        supplierSuggestionsContainer.innerHTML = '';
+        supplierDirectoryState.matches = [];
+        setSupplierInputExpanded(false);
+        supplierNameInput?.removeAttribute('aria-busy');
+    };
+
+    const showSupplierSuggestionsMessage = (message, { tone = 'info', actionLabel = null, onAction = null } = {}) => {
+        if (!supplierSuggestionsContainer) return;
+        supplierDirectoryState.matches = [];
+        const iconClass = tone === 'error'
+            ? 'fa-triangle-exclamation text-red-500'
+            : tone === 'loading'
+                ? 'fa-circle-notch fa-spin text-primary'
+                : 'fa-circle-info text-primary';
+        const textClass = tone === 'error' ? 'text-red-600' : 'text-gray-600';
+        const actionHtml = actionLabel
+            ? `<button type="button" class="mt-3 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-600 hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-supplier-suggestions-action="primary">${escapeHtml(actionLabel)}</button>`
+            : '';
+        supplierSuggestionsContainer.innerHTML = `
+            <div class="px-4 py-4 text-sm">
+                <div class="flex items-start gap-3">
+                    <i class="fas ${iconClass} mt-1"></i>
+                    <div class="flex-1">
+                        <p class="${textClass}">${message}</p>
+                        ${actionHtml ? `<div class="flex flex-wrap gap-2">${actionHtml}</div>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+        supplierSuggestionsContainer.classList.remove('hidden');
+        setSupplierInputExpanded(true);
+        if (tone === 'loading') {
+            supplierNameInput?.setAttribute('aria-busy', 'true');
+        } else {
+            supplierNameInput?.removeAttribute('aria-busy');
+        }
+        if (actionHtml && typeof onAction === 'function') {
+            const actionButton = supplierSuggestionsContainer.querySelector('[data-supplier-suggestions-action="primary"]');
+            actionButton?.addEventListener('click', (event) => {
+                event.preventDefault();
+                onAction();
+            });
+        }
+    };
+
+    const filterSupplierDirectory = (term, { allowEmpty = false } = {}) => {
+        const trimmed = typeof term === 'string' ? term.trim() : '';
+        if (!trimmed) {
+            return allowEmpty ? supplierDirectoryState.items.slice(0, 6) : [];
+        }
+        const normalizedTerm = normalizeSearchText(trimmed);
+        const digitsTerm = digitsOnly(trimmed);
+        const hasText = normalizedTerm.length > 0;
+        const hasDigits = digitsTerm.length > 0;
+        if (!hasText && !hasDigits) return [];
+        const matches = supplierDirectoryState.items.filter((supplier) => {
+            let matched = false;
+            if (hasText) {
+                const candidates = [
+                    supplier?.legalName,
+                    supplier?.fantasyName,
+                    supplier?.name,
+                    supplier?.contact?.responsible,
+                    supplier?.address?.cidade,
+                    supplier?.address?.bairro,
+                ];
+                matched = candidates.some((field) => normalizeSearchText(field).includes(normalizedTerm));
+            }
+            if (!matched && hasDigits) {
+                const digitCandidates = [
+                    supplier?.cnpj,
+                    supplier?.contact?.phone,
+                    supplier?.contact?.mobile,
+                    supplier?.contact?.secondaryPhone,
+                    supplier?.codeNumber,
+                    supplier?.code,
+                ];
+                matched = digitCandidates.some((field) => digitsOnly(field).includes(digitsTerm));
+            }
+            return matched;
+        });
+        return matches.slice(0, 8);
+    };
+
+    const handleSupplierButtonKeydown = (event) => {
+        const target = event.currentTarget;
+        if (!(target instanceof HTMLElement)) return;
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            const next = target.nextElementSibling;
+            if (next instanceof HTMLElement) {
+                next.focus();
+            } else {
+                supplierNameInput?.focus();
+            }
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            const previous = target.previousElementSibling;
+            if (previous instanceof HTMLElement) {
+                previous.focus();
+            } else {
+                supplierNameInput?.focus();
+            }
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            hideSupplierSuggestions();
+            supplierNameInput?.focus();
+        }
+    };
+
+    const selectSupplierSuggestion = (index) => {
+        const supplier = supplierDirectoryState.matches[index];
+        if (!supplier || !supplierNameInput) return;
+        const displayName = getSupplierDisplayName(supplier) || supplier.fornecedor || supplier.nome || '';
+        supplierNameInput.value = displayName;
+        if (supplier?._id) {
+            supplierNameInput.dataset.selectedSupplierId = supplier._id;
+        } else {
+            delete supplierNameInput.dataset.selectedSupplierId;
+        }
+        if (supplier?.cnpj) {
+            supplierNameInput.dataset.selectedSupplierDocument = digitsOnly(supplier.cnpj);
+        } else {
+            delete supplierNameInput.dataset.selectedSupplierDocument;
+        }
+        supplierNameInput.removeAttribute('aria-busy');
+        hideSupplierSuggestions();
+        supplierNameInput.focus();
+    };
+
+    const renderSupplierSuggestionCards = (results, term) => {
+        if (!supplierSuggestionsContainer) return;
+        supplierDirectoryState.matches = results;
+        if (!results.length) {
+            const message = term
+                ? `Nenhum fornecedor encontrado para "${escapeHtml(term)}".`
+                : 'Cadastre fornecedores para vinculá-los aos produtos.';
+            showSupplierSuggestionsMessage(message, { tone: 'info' });
+            return;
+        }
+        const cards = results
+            .map((supplier, index) => {
+                const displayName = getSupplierDisplayName(supplier) || 'Fornecedor sem nome';
+                const documentLabel = supplier?.cnpj ? formatDocument(supplier.cnpj) : '';
+                const supplierCode = supplier?.code
+                    || (typeof supplier?.codeNumber === 'number' ? String(supplier.codeNumber).padStart(4, '0') : '');
+                const locationParts = [supplier?.address?.cidade, supplier?.address?.uf]
+                    .map((part) => (typeof part === 'string' ? part.trim() : ''))
+                    .filter(Boolean);
+                const locationLabel = locationParts.join(' - ');
+                const contactBits = [];
+                if (supplier?.contact?.responsible) {
+                    contactBits.push(`<span class="inline-flex items-center gap-1"><i class="fas fa-user text-[10px]"></i>${escapeHtml(supplier.contact.responsible)}</span>`);
+                }
+                const phoneLabel = supplier?.contact?.mobile || supplier?.contact?.phone || '';
+                if (phoneLabel) {
+                    contactBits.push(`<span class="inline-flex items-center gap-1"><i class="fas fa-phone text-[10px]"></i>${escapeHtml(formatPhone(phoneLabel))}</span>`);
+                }
+                if (supplier?.contact?.email) {
+                    contactBits.push(`<span class="inline-flex items-center gap-1"><i class="fas fa-envelope text-[10px]"></i>${escapeHtml(supplier.contact.email)}</span>`);
+                }
+                const badges = [];
+                if (supplier?.flags?.inactive) {
+                    badges.push('<span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-500">Inativo</span>');
+                }
+                if (supplier?.flags?.ong) {
+                    badges.push('<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">ONG</span>');
+                }
+                if (supplier?.flags?.bankSupplier) {
+                    badges.push('<span class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-700">Fornecedor bancário</span>');
+                }
+                const badgesLine = badges.length ? `<div class="mt-1 flex flex-wrap items-center gap-2">${badges.join('')}</div>` : '';
+                const metadata = [];
+                if (documentLabel) {
+                    metadata.push(`<span class="inline-flex items-center gap-1"><i class="fas fa-id-card text-[10px]"></i>${escapeHtml(documentLabel)}</span>`);
+                }
+                if (supplierCode) {
+                    metadata.push(`<span class="inline-flex items-center gap-1"><i class="fas fa-hashtag text-[10px]"></i>${escapeHtml(supplierCode)}</span>`);
+                }
+                const metadataLine = metadata.length
+                    ? `<div class="mt-1 flex flex-wrap items-center gap-3 text-xs text-gray-500">${metadata.join('<span class="text-gray-300">•</span>')}</div>`
+                    : '';
+                const locationLine = locationLabel
+                    ? `<div class="mt-1 text-[11px] text-gray-500"><i class="fas fa-location-dot text-[10px] mr-1"></i>${escapeHtml(locationLabel)}</div>`
+                    : '';
+                const contactLine = contactBits.length
+                    ? `<div class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-gray-500">${contactBits.join('<span class="text-gray-300">•</span>')}</div>`
+                    : '';
+                const initials = getSupplierInitials(supplier);
+                return `
+                    <button type="button" class="supplier-suggestion flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-primary/5 focus:bg-primary/10 focus:outline-none" data-supplier-index="${index}" role="option" aria-selected="false">
+                        <span class="mt-1 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">${escapeHtml(initials)}</span>
+                        <span class="flex-1 min-w-0">
+                            <span class="block text-sm font-semibold text-gray-800 truncate">${escapeHtml(displayName)}</span>
+                            ${metadataLine}
+                            ${badgesLine}
+                            ${locationLine}
+                            ${contactLine}
+                        </span>
+                    </button>
+                `;
+            })
+            .join('');
+        supplierSuggestionsContainer.innerHTML = cards;
+        supplierSuggestionsContainer.classList.remove('hidden');
+        setSupplierInputExpanded(true);
+        supplierNameInput?.removeAttribute('aria-busy');
+        const buttons = supplierSuggestionsContainer.querySelectorAll('[data-supplier-index]');
+        buttons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const index = Number(button.dataset.supplierIndex);
+                selectSupplierSuggestion(Number.isFinite(index) ? index : 0);
+            });
+            button.addEventListener('keydown', handleSupplierButtonKeydown);
+        });
+    };
+
+    const requestSupplierSuggestions = async (term, { allowEmpty = false } = {}) => {
+        const value = typeof term === 'string' ? term : '';
+        const trimmed = value.trim();
+        if (!trimmed && !allowEmpty) {
+            hideSupplierSuggestions();
+            return;
+        }
+        if (!supplierDirectoryState.items.length) {
+            showSupplierSuggestionsMessage('Carregando fornecedores cadastrados...', { tone: 'loading' });
+            try {
+                await ensureSuppliersLoaded();
+            } catch (error) {
+                console.error('Erro ao carregar fornecedores para sugestão:', error);
+                showSupplierSuggestionsMessage('Não foi possível carregar os fornecedores cadastrados. Tente novamente.', {
+                    tone: 'error',
+                    actionLabel: 'Tentar novamente',
+                    onAction: () => requestSupplierSuggestions(term, { allowEmpty }),
+                });
+                return;
+            }
+        }
+        if (!supplierDirectoryState.items.length) {
+            showSupplierSuggestionsMessage('Cadastre fornecedores para vinculá-los aos produtos.', { tone: 'info' });
+            return;
+        }
+        const results = filterSupplierDirectory(trimmed, { allowEmpty });
+        if (!results.length) {
+            if (trimmed || !allowEmpty) {
+                showSupplierSuggestionsMessage(`Nenhum fornecedor encontrado para "${escapeHtml(trimmed)}".`, { tone: 'info' });
+            } else {
+                showSupplierSuggestionsMessage('Cadastre fornecedores para vinculá-los aos produtos.', { tone: 'info' });
+            }
+            return;
+        }
+        renderSupplierSuggestionCards(results, trimmed);
+    };
+
     const makeFieldEditable = (input) => {
         if (!input) return;
         input.disabled = false;
@@ -587,12 +955,17 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const resetSupplierForm = () => {
-        if (supplierNameInput) supplierNameInput.value = '';
+        if (supplierNameInput) {
+            supplierNameInput.value = '';
+            delete supplierNameInput.dataset.selectedSupplierId;
+            delete supplierNameInput.dataset.selectedSupplierDocument;
+        }
         if (supplierProductNameInput) supplierProductNameInput.value = '';
         if (supplierProductCodeInput) supplierProductCodeInput.value = '';
         if (supplierEntryUnitSelect) supplierEntryUnitSelect.value = '';
         if (supplierCalcTypeSelect) supplierCalcTypeSelect.value = '';
         if (supplierCalcValueInput) supplierCalcValueInput.value = '';
+        hideSupplierSuggestions();
     };
 
     const renderSupplierEntries = () => {
@@ -615,16 +988,23 @@ document.addEventListener('DOMContentLoaded', () => {
             infoContainer.className = 'space-y-1 text-sm text-gray-700';
 
             const supplierLine = document.createElement('p');
-            supplierLine.innerHTML = `<span class="font-semibold">Fornecedor:</span> ${entry.fornecedor}`;
+            const supplierName = escapeHtml(entry.fornecedor || '—');
+            const supplierDocument = entry.documentoFornecedor ? formatDocument(entry.documentoFornecedor) : '';
+            const supplierDocumentHtml = supplierDocument
+                ? ` <span class="ml-2 inline-flex items-center gap-1 text-xs text-gray-500"><i class="fas fa-id-card text-[10px]"></i>${escapeHtml(supplierDocument)}</span>`
+                : '';
+            supplierLine.innerHTML = `<span class="font-semibold">Fornecedor:</span> ${supplierName}${supplierDocumentHtml}`;
             const productNameLine = document.createElement('p');
-            productNameLine.innerHTML = `<span class="font-semibold">Nome do produto no fornecedor:</span> ${entry.nomeProdutoFornecedor || '—'}`;
+            productNameLine.innerHTML = `<span class="font-semibold">Nome do produto no fornecedor:</span> ${escapeHtml(entry.nomeProdutoFornecedor || '—')}`;
             const codeLine = document.createElement('p');
-            codeLine.innerHTML = `<span class="font-semibold">Código do produto:</span> ${entry.codigoProduto || '—'}`;
+            codeLine.innerHTML = `<span class="font-semibold">Código do produto:</span> ${escapeHtml(entry.codigoProduto || '—')}`;
             const unitLine = document.createElement('p');
-            unitLine.innerHTML = `<span class="font-semibold">Unidade de entrada:</span> ${entry.unidadeEntrada || '—'}`;
+            unitLine.innerHTML = `<span class="font-semibold">Unidade de entrada:</span> ${escapeHtml(entry.unidadeEntrada || '—')}`;
             const calcLine = document.createElement('p');
             const valorCalculo = Number.isFinite(entry.valorCalculo) ? entry.valorCalculo : '—';
-            calcLine.innerHTML = `<span class="font-semibold">Cálculo:</span> ${entry.tipoCalculo || '—'} ${valorCalculo !== '—' ? `(${valorCalculo})` : ''}`;
+            const calcLabel = escapeHtml(entry.tipoCalculo || '—');
+            const calcValueLabel = valorCalculo !== '—' ? ` (${valorCalculo})` : '';
+            calcLine.innerHTML = `<span class="font-semibold">Cálculo:</span> ${calcLabel}${calcValueLabel}`;
 
             infoContainer.appendChild(supplierLine);
             infoContainer.appendChild(productNameLine);
@@ -956,6 +1336,8 @@ document.addEventListener('DOMContentLoaded', () => {
         supplierEntries = Array.isArray(product.fornecedores)
             ? product.fornecedores.map((item) => ({
                 fornecedor: item.fornecedor || '',
+                fornecedorId: item.fornecedorId || item.supplierId || null,
+                documentoFornecedor: item.documentoFornecedor || item.cnpjFornecedor || item.cnpj || '',
                 nomeProdutoFornecedor: item.nomeProdutoFornecedor || '',
                 codigoProduto: item.codigoProduto || item.codigo || '',
                 unidadeEntrada: item.unidadeEntrada || item.unidade || '',
@@ -1145,6 +1527,22 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelCategoryModalBtn.addEventListener('click', () => categoryModal.classList.add('hidden'));
     closeCategoryModalBtn.addEventListener('click', () => categoryModal.classList.add('hidden'));
 
+    const debounceSupplierSuggestions = (value, allowEmpty) => {
+        if (supplierSearchDebounce) {
+            clearTimeout(supplierSearchDebounce);
+        }
+        supplierSearchDebounce = window.setTimeout(() => {
+            requestSupplierSuggestions(value, { allowEmpty });
+        }, 180);
+    };
+
+    const handleSupplierInputEvent = () => {
+        if (!supplierNameInput) return;
+        delete supplierNameInput.dataset.selectedSupplierId;
+        delete supplierNameInput.dataset.selectedSupplierDocument;
+        debounceSupplierSuggestions(supplierNameInput.value || '', false);
+    };
+
     const handleAddSupplier = () => {
         const fornecedor = supplierNameInput?.value.trim();
         const nomeProdutoFornecedor = supplierProductNameInput?.value.trim();
@@ -1152,6 +1550,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const unidadeEntrada = supplierEntryUnitSelect?.value;
         const tipoCalculo = supplierCalcTypeSelect?.value;
         const valorCalculoRaw = supplierCalcValueInput?.value.trim();
+
+        const fornecedorId = supplierNameInput?.dataset?.selectedSupplierId || null;
+        const documentoFornecedor = supplierNameInput?.dataset?.selectedSupplierDocument || '';
 
         if (!fornecedor) {
             alert('Informe o nome do fornecedor.');
@@ -1176,10 +1577,67 @@ document.addEventListener('DOMContentLoaded', () => {
             valorCalculo = parsed;
         }
 
-        supplierEntries.push({ fornecedor, nomeProdutoFornecedor, codigoProduto, unidadeEntrada, tipoCalculo, valorCalculo });
+        supplierEntries.push({
+            fornecedor,
+            fornecedorId,
+            documentoFornecedor,
+            nomeProdutoFornecedor,
+            codigoProduto,
+            unidadeEntrada,
+            tipoCalculo,
+            valorCalculo,
+        });
         renderSupplierEntries();
         resetSupplierForm();
     };
+
+    supplierNameInput?.addEventListener('input', handleSupplierInputEvent);
+    supplierNameInput?.addEventListener('focus', () => {
+        if (!supplierNameInput) return;
+        debounceSupplierSuggestions(supplierNameInput.value || '', true);
+    });
+    supplierNameInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') {
+            const firstOption = supplierSuggestionsContainer?.querySelector('[data-supplier-index="0"]');
+            if (firstOption instanceof HTMLElement) {
+                event.preventDefault();
+                firstOption.focus();
+            }
+        } else if (event.key === 'Escape') {
+            hideSupplierSuggestions();
+        }
+    });
+    supplierNameInput?.addEventListener('blur', () => {
+        window.setTimeout(() => {
+            const active = document.activeElement;
+            if (supplierSuggestionsContainer && supplierSuggestionsContainer.contains(active)) {
+                return;
+            }
+            hideSupplierSuggestions();
+        }, 120);
+    });
+
+    supplierSuggestionsContainer?.addEventListener('focusout', () => {
+        window.setTimeout(() => {
+            const active = document.activeElement;
+            if (supplierSuggestionsContainer &&
+                supplierSuggestionsContainer.contains(active)) {
+                return;
+            }
+            if (active === supplierNameInput) return;
+            hideSupplierSuggestions();
+        }, 120);
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!supplierSuggestionsContainer || !supplierNameInput) return;
+        const target = event.target;
+        if (!(target instanceof Node)) return;
+        if (supplierSuggestionsContainer.contains(target) || target === supplierNameInput) {
+            return;
+        }
+        hideSupplierSuggestions();
+    });
 
     addSupplierBtn?.addEventListener('click', handleAddSupplier);
 
