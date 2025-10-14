@@ -2356,6 +2356,23 @@
           return url.toString();
         };
 
+        const buildExistingProductEditUrl = (item, nfeData) => {
+          const productId = getProductIdFromRecord(item?.matchedProduct);
+          if (!productId) return null;
+          const url = new URL('admin-produtos.html', window.location.href);
+          url.searchParams.set('id', productId);
+          if (nfeData?.accessKey) {
+            url.searchParams.set('nfe', nfeData.accessKey);
+          }
+          const barcode = Array.isArray(item?.barcodeCandidates) && item.barcodeCandidates.length
+            ? item.barcodeCandidates[0]
+            : '';
+          if (barcode) {
+            url.searchParams.set('barcode', barcode);
+          }
+          return url.toString();
+        };
+
         const isImportModalOpen = () => Boolean(importModal && !importModal.classList.contains('hidden'));
 
         const updateProductIframeHeader = (item, nfeData) => {
@@ -2543,6 +2560,19 @@
           openProductIframeModal(url, item, lastNfeData);
         };
 
+        const openExistingProduct = (item) => {
+          if (!item || !item.matchedProduct) {
+            notify('Produto não disponível para edição no momento.', 'warning');
+            return;
+          }
+          const url = buildExistingProductEditUrl(item, lastNfeData);
+          if (!url) {
+            notify('Não foi possível identificar o produto cadastrado para abrir no modal.', 'error');
+            return;
+          }
+          openProductIframeModal(url, item, lastNfeData);
+        };
+
         if (productIframe) {
           productIframe.addEventListener('load', () => {
             if (productIframeLoading) {
@@ -2629,6 +2659,36 @@
           return badge;
         };
 
+        const createProductActionButton = (label, iconClass = 'fas fa-plus') => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.classList.add(
+            'inline-flex',
+            'items-center',
+            'gap-1',
+            'rounded-full',
+            'border',
+            'border-primary/40',
+            'bg-primary/10',
+            'px-1.5',
+            'py-0.5',
+            'text-[9px]',
+            'font-semibold',
+            'text-primary',
+            'hover:bg-primary/20',
+            'focus:outline-none',
+            'focus:ring-2',
+            'focus:ring-primary/30',
+            'whitespace-nowrap'
+          );
+          const icon = document.createElement('i');
+          icon.className = iconClass;
+          const labelSpan = document.createElement('span');
+          labelSpan.textContent = label;
+          button.append(icon, labelSpan);
+          return button;
+        };
+
         const buildStatusCell = (item) => {
           const cell = document.createElement('td');
           cell.className = 'px-2 py-1.5 bg-white sticky left-0 z-10 whitespace-nowrap';
@@ -2678,36 +2738,23 @@
             return cell;
           }
 
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.classList.add(
-            'inline-flex',
-            'items-center',
-            'gap-1',
-            'rounded-full',
-            'border',
-            'border-primary/40',
-            'bg-primary/10',
-            'px-1.5',
-            'py-0.5',
-            'text-[9px]',
-            'font-semibold',
-            'text-primary',
-            'hover:bg-primary/20',
-            'focus:outline-none',
-            'focus:ring-2',
-            'focus:ring-primary/30',
-            'whitespace-nowrap'
-          );
+          const button = createProductActionButton('Cadastrar', 'fas fa-plus');
           button.dataset.productBarcode = item?.barcodeCandidates?.[0] || '';
-          const icon = document.createElement('i');
-          icon.className = 'fas fa-plus';
-          const label = document.createElement('span');
-          label.textContent = 'Cadastrar';
-          button.append(icon, label);
           button.addEventListener('click', () => openProductRegistration(item));
           cell.appendChild(button);
           return cell;
+        };
+
+        const getProductIdFromRecord = (product) => {
+          if (!product || typeof product !== 'object') return '';
+          const candidateKeys = ['_id', 'id', 'uuid'];
+          for (const key of candidateKeys) {
+            const value = typeof product[key] === 'string' ? product[key].trim() : '';
+            if (value) {
+              return value;
+            }
+          }
+          return '';
         };
 
         const ensureConversionDefaults = (item) => {
@@ -3021,14 +3068,25 @@
           return cell;
         };
 
-        const buildSelectCell = () => {
+        const buildSelectCell = (item) => {
           const cell = document.createElement('td');
           cell.className = 'px-2 py-1.5 whitespace-nowrap';
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.checked = true;
-          checkbox.className = 'h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40';
-          cell.appendChild(checkbox);
+          const button = createProductActionButton('Selecionar', 'fas fa-pen-to-square');
+          const productId = getProductIdFromRecord(item?.matchedProduct);
+          const canOpenExistingProduct = item?.validationStatus === 'matched' && Boolean(productId);
+
+          if (canOpenExistingProduct) {
+            button.title = 'Abrir o produto cadastrado para visualizar ou editar';
+            button.addEventListener('click', () => openExistingProduct(item));
+          } else {
+            button.disabled = true;
+            button.classList.add('opacity-50', 'cursor-not-allowed');
+            button.setAttribute('aria-disabled', 'true');
+            button.title =
+              'Disponível após localizar o produto cadastrado pelo XML importado';
+          }
+
+          cell.appendChild(button);
           return cell;
         };
 
@@ -3063,7 +3121,7 @@
             key: 'select',
             label: 'Selecionar',
             headerClass: 'px-2 py-1.5 text-left',
-            renderCell: () => buildSelectCell(),
+            renderCell: (item) => buildSelectCell(item),
             getDisplayText: () => 'Selecionado',
           },
           {
