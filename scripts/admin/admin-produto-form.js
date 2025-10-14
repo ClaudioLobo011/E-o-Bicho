@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fiscalCompanySelect = document.getElementById('fiscal-company-select');
     const fiscalCompanySummary = document.getElementById('fiscal-company-summary');
 
+    const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
     const FISCAL_GENERAL_KEY = '__general__';
     const fiscalStatusLabels = {
         pendente: 'Pendente',
@@ -451,6 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const depositStockMap = new Map();
     let lastSelectedProductUnit = getSelectedProductUnit();
     let duplicateCheckInProgress = false;
+    let pendingImportedProductDraft = null;
 
     const supplierDirectoryState = {
         items: [],
@@ -1093,6 +1095,167 @@ document.addEventListener('DOMContentLoaded', () => {
     saleInput?.addEventListener('input', updateMarkupFromValues);
     markupInput?.addEventListener('input', updateSaleFromMarkup);
 
+    const loadImportedProductDraft = () => {
+        if (typeof sessionStorage === 'undefined') return null;
+        try {
+            const raw = sessionStorage.getItem(PRODUCT_DRAFT_STORAGE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') return null;
+            return parsed;
+        } catch (error) {
+            console.warn('Não foi possível recuperar o rascunho importado da NF-e.', error);
+            return null;
+        }
+    };
+
+    const applyNfeDraftIfAvailable = () => {
+        if (urlParams.get('from') !== 'nfe-import') return false;
+        const draft = loadImportedProductDraft();
+        if (!draft || typeof draft !== 'object' || !draft.item) return false;
+
+        pendingImportedProductDraft = draft;
+
+        const item = draft.item || {};
+        const supplier = draft.supplier || {};
+
+        if (pageTitle) {
+            const itemTitle = typeof item.description === 'string' && item.description.trim()
+                ? item.description.trim()
+                : 'Produto importado';
+            pageTitle.textContent = `Cadastrar produto: ${itemTitle}`;
+        }
+
+        if (pageDescription) {
+            const descriptor = [];
+            if (draft.nfe?.number) descriptor.push(`NF-e ${draft.nfe.number}`);
+            if (draft.nfe?.serie) descriptor.push(`Série ${draft.nfe.serie}`);
+            if (supplier.name) descriptor.push(supplier.name);
+            const suffix = descriptor.length ? ` (${descriptor.join(' · ')})` : '';
+            pageDescription.textContent = `Revise os dados preenchidos automaticamente a partir do XML autorizado${suffix}.`;
+        }
+
+        if (skuInput) {
+            skuInput.disabled = true;
+            skuInput.classList.add('bg-gray-100', 'cursor-not-allowed');
+            skuInput.placeholder = 'Gerado automaticamente após salvar';
+            skuInput.value = '';
+        }
+
+        if (nameInput) {
+            nameInput.value = item.description || '';
+        }
+
+        const primaryBarcodeCandidate = Array.isArray(item.barcodeCandidates)
+            ? item.barcodeCandidates.find((code) => typeof code === 'string' && code.trim())
+            : null;
+        if (barcodeInput) {
+            barcodeInput.value = primaryBarcodeCandidate || item.barcodeDisplay || '';
+        }
+
+        if (detailedDescriptionInput) {
+            const lines = [];
+            if (item.description) lines.push(item.description);
+            const fiscalInfo = [];
+            if (item.cfop) fiscalInfo.push(`CFOP ${item.cfop}`);
+            if (item.ncm) fiscalInfo.push(`NCM ${item.ncm}`);
+            if (fiscalInfo.length) lines.push(fiscalInfo.join(' · '));
+            if (draft.accessKey) lines.push(`Origem: XML NF-e ${draft.accessKey}`);
+            detailedDescriptionInput.value = lines.join('\n');
+        }
+
+        if (unitSelect) {
+            const unitValue = item.unit || item.unitTrib || '';
+            if (unitValue) {
+                unitSelect.value = unitValue;
+                lastSelectedProductUnit = getSelectedProductUnit();
+            }
+        }
+
+        const referenciaInput = form.querySelector('#referencia');
+        if (referenciaInput) {
+            referenciaInput.value = item.supplierCode || '';
+        }
+
+        const ncmInput = form.querySelector('#ncm');
+        if (ncmInput) {
+            ncmInput.value = item.ncm || '';
+        }
+
+        const parsedUnitPrice = Number(item.unitPrice);
+        if (costInput) {
+            costInput.value = Number.isFinite(parsedUnitPrice) && parsedUnitPrice >= 0 ? parsedUnitPrice : '';
+        }
+        if (saleInput) {
+            saleInput.value = Number.isFinite(parsedUnitPrice) && parsedUnitPrice >= 0 ? parsedUnitPrice : '';
+        }
+        updateMarkupFromValues();
+
+        if (supplierNameInput) supplierNameInput.value = supplier.name || '';
+        if (supplierProductNameInput) supplierProductNameInput.value = item.description || '';
+        if (supplierProductCodeInput) supplierProductCodeInput.value = item.supplierCode || '';
+        if (supplierEntryUnitSelect) {
+            const unitValue = item.unit || item.unitTrib || '';
+            supplierEntryUnitSelect.value = unitValue || '';
+        }
+        if (supplierCalcTypeSelect) supplierCalcTypeSelect.value = '';
+        if (supplierCalcValueInput) {
+            const conversion = Number(item.conversion);
+            supplierCalcValueInput.value = Number.isFinite(conversion) && conversion > 0 ? conversion : '';
+        }
+
+        supplierEntries = [];
+        if (supplier.name) {
+            supplierEntries.push({
+                fornecedor: supplier.name,
+                fornecedorId: supplier.id || null,
+                documentoFornecedor: supplier.document || '',
+                nomeProdutoFornecedor: item.description || '',
+                codigoProduto: item.supplierCode || '',
+                unidadeEntrada: item.unit || item.unitTrib || '',
+                tipoCalculo: '',
+                valorCalculo: Number.isFinite(item.conversion) && item.conversion > 0 ? item.conversion : null,
+            });
+        }
+        renderSupplierEntries();
+        resetSupplierForm();
+
+        const dataCadastroInput = form.querySelector('#data-cadastro');
+        if (dataCadastroInput) {
+            const rawDate = draft.nfe?.emissionDate || '';
+            if (rawDate) {
+                const parsedDate = new Date(rawDate);
+                if (!Number.isNaN(parsedDate.getTime())) {
+                    dataCadastroInput.value = parsedDate.toISOString().split('T')[0];
+                }
+            }
+        }
+
+        if (fiscalInputs.cfop?.nfe?.interno) {
+            setInputValue(fiscalInputs.cfop.nfe.interno, item.cfop || '');
+        }
+        if (fiscalInputs.cst) {
+            setInputValue(fiscalInputs.cst, item.cst || '');
+        }
+        if (fiscalInputs.pis?.aliquota) {
+            const pisRate = Number(item.pisRate);
+            setInputValue(fiscalInputs.pis.aliquota, Number.isFinite(pisRate) ? pisRate : '');
+        }
+        if (fiscalInputs.cofins?.aliquota) {
+            const cofinsRate = Number(item.cofinsRate);
+            setInputValue(fiscalInputs.cofins.aliquota, Number.isFinite(cofinsRate) ? cofinsRate : '');
+        }
+        if (fiscalInputs.ipi?.aliquota) {
+            const ipiRate = Number(item.ipiRate);
+            setInputValue(fiscalInputs.ipi.aliquota, Number.isFinite(ipiRate) ? ipiRate : '');
+        }
+        if (fiscalInputs.ipi?.cst) {
+            setInputValue(fiscalInputs.ipi.cst, item.ipiCst || '');
+        }
+
+        return true;
+    };
+
     // --- FUNÇÕES DE LÓGICA ---
     const renderCategoryTags = (categories) => {
         categoryTagsContainer.innerHTML = '';
@@ -1513,6 +1676,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 populateForm(product);
             } else {
                 prepareFormForCreation();
+                applyNfeDraftIfAvailable();
             }
 
             populateCategoryTree(allHierarchicalCategories, productCategories);
@@ -1913,6 +2077,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         : 'Produto cadastrado com sucesso.',
                     confirmText: 'OK'
                 });
+                try {
+                    if (typeof sessionStorage !== 'undefined') {
+                        sessionStorage.removeItem(PRODUCT_DRAFT_STORAGE_KEY);
+                    }
+                } catch (storageError) {
+                    console.warn('Não foi possível limpar o rascunho importado da NF-e.', storageError);
+                }
+                pendingImportedProductDraft = null;
             }
 
         } catch (error) {
