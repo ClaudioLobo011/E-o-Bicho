@@ -8,6 +8,7 @@ const multer = require('multer');
 const fs = require('fs');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const PdvState = require('../models/PdvState');
 
 // Configuração do Multer para upload de imagens
 const storage = multer.diskStorage({
@@ -1011,6 +1012,49 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
 
         if (!product) {
             return res.status(404).json({ message: 'Produto não encontrado.' });
+        }
+
+        const productId = product._id;
+        const productIdString = productId.toString();
+        const productIdCandidates = [productId, productIdString];
+
+        const basePaths = [
+            'completedSales.items',
+            'completedSales.receiptSnapshot.itens',
+            'completedSales.receiptSnapshot.items',
+            'completedSales.fiscalItemsSnapshot',
+            'completedSales.fiscalItemsSnapshot.itens',
+            'completedSales.fiscalItemsSnapshot.items',
+        ];
+
+        const propertyVariants = [
+            'productSnapshot._id',
+            'productSnapshot.id',
+            'productSnapshot.productId',
+            'productSnapshot.product_id',
+            'productSnapshot.produtoId',
+            'productSnapshot.produto_id',
+            'productId',
+            'product_id',
+            'produtoId',
+            'produto_id',
+            'id',
+            'product',
+            'produto',
+        ];
+
+        const salesLinkQuery = [{ 'inventoryMovements.items.product': productId }];
+
+        for (const basePath of basePaths) {
+            for (const variant of propertyVariants) {
+                salesLinkQuery.push({ [`${basePath}.${variant}`]: { $in: productIdCandidates } });
+            }
+        }
+
+        const hasSalesLinks = await PdvState.exists({ $or: salesLinkQuery });
+
+        if (hasSalesLinks) {
+            return res.status(409).json({ message: 'Não é possível excluir produtos que possuam vendas registradas.' });
         }
 
         const imagePaths = new Set();
