@@ -1215,6 +1215,71 @@
     </div>
   </div>
 
+  <div
+    id="product-registration-iframe-modal"
+    class="fixed inset-0 z-[1000] hidden"
+    aria-hidden="true"
+  >
+    <div
+      class="absolute inset-0 bg-gray-900/70 backdrop-blur-sm"
+      data-close-product-modal
+      aria-label="Fechar cadastro de produto"
+    ></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div
+        class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out max-h-[90vh] min-h-0 text-[12px] leading-[1.35]"
+        data-product-frame-shell
+      >
+        <header class="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+          <div class="space-y-1">
+            <span
+              data-product-modal-subtitle
+              class="hidden text-[11px] font-semibold uppercase tracking-wide text-primary"
+            ></span>
+            <h3
+              data-product-modal-title
+              class="text-lg font-semibold text-gray-900"
+            >
+              Cadastro de produto
+            </h3>
+            <p
+              data-product-modal-helper
+              class="text-[11px] text-gray-600"
+            >
+              Os dados do XML autorizado foram enviados automaticamente. Revise e complete as informações antes de salvar.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
+            data-close-product-modal
+            aria-label="Fechar cadastro de produto"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
+        <div class="flex-1 overflow-hidden">
+          <div
+            data-product-frame-loading
+            class="flex h-full flex-col items-center justify-center gap-3 bg-gray-50 text-center text-[12px] text-gray-600"
+          >
+            <i class="fas fa-circle-notch fa-spin text-lg text-primary"></i>
+            <p>
+              Carregando cadastro de produto...
+              <span class="block text-[11px] text-gray-500">Isso pode levar alguns instantes.</span>
+            </p>
+          </div>
+          <iframe
+            data-product-frame
+            title="Cadastro de produto"
+            class="hidden h-full w-full border-0"
+            allow="clipboard-write"
+          ></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="admin-footer-placeholder"></div>
 
   <script>var basePath = '../../';</script>
@@ -1323,6 +1388,18 @@
           },
           {}
         );
+        const productIframeModal = document.getElementById('product-registration-iframe-modal');
+        const productIframe = productIframeModal?.querySelector('[data-product-frame]') || null;
+        const productIframeLoading =
+          productIframeModal?.querySelector('[data-product-frame-loading]') || null;
+        const productIframeShell =
+          productIframeModal?.querySelector('[data-product-frame-shell]') || null;
+        const productIframeTitle = productIframeModal?.querySelector('[data-product-modal-title]') || null;
+        const productIframeSubtitle = productIframeModal?.querySelector('[data-product-modal-subtitle]') || null;
+        const productIframeHelper = productIframeModal?.querySelector('[data-product-modal-helper]') || null;
+        const productIframeCloseTriggers = productIframeModal
+          ? productIframeModal.querySelectorAll('[data-close-product-modal]')
+          : [];
         const supplierSelect = document.getElementById('nfe-supplier');
         const companySelect = document.getElementById('company');
         const nfeNumberInput = document.getElementById('nfe-number');
@@ -1336,7 +1413,10 @@
         const importAccessKeyInput = document.getElementById('import-access-key');
         const accessKeyInput = document.getElementById('access-key');
         const totalAmountDisplay = document.querySelector('[data-nfe-total]');
+        const MODAL_FOCUSABLE_SELECTORS =
+          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
         let previouslyFocusedElement = null;
+        let productModalPreviousFocus = null;
         const apiBaseUrl =
           typeof API_CONFIG !== 'undefined' && API_CONFIG?.BASE_URL
             ? API_CONFIG.BASE_URL.replace(/\/+$/, '')
@@ -2092,10 +2172,34 @@
         const persistProductDraft = (item, nfeData) => {
           if (!item || typeof sessionStorage === 'undefined') return;
           try {
+            const supplierSource = lastSupplierData || nfeData?.emit || null;
+            const supplierName =
+              supplierSource?.name ||
+              supplierSource?.fantasyName ||
+              supplierSource?.legalName ||
+              supplierSource?.razaoSocial ||
+              '';
+            const supplierPayload = supplierSource
+              ? {
+                  name: supplierName,
+                  fantasyName: supplierSource?.fantasyName || '',
+                  document: supplierSource?.document ? digitsOnly(supplierSource.document) : '',
+                  stateRegistration: supplierSource?.stateRegistration || '',
+                  email: supplierSource?.email || '',
+                  phone: supplierSource?.phone || '',
+                  address: supplierSource?.address || null,
+                }
+              : null;
             const payload = {
               item,
               accessKey: nfeData?.accessKey || '',
               generatedAt: new Date().toISOString(),
+              supplier: supplierPayload,
+              nfe: {
+                number: nfeData?.ide?.number || '',
+                serie: nfeData?.ide?.serie || '',
+                emissionDate: nfeData?.ide?.emissionDate || '',
+              },
             };
             sessionStorage.setItem(PRODUCT_DRAFT_STORAGE_KEY, JSON.stringify(payload));
           } catch (error) {
@@ -2118,12 +2222,244 @@
           return url.toString();
         };
 
+        const isImportModalOpen = () => Boolean(importModal && !importModal.classList.contains('hidden'));
+
+        const updateProductIframeHeader = (item, nfeData) => {
+          if (productIframeTitle) {
+            const rawTitle = typeof item?.description === 'string' ? item.description.trim() : '';
+            const normalizedTitle = rawTitle || 'Cadastro de produto';
+            productIframeTitle.textContent = normalizedTitle.length > 140
+              ? `${normalizedTitle.slice(0, 137)}...`
+              : normalizedTitle;
+          }
+
+          if (productIframeSubtitle) {
+            const parts = [];
+            if (nfeData?.ide?.number) parts.push(`NF-e ${nfeData.ide.number}`);
+            if (nfeData?.ide?.serie) parts.push(`Série ${nfeData.ide.serie}`);
+            const supplierName =
+              lastSupplierData?.fantasyName ||
+              lastSupplierData?.name ||
+              lastSupplierData?.legalName ||
+              nfeData?.emit?.fantasyName ||
+              nfeData?.emit?.name ||
+              '';
+            if (supplierName) parts.push(supplierName);
+            const subtitle = parts.join(' · ');
+            productIframeSubtitle.textContent = subtitle;
+            productIframeSubtitle.classList.toggle('hidden', subtitle.length === 0);
+          }
+
+          if (productIframeHelper) {
+            const baseMessage =
+              'Os dados do XML autorizado foram enviados automaticamente. Revise e complete as informações antes de salvar.';
+            const accessKeyNote = nfeData?.accessKey ? ` Chave de acesso ${nfeData.accessKey}.` : '';
+            productIframeHelper.textContent = `${baseMessage}${accessKeyNote}`;
+          }
+        };
+
+        const clearProductModalHeight = () => {
+          if (!productIframeShell) return;
+          productIframeShell.style.removeProperty('min-height');
+          productIframeShell.style.removeProperty('height');
+          productIframeShell.style.removeProperty('max-height');
+        };
+
+        const syncProductModalHeight = () => {
+          if (!productIframeShell || !productIframeModal) return;
+          if (productIframeModal.classList.contains('hidden')) {
+            clearProductModalHeight();
+            return;
+          }
+
+          const importModalCard = importModal?.querySelector('[data-import-modal-card]') || null;
+          if (!importModalCard) {
+            clearProductModalHeight();
+            return;
+          }
+
+          const { height } = importModalCard.getBoundingClientRect();
+          if (!Number.isFinite(height) || height <= 0) {
+            clearProductModalHeight();
+            return;
+          }
+
+          const viewportLimit = Number.isFinite(window.innerHeight)
+            ? Math.max(0, window.innerHeight * 0.9)
+            : height;
+          const targetHeight = Math.max(0, Math.min(height, viewportLimit));
+
+          if (targetHeight === 0) {
+            clearProductModalHeight();
+            return;
+          }
+
+          const heightValue = `${targetHeight}px`;
+          productIframeShell.style.minHeight = heightValue;
+          productIframeShell.style.height = heightValue;
+          productIframeShell.style.maxHeight = heightValue;
+        };
+
+        let productModalHeightSyncBound = false;
+        let productModalHeightObserver = null;
+
+        const ensureProductModalHeightSync = () => {
+          syncProductModalHeight();
+          if (productModalHeightSyncBound) return;
+          window.addEventListener('resize', syncProductModalHeight);
+          productModalHeightSyncBound = true;
+          if (typeof ResizeObserver === 'function') {
+            const importModalCard = importModal?.querySelector('[data-import-modal-card]') || null;
+            if (importModalCard) {
+              productModalHeightObserver = new ResizeObserver(() => {
+                syncProductModalHeight();
+              });
+              productModalHeightObserver.observe(importModalCard);
+            }
+          }
+        };
+
+        const teardownProductModalHeightSync = () => {
+          if (productModalHeightSyncBound) {
+            window.removeEventListener('resize', syncProductModalHeight);
+            productModalHeightSyncBound = false;
+          }
+          if (productModalHeightObserver) {
+            try {
+              productModalHeightObserver.disconnect();
+            } catch (observerError) {
+              console.debug('Não foi possível desconectar o observador de altura do modal.', observerError);
+            }
+            productModalHeightObserver = null;
+          }
+          clearProductModalHeight();
+        };
+
+        const resetProductIframeModal = () => {
+          if (productIframeLoading) {
+            productIframeLoading.classList.remove('hidden');
+          }
+          if (productIframe) {
+            productIframe.classList.add('hidden');
+            try {
+              productIframe.src = 'about:blank';
+            } catch (iframeResetError) {
+              console.debug('Não foi possível redefinir o iframe do produto.', iframeResetError);
+            }
+          }
+          clearProductModalHeight();
+        };
+
+        const closeProductIframeModal = () => {
+          if (!productIframeModal) return;
+          resetProductIframeModal();
+          teardownProductModalHeightSync();
+          productIframeModal.classList.add('hidden');
+          productIframeModal.removeAttribute('data-modal-open');
+          if (!isImportModalOpen()) {
+            document.body.classList.remove('overflow-hidden');
+          }
+          if (productModalPreviousFocus && typeof productModalPreviousFocus.focus === 'function') {
+            try {
+              productModalPreviousFocus.focus();
+            } catch (focusError) {
+              console.debug('Não foi possível restaurar o foco após fechar o cadastro de produto.', focusError);
+            }
+          }
+          productModalPreviousFocus = null;
+        };
+
+        const openProductIframeModal = (url, item, nfeData) => {
+          if (!productIframeModal || !productIframe) {
+            window.open(url, '_blank', 'noopener');
+            return;
+          }
+
+          productModalPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          updateProductIframeHeader(item, nfeData);
+          if (productIframeLoading) {
+            productIframeLoading.classList.remove('hidden');
+          }
+          productIframe.classList.add('hidden');
+          productIframeModal.classList.remove('hidden');
+          productIframeModal.setAttribute('data-modal-open', 'true');
+          document.body.classList.add('overflow-hidden');
+          productIframe.src = url;
+          ensureProductModalHeightSync();
+          requestAnimationFrame(syncProductModalHeight);
+
+          requestAnimationFrame(() => {
+            if (!productIframeModal) return;
+            const focusableElements = Array.from(
+              productIframeModal.querySelectorAll(MODAL_FOCUSABLE_SELECTORS)
+            ).filter((element) => element instanceof HTMLElement && element.offsetParent !== null);
+            if (focusableElements.length > 0) {
+              const firstElement = focusableElements[0];
+              if (firstElement instanceof HTMLElement) {
+                firstElement.focus();
+              }
+            }
+          });
+        };
+
         const openProductRegistration = (item) => {
           if (!item) return;
           persistProductDraft(item, lastNfeData);
           const url = buildProductRegistrationUrl(item, lastNfeData);
-          window.open(url, '_blank', 'noopener');
+          openProductIframeModal(url, item, lastNfeData);
         };
+
+        if (productIframe) {
+          productIframe.addEventListener('load', () => {
+            if (productIframeLoading) {
+              productIframeLoading.classList.add('hidden');
+            }
+            productIframe.classList.remove('hidden');
+            syncProductModalHeight();
+          });
+        }
+
+        productIframeCloseTriggers.forEach((trigger) => {
+          trigger.addEventListener('click', (event) => {
+            event.preventDefault();
+            closeProductIframeModal();
+          });
+        });
+
+        if (productIframeModal) {
+          productIframeModal.addEventListener('click', (event) => {
+            const target = event.target;
+            if (target instanceof Element && target.hasAttribute('data-close-product-modal')) {
+              event.preventDefault();
+              closeProductIframeModal();
+            }
+          });
+        }
+
+        const handleProductIframeKeydown = (event) => {
+          if (!productIframeModal || productIframeModal.classList.contains('hidden')) return;
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            closeProductIframeModal();
+            return;
+          }
+          if (event.key !== 'Tab') return;
+          const focusableElements = Array.from(
+            productIframeModal.querySelectorAll(MODAL_FOCUSABLE_SELECTORS)
+          ).filter((element) => element instanceof HTMLElement && element.offsetParent !== null);
+          if (!focusableElements.length) return;
+          const firstElement = focusableElements[0];
+          const lastElement = focusableElements[focusableElements.length - 1];
+          if (event.shiftKey && document.activeElement === firstElement) {
+            event.preventDefault();
+            lastElement.focus();
+          } else if (!event.shiftKey && document.activeElement === lastElement) {
+            event.preventDefault();
+            firstElement.focus();
+          }
+        };
+
+        document.addEventListener('keydown', handleProductIframeKeydown);
 
         const getProductStatusLabel = (item) => {
           if (!item) return '';
@@ -3912,13 +4248,16 @@
           reader.readAsText(file);
         };
 
-        const focusableSelectors = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
-
         function trapFocus(event) {
           if (!importModal || importModal.classList.contains('hidden')) return;
+          if (productIframeModal && !productIframeModal.classList.contains('hidden')) return;
           if (event.key !== 'Tab') return;
 
-          const focusableElements = importModalCard ? Array.from(importModalCard.querySelectorAll(focusableSelectors)).filter((element) => element.offsetParent !== null) : [];
+          const focusableElements = importModalCard
+            ? Array.from(importModalCard.querySelectorAll(MODAL_FOCUSABLE_SELECTORS)).filter(
+                (element) => element instanceof HTMLElement && element.offsetParent !== null
+              )
+            : [];
           if (focusableElements.length === 0) return;
 
           const firstElement = focusableElements[0];
@@ -3945,7 +4284,7 @@
               importModalCard.classList.add('opacity-100', 'scale-100');
             });
 
-            const focusableElements = importModalCard.querySelectorAll(focusableSelectors);
+            const focusableElements = importModalCard.querySelectorAll(MODAL_FOCUSABLE_SELECTORS);
             if (focusableElements.length) {
               focusableElements[0].focus();
             }
@@ -3960,7 +4299,9 @@
             importModalCard.classList.add('opacity-0', 'scale-95');
           }
 
-          document.body.classList.remove('overflow-hidden');
+          if (!productIframeModal || productIframeModal.classList.contains('hidden')) {
+            document.body.classList.remove('overflow-hidden');
+          }
           document.removeEventListener('keydown', trapFocus);
 
           setTimeout(() => {
@@ -4029,8 +4370,13 @@
         });
 
         document.addEventListener('keydown', (event) => {
-          if (event.key === 'Escape' && !importModal.classList.contains('hidden')) {
-            closeImportModal();
+          if (event.key === 'Escape') {
+            if (productIframeModal && !productIframeModal.classList.contains('hidden')) {
+              return;
+            }
+            if (!importModal.classList.contains('hidden')) {
+              closeImportModal();
+            }
           }
         });
 

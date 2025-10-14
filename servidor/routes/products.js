@@ -21,9 +21,173 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// ========================================================================
-// ========= ROTAS ESPECÍFICAS (Devem vir primeiro) =======================
-// ========================================================================
+
+router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
+    try {
+        const payload = req.body || {};
+        const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
+        const parseDate = (value) => {
+            if (!value) return null;
+            const parsed = new Date(value);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        };
+        const parseNumber = (value) => {
+            if (value === null || value === undefined || value === '') return null;
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        const nome = normalizeString(payload.nome);
+        if (!nome) {
+            return res.status(400).json({ message: 'Informe a descrição do produto.' });
+        }
+
+        const codbarras = normalizeString(payload.codbarras);
+        if (!codbarras) {
+            return res.status(400).json({ message: 'Informe o código de barras do produto.' });
+        }
+
+        const existingBarcode = await Product.findOne({ codbarras }).lean();
+        if (existingBarcode) {
+            return res.status(409).json({ message: 'Já existe um produto com este código de barras.' });
+        }
+
+        let cod = normalizeString(payload.cod);
+        const codProvided = Boolean(cod);
+        if (codProvided) {
+            const existingCod = await Product.findOne({ cod }).lean();
+            if (existingCod) {
+                return res.status(409).json({ message: 'Já existe um produto com este código interno.' });
+            }
+        } else {
+            cod = await generateSequentialCod();
+        }
+
+        const fornecedores = Array.isArray(payload.fornecedores)
+            ? payload.fornecedores
+                .map((item) => {
+                    const fornecedor = normalizeString(item?.fornecedor);
+                    if (!fornecedor) return null;
+                    const valorCalculo = parseNumber(item?.valorCalculo);
+                    return {
+                        fornecedor,
+                        nomeProdutoFornecedor: normalizeString(item?.nomeProdutoFornecedor),
+                        codigoProduto: normalizeString(item?.codigoProduto),
+                        unidadeEntrada: normalizeString(item?.unidadeEntrada),
+                        tipoCalculo: normalizeString(item?.tipoCalculo),
+                        valorCalculo: valorCalculo,
+                    };
+                })
+                .filter(Boolean)
+            : [];
+
+        const estoques = Array.isArray(payload.estoques)
+            ? payload.estoques
+                .map((item) => {
+                    const deposito = item?.deposito || item?.depositId;
+                    if (!deposito) return null;
+                    const quantidade = parseNumber(item?.quantidade);
+                    return {
+                        deposito,
+                        quantidade: quantidade === null ? 0 : quantidade,
+                        unidade: normalizeString(item?.unidade),
+                    };
+                })
+                .filter(Boolean)
+            : [];
+
+        const costNumber = parseNumber(payload.custo);
+        const saleNumber = parseNumber(payload.venda);
+        const stockNumber = parseNumber(payload.stock);
+
+        const productData = {
+            cod,
+            codbarras,
+            nome,
+            descricao: payload.descricao || '',
+            marca: payload.marca || '',
+            unidade: normalizeString(payload.unidade),
+            referencia: normalizeString(payload.referencia),
+            custo: Number.isFinite(costNumber) && costNumber >= 0 ? costNumber : 0,
+            venda: Number.isFinite(saleNumber) && saleNumber >= 0 ? saleNumber : 0,
+            categorias: Array.isArray(payload.categorias) ? payload.categorias : [],
+            especificacoes: typeof payload.especificacoes === 'object' && payload.especificacoes !== null
+                ? payload.especificacoes
+                : {},
+            fornecedores,
+            estoques,
+            stock: estoques.length > 0
+                ? estoques.reduce((sum, entry) => sum + (Number(entry.quantidade) || 0), 0)
+                : Number.isFinite(stockNumber) && stockNumber >= 0
+                    ? stockNumber
+                    : 0,
+            dataCadastro: parseDate(payload.dataCadastro),
+            peso: parseNumber(payload.peso),
+            iat: normalizeString(payload.iat),
+            tipoProduto: normalizeString(payload.tipoProduto),
+            ncm: normalizeString(payload.ncm),
+            inativo: Boolean(payload.inativo),
+            codigosComplementares: Array.isArray(payload.codigosComplementares)
+                ? payload.codigosComplementares.map((code) => normalizeString(code)).filter(Boolean)
+                : [],
+            fiscal: sanitizeFiscalData(payload.fiscal || {}, {}, req.user?.id || ''),
+            fiscalPorEmpresa: {},
+        };
+
+        if (payload.fiscalPorEmpresa && typeof payload.fiscalPorEmpresa === 'object') {
+            Object.entries(payload.fiscalPorEmpresa).forEach(([companyId, fiscalData]) => {
+                if (!companyId) return;
+                productData.fiscalPorEmpresa[companyId] = sanitizeFiscalData(
+                    fiscalData,
+                    {},
+                    req.user?.id || ''
+                );
+            });
+        }
+
+        let createdProduct = null;
+        let attempts = 0;
+
+        while (attempts < 5 && !createdProduct) {
+            try {
+                const product = new Product(productData);
+                createdProduct = await product.save();
+            } catch (error) {
+                if (!codProvided && error?.code === 11000 && error?.keyPattern?.cod) {
+                    cod = await generateSequentialCod();
+                    productData.cod = cod;
+                    attempts += 1;
+                    continue;
+                }
+                if (error?.code === 11000 && error?.keyPattern?.codbarras) {
+                    return res.status(409).json({ message: 'Já existe um produto com este código de barras.' });
+                }
+                if (error?.code === 11000 && error?.keyPattern?.cod) {
+                    return res.status(409).json({ message: 'Já existe um produto com este código interno.' });
+                }
+                throw error;
+            }
+        }
+
+        if (!createdProduct) {
+            return res.status(500).json({ message: 'Não foi possível gerar um código interno único para o produto.' });
+        }
+
+        const populatedProduct = await Product.findById(createdProduct._id)
+            .populate('categorias')
+            .populate({
+                path: 'estoques.deposito',
+                populate: { path: 'empresa' }
+            })
+            .lean();
+
+        res.status(201).json({ product: populatedProduct });
+    } catch (error) {
+        console.error('Erro ao cadastrar produto:', error);
+        res.status(500).json({ message: 'Erro no servidor.' });
+    }
+});
+
 
 // Função auxiliar recursiva para encontrar todos os IDs de sub-categorias
 async function findAllSubCategoryIds(categoryId) {
@@ -34,6 +198,54 @@ async function findAllSubCategoryIds(categoryId) {
     }
     return ids;
 }
+
+const extractCodComponents = (cod) => {
+    if (typeof cod !== 'string') return null;
+    const trimmed = cod.trim();
+    if (!trimmed) return null;
+    const match = trimmed.match(/^(.*?)(\d+)([^0-9]*)$/);
+    if (match) {
+        return {
+            prefix: match[1] || '',
+            numeric: match[2] || '',
+            suffix: match[3] || '',
+        };
+    }
+    const digits = trimmed.replace(/\D+/g, '');
+    if (!digits) return null;
+    const startIndex = trimmed.indexOf(digits);
+    return {
+        prefix: startIndex > 0 ? trimmed.slice(0, startIndex) : '',
+        numeric: digits,
+        suffix: trimmed.slice(startIndex + digits.length) || '',
+    };
+};
+
+const generateSequentialCod = async () => {
+    const lastProduct = await Product.findOne(
+        { cod: { $exists: true, $ne: null } },
+        { cod: 1 }
+    )
+        .collation({ locale: 'pt', numericOrdering: true })
+        .sort({ cod: -1 })
+        .lean();
+
+    if (!lastProduct?.cod) {
+        return '000001';
+    }
+
+    const components = extractCodComponents(lastProduct.cod);
+    if (!components || !components.numeric) {
+        const digits = lastProduct.cod.replace(/\D+/g, '');
+        const padding = digits.length || 6;
+        const nextNumber = Number.parseInt(digits || '0', 10) + 1;
+        return String(nextNumber).padStart(padding, '0');
+    }
+
+    const nextNumber = Number.parseInt(components.numeric, 10) + 1;
+    const paddedNumeric = String(nextNumber).padStart(components.numeric.length, '0');
+    return `${components.prefix || ''}${paddedNumeric}${components.suffix || ''}`;
+};
 
 // GET /api/products/by-category (pública)
 router.get('/by-category', async (req, res) => {
@@ -230,7 +442,6 @@ router.get('/check-unique', async (req, res) => {
 
 // ========================================================================
 // ========= FUNÇÃO AUXILIAR PARA BREADCRUMB ===============================
-// ========================================================================
 async function getCategoryPath(categoryId) {
     // Primeiro, monta a lista de categorias do nó raiz até a folha
     const nodes = [];
