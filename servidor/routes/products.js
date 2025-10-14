@@ -223,29 +223,61 @@ const extractCodComponents = (cod) => {
 };
 
 const generateSequentialCod = async () => {
-    const lastProduct = await Product.findOne(
+    const existingProducts = await Product.find(
         { cod: { $exists: true, $ne: null } },
         { cod: 1 }
     )
         .collation({ locale: 'pt', numericOrdering: true })
-        .sort({ cod: -1 })
+        .sort({ cod: 1 })
         .lean();
 
-    if (!lastProduct?.cod) {
+    if (!existingProducts.length) {
         return '000001';
     }
 
-    const components = extractCodComponents(lastProduct.cod);
-    if (!components || !components.numeric) {
-        const digits = lastProduct.cod.replace(/\D+/g, '');
-        const padding = digits.length || 6;
-        const nextNumber = Number.parseInt(digits || '0', 10) + 1;
-        return String(nextNumber).padStart(padding, '0');
+    let padding = 6;
+    const numericCodes = [];
+
+    existingProducts.forEach((product) => {
+        const components = extractCodComponents(product.cod);
+        if (!components?.numeric) {
+            const digits = typeof product.cod === 'string' ? product.cod.replace(/\D+/g, '') : '';
+            const parsed = Number.parseInt(digits || '0', 10);
+            if (Number.isFinite(parsed) && parsed > 0) {
+                padding = Math.max(padding, digits.length || 0);
+                numericCodes.push(parsed);
+            }
+            return;
+        }
+
+        const parsed = Number.parseInt(components.numeric, 10);
+        if (!Number.isFinite(parsed) || parsed <= 0) return;
+        padding = Math.max(padding, components.numeric.length || 0);
+        if (!components.prefix && !components.suffix) {
+            numericCodes.push(parsed);
+            return;
+        }
+
+        numericCodes.push(parsed);
+    });
+
+    if (!numericCodes.length) {
+        return '000001';
     }
 
-    const nextNumber = Number.parseInt(components.numeric, 10) + 1;
-    const paddedNumeric = String(nextNumber).padStart(components.numeric.length, '0');
-    return `${components.prefix || ''}${paddedNumeric}${components.suffix || ''}`;
+    numericCodes.sort((a, b) => a - b);
+
+    let candidate = 1;
+    for (const value of numericCodes) {
+        if (value < candidate) continue;
+        if (value === candidate) {
+            candidate += 1;
+            continue;
+        }
+        break;
+    }
+
+    return String(candidate).padStart(padding, '0');
 };
 
 // GET /api/products/by-category (pública)
