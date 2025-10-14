@@ -673,6 +673,143 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
     }
 });
 
+const normalizeSupplierString = (value) => {
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    return '';
+};
+
+const parseNullableNumber = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const mapSupplierEntriesToPlainObject = (entries = []) =>
+    entries.map((entry) => (typeof entry?.toObject === 'function' ? entry.toObject() : { ...entry }));
+
+router.post(
+    '/:id/suppliers/link',
+    requireAuth,
+    authorizeRoles('admin', 'admin_master'),
+    async (req, res) => {
+        try {
+            const productId = req.params.id;
+            const product = await Product.findById(productId);
+            if (!product) {
+                return res.status(404).json({ message: 'Produto não encontrado.' });
+            }
+
+            const supplierName = normalizeSupplierString(req.body?.fornecedor);
+            const supplierProductCode = normalizeSupplierString(req.body?.codigoProduto);
+            if (!supplierProductCode) {
+                return res
+                    .status(400)
+                    .json({ message: 'Informe o código do produto no fornecedor.' });
+            }
+            if (!supplierName) {
+                return res.status(400).json({ message: 'Informe o nome do fornecedor.' });
+            }
+
+            const supplierProductName = normalizeSupplierString(req.body?.nomeProdutoFornecedor);
+            const supplierUnit = normalizeSupplierString(req.body?.unidadeEntrada);
+            const supplierCalcType = normalizeSupplierString(req.body?.tipoCalculo);
+            const supplierCalcValue = parseNullableNumber(req.body?.valorCalculo);
+
+            const suppliers = Array.isArray(product.fornecedores)
+                ? [...product.fornecedores]
+                : [];
+            const existingIndex = suppliers.findIndex(
+                (entry) => normalizeSupplierString(entry?.codigoProduto) === supplierProductCode
+            );
+
+            if (existingIndex >= 0) {
+                const existingEntry = suppliers[existingIndex];
+                let changed = false;
+
+                if (normalizeSupplierString(existingEntry?.fornecedor) !== supplierName) {
+                    existingEntry.fornecedor = supplierName;
+                    changed = true;
+                }
+
+                if (supplierProductName) {
+                    const normalizedExistingName = normalizeSupplierString(
+                        existingEntry?.nomeProdutoFornecedor
+                    );
+                    if (normalizedExistingName !== supplierProductName) {
+                        existingEntry.nomeProdutoFornecedor = supplierProductName;
+                        changed = true;
+                    }
+                }
+
+                if (supplierUnit) {
+                    if (normalizeSupplierString(existingEntry?.unidadeEntrada) !== supplierUnit) {
+                        existingEntry.unidadeEntrada = supplierUnit;
+                        changed = true;
+                    }
+                }
+
+                if (supplierCalcType) {
+                    if (normalizeSupplierString(existingEntry?.tipoCalculo) !== supplierCalcType) {
+                        existingEntry.tipoCalculo = supplierCalcType;
+                        changed = true;
+                    }
+                }
+
+                if (req.body?.valorCalculo !== undefined) {
+                    if (supplierCalcValue !== null) {
+                        if (!Number.isFinite(existingEntry?.valorCalculo) || existingEntry.valorCalculo !== supplierCalcValue) {
+                            existingEntry.valorCalculo = supplierCalcValue;
+                            changed = true;
+                        }
+                    } else if (existingEntry?.valorCalculo !== null && existingEntry?.valorCalculo !== undefined) {
+                        existingEntry.valorCalculo = null;
+                        changed = true;
+                    }
+                }
+
+                if (changed) {
+                    suppliers[existingIndex] = existingEntry;
+                    product.fornecedores = suppliers;
+                    product.markModified('fornecedores');
+                    await product.save();
+                }
+
+                return res.json({
+                    linked: true,
+                    updated: changed,
+                    fornecedor: mapSupplierEntriesToPlainObject([suppliers[existingIndex]])[0],
+                    fornecedores: mapSupplierEntriesToPlainObject(product.fornecedores),
+                });
+            }
+
+            const newEntry = {
+                fornecedor: supplierName,
+                nomeProdutoFornecedor: supplierProductName,
+                codigoProduto: supplierProductCode,
+                unidadeEntrada: supplierUnit,
+                tipoCalculo: supplierCalcType,
+                valorCalculo: supplierCalcValue,
+            };
+
+            suppliers.push(newEntry);
+            product.fornecedores = suppliers;
+            product.markModified('fornecedores');
+            await product.save();
+
+            return res.status(201).json({
+                linked: true,
+                created: true,
+                fornecedor: mapSupplierEntriesToPlainObject([newEntry])[0],
+                fornecedores: mapSupplierEntriesToPlainObject(product.fornecedores),
+            });
+        } catch (error) {
+            console.error('Erro ao vincular fornecedor ao produto:', error);
+            res.status(500).json({ message: 'Erro ao vincular fornecedor ao produto.' });
+        }
+    }
+);
+
 // POST /api/products/:id/destaque (restrito)
 router.post('/:id/destaque', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {

@@ -1467,11 +1467,15 @@
         };
 
         let lastSupplierData = null;
+        let lastSupplierRecord = null;
         let lastNfeData = null;
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
         let productValidationSequence = 0;
+        const productSupplierLinkCache = new Set();
+        const productSupplierLinkPromises = new Map();
+        let supplierLinkErrorNotified = false;
 
         const STATUS_CLASS_MAP = {
           success: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-800'],
@@ -1586,6 +1590,136 @@
         const formatPercentValue = (value) => formatDecimal(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         const INTERNAL_CODE_PREFIX = 'SKU-';
+
+        const normalizeSupplierProductCode = (value) => {
+          if (value === null || value === undefined) return '';
+          if (typeof value === 'string') return value.trim();
+          if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+          return String(value).trim();
+        };
+
+        const canonicalSupplierProductCode = (value) =>
+          normalizeSupplierProductCode(value).toUpperCase();
+
+        const resolveActiveSupplierInfo = (nfeData) => {
+          const result = { name: '', document: '' };
+          const pickName = (...values) => values.find((entry) => typeof entry === 'string' && entry.trim());
+
+          if (lastSupplierRecord) {
+            result.name =
+              pickName(
+                lastSupplierRecord.legalName,
+                lastSupplierRecord.fantasyName,
+                lastSupplierRecord.name,
+                lastSupplierRecord.razaoSocial
+              ) || '';
+            result.document = digitsOnly(lastSupplierRecord.cnpj || lastSupplierRecord.document || '');
+          }
+
+          const xmlSource = lastSupplierData || nfeData?.emit || null;
+          if (!result.name && xmlSource) {
+            result.name =
+              pickName(xmlSource.name, xmlSource.fantasyName, xmlSource.legalName, xmlSource.razaoSocial) || '';
+          }
+          if (!result.document && xmlSource) {
+            result.document = digitsOnly(xmlSource.document);
+          }
+
+          if (
+            !result.name &&
+            supplierSelect &&
+            supplierSelect.selectedOptions &&
+            supplierSelect.selectedOptions.length
+          ) {
+            const option = supplierSelect.selectedOptions[0];
+            const optionName =
+              (option.dataset && option.dataset.supplierName) || option.textContent || '';
+            if (optionName) {
+              result.name = optionName.trim();
+            }
+            if (!result.document && option.dataset && option.dataset.supplierDocument) {
+              result.document = digitsOnly(option.dataset.supplierDocument);
+            }
+          }
+
+          return result;
+        };
+
+        const ensureProductSupplierLink = (product, item, nfeData) => {
+          const productId = product?._id || product?.id;
+          const normalizedCode = canonicalSupplierProductCode(item?.supplierCode);
+          if (!productId || !normalizedCode) {
+            return null;
+          }
+
+          const cacheKey = `${productId}::${normalizedCode}`;
+          if (productSupplierLinkCache.has(cacheKey)) {
+            return null;
+          }
+          if (productSupplierLinkPromises.has(cacheKey)) {
+            return productSupplierLinkPromises.get(cacheKey);
+          }
+
+          const currentLinks = Array.isArray(product?.fornecedores) ? product.fornecedores : [];
+          const alreadyLinked = currentLinks.some(
+            (entry) => canonicalSupplierProductCode(entry?.codigoProduto) === normalizedCode
+          );
+          if (alreadyLinked) {
+            productSupplierLinkCache.add(cacheKey);
+            return null;
+          }
+
+          const supplierInfo = resolveActiveSupplierInfo(nfeData);
+          if (!supplierInfo.name) {
+            return null;
+          }
+
+          const payload = {
+            fornecedor: supplierInfo.name,
+            nomeProdutoFornecedor: item?.description || '',
+            codigoProduto: item?.supplierCode || '',
+            unidadeEntrada: item?.unit || item?.unitTrib || '',
+          };
+
+          const headers = buildAuthHeaders();
+          headers.set('Content-Type', 'application/json');
+
+          const requestPromise = (async () => {
+            const response = await fetch(`${apiBaseUrl}/products/${productId}/suppliers/link`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(payload),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              const message =
+                result?.message ||
+                `Falha ao vincular produto ao fornecedor (status ${response.status}).`;
+              throw new Error(message);
+            }
+
+            if (Array.isArray(result?.fornecedores)) {
+              product.fornecedores = result.fornecedores;
+            } else if (result?.fornecedor) {
+              const updatedList = Array.isArray(product.fornecedores)
+                ? [...product.fornecedores, result.fornecedor]
+                : [result.fornecedor];
+              product.fornecedores = updatedList;
+            }
+
+            productSupplierLinkCache.add(cacheKey);
+            return result;
+          })()
+            .catch((error) => {
+              throw error;
+            })
+            .finally(() => {
+              productSupplierLinkPromises.delete(cacheKey);
+            });
+
+          productSupplierLinkPromises.set(cacheKey, requestPromise);
+          return requestPromise;
+        };
 
         const normalizeInternalCode = (value) => {
           if (typeof value === 'number' && Number.isFinite(value)) {
@@ -3711,6 +3845,7 @@
           renderImportedProducts(items);
 
           let hadError = false;
+          const linkingTasks = [];
 
           for (const item of itemsWithBarcode) {
             if (sequence !== productValidationSequence) {
@@ -3724,6 +3859,22 @@
               if (product) {
                 item.matchedProduct = product;
                 item.validationStatus = 'matched';
+                const linkPromise = ensureProductSupplierLink(product, item, nfeData);
+                if (linkPromise) {
+                  linkingTasks.push(
+                    linkPromise.catch((error) => {
+                      console.error('Erro ao vincular produto ao fornecedor automaticamente:', error);
+                      if (!supplierLinkErrorNotified) {
+                        notify(
+                          'Não foi possível vincular alguns produtos ao fornecedor automaticamente. Verifique os cadastros.',
+                          'warning'
+                        );
+                        supplierLinkErrorNotified = true;
+                      }
+                      return null;
+                    })
+                  );
+                }
               } else {
                 item.matchedProduct = null;
                 item.validationStatus = 'not-found';
@@ -3737,6 +3888,13 @@
 
           if (sequence !== productValidationSequence) {
             return;
+          }
+
+          if (linkingTasks.length) {
+            await Promise.all(linkingTasks);
+            if (sequence !== productValidationSequence) {
+              return;
+            }
           }
 
           renderImportedProducts(items);
@@ -3882,6 +4040,7 @@
         const handleSupplierSelection = async (supplier) => {
           setSupplierSummary(supplier);
           lastSupplierData = supplier || null;
+          lastSupplierRecord = null;
           if (!supplier || !supplier.document) {
             updateSupplierStatusCard(
               'warning',
@@ -3904,14 +4063,28 @@
 
           await loadSuppliersFromApi();
           let registeredSupplier = supplierRegistry.byDocument.get(documentDigits) || null;
+          lastSupplierRecord = registeredSupplier || null;
 
           if (!registeredSupplier && !matchedOption) {
             await loadSuppliersFromApi(true);
             registeredSupplier = supplierRegistry.byDocument.get(documentDigits) || null;
+            lastSupplierRecord = registeredSupplier || null;
           }
 
           if (!matchedOption && registeredSupplier) {
             matchedOption = ensureSupplierOption(registeredSupplier, documentDigits);
+          }
+
+          if (!lastSupplierRecord && matchedOption) {
+            const optionSupplierName =
+              (matchedOption.dataset && matchedOption.dataset.supplierName) ||
+              matchedOption.textContent ||
+              '';
+            lastSupplierRecord = {
+              _id: matchedOption.dataset?.supplierId || null,
+              legalName: optionSupplierName,
+              cnpj: matchedOption.dataset?.supplierDocument || '',
+            };
           }
 
           if (matchedOption) {
@@ -4187,6 +4360,9 @@
         const processXmlFile = (file) => {
           if (!file) return;
           clearStatusMessages();
+          productSupplierLinkCache.clear();
+          productSupplierLinkPromises.clear();
+          supplierLinkErrorNotified = false;
           const extension = file.name.split('.').pop()?.toLowerCase();
           if (extension !== 'xml') {
             showFileFeedback('Selecione um arquivo XML autorizado pela SEFAZ (extensão .xml).', 'error');
