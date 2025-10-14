@@ -391,8 +391,8 @@
                       <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Código</th>
                       <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Descrição</th>
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Qtde.</th>
-                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Multiplicador</th>
-                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Divisor</th>
+                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Multiplicador/Divisor</th>
+                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Estoque de entrada</th>
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Unitário (R$)</th>
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Desc (%)</th>
                     </tr>
@@ -756,6 +756,10 @@
           <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
             <i class="fas fa-file-archive"></i>
             Salvar rascunho
+          </button>
+          <button type="button" data-clear-import class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+            <i class="fas fa-eraser"></i>
+            Limpar
           </button>
           <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
             <i class="fas fa-save"></i>
@@ -1482,6 +1486,9 @@
         const nfeModelSelect = document.getElementById('nfe-model');
         const nfeTypeSelect = document.getElementById('nfe-type');
         const tipoEmissaoSelect = document.getElementById('tipo-emissao');
+        const finalidadeSelect = document.getElementById('finalidade');
+        const indicadorPresencaSelect = document.getElementById('indicador-presenca');
+        const depositSelect = document.getElementById('deposit');
         const importAccessKeyInput = document.getElementById('import-access-key');
         const accessKeyInput = document.getElementById('access-key');
         const totalAmountDisplay = document.querySelector('[data-nfe-total]');
@@ -1519,6 +1526,7 @@
         const duplicataDaysInput = document.getElementById('dias');
         const duplicataInitialDaysInput = document.getElementById('dias-vencimento');
         const duplicataDaysTypeSelect = document.getElementById('tipo-dias');
+        const clearImportButton = document.querySelector('[data-clear-import]');
         const documentsTableBody = document.querySelector('[data-nfe-documents-body]');
         const documentsEmptyRow = document.querySelector('[data-nfe-documents-empty]');
         const mainProductsTableBody = document.querySelector('[data-nfe-products-body]');
@@ -2476,6 +2484,26 @@
             select.value = option.value;
             select.dispatchEvent(new Event('change', { bubbles: true }));
           }
+        };
+
+        const resetSelectValue = (select, defaultValue = '') => {
+          if (!select) return;
+          const options = Array.from(select.options || []);
+          if (typeof defaultValue !== 'undefined' && defaultValue !== null) {
+            const hasMatch = options.some((option) => option.value === defaultValue);
+            if (hasMatch || defaultValue === '') {
+              select.value = defaultValue;
+            } else if (options.length) {
+              select.selectedIndex = 0;
+            } else {
+              select.value = '';
+            }
+          } else if (options.length) {
+            select.selectedIndex = 0;
+          } else {
+            select.value = '';
+          }
+          select.dispatchEvent(new Event('change', { bubbles: true }));
         };
 
         const clearStatusClasses = (element, classes) => {
@@ -5375,13 +5403,48 @@
             quantityCell.className = 'px-4 py-3 text-right text-gray-600';
             quantityCell.textContent = formatQuantity(item?.quantity);
 
-            const multiplierCell = document.createElement('td');
-            multiplierCell.className = 'px-4 py-3 text-right text-gray-600';
-            multiplierCell.textContent = formatQuantity(item?.conversionMultiplier);
+            const toNumeric = (value) =>
+              Number.isFinite(value) ? value : parseNumber(value);
+            const multiplierValue = toNumeric(item?.conversionMultiplier);
+            const dividerValue = toNumeric(item?.conversionDivider);
+            const multiplierDisplay = Number.isFinite(multiplierValue)
+              ? formatQuantity(multiplierValue)
+              : '—';
+            const dividerDisplay = Number.isFinite(dividerValue)
+              ? formatQuantity(dividerValue)
+              : '—';
 
-            const dividerCell = document.createElement('td');
-            dividerCell.className = 'px-4 py-3 text-right text-gray-600';
-            dividerCell.textContent = formatQuantity(item?.conversionDivider);
+            const conversionCell = document.createElement('td');
+            conversionCell.className = 'px-4 py-3 text-right text-gray-600';
+            if (Number.isFinite(multiplierValue) || Number.isFinite(dividerValue)) {
+              conversionCell.textContent = `${multiplierDisplay} / ${dividerDisplay}`;
+            } else {
+              conversionCell.textContent = '—';
+            }
+
+            const quantityValue = toNumeric(item?.quantity);
+            const qTribValue = toNumeric(item?.qTrib);
+            let entryStockValue = Number.isFinite(qTribValue) ? qTribValue : null;
+            if (!Number.isFinite(entryStockValue)) {
+              if (
+                Number.isFinite(quantityValue) &&
+                Number.isFinite(multiplierValue) &&
+                Number.isFinite(dividerValue) &&
+                dividerValue !== 0
+              ) {
+                entryStockValue = quantityValue * (multiplierValue / dividerValue);
+              } else if (Number.isFinite(quantityValue) && Number.isFinite(multiplierValue)) {
+                entryStockValue = quantityValue * multiplierValue;
+              } else if (Number.isFinite(quantityValue)) {
+                entryStockValue = quantityValue;
+              }
+            }
+
+            const entryStockCell = document.createElement('td');
+            entryStockCell.className = 'px-4 py-3 text-right text-gray-600';
+            entryStockCell.textContent = Number.isFinite(entryStockValue)
+              ? formatQuantity(entryStockValue)
+              : '—';
 
             const unitPriceCell = document.createElement('td');
             unitPriceCell.className = 'px-4 py-3 text-right text-gray-600';
@@ -5397,8 +5460,8 @@
               codeCell,
               descriptionCell,
               quantityCell,
-              multiplierCell,
-              dividerCell,
+              conversionCell,
+              entryStockCell,
               unitPriceCell,
               discountCell
             );
@@ -5459,6 +5522,101 @@
           if (totalAmountDisplay) {
             totalAmountDisplay.textContent = formatCurrencyBRL(data.totals?.totalValue);
           }
+        };
+
+        const resetImportedNfeState = () => {
+          lastNfeData = null;
+          lastSupplierData = null;
+          lastSupplierRecord = null;
+          supplierLinkErrorNotified = false;
+          productValidationSequence += 1;
+          resetProductLookupCaches();
+          productSupplierLinkCache.clear();
+          productSupplierLinkPromises.clear();
+          supplierReferenceLookupCache.clear();
+          supplierReferenceLookupPromises.clear();
+          if (refreshImportedProductsButton) {
+            setRefreshImportedProductsButtonState(false);
+          }
+          if (importFileInput) {
+            importFileInput.value = '';
+          }
+          clearStatusMessages();
+          try {
+            sessionStorage.removeItem(PRODUCT_DRAFT_STORAGE_KEY);
+          } catch (error) {
+            console.warn('Não foi possível limpar o rascunho de produtos da importação.', error);
+          }
+
+          const inputsToReset = [
+            nfeNumberInput,
+            nfeSeriesInput,
+            nfeProtocolInput,
+            nfeReferenceInput,
+            issueDateInput,
+            entryDateInput,
+            importAccessKeyInput,
+            accessKeyInput,
+            supplierCnpjInput,
+            supplierIeInput,
+            supplierEmailInput,
+            supplierAddressInput,
+            transportCnpjInput,
+            transportIeInput,
+            transportPlateInput,
+            transportNameInput,
+            weightGrossInput,
+            weightNetInput,
+            totalsProductsInput,
+            totalsIcmsBaseInput,
+            totalsIcmsValueInput,
+            totalsIcmsStInput,
+            totalsFcpStInput,
+            totalsServicesInput,
+            totalsAdjustmentInput,
+            totalsDiscountInput,
+            totalsOtherInput,
+            totalsFreightInput,
+            totalsIpiInput,
+            totalsUnitDiscountInput,
+            totalsInsuranceInput,
+            totalsDollarInput,
+            duplicataEmissionInput,
+            duplicataCountInput,
+            duplicataFirstDueInput,
+            duplicataDaysInput,
+            duplicataInitialDaysInput,
+          ];
+
+          inputsToReset.forEach((input) => setInputValue(input, ''));
+
+          const selectsToReset = [
+            { element: supplierSelect, value: '' },
+            { element: supplierUfSelect, value: '' },
+            { element: companySelect, value: '' },
+            { element: nfeModelSelect, value: '55' },
+            { element: nfeTypeSelect, value: 'NF' },
+            { element: tipoEmissaoSelect, value: '1' },
+            { element: finalidadeSelect, value: 'normal' },
+            { element: indicadorPresencaSelect, value: '0' },
+            { element: depositSelect, value: '' },
+            { element: transportUfSelect, value: '' },
+            { element: transportPlateUfSelect, value: '' },
+            { element: freightModeSelect, value: '0' },
+            { element: duplicataDaysTypeSelect, value: 'dias' },
+          ];
+
+          selectsToReset.forEach(({ element, value }) => resetSelectValue(element, value));
+
+          if (totalAmountDisplay) {
+            totalAmountDisplay.textContent = 'R$ 0,00';
+          }
+
+          updateSummaryFromData(null);
+          setSupplierSummary(null);
+          renderDocumentsFromNfe([]);
+          renderDuplicatasFromNfe([], null);
+          renderMainProductsFromNfe([]);
         };
 
         const handleSupplierSelection = async (supplier) => {
@@ -6096,6 +6254,19 @@
           refreshImportedProductsButton.addEventListener('click', (event) => {
             event.preventDefault();
             refreshImportedProductsList();
+          });
+        }
+
+        if (clearImportButton) {
+          clearImportButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            try {
+              resetImportedNfeState();
+              notify('Campos limpos. Pronto para uma nova importação.', 'info');
+            } catch (error) {
+              console.error('Erro ao limpar os dados importados da nota:', error);
+              notify('Não foi possível limpar os dados importados. Atualize a página e tente novamente.', 'error');
+            }
           });
         }
 
