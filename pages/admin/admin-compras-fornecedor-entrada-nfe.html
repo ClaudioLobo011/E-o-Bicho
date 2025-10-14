@@ -5407,37 +5407,32 @@
               Number.isFinite(value) ? value : parseNumber(value);
             const multiplierValue = toNumeric(item?.conversionMultiplier);
             const dividerValue = toNumeric(item?.conversionDivider);
-            const multiplierDisplay = Number.isFinite(multiplierValue)
-              ? formatQuantity(multiplierValue)
-              : '—';
-            const dividerDisplay = Number.isFinite(dividerValue)
-              ? formatQuantity(dividerValue)
-              : '—';
+            let conversionFactor = null;
+            if (Number.isFinite(multiplierValue) && Number.isFinite(dividerValue)) {
+              if (dividerValue !== 0) {
+                conversionFactor = multiplierValue / dividerValue;
+              }
+            } else if (Number.isFinite(multiplierValue)) {
+              conversionFactor = multiplierValue;
+            } else if (Number.isFinite(dividerValue) && dividerValue !== 0) {
+              conversionFactor = 1 / dividerValue;
+            }
 
             const conversionCell = document.createElement('td');
             conversionCell.className = 'px-4 py-3 text-right text-gray-600';
-            if (Number.isFinite(multiplierValue) || Number.isFinite(dividerValue)) {
-              conversionCell.textContent = `${multiplierDisplay} / ${dividerDisplay}`;
-            } else {
-              conversionCell.textContent = '—';
-            }
+            conversionCell.textContent = Number.isFinite(conversionFactor)
+              ? formatQuantity(conversionFactor)
+              : '—';
 
             const quantityValue = toNumeric(item?.quantity);
             const qTribValue = toNumeric(item?.qTrib);
-            let entryStockValue = Number.isFinite(qTribValue) ? qTribValue : null;
-            if (!Number.isFinite(entryStockValue)) {
-              if (
-                Number.isFinite(quantityValue) &&
-                Number.isFinite(multiplierValue) &&
-                Number.isFinite(dividerValue) &&
-                dividerValue !== 0
-              ) {
-                entryStockValue = quantityValue * (multiplierValue / dividerValue);
-              } else if (Number.isFinite(quantityValue) && Number.isFinite(multiplierValue)) {
-                entryStockValue = quantityValue * multiplierValue;
-              } else if (Number.isFinite(quantityValue)) {
-                entryStockValue = quantityValue;
-              }
+            let entryStockValue = null;
+            if (Number.isFinite(quantityValue) && Number.isFinite(conversionFactor)) {
+              entryStockValue = quantityValue * conversionFactor;
+            } else if (Number.isFinite(qTribValue)) {
+              entryStockValue = qTribValue;
+            } else if (Number.isFinite(quantityValue)) {
+              entryStockValue = quantityValue;
             }
 
             const entryStockCell = document.createElement('td');
