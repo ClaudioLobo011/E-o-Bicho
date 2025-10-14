@@ -1,5 +1,12 @@
 /* 1. Importa a base do Tailwind */
-@import "tailwindcss";
+/*
+   Observação: no Windows, a resolução automática de módulos do Tailwind CLI 4.x
+   pode falhar ao procurar por "tailwindcss" relativo ao arquivo de entrada
+   ("Can't resolve 'tailwindcss'"). Usamos um caminho relativo explícito para
+   apontar diretamente para o pacote instalado em node_modules, garantindo que o
+   build funcione de forma consistente em todos os ambientes.
+*/
+@import "../node_modules/tailwindcss/index.css";
 
 /* 2. Define as nossas variáveis de tema diretamente no bloco @theme.
    Isto vai INSTRUIR o Tailwind a criar as classes de utilitário correspondentes. */
