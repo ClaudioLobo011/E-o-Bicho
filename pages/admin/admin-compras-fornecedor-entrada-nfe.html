@@ -1049,7 +1049,7 @@
                 </div>
                 <div class="lg:col-span-3 grid grid-cols-1 gap-1.5 pt-1 md:grid-cols-2 xl:grid-cols-3" data-import-supplier-insights>
                   <div data-file-feedback class="hidden h-full rounded-lg border px-3 py-2 text-[10px] font-medium leading-snug"></div>
-                  <div data-import-supplier-status class="hidden h-full rounded-lg border px-3 py-2 text-[10px] text-gray-600 space-y-1.5 sm:flex sm:items-start sm:justify-between sm:gap-3">
+                  <div data-import-supplier-status class="hidden h-full rounded-lg border px-3 py-2 text-[10px] text-gray-600 space-y-1.5 sm:space-y-0">
                     <div class="flex items-start gap-1.5">
                       <i data-supplier-status-icon class="fas fa-circle-info mt-0.5 text-[12px]"></i>
                       <div class="space-y-0.5">
@@ -1477,6 +1477,25 @@
             'hover:text-primary',
             'focus:ring-primary/20',
           ],
+        };
+
+        const SUPPLIER_STATUS_LAYOUT_CLASSES = [
+          'flex',
+          'flex-col',
+          'sm:flex',
+          'sm:flex-row',
+          'sm:items-start',
+          'sm:justify-between',
+          'sm:gap-3',
+        ];
+
+        const toggleSupplierStatusLayout = (isActive) => {
+          if (!importSupplierStatus) return;
+          if (isActive) {
+            importSupplierStatus.classList.add(...SUPPLIER_STATUS_LAYOUT_CLASSES);
+          } else {
+            importSupplierStatus.classList.remove(...SUPPLIER_STATUS_LAYOUT_CLASSES);
+          }
         };
 
         const digitsOnly = (value) => String(value ?? '').replace(/\D+/g, '');
@@ -1933,6 +1952,7 @@
           }
           if (importSupplierStatus) {
             importSupplierStatus.classList.add('hidden');
+            toggleSupplierStatusLayout(false);
             if (importSupplierMessage) importSupplierMessage.textContent = '';
             if (importSupplierDescription) {
               importSupplierDescription.textContent = '';
@@ -1989,6 +2009,30 @@
         const updateSupplierStatusCard = (type = 'info', message = '', description = '', actions = []) => {
           if (!importSupplierStatus) return;
 
+          const hasMessage = Boolean(message);
+          const hasDescription = Boolean(description);
+          const hasActions = Array.isArray(actions) && actions.length > 0;
+
+          if (!hasMessage && !hasDescription && !hasActions) {
+            importSupplierStatus.classList.add('hidden');
+            toggleSupplierStatusLayout(false);
+            if (importSupplierMessage) importSupplierMessage.textContent = '';
+            if (importSupplierDescription) {
+              importSupplierDescription.textContent = '';
+              importSupplierDescription.classList.add('hidden');
+            }
+            if (importSupplierActions) {
+              importSupplierActions.innerHTML = '';
+              importSupplierActions.classList.add('hidden');
+            }
+            if (importSupplierIcon) {
+              importSupplierIcon.className = 'fas fa-circle-info mt-0.5 text-[12px]';
+            }
+            clearStatusClasses(importSupplierStatus, ALL_STATUS_CLASSES);
+            return;
+          }
+
+          toggleSupplierStatusLayout(true);
           importSupplierStatus.classList.remove('hidden');
           applyStatusClasses(importSupplierStatus, type);
 
@@ -2002,7 +2046,7 @@
           }
 
           if (importSupplierDescription) {
-            if (description) {
+            if (hasDescription) {
               importSupplierDescription.textContent = description;
               importSupplierDescription.classList.remove('hidden');
             } else {
@@ -2014,7 +2058,7 @@
           if (!importSupplierActions) return;
 
           importSupplierActions.innerHTML = '';
-          if (Array.isArray(actions) && actions.length) {
+          if (hasActions) {
             importSupplierActions.classList.remove('hidden');
             actions.forEach((actionConfig) => {
               if (!actionConfig || !actionConfig.label) return;
