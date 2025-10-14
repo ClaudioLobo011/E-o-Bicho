@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/check-tailwind.js",
     "dev": "npx @tailwindcss/cli -i ./src/input.css -o ./src/output.css --watch",
+    "prebuild": "node scripts/check-tailwind.js",
     "build": "npx @tailwindcss/cli -i ./src/input.css -o ./src/output.css"
   },
   "dependencies": {

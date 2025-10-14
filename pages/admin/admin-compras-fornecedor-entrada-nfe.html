@@ -833,7 +833,7 @@
   <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden">
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-import-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
-      <div data-import-modal-card class="relative flex w-full max-w-[852px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh] min-h-0 text-[12px] leading-[1.35]">
+      <div data-import-modal-card class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh] min-h-0 text-[12px] leading-[1.35]">
         <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -1033,38 +1033,6 @@
                     <input id="import-file-input" type="file" accept=".xml" class="hidden">
                   </label>
                   <p class="text-[9px] text-gray-500">Validação com esquemas oficiais (XSD) e regras de negócio SEFAZ.</p>
-                  <div data-file-feedback class="hidden rounded-lg border px-3 py-2 text-[10px] font-medium"></div>
-                  <div data-import-supplier-status class="hidden rounded-lg border px-3 py-3 text-[10px] space-y-2">
-                    <div class="flex items-start gap-2">
-                      <i data-supplier-status-icon class="fas fa-circle-info mt-0.5 text-[12px]"></i>
-                      <div class="space-y-1">
-                        <p data-supplier-message class="text-[11px] font-semibold text-gray-700"></p>
-                        <p data-supplier-description class="text-[10px] text-gray-600"></p>
-                      </div>
-                    </div>
-                    <div data-supplier-actions class="mt-1 flex flex-wrap gap-2"></div>
-                  </div>
-                  <div data-import-supplier-summary class="hidden rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] text-gray-600 space-y-2">
-                    <p data-supplier-summary-name class="text-[11px] font-semibold text-gray-700"></p>
-                    <dl class="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                      <div>
-                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Documento</dt>
-                        <dd data-supplier-summary-document class="text-gray-700"></dd>
-                      </div>
-                      <div>
-                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Inscrição Estadual</dt>
-                        <dd data-supplier-summary-ie class="text-gray-700"></dd>
-                      </div>
-                      <div class="sm:col-span-2">
-                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Endereço</dt>
-                        <dd data-supplier-summary-address class="text-gray-700"></dd>
-                      </div>
-                      <div class="sm:col-span-2">
-                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Contato</dt>
-                        <dd data-supplier-summary-contact class="text-gray-700"></dd>
-                      </div>
-                    </dl>
-                  </div>
                 </div>
                 <div class="space-y-1.5">
                   <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</label>
@@ -1077,6 +1045,40 @@
                       <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
                       Atualizar preços de compra existentes
                     </label>
+                  </div>
+                </div>
+                <div class="lg:col-span-3 grid grid-cols-1 gap-1.5 pt-1 md:grid-cols-2 xl:grid-cols-3" data-import-supplier-insights>
+                  <div data-file-feedback class="hidden h-full rounded-lg border px-3 py-2 text-[10px] font-medium leading-snug"></div>
+                  <div data-import-supplier-status class="hidden h-full rounded-lg border px-3 py-2 text-[10px] text-gray-600 space-y-1.5 sm:space-y-0">
+                    <div class="flex items-start gap-1.5">
+                      <i data-supplier-status-icon class="fas fa-circle-info mt-0.5 text-[12px]"></i>
+                      <div class="space-y-0.5">
+                        <p data-supplier-message class="text-[11px] font-semibold text-gray-700 leading-snug"></p>
+                        <p data-supplier-description class="text-[10px] text-gray-600 leading-snug"></p>
+                      </div>
+                    </div>
+                    <div data-supplier-actions class="flex flex-wrap gap-1.5 sm:mt-0"></div>
+                  </div>
+                  <div data-import-supplier-summary class="hidden h-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] text-gray-600 space-y-1.5">
+                    <p data-supplier-summary-name class="text-[11px] font-semibold text-gray-700 leading-snug"></p>
+                    <dl class="grid grid-cols-1 gap-1 sm:grid-cols-2 sm:gap-y-1.5">
+                      <div>
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Documento</dt>
+                        <dd data-supplier-summary-document class="text-gray-700 leading-snug"></dd>
+                      </div>
+                      <div>
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Inscrição Estadual</dt>
+                        <dd data-supplier-summary-ie class="text-gray-700 leading-snug"></dd>
+                      </div>
+                      <div class="sm:col-span-2">
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Endereço</dt>
+                        <dd data-supplier-summary-address class="text-gray-700 leading-snug"></dd>
+                      </div>
+                      <div class="sm:col-span-2">
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Contato</dt>
+                        <dd data-supplier-summary-contact class="text-gray-700 leading-snug"></dd>
+                      </div>
+                    </dl>
                   </div>
                 </div>
               </div>
@@ -1475,6 +1477,25 @@
             'hover:text-primary',
             'focus:ring-primary/20',
           ],
+        };
+
+        const SUPPLIER_STATUS_LAYOUT_CLASSES = [
+          'flex',
+          'flex-col',
+          'sm:flex',
+          'sm:flex-row',
+          'sm:items-start',
+          'sm:justify-between',
+          'sm:gap-3',
+        ];
+
+        const toggleSupplierStatusLayout = (isActive) => {
+          if (!importSupplierStatus) return;
+          if (isActive) {
+            importSupplierStatus.classList.add(...SUPPLIER_STATUS_LAYOUT_CLASSES);
+          } else {
+            importSupplierStatus.classList.remove(...SUPPLIER_STATUS_LAYOUT_CLASSES);
+          }
         };
 
         const digitsOnly = (value) => String(value ?? '').replace(/\D+/g, '');
@@ -1931,6 +1952,7 @@
           }
           if (importSupplierStatus) {
             importSupplierStatus.classList.add('hidden');
+            toggleSupplierStatusLayout(false);
             if (importSupplierMessage) importSupplierMessage.textContent = '';
             if (importSupplierDescription) {
               importSupplierDescription.textContent = '';
@@ -1987,6 +2009,30 @@
         const updateSupplierStatusCard = (type = 'info', message = '', description = '', actions = []) => {
           if (!importSupplierStatus) return;
 
+          const hasMessage = Boolean(message);
+          const hasDescription = Boolean(description);
+          const hasActions = Array.isArray(actions) && actions.length > 0;
+
+          if (!hasMessage && !hasDescription && !hasActions) {
+            importSupplierStatus.classList.add('hidden');
+            toggleSupplierStatusLayout(false);
+            if (importSupplierMessage) importSupplierMessage.textContent = '';
+            if (importSupplierDescription) {
+              importSupplierDescription.textContent = '';
+              importSupplierDescription.classList.add('hidden');
+            }
+            if (importSupplierActions) {
+              importSupplierActions.innerHTML = '';
+              importSupplierActions.classList.add('hidden');
+            }
+            if (importSupplierIcon) {
+              importSupplierIcon.className = 'fas fa-circle-info mt-0.5 text-[12px]';
+            }
+            clearStatusClasses(importSupplierStatus, ALL_STATUS_CLASSES);
+            return;
+          }
+
+          toggleSupplierStatusLayout(true);
           importSupplierStatus.classList.remove('hidden');
           applyStatusClasses(importSupplierStatus, type);
 
@@ -2000,7 +2046,7 @@
           }
 
           if (importSupplierDescription) {
-            if (description) {
+            if (hasDescription) {
               importSupplierDescription.textContent = description;
               importSupplierDescription.classList.remove('hidden');
             } else {
@@ -2012,7 +2058,7 @@
           if (!importSupplierActions) return;
 
           importSupplierActions.innerHTML = '';
-          if (Array.isArray(actions) && actions.length) {
+          if (hasActions) {
             importSupplierActions.classList.remove('hidden');
             actions.forEach((actionConfig) => {
               if (!actionConfig || !actionConfig.label) return;
@@ -2024,10 +2070,11 @@
                 'gap-1.5',
                 'rounded-lg',
                 'border',
-                'px-3',
-                'py-1.5',
-                'text-[10px]',
+                'px-2.5',
+                'py-1',
+                'text-[9.5px]',
                 'font-semibold',
+                'leading-tight',
                 'transition',
                 'focus:outline-none',
                 'focus:ring-2',
