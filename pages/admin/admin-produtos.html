@@ -439,7 +439,11 @@
                             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                                 <div>
                                     <label for="supplier-name" class="block text-sm font-medium text-gray-700">Fornecedor</label>
-                                    <input type="text" id="supplier-name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Nome do fornecedor">
+                                    <div class="relative">
+                                        <input type="text" id="supplier-name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Nome do fornecedor" autocomplete="off" autocapitalize="none" spellcheck="false" aria-autocomplete="list" aria-controls="supplier-suggestions" aria-describedby="supplier-name-hint" aria-expanded="false">
+                                        <div id="supplier-suggestions" class="absolute left-0 right-0 top-full z-30 mt-2 hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl" role="listbox" aria-label="Sugestões de fornecedores"></div>
+                                    </div>
+                                    <p id="supplier-name-hint" class="mt-2 text-xs text-gray-500">Comece a digitar para buscar fornecedores cadastrados.</p>
                                 </div>
                                 <div>
                                     <label for="supplier-product-name" class="block text-sm font-medium text-gray-700">Nome do Produto no Fornecedor</label>
