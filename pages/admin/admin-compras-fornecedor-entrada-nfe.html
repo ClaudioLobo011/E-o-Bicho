@@ -1188,6 +1188,14 @@
                     <i class="fas fa-layer-group text-[11px]"></i>
                     <span data-import-xml-number>XML não importado</span>
                   </span>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full border border-primary px-2 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-refresh-import-products
+                  >
+                    <i class="fas fa-rotate-right text-[11px]" data-refresh-import-products-icon></i>
+                    Atualizar lista
+                  </button>
                   <span class="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-sky-700" data-import-xml-validation>
                     <i class="fas fa-circle-info text-[11px]" data-import-xml-validation-icon></i>
                     <span data-import-xml-validation-text>Aguardando validação fiscal</span>
@@ -1482,6 +1490,10 @@
         const importXmlValidationBadge = importModal.querySelector('[data-import-xml-validation]');
         const importXmlValidationText = importModal.querySelector('[data-import-xml-validation-text]');
         const importXmlValidationIcon = importModal.querySelector('[data-import-xml-validation-icon]');
+        const refreshImportedProductsButton = importModal.querySelector('[data-refresh-import-products]');
+        const refreshImportedProductsIcon = refreshImportedProductsButton
+          ? refreshImportedProductsButton.querySelector('[data-refresh-import-products-icon]')
+          : null;
         const importProductsTableHead = importModal.querySelector('[data-import-products-head]');
         const importProductsTableBody = importModal.querySelector('[data-import-products-body]');
         const importSummaryFields = Array.from(importModal.querySelectorAll('[data-import-summary-field]')).reduce(
@@ -1595,10 +1607,13 @@
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
+        const supplierReferenceLookupCache = new Map();
+        const supplierReferenceLookupPromises = new Map();
         let productValidationSequence = 0;
         const productSupplierLinkCache = new Set();
         const productSupplierLinkPromises = new Map();
         let supplierLinkErrorNotified = false;
+        let isRefreshingImportedProducts = false;
 
         const STATUS_CLASS_MAP = {
           success: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-800'],
@@ -1668,6 +1683,70 @@
         };
 
         const digitsOnly = (value) => String(value ?? '').replace(/\D+/g, '');
+
+        const resetProductLookupCaches = () => {
+          productLookupCache.clear();
+          productLookupPromises.clear();
+          supplierReferenceLookupCache.clear();
+          supplierReferenceLookupPromises.clear();
+        };
+
+        const setRefreshImportedProductsButtonState = (isLoading) => {
+          if (!refreshImportedProductsButton) return;
+          const shouldDisable = Boolean(isLoading);
+          refreshImportedProductsButton.disabled = shouldDisable;
+          refreshImportedProductsButton.classList.toggle('opacity-60', shouldDisable);
+          refreshImportedProductsButton.classList.toggle('cursor-not-allowed', shouldDisable);
+          if (shouldDisable) {
+            refreshImportedProductsButton.setAttribute('aria-busy', 'true');
+          } else {
+            refreshImportedProductsButton.removeAttribute('aria-busy');
+          }
+          if (refreshImportedProductsIcon) {
+            refreshImportedProductsIcon.classList.toggle('fa-spin', shouldDisable);
+          }
+        };
+
+        const refreshImportedProductsList = async () => {
+          if (isRefreshingImportedProducts) {
+            return;
+          }
+          const hasItems = Array.isArray(lastNfeData?.items) && lastNfeData.items.length > 0;
+          if (!hasItems) {
+            notify('Importe um XML autorizado para atualizar a lista de produtos.', 'warning');
+            return;
+          }
+
+          isRefreshingImportedProducts = true;
+          setRefreshImportedProductsButtonState(true);
+
+          const itemsBeforeRefresh = Array.isArray(lastNfeData.items) ? lastNfeData.items : [];
+          const previousUnmatchedCount = itemsBeforeRefresh.filter(
+            (item) => item?.validationStatus === 'not-found'
+          ).length;
+
+          try {
+            resetProductLookupCaches();
+            await validateImportedProducts(lastNfeData);
+
+            const updatedItems = Array.isArray(lastNfeData?.items) ? lastNfeData.items : [];
+            const currentUnmatchedCount = updatedItems.filter(
+              (item) => item?.validationStatus === 'not-found'
+            ).length;
+
+            const successMessage =
+              currentUnmatchedCount < previousUnmatchedCount
+                ? 'Lista atualizada e novos produtos foram vinculados.'
+                : 'Lista de produtos importados atualizada.';
+            notify(successMessage, 'success');
+          } catch (error) {
+            console.error('Erro ao atualizar a lista de produtos importados:', error);
+            notify('Não foi possível atualizar a lista de produtos importados. Tente novamente.', 'error');
+          } finally {
+            setRefreshImportedProductsButtonState(false);
+            isRefreshingImportedProducts = false;
+          }
+        };
 
         const normalizeBarcodeForComparison = (value) => {
           const digits = digitsOnly(value);
@@ -1783,6 +1862,168 @@
           return result;
         };
 
+        const normalizeSupplierCalcType = (value) => {
+          if (typeof value !== 'string') return '';
+          return value
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toLowerCase();
+        };
+
+        const canonicalSupplierCalcType = (value) => {
+          const normalized = normalizeSupplierCalcType(value);
+          if (!normalized) return '';
+          if (normalized.startsWith('multi') || normalized === 'x') {
+            return 'multiply';
+          }
+          if (normalized.startsWith('div')) {
+            return 'divide';
+          }
+          return '';
+        };
+
+        const parseSupplierCalcValue = (rawValue) => {
+          if (Number.isFinite(rawValue)) {
+            return rawValue > 0 ? rawValue : null;
+          }
+          const numeric = parseNumber(rawValue);
+          return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+        };
+
+        const getBaseConversionFactor = (item) => {
+          if (!item) return 1;
+          const original = Number.isFinite(item?.originalConversionFactor)
+            ? item.originalConversionFactor
+            : parseNumber(item?.originalConversionFactor);
+          if (Number.isFinite(original) && original > 0) {
+            return original;
+          }
+          const multiplier = Number.isFinite(item?.conversionMultiplier)
+            ? item.conversionMultiplier
+            : parseNumber(item?.conversionMultiplier);
+          const divider = Number.isFinite(item?.conversionDivider)
+            ? item.conversionDivider
+            : parseNumber(item?.conversionDivider);
+          if (Number.isFinite(multiplier) && Number.isFinite(divider) && divider > 0) {
+            return multiplier / divider;
+          }
+          const conversion = Number.isFinite(item?.conversion) ? item.conversion : parseNumber(item?.conversion);
+          if (Number.isFinite(conversion) && conversion > 0) {
+            return conversion;
+          }
+          return 1;
+        };
+
+        const findSupplierEntryForProduct = (product, item, nfeData) => {
+          if (!product) return null;
+          const suppliers = Array.isArray(product?.fornecedores) ? product.fornecedores : [];
+          if (!suppliers.length) return null;
+
+          const supplierInfo = resolveActiveSupplierInfo(nfeData);
+          const normalizedSupplierName = canonicalSupplierName(supplierInfo.name);
+          const itemSupplierCode = canonicalSupplierProductCode(item?.supplierCode);
+
+          let candidates = suppliers;
+
+          if (itemSupplierCode) {
+            const codeMatches = suppliers.filter(
+              (entry) => canonicalSupplierProductCode(entry?.codigoProduto) === itemSupplierCode
+            );
+            if (codeMatches.length) {
+              candidates = codeMatches;
+            }
+          }
+
+          if (normalizedSupplierName) {
+            const nameMatches = candidates.filter(
+              (entry) => canonicalSupplierName(entry?.fornecedor) === normalizedSupplierName
+            );
+            if (nameMatches.length) {
+              candidates = nameMatches;
+            }
+          }
+
+          const hasValidCalc = (entry) =>
+            Boolean(canonicalSupplierCalcType(entry?.tipoCalculo)) && parseSupplierCalcValue(entry?.valorCalculo) !== null;
+
+          const prioritized = candidates.filter(hasValidCalc);
+          if (prioritized.length) {
+            return prioritized[0];
+          }
+
+          const fallbackWithCalc = suppliers.filter(hasValidCalc);
+          if (fallbackWithCalc.length) {
+            return fallbackWithCalc[0];
+          }
+
+          return candidates[0] || suppliers[0] || null;
+        };
+
+        const applySupplierConversionFromProduct = (item, product, nfeData) => {
+          if (!item || !product) return false;
+          if (item.manualConversionOverride) return false;
+
+          const supplierEntry = findSupplierEntryForProduct(product, item, nfeData);
+          if (!supplierEntry) {
+            item.supplierAppliedConversion = null;
+            return false;
+          }
+
+          const calcType = canonicalSupplierCalcType(supplierEntry?.tipoCalculo);
+          const calcValue = parseSupplierCalcValue(supplierEntry?.valorCalculo);
+          if (!calcType || calcValue === null) {
+            item.supplierAppliedConversion = null;
+            item.manualConversionOverride = false;
+            return false;
+          }
+
+          let baseFactor = getBaseConversionFactor(item);
+          if (!Number.isFinite(baseFactor) || baseFactor <= 0) {
+            baseFactor = 1;
+          }
+
+          let adjustedFactor = baseFactor;
+          if (calcType === 'multiply') {
+            adjustedFactor = baseFactor * calcValue;
+          } else if (calcType === 'divide') {
+            adjustedFactor = baseFactor / calcValue;
+          }
+
+          if (!Number.isFinite(adjustedFactor) || adjustedFactor <= 0) {
+            item.supplierAppliedConversion = null;
+            item.manualConversionOverride = false;
+            return false;
+          }
+
+          const currentFactor = Number.isFinite(item?.conversion) ? item.conversion : parseNumber(item?.conversion);
+          const alreadyApplied =
+            item?.supplierAppliedConversion &&
+            Number.isFinite(item.supplierAppliedConversion?.factor) &&
+            Math.abs(item.supplierAppliedConversion.factor - adjustedFactor) <= 0.0005 &&
+            item.supplierAppliedConversion.type === calcType &&
+            item.supplierAppliedConversion.value === calcValue;
+
+          if (alreadyApplied && Number.isFinite(currentFactor)) {
+            item.manualConversionOverride = false;
+            return false;
+          }
+
+          item.conversion = adjustedFactor;
+          item.conversionMultiplier = adjustedFactor;
+          item.conversionDivider = 1;
+          item.supplierAppliedConversion = {
+            type: calcType,
+            value: calcValue,
+            factor: adjustedFactor,
+            supplierCode: canonicalSupplierProductCode(supplierEntry?.codigoProduto),
+            supplierName: supplierEntry?.fornecedor || '',
+            baseFactor,
+          };
+          item.manualConversionOverride = false;
+          return true;
+        };
+
         const ensureProductSupplierLink = (product, item, nfeData) => {
           const productId = product?._id || product?.id;
           const normalizedCode = canonicalSupplierProductCode(item?.supplierCode);
@@ -1793,11 +2034,18 @@
           const supplierInfo = resolveActiveSupplierInfo(nfeData);
           const supplierName = typeof supplierInfo.name === 'string' ? supplierInfo.name.trim() : '';
           const normalizedSupplierName = canonicalSupplierName(supplierName);
+          const supplierDocumentDigits = digitsOnly(supplierInfo.document);
           if (!normalizedSupplierName) {
             return null;
           }
 
-          const cacheKey = `${productId}::${normalizedSupplierName}::${normalizedCode}`;
+          const cacheKeySegments = [String(productId).trim(), normalizedCode];
+          if (supplierDocumentDigits) {
+            cacheKeySegments.splice(1, 0, `DOC:${supplierDocumentDigits}`);
+          } else if (normalizedSupplierName) {
+            cacheKeySegments.splice(1, 0, `NAME:${normalizedSupplierName}`);
+          }
+          const cacheKey = cacheKeySegments.join('::');
           if (productSupplierLinkCache.has(cacheKey)) {
             return null;
           }
@@ -1806,11 +2054,17 @@
           }
 
           const currentLinks = Array.isArray(product?.fornecedores) ? product.fornecedores : [];
-          const alreadyLinked = currentLinks.some(
-            (entry) =>
-              canonicalSupplierProductCode(entry?.codigoProduto) === normalizedCode &&
-              canonicalSupplierName(entry?.fornecedor) === normalizedSupplierName
-          );
+          const alreadyLinked = currentLinks.some((entry) => {
+            if (canonicalSupplierProductCode(entry?.codigoProduto) !== normalizedCode) {
+              return false;
+            }
+            const entryDocumentDigits = digitsOnly(entry?.documentoFornecedor);
+            const entrySupplierName = canonicalSupplierName(entry?.fornecedor);
+            if (supplierDocumentDigits && entryDocumentDigits) {
+              return entryDocumentDigits === supplierDocumentDigits;
+            }
+            return entrySupplierName === normalizedSupplierName;
+          });
           if (alreadyLinked) {
             productSupplierLinkCache.add(cacheKey);
             return null;
@@ -1825,6 +2079,7 @@
             nomeProdutoFornecedor: item?.description || '',
             codigoProduto: item?.supplierCode || '',
             unidadeEntrada: item?.unit || item?.unitTrib || '',
+            documentoFornecedor: supplierDocumentDigits,
           };
 
           const headers = buildAuthHeaders();
@@ -3035,8 +3290,10 @@
               await linkPromise;
             }
 
+            productLinkActiveItem.manualConversionOverride = false;
             productLinkActiveItem.matchedProduct = product;
             productLinkActiveItem.validationStatus = 'matched';
+            applySupplierConversionFromProduct(productLinkActiveItem, product, lastNfeData);
             productLinkActiveItem.internalCode = normalizeInternalCode(
               getProductCodeFromRecord(product)
             );
@@ -3387,13 +3644,50 @@
           const wrapper = document.createElement('div');
           wrapper.className = 'flex flex-col gap-1.5';
 
+          const supplierEntry =
+            item?.matchedProduct && lastNfeData
+              ? findSupplierEntryForProduct(item.matchedProduct, item, lastNfeData)
+              : null;
+          const supplierCalcType = canonicalSupplierCalcType(supplierEntry?.tipoCalculo);
+          const supplierCalcValue = parseSupplierCalcValue(supplierEntry?.valorCalculo);
+          let supplierBaseFactor = null;
+          let supplierFactor = null;
+          if (supplierEntry && supplierCalcType && supplierCalcValue !== null) {
+            supplierBaseFactor = getBaseConversionFactor(item);
+            if (!Number.isFinite(supplierBaseFactor) || supplierBaseFactor <= 0) {
+              supplierBaseFactor = 1;
+            }
+            const computedFactor =
+              supplierCalcType === 'divide'
+                ? supplierBaseFactor / supplierCalcValue
+                : supplierBaseFactor * supplierCalcValue;
+            if (Number.isFinite(computedFactor) && computedFactor > 0) {
+              supplierFactor = computedFactor;
+            }
+          }
+
           const factorText = document.createElement('span');
           factorText.className = 'text-[9px] text-right font-medium text-gray-500';
           const updateFactorText = () => {
             const factor = toNumeric(item?.conversion);
-            factorText.textContent = Number.isFinite(factor)
-              ? `Fator: ${formatDecimal(factor, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`
-              : 'Fator: —';
+            if (Number.isFinite(factor)) {
+              let suffix = '';
+              if (item?.supplierAppliedConversion && !item?.manualConversionOverride) {
+                const appliedType = item.supplierAppliedConversion.type;
+                const appliedValue = item.supplierAppliedConversion.value;
+                if (appliedType && Number.isFinite(appliedValue)) {
+                  const symbol = appliedType === 'divide' ? '÷' : '×';
+                  const formattedAppliedValue = formatConversionInputValue(appliedValue) || appliedValue;
+                  suffix = ` (Fornecedor ${symbol} ${formattedAppliedValue})`;
+                }
+              }
+              factorText.textContent = `Fator: ${formatDecimal(factor, {
+                minimumFractionDigits: 3,
+                maximumFractionDigits: 3,
+              })}${suffix}`;
+            } else {
+              factorText.textContent = 'Fator: —';
+            }
           };
 
           const handleTableRefresh = () => {
@@ -3406,6 +3700,25 @@
           };
 
           const commitConversionChange = (factor) => {
+            const fromSupplierCalculation =
+              Number.isFinite(supplierFactor) &&
+              Number.isFinite(factor) &&
+              Math.abs(supplierFactor - factor) <= 0.0005;
+
+            if (fromSupplierCalculation && supplierEntry && supplierCalcType && supplierCalcValue !== null) {
+              item.manualConversionOverride = false;
+              item.supplierAppliedConversion = {
+                type: supplierCalcType,
+                value: supplierCalcValue,
+                factor,
+                supplierCode: canonicalSupplierProductCode(supplierEntry?.codigoProduto),
+                supplierName: supplierEntry?.fornecedor || '',
+                baseFactor: supplierBaseFactor ?? getBaseConversionFactor(item),
+              };
+            } else {
+              item.manualConversionOverride = true;
+              item.supplierAppliedConversion = null;
+            }
             updateItemConversion(item, factor);
             updateFactorText();
             handleTableRefresh();
@@ -3579,6 +3892,17 @@
           const quickActions = [];
           if (Number.isFinite(xmlFactor)) {
             quickActions.push({ label: 'XML', value: Number.parseFloat(xmlFactor.toFixed(3)), title: 'Valor informado no XML' });
+          }
+          if (Number.isFinite(supplierFactor)) {
+            const supplierValueLabel = formatConversionInputValue(supplierCalcValue) || supplierCalcValue;
+            const supplierTitle = supplierCalcType === 'divide'
+              ? `Aplicar cálculo do fornecedor (÷ ${supplierValueLabel})`
+              : `Aplicar cálculo do fornecedor (× ${supplierValueLabel})`;
+            quickActions.push({
+              label: 'Fornecedor',
+              value: Number.parseFloat(supplierFactor.toFixed(3)),
+              title: supplierTitle,
+            });
           }
           quickActions.push({ label: '0', value: 0, title: 'Definir como divisão (0)' });
           quickActions.push({ label: formatDecimal(0.5, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), value: 0.5 });
@@ -4346,7 +4670,7 @@
           }
           const isPending = items.some((item) => item.validationStatus === 'pending' || item.validationStatus === 'checking');
           if (isPending) {
-            importXmlValidationText.textContent = 'Validando produtos pelo código de barras...';
+            importXmlValidationText.textContent = 'Validando produtos pelo fornecedor e código de barras...';
             applyValidationStyles('info');
             return;
           }
@@ -4387,6 +4711,98 @@
 
           updateProductTableDisplay();
         }
+
+        const buildSupplierLookupKey = (supplierInfo, supplierCode) => {
+          const normalizedCode = canonicalSupplierProductCode(supplierCode);
+          if (!normalizedCode) return '';
+          const parts = [normalizedCode];
+          if (supplierInfo) {
+            const supplierNameKey = canonicalSupplierName(supplierInfo.name);
+            if (supplierNameKey) {
+              parts.push(`NAME:${supplierNameKey}`);
+            }
+            const supplierDocumentKey = digitsOnly(supplierInfo.document);
+            if (supplierDocumentKey) {
+              parts.push(`DOC:${supplierDocumentKey}`);
+            }
+          }
+          return parts.join('::');
+        };
+
+        const findProductBySupplierReference = async (supplierInfo, supplierCode) => {
+          const normalizedCanonicalCode = canonicalSupplierProductCode(supplierCode);
+          if (!normalizedCanonicalCode) return null;
+
+          const normalizedSupplierCode = normalizeSupplierProductCode(supplierCode);
+          const cacheKey = buildSupplierLookupKey(supplierInfo, supplierCode);
+          if (cacheKey && supplierReferenceLookupCache.has(cacheKey)) {
+            return supplierReferenceLookupCache.get(cacheKey);
+          }
+          if (cacheKey && supplierReferenceLookupPromises.has(cacheKey)) {
+            return supplierReferenceLookupPromises.get(cacheKey);
+          }
+
+          const params = new URLSearchParams();
+          params.set('supplierCode', normalizedSupplierCode);
+          if (supplierInfo?.name) {
+            params.set('supplierName', supplierInfo.name);
+          }
+          if (supplierInfo?.document) {
+            const documentDigits = digitsOnly(supplierInfo.document);
+            if (documentDigits) {
+              params.set('supplierDocument', documentDigits);
+            }
+          }
+
+          const headers = buildAuthHeaders();
+          const requestPromise = (async () => {
+            const response = await fetch(
+              `${apiBaseUrl}/products/search-by-supplier?${params.toString()}`,
+              { headers }
+            );
+            const payload = await response.json().catch(() => ({}));
+
+            if (response.status === 401) {
+              handleAuthError();
+            }
+
+            if (response.status === 404) {
+              if (cacheKey) {
+                supplierReferenceLookupCache.set(cacheKey, null);
+              }
+              return null;
+            }
+
+            if (!response.ok) {
+              throw new Error(
+                payload?.message ||
+                  `Falha ao consultar produtos do fornecedor (status ${response.status}).`
+              );
+            }
+
+            const product = payload?.product || null;
+            if (cacheKey) {
+              supplierReferenceLookupCache.set(cacheKey, product);
+            }
+            return product;
+          })()
+            .catch((error) => {
+              if (cacheKey) {
+                supplierReferenceLookupCache.delete(cacheKey);
+              }
+              throw error;
+            })
+            .finally(() => {
+              if (cacheKey) {
+                supplierReferenceLookupPromises.delete(cacheKey);
+              }
+            });
+
+          if (cacheKey) {
+            supplierReferenceLookupPromises.set(cacheKey, requestPromise);
+          }
+          return requestPromise;
+        };
 
         const findProductByBarcode = async (barcodeDigits) => {
           const normalized = normalizeBarcodeForComparison(barcodeDigits);
@@ -4446,11 +4862,18 @@
             return;
           }
 
+          const supplierInfo = resolveActiveSupplierInfo(nfeData);
+          const itemsWithSupplierReference = items.filter((item) =>
+            Boolean(canonicalSupplierProductCode(item?.supplierCode))
+          );
           const itemsWithBarcode = items.filter(
             (item) => Array.isArray(item?.barcodeCandidates) && item.barcodeCandidates.length
           );
-          if (itemsWithBarcode.length) {
-            itemsWithBarcode.forEach((item) => {
+          const pendingValidationItems = Array.from(
+            new Set([...itemsWithSupplierReference, ...itemsWithBarcode])
+          );
+          if (pendingValidationItems.length) {
+            pendingValidationItems.forEach((item) => {
               item.validationStatus = 'checking';
             });
           }
@@ -4460,42 +4883,69 @@
           let hadError = false;
           const linkingTasks = [];
 
-          for (const item of itemsWithBarcode) {
+          for (const item of items) {
             if (sequence !== productValidationSequence) {
               return;
             }
-            try {
-              const product = await findProductMatchForCandidates(item.barcodeCandidates);
-              if (sequence !== productValidationSequence) {
-                return;
-              }
-              if (product) {
-                item.matchedProduct = product;
-                item.validationStatus = 'matched';
-                const linkPromise = ensureProductSupplierLink(product, item, nfeData);
-                if (linkPromise) {
-                  linkingTasks.push(
-                    linkPromise.catch((error) => {
-                      console.error('Erro ao vincular produto ao fornecedor automaticamente:', error);
-                      if (!supplierLinkErrorNotified) {
-                        notify(
-                          'Não foi possível vincular alguns produtos ao fornecedor automaticamente. Verifique os cadastros.',
-                          'warning'
-                        );
-                        supplierLinkErrorNotified = true;
-                      }
-                      return null;
-                    })
-                  );
+
+            const hasSupplierReference = Boolean(canonicalSupplierProductCode(item?.supplierCode));
+            const hasBarcodeCandidates = Array.isArray(item?.barcodeCandidates) && item.barcodeCandidates.length;
+            let matchedProduct = null;
+            let matched = false;
+
+            if (hasSupplierReference) {
+              try {
+                matchedProduct = await findProductBySupplierReference(supplierInfo, item.supplierCode);
+                if (sequence !== productValidationSequence) {
+                  return;
                 }
-              } else {
-                item.matchedProduct = null;
-                item.validationStatus = 'not-found';
+                matched = Boolean(matchedProduct);
+              } catch (error) {
+                console.error('Erro ao validar produto pelo fornecedor:', error);
+                item.validationStatus = 'error';
+                hadError = true;
+                continue;
               }
-            } catch (error) {
-              console.error('Erro ao validar produto pelo código de barras:', error);
-              item.validationStatus = 'error';
-              hadError = true;
+            }
+
+            if (!matched && hasBarcodeCandidates) {
+              try {
+                matchedProduct = await findProductMatchForCandidates(item.barcodeCandidates);
+                if (sequence !== productValidationSequence) {
+                  return;
+                }
+                matched = Boolean(matchedProduct);
+              } catch (error) {
+                console.error('Erro ao validar produto pelo código de barras:', error);
+                item.validationStatus = 'error';
+                hadError = true;
+                continue;
+              }
+            }
+
+            if (matched && matchedProduct) {
+              item.matchedProduct = matchedProduct;
+              item.validationStatus = 'matched';
+              applySupplierConversionFromProduct(item, matchedProduct, nfeData);
+              const linkPromise = ensureProductSupplierLink(matchedProduct, item, nfeData);
+              if (linkPromise) {
+                linkingTasks.push(
+                  linkPromise.catch((error) => {
+                    console.error('Erro ao vincular produto ao fornecedor automaticamente:', error);
+                    if (!supplierLinkErrorNotified) {
+                      notify(
+                        'Não foi possível vincular alguns produtos ao fornecedor automaticamente. Verifique os cadastros.',
+                        'warning'
+                      );
+                      supplierLinkErrorNotified = true;
+                    }
+                    return null;
+                  })
+                );
+              }
+            } else if (hasSupplierReference || hasBarcodeCandidates) {
+              item.matchedProduct = null;
+              item.validationStatus = 'not-found';
             }
           }
 
@@ -4514,7 +4964,7 @@
 
           if (hadError) {
             notify(
-              'Alguns produtos não puderam ser validados pelo código de barras. Tente novamente em instantes.',
+              'Alguns produtos não puderam ser validados automaticamente. Tente novamente em instantes.',
               'error'
             );
           }
@@ -4975,6 +5425,8 @@
           clearStatusMessages();
           productSupplierLinkCache.clear();
           productSupplierLinkPromises.clear();
+          supplierReferenceLookupCache.clear();
+          supplierReferenceLookupPromises.clear();
           supplierLinkErrorNotified = false;
           const extension = file.name.split('.').pop()?.toLowerCase();
           if (extension !== 'xml') {
@@ -5000,7 +5452,7 @@
               updateSummaryFromData(parsed);
               showFileFeedback('Validando fornecedor importado...', 'info');
               await handleSupplierSelection(parsed.emit);
-              showFileFeedback('Validando produtos pelo código de barras...', 'info');
+              showFileFeedback('Validando produtos pelo fornecedor e código de barras...', 'info');
               await validateImportedProducts(parsed);
 
               const nfNumberText = parsed.ide?.number ? `NF ${parsed.ide.number}` : 'NF-e';
@@ -5168,6 +5620,13 @@
             }
           }
         });
+
+        if (refreshImportedProductsButton) {
+          refreshImportedProductsButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            refreshImportedProductsList();
+          });
+        }
 
         importTabButtons.forEach((button) => {
           button.addEventListener('click', () => {

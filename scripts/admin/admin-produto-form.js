@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const inactiveCheckbox = document.getElementById('inativo');
     const fiscalCompanySelect = document.getElementById('fiscal-company-select');
     const fiscalCompanySummary = document.getElementById('fiscal-company-summary');
+    const deleteProductButton = document.getElementById('delete-product-button');
 
     const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
     const FISCAL_GENERAL_KEY = '__general__';
@@ -851,6 +852,34 @@ document.addEventListener('DOMContentLoaded', () => {
         input.classList.remove('bg-gray-100', 'cursor-not-allowed');
     };
 
+    const deleteButtonIdleContent = deleteProductButton ? deleteProductButton.innerHTML : 'Excluir Produto';
+
+    const setDeleteButtonIdleState = () => {
+        if (!deleteProductButton) return;
+        deleteProductButton.disabled = false;
+        deleteProductButton.innerHTML = deleteButtonIdleContent;
+        deleteProductButton.classList.remove('opacity-60', 'cursor-not-allowed');
+    };
+
+    const setDeleteButtonLoadingState = () => {
+        if (!deleteProductButton) return;
+        deleteProductButton.disabled = true;
+        deleteProductButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Excluindo...</span>';
+        deleteProductButton.classList.add('opacity-60', 'cursor-not-allowed');
+    };
+
+    const hideDeleteButton = () => {
+        if (!deleteProductButton) return;
+        setDeleteButtonIdleState();
+        deleteProductButton.classList.add('hidden');
+    };
+
+    const showDeleteButton = () => {
+        if (!deleteProductButton) return;
+        setDeleteButtonIdleState();
+        deleteProductButton.classList.remove('hidden');
+    };
+
     const setSubmitButtonIdleText = () => {
         if (!submitButton) return;
         submitButton.innerHTML = isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto';
@@ -1318,6 +1347,7 @@ document.addEventListener('DOMContentLoaded', () => {
         makeFieldEditable(skuInput);
         makeFieldEditable(nameInput);
         makeFieldEditable(barcodeInput);
+        hideDeleteButton();
 
         if (skuInput) skuInput.value = '';
         if (nameInput) nameInput.value = '';
@@ -1451,6 +1481,7 @@ document.addEventListener('DOMContentLoaded', () => {
         makeFieldEditable(nameInput);
         makeFieldEditable(barcodeInput);
         setSubmitButtonIdleText();
+        showDeleteButton();
         pageTitle.textContent = `Editar Produto: ${product.nome}`;
         if (pageDescription) {
             pageDescription.textContent = 'Altere os dados do produto abaixo.';
@@ -1876,7 +1907,132 @@ document.addEventListener('DOMContentLoaded', () => {
         categoryModal.classList.add('hidden');
     };
 
+    const handleDeleteProduct = () => {
+        if (!productId) {
+            showModal({
+                title: 'Produto não selecionado',
+                message: 'Selecione um produto antes de tentar excluí-lo.',
+                confirmText: 'Entendi'
+            });
+            return;
+        }
+
+        showModal({
+            title: 'Excluir produto',
+            message: 'Tem certeza de que deseja excluir este produto? A exclusão é definitiva e só será concluída caso não existam vendas vinculadas.',
+            confirmText: 'Excluir',
+            cancelText: 'Cancelar',
+            onConfirm: async () => {
+                setDeleteButtonLoadingState();
+
+                try {
+                    let loggedInUser = null;
+                    try {
+                        loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+                    } catch (storageError) {
+                        console.warn('Não foi possível ler os dados do usuário logado.', storageError);
+                    }
+
+                    const token = loggedInUser?.token;
+                    if (!token) {
+                        setDeleteButtonIdleState();
+                        showModal({
+                            title: 'Sessão expirada',
+                            message: 'Faça login novamente para excluir produtos.',
+                            confirmText: 'Ir para login',
+                            onConfirm: () => {
+                                window.location.href = '/pages/login.html';
+                            },
+                        });
+                        return;
+                    }
+
+                    const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+
+                    let payload = null;
+                    try {
+                        payload = await response.json();
+                    } catch (_) {
+                        payload = null;
+                    }
+
+                    if (response.status === 401 || response.status === 403) {
+                        setDeleteButtonIdleState();
+                        showModal({
+                            title: 'Sessão expirada',
+                            message: payload?.message || 'Faça login novamente para continuar.',
+                            confirmText: 'Ir para login',
+                            onConfirm: () => {
+                                window.location.href = '/pages/login.html';
+                            },
+                        });
+                        return;
+                    }
+
+                    if (response.status === 409) {
+                        setDeleteButtonIdleState();
+                        showModal({
+                            title: 'Não foi possível excluir',
+                            message: payload?.message || 'Este produto está vinculado a vendas e não pode ser removido.',
+                            confirmText: 'Entendi'
+                        });
+                        return;
+                    }
+
+                    if (!response.ok) {
+                        const errorMessage = payload?.message || 'Falha ao excluir o produto.';
+                        throw new Error(errorMessage);
+                    }
+
+                    const successMessage = payload?.message || 'Produto removido com sucesso.';
+
+                    productId = null;
+                    isEditMode = false;
+                    prepareFormForCreation();
+                    if (Array.isArray(allHierarchicalCategories) && allHierarchicalCategories.length) {
+                        populateCategoryTree(allHierarchicalCategories, productCategories);
+                    }
+
+                    try {
+                        const currentUrl = new URL(window.location.href);
+                        currentUrl.searchParams.delete('id');
+                        window.history.replaceState({}, '', currentUrl.toString());
+                    } catch (urlError) {
+                        console.warn('Não foi possível atualizar a URL após excluir o produto.', urlError);
+                    }
+
+                    showModal({
+                        title: 'Produto excluído',
+                        message: successMessage,
+                        confirmText: 'OK'
+                    });
+                } catch (error) {
+                    console.error('Erro ao excluir produto:', error);
+                    setDeleteButtonIdleState();
+                    showModal({
+                        title: 'Erro',
+                        message: error?.message
+                            ? `Não foi possível excluir o produto: ${error.message}`
+                            : 'Não foi possível excluir o produto.',
+                        confirmText: 'Entendi'
+                    });
+                } finally {
+                    if (deleteProductButton && !deleteProductButton.classList.contains('hidden')) {
+                        setDeleteButtonIdleState();
+                    }
+                }
+            }
+        });
+    };
+
     saveCategoryModalBtn.addEventListener('click', handleSaveCategories);
+    deleteProductButton?.addEventListener('click', handleDeleteProduct);
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -1930,6 +2086,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categorias: productCategories,
             fornecedores: supplierEntries.map((item) => ({
                 fornecedor: item.fornecedor,
+                documentoFornecedor: item.documentoFornecedor || null,
                 nomeProdutoFornecedor: item.nomeProdutoFornecedor || null,
                 codigoProduto: item.codigoProduto || null,
                 unidadeEntrada: item.unidadeEntrada || null,

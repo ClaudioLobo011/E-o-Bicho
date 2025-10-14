@@ -8,6 +8,7 @@ const multer = require('multer');
 const fs = require('fs');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const PdvState = require('../models/PdvState');
 
 // Configuração do Multer para upload de imagens
 const storage = multer.diskStorage({
@@ -26,6 +27,16 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
     try {
         const payload = req.body || {};
         const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
+        const normalizeDocument = (value) => {
+            if (value === null || value === undefined) return '';
+            if (typeof value === 'number' && Number.isFinite(value)) {
+                return String(value).replace(/\D+/g, '');
+            }
+            if (typeof value === 'string') {
+                return value.trim().replace(/\D+/g, '');
+            }
+            return String(value).replace(/\D+/g, '');
+        };
         const parseDate = (value) => {
             if (!value) return null;
             const parsed = new Date(value);
@@ -69,8 +80,16 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
                     const fornecedor = normalizeString(item?.fornecedor);
                     if (!fornecedor) return null;
                     const valorCalculo = parseNumber(item?.valorCalculo);
+                    const documentoFornecedor = normalizeDocument(
+                        item?.documentoFornecedor ||
+                        item?.documento ||
+                        item?.supplierDocument ||
+                        item?.cnpjFornecedor ||
+                        item?.cnpj
+                    );
                     return {
                         fornecedor,
+                        documentoFornecedor,
                         nomeProdutoFornecedor: normalizeString(item?.nomeProdutoFornecedor),
                         codigoProduto: normalizeString(item?.codigoProduto),
                         unidadeEntrada: normalizeString(item?.unidadeEntrada),
@@ -222,29 +241,61 @@ const extractCodComponents = (cod) => {
 };
 
 const generateSequentialCod = async () => {
-    const lastProduct = await Product.findOne(
+    const existingProducts = await Product.find(
         { cod: { $exists: true, $ne: null } },
         { cod: 1 }
     )
         .collation({ locale: 'pt', numericOrdering: true })
-        .sort({ cod: -1 })
+        .sort({ cod: 1 })
         .lean();
 
-    if (!lastProduct?.cod) {
+    if (!existingProducts.length) {
         return '000001';
     }
 
-    const components = extractCodComponents(lastProduct.cod);
-    if (!components || !components.numeric) {
-        const digits = lastProduct.cod.replace(/\D+/g, '');
-        const padding = digits.length || 6;
-        const nextNumber = Number.parseInt(digits || '0', 10) + 1;
-        return String(nextNumber).padStart(padding, '0');
+    let padding = 6;
+    const numericCodes = [];
+
+    existingProducts.forEach((product) => {
+        const components = extractCodComponents(product.cod);
+        if (!components?.numeric) {
+            const digits = typeof product.cod === 'string' ? product.cod.replace(/\D+/g, '') : '';
+            const parsed = Number.parseInt(digits || '0', 10);
+            if (Number.isFinite(parsed) && parsed > 0) {
+                padding = Math.max(padding, digits.length || 0);
+                numericCodes.push(parsed);
+            }
+            return;
+        }
+
+        const parsed = Number.parseInt(components.numeric, 10);
+        if (!Number.isFinite(parsed) || parsed <= 0) return;
+        padding = Math.max(padding, components.numeric.length || 0);
+        if (!components.prefix && !components.suffix) {
+            numericCodes.push(parsed);
+            return;
+        }
+
+        numericCodes.push(parsed);
+    });
+
+    if (!numericCodes.length) {
+        return '000001';
     }
 
-    const nextNumber = Number.parseInt(components.numeric, 10) + 1;
-    const paddedNumeric = String(nextNumber).padStart(components.numeric.length, '0');
-    return `${components.prefix || ''}${paddedNumeric}${components.suffix || ''}`;
+    numericCodes.sort((a, b) => a - b);
+
+    let candidate = 1;
+    for (const value of numericCodes) {
+        if (value < candidate) continue;
+        if (value === candidate) {
+            candidate += 1;
+            continue;
+        }
+        break;
+    }
+
+    return String(candidate).padStart(padding, '0');
 };
 
 // GET /api/products/by-category (pública)
@@ -440,6 +491,63 @@ router.get('/check-unique', async (req, res) => {
     }
 });
 
+router.get(
+    '/search-by-supplier',
+    requireAuth,
+    authorizeRoles('admin', 'admin_master'),
+    async (req, res) => {
+        try {
+            const supplierCodeCanonical = canonicalSupplierProductCode(req.query?.supplierCode);
+            if (!supplierCodeCanonical) {
+                return res.status(400).json({ message: 'Informe o código do produto no fornecedor.' });
+            }
+
+            const supplierNameCanonical = canonicalSupplierName(req.query?.supplierName);
+            const supplierDocumentDigits = normalizeDocumentDigits(req.query?.supplierDocument);
+
+            const supplierCodeRaw = normalizeSupplierString(req.query?.supplierCode);
+            const codeRegex = new RegExp(`^${escapeRegExp(supplierCodeRaw)}$`, 'i');
+
+            const candidates = await Product.find({ 'fornecedores.codigoProduto': { $regex: codeRegex } })
+                .select('cod codbarras nome imagemPrincipal imagens marca unidade fornecedores')
+                .lean();
+
+            const match = candidates.find((product) => {
+                if (!Array.isArray(product?.fornecedores)) return false;
+                return product.fornecedores.some((entry) => {
+                    if (canonicalSupplierProductCode(entry?.codigoProduto) !== supplierCodeCanonical) {
+                        return false;
+                    }
+
+                    if (supplierNameCanonical) {
+                        if (canonicalSupplierName(entry?.fornecedor) !== supplierNameCanonical) {
+                            return false;
+                        }
+                    }
+
+                    if (supplierDocumentDigits) {
+                        const entryDocument = normalizeDocumentDigits(entry?.documentoFornecedor);
+                        if (entryDocument && entryDocument !== supplierDocumentDigits) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                });
+            });
+
+            if (!match) {
+                return res.status(404).json({ message: 'Produto não encontrado para o fornecedor informado.' });
+            }
+
+            return res.json({ product: match });
+        } catch (error) {
+            console.error('Erro ao localizar produto pelo fornecedor:', error);
+            res.status(500).json({ message: 'Erro ao localizar produto pelo fornecedor.' });
+        }
+    }
+);
+
 // ========================================================================
 // ========= FUNÇÃO AUXILIAR PARA BREADCRUMB ===============================
 async function getCategoryPath(categoryId) {
@@ -572,6 +680,16 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         }
 
         const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
+        const normalizeDocument = (value) => {
+            if (value === null || value === undefined) return '';
+            if (typeof value === 'number' && Number.isFinite(value)) {
+                return String(value).replace(/\D+/g, '');
+            }
+            if (typeof value === 'string') {
+                return value.trim().replace(/\D+/g, '');
+            }
+            return String(value).replace(/\D+/g, '');
+        };
         const parseDate = (value) => {
             if (!value) return null;
             const parsed = new Date(value);
@@ -589,8 +707,16 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
                     const fornecedor = normalizeString(item?.fornecedor);
                     if (!fornecedor) return null;
                     const valorCalculo = parseNumber(item?.valorCalculo);
+                    const documentoFornecedor = normalizeDocument(
+                        item?.documentoFornecedor ||
+                        item?.documento ||
+                        item?.supplierDocument ||
+                        item?.cnpjFornecedor ||
+                        item?.cnpj
+                    );
                     return {
                         fornecedor,
+                        documentoFornecedor,
                         nomeProdutoFornecedor: normalizeString(item?.nomeProdutoFornecedor),
                         codigoProduto: normalizeString(item?.codigoProduto),
                         unidadeEntrada: normalizeString(item?.unidadeEntrada),
@@ -690,6 +816,12 @@ const canonicalSupplierName = (value) => {
         .toUpperCase();
 };
 
+const canonicalSupplierProductCode = (value) => normalizeSupplierString(value).toUpperCase();
+
+const normalizeDocumentDigits = (value) => normalizeSupplierString(value).replace(/\D+/g, '');
+
+const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const parseNullableNumber = (value) => {
     if (value === null || value === undefined || value === '') return null;
     const parsed = Number(value);
@@ -722,6 +854,13 @@ router.post(
                 return res.status(400).json({ message: 'Informe o nome do fornecedor.' });
             }
 
+            const supplierDocumentDigits = normalizeDocumentDigits(
+                req.body?.documentoFornecedor ||
+                req.body?.supplierDocument ||
+                req.body?.documento ||
+                req.body?.cnpjFornecedor ||
+                req.body?.cnpj
+            );
             const supplierProductName = normalizeSupplierString(req.body?.nomeProdutoFornecedor);
             const supplierUnit = normalizeSupplierString(req.body?.unidadeEntrada);
             const supplierCalcType = normalizeSupplierString(req.body?.tipoCalculo);
@@ -731,9 +870,14 @@ router.post(
                 ? [...product.fornecedores]
                 : [];
             const normalizedSupplierName = canonicalSupplierName(supplierName);
+            const normalizedSupplierCode = canonicalSupplierProductCode(supplierProductCode);
             const existingIndex = suppliers.findIndex((entry) => {
-                if (normalizeSupplierString(entry?.codigoProduto) !== supplierProductCode) {
+                if (canonicalSupplierProductCode(entry?.codigoProduto) !== normalizedSupplierCode) {
                     return false;
+                }
+                const entryDocumentDigits = normalizeDocumentDigits(entry?.documentoFornecedor);
+                if (supplierDocumentDigits && entryDocumentDigits) {
+                    return entryDocumentDigits === supplierDocumentDigits;
                 }
                 return canonicalSupplierName(entry?.fornecedor) === normalizedSupplierName;
             });
@@ -745,6 +889,14 @@ router.post(
                 if (normalizeSupplierString(existingEntry?.fornecedor) !== supplierName) {
                     existingEntry.fornecedor = supplierName;
                     changed = true;
+                }
+
+                if (supplierDocumentDigits) {
+                    const entryDocumentDigits = normalizeDocumentDigits(existingEntry?.documentoFornecedor);
+                    if (entryDocumentDigits !== supplierDocumentDigits) {
+                        existingEntry.documentoFornecedor = supplierDocumentDigits;
+                        changed = true;
+                    }
                 }
 
                 if (supplierProductName) {
@@ -800,6 +952,7 @@ router.post(
 
             const newEntry = {
                 fornecedor: supplierName,
+                documentoFornecedor: supplierDocumentDigits,
                 nomeProdutoFornecedor: supplierProductName,
                 codigoProduto: supplierProductCode,
                 unidadeEntrada: supplierUnit,
@@ -948,6 +1101,49 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
 
         if (!product) {
             return res.status(404).json({ message: 'Produto não encontrado.' });
+        }
+
+        const productId = product._id;
+        const productIdString = productId.toString();
+        const productIdCandidates = [productId, productIdString];
+
+        const basePaths = [
+            'completedSales.items',
+            'completedSales.receiptSnapshot.itens',
+            'completedSales.receiptSnapshot.items',
+            'completedSales.fiscalItemsSnapshot',
+            'completedSales.fiscalItemsSnapshot.itens',
+            'completedSales.fiscalItemsSnapshot.items',
+        ];
+
+        const propertyVariants = [
+            'productSnapshot._id',
+            'productSnapshot.id',
+            'productSnapshot.productId',
+            'productSnapshot.product_id',
+            'productSnapshot.produtoId',
+            'productSnapshot.produto_id',
+            'productId',
+            'product_id',
+            'produtoId',
+            'produto_id',
+            'id',
+            'product',
+            'produto',
+        ];
+
+        const salesLinkQuery = [{ 'inventoryMovements.items.product': productId }];
+
+        for (const basePath of basePaths) {
+            for (const variant of propertyVariants) {
+                salesLinkQuery.push({ [`${basePath}.${variant}`]: { $in: productIdCandidates } });
+            }
+        }
+
+        const hasSalesLinks = await PdvState.exists({ $or: salesLinkQuery });
+
+        if (hasSalesLinks) {
+            return res.status(409).json({ message: 'Não é possível excluir produtos que possuam vendas registradas.' });
         }
 
         const imagePaths = new Set();
