@@ -1188,6 +1188,14 @@
                     <i class="fas fa-layer-group text-[11px]"></i>
                     <span data-import-xml-number>XML não importado</span>
                   </span>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full border border-primary px-2 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-refresh-import-products
+                  >
+                    <i class="fas fa-rotate-right text-[11px]" data-refresh-import-products-icon></i>
+                    Atualizar lista
+                  </button>
                   <span class="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-sky-700" data-import-xml-validation>
                     <i class="fas fa-circle-info text-[11px]" data-import-xml-validation-icon></i>
                     <span data-import-xml-validation-text>Aguardando validação fiscal</span>
@@ -1482,6 +1490,10 @@
         const importXmlValidationBadge = importModal.querySelector('[data-import-xml-validation]');
         const importXmlValidationText = importModal.querySelector('[data-import-xml-validation-text]');
         const importXmlValidationIcon = importModal.querySelector('[data-import-xml-validation-icon]');
+        const refreshImportedProductsButton = importModal.querySelector('[data-refresh-import-products]');
+        const refreshImportedProductsIcon = refreshImportedProductsButton
+          ? refreshImportedProductsButton.querySelector('[data-refresh-import-products-icon]')
+          : null;
         const importProductsTableHead = importModal.querySelector('[data-import-products-head]');
         const importProductsTableBody = importModal.querySelector('[data-import-products-body]');
         const importSummaryFields = Array.from(importModal.querySelectorAll('[data-import-summary-field]')).reduce(
@@ -1601,6 +1613,7 @@
         const productSupplierLinkCache = new Set();
         const productSupplierLinkPromises = new Map();
         let supplierLinkErrorNotified = false;
+        let isRefreshingImportedProducts = false;
 
         const STATUS_CLASS_MAP = {
           success: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-800'],
@@ -1670,6 +1683,70 @@
         };
 
         const digitsOnly = (value) => String(value ?? '').replace(/\D+/g, '');
+
+        const resetProductLookupCaches = () => {
+          productLookupCache.clear();
+          productLookupPromises.clear();
+          supplierReferenceLookupCache.clear();
+          supplierReferenceLookupPromises.clear();
+        };
+
+        const setRefreshImportedProductsButtonState = (isLoading) => {
+          if (!refreshImportedProductsButton) return;
+          const shouldDisable = Boolean(isLoading);
+          refreshImportedProductsButton.disabled = shouldDisable;
+          refreshImportedProductsButton.classList.toggle('opacity-60', shouldDisable);
+          refreshImportedProductsButton.classList.toggle('cursor-not-allowed', shouldDisable);
+          if (shouldDisable) {
+            refreshImportedProductsButton.setAttribute('aria-busy', 'true');
+          } else {
+            refreshImportedProductsButton.removeAttribute('aria-busy');
+          }
+          if (refreshImportedProductsIcon) {
+            refreshImportedProductsIcon.classList.toggle('fa-spin', shouldDisable);
+          }
+        };
+
+        const refreshImportedProductsList = async () => {
+          if (isRefreshingImportedProducts) {
+            return;
+          }
+          const hasItems = Array.isArray(lastNfeData?.items) && lastNfeData.items.length > 0;
+          if (!hasItems) {
+            notify('Importe um XML autorizado para atualizar a lista de produtos.', 'warning');
+            return;
+          }
+
+          isRefreshingImportedProducts = true;
+          setRefreshImportedProductsButtonState(true);
+
+          const itemsBeforeRefresh = Array.isArray(lastNfeData.items) ? lastNfeData.items : [];
+          const previousUnmatchedCount = itemsBeforeRefresh.filter(
+            (item) => item?.validationStatus === 'not-found'
+          ).length;
+
+          try {
+            resetProductLookupCaches();
+            await validateImportedProducts(lastNfeData);
+
+            const updatedItems = Array.isArray(lastNfeData?.items) ? lastNfeData.items : [];
+            const currentUnmatchedCount = updatedItems.filter(
+              (item) => item?.validationStatus === 'not-found'
+            ).length;
+
+            const successMessage =
+              currentUnmatchedCount < previousUnmatchedCount
+                ? 'Lista atualizada e novos produtos foram vinculados.'
+                : 'Lista de produtos importados atualizada.';
+            notify(successMessage, 'success');
+          } catch (error) {
+            console.error('Erro ao atualizar a lista de produtos importados:', error);
+            notify('Não foi possível atualizar a lista de produtos importados. Tente novamente.', 'error');
+          } finally {
+            setRefreshImportedProductsButtonState(false);
+            isRefreshingImportedProducts = false;
+          }
+        };
 
         const normalizeBarcodeForComparison = (value) => {
           const digits = digitsOnly(value);
@@ -5529,6 +5606,13 @@
             }
           }
         });
+
+        if (refreshImportedProductsButton) {
+          refreshImportedProductsButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            refreshImportedProductsList();
+          });
+        }
 
         importTabButtons.forEach((button) => {
           button.addEventListener('click', () => {
