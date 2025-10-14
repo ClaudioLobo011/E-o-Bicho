@@ -2242,18 +2242,49 @@
 
         const ensureConversionDefaults = (item) => {
           if (!item) return;
-          const hasMultiplier = Number.isFinite(item.conversionMultiplier);
-          if (!hasMultiplier) {
-            item.conversionMultiplier = Number.isFinite(item.quantity) ? item.quantity : 1;
+          const toNumeric = (value) => (Number.isFinite(value) ? value : parseNumber(value));
+
+          const multiplierFromData = toNumeric(item.conversionMultiplier);
+          const quantityFromData = toNumeric(item.quantity);
+          if (!Object.prototype.hasOwnProperty.call(item, 'originalConversionMultiplier')) {
+            const originalMultiplier = Number.isFinite(multiplierFromData)
+              ? multiplierFromData
+              : Number.isFinite(quantityFromData)
+              ? quantityFromData
+              : null;
+            if (Number.isFinite(originalMultiplier)) {
+              item.originalConversionMultiplier = originalMultiplier;
+            }
           }
-          const hasDivider = Number.isFinite(item.conversionDivider) && item.conversionDivider > 0;
+
+          const dividerFromData = toNumeric(item.conversionDivider);
+          const qTribFromData = toNumeric(item.qTrib);
+          if (!Object.prototype.hasOwnProperty.call(item, 'originalConversionDivider')) {
+            const originalDivider =
+              Number.isFinite(dividerFromData) && dividerFromData > 0
+                ? dividerFromData
+                : Number.isFinite(qTribFromData) && qTribFromData > 0
+                ? qTribFromData
+                : null;
+            if (Number.isFinite(originalDivider)) {
+              item.originalConversionDivider = originalDivider;
+            }
+          }
+
+          const hasMultiplier = Number.isFinite(multiplierFromData);
+          if (!hasMultiplier) {
+            item.conversionMultiplier = Number.isFinite(quantityFromData) ? quantityFromData : 1;
+          }
+          const hasDivider = Number.isFinite(dividerFromData) && dividerFromData > 0;
           if (!hasDivider) {
-            const derivedDivider = Number.isFinite(item.qTrib) && item.qTrib > 0 ? item.qTrib : 1;
+            const derivedDivider = Number.isFinite(qTribFromData) && qTribFromData > 0 ? qTribFromData : 1;
             item.conversionDivider = derivedDivider;
           }
-          const numerator = Number.isFinite(item.conversionMultiplier) ? item.conversionMultiplier : null;
+          const numerator = Number.isFinite(toNumeric(item.conversionMultiplier)) ? toNumeric(item.conversionMultiplier) : null;
           const denominator =
-            Number.isFinite(item.conversionDivider) && item.conversionDivider > 0 ? item.conversionDivider : null;
+            Number.isFinite(toNumeric(item.conversionDivider)) && toNumeric(item.conversionDivider) > 0
+              ? toNumeric(item.conversionDivider)
+              : null;
           if (numerator !== null && denominator !== null) {
             item.conversion = numerator / denominator;
           }
@@ -2284,96 +2315,243 @@
 
         const buildConversionCell = (item) => {
           ensureConversionDefaults(item);
+          const toNumeric = (value) => (Number.isFinite(value) ? value : parseNumber(value));
           const cell = document.createElement('td');
-          cell.className = 'px-2 py-1.5 text-gray-600 whitespace-nowrap';
+          cell.className = 'px-2 py-1.5 text-gray-600 whitespace-nowrap align-top';
 
           const wrapper = document.createElement('div');
-          wrapper.className = 'flex flex-col gap-1';
-
-          const inputRow = document.createElement('div');
-          inputRow.className = 'flex items-center gap-1';
-
-          const createNumericInput = (initialValue, onCommit, { allowZero = false } = {}) => {
-            let currentValue = Number.isFinite(initialValue) ? initialValue : null;
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.inputMode = 'decimal';
-            input.className =
-              'w-16 rounded border border-gray-200 bg-white px-1.5 py-1 text-[10px] text-right font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30';
-            if (Number.isFinite(currentValue)) {
-              input.value = formatConversionInputValue(currentValue);
-            }
-            input.addEventListener('focus', () => {
-              setTimeout(() => input.select(), 0);
-            });
-            const commitValue = () => {
-              const numeric = parseNumber(input.value);
-              const isValid = allowZero ? Number.isFinite(numeric) && numeric >= 0 : Number.isFinite(numeric) && numeric > 0;
-              const safeValue = isValid ? numeric : currentValue;
-              if (Number.isFinite(safeValue)) {
-                currentValue = safeValue;
-                onCommit(safeValue);
-                input.value = formatConversionInputValue(safeValue);
-              } else {
-                input.value = '';
-              }
-              updateFactorText();
-              const hasActiveFilters = Object.values(productTableState?.filters || {}).some(
-                (value) => normalizeFilterText(value).length > 0
-              );
-              if (hasActiveFilters || productTableState?.sortKey) {
-                requestAnimationFrame(() => updateProductTableDisplay());
-              }
-            };
-            input.addEventListener('blur', commitValue);
-            input.addEventListener('keydown', (event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                commitValue();
-                input.blur();
-              }
-            });
-            return input;
-          };
-
-          const multiplierInitial = Number.isFinite(item?.conversionMultiplier)
-            ? item.conversionMultiplier
-            : Number.isFinite(item?.quantity)
-            ? item.quantity
-            : null;
-          const dividerInitial = Number.isFinite(item?.conversionDivider)
-            ? item.conversionDivider
-            : Number.isFinite(item?.qTrib)
-            ? item.qTrib
-            : null;
-
-          const multiplierInput = createNumericInput(
-            multiplierInitial,
-            (value) => {
-              updateItemConversion(item, { multiplier: value });
-            },
-            { allowZero: true }
-          );
-
-          const dividerInput = createNumericInput(dividerInitial, (value) => {
-            updateItemConversion(item, { divider: value });
-          });
-
-          const separator = document.createElement('span');
-          separator.className = 'text-[10px] font-semibold text-gray-400';
-          separator.textContent = '÷';
-
-          inputRow.append(multiplierInput, separator, dividerInput);
+          wrapper.className = 'flex flex-col gap-1.5';
 
           const factorText = document.createElement('span');
           factorText.className = 'text-[9px] text-right font-medium text-gray-500';
           const updateFactorText = () => {
-            const factor = Number.isFinite(item?.conversion) ? item.conversion : null;
-            factorText.textContent = factor ? `Fator: ${formatDecimal(factor, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}` : 'Fator: —';
+            const factor = toNumeric(item?.conversion);
+            factorText.textContent = Number.isFinite(factor)
+              ? `Fator: ${formatDecimal(factor, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`
+              : 'Fator: —';
           };
+
+          const handleTableRefresh = () => {
+            const hasActiveFilters = Object.values(productTableState?.filters || {}).some(
+              (value) => normalizeFilterText(value).length > 0
+            );
+            if (hasActiveFilters || productTableState?.sortKey) {
+              requestAnimationFrame(() => updateProductTableDisplay());
+            }
+          };
+
+          const commitConversionChange = (changes) => {
+            updateItemConversion(item, changes);
+            updateFactorText();
+            handleTableRefresh();
+          };
+
+          const createNumericEditor = (labelText, { initialValue, allowZero = false, step = 1, quickActions = [], onCommit }) => {
+            let currentValue = Number.isFinite(initialValue) ? initialValue : null;
+            const MIN_POSITIVE = 0.001;
+            const container = document.createElement('div');
+            container.className = 'flex flex-col items-end gap-1';
+
+            const label = document.createElement('span');
+            label.className = 'text-[9px] font-semibold uppercase tracking-wide text-gray-500';
+            label.textContent = labelText;
+            container.appendChild(label);
+
+            const controlsRow = document.createElement('div');
+            controlsRow.className = 'flex items-center gap-1';
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.inputMode = 'decimal';
+            input.placeholder = '0,000';
+            input.className =
+              'w-20 rounded border border-gray-200 bg-white px-2 py-1 text-[11px] text-right font-semibold text-gray-700 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30';
+
+            const formatValue = (value) => (Number.isFinite(value) ? formatConversionInputValue(value) : '');
+            const normalizeValue = (value) => {
+              const numeric = Number.isFinite(value) ? value : parseNumber(value);
+              if (!Number.isFinite(numeric)) return null;
+              const minValue = allowZero ? 0 : MIN_POSITIVE;
+              const sanitized = numeric < minValue ? minValue : numeric;
+              return Number.parseFloat(sanitized.toFixed(3));
+            };
+
+            const updateInputValue = () => {
+              input.value = formatValue(currentValue);
+            };
+
+            if (Number.isFinite(currentValue)) {
+              updateInputValue();
+            }
+
+            input.addEventListener('focus', () => {
+              setTimeout(() => input.select(), 0);
+            });
+
+            const commitValue = (value) => {
+              const normalized = normalizeValue(value);
+              if (normalized === null) {
+                updateInputValue();
+                return;
+              }
+              currentValue = normalized;
+              updateInputValue();
+              if (typeof onCommit === 'function') {
+                onCommit(normalized);
+              }
+            };
+
+            const computeStep = (event) => {
+              let computed = Number.isFinite(step) && step > 0 ? step : 1;
+              if (event?.shiftKey) {
+                computed *= 10;
+              }
+              if (event?.altKey) {
+                computed /= 10;
+              }
+              if (event?.ctrlKey || event?.metaKey) {
+                computed /= 100;
+              }
+              return computed;
+            };
+
+            const applyStep = (direction, event) => {
+              const baseValue = (() => {
+                const inputValue = parseNumber(input.value);
+                if (Number.isFinite(inputValue)) return inputValue;
+                if (Number.isFinite(currentValue)) return currentValue;
+                return allowZero ? 0 : step || 1;
+              })();
+              const nextValue = baseValue + direction * computeStep(event);
+              commitValue(nextValue);
+            };
+
+            const createStepButton = (symbol, direction) => {
+              const button = document.createElement('button');
+              button.type = 'button';
+              button.className =
+                'h-6 w-6 flex items-center justify-center rounded border border-gray-200 bg-white text-[11px] font-semibold text-gray-500 hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30';
+              button.textContent = symbol;
+              button.title =
+                direction > 0
+                  ? 'Aumentar valor (Shift=×10, Alt=÷10, Ctrl=÷100)'
+                  : 'Reduzir valor (Shift=×10, Alt=÷10, Ctrl=÷100)';
+              button.addEventListener('click', (event) => {
+                event.preventDefault();
+                applyStep(direction, event);
+              });
+              return button;
+            };
+
+            const decrementButton = createStepButton('−', -1);
+            const incrementButton = createStepButton('+', 1);
+            controlsRow.append(decrementButton, input, incrementButton);
+            container.appendChild(controlsRow);
+
+            input.addEventListener('keydown', (event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commitValue(input.value);
+                input.blur();
+                return;
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                updateInputValue();
+                input.blur();
+                return;
+              }
+              if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                event.preventDefault();
+                applyStep(event.key === 'ArrowUp' ? 1 : -1, event);
+              }
+            });
+
+            input.addEventListener('blur', () => commitValue(input.value));
+
+            if (quickActions.length > 0) {
+              const quickRow = document.createElement('div');
+              quickRow.className = 'flex flex-wrap items-center justify-end gap-1';
+              quickActions.forEach((action) => {
+                const quickButton = document.createElement('button');
+                quickButton.type = 'button';
+                quickButton.className =
+                  'rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[9px] font-medium text-gray-600 hover:border-primary hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30';
+                quickButton.textContent = action.label;
+                if (action.title) {
+                  quickButton.title = action.title;
+                }
+                quickButton.addEventListener('click', (event) => {
+                  event.preventDefault();
+                  const actionValue = typeof action.getValue === 'function' ? action.getValue() : action.value;
+                  commitValue(actionValue);
+                });
+                quickRow.appendChild(quickButton);
+              });
+              container.appendChild(quickRow);
+            }
+
+            return container;
+          };
+
+          let multiplierInitial = toNumeric(item?.conversionMultiplier);
+          if (!Number.isFinite(multiplierInitial)) {
+            multiplierInitial = toNumeric(item?.quantity);
+          }
+          let dividerInitial = toNumeric(item?.conversionDivider);
+          if (!Number.isFinite(dividerInitial)) {
+            dividerInitial = toNumeric(item?.qTrib);
+          }
+
+          const xmlMultiplier = toNumeric(item?.originalConversionMultiplier);
+          const nfQuantity = toNumeric(item?.quantity);
+          const multiplierQuickActions = [];
+          if (Number.isFinite(xmlMultiplier)) {
+            multiplierQuickActions.push({ label: 'XML', getValue: () => xmlMultiplier, title: 'Valor informado no XML' });
+          }
+          if (Number.isFinite(nfQuantity) && nfQuantity !== xmlMultiplier) {
+            multiplierQuickActions.push({ label: 'Qtd NF', getValue: () => nfQuantity, title: 'Quantidade do item na NF-e' });
+          }
+          multiplierQuickActions.push({ label: '1', value: 1, title: 'Definir multiplicador como 1' });
+
+          const xmlDivider = toNumeric(item?.originalConversionDivider);
+          const qTribValue = toNumeric(item?.qTrib);
+          const dividerQuickActions = [];
+          if (Number.isFinite(xmlDivider)) {
+            dividerQuickActions.push({ label: 'XML', getValue: () => xmlDivider, title: 'Valor informado no XML' });
+          }
+          if (Number.isFinite(qTribValue) && qTribValue !== xmlDivider) {
+            dividerQuickActions.push({ label: 'Qtd Trib', getValue: () => qTribValue, title: 'Quantidade tributável (qTrib)' });
+          }
+          dividerQuickActions.push({ label: '1', value: 1, title: 'Definir divisor como 1' });
+
+          const editorsRow = document.createElement('div');
+          editorsRow.className = 'grid grid-cols-2 gap-2';
+
+          const multiplierEditor = createNumericEditor('Multiplicador', {
+            initialValue: multiplierInitial,
+            allowZero: true,
+            step: 1,
+            quickActions: multiplierQuickActions,
+            onCommit: (value) => {
+              commitConversionChange({ multiplier: value });
+            },
+          });
+
+          const dividerEditor = createNumericEditor('Divisor', {
+            initialValue: dividerInitial,
+            step: 1,
+            quickActions: dividerQuickActions,
+            onCommit: (value) => {
+              commitConversionChange({ divider: value });
+            },
+          });
+
+          editorsRow.append(multiplierEditor, dividerEditor);
+
+          wrapper.append(editorsRow, factorText);
           updateFactorText();
 
-          wrapper.append(inputRow, factorText);
           cell.appendChild(wrapper);
           return cell;
         };
