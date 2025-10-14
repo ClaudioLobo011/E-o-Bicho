@@ -1827,24 +1827,44 @@
           const quantityValue = toNumeric(item.quantity);
           const unitPriceValue = toNumeric(item.unitPrice);
           const totalValue = toNumeric(item.total);
-          const discountValue = toNumeric(item.discount);
+          const discountValueRaw = toNumeric(item.discount);
+
+          const grossAmount = Number.isFinite(quantityValue) && Number.isFinite(unitPriceValue)
+            ? quantityValue * unitPriceValue
+            : Number.isFinite(totalValue)
+            ? totalValue
+            : null;
 
           const baseTotal = Number.isFinite(totalValue)
             ? totalValue
-            : Number.isFinite(quantityValue) && Number.isFinite(unitPriceValue)
-            ? quantityValue * unitPriceValue
+            : Number.isFinite(grossAmount)
+            ? grossAmount
             : null;
+
+          let discountValue = Number.isFinite(discountValueRaw) ? Math.max(discountValueRaw, 0) : 0;
+          if (Number.isFinite(baseTotal)) {
+            discountValue = Math.min(discountValue, Math.max(baseTotal, 0));
+          }
+
+          if (Number.isFinite(grossAmount) && grossAmount > 0) {
+            item.discountPercent = Number.isFinite(discountValue)
+              ? (discountValue / grossAmount) * 100
+              : 0;
+          } else if (!Number.isFinite(discountValue) || discountValue <= 0) {
+            item.discountPercent = 0;
+          }
 
           const netBaseTotal = Number.isFinite(baseTotal)
             ? Math.max(baseTotal - (Number.isFinite(discountValue) ? discountValue : 0), 0)
             : null;
 
           const taxesTotal = sumFiniteValues([
-            toNumeric(item.icmsValue),
             toNumeric(item.icmsStValue),
             toNumeric(item.ipiValue),
-            toNumeric(item.pisValue),
-            toNumeric(item.cofinsValue),
+            toNumeric(item.iiValue),
+            toNumeric(item.fcpValue),
+            toNumeric(item.fcpStValue),
+            toNumeric(item.fcpStRetainedValue),
           ]);
 
           const additionalsTotal = sumFiniteValues([toNumeric(item.freight), toNumeric(item.other)]);
@@ -1864,6 +1884,7 @@
               ? totalWithTaxes / effectiveQuantity
               : null;
 
+          item.discount = Number.isFinite(discountValue) ? discountValue : 0;
           item.entryStockQuantity =
             Number.isFinite(entryStockQuantity) && entryStockQuantity >= 0 ? entryStockQuantity : null;
           item.netProductValue =
@@ -1876,6 +1897,169 @@
             Number.isFinite(unitCostWithTaxes) && unitCostWithTaxes >= 0 ? unitCostWithTaxes : null;
 
           return item;
+        };
+
+        const alignItemsWithTotals = (items, totals) => {
+          if (!Array.isArray(items) || !items.length) return;
+
+          const distributionEntries = items.map((item) => {
+            const candidates = [
+              toNumeric(item.netProductValue),
+              toNumeric(item.total),
+              toNumeric(item.entryStockQuantity),
+              toNumeric(item.quantity),
+            ];
+            const base = candidates.find((value) => Number.isFinite(value) && value > 0) || 1;
+            return { item, base };
+          });
+
+          const distributeByBase = (amount, applyShare) => {
+            if (!Number.isFinite(amount) || !items.length || Math.abs(amount) <= 0.00001) {
+              return;
+            }
+
+            const totalBase = distributionEntries.reduce(
+              (accumulator, entry) =>
+                accumulator + (Number.isFinite(entry.base) && entry.base > 0 ? entry.base : 0),
+              0
+            );
+
+            let allocated = 0;
+            distributionEntries.forEach((entry, index) => {
+              const ratio =
+                totalBase > 0
+                  ? entry.base / totalBase
+                  : 1 / distributionEntries.length;
+              let share = amount * ratio;
+              if (index === distributionEntries.length - 1) {
+                share = amount - allocated;
+              } else {
+                allocated += share;
+              }
+              applyShare(entry.item, share);
+            });
+          };
+
+          const setFieldValue = (item, field, value) => {
+            const sanitized = Math.abs(value) <= 0.000001 ? 0 : value;
+            item[field] = sanitized;
+          };
+
+          const addToField = (item, field, delta) => {
+            const current = toNumeric(item[field]);
+            const next = (Number.isFinite(current) ? current : 0) + delta;
+            setFieldValue(item, field, next);
+          };
+
+          const adjustNonNegativeField = (field, targetValue) => {
+            if (!Number.isFinite(targetValue)) return;
+            const sanitizedTarget = targetValue > 0 ? targetValue : 0;
+            const currentSum = sumFiniteValues(
+              items.map((item) => {
+                const value = toNumeric(item[field]);
+                return Number.isFinite(value) && value > 0 ? value : 0;
+              })
+            );
+
+            if (currentSum > 0) {
+              const ratio = sanitizedTarget / currentSum;
+              items.forEach((item) => {
+                const value = toNumeric(item[field]);
+                const current = Number.isFinite(value) && value > 0 ? value : 0;
+                setFieldValue(item, field, current * ratio);
+              });
+            } else if (sanitizedTarget > 0) {
+              distributeByBase(sanitizedTarget, (item, share) => addToField(item, field, share));
+            } else {
+              items.forEach((item) => {
+                if (item[field]) {
+                  setFieldValue(item, field, 0);
+                }
+              });
+            }
+          };
+
+          const totalsNormalized = {
+            discount: toNumeric(totals?.discount),
+            freight: toNumeric(totals?.freight),
+            other: toNumeric(totals?.other),
+            insurance: toNumeric(totals?.insurance),
+            ipi: toNumeric(totals?.ipi),
+            icmsSt: toNumeric(totals?.icmsSt),
+            fcp: toNumeric(totals?.fcp),
+            fcpSt: toNumeric(totals?.fcpSt),
+            fcpStRet: toNumeric(totals?.fcpStRet),
+            ii: toNumeric(totals?.ii),
+            totalValue: toNumeric(totals?.totalValue),
+          };
+
+          const discountTarget = Number.isFinite(totalsNormalized.discount)
+            ? Math.max(totalsNormalized.discount, 0)
+            : null;
+          if (discountTarget !== null) {
+            const currentDiscountSum = sumFiniteValues(
+              items.map((item) => {
+                const value = toNumeric(item.discount);
+                return Number.isFinite(value) && value > 0 ? value : 0;
+              })
+            );
+
+            if (currentDiscountSum > 0) {
+              const ratio = discountTarget / currentDiscountSum;
+              items.forEach((item) => {
+                const value = toNumeric(item.discount);
+                const current = Number.isFinite(value) && value > 0 ? value : 0;
+                setFieldValue(item, 'discount', current * ratio);
+              });
+            } else if (discountTarget > 0) {
+              distributeByBase(discountTarget, (item, share) => addToField(item, 'discount', share));
+            } else {
+              items.forEach((item) => {
+                if (item.discount) {
+                  setFieldValue(item, 'discount', 0);
+                }
+              });
+            }
+          }
+
+          adjustNonNegativeField('freight', totalsNormalized.freight);
+
+          const targetOther =
+            (Number.isFinite(totalsNormalized.other) ? totalsNormalized.other : 0) +
+            (Number.isFinite(totalsNormalized.insurance) ? totalsNormalized.insurance : 0);
+          const currentOther = sumFiniteValues(items.map((item) => toNumeric(item.other)));
+          distributeByBase(targetOther - currentOther, (item, share) => addToField(item, 'other', share));
+
+          adjustNonNegativeField('ipiValue', totalsNormalized.ipi);
+          adjustNonNegativeField('icmsStValue', totalsNormalized.icmsSt);
+          adjustNonNegativeField('fcpValue', totalsNormalized.fcp);
+          adjustNonNegativeField('fcpStValue', totalsNormalized.fcpSt);
+          adjustNonNegativeField('fcpStRetainedValue', totalsNormalized.fcpStRet);
+          adjustNonNegativeField('iiValue', totalsNormalized.ii);
+
+          items.forEach((item) => ensureItemCostWithTaxes(item));
+
+          if (Number.isFinite(totalsNormalized.totalValue)) {
+            let aggregatedTotal = sumFiniteValues(
+              items.map((item) => toNumeric(item.totalWithTaxes))
+            );
+            let remainder = totalsNormalized.totalValue - aggregatedTotal;
+
+            if (Math.abs(remainder) > 0.05) {
+              distributeByBase(remainder, (item, share) => addToField(item, 'other', share));
+              items.forEach((item) => ensureItemCostWithTaxes(item));
+              aggregatedTotal = sumFiniteValues(items.map((item) => toNumeric(item.totalWithTaxes)));
+              remainder = totalsNormalized.totalValue - aggregatedTotal;
+            }
+
+            if (Math.abs(remainder) > 0.0005) {
+              const lastItem = items[items.length - 1];
+              if (lastItem) {
+                addToField(lastItem, 'other', remainder);
+                ensureItemCostWithTaxes(lastItem);
+              }
+            }
+          }
         };
 
         const INTERNAL_CODE_PREFIX = 'SKU-';
@@ -5879,6 +6063,7 @@
                 ipi.getElementsByTagName('IPINT')[0] ||
                 ipi
               : null;
+            const ii = imposto ? imposto.getElementsByTagName('II')[0] : null;
             const pis = imposto ? imposto.getElementsByTagName('PIS')[0] : null;
             const pisNode = pis
               ? Array.from(pis.children || []).find((child) => child.nodeType === 1)
@@ -5937,6 +6122,13 @@
             const icmsStValueRaw = parseNumber(getText(icmsNode, 'vICMSST'));
             const icmsStValue = Number.isFinite(icmsStValueRaw) ? icmsStValueRaw : 0;
 
+            const fcpValueRaw = parseNumber(getText(icmsNode, 'vFCP'));
+            const fcpValue = Number.isFinite(fcpValueRaw) ? fcpValueRaw : 0;
+            const fcpStValueRaw = parseNumber(getText(icmsNode, 'vFCPST'));
+            const fcpStValue = Number.isFinite(fcpStValueRaw) ? fcpStValueRaw : 0;
+            const fcpStRetRaw = parseNumber(getText(icmsNode, 'vFCPSTRet'));
+            const fcpStRetainedValue = Number.isFinite(fcpStRetRaw) ? fcpStRetRaw : 0;
+
             const ipiRateRaw = parseNumber(getText(ipiNode, 'pIPI'));
             const ipiRate = Number.isFinite(ipiRateRaw) ? ipiRateRaw : 0;
             const ipiBaseRaw = parseNumber(getText(ipiNode, 'vBC'));
@@ -5944,6 +6136,9 @@
             const ipiValueRaw = parseNumber(getText(ipiNode, 'vIPI'));
             const ipiValue = Number.isFinite(ipiValueRaw) ? ipiValueRaw : 0;
             const ipiCst = getText(ipiNode, 'CST') || getText(ipi, 'CST') || '';
+
+            const iiValueRaw = parseNumber(getText(ii, 'vII'));
+            const iiValue = Number.isFinite(iiValueRaw) ? iiValueRaw : 0;
 
             const pisRateRaw = parseNumber(getText(pisNode, 'pPIS'));
             const pisRate = Number.isFinite(pisRateRaw) ? pisRateRaw : 0;
@@ -5979,10 +6174,14 @@
               iva,
               icmsStRate,
               icmsStValue,
+              fcpValue,
+              fcpStValue,
+              fcpStRetainedValue,
               ipiRate,
               ipiBase,
               ipiValue,
               ipiCst,
+              iiValue,
               pisRate,
               pisBase,
               pisValue,
@@ -6085,6 +6284,26 @@
             })
             .filter(Boolean);
 
+          const totalsData = {
+            totalValue: getText(total, 'vNF'),
+            products: getText(total, 'vProd'),
+            icmsBase: getText(total, 'vBC'),
+            icmsValue: getText(total, 'vICMS'),
+            icmsSt: getText(total, 'vST'),
+            fcp: getText(total, 'vFCP'),
+            fcpSt: getText(total, 'vFCPST'),
+            fcpStRet: getText(total, 'vFCPSTRet'),
+            discount: getText(total, 'vDesc'),
+            other: getText(total, 'vOutro'),
+            freight: getText(total, 'vFrete'),
+            ipi: getText(total, 'vIPI'),
+            ii: getText(total, 'vII'),
+            insurance: getText(total, 'vSeg'),
+            services: getText(total, 'vServ'),
+          };
+
+          alignItemsWithTotals(items, totalsData);
+
           return {
             accessKey,
             ambient: getText(ide, 'tpAmb'),
@@ -6118,20 +6337,7 @@
               phone: getText(dest, 'fone'),
               address: addressFrom(dest?.getElementsByTagName('enderDest')[0]),
             },
-            totals: {
-              totalValue: getText(total, 'vNF'),
-              products: getText(total, 'vProd'),
-              icmsBase: getText(total, 'vBC'),
-              icmsValue: getText(total, 'vICMS'),
-              icmsSt: getText(total, 'vST'),
-              fcpSt: getText(total, 'vFCPST'),
-              discount: getText(total, 'vDesc'),
-              other: getText(total, 'vOutro'),
-              freight: getText(total, 'vFrete'),
-              ipi: getText(total, 'vIPI'),
-              insurance: getText(total, 'vSeg'),
-              services: getText(total, 'vServ'),
-            },
+            totals: totalsData,
             protocol: {
               number: getText(infProt, 'nProt'),
               receivedAt: getText(infProt, 'dhRecbto'),
