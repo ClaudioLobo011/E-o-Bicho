@@ -531,9 +531,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const loadSupplierDirectory = async () => {
         try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/suppliers`);
+            let token = null;
+            try {
+                token = JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token || null;
+            } catch (storageError) {
+                console.error('Erro ao recuperar token do usuário logado:', storageError);
+            }
+
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+            const response = await fetch(`${API_CONFIG.BASE_URL}/suppliers`, { headers });
             if (!response.ok) {
-                throw new Error(`Erro ao carregar fornecedores (${response.status})`);
+                const error = new Error(
+                    response.status === 401
+                        ? 'Sua sessão expirou. Faça login novamente para carregar os fornecedores.'
+                        : `Erro ao carregar fornecedores (${response.status})`,
+                );
+                error.status = response.status;
+                throw error;
             }
             const payload = await response.json();
             const suppliers = Array.isArray(payload?.suppliers) ? payload.suppliers : [];
@@ -795,11 +809,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 await ensureSuppliersLoaded();
             } catch (error) {
                 console.error('Erro ao carregar fornecedores para sugestão:', error);
-                showSupplierSuggestionsMessage('Não foi possível carregar os fornecedores cadastrados. Tente novamente.', {
-                    tone: 'error',
-                    actionLabel: 'Tentar novamente',
-                    onAction: () => requestSupplierSuggestions(term, { allowEmpty }),
-                });
+                const unauthorized = Number(error?.status) === 401;
+                showSupplierSuggestionsMessage(
+                    unauthorized
+                        ? 'Sua sessão expirou. Faça login novamente para buscar fornecedores.'
+                        : 'Não foi possível carregar os fornecedores cadastrados. Tente novamente.',
+                    {
+                        tone: 'error',
+                        actionLabel: unauthorized ? 'Ir para login' : 'Tentar novamente',
+                        onAction: unauthorized
+                            ? () => {
+                                window.location.href = '/pages/login.html';
+                            }
+                            : () => requestSupplierSuggestions(term, { allowEmpty }),
+                    },
+                );
                 return;
             }
         }
