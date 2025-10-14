@@ -393,13 +393,14 @@
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Qtde.</th>
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Multiplicador/Divisor</th>
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Estoque de entrada</th>
+                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Custo calculado (R$)</th>
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Unitário (R$)</th>
                       <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Desc (%)</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100 bg-white" data-nfe-products-body>
                     <tr class="hidden" data-nfe-products-empty>
-                      <td class="px-4 py-3 text-center text-gray-500" colspan="9">
+                      <td class="px-4 py-3 text-center text-gray-500" colspan="10">
                         Nenhum produto importado do XML.
                       </td>
                     </tr>
@@ -1779,6 +1780,103 @@
         const formatMoneyValue = (value) => formatDecimal(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         const formatPercentValue = (value) => formatDecimal(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        const toNumeric = (value) => (Number.isFinite(value) ? value : parseNumber(value));
+
+        const sumFiniteValues = (values) =>
+          values.reduce(
+            (accumulator, current) =>
+              Number.isFinite(current) ? accumulator + current : accumulator,
+            0
+          );
+
+        const calculateEntryStockQuantity = (item) => {
+          if (!item || typeof item !== 'object') return null;
+
+          const quantityValue = toNumeric(item.quantity);
+          let conversionFactor = toNumeric(item.conversion);
+
+          if (!Number.isFinite(conversionFactor)) {
+            const multiplierValue = toNumeric(item.conversionMultiplier);
+            const dividerValue = toNumeric(item.conversionDivider);
+
+            if (Number.isFinite(multiplierValue) && Number.isFinite(dividerValue) && dividerValue !== 0) {
+              conversionFactor = multiplierValue / dividerValue;
+            } else if (Number.isFinite(multiplierValue)) {
+              conversionFactor = multiplierValue;
+            } else if (Number.isFinite(dividerValue) && dividerValue !== 0) {
+              conversionFactor = 1 / dividerValue;
+            }
+          }
+
+          if (Number.isFinite(quantityValue) && Number.isFinite(conversionFactor)) {
+            return quantityValue * conversionFactor;
+          }
+
+          const qTribValue = toNumeric(item.qTrib);
+          if (Number.isFinite(qTribValue)) {
+            return qTribValue;
+          }
+
+          return Number.isFinite(quantityValue) ? quantityValue : null;
+        };
+
+        const ensureItemCostWithTaxes = (item) => {
+          if (!item || typeof item !== 'object') return item;
+
+          const quantityValue = toNumeric(item.quantity);
+          const unitPriceValue = toNumeric(item.unitPrice);
+          const totalValue = toNumeric(item.total);
+          const discountValue = toNumeric(item.discount);
+
+          const baseTotal = Number.isFinite(totalValue)
+            ? totalValue
+            : Number.isFinite(quantityValue) && Number.isFinite(unitPriceValue)
+            ? quantityValue * unitPriceValue
+            : null;
+
+          const netBaseTotal = Number.isFinite(baseTotal)
+            ? Math.max(baseTotal - (Number.isFinite(discountValue) ? discountValue : 0), 0)
+            : null;
+
+          const taxesTotal = sumFiniteValues([
+            toNumeric(item.icmsValue),
+            toNumeric(item.icmsStValue),
+            toNumeric(item.ipiValue),
+            toNumeric(item.pisValue),
+            toNumeric(item.cofinsValue),
+          ]);
+
+          const additionalsTotal = sumFiniteValues([toNumeric(item.freight), toNumeric(item.other)]);
+          const totalWithTaxes =
+            (Number.isFinite(netBaseTotal) ? netBaseTotal : 0) + taxesTotal + additionalsTotal;
+
+          const entryStockQuantity = calculateEntryStockQuantity(item);
+          const effectiveQuantity =
+            Number.isFinite(entryStockQuantity) && entryStockQuantity > 0
+              ? entryStockQuantity
+              : Number.isFinite(quantityValue) && quantityValue > 0
+              ? quantityValue
+              : null;
+
+          const unitCostWithTaxes =
+            Number.isFinite(effectiveQuantity) && effectiveQuantity > 0
+              ? totalWithTaxes / effectiveQuantity
+              : null;
+
+          item.entryStockQuantity =
+            Number.isFinite(entryStockQuantity) && entryStockQuantity >= 0 ? entryStockQuantity : null;
+          item.netProductValue =
+            Number.isFinite(netBaseTotal) && netBaseTotal >= 0 ? netBaseTotal : null;
+          item.taxesTotal = taxesTotal;
+          item.additionalsTotal = additionalsTotal;
+          item.totalWithTaxes =
+            Number.isFinite(netBaseTotal) || taxesTotal || additionalsTotal ? totalWithTaxes : null;
+          item.unitCostWithTaxes =
+            Number.isFinite(unitCostWithTaxes) && unitCostWithTaxes >= 0 ? unitCostWithTaxes : null;
+
+          return item;
+        };
 
         const INTERNAL_CODE_PREFIX = 'SKU-';
 
@@ -5342,6 +5440,8 @@
           items.forEach((item, index) => {
             const row = document.createElement('tr');
 
+            ensureItemCostWithTaxes(item);
+
             const indexCell = document.createElement('td');
             indexCell.className = 'px-4 py-3 text-gray-600';
             indexCell.textContent = String(index + 1);
@@ -5403,19 +5503,20 @@
             quantityCell.className = 'px-4 py-3 text-right text-gray-600';
             quantityCell.textContent = formatQuantity(item?.quantity);
 
-            const toNumeric = (value) =>
-              Number.isFinite(value) ? value : parseNumber(value);
+            const conversionFromItem = toNumeric(item?.conversion);
             const multiplierValue = toNumeric(item?.conversionMultiplier);
             const dividerValue = toNumeric(item?.conversionDivider);
-            let conversionFactor = null;
-            if (Number.isFinite(multiplierValue) && Number.isFinite(dividerValue)) {
-              if (dividerValue !== 0) {
+            let conversionFactor = Number.isFinite(conversionFromItem)
+              ? conversionFromItem
+              : null;
+            if (!Number.isFinite(conversionFactor)) {
+              if (Number.isFinite(multiplierValue) && Number.isFinite(dividerValue) && dividerValue !== 0) {
                 conversionFactor = multiplierValue / dividerValue;
+              } else if (Number.isFinite(multiplierValue)) {
+                conversionFactor = multiplierValue;
+              } else if (Number.isFinite(dividerValue) && dividerValue !== 0) {
+                conversionFactor = 1 / dividerValue;
               }
-            } else if (Number.isFinite(multiplierValue)) {
-              conversionFactor = multiplierValue;
-            } else if (Number.isFinite(dividerValue) && dividerValue !== 0) {
-              conversionFactor = 1 / dividerValue;
             }
 
             const conversionCell = document.createElement('td');
@@ -5426,19 +5527,34 @@
 
             const quantityValue = toNumeric(item?.quantity);
             const qTribValue = toNumeric(item?.qTrib);
-            let entryStockValue = null;
-            if (Number.isFinite(quantityValue) && Number.isFinite(conversionFactor)) {
-              entryStockValue = quantityValue * conversionFactor;
-            } else if (Number.isFinite(qTribValue)) {
-              entryStockValue = qTribValue;
-            } else if (Number.isFinite(quantityValue)) {
-              entryStockValue = quantityValue;
+            let entryStockValue = Number.isFinite(item?.entryStockQuantity)
+              ? item.entryStockQuantity
+              : null;
+            if (!Number.isFinite(entryStockValue)) {
+              if (Number.isFinite(quantityValue) && Number.isFinite(conversionFactor)) {
+                entryStockValue = quantityValue * conversionFactor;
+              } else if (Number.isFinite(qTribValue)) {
+                entryStockValue = qTribValue;
+              } else if (Number.isFinite(quantityValue)) {
+                entryStockValue = quantityValue;
+              }
+            }
+            if (Number.isFinite(entryStockValue) && !Number.isFinite(item.entryStockQuantity)) {
+              item.entryStockQuantity = entryStockValue;
+              ensureItemCostWithTaxes(item);
             }
 
             const entryStockCell = document.createElement('td');
             entryStockCell.className = 'px-4 py-3 text-right text-gray-600';
             entryStockCell.textContent = Number.isFinite(entryStockValue)
               ? formatQuantity(entryStockValue)
+              : '—';
+
+            const unitCostWithTaxesValue = toNumeric(item?.unitCostWithTaxes);
+            const calculatedCostCell = document.createElement('td');
+            calculatedCostCell.className = 'px-4 py-3 text-right text-gray-600';
+            calculatedCostCell.textContent = Number.isFinite(unitCostWithTaxesValue)
+              ? formatMoneyValue(unitCostWithTaxesValue)
               : '—';
 
             const unitPriceCell = document.createElement('td');
@@ -5457,6 +5573,7 @@
               quantityCell,
               conversionCell,
               entryStockCell,
+              calculatedCostCell,
               unitPriceCell,
               discountCell
             );
@@ -5842,7 +5959,7 @@
             const cofinsValueRaw = parseNumber(getText(cofinsNode, 'vCOFINS'));
             const cofinsValue = Number.isFinite(cofinsValueRaw) ? cofinsValueRaw : 0;
 
-            return {
+            const itemData = {
               index,
               nItem: detElement.getAttribute('nItem') || String(index + 1),
               supplierCode,
@@ -5888,6 +6005,8 @@
               validationStatus: barcodeCandidates.length ? 'pending' : 'no-barcode',
               matchedProduct: null,
             };
+            ensureItemCostWithTaxes(itemData);
+            return itemData;
           });
           const cfop = items.find((item) => item.cfop)?.cfop || '';
           const addressFrom = (element) => {
