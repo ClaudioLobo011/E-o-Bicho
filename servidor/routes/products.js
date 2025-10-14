@@ -27,6 +27,16 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
     try {
         const payload = req.body || {};
         const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
+        const normalizeDocument = (value) => {
+            if (value === null || value === undefined) return '';
+            if (typeof value === 'number' && Number.isFinite(value)) {
+                return String(value).replace(/\D+/g, '');
+            }
+            if (typeof value === 'string') {
+                return value.trim().replace(/\D+/g, '');
+            }
+            return String(value).replace(/\D+/g, '');
+        };
         const parseDate = (value) => {
             if (!value) return null;
             const parsed = new Date(value);
@@ -70,8 +80,16 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
                     const fornecedor = normalizeString(item?.fornecedor);
                     if (!fornecedor) return null;
                     const valorCalculo = parseNumber(item?.valorCalculo);
+                    const documentoFornecedor = normalizeDocument(
+                        item?.documentoFornecedor ||
+                        item?.documento ||
+                        item?.supplierDocument ||
+                        item?.cnpjFornecedor ||
+                        item?.cnpj
+                    );
                     return {
                         fornecedor,
+                        documentoFornecedor,
                         nomeProdutoFornecedor: normalizeString(item?.nomeProdutoFornecedor),
                         codigoProduto: normalizeString(item?.codigoProduto),
                         unidadeEntrada: normalizeString(item?.unidadeEntrada),
@@ -662,6 +680,16 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         }
 
         const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
+        const normalizeDocument = (value) => {
+            if (value === null || value === undefined) return '';
+            if (typeof value === 'number' && Number.isFinite(value)) {
+                return String(value).replace(/\D+/g, '');
+            }
+            if (typeof value === 'string') {
+                return value.trim().replace(/\D+/g, '');
+            }
+            return String(value).replace(/\D+/g, '');
+        };
         const parseDate = (value) => {
             if (!value) return null;
             const parsed = new Date(value);
@@ -679,8 +707,16 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
                     const fornecedor = normalizeString(item?.fornecedor);
                     if (!fornecedor) return null;
                     const valorCalculo = parseNumber(item?.valorCalculo);
+                    const documentoFornecedor = normalizeDocument(
+                        item?.documentoFornecedor ||
+                        item?.documento ||
+                        item?.supplierDocument ||
+                        item?.cnpjFornecedor ||
+                        item?.cnpj
+                    );
                     return {
                         fornecedor,
+                        documentoFornecedor,
                         nomeProdutoFornecedor: normalizeString(item?.nomeProdutoFornecedor),
                         codigoProduto: normalizeString(item?.codigoProduto),
                         unidadeEntrada: normalizeString(item?.unidadeEntrada),
@@ -818,6 +854,13 @@ router.post(
                 return res.status(400).json({ message: 'Informe o nome do fornecedor.' });
             }
 
+            const supplierDocumentDigits = normalizeDocumentDigits(
+                req.body?.documentoFornecedor ||
+                req.body?.supplierDocument ||
+                req.body?.documento ||
+                req.body?.cnpjFornecedor ||
+                req.body?.cnpj
+            );
             const supplierProductName = normalizeSupplierString(req.body?.nomeProdutoFornecedor);
             const supplierUnit = normalizeSupplierString(req.body?.unidadeEntrada);
             const supplierCalcType = normalizeSupplierString(req.body?.tipoCalculo);
@@ -827,9 +870,14 @@ router.post(
                 ? [...product.fornecedores]
                 : [];
             const normalizedSupplierName = canonicalSupplierName(supplierName);
+            const normalizedSupplierCode = canonicalSupplierProductCode(supplierProductCode);
             const existingIndex = suppliers.findIndex((entry) => {
-                if (normalizeSupplierString(entry?.codigoProduto) !== supplierProductCode) {
+                if (canonicalSupplierProductCode(entry?.codigoProduto) !== normalizedSupplierCode) {
                     return false;
+                }
+                const entryDocumentDigits = normalizeDocumentDigits(entry?.documentoFornecedor);
+                if (supplierDocumentDigits && entryDocumentDigits) {
+                    return entryDocumentDigits === supplierDocumentDigits;
                 }
                 return canonicalSupplierName(entry?.fornecedor) === normalizedSupplierName;
             });
@@ -841,6 +889,14 @@ router.post(
                 if (normalizeSupplierString(existingEntry?.fornecedor) !== supplierName) {
                     existingEntry.fornecedor = supplierName;
                     changed = true;
+                }
+
+                if (supplierDocumentDigits) {
+                    const entryDocumentDigits = normalizeDocumentDigits(existingEntry?.documentoFornecedor);
+                    if (entryDocumentDigits !== supplierDocumentDigits) {
+                        existingEntry.documentoFornecedor = supplierDocumentDigits;
+                        changed = true;
+                    }
                 }
 
                 if (supplierProductName) {
@@ -896,6 +952,7 @@ router.post(
 
             const newEntry = {
                 fornecedor: supplierName,
+                documentoFornecedor: supplierDocumentDigits,
                 nomeProdutoFornecedor: supplierProductName,
                 codigoProduto: supplierProductCode,
                 unidadeEntrada: supplierUnit,

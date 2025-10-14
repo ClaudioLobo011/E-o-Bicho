@@ -2086,6 +2086,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categorias: productCategories,
             fornecedores: supplierEntries.map((item) => ({
                 fornecedor: item.fornecedor,
+                documentoFornecedor: item.documentoFornecedor || null,
                 nomeProdutoFornecedor: item.nomeProdutoFornecedor || null,
                 codigoProduto: item.codigoProduto || null,
                 unidadeEntrada: item.unidadeEntrada || null,

@@ -2034,11 +2034,18 @@
           const supplierInfo = resolveActiveSupplierInfo(nfeData);
           const supplierName = typeof supplierInfo.name === 'string' ? supplierInfo.name.trim() : '';
           const normalizedSupplierName = canonicalSupplierName(supplierName);
+          const supplierDocumentDigits = digitsOnly(supplierInfo.document);
           if (!normalizedSupplierName) {
             return null;
           }
 
-          const cacheKey = `${productId}::${normalizedSupplierName}::${normalizedCode}`;
+          const cacheKeySegments = [String(productId).trim(), normalizedCode];
+          if (supplierDocumentDigits) {
+            cacheKeySegments.splice(1, 0, `DOC:${supplierDocumentDigits}`);
+          } else if (normalizedSupplierName) {
+            cacheKeySegments.splice(1, 0, `NAME:${normalizedSupplierName}`);
+          }
+          const cacheKey = cacheKeySegments.join('::');
           if (productSupplierLinkCache.has(cacheKey)) {
             return null;
           }
@@ -2047,11 +2054,17 @@
           }
 
           const currentLinks = Array.isArray(product?.fornecedores) ? product.fornecedores : [];
-          const alreadyLinked = currentLinks.some(
-            (entry) =>
-              canonicalSupplierProductCode(entry?.codigoProduto) === normalizedCode &&
-              canonicalSupplierName(entry?.fornecedor) === normalizedSupplierName
-          );
+          const alreadyLinked = currentLinks.some((entry) => {
+            if (canonicalSupplierProductCode(entry?.codigoProduto) !== normalizedCode) {
+              return false;
+            }
+            const entryDocumentDigits = digitsOnly(entry?.documentoFornecedor);
+            const entrySupplierName = canonicalSupplierName(entry?.fornecedor);
+            if (supplierDocumentDigits && entryDocumentDigits) {
+              return entryDocumentDigits === supplierDocumentDigits;
+            }
+            return entrySupplierName === normalizedSupplierName;
+          });
           if (alreadyLinked) {
             productSupplierLinkCache.add(cacheKey);
             return null;
@@ -2066,6 +2079,7 @@
             nomeProdutoFornecedor: item?.description || '',
             codigoProduto: item?.supplierCode || '',
             unidadeEntrada: item?.unit || item?.unitTrib || '',
+            documentoFornecedor: supplierDocumentDigits,
           };
 
           const headers = buildAuthHeaders();
