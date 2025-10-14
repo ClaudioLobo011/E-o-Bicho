@@ -1033,40 +1033,6 @@
                     <input id="import-file-input" type="file" accept=".xml" class="hidden">
                   </label>
                   <p class="text-[9px] text-gray-500">Validação com esquemas oficiais (XSD) e regras de negócio SEFAZ.</p>
-                  <div class="grid grid-cols-1 gap-1.5 md:grid-cols-2 lg:grid-cols-3" data-import-supplier-insights>
-                    <div data-file-feedback class="hidden h-full rounded-lg border px-3 py-2 text-[10px] font-medium leading-snug"></div>
-                    <div data-import-supplier-status class="hidden h-full rounded-lg border px-3 py-2 text-[10px] text-gray-600 space-y-1.5 sm:flex sm:items-start sm:justify-between sm:gap-3">
-                      <div class="flex items-start gap-1.5">
-                        <i data-supplier-status-icon class="fas fa-circle-info mt-0.5 text-[12px]"></i>
-                        <div class="space-y-0.5">
-                          <p data-supplier-message class="text-[11px] font-semibold text-gray-700 leading-snug"></p>
-                          <p data-supplier-description class="text-[10px] text-gray-600 leading-snug"></p>
-                        </div>
-                      </div>
-                      <div data-supplier-actions class="flex flex-wrap gap-1.5 sm:mt-0"></div>
-                    </div>
-                    <div data-import-supplier-summary class="hidden h-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] text-gray-600 space-y-1.5">
-                      <p data-supplier-summary-name class="text-[11px] font-semibold text-gray-700 leading-snug"></p>
-                      <dl class="grid grid-cols-1 gap-1 sm:grid-cols-2 sm:gap-y-1.5">
-                        <div>
-                          <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Documento</dt>
-                          <dd data-supplier-summary-document class="text-gray-700 leading-snug"></dd>
-                        </div>
-                        <div>
-                          <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Inscrição Estadual</dt>
-                          <dd data-supplier-summary-ie class="text-gray-700 leading-snug"></dd>
-                        </div>
-                        <div class="sm:col-span-2">
-                          <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Endereço</dt>
-                          <dd data-supplier-summary-address class="text-gray-700 leading-snug"></dd>
-                        </div>
-                        <div class="sm:col-span-2">
-                          <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Contato</dt>
-                          <dd data-supplier-summary-contact class="text-gray-700 leading-snug"></dd>
-                        </div>
-                      </dl>
-                    </div>
-                  </div>
                 </div>
                 <div class="space-y-1.5">
                   <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</label>
@@ -1079,6 +1045,40 @@
                       <input type="checkbox" class="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40" checked>
                       Atualizar preços de compra existentes
                     </label>
+                  </div>
+                </div>
+                <div class="lg:col-span-3 grid grid-cols-1 gap-1.5 pt-1 md:grid-cols-2 xl:grid-cols-3" data-import-supplier-insights>
+                  <div data-file-feedback class="hidden h-full rounded-lg border px-3 py-2 text-[10px] font-medium leading-snug"></div>
+                  <div data-import-supplier-status class="hidden h-full rounded-lg border px-3 py-2 text-[10px] text-gray-600 space-y-1.5 sm:flex sm:items-start sm:justify-between sm:gap-3">
+                    <div class="flex items-start gap-1.5">
+                      <i data-supplier-status-icon class="fas fa-circle-info mt-0.5 text-[12px]"></i>
+                      <div class="space-y-0.5">
+                        <p data-supplier-message class="text-[11px] font-semibold text-gray-700 leading-snug"></p>
+                        <p data-supplier-description class="text-[10px] text-gray-600 leading-snug"></p>
+                      </div>
+                    </div>
+                    <div data-supplier-actions class="flex flex-wrap gap-1.5 sm:mt-0"></div>
+                  </div>
+                  <div data-import-supplier-summary class="hidden h-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] text-gray-600 space-y-1.5">
+                    <p data-supplier-summary-name class="text-[11px] font-semibold text-gray-700 leading-snug"></p>
+                    <dl class="grid grid-cols-1 gap-1 sm:grid-cols-2 sm:gap-y-1.5">
+                      <div>
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Documento</dt>
+                        <dd data-supplier-summary-document class="text-gray-700 leading-snug"></dd>
+                      </div>
+                      <div>
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Inscrição Estadual</dt>
+                        <dd data-supplier-summary-ie class="text-gray-700 leading-snug"></dd>
+                      </div>
+                      <div class="sm:col-span-2">
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Endereço</dt>
+                        <dd data-supplier-summary-address class="text-gray-700 leading-snug"></dd>
+                      </div>
+                      <div class="sm:col-span-2">
+                        <dt class="text-[9px] font-semibold uppercase tracking-wide text-gray-500">Contato</dt>
+                        <dd data-supplier-summary-contact class="text-gray-700 leading-snug"></dd>
+                      </div>
+                    </dl>
                   </div>
                 </div>
               </div>
