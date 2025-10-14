@@ -1595,6 +1595,8 @@
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
+        const supplierReferenceLookupCache = new Map();
+        const supplierReferenceLookupPromises = new Map();
         let productValidationSequence = 0;
         const productSupplierLinkCache = new Set();
         const productSupplierLinkPromises = new Map();
@@ -4346,7 +4348,7 @@
           }
           const isPending = items.some((item) => item.validationStatus === 'pending' || item.validationStatus === 'checking');
           if (isPending) {
-            importXmlValidationText.textContent = 'Validando produtos pelo código de barras...';
+            importXmlValidationText.textContent = 'Validando produtos pelo fornecedor e código de barras...';
             applyValidationStyles('info');
             return;
           }
@@ -4387,6 +4389,98 @@
 
           updateProductTableDisplay();
         }
+
+        const buildSupplierLookupKey = (supplierInfo, supplierCode) => {
+          const normalizedCode = canonicalSupplierProductCode(supplierCode);
+          if (!normalizedCode) return '';
+          const parts = [normalizedCode];
+          if (supplierInfo) {
+            const supplierNameKey = canonicalSupplierName(supplierInfo.name);
+            if (supplierNameKey) {
+              parts.push(`NAME:${supplierNameKey}`);
+            }
+            const supplierDocumentKey = digitsOnly(supplierInfo.document);
+            if (supplierDocumentKey) {
+              parts.push(`DOC:${supplierDocumentKey}`);
+            }
+          }
+          return parts.join('::');
+        };
+
+        const findProductBySupplierReference = async (supplierInfo, supplierCode) => {
+          const normalizedCanonicalCode = canonicalSupplierProductCode(supplierCode);
+          if (!normalizedCanonicalCode) return null;
+
+          const normalizedSupplierCode = normalizeSupplierProductCode(supplierCode);
+          const cacheKey = buildSupplierLookupKey(supplierInfo, supplierCode);
+          if (cacheKey && supplierReferenceLookupCache.has(cacheKey)) {
+            return supplierReferenceLookupCache.get(cacheKey);
+          }
+          if (cacheKey && supplierReferenceLookupPromises.has(cacheKey)) {
+            return supplierReferenceLookupPromises.get(cacheKey);
+          }
+
+          const params = new URLSearchParams();
+          params.set('supplierCode', normalizedSupplierCode);
+          if (supplierInfo?.name) {
+            params.set('supplierName', supplierInfo.name);
+          }
+          if (supplierInfo?.document) {
+            const documentDigits = digitsOnly(supplierInfo.document);
+            if (documentDigits) {
+              params.set('supplierDocument', documentDigits);
+            }
+          }
+
+          const headers = buildAuthHeaders();
+          const requestPromise = (async () => {
+            const response = await fetch(
+              `${apiBaseUrl}/products/search-by-supplier?${params.toString()}`,
+              { headers }
+            );
+            const payload = await response.json().catch(() => ({}));
+
+            if (response.status === 401) {
+              handleAuthError();
+            }
+
+            if (response.status === 404) {
+              if (cacheKey) {
+                supplierReferenceLookupCache.set(cacheKey, null);
+              }
+              return null;
+            }
+
+            if (!response.ok) {
+              throw new Error(
+                payload?.message ||
+                  `Falha ao consultar produtos do fornecedor (status ${response.status}).`
+              );
+            }
+
+            const product = payload?.product || null;
+            if (cacheKey) {
+              supplierReferenceLookupCache.set(cacheKey, product);
+            }
+            return product;
+          })()
+            .catch((error) => {
+              if (cacheKey) {
+                supplierReferenceLookupCache.delete(cacheKey);
+              }
+              throw error;
+            })
+            .finally(() => {
+              if (cacheKey) {
+                supplierReferenceLookupPromises.delete(cacheKey);
+              }
+            });
+
+          if (cacheKey) {
+            supplierReferenceLookupPromises.set(cacheKey, requestPromise);
+          }
+          return requestPromise;
+        };
 
         const findProductByBarcode = async (barcodeDigits) => {
           const normalized = normalizeBarcodeForComparison(barcodeDigits);
@@ -4446,11 +4540,18 @@
             return;
           }
 
+          const supplierInfo = resolveActiveSupplierInfo(nfeData);
+          const itemsWithSupplierReference = items.filter((item) =>
+            Boolean(canonicalSupplierProductCode(item?.supplierCode))
+          );
           const itemsWithBarcode = items.filter(
             (item) => Array.isArray(item?.barcodeCandidates) && item.barcodeCandidates.length
           );
-          if (itemsWithBarcode.length) {
-            itemsWithBarcode.forEach((item) => {
+          const pendingValidationItems = Array.from(
+            new Set([...itemsWithSupplierReference, ...itemsWithBarcode])
+          );
+          if (pendingValidationItems.length) {
+            pendingValidationItems.forEach((item) => {
               item.validationStatus = 'checking';
             });
           }
@@ -4460,42 +4561,68 @@
           let hadError = false;
           const linkingTasks = [];
 
-          for (const item of itemsWithBarcode) {
+          for (const item of items) {
             if (sequence !== productValidationSequence) {
               return;
             }
-            try {
-              const product = await findProductMatchForCandidates(item.barcodeCandidates);
-              if (sequence !== productValidationSequence) {
-                return;
-              }
-              if (product) {
-                item.matchedProduct = product;
-                item.validationStatus = 'matched';
-                const linkPromise = ensureProductSupplierLink(product, item, nfeData);
-                if (linkPromise) {
-                  linkingTasks.push(
-                    linkPromise.catch((error) => {
-                      console.error('Erro ao vincular produto ao fornecedor automaticamente:', error);
-                      if (!supplierLinkErrorNotified) {
-                        notify(
-                          'Não foi possível vincular alguns produtos ao fornecedor automaticamente. Verifique os cadastros.',
-                          'warning'
-                        );
-                        supplierLinkErrorNotified = true;
-                      }
-                      return null;
-                    })
-                  );
+
+            const hasSupplierReference = Boolean(canonicalSupplierProductCode(item?.supplierCode));
+            const hasBarcodeCandidates = Array.isArray(item?.barcodeCandidates) && item.barcodeCandidates.length;
+            let matchedProduct = null;
+            let matched = false;
+
+            if (hasSupplierReference) {
+              try {
+                matchedProduct = await findProductBySupplierReference(supplierInfo, item.supplierCode);
+                if (sequence !== productValidationSequence) {
+                  return;
                 }
-              } else {
-                item.matchedProduct = null;
-                item.validationStatus = 'not-found';
+                matched = Boolean(matchedProduct);
+              } catch (error) {
+                console.error('Erro ao validar produto pelo fornecedor:', error);
+                item.validationStatus = 'error';
+                hadError = true;
+                continue;
               }
-            } catch (error) {
-              console.error('Erro ao validar produto pelo código de barras:', error);
-              item.validationStatus = 'error';
-              hadError = true;
+            }
+
+            if (!matched && hasBarcodeCandidates) {
+              try {
+                matchedProduct = await findProductMatchForCandidates(item.barcodeCandidates);
+                if (sequence !== productValidationSequence) {
+                  return;
+                }
+                matched = Boolean(matchedProduct);
+              } catch (error) {
+                console.error('Erro ao validar produto pelo código de barras:', error);
+                item.validationStatus = 'error';
+                hadError = true;
+                continue;
+              }
+            }
+
+            if (matched && matchedProduct) {
+              item.matchedProduct = matchedProduct;
+              item.validationStatus = 'matched';
+              const linkPromise = ensureProductSupplierLink(matchedProduct, item, nfeData);
+              if (linkPromise) {
+                linkingTasks.push(
+                  linkPromise.catch((error) => {
+                    console.error('Erro ao vincular produto ao fornecedor automaticamente:', error);
+                    if (!supplierLinkErrorNotified) {
+                      notify(
+                        'Não foi possível vincular alguns produtos ao fornecedor automaticamente. Verifique os cadastros.',
+                        'warning'
+                      );
+                      supplierLinkErrorNotified = true;
+                    }
+                    return null;
+                  })
+                );
+              }
+            } else if (hasSupplierReference || hasBarcodeCandidates) {
+              item.matchedProduct = null;
+              item.validationStatus = 'not-found';
             }
           }
 
@@ -4514,7 +4641,7 @@
 
           if (hadError) {
             notify(
-              'Alguns produtos não puderam ser validados pelo código de barras. Tente novamente em instantes.',
+              'Alguns produtos não puderam ser validados automaticamente. Tente novamente em instantes.',
               'error'
             );
           }
@@ -4975,6 +5102,8 @@
           clearStatusMessages();
           productSupplierLinkCache.clear();
           productSupplierLinkPromises.clear();
+          supplierReferenceLookupCache.clear();
+          supplierReferenceLookupPromises.clear();
           supplierLinkErrorNotified = false;
           const extension = file.name.split('.').pop()?.toLowerCase();
           if (extension !== 'xml') {
@@ -5000,7 +5129,7 @@
               updateSummaryFromData(parsed);
               showFileFeedback('Validando fornecedor importado...', 'info');
               await handleSupplierSelection(parsed.emit);
-              showFileFeedback('Validando produtos pelo código de barras...', 'info');
+              showFileFeedback('Validando produtos pelo fornecedor e código de barras...', 'info');
               await validateImportedProducts(parsed);
 
               const nfNumberText = parsed.ide?.number ? `NF ${parsed.ide.number}` : 'NF-e';

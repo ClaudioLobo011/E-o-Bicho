@@ -440,6 +440,63 @@ router.get('/check-unique', async (req, res) => {
     }
 });
 
+router.get(
+    '/search-by-supplier',
+    requireAuth,
+    authorizeRoles('admin', 'admin_master'),
+    async (req, res) => {
+        try {
+            const supplierCodeCanonical = canonicalSupplierProductCode(req.query?.supplierCode);
+            if (!supplierCodeCanonical) {
+                return res.status(400).json({ message: 'Informe o código do produto no fornecedor.' });
+            }
+
+            const supplierNameCanonical = canonicalSupplierName(req.query?.supplierName);
+            const supplierDocumentDigits = normalizeDocumentDigits(req.query?.supplierDocument);
+
+            const supplierCodeRaw = normalizeSupplierString(req.query?.supplierCode);
+            const codeRegex = new RegExp(`^${escapeRegExp(supplierCodeRaw)}$`, 'i');
+
+            const candidates = await Product.find({ 'fornecedores.codigoProduto': { $regex: codeRegex } })
+                .select('cod codbarras nome imagemPrincipal imagens marca unidade fornecedores')
+                .lean();
+
+            const match = candidates.find((product) => {
+                if (!Array.isArray(product?.fornecedores)) return false;
+                return product.fornecedores.some((entry) => {
+                    if (canonicalSupplierProductCode(entry?.codigoProduto) !== supplierCodeCanonical) {
+                        return false;
+                    }
+
+                    if (supplierNameCanonical) {
+                        if (canonicalSupplierName(entry?.fornecedor) !== supplierNameCanonical) {
+                            return false;
+                        }
+                    }
+
+                    if (supplierDocumentDigits) {
+                        const entryDocument = normalizeDocumentDigits(entry?.documentoFornecedor);
+                        if (entryDocument && entryDocument !== supplierDocumentDigits) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                });
+            });
+
+            if (!match) {
+                return res.status(404).json({ message: 'Produto não encontrado para o fornecedor informado.' });
+            }
+
+            return res.json({ product: match });
+        } catch (error) {
+            console.error('Erro ao localizar produto pelo fornecedor:', error);
+            res.status(500).json({ message: 'Erro ao localizar produto pelo fornecedor.' });
+        }
+    }
+);
+
 // ========================================================================
 // ========= FUNÇÃO AUXILIAR PARA BREADCRUMB ===============================
 async function getCategoryPath(categoryId) {
@@ -689,6 +746,12 @@ const canonicalSupplierName = (value) => {
         .trim()
         .toUpperCase();
 };
+
+const canonicalSupplierProductCode = (value) => normalizeSupplierString(value).toUpperCase();
+
+const normalizeDocumentDigits = (value) => normalizeSupplierString(value).replace(/\D+/g, '');
+
+const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const parseNullableNumber = (value) => {
     if (value === null || value === undefined || value === '') return null;
