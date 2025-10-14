@@ -1724,6 +1724,21 @@
         const canonicalSupplierProductCode = (value) =>
           normalizeSupplierProductCode(value).toUpperCase();
 
+        const canonicalSupplierName = (value) => {
+          if (typeof value === 'string') {
+            const normalized = value
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+            return normalized ? normalized.toUpperCase() : '';
+          }
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            return String(value).toUpperCase();
+          }
+          return '';
+        };
+
         const resolveActiveSupplierInfo = (nfeData) => {
           const result = { name: '', document: '' };
           const pickName = (...values) => values.find((entry) => typeof entry === 'string' && entry.trim());
@@ -1775,7 +1790,14 @@
             return null;
           }
 
-          const cacheKey = `${productId}::${normalizedCode}`;
+          const supplierInfo = resolveActiveSupplierInfo(nfeData);
+          const supplierName = typeof supplierInfo.name === 'string' ? supplierInfo.name.trim() : '';
+          const normalizedSupplierName = canonicalSupplierName(supplierName);
+          if (!normalizedSupplierName) {
+            return null;
+          }
+
+          const cacheKey = `${productId}::${normalizedSupplierName}::${normalizedCode}`;
           if (productSupplierLinkCache.has(cacheKey)) {
             return null;
           }
@@ -1785,20 +1807,21 @@
 
           const currentLinks = Array.isArray(product?.fornecedores) ? product.fornecedores : [];
           const alreadyLinked = currentLinks.some(
-            (entry) => canonicalSupplierProductCode(entry?.codigoProduto) === normalizedCode
+            (entry) =>
+              canonicalSupplierProductCode(entry?.codigoProduto) === normalizedCode &&
+              canonicalSupplierName(entry?.fornecedor) === normalizedSupplierName
           );
           if (alreadyLinked) {
             productSupplierLinkCache.add(cacheKey);
             return null;
           }
 
-          const supplierInfo = resolveActiveSupplierInfo(nfeData);
-          if (!supplierInfo.name) {
+          if (!supplierName) {
             return null;
           }
 
           const payload = {
-            fornecedor: supplierInfo.name,
+            fornecedor: supplierName,
             nomeProdutoFornecedor: item?.description || '',
             codigoProduto: item?.supplierCode || '',
             unidadeEntrada: item?.unit || item?.unitTrib || '',

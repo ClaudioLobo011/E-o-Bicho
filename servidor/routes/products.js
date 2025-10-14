@@ -679,6 +679,17 @@ const normalizeSupplierString = (value) => {
     return '';
 };
 
+const canonicalSupplierName = (value) => {
+    const normalized = normalizeSupplierString(value);
+    if (!normalized) return '';
+    return normalized
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+};
+
 const parseNullableNumber = (value) => {
     if (value === null || value === undefined || value === '') return null;
     const parsed = Number(value);
@@ -719,9 +730,13 @@ router.post(
             const suppliers = Array.isArray(product.fornecedores)
                 ? [...product.fornecedores]
                 : [];
-            const existingIndex = suppliers.findIndex(
-                (entry) => normalizeSupplierString(entry?.codigoProduto) === supplierProductCode
-            );
+            const normalizedSupplierName = canonicalSupplierName(supplierName);
+            const existingIndex = suppliers.findIndex((entry) => {
+                if (normalizeSupplierString(entry?.codigoProduto) !== supplierProductCode) {
+                    return false;
+                }
+                return canonicalSupplierName(entry?.fornecedor) === normalizedSupplierName;
+            });
 
             if (existingIndex >= 0) {
                 const existingEntry = suppliers[existingIndex];
