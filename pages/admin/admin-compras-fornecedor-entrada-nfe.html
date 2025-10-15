@@ -1909,22 +1909,45 @@
               : null;
 
           if (skipTaxComputation) {
-            const effectiveTotal =
-              (Number.isFinite(netBaseTotal) ? netBaseTotal : 0) + additionalsTotal;
-            const unitCost =
-              Number.isFinite(effectiveQuantity) && effectiveQuantity > 0 && Number.isFinite(effectiveTotal)
-                ? effectiveTotal / effectiveQuantity
+            const preservedTotal = Number.isFinite(totalValue)
+              ? totalValue
+              : Number.isFinite(netBaseTotal)
+              ? netBaseTotal
+              : Number.isFinite(grossAmount)
+              ? grossAmount
+              : null;
+
+            const effectiveTotal = Number.isFinite(preservedTotal) ? preservedTotal : null;
+
+            const quantityForCost = Number.isFinite(quantityValue) && quantityValue > 0
+              ? quantityValue
+              : Number.isFinite(effectiveQuantity) && effectiveQuantity > 0
+              ? effectiveQuantity
+              : null;
+
+            const computedUnitCost =
+              Number.isFinite(effectiveTotal) && Number.isFinite(quantityForCost) && quantityForCost > 0
+                ? effectiveTotal / quantityForCost
                 : null;
+
+            const unitCost = Number.isFinite(unitPriceValue) && unitPriceValue >= 0
+              ? unitPriceValue
+              : Number.isFinite(computedUnitCost) && computedUnitCost >= 0
+              ? computedUnitCost
+              : null;
 
             item.discount = Number.isFinite(discountValue) ? discountValue : 0;
             item.entryStockQuantity =
               Number.isFinite(entryStockQuantity) && entryStockQuantity >= 0 ? entryStockQuantity : null;
             item.netProductValue =
-              Number.isFinite(netBaseTotal) && netBaseTotal >= 0 ? netBaseTotal : null;
-            item.taxesTotal = 0;
+              Number.isFinite(netBaseTotal) && netBaseTotal >= 0
+                ? netBaseTotal
+                : Number.isFinite(effectiveTotal) && effectiveTotal >= 0
+                ? effectiveTotal
+                : null;
+            item.taxesTotal = Number.isFinite(taxesTotal) ? taxesTotal : 0;
             item.additionalsTotal = additionalsTotal;
-            item.totalWithTaxes =
-              Number.isFinite(netBaseTotal) || additionalsTotal ? effectiveTotal : null;
+            item.totalWithTaxes = Number.isFinite(effectiveTotal) && effectiveTotal >= 0 ? effectiveTotal : null;
             item.unitCostWithTaxes = Number.isFinite(unitCost) && unitCost >= 0 ? unitCost : null;
 
             return item;
@@ -2124,7 +2147,7 @@
 
           if (
             Number.isFinite(totalsNormalized.totalValue) &&
-            (hasDeclaredCharges || !totalsMatchProducts)
+            !totalsMatchProducts
           ) {
             let aggregatedTotal = sumFiniteValues(
               items.map((item) => toNumeric(item.totalWithTaxes))
@@ -7643,7 +7666,7 @@
             (value) => Number.isFinite(value) && Math.abs(value) > 0.000001
           );
 
-          const shouldSkipTaxComputation = totalsMatchProducts && !hasDeclaredCharges;
+          const shouldSkipTaxComputation = totalsMatchProducts;
 
           alignItemsWithTotals(items, totalsData, { skipTaxComputation: shouldSkipTaxComputation });
 
