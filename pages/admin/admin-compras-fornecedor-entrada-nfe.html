@@ -380,23 +380,128 @@
               <div class="mt-4 overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
                   <thead class="bg-gray-50">
-                    <tr>
-                      <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Item</th>
-                      <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Não escriturar o valor de ICMS</th>
-                      <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Código</th>
-                      <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Descrição</th>
-                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Qtde.</th>
-                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Multiplicador/Divisor</th>
-                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Estoque de entrada</th>
-                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Custo calculado (R$)</th>
-                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Unitário (R$)</th>
-                      <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Desc (%)</th>
+                    <tr class="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                      <th scope="col" class="px-4 py-3 text-left align-top">
+                        <div class="flex flex-col gap-1">
+                          <span>Item</span>
+                          <input
+                            type="text"
+                            placeholder="Filtrar"
+                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            data-main-products-filter="item"
+                          />
+                        </div>
+                      </th>
+                      <th scope="col" class="px-4 py-3 text-left align-top">
+                        <div class="flex flex-col gap-1">
+                          <span>Código</span>
+                          <input
+                            type="text"
+                            placeholder="Filtrar"
+                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            data-main-products-filter="code"
+                          />
+                        </div>
+                      </th>
+                      <th scope="col" class="px-4 py-3 text-left align-top">
+                        <div class="flex flex-col gap-1">
+                          <span>Descrição</span>
+                          <input
+                            type="text"
+                            placeholder="Filtrar"
+                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            data-main-products-filter="description"
+                          />
+                        </div>
+                      </th>
+                      <th scope="col" class="px-4 py-3 text-right align-top">
+                        <div class="flex flex-col gap-1 items-end">
+                          <span>Qtde.</span>
+                          <input
+                            type="text"
+                            placeholder="Filtrar"
+                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            data-main-products-filter="quantity"
+                          />
+                        </div>
+                      </th>
+                      <th scope="col" class="px-4 py-3 text-right align-top">
+                        <div class="flex flex-col gap-1 items-end">
+                          <span>Multiplicador/Divisor</span>
+                          <input
+                            type="text"
+                            placeholder="Filtrar"
+                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            data-main-products-filter="conversion"
+                          />
+                        </div>
+                      </th>
+                      <th scope="col" class="px-4 py-3 text-left align-top">
+                        <div class="flex flex-col gap-1">
+                          <span>Unidade</span>
+                          <input
+                            type="text"
+                            placeholder="Filtrar"
+                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            data-main-products-filter="unit"
+                          />
+                        </div>
+                      </th>
+                      <th scope="col" class="px-4 py-3 text-right align-top">
+                        <div class="flex flex-col gap-1 items-end">
+                          <span>Estoque de entrada</span>
+                          <input
+                            type="text"
+                            placeholder="Filtrar"
+                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            data-main-products-filter="entryStock"
+                          />
+                        </div>
+                      </th>
+                      <th scope="col" class="px-4 py-3 text-right align-top">
+                        <div class="flex flex-col gap-1 items-end">
+                          <span>Custo calculado (R$)</span>
+                          <input
+                            type="text"
+                            placeholder="Filtrar"
+                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            data-main-products-filter="cost"
+                          />
+                        </div>
+                      </th>
+                      <th scope="col" class="px-4 py-3 text-right align-top">
+                        <div class="flex flex-col gap-1 items-end">
+                          <span>Unitário (R$)</span>
+                          <input
+                            type="text"
+                            placeholder="Filtrar"
+                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            data-main-products-filter="unitPrice"
+                          />
+                        </div>
+                      </th>
+                      <th scope="col" class="px-4 py-3 text-right align-top">
+                        <div class="flex flex-col gap-1 items-end">
+                          <span>Desc (%)</span>
+                          <input
+                            type="text"
+                            placeholder="Filtrar"
+                            class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            data-main-products-filter="discount"
+                          />
+                        </div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100 bg-white" data-nfe-products-body>
                     <tr class="hidden" data-nfe-products-empty>
                       <td class="px-4 py-3 text-center text-gray-500" colspan="10">
                         Nenhum produto importado do XML.
+                      </td>
+                    </tr>
+                    <tr class="hidden" data-nfe-products-filtered-empty>
+                      <td class="px-4 py-3 text-center text-gray-500" colspan="10">
+                        Nenhum produto encontrado com os filtros aplicados.
                       </td>
                     </tr>
                   </tbody>
@@ -1524,6 +1629,9 @@
         const documentsEmptyRow = document.querySelector('[data-nfe-documents-empty]');
         const mainProductsTableBody = document.querySelector('[data-nfe-products-body]');
         const mainProductsEmptyRow = document.querySelector('[data-nfe-products-empty]');
+        const mainProductsFilteredEmptyRow = document.querySelector('[data-nfe-products-filtered-empty]');
+        const mainProductTableState = { items: [], filters: {} };
+        const mainProductTableFilterInputs = new Map();
         const duplicatasTableBody = document.querySelector('[data-nfe-duplicatas-body]');
         const duplicatasEmptyRow = document.querySelector('[data-nfe-duplicatas-empty]');
         const MODAL_FOCUSABLE_SELECTORS =
@@ -1852,7 +1960,15 @@
         const ensureItemCostWithTaxes = (item, options = {}) => {
           if (!item || typeof item !== 'object') return item;
 
-          const { skipTaxComputation = false } = options;
+          const hasExplicitSkip = Object.prototype.hasOwnProperty.call(
+            options,
+            'skipTaxComputation'
+          );
+          const skipTaxComputation = hasExplicitSkip
+            ? Boolean(options.skipTaxComputation)
+            : Boolean(item?.skipTaxComputation);
+
+          item.skipTaxComputation = skipTaxComputation;
 
           const quantityValue = toNumeric(item.quantity);
           const unitPriceValue = toNumeric(item.unitPrice);
@@ -5294,6 +5410,12 @@
             getDisplayText: (item) => item?.barcodeDisplay || 'SEM GTIN',
           },
           {
+            key: 'barcodeTrib',
+            label: 'Cod_Barras_Trib',
+            headerClass: 'px-2 py-1.5 text-left',
+            getDisplayText: (item) => item?.barcodeTribDisplay || 'SEM GTIN',
+          },
+          {
             key: 'supplierName',
             label: 'Nome no Fornecedor',
             headerClass: 'px-2 py-1.5 text-left',
@@ -5760,20 +5882,17 @@
 
             const labelRow = document.createElement('div');
             labelRow.className = 'flex items-center justify-between gap-1';
-            if (column.isNumeric) {
-              labelRow.classList.add('justify-end');
-            }
 
             const label = document.createElement('span');
             label.textContent = column.label;
-            label.className = 'text-[9px] font-semibold uppercase tracking-wide text-gray-600';
+            label.className = 'flex-1 text-[8px] font-semibold uppercase leading-tight tracking-wide text-gray-600';
             if (column.isNumeric) {
               label.classList.add('text-right');
             }
             labelRow.appendChild(label);
 
             const sortGroup = document.createElement('div');
-            sortGroup.className = 'flex flex-col';
+            sortGroup.className = 'flex flex-col items-center justify-center gap-px text-gray-400';
 
             const createSortButton = (direction) => {
               const button = document.createElement('button');
@@ -5781,8 +5900,8 @@
               button.dataset.sortDirection = direction;
               button.classList.add(
                 'flex',
-                'h-4',
-                'w-4',
+                'h-3.5',
+                'w-3.5',
                 'items-center',
                 'justify-center',
                 'rounded',
@@ -5800,7 +5919,7 @@
                 `Ordenar ${direction === 'asc' ? 'crescente' : 'decrescente'} pela coluna ${column.label}`
               );
               const icon = document.createElement('i');
-              icon.className = direction === 'asc' ? 'fas fa-sort-up text-[10px]' : 'fas fa-sort-down text-[10px]';
+              icon.className = direction === 'asc' ? 'fas fa-sort-up text-[9px]' : 'fas fa-sort-down text-[9px]';
               button.appendChild(icon);
               button.addEventListener('click', () => toggleProductTableSort(column.key, direction));
               return button;
@@ -5820,9 +5939,9 @@
               'border',
               'border-gray-200',
               'bg-white',
-              'px-1.5',
-              'py-1',
-              'text-[9px]',
+              'px-1',
+              'py-0.5',
+              'text-[8px]',
               'font-medium',
               'text-gray-600',
               'placeholder:text-gray-400',
@@ -6720,50 +6839,189 @@
           return account;
         };
 
-        const renderMainProductsFromNfe = (items = []) => {
-          if (!mainProductsTableBody) return;
-          const existingRows = mainProductsTableBody.querySelectorAll(
-            'tr:not([data-nfe-products-empty])'
-          );
-          existingRows.forEach((row) => row.remove());
+        const resolveMainProductConversionFactor = (item) => {
+          const conversionFromItem = toNumeric(item?.conversion);
+          if (Number.isFinite(conversionFromItem)) {
+            return conversionFromItem;
+          }
+          const multiplierValue = toNumeric(item?.conversionMultiplier);
+          const dividerValue = toNumeric(item?.conversionDivider);
+          if (Number.isFinite(multiplierValue) && Number.isFinite(dividerValue) && dividerValue !== 0) {
+            return multiplierValue / dividerValue;
+          }
+          if (Number.isFinite(multiplierValue)) {
+            return multiplierValue;
+          }
+          if (Number.isFinite(dividerValue) && dividerValue !== 0) {
+            return 1 / dividerValue;
+          }
+          return null;
+        };
 
-          const hasItems = Array.isArray(items) && items.length > 0;
+        const resolveMainProductEntryStockQuantity = (item, conversionFactor) => {
+          if (Number.isFinite(item?.entryStockQuantity)) {
+            return item.entryStockQuantity;
+          }
+          const quantityValue = toNumeric(item?.quantity);
+          const qTribValue = toNumeric(item?.qTrib);
+          if (Number.isFinite(quantityValue) && Number.isFinite(conversionFactor)) {
+            return quantityValue * conversionFactor;
+          }
+          if (Number.isFinite(qTribValue)) {
+            return qTribValue;
+          }
+          if (Number.isFinite(quantityValue)) {
+            return quantityValue;
+          }
+          return null;
+        };
+
+        const buildMainProductRowData = (item, index) => {
+          ensureItemCostWithTaxes(item);
+
+          const matchedCode = item?.matchedProduct
+            ? normalizeInternalCode(getProductCodeFromRecord(item.matchedProduct))
+            : '';
+          const supplierCode = item?.supplierCode || '';
+          const conversionFactor = resolveMainProductConversionFactor(item);
+          const entryStockValue = resolveMainProductEntryStockQuantity(item, conversionFactor);
+
+          if (Number.isFinite(entryStockValue) && !Number.isFinite(item.entryStockQuantity)) {
+            item.entryStockQuantity = entryStockValue;
+            ensureItemCostWithTaxes(item);
+          }
+
+          const unitCostWithTaxesValue = toNumeric(item?.unitCostWithTaxes);
+          const quantityDisplay = formatQuantity(item?.quantity);
+          const conversionDisplay = Number.isFinite(conversionFactor)
+            ? formatQuantity(conversionFactor)
+            : '—';
+          const entryStockDisplay = Number.isFinite(entryStockValue)
+            ? formatQuantity(entryStockValue)
+            : '—';
+          const unitDisplay = item?.unit || item?.unitTrib || '—';
+          const costDisplay = Number.isFinite(unitCostWithTaxesValue)
+            ? formatMoneyValue(unitCostWithTaxesValue)
+            : '—';
+          const unitPriceDisplay = formatMoneyValue(item?.unitPrice);
+          const discountDisplay = formatPercentValue(item?.discountPercent);
+
+          const descriptionFilterParts = [
+            item?.description,
+            item?.unit ? `UN ${item.unit}` : '',
+            item?.unitTrib && item.unitTrib !== item.unit ? `TRIB ${item.unitTrib}` : '',
+            item?.ncm ? `NCM ${item.ncm}` : '',
+            item?.cest ? `CEST ${item.cest}` : '',
+            item?.cfop ? `CFOP ${item.cfop}` : '',
+            item?.cst ? `CST ${item.cst}` : '',
+            formatPercentValue(item?.icmsRate),
+            formatPercentValue(item?.icmsStRate),
+            formatPercentValue(item?.ipiRate),
+            formatPercentValue(item?.pisRate),
+            formatPercentValue(item?.cofinsRate),
+            item?.barcodeDisplay,
+            formatGtinDisplay(item?.ean || item?.eanTrib),
+          ].filter(Boolean);
+
+          return {
+            item,
+            index,
+            displays: {
+              code: matchedCode || supplierCode || '—',
+              quantity: quantityDisplay,
+              conversion: conversionDisplay,
+              unit: unitDisplay,
+              entryStock: entryStockDisplay,
+              cost: costDisplay,
+              unitPrice: unitPriceDisplay,
+              discount: discountDisplay,
+            },
+            filterTexts: {
+              item: String(index + 1),
+              code: [matchedCode, supplierCode].filter(Boolean).join(' '),
+              description: descriptionFilterParts.join(' '),
+              quantity: buildNumericFilterValue(quantityDisplay, item?.quantity),
+              conversion: buildNumericFilterValue(
+                conversionDisplay !== '—' ? conversionDisplay : '',
+                conversionFactor
+              ),
+              unit: [item?.unit, item?.unitTrib].filter(Boolean).join(' '),
+              entryStock: buildNumericFilterValue(
+                entryStockDisplay !== '—' ? entryStockDisplay : '',
+                entryStockValue
+              ),
+              cost: buildNumericFilterValue(costDisplay, unitCostWithTaxesValue),
+              unitPrice: buildNumericFilterValue(unitPriceDisplay, item?.unitPrice),
+              discount: buildNumericFilterValue(discountDisplay, item?.discountPercent),
+            },
+          };
+        };
+
+        const applyMainProductFiltersToRows = (entries) => {
+          const activeFilters = Object.entries(mainProductTableState.filters || {}).filter(
+            ([, value]) => Boolean(normalizeFilterText(value))
+          );
+          if (!activeFilters.length) {
+            return entries;
+          }
+          return entries.filter((entry) =>
+            activeFilters.every(([key, value]) => {
+              const normalizedFilter = normalizeFilterText(value);
+              if (!normalizedFilter) return true;
+              const columnValue = entry.filterTexts?.[key] ?? '';
+              const normalizedColumn = normalizeFilterText(columnValue);
+              return normalizedColumn.includes(normalizedFilter);
+            })
+          );
+        };
+
+        const updateMainProductsTableDisplay = () => {
+          if (!mainProductsTableBody) return;
+
+          const items = Array.isArray(mainProductTableState.items)
+            ? mainProductTableState.items
+            : [];
+
+          const hasItems = items.length > 0;
+
           if (mainProductsEmptyRow) {
             mainProductsEmptyRow.classList.toggle('hidden', hasItems);
           }
+          if (mainProductsFilteredEmptyRow) {
+            mainProductsFilteredEmptyRow.classList.add('hidden');
+          }
+
+          const existingRows = mainProductsTableBody.querySelectorAll('[data-nfe-products-row]');
+          existingRows.forEach((row) => row.remove());
+
           if (!hasItems) {
+            return;
+          }
+
+          const derivedEntries = items.map((item, index) => buildMainProductRowData(item, index));
+          const itemsToRender = applyMainProductFiltersToRows(derivedEntries);
+
+          if (!itemsToRender.length) {
+            if (mainProductsFilteredEmptyRow) {
+              mainProductsFilteredEmptyRow.classList.remove('hidden');
+            }
             return;
           }
 
           const fragment = document.createDocumentFragment();
 
-          items.forEach((item, index) => {
+          itemsToRender.forEach((entry) => {
+            const { item, index, displays } = entry;
             const row = document.createElement('tr');
-
-            ensureItemCostWithTaxes(item);
+            row.dataset.nfeProductsRow = 'true';
 
             const indexCell = document.createElement('td');
             indexCell.className = 'px-4 py-3 text-gray-600';
             indexCell.textContent = String(index + 1);
 
-            const icmsCell = document.createElement('td');
-            icmsCell.className = 'px-4 py-3';
-            const icmsLabel = document.createElement('label');
-            icmsLabel.className = 'inline-flex items-center gap-2 text-xs text-gray-600';
-            const icmsCheckbox = document.createElement('input');
-            icmsCheckbox.type = 'checkbox';
-            icmsCheckbox.disabled = true;
-            icmsCheckbox.className = 'rounded border-gray-300 text-primary focus:ring-primary/30';
-            icmsLabel.append(icmsCheckbox, document.createTextNode('Não'));
-            icmsCell.appendChild(icmsLabel);
-
             const codeCell = document.createElement('td');
             codeCell.className = 'px-4 py-3 text-gray-600';
-            const matchedCode = item?.matchedProduct
-              ? normalizeInternalCode(getProductCodeFromRecord(item.matchedProduct))
-              : '';
-            const supplierCode = item?.supplierCode || '';
-            codeCell.textContent = matchedCode || supplierCode || '—';
+            codeCell.textContent = displays.code;
 
             const descriptionCell = document.createElement('td');
             descriptionCell.className = 'px-4 py-3 text-gray-700';
@@ -6773,7 +7031,8 @@
             detailLine1.className = 'text-xs text-gray-500';
             const line1Parts = [];
             if (item?.unit) line1Parts.push(`UN: ${item.unit}`);
-            if (item?.unitTrib && item.unitTrib !== item.unit) line1Parts.push(`Trib: ${item.unitTrib}`);
+            if (item?.unitTrib && item.unitTrib !== item.unit)
+              line1Parts.push(`Trib: ${item.unitTrib}`);
             if (item?.ncm) line1Parts.push(`NCM ${item.ncm}`);
             if (item?.cest) line1Parts.push(`CEST ${item.cest}`);
             detailLine1.textContent = line1Parts.join(' · ') || '—';
@@ -6795,83 +7054,47 @@
 
             const detailLine4 = document.createElement('p');
             detailLine4.className = 'text-xs text-gray-500';
-            detailLine4.textContent = `GTIN: ${item?.barcodeDisplay || formatGtinDisplay(item?.ean || item?.eanTrib) || 'SEM GTIN'}`;
+            detailLine4.textContent = `GTIN: ${
+              item?.barcodeDisplay || formatGtinDisplay(item?.ean || item?.eanTrib) || 'SEM GTIN'
+            }`;
 
             descriptionCell.append(detailLine1, detailLine2, detailLine3, detailLine4);
 
             const quantityCell = document.createElement('td');
             quantityCell.className = 'px-4 py-3 text-right text-gray-600';
-            quantityCell.textContent = formatQuantity(item?.quantity);
-
-            const conversionFromItem = toNumeric(item?.conversion);
-            const multiplierValue = toNumeric(item?.conversionMultiplier);
-            const dividerValue = toNumeric(item?.conversionDivider);
-            let conversionFactor = Number.isFinite(conversionFromItem)
-              ? conversionFromItem
-              : null;
-            if (!Number.isFinite(conversionFactor)) {
-              if (Number.isFinite(multiplierValue) && Number.isFinite(dividerValue) && dividerValue !== 0) {
-                conversionFactor = multiplierValue / dividerValue;
-              } else if (Number.isFinite(multiplierValue)) {
-                conversionFactor = multiplierValue;
-              } else if (Number.isFinite(dividerValue) && dividerValue !== 0) {
-                conversionFactor = 1 / dividerValue;
-              }
-            }
+            quantityCell.textContent = displays.quantity;
 
             const conversionCell = document.createElement('td');
             conversionCell.className = 'px-4 py-3 text-right text-gray-600';
-            conversionCell.textContent = Number.isFinite(conversionFactor)
-              ? formatQuantity(conversionFactor)
-              : '—';
+            conversionCell.textContent = displays.conversion;
 
-            const quantityValue = toNumeric(item?.quantity);
-            const qTribValue = toNumeric(item?.qTrib);
-            let entryStockValue = Number.isFinite(item?.entryStockQuantity)
-              ? item.entryStockQuantity
-              : null;
-            if (!Number.isFinite(entryStockValue)) {
-              if (Number.isFinite(quantityValue) && Number.isFinite(conversionFactor)) {
-                entryStockValue = quantityValue * conversionFactor;
-              } else if (Number.isFinite(qTribValue)) {
-                entryStockValue = qTribValue;
-              } else if (Number.isFinite(quantityValue)) {
-                entryStockValue = quantityValue;
-              }
-            }
-            if (Number.isFinite(entryStockValue) && !Number.isFinite(item.entryStockQuantity)) {
-              item.entryStockQuantity = entryStockValue;
-              ensureItemCostWithTaxes(item);
-            }
+            const unitCell = document.createElement('td');
+            unitCell.className = 'px-4 py-3 text-left text-gray-600';
+            unitCell.textContent = displays.unit;
 
             const entryStockCell = document.createElement('td');
             entryStockCell.className = 'px-4 py-3 text-right text-gray-600';
-            entryStockCell.textContent = Number.isFinite(entryStockValue)
-              ? formatQuantity(entryStockValue)
-              : '—';
+            entryStockCell.textContent = displays.entryStock;
 
-            const unitCostWithTaxesValue = toNumeric(item?.unitCostWithTaxes);
             const calculatedCostCell = document.createElement('td');
             calculatedCostCell.className = 'px-4 py-3 text-right text-gray-600';
-            calculatedCostCell.textContent = Number.isFinite(unitCostWithTaxesValue)
-              ? formatMoneyValue(unitCostWithTaxesValue)
-              : '—';
+            calculatedCostCell.textContent = displays.cost;
 
             const unitPriceCell = document.createElement('td');
             unitPriceCell.className = 'px-4 py-3 text-right text-gray-600';
-            unitPriceCell.textContent = formatMoneyValue(item?.unitPrice);
+            unitPriceCell.textContent = displays.unitPrice;
 
             const discountCell = document.createElement('td');
             discountCell.className = 'px-4 py-3 text-right text-gray-600';
-            discountCell.textContent = formatPercentValue(item?.discountPercent);
+            discountCell.textContent = displays.discount;
 
             row.append(
               indexCell,
-              icmsCell,
               codeCell,
               descriptionCell,
               quantityCell,
               conversionCell,
+              unitCell,
               entryStockCell,
               calculatedCostCell,
               unitPriceCell,
@@ -6882,6 +7105,31 @@
 
           mainProductsTableBody.appendChild(fragment);
         };
+
+        const setMainProductTableFilter = (key, value) => {
+          if (!key) return;
+          const nextValue = value || '';
+          if (mainProductTableState.filters[key] === nextValue) {
+            return;
+          }
+          mainProductTableState.filters[key] = nextValue;
+          updateMainProductsTableDisplay();
+        };
+
+        const renderMainProductsFromNfe = (items = []) => {
+          mainProductTableState.items = Array.isArray(items) ? items : [];
+          updateMainProductsTableDisplay();
+        };
+
+        document.querySelectorAll('[data-main-products-filter]').forEach((input) => {
+          const key = input.dataset.mainProductsFilter;
+          if (!key) return;
+          mainProductTableFilterInputs.set(key, input);
+          mainProductTableState.filters[key] = input.value || '';
+          input.addEventListener('input', (event) => {
+            setMainProductTableFilter(key, event.target.value || '');
+          });
+        });
 
         const updateDuplicataSummaryFromData = (data) => {
           const duplicates = Array.isArray(data?.duplicates) ? data.duplicates : [];
@@ -7288,6 +7536,7 @@
             const eanTrib = getText(prod, 'cEANTrib');
             const barcodeCandidates = Array.from(new Set([normalizeGtin(ean), normalizeGtin(eanTrib)].filter(Boolean)));
             const barcodeDisplay = formatGtinDisplay(ean || eanTrib);
+            const barcodeTribDisplay = formatGtinDisplay(eanTrib);
             const qTribRaw = parseNumber(getText(prod, 'qTrib'));
             const qTrib = Number.isFinite(qTribRaw) ? qTribRaw : quantity;
             const conversionMultiplier = Number.isFinite(qTrib) && qTrib > 0 ? qTrib : 1;
@@ -7392,6 +7641,7 @@
               freight,
               other,
               barcodeDisplay,
+              barcodeTribDisplay,
               barcodeCandidates,
               unitTrib: getText(prod, 'uTrib'),
               qTrib,
