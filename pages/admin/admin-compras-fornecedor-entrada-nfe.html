@@ -383,7 +383,29 @@
                     <tr class="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
                       <th scope="col" class="px-4 py-3 text-left align-top">
                         <div class="flex flex-col gap-1">
-                          <span>Item</span>
+                          <div class="flex items-center justify-between gap-1">
+                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Item</span>
+                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="item"
+                                data-sort-direction="asc"
+                                aria-label="Ordenar crescente pela coluna Item"
+                              >
+                                <i class="fas fa-sort-up text-[9px]"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="item"
+                                data-sort-direction="desc"
+                                aria-label="Ordenar decrescente pela coluna Item"
+                              >
+                                <i class="fas fa-sort-down text-[9px]"></i>
+                              </button>
+                            </div>
+                          </div>
                           <input
                             type="text"
                             placeholder="Filtrar"
@@ -394,7 +416,29 @@
                       </th>
                       <th scope="col" class="px-4 py-3 text-left align-top">
                         <div class="flex flex-col gap-1">
-                          <span>Código</span>
+                          <div class="flex items-center justify-between gap-1">
+                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Código</span>
+                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="code"
+                                data-sort-direction="asc"
+                                aria-label="Ordenar crescente pela coluna Código"
+                              >
+                                <i class="fas fa-sort-up text-[9px]"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="code"
+                                data-sort-direction="desc"
+                                aria-label="Ordenar decrescente pela coluna Código"
+                              >
+                                <i class="fas fa-sort-down text-[9px]"></i>
+                              </button>
+                            </div>
+                          </div>
                           <input
                             type="text"
                             placeholder="Filtrar"
@@ -405,7 +449,29 @@
                       </th>
                       <th scope="col" class="px-4 py-3 text-left align-top">
                         <div class="flex flex-col gap-1">
-                          <span>Descrição</span>
+                          <div class="flex items-center justify-between gap-1">
+                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Descrição</span>
+                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="description"
+                                data-sort-direction="asc"
+                                aria-label="Ordenar crescente pela coluna Descrição"
+                              >
+                                <i class="fas fa-sort-up text-[9px]"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="description"
+                                data-sort-direction="desc"
+                                aria-label="Ordenar decrescente pela coluna Descrição"
+                              >
+                                <i class="fas fa-sort-down text-[9px]"></i>
+                              </button>
+                            </div>
+                          </div>
                           <input
                             type="text"
                             placeholder="Filtrar"
@@ -415,8 +481,30 @@
                         </div>
                       </th>
                       <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col gap-1 items-end">
-                          <span>Qtde.</span>
+                        <div class="flex flex-col items-end gap-1">
+                          <div class="flex w-full items-center justify-end gap-1">
+                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Qtde.</span>
+                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="quantity"
+                                data-sort-direction="asc"
+                                aria-label="Ordenar crescente pela coluna Qtde."
+                              >
+                                <i class="fas fa-sort-up text-[9px]"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="quantity"
+                                data-sort-direction="desc"
+                                aria-label="Ordenar decrescente pela coluna Qtde."
+                              >
+                                <i class="fas fa-sort-down text-[9px]"></i>
+                              </button>
+                            </div>
+                          </div>
                           <input
                             type="text"
                             placeholder="Filtrar"
@@ -426,8 +514,30 @@
                         </div>
                       </th>
                       <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col gap-1 items-end">
-                          <span>Multiplicador/Divisor</span>
+                        <div class="flex flex-col items-end gap-1">
+                          <div class="flex w-full items-center justify-end gap-1">
+                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Multiplicador/Divisor</span>
+                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="conversion"
+                                data-sort-direction="asc"
+                                aria-label="Ordenar crescente pela coluna Multiplicador/Divisor"
+                              >
+                                <i class="fas fa-sort-up text-[9px]"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="conversion"
+                                data-sort-direction="desc"
+                                aria-label="Ordenar decrescente pela coluna Multiplicador/Divisor"
+                              >
+                                <i class="fas fa-sort-down text-[9px]"></i>
+                              </button>
+                            </div>
+                          </div>
                           <input
                             type="text"
                             placeholder="Filtrar"
@@ -438,7 +548,29 @@
                       </th>
                       <th scope="col" class="px-4 py-3 text-left align-top">
                         <div class="flex flex-col gap-1">
-                          <span>Unidade</span>
+                          <div class="flex items-center justify-between gap-1">
+                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Unidade</span>
+                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="unit"
+                                data-sort-direction="asc"
+                                aria-label="Ordenar crescente pela coluna Unidade"
+                              >
+                                <i class="fas fa-sort-up text-[9px]"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="unit"
+                                data-sort-direction="desc"
+                                aria-label="Ordenar decrescente pela coluna Unidade"
+                              >
+                                <i class="fas fa-sort-down text-[9px]"></i>
+                              </button>
+                            </div>
+                          </div>
                           <input
                             type="text"
                             placeholder="Filtrar"
@@ -448,8 +580,30 @@
                         </div>
                       </th>
                       <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col gap-1 items-end">
-                          <span>Estoque de entrada</span>
+                        <div class="flex flex-col items-end gap-1">
+                          <div class="flex w-full items-center justify-end gap-1">
+                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Estoque de entrada</span>
+                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="entryStock"
+                                data-sort-direction="asc"
+                                aria-label="Ordenar crescente pela coluna Estoque de entrada"
+                              >
+                                <i class="fas fa-sort-up text-[9px]"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="entryStock"
+                                data-sort-direction="desc"
+                                aria-label="Ordenar decrescente pela coluna Estoque de entrada"
+                              >
+                                <i class="fas fa-sort-down text-[9px]"></i>
+                              </button>
+                            </div>
+                          </div>
                           <input
                             type="text"
                             placeholder="Filtrar"
@@ -459,8 +613,30 @@
                         </div>
                       </th>
                       <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col gap-1 items-end">
-                          <span>Custo calculado (R$)</span>
+                        <div class="flex flex-col items-end gap-1">
+                          <div class="flex w-full items-center justify-end gap-1">
+                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Custo calculado (R$)</span>
+                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="cost"
+                                data-sort-direction="asc"
+                                aria-label="Ordenar crescente pela coluna Custo calculado (R$)"
+                              >
+                                <i class="fas fa-sort-up text-[9px]"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="cost"
+                                data-sort-direction="desc"
+                                aria-label="Ordenar decrescente pela coluna Custo calculado (R$)"
+                              >
+                                <i class="fas fa-sort-down text-[9px]"></i>
+                              </button>
+                            </div>
+                          </div>
                           <input
                             type="text"
                             placeholder="Filtrar"
@@ -470,8 +646,30 @@
                         </div>
                       </th>
                       <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col gap-1 items-end">
-                          <span>Unitário (R$)</span>
+                        <div class="flex flex-col items-end gap-1">
+                          <div class="flex w-full items-center justify-end gap-1">
+                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Unitário (R$)</span>
+                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="unitPrice"
+                                data-sort-direction="asc"
+                                aria-label="Ordenar crescente pela coluna Unitário (R$)"
+                              >
+                                <i class="fas fa-sort-up text-[9px]"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="unitPrice"
+                                data-sort-direction="desc"
+                                aria-label="Ordenar decrescente pela coluna Unitário (R$)"
+                              >
+                                <i class="fas fa-sort-down text-[9px]"></i>
+                              </button>
+                            </div>
+                          </div>
                           <input
                             type="text"
                             placeholder="Filtrar"
@@ -481,8 +679,30 @@
                         </div>
                       </th>
                       <th scope="col" class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-col gap-1 items-end">
-                          <span>Desc (%)</span>
+                        <div class="flex flex-col items-end gap-1">
+                          <div class="flex w-full items-center justify-end gap-1">
+                            <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Desc (%)</span>
+                            <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="discount"
+                                data-sort-direction="asc"
+                                aria-label="Ordenar crescente pela coluna Desc (%)"
+                              >
+                                <i class="fas fa-sort-up text-[9px]"></i>
+                              </button>
+                              <button
+                                type="button"
+                                class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                data-main-products-sort="discount"
+                                data-sort-direction="desc"
+                                aria-label="Ordenar decrescente pela coluna Desc (%)"
+                              >
+                                <i class="fas fa-sort-down text-[9px]"></i>
+                              </button>
+                            </div>
+                          </div>
                           <input
                             type="text"
                             placeholder="Filtrar"
@@ -1630,8 +1850,10 @@
         const mainProductsTableBody = document.querySelector('[data-nfe-products-body]');
         const mainProductsEmptyRow = document.querySelector('[data-nfe-products-empty]');
         const mainProductsFilteredEmptyRow = document.querySelector('[data-nfe-products-filtered-empty]');
-        const mainProductTableState = { items: [], filters: {} };
+        const mainProductTableState = { items: [], filters: {}, sort: { key: '', direction: 'asc' } };
         const mainProductTableFilterInputs = new Map();
+        const mainProductSortButtons = new Map();
+        const mainProductSortHeaders = new Map();
         const duplicatasTableBody = document.querySelector('[data-nfe-duplicatas-body]');
         const duplicatasEmptyRow = document.querySelector('[data-nfe-duplicatas-empty]');
         const MODAL_FOCUSABLE_SELECTORS =
@@ -3477,6 +3699,15 @@
           product?.codigoReferencia ||
           product?.sku ||
           product?.id ||
+          '';
+
+        const getProductNameFromRecord = (product) =>
+          product?.nome ||
+          product?.name ||
+          product?.descricao ||
+          product?.description ||
+          product?.titulo ||
+          product?.title ||
           '';
 
         const PRODUCT_BARCODE_FIELDS = [
@@ -6883,6 +7114,23 @@
             ? normalizeInternalCode(getProductCodeFromRecord(item.matchedProduct))
             : '';
           const supplierCode = item?.supplierCode || '';
+          const systemProductName = item?.matchedProduct
+            ? getProductNameFromRecord(item.matchedProduct)
+            : '';
+          const supplierDescription = typeof item?.description === 'string' ? item.description : '';
+          const descriptionDisplay = systemProductName || supplierDescription || 'Item sem descrição';
+          const systemBarcodeDigits = item?.matchedProduct
+            ? getProductBarcodeFromRecord(item.matchedProduct)
+            : '';
+          const systemBarcodeDisplay = formatGtinDisplay(systemBarcodeDigits);
+          const nfBarcodeRaw =
+            (item?.barcodeDisplay && item.barcodeDisplay !== 'SEM GTIN' ? item.barcodeDisplay : '') ||
+            item?.ean ||
+            item?.eanTrib ||
+            '';
+          const nfBarcodeDisplay = formatGtinDisplay(nfBarcodeRaw);
+          const effectiveBarcodeDisplay =
+            systemBarcodeDisplay !== 'SEM GTIN' ? systemBarcodeDisplay : nfBarcodeDisplay;
           const conversionFactor = resolveMainProductConversionFactor(item);
           const entryStockValue = resolveMainProductEntryStockQuantity(item, conversionFactor);
 
@@ -6905,9 +7153,19 @@
             : '—';
           const unitPriceDisplay = formatMoneyValue(item?.unitPrice);
           const discountDisplay = formatPercentValue(item?.discountPercent);
+          const quantityValue = toNumeric(item?.quantity);
+          const conversionSortValue = Number.isFinite(conversionFactor)
+            ? conversionFactor
+            : toNumeric(item?.conversion);
+          const unitPriceValue = toNumeric(item?.unitPrice);
+          const discountValue = toNumeric(item?.discountPercent);
+          const codeSortValue = [matchedCode, supplierCode].filter(Boolean).join(' ').trim();
+          const descriptionSortValue = descriptionDisplay;
+          const unitSortValue = [item?.unit, item?.unitTrib].filter(Boolean).join(' ').trim();
 
           const descriptionFilterParts = [
-            item?.description,
+            descriptionDisplay,
+            supplierDescription && supplierDescription !== descriptionDisplay ? supplierDescription : '',
             item?.unit ? `UN ${item.unit}` : '',
             item?.unitTrib && item.unitTrib !== item.unit ? `TRIB ${item.unitTrib}` : '',
             item?.ncm ? `NCM ${item.ncm}` : '',
@@ -6919,8 +7177,10 @@
             formatPercentValue(item?.ipiRate),
             formatPercentValue(item?.pisRate),
             formatPercentValue(item?.cofinsRate),
-            item?.barcodeDisplay,
-            formatGtinDisplay(item?.ean || item?.eanTrib),
+            systemBarcodeDisplay !== 'SEM GTIN' ? systemBarcodeDisplay : '',
+            nfBarcodeDisplay !== 'SEM GTIN' ? nfBarcodeDisplay : '',
+            systemBarcodeDigits,
+            normalizeBarcodeForComparison(nfBarcodeRaw),
           ].filter(Boolean);
 
           return {
@@ -6928,6 +7188,7 @@
             index,
             displays: {
               code: matchedCode || supplierCode || '—',
+              description: descriptionDisplay,
               quantity: quantityDisplay,
               conversion: conversionDisplay,
               unit: unitDisplay,
@@ -6935,6 +7196,7 @@
               cost: costDisplay,
               unitPrice: unitPriceDisplay,
               discount: discountDisplay,
+              barcode: effectiveBarcodeDisplay || 'SEM GTIN',
             },
             filterTexts: {
               item: String(index + 1),
@@ -6954,6 +7216,19 @@
               unitPrice: buildNumericFilterValue(unitPriceDisplay, item?.unitPrice),
               discount: buildNumericFilterValue(discountDisplay, item?.discountPercent),
             },
+            sortValues: {
+              item: index,
+              code: codeSortValue,
+              description: descriptionSortValue,
+              quantity: Number.isFinite(quantityValue) ? quantityValue : null,
+              conversion: Number.isFinite(conversionSortValue) ? conversionSortValue : null,
+              unit: unitSortValue,
+              entryStock: Number.isFinite(entryStockValue) ? entryStockValue : null,
+              cost: Number.isFinite(unitCostWithTaxesValue) ? unitCostWithTaxesValue : null,
+              unitPrice: Number.isFinite(unitPriceValue) ? unitPriceValue : null,
+              discount: Number.isFinite(discountValue) ? discountValue : null,
+            },
+            supplierDescription,
           };
         };
 
@@ -6975,6 +7250,75 @@
           );
         };
 
+        const applyMainProductSortToRows = (entries) => {
+          if (!Array.isArray(entries) || !entries.length) {
+            return [];
+          }
+          const { sort } = mainProductTableState;
+          const sortKey = sort?.key || '';
+          if (!sortKey) {
+            return entries.slice();
+          }
+          const sortDirection = sort?.direction === 'desc' ? 'desc' : 'asc';
+          const directionMultiplier = sortDirection === 'desc' ? -1 : 1;
+          return entries
+            .slice()
+            .sort((a, b) => {
+              const sortValuesA = a?.sortValues || {};
+              const sortValuesB = b?.sortValues || {};
+              const valueA = sortValuesA[sortKey];
+              const valueB = sortValuesB[sortKey];
+              const numericA = Number.isFinite(valueA) ? valueA : parseNumber(valueA);
+              const numericB = Number.isFinite(valueB) ? valueB : parseNumber(valueB);
+              if (Number.isFinite(numericA) || Number.isFinite(numericB)) {
+                const safeA = Number.isFinite(numericA) ? numericA : Number.NEGATIVE_INFINITY;
+                const safeB = Number.isFinite(numericB) ? numericB : Number.NEGATIVE_INFINITY;
+                if (safeA === safeB) {
+                  const indexA = Number.isFinite(a?.index) ? a.index : 0;
+                  const indexB = Number.isFinite(b?.index) ? b.index : 0;
+                  return indexA - indexB;
+                }
+                return safeA > safeB ? directionMultiplier : -directionMultiplier;
+              }
+              const textA = String(valueA ?? '').trim();
+              const textB = String(valueB ?? '').trim();
+              const comparison = textA.localeCompare(textB, 'pt-BR', {
+                sensitivity: 'base',
+                numeric: true,
+              });
+              if (comparison === 0) {
+                const indexA = Number.isFinite(a?.index) ? a.index : 0;
+                const indexB = Number.isFinite(b?.index) ? b.index : 0;
+                return indexA - indexB;
+              }
+              return comparison * directionMultiplier;
+            });
+        };
+
+        const updateMainProductSortButtons = () => {
+          const { sort } = mainProductTableState;
+          const activeKey = sort?.key || '';
+          const activeDirection = sort?.direction === 'desc' ? 'desc' : 'asc';
+
+          mainProductSortHeaders.forEach((header, key) => {
+            if (!header) return;
+            if (key === activeKey && activeKey) {
+              header.setAttribute('aria-sort', activeDirection === 'desc' ? 'descending' : 'ascending');
+            } else {
+              header.removeAttribute('aria-sort');
+            }
+          });
+
+          mainProductSortButtons.forEach((meta, button) => {
+            if (!button) return;
+            const isActive = activeKey && meta.key === activeKey && meta.direction === activeDirection;
+            button.classList.toggle('text-primary', isActive);
+            button.classList.toggle('border-primary/60', isActive);
+            button.classList.toggle('bg-primary/10', isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+          });
+        };
+
         const updateMainProductsTableDisplay = () => {
           if (!mainProductsTableBody) return;
 
@@ -6983,6 +7327,8 @@
             : [];
 
           const hasItems = items.length > 0;
+
+          updateMainProductSortButtons();
 
           if (mainProductsEmptyRow) {
             mainProductsEmptyRow.classList.toggle('hidden', hasItems);
@@ -6999,7 +7345,8 @@
           }
 
           const derivedEntries = items.map((item, index) => buildMainProductRowData(item, index));
-          const itemsToRender = applyMainProductFiltersToRows(derivedEntries);
+          const filteredEntries = applyMainProductFiltersToRows(derivedEntries);
+          const itemsToRender = applyMainProductSortToRows(filteredEntries);
 
           if (!itemsToRender.length) {
             if (mainProductsFilteredEmptyRow) {
@@ -7025,7 +7372,7 @@
 
             const descriptionCell = document.createElement('td');
             descriptionCell.className = 'px-4 py-3 text-gray-700';
-            descriptionCell.textContent = item?.description || 'Item sem descrição';
+            descriptionCell.textContent = displays.description || 'Item sem descrição';
 
             const detailLine1 = document.createElement('p');
             detailLine1.className = 'text-xs text-gray-500';
@@ -7054,11 +7401,17 @@
 
             const detailLine4 = document.createElement('p');
             detailLine4.className = 'text-xs text-gray-500';
-            detailLine4.textContent = `GTIN: ${
-              item?.barcodeDisplay || formatGtinDisplay(item?.ean || item?.eanTrib) || 'SEM GTIN'
-            }`;
+            detailLine4.textContent = `GTIN: ${displays.barcode || 'SEM GTIN'}`;
 
             descriptionCell.append(detailLine1, detailLine2, detailLine3, detailLine4);
+
+            const supplierDescriptionText = entry.supplierDescription || '';
+            if (supplierDescriptionText && supplierDescriptionText !== displays.description) {
+              const supplierDetailLine = document.createElement('p');
+              supplierDetailLine.className = 'text-xs text-gray-400 italic';
+              supplierDetailLine.textContent = `Descrição NF: ${supplierDescriptionText}`;
+              descriptionCell.appendChild(supplierDetailLine);
+            }
 
             const quantityCell = document.createElement('td');
             quantityCell.className = 'px-4 py-3 text-right text-gray-600';
@@ -7116,6 +7469,20 @@
           updateMainProductsTableDisplay();
         };
 
+        const setMainProductSort = (key, direction) => {
+          if (!key) return;
+          const nextDirection = direction === 'desc' ? 'desc' : 'asc';
+          const { sort } = mainProductTableState;
+          const currentKey = sort?.key || '';
+          const currentDirection = sort?.direction || 'asc';
+          if (currentKey === key && currentDirection === nextDirection) {
+            mainProductTableState.sort = { key: '', direction: 'asc' };
+          } else {
+            mainProductTableState.sort = { key, direction: nextDirection };
+          }
+          updateMainProductsTableDisplay();
+        };
+
         const renderMainProductsFromNfe = (items = []) => {
           mainProductTableState.items = Array.isArray(items) ? items : [];
           updateMainProductsTableDisplay();
@@ -7130,6 +7497,23 @@
             setMainProductTableFilter(key, event.target.value || '');
           });
         });
+
+        document.querySelectorAll('[data-main-products-sort]').forEach((button) => {
+          const key = button.dataset.mainProductsSort;
+          if (!key) return;
+          const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+          const header = button.closest('th');
+          mainProductSortButtons.set(button, { key, direction });
+          if (header && !mainProductSortHeaders.has(key)) {
+            mainProductSortHeaders.set(key, header);
+          }
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            setMainProductSort(key, direction);
+          });
+        });
+
+        updateMainProductSortButtons();
 
         const updateDuplicataSummaryFromData = (data) => {
           const duplicates = Array.isArray(data?.duplicates) ? data.duplicates : [];
