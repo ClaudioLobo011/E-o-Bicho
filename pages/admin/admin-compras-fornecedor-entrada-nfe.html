@@ -5302,6 +5302,12 @@
             getDisplayText: (item) => item?.barcodeDisplay || 'SEM GTIN',
           },
           {
+            key: 'barcodeTrib',
+            label: 'Cod_Barras_Trib',
+            headerClass: 'px-2 py-1.5 text-left',
+            getDisplayText: (item) => item?.barcodeTribDisplay || 'SEM GTIN',
+          },
+          {
             key: 'supplierName',
             label: 'Nome no Fornecedor',
             headerClass: 'px-2 py-1.5 text-left',
@@ -7296,6 +7302,7 @@
             const eanTrib = getText(prod, 'cEANTrib');
             const barcodeCandidates = Array.from(new Set([normalizeGtin(ean), normalizeGtin(eanTrib)].filter(Boolean)));
             const barcodeDisplay = formatGtinDisplay(ean || eanTrib);
+            const barcodeTribDisplay = formatGtinDisplay(eanTrib);
             const qTribRaw = parseNumber(getText(prod, 'qTrib'));
             const qTrib = Number.isFinite(qTribRaw) ? qTribRaw : quantity;
             const conversionMultiplier = Number.isFinite(qTrib) && qTrib > 0 ? qTrib : 1;
@@ -7400,6 +7407,7 @@
               freight,
               other,
               barcodeDisplay,
+              barcodeTribDisplay,
               barcodeCandidates,
               unitTrib: getText(prod, 'uTrib'),
               qTrib,
