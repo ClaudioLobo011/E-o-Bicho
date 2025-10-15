@@ -1909,27 +1909,38 @@
               : null;
 
           if (skipTaxComputation) {
-            const effectiveTotal =
-              (Number.isFinite(netBaseTotal) ? netBaseTotal : 0) +
-              (Number.isFinite(taxesTotal) ? taxesTotal : 0) +
-              additionalsTotal;
-            const unitCost =
-              Number.isFinite(effectiveQuantity) && effectiveQuantity > 0 && Number.isFinite(effectiveTotal)
+            const preservedTotal = Number.isFinite(totalValue)
+              ? totalValue
+              : Number.isFinite(netBaseTotal)
+              ? netBaseTotal
+              : Number.isFinite(grossAmount)
+              ? grossAmount
+              : null;
+
+            const effectiveTotal = Number.isFinite(preservedTotal) ? preservedTotal : null;
+
+            const unitCost = Number.isFinite(effectiveQuantity) && effectiveQuantity > 0
+              ? Number.isFinite(effectiveTotal)
                 ? effectiveTotal / effectiveQuantity
-                : null;
+                : Number.isFinite(unitPriceValue) && unitPriceValue >= 0
+                ? unitPriceValue
+                : null
+              : Number.isFinite(unitPriceValue) && unitPriceValue >= 0
+              ? unitPriceValue
+              : null;
 
             item.discount = Number.isFinite(discountValue) ? discountValue : 0;
             item.entryStockQuantity =
               Number.isFinite(entryStockQuantity) && entryStockQuantity >= 0 ? entryStockQuantity : null;
             item.netProductValue =
-              Number.isFinite(netBaseTotal) && netBaseTotal >= 0 ? netBaseTotal : null;
+              Number.isFinite(netBaseTotal) && netBaseTotal >= 0
+                ? netBaseTotal
+                : Number.isFinite(effectiveTotal) && effectiveTotal >= 0
+                ? effectiveTotal
+                : null;
             item.taxesTotal = Number.isFinite(taxesTotal) ? taxesTotal : 0;
             item.additionalsTotal = additionalsTotal;
-            const hasBaseForTotal =
-              Number.isFinite(netBaseTotal) ||
-              Number.isFinite(taxesTotal) ||
-              Math.abs(additionalsTotal) > 0.000001;
-            item.totalWithTaxes = hasBaseForTotal ? effectiveTotal : null;
+            item.totalWithTaxes = Number.isFinite(effectiveTotal) && effectiveTotal >= 0 ? effectiveTotal : null;
             item.unitCostWithTaxes = Number.isFinite(unitCost) && unitCost >= 0 ? unitCost : null;
 
             return item;
