@@ -1955,6 +1955,8 @@
         let productValidationSequence = 0;
         const productSupplierLinkCache = new Set();
         const productSupplierLinkPromises = new Map();
+        const supplierFactorUpdatePromises = new Map();
+        const FACTOR_COMPARISON_TOLERANCE = 0.0005;
         let supplierLinkErrorNotified = false;
         let isRefreshingImportedProducts = false;
 
@@ -3994,6 +3996,188 @@
 
           productSupplierLinkPromises.set(cacheKey, requestPromise);
           return requestPromise;
+        };
+
+        const computeSupplierFactorAdjustment = (item, nfeData) => {
+          if (!item || !item.matchedProduct) return null;
+
+          const toNumeric = (value) => (Number.isFinite(value) ? value : parseNumber(value));
+          const targetFactor = toNumeric(item?.conversion);
+          if (!Number.isFinite(targetFactor) || targetFactor <= 0) {
+            return null;
+          }
+
+          let baseFactor = getBaseConversionFactor(item);
+          if (!Number.isFinite(baseFactor) || baseFactor <= 0) {
+            baseFactor = 1;
+          }
+
+          const supplierEntry = findSupplierEntryForProduct(item.matchedProduct, item, nfeData);
+          const existingType = canonicalSupplierCalcType(supplierEntry?.tipoCalculo);
+          const existingValue = parseSupplierCalcValue(supplierEntry?.valorCalculo);
+
+          if (existingType && Number.isFinite(existingValue)) {
+            const computedFactor = (() => {
+              if (existingType === 'divide') {
+                return existingValue > 0 ? baseFactor / existingValue : null;
+              }
+              return baseFactor * existingValue;
+            })();
+            if (
+              Number.isFinite(computedFactor) &&
+              Math.abs(computedFactor - targetFactor) <= FACTOR_COMPARISON_TOLERANCE
+            ) {
+              return null;
+            }
+          }
+
+          let ratio = targetFactor / baseFactor;
+          let calcType = 'multiply';
+
+          if (!Number.isFinite(ratio) || ratio <= 0) {
+            if (targetFactor <= 0) {
+              return null;
+            }
+            ratio = baseFactor / targetFactor;
+            calcType = 'divide';
+          }
+
+          if (!Number.isFinite(ratio) || ratio <= 0) {
+            return null;
+          }
+
+          const normalizedRatio = Number.parseFloat(ratio.toFixed(6));
+          if (!Number.isFinite(normalizedRatio) || normalizedRatio <= 0) {
+            return null;
+          }
+
+          if (
+            existingType &&
+            existingType === calcType &&
+            Number.isFinite(existingValue) &&
+            Math.abs(existingValue - normalizedRatio) <= FACTOR_COMPARISON_TOLERANCE
+          ) {
+            return null;
+          }
+
+          return {
+            calcType,
+            calcValue: normalizedRatio,
+            supplierEntry,
+            targetFactor,
+            baseFactor,
+          };
+        };
+
+        const updateSupplierFactorForItem = (item, nfeData) => {
+          if (!item || !item.matchedProduct) return null;
+
+          const productId = getProductIdFromRecord(item.matchedProduct);
+          if (!productId) return null;
+
+          const supplierInfo = resolveActiveSupplierInfo(nfeData);
+          const supplierName = typeof supplierInfo.name === 'string' ? supplierInfo.name.trim() : '';
+          if (!supplierName) return null;
+
+          const supplierCode = canonicalSupplierProductCode(item?.supplierCode);
+          if (!supplierCode) return null;
+
+          const adjustment = computeSupplierFactorAdjustment(item, nfeData);
+          if (!adjustment) return null;
+
+          const cacheKey = [productId, supplierCode, adjustment.calcType, adjustment.calcValue].join('::');
+          if (supplierFactorUpdatePromises.has(cacheKey)) {
+            return supplierFactorUpdatePromises.get(cacheKey);
+          }
+
+          const headers = buildAuthHeaders();
+          headers.set('Content-Type', 'application/json');
+
+          const payload = {
+            fornecedor: supplierName,
+            codigoProduto: item?.supplierCode || '',
+            nomeProdutoFornecedor: item?.description || '',
+            unidadeEntrada: item?.unit || item?.unitTrib || '',
+            documentoFornecedor: supplierInfo.document || '',
+            tipoCalculo: adjustment.calcType,
+            valorCalculo: adjustment.calcValue,
+          };
+
+          const requestPromise = (async () => {
+            const response = await fetch(`${apiBaseUrl}/products/${productId}/suppliers/link`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(payload),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              const contextLabel =
+                item?.matchedProduct?.nome || item?.description || item?.supplierCode || 'produto';
+              const message = result?.message || `Falha ao atualizar o fator do ${contextLabel}.`;
+              throw new Error(message);
+            }
+
+            if (Array.isArray(result?.fornecedores)) {
+              item.matchedProduct.fornecedores = result.fornecedores;
+            } else if (result?.fornecedor) {
+              const current = Array.isArray(item.matchedProduct.fornecedores)
+                ? [...item.matchedProduct.fornecedores]
+                : [];
+              const normalizedCode = canonicalSupplierProductCode(result.fornecedor?.codigoProduto);
+              const normalizedName = canonicalSupplierName(result.fornecedor?.fornecedor);
+              let replaced = false;
+              const updatedList = current.map((entry) => {
+                const entryCode = canonicalSupplierProductCode(entry?.codigoProduto);
+                const entryName = canonicalSupplierName(entry?.fornecedor);
+                if (!replaced && entryCode === normalizedCode && entryName === normalizedName) {
+                  replaced = true;
+                  return result.fornecedor;
+                }
+                return entry;
+              });
+              if (!replaced) {
+                updatedList.push(result.fornecedor);
+              }
+              item.matchedProduct.fornecedores = updatedList;
+            }
+
+            item.manualConversionOverride = false;
+            item.supplierAppliedConversion = {
+              type: adjustment.calcType,
+              value: adjustment.calcValue,
+              factor: adjustment.targetFactor,
+              baseFactor: adjustment.baseFactor,
+              supplierCode,
+              supplierName,
+            };
+
+            return result;
+          })()
+            .catch((error) => {
+              throw error;
+            })
+            .finally(() => {
+              supplierFactorUpdatePromises.delete(cacheKey);
+            });
+
+          supplierFactorUpdatePromises.set(cacheKey, requestPromise);
+          return requestPromise;
+        };
+
+        const syncSupplierFactorsForItems = async (items, nfeData) => {
+          if (!Array.isArray(items) || !items.length) return;
+          const promises = [];
+          items.forEach((item) => {
+            if (item?.validationStatus !== 'matched' || !item?.matchedProduct) {
+              return;
+            }
+            const updatePromise = updateSupplierFactorForItem(item, nfeData);
+            if (updatePromise && typeof updatePromise.then === 'function') {
+              promises.push(updatePromise);
+            }
+          });
+          if (!promises.length) return;
+          await Promise.all(promises);
         };
 
         const normalizeInternalCode = (value) => {
@@ -9153,7 +9337,16 @@
 
         const confirmImportButton = importModal.querySelector('[data-confirm-import]');
         if (confirmImportButton) {
-          confirmImportButton.addEventListener('click', (event) => {
+          const disableConfirmButton = () => {
+            confirmImportButton.disabled = true;
+            confirmImportButton.classList.add('cursor-wait', 'opacity-60');
+          };
+          const restoreConfirmButton = () => {
+            confirmImportButton.disabled = false;
+            confirmImportButton.classList.remove('cursor-wait', 'opacity-60');
+          };
+
+          confirmImportButton.addEventListener('click', async (event) => {
             event.preventDefault();
             if (!lastNfeData) {
               notify('Importe um XML autorizado antes de aplicar os dados na nota.', 'warning');
@@ -9177,6 +9370,21 @@
               return;
             }
 
+            disableConfirmButton();
+
+            try {
+              await syncSupplierFactorsForItems(items, lastNfeData);
+            } catch (error) {
+              console.error('Erro ao atualizar fator dos produtos cadastrados:', error);
+              notify(
+                error?.message ||
+                  'Não foi possível atualizar o fator dos produtos no cadastro. Tente novamente.',
+                'error'
+              );
+              restoreConfirmButton();
+              return;
+            }
+
             try {
               applyImportedDataToMainForm(lastNfeData);
               notify('Dados do XML aplicados à entrada da nota.', 'success');
@@ -9184,6 +9392,8 @@
             } catch (error) {
               console.error('Erro ao aplicar dados importados na nota:', error);
               notify('Não foi possível aplicar os dados do XML na nota. Tente novamente.', 'error');
+            } finally {
+              restoreConfirmButton();
             }
           });
         }
