@@ -3701,6 +3701,15 @@
           product?.id ||
           '';
 
+        const getProductNameFromRecord = (product) =>
+          product?.nome ||
+          product?.name ||
+          product?.descricao ||
+          product?.description ||
+          product?.titulo ||
+          product?.title ||
+          '';
+
         const PRODUCT_BARCODE_FIELDS = [
           'codigoBarras',
           'codigoDeBarras',
@@ -7105,6 +7114,23 @@
             ? normalizeInternalCode(getProductCodeFromRecord(item.matchedProduct))
             : '';
           const supplierCode = item?.supplierCode || '';
+          const systemProductName = item?.matchedProduct
+            ? getProductNameFromRecord(item.matchedProduct)
+            : '';
+          const supplierDescription = typeof item?.description === 'string' ? item.description : '';
+          const descriptionDisplay = systemProductName || supplierDescription || 'Item sem descrição';
+          const systemBarcodeDigits = item?.matchedProduct
+            ? getProductBarcodeFromRecord(item.matchedProduct)
+            : '';
+          const systemBarcodeDisplay = formatGtinDisplay(systemBarcodeDigits);
+          const nfBarcodeRaw =
+            (item?.barcodeDisplay && item.barcodeDisplay !== 'SEM GTIN' ? item.barcodeDisplay : '') ||
+            item?.ean ||
+            item?.eanTrib ||
+            '';
+          const nfBarcodeDisplay = formatGtinDisplay(nfBarcodeRaw);
+          const effectiveBarcodeDisplay =
+            systemBarcodeDisplay !== 'SEM GTIN' ? systemBarcodeDisplay : nfBarcodeDisplay;
           const conversionFactor = resolveMainProductConversionFactor(item);
           const entryStockValue = resolveMainProductEntryStockQuantity(item, conversionFactor);
 
@@ -7134,11 +7160,12 @@
           const unitPriceValue = toNumeric(item?.unitPrice);
           const discountValue = toNumeric(item?.discountPercent);
           const codeSortValue = [matchedCode, supplierCode].filter(Boolean).join(' ').trim();
-          const descriptionSortValue = item?.description || '';
+          const descriptionSortValue = descriptionDisplay;
           const unitSortValue = [item?.unit, item?.unitTrib].filter(Boolean).join(' ').trim();
 
           const descriptionFilterParts = [
-            item?.description,
+            descriptionDisplay,
+            supplierDescription && supplierDescription !== descriptionDisplay ? supplierDescription : '',
             item?.unit ? `UN ${item.unit}` : '',
             item?.unitTrib && item.unitTrib !== item.unit ? `TRIB ${item.unitTrib}` : '',
             item?.ncm ? `NCM ${item.ncm}` : '',
@@ -7150,8 +7177,10 @@
             formatPercentValue(item?.ipiRate),
             formatPercentValue(item?.pisRate),
             formatPercentValue(item?.cofinsRate),
-            item?.barcodeDisplay,
-            formatGtinDisplay(item?.ean || item?.eanTrib),
+            systemBarcodeDisplay !== 'SEM GTIN' ? systemBarcodeDisplay : '',
+            nfBarcodeDisplay !== 'SEM GTIN' ? nfBarcodeDisplay : '',
+            systemBarcodeDigits,
+            normalizeBarcodeForComparison(nfBarcodeRaw),
           ].filter(Boolean);
 
           return {
@@ -7159,6 +7188,7 @@
             index,
             displays: {
               code: matchedCode || supplierCode || '—',
+              description: descriptionDisplay,
               quantity: quantityDisplay,
               conversion: conversionDisplay,
               unit: unitDisplay,
@@ -7166,6 +7196,7 @@
               cost: costDisplay,
               unitPrice: unitPriceDisplay,
               discount: discountDisplay,
+              barcode: effectiveBarcodeDisplay || 'SEM GTIN',
             },
             filterTexts: {
               item: String(index + 1),
@@ -7197,6 +7228,7 @@
               unitPrice: Number.isFinite(unitPriceValue) ? unitPriceValue : null,
               discount: Number.isFinite(discountValue) ? discountValue : null,
             },
+            supplierDescription,
           };
         };
 
@@ -7340,7 +7372,7 @@
 
             const descriptionCell = document.createElement('td');
             descriptionCell.className = 'px-4 py-3 text-gray-700';
-            descriptionCell.textContent = item?.description || 'Item sem descrição';
+            descriptionCell.textContent = displays.description || 'Item sem descrição';
 
             const detailLine1 = document.createElement('p');
             detailLine1.className = 'text-xs text-gray-500';
@@ -7369,11 +7401,17 @@
 
             const detailLine4 = document.createElement('p');
             detailLine4.className = 'text-xs text-gray-500';
-            detailLine4.textContent = `GTIN: ${
-              item?.barcodeDisplay || formatGtinDisplay(item?.ean || item?.eanTrib) || 'SEM GTIN'
-            }`;
+            detailLine4.textContent = `GTIN: ${displays.barcode || 'SEM GTIN'}`;
 
             descriptionCell.append(detailLine1, detailLine2, detailLine3, detailLine4);
+
+            const supplierDescriptionText = entry.supplierDescription || '';
+            if (supplierDescriptionText && supplierDescriptionText !== displays.description) {
+              const supplierDetailLine = document.createElement('p');
+              supplierDetailLine.className = 'text-xs text-gray-400 italic';
+              supplierDetailLine.textContent = `Descrição NF: ${supplierDescriptionText}`;
+              descriptionCell.appendChild(supplierDetailLine);
+            }
 
             const quantityCell = document.createElement('td');
             quantityCell.className = 'px-4 py-3 text-right text-gray-600';
