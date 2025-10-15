@@ -1527,6 +1527,10 @@
         const duplicataDaysInput = document.getElementById('dias');
         const duplicataInitialDaysInput = document.getElementById('dias-vencimento');
         const duplicataDaysTypeSelect = document.getElementById('tipo-dias');
+        const paymentConditionInput = document.getElementById('condicao-pagamento');
+        const paymentFormInput = document.getElementById('forma-pagamento');
+        const observationInput = document.getElementById('observacao');
+        const complementaryInfoInput = document.getElementById('informacoes-complementares');
         const clearImportButton = document.querySelector('[data-clear-import]');
         const documentsTableBody = document.querySelector('[data-nfe-documents-body]');
         const documentsEmptyRow = document.querySelector('[data-nfe-documents-empty]');
@@ -2673,6 +2677,38 @@
             return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
           }
           return 'R$ 0,00';
+        };
+
+        const PAYMENT_METHOD_DESCRIPTIONS = {
+          '01': 'Dinheiro',
+          '02': 'Cheque',
+          '03': 'Cartão de Crédito',
+          '04': 'Cartão de Débito',
+          '05': 'Crédito Loja',
+          '10': 'Vale Alimentação',
+          '11': 'Vale Refeição',
+          '12': 'Vale Presente',
+          '13': 'Vale Combustível',
+          '14': 'Duplicata Mercantil',
+          '15': 'Boleto Bancário',
+          '16': 'Depósito Bancário',
+          '17': 'Pagamento Instantâneo (PIX)',
+          '18': 'Transferência bancária',
+          '19': 'Programa de Fidelidade',
+          '90': 'Sem pagamento',
+          '99': 'Outros',
+        };
+
+        const describePaymentMethod = (code) => {
+          if (!code && code !== 0) return '';
+          const normalized = String(code).trim();
+          if (!normalized) return '';
+          const padded = normalized.length === 1 ? `0${normalized}` : normalized;
+          return (
+            PAYMENT_METHOD_DESCRIPTIONS[padded] ||
+            PAYMENT_METHOD_DESCRIPTIONS[normalized] ||
+            normalized
+          );
         };
 
         const formatAddressLine = (address = {}) => {
@@ -5458,6 +5494,56 @@
           }
         };
 
+        const fillAdditionalInfoFromNfeData = (data) => {
+          const additional = data?.additionalInfo || {};
+          if (observationInput) {
+            observationInput.value = additional.complementary || '';
+          }
+          if (complementaryInfoInput) {
+            complementaryInfoInput.value = additional.fiscal || '';
+          }
+
+          const payments = Array.isArray(data?.payments) ? data.payments : [];
+          if (paymentFormInput) {
+            const descriptions = payments
+              .map((payment) => payment?.description || describePaymentMethod(payment?.method))
+              .filter(Boolean);
+            const uniqueDescriptions = Array.from(new Set(descriptions));
+            paymentFormInput.value = uniqueDescriptions.join(', ');
+          }
+
+          if (paymentConditionInput) {
+            const duplicates = Array.isArray(data?.duplicates) ? data.duplicates : [];
+            const emission = normalizeDate(data?.ide?.emissionDate);
+            if (duplicates.length && emission.dateInput) {
+              const emissionDateObj = new Date(`${emission.dateInput}T00:00:00`);
+              const dueDiffs = duplicates
+                .map((dup) => {
+                  const dueInfo = normalizeDate(dup?.dueDate);
+                  if (!dueInfo.dateInput) return null;
+                  const dueDateObj = new Date(`${dueInfo.dateInput}T00:00:00`);
+                  const diff = Math.round((dueDateObj - emissionDateObj) / (24 * 60 * 60 * 1000));
+                  return Number.isFinite(diff) ? diff : null;
+                })
+                .filter((value) => value !== null)
+                .sort((a, b) => a - b);
+              if (dueDiffs.length) {
+                paymentConditionInput.value = dueDiffs.join('/');
+              } else {
+                paymentConditionInput.value = `${duplicates.length} parcela${
+                  duplicates.length > 1 ? 's' : ''
+                }`;
+              }
+            } else if (payments.length) {
+              paymentConditionInput.value = `${payments.length} parcela${
+                payments.length > 1 ? 's' : ''
+              }`;
+            } else {
+              paymentConditionInput.value = '';
+            }
+          }
+        };
+
         const renderDocumentsFromNfe = (references = []) => {
           if (!documentsTableBody) return;
           const existingRows = documentsTableBody.querySelectorAll(
@@ -5569,7 +5655,22 @@
 
             const observationCell = document.createElement('td');
             observationCell.className = 'px-4 py-3 text-gray-600';
-            observationCell.textContent = '—';
+            const observationParts = [];
+            const methodDescription =
+              dup?.paymentDescription ||
+              (dup?.paymentMethod ? describePaymentMethod(dup.paymentMethod) : '');
+            if (methodDescription) {
+              observationParts.push(methodDescription);
+            }
+            const paymentTypeRaw = dup?.paymentType;
+            let paymentTypeLabel = '';
+            if (paymentTypeRaw === '0') paymentTypeLabel = 'À vista';
+            else if (paymentTypeRaw === '1') paymentTypeLabel = 'À prazo';
+            else if (paymentTypeRaw === '2') paymentTypeLabel = 'Outros';
+            if (paymentTypeLabel) {
+              observationParts.push(paymentTypeLabel);
+            }
+            observationCell.textContent = observationParts.join(' · ') || '—';
 
             const accountCell = document.createElement('td');
             accountCell.className = 'px-4 py-3 text-gray-600';
@@ -5813,6 +5914,7 @@
           fillTotalsFromNfeData(data);
           fillTransportFromNfeData(data);
           fillDuplicatasFromNfeData(data);
+          fillAdditionalInfoFromNfeData(data);
           renderDocumentsFromNfe(data.references);
           renderMainProductsFromNfe(data.items);
           if (totalAmountDisplay) {
@@ -5882,6 +5984,10 @@
             duplicataFirstDueInput,
             duplicataDaysInput,
             duplicataInitialDaysInput,
+            paymentConditionInput,
+            paymentFormInput,
+            observationInput,
+            complementaryInfoInput,
           ];
 
           inputsToReset.forEach((input) => setInputValue(input, ''));
@@ -6045,7 +6151,16 @@
           const infProt = prot ? prot.getElementsByTagName('infProt')[0] : null;
           const cobr = infNFe.getElementsByTagName('cobr')[0];
           const dupElements = cobr ? Array.from(cobr.getElementsByTagName('dup')) : [];
+          const pagElements = Array.from(infNFe.getElementsByTagName('pag'));
+          const detPagElements = pagElements.reduce((acc, pagElement) => {
+            const detPagList = Array.from(pagElement.getElementsByTagName('detPag'));
+            if (detPagList.length) {
+              acc.push(...detPagList);
+            }
+            return acc;
+          }, []);
           const nfRefElements = ide ? Array.from(ide.getElementsByTagName('NFref')) : [];
+          const infAdic = infNFe.getElementsByTagName('infAdic')[0] || null;
 
           const accessKey = (infNFe.getAttribute('Id') || infNFe.getAttribute('id') || '').replace(/^NFe/i, '');
           const emissionDate = getText(ide, 'dhEmi') || getText(ide, 'dEmi');
@@ -6222,12 +6337,41 @@
             };
           };
 
-          const duplicates = dupElements.map((dup, index) => ({
+          const duplicatesFromXml = dupElements.map((dup, index) => ({
             index,
             number: getText(dup, 'nDup'),
             dueDate: getText(dup, 'dVenc'),
-            value: getText(dup, 'vDup'),
+            value: toNumeric(getText(dup, 'vDup')),
           }));
+
+          const payments = detPagElements.map((detPag, index) => {
+            const cardNode = detPag.getElementsByTagName('card')[0] || null;
+            const methodCode = getText(detPag, 'tPag');
+            const payment = {
+              index,
+              method: methodCode,
+              description: describePaymentMethod(methodCode),
+              type: getText(detPag, 'indPag'),
+              dueDate: getText(detPag, 'dVenc'),
+              amount: toNumeric(getText(detPag, 'vPag')),
+              integrationType: getText(cardNode, 'tpIntegra'),
+              cardCnpj: getText(cardNode, 'CNPJ'),
+              cardBrand: getText(cardNode, 'tBand'),
+            };
+            return payment;
+          });
+
+          const duplicates = duplicatesFromXml.length
+            ? duplicatesFromXml
+            : payments.map((payment) => ({
+                index: payment.index,
+                number: '',
+                dueDate: payment.dueDate,
+                value: payment.amount,
+                paymentMethod: payment.method,
+                paymentDescription: payment.description,
+                paymentType: payment.type,
+              }));
 
           const references = nfRefElements
             .map((ref) => {
@@ -6364,6 +6508,11 @@
                 weightNet: getText(volElement, 'pesoL'),
               },
             },
+            additionalInfo: {
+              complementary: getText(infAdic, 'infCpl'),
+              fiscal: getText(infAdic, 'infAdFisco'),
+            },
+            payments,
             duplicates,
             references,
             items,
