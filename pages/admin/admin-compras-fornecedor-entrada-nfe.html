@@ -1852,7 +1852,15 @@
         const ensureItemCostWithTaxes = (item, options = {}) => {
           if (!item || typeof item !== 'object') return item;
 
-          const { skipTaxComputation = false } = options;
+          const hasExplicitSkip = Object.prototype.hasOwnProperty.call(
+            options,
+            'skipTaxComputation'
+          );
+          const skipTaxComputation = hasExplicitSkip
+            ? Boolean(options.skipTaxComputation)
+            : Boolean(item?.skipTaxComputation);
+
+          item.skipTaxComputation = skipTaxComputation;
 
           const quantityValue = toNumeric(item.quantity);
           const unitPriceValue = toNumeric(item.unitPrice);
