@@ -2259,11 +2259,14 @@
 
             const effectiveTotal = Number.isFinite(preservedTotal) ? preservedTotal : null;
 
-            const quantityForCost = Number.isFinite(quantityValue) && quantityValue > 0
-              ? quantityValue
-              : Number.isFinite(effectiveQuantity) && effectiveQuantity > 0
-              ? effectiveQuantity
-              : null;
+            const quantityForCostCandidates = [
+              entryStockQuantity,
+              effectiveQuantity,
+              quantityValue,
+            ];
+            const quantityForCost = quantityForCostCandidates.find(
+              (candidate) => Number.isFinite(candidate) && candidate > 0
+            ) || null;
 
             const computedUnitCost =
               Number.isFinite(effectiveTotal) && Number.isFinite(quantityForCost) && quantityForCost > 0
