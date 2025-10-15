@@ -503,14 +503,6 @@
                   <input type="date" id="duplicata-data-emissao" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500" value="2024-07-05" readonly>
                 </div>
                 <div>
-                  <label for="doc-mercantil" class="block text-sm font-medium text-gray-700 mb-1">Doc. Mercantil</label>
-                  <select id="doc-mercantil" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="boleto" selected>BOLETO</option>
-                    <option value="dup">DUPLICATA</option>
-                    <option value="nf">Nota Fiscal</option>
-                  </select>
-                </div>
-                <div>
                   <label for="numero-doc-bancario" class="block text-sm font-medium text-gray-700 mb-1">Nº Doc. Bancário</label>
                   <input type="text" id="numero-doc-bancario" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="0001234567">
                 </div>
@@ -563,13 +555,12 @@
                       <th class="px-4 py-3 text-left font-semibold text-gray-700">Observação</th>
                       <th class="px-4 py-3 text-left font-semibold text-gray-700">Conta Contábil</th>
                       <th class="px-4 py-3 text-left font-semibold text-gray-700">Código Conta Contábil</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Doc. Mercantil</th>
                       <th class="px-4 py-3 text-left font-semibold text-gray-700">Conta Corrente</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100 bg-white" data-nfe-duplicatas-body>
                     <tr class="hidden" data-nfe-duplicatas-empty>
-                      <td class="px-4 py-3 text-center text-gray-500" colspan="9">
+                      <td class="px-4 py-3 text-center text-gray-500" colspan="8">
                         Nenhuma duplicata foi informada no XML.
                       </td>
                     </tr>
@@ -1527,6 +1518,7 @@
         const duplicataDaysInput = document.getElementById('dias');
         const duplicataInitialDaysInput = document.getElementById('dias-vencimento');
         const duplicataDaysTypeSelect = document.getElementById('tipo-dias');
+        const bankAccountSelect = document.getElementById('conta-corrente');
         const accountingAccountInput = document.getElementById('conta-contabil');
         const paymentConditionInput = document.getElementById('condicao-pagamento');
         const paymentFormInput = document.getElementById('forma-pagamento');
@@ -1552,6 +1544,7 @@
             ? API_CONFIG.BASE_URL.replace(/\/+$/, '')
             : '/api';
         const suppliersEndpoint = `${apiBaseUrl}/suppliers`;
+        const bankAccountsEndpoint = `${apiBaseUrl}/bank-accounts`;
 
         const notify = (message, type = 'info') => {
           if (typeof window.showToast === 'function') {
@@ -1596,9 +1589,18 @@
           error: null,
         };
 
+        const bankAccountsRegistry = {
+          cache: new Map(),
+          loading: new Map(),
+          index: new Map(),
+          lastLoadedAt: 0,
+          error: null,
+        };
+
         let lastSupplierData = null;
         let lastSupplierRecord = null;
         let lastNfeData = null;
+        let pendingBankAccountId = '';
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
@@ -2156,6 +2158,264 @@
             return `${account.code} - ${account.name}`;
           }
           return account.code || account.name || '';
+        };
+
+        const setBankAccountPlaceholder = (message, { disabled = true } = {}) => {
+          if (!bankAccountSelect) return;
+          bankAccountSelect.innerHTML = '';
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = message;
+          bankAccountSelect.appendChild(option);
+          bankAccountSelect.disabled = Boolean(disabled);
+        };
+
+        const registerBankAccounts = (accounts = []) => {
+          if (!Array.isArray(accounts)) return [];
+          accounts.forEach((account) => {
+            if (!account || !account._id) return;
+            bankAccountsRegistry.index.set(String(account._id), account);
+          });
+          return accounts;
+        };
+
+        const buildBankAccountLabel = (account) => {
+          if (!account || typeof account !== 'object') return 'Conta corrente';
+
+          const normalize = (value) => (typeof value === 'string' ? value.trim() : '');
+          const alias = normalize(account.alias);
+          const bankName = normalize(account.bankName);
+          const bankCode = normalize(account.bankCode);
+          const agency = normalize(account.agency);
+          const accountNumber = normalize(account.accountNumber);
+          const accountDigit = normalize(account.accountDigit);
+
+          const numberDisplay = accountNumber
+            ? `${accountNumber}${accountDigit ? `-${accountDigit}` : ''}`
+            : '';
+
+          const parts = [];
+          if (alias) parts.push(alias);
+
+          const bankParts = [];
+          if (bankCode) bankParts.push(`Banco ${bankCode}`);
+          if (bankName) bankParts.push(bankName);
+          if (bankParts.length) {
+            parts.push(bankParts.join(' · '));
+          }
+
+          const accountParts = [];
+          if (agency) accountParts.push(`Ag. ${agency}`);
+          if (numberDisplay) accountParts.push(`C/C ${numberDisplay}`);
+          if (accountParts.length) {
+            parts.push(accountParts.join(' · '));
+          }
+
+          return parts.join(' • ') || bankName || bankCode || alias || 'Conta corrente';
+        };
+
+        const setBankAccountOptions = (accounts = [], { placeholder = null } = {}) => {
+          if (!bankAccountSelect) return;
+
+          bankAccountSelect.innerHTML = '';
+          const defaultOption = document.createElement('option');
+          defaultOption.value = '';
+          defaultOption.textContent =
+            placeholder ||
+            (Array.isArray(accounts) && accounts.length
+              ? 'Selecione a conta corrente'
+              : 'Nenhuma conta corrente cadastrada');
+          bankAccountSelect.appendChild(defaultOption);
+
+          if (Array.isArray(accounts)) {
+            accounts.forEach((account) => {
+              if (!account || !account._id) return;
+              const option = document.createElement('option');
+              option.value = String(account._id);
+              option.textContent = buildBankAccountLabel(account);
+              bankAccountSelect.appendChild(option);
+            });
+          }
+
+          bankAccountSelect.disabled = !accounts || !accounts.length;
+        };
+
+        const setBankAccountSelectValue = (value) => {
+          if (!bankAccountSelect) return false;
+          const normalized = value ? String(value) : '';
+          if (!normalized) {
+            bankAccountSelect.value = '';
+            return true;
+          }
+          const options = Array.from(bankAccountSelect.options || []);
+          const match = options.find((option) => option.value === normalized);
+          if (match) {
+            bankAccountSelect.value = normalized;
+            return true;
+          }
+          return false;
+        };
+
+        const findBankAccountById = (id) => {
+          if (!id) return null;
+          const normalized = String(id);
+          return bankAccountsRegistry.index.get(normalized) || null;
+        };
+
+        const resolveSelectedBankAccount = (data = null) => {
+          const directSelection = bankAccountSelect ? bankAccountSelect.value : '';
+          if (directSelection) {
+            return findBankAccountById(directSelection);
+          }
+          const fallbackId = data?.selectedBankAccountId || pendingBankAccountId || '';
+          if (fallbackId) {
+            return findBankAccountById(fallbackId);
+          }
+          return null;
+        };
+
+        const loadBankAccountsForCompany = async (companyId = '') => {
+          if (!bankAccountsEndpoint) return [];
+          const cacheKey = companyId ? String(companyId) : '__all__';
+
+          if (bankAccountsRegistry.cache.has(cacheKey)) {
+            const cached = bankAccountsRegistry.cache.get(cacheKey) || [];
+            registerBankAccounts(cached);
+            return cached;
+          }
+
+          if (bankAccountsRegistry.loading.has(cacheKey)) {
+            try {
+              await bankAccountsRegistry.loading.get(cacheKey);
+            } catch (error) {
+              console.error('Falha anterior ao carregar contas correntes:', error);
+            }
+            const cached = bankAccountsRegistry.cache.get(cacheKey) || [];
+            registerBankAccounts(cached);
+            return cached;
+          }
+
+          const query = companyId ? `?company=${encodeURIComponent(companyId)}` : '';
+          const requestPromise = (async () => {
+            bankAccountsRegistry.error = null;
+            try {
+              const response = await fetch(`${bankAccountsEndpoint}${query}`, {
+                headers: buildAuthHeaders(),
+              });
+
+              let payload = null;
+              try {
+                payload = await response.json();
+              } catch (error) {
+                payload = null;
+              }
+
+              if (response.status === 401 || response.status === 403) {
+                handleAuthError();
+              }
+
+              if (!response.ok) {
+                const message =
+                  (payload && (payload.message || payload.error)) ||
+                  'Não foi possível carregar as contas correntes.';
+                const error = new Error(message);
+                error.status = response.status;
+                throw error;
+              }
+
+              const accounts = Array.isArray(payload?.accounts) ? payload.accounts : [];
+              registerBankAccounts(accounts);
+              bankAccountsRegistry.cache.set(cacheKey, accounts);
+              bankAccountsRegistry.lastLoadedAt = Date.now();
+              return accounts;
+            } catch (error) {
+              bankAccountsRegistry.error = error;
+              throw error;
+            }
+          })();
+
+          bankAccountsRegistry.loading.set(cacheKey, requestPromise);
+
+          try {
+            return await requestPromise;
+          } finally {
+            bankAccountsRegistry.loading.delete(cacheKey);
+          }
+        };
+
+        const syncBankAccountWithDuplicates = () => {
+          if (!lastNfeData) return;
+          const duplicates = Array.isArray(lastNfeData.duplicates) ? lastNfeData.duplicates : [];
+          const selectedId = bankAccountSelect ? bankAccountSelect.value : '';
+          const normalizedSelected = selectedId ? String(selectedId) : '';
+          lastNfeData.selectedBankAccountId = normalizedSelected || pendingBankAccountId || '';
+
+          if (!duplicates.length) return;
+
+          duplicates.forEach((duplicate) => {
+            if (!duplicate || typeof duplicate !== 'object') return;
+            duplicate.bankAccount = normalizedSelected || null;
+          });
+
+          renderDuplicatasFromNfe(duplicates, lastNfeData);
+        };
+
+        const refreshBankAccountOptions = async ({ preserveSelection = true } = {}) => {
+          if (!bankAccountSelect) return;
+
+          const companyId = companySelect ? companySelect.value : '';
+          if (!companyId) {
+            pendingBankAccountId = '';
+            setBankAccountPlaceholder('Selecione uma empresa para listar as contas correntes');
+            if (lastNfeData && Array.isArray(lastNfeData.duplicates)) {
+              lastNfeData.duplicates.forEach((duplicate) => {
+                if (!duplicate || typeof duplicate !== 'object') return;
+                duplicate.bankAccount = null;
+              });
+              lastNfeData.selectedBankAccountId = '';
+              renderDuplicatasFromNfe(lastNfeData.duplicates, lastNfeData);
+            }
+            return;
+          }
+
+          setBankAccountPlaceholder('Carregando contas correntes...', { disabled: true });
+
+          try {
+            const accounts = await loadBankAccountsForCompany(companyId);
+            setBankAccountOptions(accounts);
+
+            let desiredValue = '';
+            if (preserveSelection && lastNfeData && lastNfeData.selectedBankAccountId) {
+              desiredValue = String(lastNfeData.selectedBankAccountId);
+            }
+            if (!desiredValue && pendingBankAccountId) {
+              desiredValue = pendingBankAccountId;
+            }
+
+            if (desiredValue) {
+              const applied = setBankAccountSelectValue(desiredValue);
+              if (!applied) {
+                pendingBankAccountId = desiredValue;
+                bankAccountSelect.value = '';
+              } else if (pendingBankAccountId === desiredValue) {
+                pendingBankAccountId = '';
+              }
+            } else {
+              pendingBankAccountId = '';
+              bankAccountSelect.value = '';
+            }
+          } catch (error) {
+            console.error('Erro ao carregar contas correntes:', error);
+            notify(
+              error?.message || 'Não foi possível carregar as contas correntes da empresa selecionada.',
+              'error'
+            );
+            setBankAccountPlaceholder('Erro ao carregar contas correntes');
+            pendingBankAccountId = '';
+          }
+
+          bankAccountSelect.disabled = bankAccountSelect.options.length <= 1;
+          syncBankAccountWithDuplicates();
         };
 
         const normalizeSupplierCalcType = (value) => {
@@ -5673,6 +5933,7 @@
           const fragment = document.createDocumentFragment();
           duplicates.forEach((dup, index) => {
             const row = document.createElement('tr');
+            row.dataset.duplicateIndex = String(index);
 
             const parcelCell = document.createElement('td');
             parcelCell.className = 'px-4 py-3 text-gray-600';
@@ -5680,27 +5941,39 @@
 
             const daysCell = document.createElement('td');
             daysCell.className = 'px-4 py-3 text-gray-600';
-            const dueInfo = normalizeDate(dup?.dueDate);
+            daysCell.dataset.duplicateTerm = String(index);
+            const manualDueInfo = normalizeDate(dup?.manualDueDate);
+            const dueInfo = manualDueInfo.dateInput ? manualDueInfo : normalizeDate(dup?.dueDate);
             let diffText = '—';
             if (Number.isFinite(dup?.termDays)) {
               diffText = String(dup.termDays);
-            } else if (baseDateInput && dueInfo.dateInput) {
-              const diff = computeDateDiffInDays(baseDateInput, dueInfo.dateInput);
-              if (Number.isFinite(diff)) {
-                diffText = String(diff);
+            } else if (baseDateInput) {
+              const diffBase = dueInfo.dateInput || manualDueInfo.dateInput;
+              if (diffBase) {
+                const diff = computeDateDiffInDays(baseDateInput, diffBase);
+                if (Number.isFinite(diff)) {
+                  diffText = String(diff);
+                }
               }
             }
             daysCell.textContent = diffText;
 
             const dueCell = document.createElement('td');
-            dueCell.className = 'px-4 py-3 text-gray-600';
-            let dueDisplay = dueInfo.display || dueInfo.dateInput || '';
-            if (!dueDisplay && Number.isFinite(dup?.termDays) && baseDateInput) {
+            dueCell.className = 'px-4 py-3';
+            const dueInput = document.createElement('input');
+            dueInput.type = 'date';
+            dueInput.className =
+              'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20';
+            dueInput.dataset.duplicateDueInput = 'true';
+            dueInput.dataset.duplicateIndex = String(index);
+
+            let dueInputInfo = manualDueInfo.dateInput ? manualDueInfo : dueInfo;
+            if (!dueInputInfo.dateInput && Number.isFinite(dup?.termDays) && baseDateInput) {
               const fallbackDueInput = addDaysToDateInput(baseDateInput, dup.termDays);
-              const fallbackDueInfo = normalizeDate(fallbackDueInput);
-              dueDisplay = fallbackDueInfo.display || fallbackDueInfo.dateInput || '';
+              dueInputInfo = normalizeDate(fallbackDueInput);
             }
-            dueCell.textContent = dueDisplay || '—';
+            dueInput.value = dueInputInfo.dateInput || '';
+            dueCell.appendChild(dueInput);
 
             const valueCell = document.createElement('td');
             valueCell.className = 'px-4 py-3 text-right text-gray-800 font-semibold';
@@ -5733,13 +6006,13 @@
             accountCodeCell.className = 'px-4 py-3 text-gray-600';
             accountCodeCell.textContent = supplierAccount?.code || '—';
 
-            const documentCell = document.createElement('td');
-            documentCell.className = 'px-4 py-3 text-gray-600';
-            documentCell.textContent = '—';
-
             const bankCell = document.createElement('td');
             bankCell.className = 'px-4 py-3 text-gray-600';
-            bankCell.textContent = '—';
+            const resolvedBankAccount =
+              findBankAccountById(dup?.bankAccount) || resolveSelectedBankAccount(data);
+            bankCell.textContent = resolvedBankAccount
+              ? buildBankAccountLabel(resolvedBankAccount)
+              : '—';
 
             row.append(
               parcelCell,
@@ -5749,7 +6022,6 @@
               observationCell,
               accountCell,
               accountCodeCell,
-              documentCell,
               bankCell
             );
             fragment.appendChild(row);
@@ -5937,36 +6209,48 @@
           mainProductsTableBody.appendChild(fragment);
         };
 
-        const fillDuplicatasFromNfeData = (data) => {
+        const updateDuplicataSummaryFromData = (data) => {
           const duplicates = Array.isArray(data?.duplicates) ? data.duplicates : [];
           const emission = normalizeDate(data?.ide?.emissionDate);
+          const entry = normalizeDate(data?.ide?.entryDate);
+          const baseDateInput = emission.dateInput || entry.dateInput || '';
+
           if (duplicataEmissionInput) {
             duplicataEmissionInput.value = emission.dateInput || '';
           }
           if (duplicataCountInput) {
             duplicataCountInput.value = duplicates.length ? String(duplicates.length) : '';
           }
+
+          const firstDuplicate = duplicates[0];
+          const firstManual = normalizeDate(firstDuplicate?.manualDueDate);
+          const firstDue = firstManual.dateInput
+            ? firstManual
+            : normalizeDate(firstDuplicate?.dueDate);
+
           if (duplicataFirstDueInput) {
-            const first = duplicates[0];
-            const due = normalizeDate(first?.dueDate);
-            if (due.dateInput) {
-              duplicataFirstDueInput.value = due.dateInput;
-            } else if (Number.isFinite(first?.termDays) && emission.dateInput) {
-              const fallbackDueInput = addDaysToDateInput(emission.dateInput, first.termDays);
-              duplicataFirstDueInput.value = fallbackDueInput || '';
+            if (firstDuplicate) {
+              if (firstDue.dateInput) {
+                duplicataFirstDueInput.value = firstDue.dateInput;
+              } else if (Number.isFinite(firstDuplicate?.termDays) && baseDateInput) {
+                const fallbackDue = addDaysToDateInput(baseDateInput, firstDuplicate.termDays);
+                duplicataFirstDueInput.value = fallbackDue || '';
+              } else {
+                duplicataFirstDueInput.value = '';
+              }
             } else {
               duplicataFirstDueInput.value = '';
             }
           }
+
           if (duplicataInitialDaysInput) {
-            const first = duplicates[0];
-            if (first) {
-              const due = normalizeDate(first?.dueDate);
-              if (emission.dateInput && due.dateInput) {
-                const diff = computeDateDiffInDays(emission.dateInput, due.dateInput);
+            if (firstDuplicate) {
+              if (Number.isFinite(firstDuplicate?.termDays)) {
+                duplicataInitialDaysInput.value = String(firstDuplicate.termDays);
+              } else if (baseDateInput && (firstDue.dateInput || firstManual.dateInput)) {
+                const diffBase = firstDue.dateInput || firstManual.dateInput;
+                const diff = computeDateDiffInDays(baseDateInput, diffBase);
                 duplicataInitialDaysInput.value = Number.isFinite(diff) ? String(diff) : '';
-              } else if (Number.isFinite(first?.termDays)) {
-                duplicataInitialDaysInput.value = String(first.termDays);
               } else {
                 duplicataInitialDaysInput.value = '';
               }
@@ -5974,12 +6258,46 @@
               duplicataInitialDaysInput.value = '';
             }
           }
+
           if (duplicataDaysInput) {
             duplicataDaysInput.value = '';
           }
-          if (duplicataDaysTypeSelect && duplicates.length) {
-            setSelectValue(duplicataDaysTypeSelect, 'data');
+          if (duplicataDaysTypeSelect) {
+            setSelectValue(duplicataDaysTypeSelect, duplicates.length ? 'data' : 'dias');
           }
+        };
+
+        const fillDuplicatasFromNfeData = (data) => {
+          const duplicates = Array.isArray(data?.duplicates) ? data.duplicates : [];
+          updateDuplicataSummaryFromData(data);
+
+          if (bankAccountSelect) {
+            const desiredValue = data?.selectedBankAccountId || '';
+            if (desiredValue) {
+              const applied = setBankAccountSelectValue(desiredValue);
+              if (!applied) {
+                pendingBankAccountId = desiredValue;
+              } else if (pendingBankAccountId === desiredValue) {
+                pendingBankAccountId = '';
+              }
+            } else {
+              bankAccountSelect.value = '';
+              pendingBankAccountId = '';
+            }
+          }
+
+          const activeBankAccountId = bankAccountSelect ? bankAccountSelect.value : '';
+          if (data) {
+            data.selectedBankAccountId = activeBankAccountId || pendingBankAccountId || '';
+          }
+          duplicates.forEach((duplicate) => {
+            if (!duplicate || typeof duplicate !== 'object') return;
+            if (!duplicate.originalDueDate) {
+              duplicate.originalDueDate = duplicate.dueDate || '';
+            }
+            duplicate.bankAccount = activeBankAccountId ? String(activeBankAccountId) : null;
+          });
+
           renderDuplicatasFromNfe(duplicates, data);
         };
 
@@ -6073,6 +6391,7 @@
             { element: supplierSelect, value: '' },
             { element: supplierUfSelect, value: '' },
             { element: companySelect, value: '' },
+            { element: bankAccountSelect, value: '' },
             { element: nfeModelSelect, value: '55' },
             { element: nfeTypeSelect, value: 'NF' },
             { element: tipoEmissaoSelect, value: '1' },
@@ -6086,6 +6405,9 @@
           ];
 
           selectsToReset.forEach(({ element, value }) => resetSelectValue(element, value));
+
+          pendingBankAccountId = '';
+          setBankAccountPlaceholder('Selecione uma empresa para listar as contas correntes');
 
           if (totalAmountDisplay) {
             totalAmountDisplay.textContent = 'R$ 0,00';
@@ -6535,17 +6857,21 @@
             }
 
             const numberLabel = duplicate?.number || paymentRef?.number || `Parcela ${position + 1}`;
+            const resolvedDueInput = normalizedDue.dateInput || dueDateValue || '';
 
             return {
               index: resolvedIndex,
               number: numberLabel,
-              dueDate: normalizedDue.dateInput || dueDateValue || '',
+              dueDate: resolvedDueInput,
+              originalDueDate: resolvedDueInput,
+              manualDueDate: duplicate?.manualDueDate || '',
               value: Number.isFinite(amountValue) ? amountValue : null,
               paymentMethod: duplicate?.paymentMethod || paymentRef?.method || '',
               paymentDescription:
                 duplicate?.paymentDescription || paymentRef?.description || describePaymentMethod(paymentRef?.method),
               paymentType: duplicate?.paymentType || paymentRef?.type || '',
               termDays: Number.isFinite(resolvedTermDays) ? resolvedTermDays : null,
+              bankAccount: duplicate?.bankAccount || null,
             };
           });
 
@@ -6722,6 +7048,7 @@
                 throw new Error('Não foi possível interpretar o conteúdo do XML informado.');
               }
               const parsed = parseNfeXml(result);
+              parsed.selectedBankAccountId = bankAccountSelect ? bankAccountSelect.value || '' : '';
               lastNfeData = parsed;
               updateSummaryFromData(parsed);
               showFileFeedback('Validando fornecedor importado...', 'info');
@@ -6902,6 +7229,75 @@
           });
         }
 
+        if (companySelect) {
+          companySelect.addEventListener('change', () => {
+            refreshBankAccountOptions({ preserveSelection: false }).catch(() => {});
+          });
+        }
+
+        if (bankAccountSelect) {
+          bankAccountSelect.addEventListener('change', () => {
+            if (lastNfeData && Array.isArray(lastNfeData.duplicates)) {
+              lastNfeData.selectedBankAccountId = bankAccountSelect.value || '';
+            }
+            syncBankAccountWithDuplicates();
+          });
+        }
+
+        if (duplicatasTableBody) {
+          duplicatasTableBody.addEventListener('change', (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLInputElement)) return;
+            if (target.dataset.duplicateDueInput !== 'true') return;
+
+            const index = Number.parseInt(target.dataset.duplicateIndex || '', 10);
+            if (!Number.isFinite(index)) return;
+            if (!lastNfeData || !Array.isArray(lastNfeData.duplicates)) return;
+            const duplicate = lastNfeData.duplicates[index];
+            if (!duplicate || typeof duplicate !== 'object') return;
+
+            const newDueValue = target.value || '';
+            duplicate.manualDueDate = newDueValue || '';
+
+            if (newDueValue) {
+              duplicate.dueDate = newDueValue;
+            } else if (duplicate.originalDueDate) {
+              duplicate.dueDate = duplicate.originalDueDate;
+            }
+
+            const emissionInfo = normalizeDate(lastNfeData?.ide?.emissionDate);
+            const entryInfo = normalizeDate(lastNfeData?.ide?.entryDate);
+            const baseDateInput = emissionInfo.dateInput || entryInfo.dateInput || '';
+            const effectiveDueInput = duplicate.dueDate || '';
+
+            let computedTerm = null;
+            if (baseDateInput && effectiveDueInput) {
+              const diff = computeDateDiffInDays(baseDateInput, effectiveDueInput);
+              if (Number.isFinite(diff)) {
+                computedTerm = diff;
+              }
+            }
+            duplicate.termDays = Number.isFinite(computedTerm) ? computedTerm : null;
+
+            const row = target.closest('tr');
+            if (row) {
+              const daysCell = row.querySelector('[data-duplicate-term]');
+              if (daysCell) {
+                const fallbackDiff = baseDateInput && effectiveDueInput
+                  ? computeDateDiffInDays(baseDateInput, effectiveDueInput)
+                  : null;
+                daysCell.textContent = Number.isFinite(duplicate.termDays)
+                  ? String(duplicate.termDays)
+                  : Number.isFinite(fallbackDiff)
+                  ? String(fallbackDiff)
+                  : '—';
+              }
+            }
+
+            updateDuplicataSummaryFromData(lastNfeData);
+          });
+        }
+
         if (clearImportButton) {
           clearImportButton.addEventListener('click', (event) => {
             event.preventDefault();
@@ -7007,6 +7403,7 @@
 
         indexExistingSupplierOptions();
         loadSuppliersFromApi().catch(() => {});
+        refreshBankAccountOptions({ preserveSelection: true }).catch(() => {});
 
         window.addEventListener('focus', () => {
           const now = Date.now();
