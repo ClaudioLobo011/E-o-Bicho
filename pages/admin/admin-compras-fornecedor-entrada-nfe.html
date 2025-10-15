@@ -5882,20 +5882,17 @@
 
             const labelRow = document.createElement('div');
             labelRow.className = 'flex items-center justify-between gap-1';
-            if (column.isNumeric) {
-              labelRow.classList.add('justify-end');
-            }
 
             const label = document.createElement('span');
             label.textContent = column.label;
-            label.className = 'text-[9px] font-semibold uppercase tracking-wide text-gray-600';
+            label.className = 'flex-1 text-[8px] font-semibold uppercase leading-tight tracking-wide text-gray-600';
             if (column.isNumeric) {
               label.classList.add('text-right');
             }
             labelRow.appendChild(label);
 
             const sortGroup = document.createElement('div');
-            sortGroup.className = 'flex flex-col';
+            sortGroup.className = 'flex flex-col items-center justify-center gap-px text-gray-400';
 
             const createSortButton = (direction) => {
               const button = document.createElement('button');
@@ -5903,8 +5900,8 @@
               button.dataset.sortDirection = direction;
               button.classList.add(
                 'flex',
-                'h-4',
-                'w-4',
+                'h-3.5',
+                'w-3.5',
                 'items-center',
                 'justify-center',
                 'rounded',
@@ -5922,7 +5919,7 @@
                 `Ordenar ${direction === 'asc' ? 'crescente' : 'decrescente'} pela coluna ${column.label}`
               );
               const icon = document.createElement('i');
-              icon.className = direction === 'asc' ? 'fas fa-sort-up text-[10px]' : 'fas fa-sort-down text-[10px]';
+              icon.className = direction === 'asc' ? 'fas fa-sort-up text-[9px]' : 'fas fa-sort-down text-[9px]';
               button.appendChild(icon);
               button.addEventListener('click', () => toggleProductTableSort(column.key, direction));
               return button;
@@ -5942,9 +5939,9 @@
               'border',
               'border-gray-200',
               'bg-white',
-              'px-1.5',
-              'py-1',
-              'text-[9px]',
+              'px-1',
+              'py-0.5',
+              'text-[8px]',
               'font-medium',
               'text-gray-600',
               'placeholder:text-gray-400',
