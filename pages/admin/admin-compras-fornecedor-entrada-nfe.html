@@ -1527,6 +1527,7 @@
         const duplicataDaysInput = document.getElementById('dias');
         const duplicataInitialDaysInput = document.getElementById('dias-vencimento');
         const duplicataDaysTypeSelect = document.getElementById('tipo-dias');
+        const accountingAccountInput = document.getElementById('conta-contabil');
         const paymentConditionInput = document.getElementById('condicao-pagamento');
         const paymentFormInput = document.getElementById('forma-pagamento');
         const observationInput = document.getElementById('observacao');
@@ -2135,6 +2136,26 @@
           }
 
           return result;
+        };
+
+        const resolveSupplierAccountingAccount = () => {
+          const account = lastSupplierRecord?.otherInfo?.accountingAccount;
+          if (account && (account.code || account.name)) {
+            return {
+              id: account._id || null,
+              code: account.code || '',
+              name: account.name || '',
+            };
+          }
+          return null;
+        };
+
+        const formatAccountingAccountValue = (account) => {
+          if (!account) return '';
+          if (account.code && account.name) {
+            return `${account.code} - ${account.name}`;
+          }
+          return account.code || account.name || '';
         };
 
         const normalizeSupplierCalcType = (value) => {
@@ -2770,6 +2791,29 @@
           if (model === '65') return 'NFCe';
           if (model === '55') return 'NF';
           return 'NF';
+        };
+
+        const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+        const computeDateDiffInDays = (startInput, endInput) => {
+          if (!startInput || !endInput) return null;
+          const startDate = new Date(`${startInput}T00:00:00`);
+          const endDate = new Date(`${endInput}T00:00:00`);
+          if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+            return null;
+          }
+          return Math.round((endDate.getTime() - startDate.getTime()) / MS_PER_DAY);
+        };
+
+        const addDaysToDateInput = (baseInput, daysToAdd) => {
+          if (!baseInput || !Number.isFinite(daysToAdd)) return '';
+          const baseDate = new Date(`${baseInput}T00:00:00`);
+          if (Number.isNaN(baseDate.getTime())) {
+            return '';
+          }
+          const adjusted = new Date(baseDate.getTime());
+          adjusted.setDate(adjusted.getDate() + daysToAdd);
+          return adjusted.toISOString().slice(0, 10);
         };
 
         const normalizeDate = (value) => {
@@ -5622,7 +5666,9 @@
           }
 
           const emission = normalizeDate(data?.ide?.emissionDate);
-          const emissionDateObj = emission.dateInput ? new Date(`${emission.dateInput}T00:00:00`) : null;
+          const entry = normalizeDate(data?.ide?.entryDate);
+          const baseDateInput = emission.dateInput || entry.dateInput || '';
+          const supplierAccount = resolveSupplierAccountingAccount();
 
           const fragment = document.createDocumentFragment();
           duplicates.forEach((dup, index) => {
@@ -5634,11 +5680,12 @@
 
             const daysCell = document.createElement('td');
             daysCell.className = 'px-4 py-3 text-gray-600';
-            let diffText = '—';
             const dueInfo = normalizeDate(dup?.dueDate);
-            if (emissionDateObj && dueInfo.dateInput) {
-              const dueDateObj = new Date(`${dueInfo.dateInput}T00:00:00`);
-              const diff = Math.round((dueDateObj - emissionDateObj) / (24 * 60 * 60 * 1000));
+            let diffText = '—';
+            if (Number.isFinite(dup?.termDays)) {
+              diffText = String(dup.termDays);
+            } else if (baseDateInput && dueInfo.dateInput) {
+              const diff = computeDateDiffInDays(baseDateInput, dueInfo.dateInput);
               if (Number.isFinite(diff)) {
                 diffText = String(diff);
               }
@@ -5647,7 +5694,13 @@
 
             const dueCell = document.createElement('td');
             dueCell.className = 'px-4 py-3 text-gray-600';
-            dueCell.textContent = dueInfo.display || dueInfo.dateInput || '—';
+            let dueDisplay = dueInfo.display || dueInfo.dateInput || '';
+            if (!dueDisplay && Number.isFinite(dup?.termDays) && baseDateInput) {
+              const fallbackDueInput = addDaysToDateInput(baseDateInput, dup.termDays);
+              const fallbackDueInfo = normalizeDate(fallbackDueInput);
+              dueDisplay = fallbackDueInfo.display || fallbackDueInfo.dateInput || '';
+            }
+            dueCell.textContent = dueDisplay || '—';
 
             const valueCell = document.createElement('td');
             valueCell.className = 'px-4 py-3 text-right text-gray-800 font-semibold';
@@ -5674,11 +5727,11 @@
 
             const accountCell = document.createElement('td');
             accountCell.className = 'px-4 py-3 text-gray-600';
-            accountCell.textContent = '—';
+            accountCell.textContent = supplierAccount?.name || '—';
 
             const accountCodeCell = document.createElement('td');
             accountCodeCell.className = 'px-4 py-3 text-gray-600';
-            accountCodeCell.textContent = '—';
+            accountCodeCell.textContent = supplierAccount?.code || '—';
 
             const documentCell = document.createElement('td');
             documentCell.className = 'px-4 py-3 text-gray-600';
@@ -5703,6 +5756,22 @@
           });
 
           duplicatasTableBody.appendChild(fragment);
+        };
+
+        const refreshAccountingAccountBindings = () => {
+          const account = resolveSupplierAccountingAccount();
+          if (accountingAccountInput) {
+            accountingAccountInput.value = formatAccountingAccountValue(account);
+          }
+          return account;
+        };
+
+        const syncAccountingAccountWithDuplicates = () => {
+          const account = refreshAccountingAccountBindings();
+          if (lastNfeData && Array.isArray(lastNfeData.duplicates)) {
+            renderDuplicatasFromNfe(lastNfeData.duplicates, lastNfeData);
+          }
+          return account;
         };
 
         const renderMainProductsFromNfe = (items = []) => {
@@ -5880,17 +5949,24 @@
           if (duplicataFirstDueInput) {
             const first = duplicates[0];
             const due = normalizeDate(first?.dueDate);
-            duplicataFirstDueInput.value = due.dateInput || '';
+            if (due.dateInput) {
+              duplicataFirstDueInput.value = due.dateInput;
+            } else if (Number.isFinite(first?.termDays) && emission.dateInput) {
+              const fallbackDueInput = addDaysToDateInput(emission.dateInput, first.termDays);
+              duplicataFirstDueInput.value = fallbackDueInput || '';
+            } else {
+              duplicataFirstDueInput.value = '';
+            }
           }
           if (duplicataInitialDaysInput) {
             const first = duplicates[0];
             if (first) {
               const due = normalizeDate(first?.dueDate);
               if (emission.dateInput && due.dateInput) {
-                const emissionDateObj = new Date(`${emission.dateInput}T00:00:00`);
-                const dueDateObj = new Date(`${due.dateInput}T00:00:00`);
-                const diff = Math.round((dueDateObj - emissionDateObj) / (24 * 60 * 60 * 1000));
+                const diff = computeDateDiffInDays(emission.dateInput, due.dateInput);
                 duplicataInitialDaysInput.value = Number.isFinite(diff) ? String(diff) : '';
+              } else if (Number.isFinite(first?.termDays)) {
+                duplicataInitialDaysInput.value = String(first.termDays);
               } else {
                 duplicataInitialDaysInput.value = '';
               }
@@ -5984,6 +6060,7 @@
             duplicataFirstDueInput,
             duplicataDaysInput,
             duplicataInitialDaysInput,
+            accountingAccountInput,
             paymentConditionInput,
             paymentFormInput,
             observationInput,
@@ -6031,6 +6108,7 @@
               'Documento do emitente não encontrado no XML.',
               'Revise o arquivo para garantir que os dados do fornecedor estejam completos.'
             );
+            syncAccountingAccountWithDuplicates();
             return;
           }
           const documentDigits = digitsOnly(supplier.document);
@@ -6040,6 +6118,7 @@
               'Documento do emitente não encontrado no XML.',
               'Revise o arquivo para garantir que os dados do fornecedor estejam completos.'
             );
+            syncAccountingAccountWithDuplicates();
             return;
           }
           const formattedDocument = formatDocument(documentDigits);
@@ -6085,6 +6164,7 @@
               `Fornecedor localizado: ${supplierName}`,
               `Aplicamos automaticamente o fornecedor cadastrado (${formattedDocument}).`
             );
+            syncAccountingAccountWithDuplicates();
             return;
           }
           const registerUrl = buildSupplierRegistrationUrl(supplier, lastNfeData);
@@ -6121,6 +6201,7 @@
                   },
             ].filter(Boolean)
           );
+          syncAccountingAccountWithDuplicates();
         };
 
         const parseNfeXml = (xmlText) => {
@@ -6347,21 +6428,32 @@
           const payments = detPagElements.map((detPag, index) => {
             const cardNode = detPag.getElementsByTagName('card')[0] || null;
             const methodCode = getText(detPag, 'tPag');
+            const rawDueDate = getText(detPag, 'dVenc');
+            let termDays = null;
+            const emissionInfo = normalizeDate(emissionDate);
+            const paymentDueInfo = normalizeDate(rawDueDate);
+            if (emissionInfo.dateInput && paymentDueInfo.dateInput) {
+              const diff = computeDateDiffInDays(emissionInfo.dateInput, paymentDueInfo.dateInput);
+              if (Number.isFinite(diff)) {
+                termDays = diff;
+              }
+            }
             const payment = {
               index,
               method: methodCode,
               description: describePaymentMethod(methodCode),
               type: getText(detPag, 'indPag'),
-              dueDate: getText(detPag, 'dVenc'),
+              dueDate: rawDueDate,
               amount: toNumeric(getText(detPag, 'vPag')),
               integrationType: getText(cardNode, 'tpIntegra'),
               cardCnpj: getText(cardNode, 'CNPJ'),
               cardBrand: getText(cardNode, 'tBand'),
+              termDays: Number.isFinite(termDays) ? termDays : null,
             };
             return payment;
           });
 
-          const duplicates = duplicatesFromXml.length
+          let duplicates = duplicatesFromXml.length
             ? duplicatesFromXml
             : payments.map((payment) => ({
                 index: payment.index,
@@ -6371,7 +6463,91 @@
                 paymentMethod: payment.method,
                 paymentDescription: payment.description,
                 paymentType: payment.type,
+                termDays: payment.termDays,
               }));
+
+          const emissionInfo = normalizeDate(emissionDate);
+          const entryInfo = normalizeDate(entryDate);
+          const fallbackBaseDateInput = entryInfo.dateInput || emissionInfo.dateInput || '';
+          const paymentByIndex = new Map();
+          payments.forEach((payment) => {
+            const paymentIndex = Number.isFinite(payment.index) ? payment.index : paymentByIndex.size;
+            paymentByIndex.set(paymentIndex, payment);
+          });
+
+          duplicates = duplicates.map((duplicate, position) => {
+            const resolvedIndex = Number.isFinite(duplicate?.index) ? duplicate.index : position;
+            const paymentRef = paymentByIndex.get(resolvedIndex) || paymentByIndex.get(position) || null;
+
+            let amountValue = toNumeric(duplicate?.value);
+            if (!Number.isFinite(amountValue) || Math.abs(amountValue) <= 0) {
+              const paymentAmount = toNumeric(paymentRef?.amount);
+              if (Number.isFinite(paymentAmount)) {
+                amountValue = paymentAmount;
+              }
+            }
+
+            let termDays = Number.isFinite(duplicate?.termDays) ? duplicate.termDays : null;
+            if (!Number.isFinite(termDays) && Number.isFinite(paymentRef?.termDays)) {
+              termDays = paymentRef.termDays;
+            }
+
+            let dueDateValue = duplicate?.dueDate || paymentRef?.dueDate || '';
+            const dueInfo = normalizeDate(dueDateValue);
+            if (!Number.isFinite(termDays) && emissionInfo.dateInput && dueInfo.dateInput) {
+              const diff = computeDateDiffInDays(emissionInfo.dateInput, dueInfo.dateInput);
+              if (Number.isFinite(diff)) {
+                termDays = diff;
+              }
+            }
+
+            if ((!dueInfo.dateInput || !dueDateValue) && fallbackBaseDateInput) {
+              let fallbackDays = Number.isFinite(termDays) ? termDays : null;
+              if (!Number.isFinite(fallbackDays)) {
+                if (Number.isFinite(paymentRef?.termDays)) {
+                  fallbackDays = paymentRef.termDays;
+                } else {
+                  const paymentType = paymentRef?.type;
+                  if (paymentType === '0') {
+                    fallbackDays = 0;
+                  } else if (paymentType === '1' || paymentType === '2') {
+                    fallbackDays = (position + 1) * 30;
+                  } else {
+                    fallbackDays = position === 0 ? 0 : position * 30;
+                  }
+                }
+              }
+              if (Number.isFinite(fallbackDays)) {
+                dueDateValue = addDaysToDateInput(fallbackBaseDateInput, fallbackDays);
+                if (!Number.isFinite(termDays)) {
+                  termDays = fallbackDays;
+                }
+              }
+            }
+
+            const normalizedDue = normalizeDate(dueDateValue);
+            let resolvedTermDays = Number.isFinite(termDays) ? termDays : null;
+            if (!Number.isFinite(resolvedTermDays) && emissionInfo.dateInput && normalizedDue.dateInput) {
+              const diff = computeDateDiffInDays(emissionInfo.dateInput, normalizedDue.dateInput);
+              if (Number.isFinite(diff)) {
+                resolvedTermDays = diff;
+              }
+            }
+
+            const numberLabel = duplicate?.number || paymentRef?.number || `Parcela ${position + 1}`;
+
+            return {
+              index: resolvedIndex,
+              number: numberLabel,
+              dueDate: normalizedDue.dateInput || dueDateValue || '',
+              value: Number.isFinite(amountValue) ? amountValue : null,
+              paymentMethod: duplicate?.paymentMethod || paymentRef?.method || '',
+              paymentDescription:
+                duplicate?.paymentDescription || paymentRef?.description || describePaymentMethod(paymentRef?.method),
+              paymentType: duplicate?.paymentType || paymentRef?.type || '',
+              termDays: Number.isFinite(resolvedTermDays) ? resolvedTermDays : null,
+            };
+          });
 
           const references = nfRefElements
             .map((ref) => {
