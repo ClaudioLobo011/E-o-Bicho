@@ -1819,20 +1819,25 @@
           const quantityValue = toNumeric(item.quantity);
           let conversionFactor = toNumeric(item.conversion);
 
-          if (!Number.isFinite(conversionFactor)) {
+          if (!Number.isFinite(conversionFactor) || conversionFactor <= 0) {
             const multiplierValue = toNumeric(item.conversionMultiplier);
             const dividerValue = toNumeric(item.conversionDivider);
 
-            if (Number.isFinite(multiplierValue) && Number.isFinite(dividerValue) && dividerValue !== 0) {
+            if (
+              Number.isFinite(multiplierValue) &&
+              multiplierValue > 0 &&
+              Number.isFinite(dividerValue) &&
+              dividerValue > 0
+            ) {
               conversionFactor = multiplierValue / dividerValue;
-            } else if (Number.isFinite(multiplierValue)) {
+            } else if (Number.isFinite(multiplierValue) && multiplierValue > 0) {
               conversionFactor = multiplierValue;
-            } else if (Number.isFinite(dividerValue) && dividerValue !== 0) {
+            } else if (Number.isFinite(dividerValue) && dividerValue > 0) {
               conversionFactor = 1 / dividerValue;
             }
           }
 
-          if (Number.isFinite(quantityValue) && Number.isFinite(conversionFactor)) {
+          if (Number.isFinite(quantityValue) && Number.isFinite(conversionFactor) && conversionFactor > 0) {
             return quantityValue * conversionFactor;
           }
 
@@ -7191,11 +7196,15 @@
             const barcodeDisplay = formatGtinDisplay(ean || eanTrib);
             const qTribRaw = parseNumber(getText(prod, 'qTrib'));
             const qTrib = Number.isFinite(qTribRaw) ? qTribRaw : quantity;
-            const conversionDivider = Number.isFinite(qTrib) && qTrib > 0 ? qTrib : 1;
-            const conversionMultiplier = Number.isFinite(quantity) ? quantity : 1;
-            const conversion = Number.isFinite(conversionMultiplier) && Number.isFinite(conversionDivider) && conversionDivider
-              ? conversionMultiplier / conversionDivider
-              : 1;
+            const conversionMultiplier = Number.isFinite(qTrib) && qTrib > 0 ? qTrib : 1;
+            const conversionDivider = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+            const conversion =
+              Number.isFinite(conversionMultiplier) &&
+              conversionMultiplier > 0 &&
+              Number.isFinite(conversionDivider) &&
+              conversionDivider > 0
+                ? conversionMultiplier / conversionDivider
+                : 1;
             const freightRaw = parseNumber(getText(prod, 'vFrete'));
             const freight = Number.isFinite(freightRaw) ? freightRaw : 0;
             const insuranceRaw = parseNumber(getText(prod, 'vSeg'));
