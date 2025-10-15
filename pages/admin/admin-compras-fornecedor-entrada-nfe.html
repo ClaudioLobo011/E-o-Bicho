@@ -2018,6 +2018,7 @@
             fcpSt: toNumeric(totals?.fcpSt),
             fcpStRet: toNumeric(totals?.fcpStRet),
             ii: toNumeric(totals?.ii),
+            products: toNumeric(totals?.products),
             totalValue: toNumeric(totals?.totalValue),
           };
 
@@ -2067,7 +2068,31 @@
 
           items.forEach((item) => ensureItemCostWithTaxes(item));
 
-          if (Number.isFinite(totalsNormalized.totalValue)) {
+          const declaredCharges = [
+            totalsNormalized.freight,
+            totalsNormalized.other,
+            totalsNormalized.insurance,
+            totalsNormalized.ipi,
+            totalsNormalized.icmsSt,
+            totalsNormalized.fcp,
+            totalsNormalized.fcpSt,
+            totalsNormalized.fcpStRet,
+            totalsNormalized.ii,
+          ];
+
+          const hasDeclaredCharges = declaredCharges.some(
+            (value) => Number.isFinite(value) && Math.abs(value) > 0.000001
+          );
+
+          const totalsMatchProducts =
+            Number.isFinite(totalsNormalized.totalValue) &&
+            Number.isFinite(totalsNormalized.products) &&
+            Math.abs(totalsNormalized.totalValue - totalsNormalized.products) <= 0.0005;
+
+          if (
+            Number.isFinite(totalsNormalized.totalValue) &&
+            (hasDeclaredCharges || !totalsMatchProducts)
+          ) {
             let aggregatedTotal = sumFiniteValues(
               items.map((item) => toNumeric(item.totalWithTaxes))
             );
@@ -2087,6 +2112,19 @@
                 ensureItemCostWithTaxes(lastItem);
               }
             }
+          } else if (
+            Number.isFinite(totalsNormalized.totalValue) &&
+            !hasDeclaredCharges &&
+            Number.isFinite(totalsNormalized.products) &&
+            Math.abs(totalsNormalized.totalValue - totalsNormalized.products) > 0.0005
+          ) {
+            console.warn(
+              '[NF-e] Valor total informado (vNF) difere do somatório dos produtos (vProd) sem custos adicionais declarados.',
+              {
+                totalValue: totalsNormalized.totalValue,
+                productsTotal: totalsNormalized.products,
+              }
+            );
           }
         };
 
