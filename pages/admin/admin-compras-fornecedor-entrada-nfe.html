@@ -2124,7 +2124,7 @@
 
           if (
             Number.isFinite(totalsNormalized.totalValue) &&
-            (hasDeclaredCharges || !totalsMatchProducts)
+            !totalsMatchProducts
           ) {
             let aggregatedTotal = sumFiniteValues(
               items.map((item) => toNumeric(item.totalWithTaxes))
@@ -7643,7 +7643,7 @@
             (value) => Number.isFinite(value) && Math.abs(value) > 0.000001
           );
 
-          const shouldSkipTaxComputation = totalsMatchProducts && !hasDeclaredCharges;
+          const shouldSkipTaxComputation = totalsMatchProducts;
 
           alignItemsWithTotals(items, totalsData, { skipTaxComputation: shouldSkipTaxComputation });
 
