@@ -125,10 +125,8 @@
                 </div>
                 <div>
                   <label for="company" class="block text-sm font-medium text-gray-700 mb-1">Empresa*</label>
-                  <select id="company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                    <option value="">Selecione</option>
-                    <option value="vila-bicho">VILA E O BICHO LTDA - CNPJ 11.222.333/0001-44</option>
-                    <option value="vilabicho-filial">VILA E O BICHO VAREJO LTDA - CNPJ 33.444.555/0001-66</option>
+                  <select id="company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required disabled>
+                    <option value="">Carregando empresas...</option>
                   </select>
                 </div>
                 <div>
@@ -1540,6 +1538,7 @@
           typeof API_CONFIG !== 'undefined' && API_CONFIG?.BASE_URL
             ? API_CONFIG.BASE_URL.replace(/\/+$/, '')
             : '/api';
+        const companiesEndpoint = `${apiBaseUrl}/stores`;
         const suppliersEndpoint = `${apiBaseUrl}/suppliers`;
         const bankAccountsEndpoint = `${apiBaseUrl}/bank-accounts`;
         const depositsEndpoint = `${apiBaseUrl}/deposits`;
@@ -1587,6 +1586,14 @@
           error: null,
         };
 
+        const companyRegistry = {
+          cache: [],
+          loading: null,
+          index: new Map(),
+          lastLoadedAt: 0,
+          error: null,
+        };
+
         const bankAccountsRegistry = {
           cache: new Map(),
           loading: new Map(),
@@ -1606,6 +1613,8 @@
         let lastSupplierData = null;
         let lastSupplierRecord = null;
         let lastNfeData = null;
+        let pendingCompanyId = '';
+        let pendingCompanyDocumentDigits = '';
         let pendingBankAccountId = '';
         let pendingDepositId = '';
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
@@ -1810,20 +1819,25 @@
           const quantityValue = toNumeric(item.quantity);
           let conversionFactor = toNumeric(item.conversion);
 
-          if (!Number.isFinite(conversionFactor)) {
+          if (!Number.isFinite(conversionFactor) || conversionFactor <= 0) {
             const multiplierValue = toNumeric(item.conversionMultiplier);
             const dividerValue = toNumeric(item.conversionDivider);
 
-            if (Number.isFinite(multiplierValue) && Number.isFinite(dividerValue) && dividerValue !== 0) {
+            if (
+              Number.isFinite(multiplierValue) &&
+              multiplierValue > 0 &&
+              Number.isFinite(dividerValue) &&
+              dividerValue > 0
+            ) {
               conversionFactor = multiplierValue / dividerValue;
-            } else if (Number.isFinite(multiplierValue)) {
+            } else if (Number.isFinite(multiplierValue) && multiplierValue > 0) {
               conversionFactor = multiplierValue;
-            } else if (Number.isFinite(dividerValue) && dividerValue !== 0) {
+            } else if (Number.isFinite(dividerValue) && dividerValue > 0) {
               conversionFactor = 1 / dividerValue;
             }
           }
 
-          if (Number.isFinite(quantityValue) && Number.isFinite(conversionFactor)) {
+          if (Number.isFinite(quantityValue) && Number.isFinite(conversionFactor) && conversionFactor > 0) {
             return quantityValue * conversionFactor;
           }
 
@@ -1835,8 +1849,10 @@
           return Number.isFinite(quantityValue) ? quantityValue : null;
         };
 
-        const ensureItemCostWithTaxes = (item) => {
+        const ensureItemCostWithTaxes = (item, options = {}) => {
           if (!item || typeof item !== 'object') return item;
+
+          const { skipTaxComputation = false } = options;
 
           const quantityValue = toNumeric(item.quantity);
           const unitPriceValue = toNumeric(item.unitPrice);
@@ -1881,9 +1897,8 @@
             toNumeric(item.fcpStRetainedValue),
           ]);
 
-          const additionalsTotal = sumFiniteValues([toNumeric(item.freight), toNumeric(item.other)]);
-          const totalWithTaxes =
-            (Number.isFinite(netBaseTotal) ? netBaseTotal : 0) + taxesTotal + additionalsTotal;
+          const rawAdditionalsTotal = sumFiniteValues([toNumeric(item.freight), toNumeric(item.other)]);
+          const additionalsTotal = Math.abs(rawAdditionalsTotal) <= 0.000001 ? 0 : rawAdditionalsTotal;
 
           const entryStockQuantity = calculateEntryStockQuantity(item);
           const effectiveQuantity =
@@ -1892,6 +1907,31 @@
               : Number.isFinite(quantityValue) && quantityValue > 0
               ? quantityValue
               : null;
+
+          if (skipTaxComputation) {
+            const effectiveTotal =
+              (Number.isFinite(netBaseTotal) ? netBaseTotal : 0) + additionalsTotal;
+            const unitCost =
+              Number.isFinite(effectiveQuantity) && effectiveQuantity > 0 && Number.isFinite(effectiveTotal)
+                ? effectiveTotal / effectiveQuantity
+                : null;
+
+            item.discount = Number.isFinite(discountValue) ? discountValue : 0;
+            item.entryStockQuantity =
+              Number.isFinite(entryStockQuantity) && entryStockQuantity >= 0 ? entryStockQuantity : null;
+            item.netProductValue =
+              Number.isFinite(netBaseTotal) && netBaseTotal >= 0 ? netBaseTotal : null;
+            item.taxesTotal = 0;
+            item.additionalsTotal = additionalsTotal;
+            item.totalWithTaxes =
+              Number.isFinite(netBaseTotal) || additionalsTotal ? effectiveTotal : null;
+            item.unitCostWithTaxes = Number.isFinite(unitCost) && unitCost >= 0 ? unitCost : null;
+
+            return item;
+          }
+
+          const totalWithTaxes =
+            (Number.isFinite(netBaseTotal) ? netBaseTotal : 0) + taxesTotal + additionalsTotal;
 
           const unitCostWithTaxes =
             Number.isFinite(effectiveQuantity) && effectiveQuantity > 0
@@ -1913,8 +1953,15 @@
           return item;
         };
 
-        const alignItemsWithTotals = (items, totals) => {
+        const alignItemsWithTotals = (items, totals, options = {}) => {
           if (!Array.isArray(items) || !items.length) return;
+
+          const { skipTaxComputation = false } = options;
+
+          if (skipTaxComputation) {
+            items.forEach((item) => ensureItemCostWithTaxes(item, options));
+            return;
+          }
 
           const distributionEntries = items.map((item) => {
             const candidates = [
@@ -2004,6 +2051,7 @@
             fcpSt: toNumeric(totals?.fcpSt),
             fcpStRet: toNumeric(totals?.fcpStRet),
             ii: toNumeric(totals?.ii),
+            products: toNumeric(totals?.products),
             totalValue: toNumeric(totals?.totalValue),
           };
 
@@ -2051,9 +2099,33 @@
           adjustNonNegativeField('fcpStRetainedValue', totalsNormalized.fcpStRet);
           adjustNonNegativeField('iiValue', totalsNormalized.ii);
 
-          items.forEach((item) => ensureItemCostWithTaxes(item));
+          items.forEach((item) => ensureItemCostWithTaxes(item, options));
 
-          if (Number.isFinite(totalsNormalized.totalValue)) {
+          const declaredCharges = [
+            totalsNormalized.freight,
+            totalsNormalized.other,
+            totalsNormalized.insurance,
+            totalsNormalized.ipi,
+            totalsNormalized.icmsSt,
+            totalsNormalized.fcp,
+            totalsNormalized.fcpSt,
+            totalsNormalized.fcpStRet,
+            totalsNormalized.ii,
+          ];
+
+          const hasDeclaredCharges = declaredCharges.some(
+            (value) => Number.isFinite(value) && Math.abs(value) > 0.000001
+          );
+
+          const totalsMatchProducts =
+            Number.isFinite(totalsNormalized.totalValue) &&
+            Number.isFinite(totalsNormalized.products) &&
+            Math.abs(totalsNormalized.totalValue - totalsNormalized.products) <= 0.0005;
+
+          if (
+            Number.isFinite(totalsNormalized.totalValue) &&
+            (hasDeclaredCharges || !totalsMatchProducts)
+          ) {
             let aggregatedTotal = sumFiniteValues(
               items.map((item) => toNumeric(item.totalWithTaxes))
             );
@@ -2073,6 +2145,19 @@
                 ensureItemCostWithTaxes(lastItem);
               }
             }
+          } else if (
+            Number.isFinite(totalsNormalized.totalValue) &&
+            !hasDeclaredCharges &&
+            Number.isFinite(totalsNormalized.products) &&
+            Math.abs(totalsNormalized.totalValue - totalsNormalized.products) > 0.0005
+          ) {
+            console.warn(
+              '[NF-e] Valor total informado (vNF) difere do somatório dos produtos (vProd) sem custos adicionais declarados.',
+              {
+                totalValue: totalsNormalized.totalValue,
+                productsTotal: totalsNormalized.products,
+              }
+            );
           }
         };
 
@@ -2433,6 +2518,286 @@
           option.textContent = message;
           depositSelect.appendChild(option);
           depositSelect.disabled = Boolean(disabled);
+        };
+
+        const registerCompanies = (companies = []) => {
+          if (!Array.isArray(companies)) return [];
+          companies.forEach((company) => {
+            if (!company || !company._id) return;
+            companyRegistry.index.set(String(company._id), company);
+          });
+          return companies;
+        };
+
+        const formatCompanyDocument = (value) => {
+          const digits = digitsOnly(value);
+          if (digits.length === 14) {
+            return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+          }
+          if (digits.length === 11) {
+            return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+          }
+          return digits;
+        };
+
+        const buildCompanyLabel = (company) => {
+          if (!company || typeof company !== 'object') return 'Empresa';
+          const normalize = (value) => (typeof value === 'string' ? value.trim() : '');
+          const name =
+            normalize(company.nomeFantasia) ||
+            normalize(company.nome) ||
+            normalize(company.razaoSocial) ||
+            normalize(company.fantasyName) ||
+            normalize(company.razonSocial) ||
+            '';
+          const documentValue =
+            company?.cnpj ||
+            company?.documento ||
+            company?.document ||
+            company?.cpfCnpj ||
+            company?.taxId ||
+            '';
+          const formattedDocument = formatCompanyDocument(documentValue);
+          if (name && formattedDocument) {
+            return `${name} • ${formattedDocument}`;
+          }
+          if (name) return name;
+          if (formattedDocument) return formattedDocument;
+          return 'Empresa';
+        };
+
+        const setCompanyPlaceholder = (message, { disabled = true } = {}) => {
+          if (!companySelect) return;
+          companySelect.innerHTML = '';
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = message;
+          companySelect.appendChild(option);
+          companySelect.disabled = Boolean(disabled);
+        };
+
+        const setCompanyOptions = (companies = [], { placeholder = null } = {}) => {
+          if (!companySelect) return;
+          companySelect.innerHTML = '';
+          const defaultOption = document.createElement('option');
+          defaultOption.value = '';
+          defaultOption.textContent = placeholder || 'Selecione a empresa';
+          companySelect.appendChild(defaultOption);
+          if (Array.isArray(companies)) {
+            companies.forEach((company) => {
+              if (!company || !company._id) return;
+              const option = document.createElement('option');
+              option.value = String(company._id);
+              option.textContent = buildCompanyLabel(company);
+              const documentValue =
+                company?.cnpj ||
+                company?.documento ||
+                company?.document ||
+                company?.cpfCnpj ||
+                company?.taxId ||
+                '';
+              const digits = digitsOnly(documentValue);
+              if (digits && option.dataset) {
+                option.dataset.companyDocument = digits;
+              }
+              companySelect.appendChild(option);
+            });
+          }
+          companySelect.disabled = !companies || !companies.length;
+        };
+
+        const setCompanySelectValue = (value) => {
+          if (!companySelect) return false;
+          const normalized = value ? String(value) : '';
+          const option = Array.from(companySelect.options || []).find((opt) => opt.value === normalized);
+          if (option) {
+            companySelect.value = normalized;
+            return true;
+          }
+          return false;
+        };
+
+        const findCompanyOptionByDocument = (documentDigits) => {
+          if (!companySelect || !documentDigits) return null;
+          const normalized = digitsOnly(documentDigits);
+          if (!normalized) return null;
+          return (
+            Array.from(companySelect.options || [])
+              .filter((option) => option.value)
+              .find((option) => {
+                let optionDigits = option.dataset?.companyDocument;
+                if (!optionDigits) {
+                  optionDigits = digitsOnly(`${option.value}${option.textContent || ''}`);
+                  if (optionDigits && option.dataset) {
+                    option.dataset.companyDocument = optionDigits;
+                  }
+                }
+                if (!optionDigits) return false;
+                return optionDigits === normalized || optionDigits.includes(normalized) || normalized.includes(optionDigits);
+              }) || null
+          );
+        };
+
+        const loadCompaniesFromApi = async (forceReload = false) => {
+          if (!companiesEndpoint) return [];
+
+          if (!forceReload && Array.isArray(companyRegistry.cache) && companyRegistry.cache.length) {
+            registerCompanies(companyRegistry.cache);
+            return companyRegistry.cache;
+          }
+
+          if (!forceReload && companyRegistry.loading) {
+            try {
+              await companyRegistry.loading;
+            } catch (error) {
+              console.error('Falha anterior ao carregar empresas:', error);
+            }
+            registerCompanies(companyRegistry.cache);
+            return companyRegistry.cache;
+          }
+
+          const requestPromise = (async () => {
+            companyRegistry.error = null;
+            try {
+              const response = await fetch(companiesEndpoint, {
+                headers: buildAuthHeaders(),
+              });
+
+              let payload = null;
+              try {
+                payload = await response.json();
+              } catch (error) {
+                payload = null;
+              }
+
+              if (response.status === 401 || response.status === 403) {
+                handleAuthError();
+              }
+
+              if (!response.ok) {
+                const message =
+                  (payload && (payload.message || payload.error)) ||
+                  'Não foi possível carregar as empresas.';
+                const error = new Error(message);
+                error.status = response.status;
+                throw error;
+              }
+
+              const companies = Array.isArray(payload?.stores)
+                ? payload.stores
+                : Array.isArray(payload)
+                ? payload
+                : [];
+
+              registerCompanies(companies);
+              companyRegistry.cache = companies;
+              companyRegistry.lastLoadedAt = Date.now();
+              return companies;
+            } catch (error) {
+              companyRegistry.error = error;
+              throw error;
+            }
+          })();
+
+          companyRegistry.loading = requestPromise;
+
+          try {
+            return await requestPromise;
+          } finally {
+            companyRegistry.loading = null;
+          }
+        };
+
+        const refreshCompanyOptions = async ({ preserveSelection = true } = {}) => {
+          if (!companySelect) return { value: '', changed: false };
+
+          const previousValue = companySelect.value || '';
+          const desiredFromData =
+            (preserveSelection && previousValue) ||
+            (lastNfeData && lastNfeData.selectedCompanyId ? String(lastNfeData.selectedCompanyId) : '') ||
+            pendingCompanyId ||
+            '';
+          const documentDigits =
+            pendingCompanyDocumentDigits ||
+            (lastNfeData && lastNfeData.dest?.document ? digitsOnly(lastNfeData.dest.document) : '');
+
+          setCompanyPlaceholder('Carregando empresas...', { disabled: true });
+
+          try {
+            const companies = await loadCompaniesFromApi();
+            const placeholder = companies.length
+              ? 'Selecione a empresa'
+              : 'Nenhuma empresa cadastrada';
+            setCompanyOptions(companies, { placeholder });
+
+            let applied = false;
+            if (desiredFromData) {
+              applied = setCompanySelectValue(desiredFromData);
+              if (applied) {
+                pendingCompanyId = '';
+                pendingCompanyDocumentDigits = '';
+              } else {
+                pendingCompanyId = desiredFromData;
+              }
+            }
+
+            if (!applied && documentDigits) {
+              const match = findCompanyOptionByDocument(documentDigits);
+              if (match) {
+                companySelect.value = match.value;
+                applied = true;
+                pendingCompanyId = '';
+                pendingCompanyDocumentDigits = '';
+              } else {
+                pendingCompanyDocumentDigits = documentDigits;
+              }
+            }
+
+            if (!applied && companies.length === 1 && companies[0]?._id) {
+              const singleValue = String(companies[0]._id);
+              companySelect.value = singleValue;
+              applied = true;
+              pendingCompanyId = '';
+              pendingCompanyDocumentDigits = '';
+            }
+
+            companySelect.disabled = !companies.length;
+
+            if (!applied) {
+              companySelect.value = '';
+              if (!companies.length) {
+                setBankAccountPlaceholder('Cadastre uma empresa para listar as contas correntes');
+                setDepositPlaceholder('Cadastre uma empresa para listar os depósitos');
+              } else {
+                setBankAccountPlaceholder('Selecione uma empresa para listar as contas correntes');
+                setDepositPlaceholder('Selecione uma empresa para listar os depósitos');
+              }
+              return { value: '', changed: previousValue !== companySelect.value };
+            }
+
+            if (lastNfeData) {
+              lastNfeData.selectedCompanyId = companySelect.value || '';
+            }
+
+            const changed = previousValue !== companySelect.value;
+            if (changed) {
+              companySelect.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            return { value: companySelect.value || '', changed };
+          } catch (error) {
+            console.error('Erro ao carregar empresas:', error);
+            notify(
+              error?.message ||
+                'Não foi possível carregar as empresas cadastradas. Tente novamente em instantes.',
+              'error'
+            );
+            setCompanyPlaceholder('Erro ao carregar empresas', { disabled: true });
+            companySelect.disabled = true;
+            pendingCompanyId = '';
+            pendingCompanyDocumentDigits = '';
+            return { value: '', changed: false };
+          }
         };
 
         const registerDeposits = (deposits = []) => {
@@ -5958,15 +6323,40 @@
           if (tipoEmissaoSelect && data.ide?.tpEmis) setSelectValue(tipoEmissaoSelect, data.ide.tpEmis);
           if (accessKeyInput && data.accessKey) accessKeyInput.value = data.accessKey;
           if (importAccessKeyInput && data.accessKey) importAccessKeyInput.value = data.accessKey;
-          if (companySelect && data.dest?.document) {
-            const companyDigits = digitsOnly(data.dest.document);
-            const matchedCompany = Array.from(companySelect.options || []).find((option) => {
-              const optionDigits = digitsOnly(`${option.value}${option.textContent || ''}`);
-              return optionDigits.includes(companyDigits) || optionDigits === companyDigits;
-            });
-            if (matchedCompany) {
-              companySelect.value = matchedCompany.value;
-              companySelect.dispatchEvent(new Event('change', { bubbles: true }));
+          if (companySelect) {
+            const previousValue = companySelect.value || '';
+            const desiredCompanyId = data.selectedCompanyId ? String(data.selectedCompanyId) : '';
+            const documentDigits = data.dest?.document ? digitsOnly(data.dest.document) : '';
+            let applied = false;
+
+            if (desiredCompanyId) {
+              applied = setCompanySelectValue(desiredCompanyId);
+              if (!applied) {
+                pendingCompanyId = desiredCompanyId;
+              } else {
+                pendingCompanyId = '';
+              }
+            }
+
+            if (!applied && documentDigits) {
+              const matchedCompany = findCompanyOptionByDocument(documentDigits);
+              if (matchedCompany) {
+                companySelect.value = matchedCompany.value;
+                applied = true;
+                pendingCompanyId = '';
+              }
+            }
+
+            if (applied) {
+              pendingCompanyDocumentDigits = '';
+              if (lastNfeData) {
+                lastNfeData.selectedCompanyId = companySelect.value || '';
+              }
+              if (previousValue !== companySelect.value) {
+                companySelect.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+            } else {
+              pendingCompanyDocumentDigits = documentDigits || '';
             }
           }
         };
@@ -6668,6 +7058,8 @@
 
           selectsToReset.forEach(({ element, value }) => resetSelectValue(element, value));
 
+          pendingCompanyId = '';
+          pendingCompanyDocumentDigits = '';
           pendingBankAccountId = '';
           setBankAccountPlaceholder('Selecione uma empresa para listar as contas correntes');
           pendingDepositId = '';
@@ -6875,11 +7267,15 @@
             const barcodeDisplay = formatGtinDisplay(ean || eanTrib);
             const qTribRaw = parseNumber(getText(prod, 'qTrib'));
             const qTrib = Number.isFinite(qTribRaw) ? qTribRaw : quantity;
-            const conversionDivider = Number.isFinite(qTrib) && qTrib > 0 ? qTrib : 1;
-            const conversionMultiplier = Number.isFinite(quantity) ? quantity : 1;
-            const conversion = Number.isFinite(conversionMultiplier) && Number.isFinite(conversionDivider) && conversionDivider
-              ? conversionMultiplier / conversionDivider
-              : 1;
+            const conversionMultiplier = Number.isFinite(qTrib) && qTrib > 0 ? qTrib : 1;
+            const conversionDivider = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+            const conversion =
+              Number.isFinite(conversionMultiplier) &&
+              conversionMultiplier > 0 &&
+              Number.isFinite(conversionDivider) &&
+              conversionDivider > 0
+                ? conversionMultiplier / conversionDivider
+                : 1;
             const freightRaw = parseNumber(getText(prod, 'vFrete'));
             const freight = Number.isFinite(freightRaw) ? freightRaw : 0;
             const insuranceRaw = parseNumber(getText(prod, 'vSeg'));
@@ -7212,7 +7608,44 @@
             services: getText(total, 'vServ'),
           };
 
-          alignItemsWithTotals(items, totalsData);
+          const totalsNumeric = {
+            totalValue: toNumeric(totalsData.totalValue),
+            products: toNumeric(totalsData.products),
+            freight: toNumeric(totalsData.freight),
+            other: toNumeric(totalsData.other),
+            insurance: toNumeric(totalsData.insurance),
+            ipi: toNumeric(totalsData.ipi),
+            ii: toNumeric(totalsData.ii),
+            icmsSt: toNumeric(totalsData.icmsSt),
+            fcp: toNumeric(totalsData.fcp),
+            fcpSt: toNumeric(totalsData.fcpSt),
+            fcpStRet: toNumeric(totalsData.fcpStRet),
+          };
+
+          const declaredCharges = [
+            totalsNumeric.freight,
+            totalsNumeric.other,
+            totalsNumeric.insurance,
+            totalsNumeric.ipi,
+            totalsNumeric.ii,
+            totalsNumeric.icmsSt,
+            totalsNumeric.fcp,
+            totalsNumeric.fcpSt,
+            totalsNumeric.fcpStRet,
+          ];
+
+          const totalsMatchProducts =
+            Number.isFinite(totalsNumeric.totalValue) &&
+            Number.isFinite(totalsNumeric.products) &&
+            Math.abs(totalsNumeric.totalValue - totalsNumeric.products) <= 0.0005;
+
+          const hasDeclaredCharges = declaredCharges.some(
+            (value) => Number.isFinite(value) && Math.abs(value) > 0.000001
+          );
+
+          const shouldSkipTaxComputation = totalsMatchProducts && !hasDeclaredCharges;
+
+          alignItemsWithTotals(items, totalsData, { skipTaxComputation: shouldSkipTaxComputation });
 
           return {
             accessKey,
@@ -7312,6 +7745,7 @@
                 throw new Error('Não foi possível interpretar o conteúdo do XML informado.');
               }
               const parsed = parseNfeXml(result);
+              parsed.selectedCompanyId = companySelect ? companySelect.value || '' : '';
               parsed.selectedBankAccountId = bankAccountSelect ? bankAccountSelect.value || '' : '';
               parsed.selectedDepositId = depositSelect ? depositSelect.value || '' : '';
               lastNfeData = parsed;
@@ -7496,6 +7930,16 @@
 
         if (companySelect) {
           companySelect.addEventListener('change', () => {
+            const selectedCompany = companySelect.value || '';
+            pendingCompanyId = '';
+            if (lastNfeData) {
+              lastNfeData.selectedCompanyId = selectedCompany;
+            }
+            pendingCompanyDocumentDigits = selectedCompany
+              ? ''
+              : lastNfeData && lastNfeData.dest?.document
+              ? digitsOnly(lastNfeData.dest.document)
+              : '';
             refreshDepositOptions({ preserveSelection: false }).catch(() => {});
             refreshBankAccountOptions({ preserveSelection: false }).catch(() => {});
           });
@@ -7678,8 +8122,20 @@
 
         indexExistingSupplierOptions();
         loadSuppliersFromApi().catch(() => {});
-        refreshDepositOptions({ preserveSelection: true }).catch(() => {});
-        refreshBankAccountOptions({ preserveSelection: true }).catch(() => {});
+        refreshCompanyOptions({ preserveSelection: true })
+          .then((result) => {
+            const resolved = result || { value: '', changed: false };
+            const selectedValue = resolved.value || '';
+            const selectionChanged = Boolean(resolved.changed);
+            if (!selectionChanged || !selectedValue) {
+              refreshDepositOptions({ preserveSelection: true }).catch(() => {});
+              refreshBankAccountOptions({ preserveSelection: true }).catch(() => {});
+            }
+          })
+          .catch(() => {
+            refreshDepositOptions({ preserveSelection: true }).catch(() => {});
+            refreshBankAccountOptions({ preserveSelection: true }).catch(() => {});
+          });
 
         window.addEventListener('focus', () => {
           const now = Date.now();
