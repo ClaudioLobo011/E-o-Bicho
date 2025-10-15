@@ -151,11 +151,8 @@
                 </div>
                 <div>
                   <label for="deposit" class="block text-sm font-medium text-gray-700 mb-1">Depósito*</label>
-                  <select id="deposit" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                    <option value="">Selecione</option>
-                    <option value="loja-vila-isabel">Loja Vila Isabel</option>
-                    <option value="cd-niteroi">Centro de Distribuição Niterói</option>
-                    <option value="cd-jacarepagua">CD Jacarepaguá</option>
+                  <select id="deposit" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required disabled>
+                    <option value="">Selecione uma empresa para listar os depósitos</option>
                   </select>
                 </div>
                 <div>
@@ -1545,6 +1542,7 @@
             : '/api';
         const suppliersEndpoint = `${apiBaseUrl}/suppliers`;
         const bankAccountsEndpoint = `${apiBaseUrl}/bank-accounts`;
+        const depositsEndpoint = `${apiBaseUrl}/deposits`;
 
         const notify = (message, type = 'info') => {
           if (typeof window.showToast === 'function') {
@@ -1597,10 +1595,19 @@
           error: null,
         };
 
+        const depositRegistry = {
+          cache: new Map(),
+          loading: new Map(),
+          index: new Map(),
+          lastLoadedAt: 0,
+          error: null,
+        };
+
         let lastSupplierData = null;
         let lastSupplierRecord = null;
         let lastNfeData = null;
         let pendingBankAccountId = '';
+        let pendingDepositId = '';
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
@@ -2416,6 +2423,244 @@
 
           bankAccountSelect.disabled = bankAccountSelect.options.length <= 1;
           syncBankAccountWithDuplicates();
+        };
+
+        const setDepositPlaceholder = (message, { disabled = true } = {}) => {
+          if (!depositSelect) return;
+          depositSelect.innerHTML = '';
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = message;
+          depositSelect.appendChild(option);
+          depositSelect.disabled = Boolean(disabled);
+        };
+
+        const registerDeposits = (deposits = []) => {
+          if (!Array.isArray(deposits)) return [];
+          deposits.forEach((deposit) => {
+            if (!deposit || !deposit._id) return;
+            depositRegistry.index.set(String(deposit._id), deposit);
+          });
+          return deposits;
+        };
+
+        const buildDepositLabel = (deposit) => {
+          if (!deposit || typeof deposit !== 'object') return 'Depósito';
+          const normalize = (value) => (typeof value === 'string' ? value.trim() : '');
+          const name = normalize(deposit.nome);
+          const code = normalize(deposit.codigo);
+          let companyName = '';
+          const company = deposit.empresa;
+          if (company && typeof company === 'object') {
+            companyName =
+              normalize(company.nomeFantasia) ||
+              normalize(company.nome) ||
+              normalize(company.razaoSocial) ||
+              '';
+          }
+          const parts = [];
+          if (name) parts.push(name);
+          if (code) parts.push(`Cód. ${code}`);
+          if (companyName) parts.push(companyName);
+          return parts.join(' • ') || 'Depósito';
+        };
+
+        const setDepositOptions = (deposits = [], { placeholder = null } = {}) => {
+          if (!depositSelect) return;
+
+          depositSelect.innerHTML = '';
+          const defaultOption = document.createElement('option');
+          defaultOption.value = '';
+          defaultOption.textContent =
+            placeholder ||
+            (Array.isArray(deposits) && deposits.length
+              ? 'Selecione o depósito'
+              : 'Nenhum depósito cadastrado para esta empresa');
+          depositSelect.appendChild(defaultOption);
+
+          if (Array.isArray(deposits)) {
+            deposits.forEach((deposit) => {
+              if (!deposit || !deposit._id) return;
+              const option = document.createElement('option');
+              option.value = String(deposit._id);
+              option.textContent = buildDepositLabel(deposit);
+              depositSelect.appendChild(option);
+            });
+          }
+
+          depositSelect.disabled = !deposits || !deposits.length;
+        };
+
+        const setDepositSelectValue = (value) => {
+          if (!depositSelect) return false;
+          const normalized = value ? String(value) : '';
+          if (!normalized) {
+            depositSelect.value = '';
+            return true;
+          }
+          const options = Array.from(depositSelect.options || []);
+          const match = options.find((option) => option.value === normalized);
+          if (match) {
+            depositSelect.value = normalized;
+            return true;
+          }
+          return false;
+        };
+
+        const loadDepositsForCompany = async (companyId = '') => {
+          if (!depositsEndpoint) return [];
+          const normalizedCompanyId = companyId ? String(companyId) : '';
+          const cacheKey = normalizedCompanyId || '__all__';
+
+          if (depositRegistry.cache.has(cacheKey)) {
+            const cached = depositRegistry.cache.get(cacheKey) || [];
+            registerDeposits(cached);
+            return cached;
+          }
+
+          if (depositRegistry.loading.has(cacheKey)) {
+            try {
+              await depositRegistry.loading.get(cacheKey);
+            } catch (error) {
+              console.error('Falha anterior ao carregar depósitos:', error);
+            }
+            const cached = depositRegistry.cache.get(cacheKey) || [];
+            registerDeposits(cached);
+            return cached;
+          }
+
+          const query = normalizedCompanyId ? `?empresa=${encodeURIComponent(normalizedCompanyId)}` : '';
+          const requestPromise = (async () => {
+            depositRegistry.error = null;
+            try {
+              const response = await fetch(`${depositsEndpoint}${query}`, {
+                headers: buildAuthHeaders(),
+              });
+
+              let payload = null;
+              try {
+                payload = await response.json();
+              } catch (error) {
+                payload = null;
+              }
+
+              if (response.status === 401 || response.status === 403) {
+                handleAuthError();
+              }
+
+              if (!response.ok) {
+                const message =
+                  (payload && (payload.message || payload.error)) ||
+                  'Não foi possível carregar os depósitos.';
+                const error = new Error(message);
+                error.status = response.status;
+                throw error;
+              }
+
+              const deposits = Array.isArray(payload?.deposits) ? payload.deposits : [];
+              registerDeposits(deposits);
+              depositRegistry.cache.set(cacheKey, deposits);
+              depositRegistry.lastLoadedAt = Date.now();
+              return deposits;
+            } catch (error) {
+              depositRegistry.error = error;
+              throw error;
+            }
+          })();
+
+          depositRegistry.loading.set(cacheKey, requestPromise);
+
+          try {
+            return await requestPromise;
+          } finally {
+            depositRegistry.loading.delete(cacheKey);
+          }
+        };
+
+        const refreshDepositOptions = async ({ preserveSelection = true } = {}) => {
+          if (!depositSelect) return;
+
+          const companyId = companySelect ? companySelect.value : '';
+          const normalizedCompanyId = companyId ? String(companyId) : '';
+
+          if (!normalizedCompanyId) {
+            pendingDepositId = '';
+            setDepositPlaceholder('Selecione uma empresa para listar os depósitos');
+            if (lastNfeData) {
+              lastNfeData.selectedDepositId = '';
+            }
+            return;
+          }
+
+          setDepositPlaceholder('Carregando depósitos...', { disabled: true });
+
+          try {
+            const deposits = await loadDepositsForCompany(normalizedCompanyId);
+            const availableDeposits = Array.isArray(deposits)
+              ? deposits.filter((deposit) => {
+                  const rawCompany = deposit?.empresa;
+                  if (!rawCompany) return true;
+                  if (typeof rawCompany === 'object') {
+                    const companyValue =
+                      rawCompany?._id ||
+                      rawCompany?.id ||
+                      (typeof rawCompany.valueOf === 'function' ? rawCompany.valueOf() : '');
+                    return String(companyValue) === normalizedCompanyId;
+                  }
+                  return String(rawCompany) === normalizedCompanyId;
+                })
+              : [];
+
+            setDepositOptions(availableDeposits, {
+              placeholder: availableDeposits.length
+                ? 'Selecione o depósito'
+                : 'Nenhum depósito cadastrado para esta empresa',
+            });
+
+            let desiredValue = '';
+            if (pendingDepositId) {
+              desiredValue = pendingDepositId;
+            } else if (preserveSelection) {
+              desiredValue =
+                depositSelect.value ||
+                (lastNfeData && lastNfeData.selectedDepositId ? String(lastNfeData.selectedDepositId) : '');
+            }
+
+            if (desiredValue) {
+              const applied = setDepositSelectValue(desiredValue);
+              if (!applied) {
+                pendingDepositId = desiredValue;
+              } else {
+                pendingDepositId = '';
+                if (lastNfeData) {
+                  lastNfeData.selectedDepositId = desiredValue;
+                }
+              }
+            } else if (availableDeposits.length === 1 && availableDeposits[0]?._id) {
+              const singleValue = String(availableDeposits[0]._id);
+              if (setDepositSelectValue(singleValue)) {
+                pendingDepositId = '';
+                if (lastNfeData) {
+                  lastNfeData.selectedDepositId = singleValue;
+                }
+              }
+            } else {
+              setDepositSelectValue('');
+              if (lastNfeData) {
+                lastNfeData.selectedDepositId = '';
+              }
+            }
+
+            depositSelect.disabled = !availableDeposits.length;
+          } catch (error) {
+            console.error('Erro ao carregar depósitos:', error);
+            notify(
+              error?.message ||
+                'Não foi possível carregar os depósitos da empresa selecionada. Tente novamente em instantes.',
+              'error'
+            );
+            setDepositPlaceholder('Não foi possível carregar os depósitos.', { disabled: true });
+          }
         };
 
         const normalizeSupplierCalcType = (value) => {
@@ -5798,6 +6043,22 @@
           }
         };
 
+        const fillDepositSelectionFromNfeData = (data) => {
+          if (!depositSelect) return;
+          const desiredValue = data?.selectedDepositId ? String(data.selectedDepositId) : '';
+          if (!desiredValue) {
+            setDepositSelectValue('');
+            pendingDepositId = '';
+            return;
+          }
+          const applied = setDepositSelectValue(desiredValue);
+          if (!applied) {
+            pendingDepositId = desiredValue;
+          } else {
+            pendingDepositId = '';
+          }
+        };
+
         const fillAdditionalInfoFromNfeData = (data) => {
           const additional = data?.additionalInfo || {};
           if (observationInput) {
@@ -6307,6 +6568,7 @@
           fillSupplierFieldsFromNfe(data);
           fillTotalsFromNfeData(data);
           fillTransportFromNfeData(data);
+          fillDepositSelectionFromNfeData(data);
           fillDuplicatasFromNfeData(data);
           fillAdditionalInfoFromNfeData(data);
           renderDocumentsFromNfe(data.references);
@@ -6408,6 +6670,8 @@
 
           pendingBankAccountId = '';
           setBankAccountPlaceholder('Selecione uma empresa para listar as contas correntes');
+          pendingDepositId = '';
+          setDepositPlaceholder('Selecione uma empresa para listar os depósitos');
 
           if (totalAmountDisplay) {
             totalAmountDisplay.textContent = 'R$ 0,00';
@@ -7049,6 +7313,7 @@
               }
               const parsed = parseNfeXml(result);
               parsed.selectedBankAccountId = bankAccountSelect ? bankAccountSelect.value || '' : '';
+              parsed.selectedDepositId = depositSelect ? depositSelect.value || '' : '';
               lastNfeData = parsed;
               updateSummaryFromData(parsed);
               showFileFeedback('Validando fornecedor importado...', 'info');
@@ -7231,6 +7496,7 @@
 
         if (companySelect) {
           companySelect.addEventListener('change', () => {
+            refreshDepositOptions({ preserveSelection: false }).catch(() => {});
             refreshBankAccountOptions({ preserveSelection: false }).catch(() => {});
           });
         }
@@ -7241,6 +7507,15 @@
               lastNfeData.selectedBankAccountId = bankAccountSelect.value || '';
             }
             syncBankAccountWithDuplicates();
+          });
+        }
+
+        if (depositSelect) {
+          depositSelect.addEventListener('change', () => {
+            pendingDepositId = '';
+            if (lastNfeData) {
+              lastNfeData.selectedDepositId = depositSelect.value || '';
+            }
           });
         }
 
@@ -7403,6 +7678,7 @@
 
         indexExistingSupplierOptions();
         loadSuppliersFromApi().catch(() => {});
+        refreshDepositOptions({ preserveSelection: true }).catch(() => {});
         refreshBankAccountOptions({ preserveSelection: true }).catch(() => {});
 
         window.addEventListener('focus', () => {
