@@ -1849,8 +1849,10 @@
           return Number.isFinite(quantityValue) ? quantityValue : null;
         };
 
-        const ensureItemCostWithTaxes = (item) => {
+        const ensureItemCostWithTaxes = (item, options = {}) => {
           if (!item || typeof item !== 'object') return item;
+
+          const { skipTaxComputation = false } = options;
 
           const quantityValue = toNumeric(item.quantity);
           const unitPriceValue = toNumeric(item.unitPrice);
@@ -1895,9 +1897,8 @@
             toNumeric(item.fcpStRetainedValue),
           ]);
 
-          const additionalsTotal = sumFiniteValues([toNumeric(item.freight), toNumeric(item.other)]);
-          const totalWithTaxes =
-            (Number.isFinite(netBaseTotal) ? netBaseTotal : 0) + taxesTotal + additionalsTotal;
+          const rawAdditionalsTotal = sumFiniteValues([toNumeric(item.freight), toNumeric(item.other)]);
+          const additionalsTotal = Math.abs(rawAdditionalsTotal) <= 0.000001 ? 0 : rawAdditionalsTotal;
 
           const entryStockQuantity = calculateEntryStockQuantity(item);
           const effectiveQuantity =
@@ -1906,6 +1907,31 @@
               : Number.isFinite(quantityValue) && quantityValue > 0
               ? quantityValue
               : null;
+
+          if (skipTaxComputation) {
+            const effectiveTotal =
+              (Number.isFinite(netBaseTotal) ? netBaseTotal : 0) + additionalsTotal;
+            const unitCost =
+              Number.isFinite(effectiveQuantity) && effectiveQuantity > 0 && Number.isFinite(effectiveTotal)
+                ? effectiveTotal / effectiveQuantity
+                : null;
+
+            item.discount = Number.isFinite(discountValue) ? discountValue : 0;
+            item.entryStockQuantity =
+              Number.isFinite(entryStockQuantity) && entryStockQuantity >= 0 ? entryStockQuantity : null;
+            item.netProductValue =
+              Number.isFinite(netBaseTotal) && netBaseTotal >= 0 ? netBaseTotal : null;
+            item.taxesTotal = 0;
+            item.additionalsTotal = additionalsTotal;
+            item.totalWithTaxes =
+              Number.isFinite(netBaseTotal) || additionalsTotal ? effectiveTotal : null;
+            item.unitCostWithTaxes = Number.isFinite(unitCost) && unitCost >= 0 ? unitCost : null;
+
+            return item;
+          }
+
+          const totalWithTaxes =
+            (Number.isFinite(netBaseTotal) ? netBaseTotal : 0) + taxesTotal + additionalsTotal;
 
           const unitCostWithTaxes =
             Number.isFinite(effectiveQuantity) && effectiveQuantity > 0
@@ -1927,8 +1953,15 @@
           return item;
         };
 
-        const alignItemsWithTotals = (items, totals) => {
+        const alignItemsWithTotals = (items, totals, options = {}) => {
           if (!Array.isArray(items) || !items.length) return;
+
+          const { skipTaxComputation = false } = options;
+
+          if (skipTaxComputation) {
+            items.forEach((item) => ensureItemCostWithTaxes(item, options));
+            return;
+          }
 
           const distributionEntries = items.map((item) => {
             const candidates = [
@@ -2066,7 +2099,7 @@
           adjustNonNegativeField('fcpStRetainedValue', totalsNormalized.fcpStRet);
           adjustNonNegativeField('iiValue', totalsNormalized.ii);
 
-          items.forEach((item) => ensureItemCostWithTaxes(item));
+          items.forEach((item) => ensureItemCostWithTaxes(item, options));
 
           const declaredCharges = [
             totalsNormalized.freight,
@@ -7575,7 +7608,44 @@
             services: getText(total, 'vServ'),
           };
 
-          alignItemsWithTotals(items, totalsData);
+          const totalsNumeric = {
+            totalValue: toNumeric(totalsData.totalValue),
+            products: toNumeric(totalsData.products),
+            freight: toNumeric(totalsData.freight),
+            other: toNumeric(totalsData.other),
+            insurance: toNumeric(totalsData.insurance),
+            ipi: toNumeric(totalsData.ipi),
+            ii: toNumeric(totalsData.ii),
+            icmsSt: toNumeric(totalsData.icmsSt),
+            fcp: toNumeric(totalsData.fcp),
+            fcpSt: toNumeric(totalsData.fcpSt),
+            fcpStRet: toNumeric(totalsData.fcpStRet),
+          };
+
+          const declaredCharges = [
+            totalsNumeric.freight,
+            totalsNumeric.other,
+            totalsNumeric.insurance,
+            totalsNumeric.ipi,
+            totalsNumeric.ii,
+            totalsNumeric.icmsSt,
+            totalsNumeric.fcp,
+            totalsNumeric.fcpSt,
+            totalsNumeric.fcpStRet,
+          ];
+
+          const totalsMatchProducts =
+            Number.isFinite(totalsNumeric.totalValue) &&
+            Number.isFinite(totalsNumeric.products) &&
+            Math.abs(totalsNumeric.totalValue - totalsNumeric.products) <= 0.0005;
+
+          const hasDeclaredCharges = declaredCharges.some(
+            (value) => Number.isFinite(value) && Math.abs(value) > 0.000001
+          );
+
+          const shouldSkipTaxComputation = totalsMatchProducts && !hasDeclaredCharges;
+
+          alignItemsWithTotals(items, totalsData, { skipTaxComputation: shouldSkipTaxComputation });
 
           return {
             accessKey,
