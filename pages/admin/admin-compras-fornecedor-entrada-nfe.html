@@ -1955,6 +1955,8 @@
         let productValidationSequence = 0;
         const productSupplierLinkCache = new Set();
         const productSupplierLinkPromises = new Map();
+        const supplierFactorUpdatePromises = new Map();
+        const FACTOR_COMPARISON_TOLERANCE = 0.0005;
         let supplierLinkErrorNotified = false;
         let isRefreshingImportedProducts = false;
 
@@ -2257,11 +2259,14 @@
 
             const effectiveTotal = Number.isFinite(preservedTotal) ? preservedTotal : null;
 
-            const quantityForCost = Number.isFinite(quantityValue) && quantityValue > 0
-              ? quantityValue
-              : Number.isFinite(effectiveQuantity) && effectiveQuantity > 0
-              ? effectiveQuantity
-              : null;
+            const quantityForCostCandidates = [
+              entryStockQuantity,
+              effectiveQuantity,
+              quantityValue,
+            ];
+            const quantityForCost = quantityForCostCandidates.find(
+              (candidate) => Number.isFinite(candidate) && candidate > 0
+            ) || null;
 
             const computedUnitCost =
               Number.isFinite(effectiveTotal) && Number.isFinite(quantityForCost) && quantityForCost > 0
@@ -2547,6 +2552,353 @@
             return String(value).toUpperCase();
           }
           return '';
+        };
+
+        const CFOP_SALE_WITHOUT_ST_CODES = new Set(['5101', '5102', '6101', '6102', '7101', '7102']);
+        const CFOP_SALE_WITH_ST_CODES = new Set(['5401', '5403', '5405', '6401', '6403', '6405']);
+        const DEFAULT_BONUS_CFOPS = ['5910', '6910', '7910'];
+        const OPTIONAL_BONUS_CFOPS = ['5949', '6949'];
+
+        const normalizeCfopCode = (value) => {
+          if (value === null || value === undefined) return '';
+          const raw = String(value).trim();
+          if (!raw) return '';
+          const digits = raw.replace(/\D+/g, '');
+          if (!digits) return '';
+          if (digits.length === 3) return `0${digits}`;
+          if (digits.length >= 4) return digits.slice(0, 4);
+          return digits.padStart(4, '0');
+        };
+
+        const isTruthyConfigValue = (value) => {
+          if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            return ['1', 'true', 'yes', 'y', 'sim'].includes(normalized);
+          }
+          return Boolean(value);
+        };
+
+        const resolveConfiguredBonusCfops = () => {
+          const bonusSet = new Set(DEFAULT_BONUS_CFOPS.map((code) => normalizeCfopCode(code)).filter(Boolean));
+          const sources = [];
+
+          if (typeof window !== 'undefined') {
+            if (window.NF_IMPORT_CONFIG) sources.push(window.NF_IMPORT_CONFIG);
+            if (window.NF_IMPORT_SETTINGS) sources.push(window.NF_IMPORT_SETTINGS);
+            if (window.APP_CONFIG) {
+              sources.push(window.APP_CONFIG);
+              if (window.APP_CONFIG.nfImport) {
+                sources.push(window.APP_CONFIG.nfImport);
+              }
+            }
+          }
+
+          if (typeof document !== 'undefined' && document.body && document.body.dataset) {
+            sources.push(document.body.dataset);
+          }
+
+          sources.forEach((source) => {
+            if (!source || typeof source !== 'object') return;
+            const explicit = source.bonusCfops || source.bonusCFOPs;
+            if (Array.isArray(explicit)) {
+              explicit.forEach((entry) => {
+                const normalized = normalizeCfopCode(entry);
+                if (normalized) {
+                  bonusSet.add(normalized);
+                }
+              });
+            }
+            const optionalList = source.optionalBonusCfops || source.optionalBonusCFOPs;
+            if (Array.isArray(optionalList)) {
+              optionalList.forEach((entry) => {
+                const normalized = normalizeCfopCode(entry);
+                if (normalized) {
+                  bonusSet.add(normalized);
+                }
+              });
+            }
+          });
+
+          OPTIONAL_BONUS_CFOPS.forEach((code) => {
+            const normalizedCode = normalizeCfopCode(code);
+            if (!normalizedCode) return;
+            const shouldInclude = sources.some((source) => {
+              if (!source || typeof source !== 'object') return false;
+              const directKeys = [
+                `accept${code}AsBonus`,
+                `accept${code}`,
+                `allow${code}Bonus`,
+                `aceitar${code}Bonificacao`,
+                `aceita${code}Bonificacao`,
+                `acceptBonus${code}`,
+                `bonus${code}`,
+              ];
+              if (directKeys.some((key) => isTruthyConfigValue(source[key]))) {
+                return true;
+              }
+              if (
+                isTruthyConfigValue(source.acceptOptionalBonusCfops) ||
+                isTruthyConfigValue(source.acceptOptionalBonusCFOPs) ||
+                isTruthyConfigValue(source.aceitarCfopsBonificacaoOpcionais)
+              ) {
+                return true;
+              }
+              const optionalList = source.optionalBonusCfops || source.optionalBonusCFOPs;
+              if (Array.isArray(optionalList)) {
+                return optionalList.some((entry) => normalizeCfopCode(entry) === normalizedCode);
+              }
+              return false;
+            });
+            if (shouldInclude) {
+              bonusSet.add(normalizedCode);
+            }
+          });
+
+          return bonusSet;
+        };
+
+        const classifyCfopForBonification = (cfopCode, bonusSet) => {
+          if (!cfopCode) return 'indefinido';
+          if (bonusSet.has(cfopCode)) return 'bonificacao';
+          if (CFOP_SALE_WITHOUT_ST_CODES.has(cfopCode)) return 'venda-sem-st';
+          if (CFOP_SALE_WITH_ST_CODES.has(cfopCode)) return 'venda-com-st';
+          return 'indefinido';
+        };
+
+        const buildBonificationGroupKey = (item) => {
+          if (!item || typeof item !== 'object') return '';
+          const parts = [];
+          const supplierCode = canonicalSupplierProductCode(item.supplierCode);
+          if (supplierCode) {
+            parts.push(`SUP:${supplierCode}`);
+          }
+          const candidateBarcodes = Array.isArray(item.barcodeCandidates) ? item.barcodeCandidates : [];
+          const normalizedBarcode =
+            candidateBarcodes.find((code) => code) ||
+            normalizeBarcodeForComparison(item.barcodeDisplay) ||
+            normalizeBarcodeForComparison(item.ean) ||
+            normalizeBarcodeForComparison(item.eanTrib);
+          if (normalizedBarcode) {
+            parts.push(`GTIN:${normalizedBarcode}`);
+          }
+          const description = typeof item.description === 'string' ? item.description.trim().toUpperCase() : '';
+          if (description) {
+            parts.push(`DESC:${description}`);
+          }
+          const ncm = typeof item.ncm === 'string' ? item.ncm.trim() : '';
+          if (ncm) {
+            parts.push(`NCM:${ncm}`);
+          }
+          if (!parts.length && Number.isFinite(item?.index)) {
+            parts.push(`INDEX:${item.index}`);
+          }
+          return parts.join('||');
+        };
+
+        const compareByOriginalIndex = (a, b) => {
+          const indexA = Number.isFinite(a?.index) ? a.index : 0;
+          const indexB = Number.isFinite(b?.index) ? b.index : 0;
+          return indexA - indexB;
+        };
+
+        const resolveEntryStockForBonification = (item) => {
+          if (!item || typeof item !== 'object') return 0;
+          const direct = toNumeric(item.entryStockQuantity);
+          if (Number.isFinite(direct)) return direct;
+          const computed = calculateEntryStockQuantity(item);
+          if (Number.isFinite(computed)) return computed;
+          const quantityValue = toNumeric(item.quantity);
+          return Number.isFinite(quantityValue) ? quantityValue : 0;
+        };
+
+        const sumBonificationValues = (items, extractor) => {
+          if (!Array.isArray(items) || !items.length) return 0;
+          return items.reduce((total, current) => {
+            const rawValue = typeof extractor === 'function' ? extractor(current) : current;
+            const numericValue = toNumeric(rawValue);
+            return Number.isFinite(numericValue) ? total + numericValue : total;
+          }, 0);
+        };
+
+        const BONIFICATION_SUM_FIELDS = [
+          'total',
+          'discount',
+          'freight',
+          'other',
+          'icmsBase',
+          'icmsValue',
+          'icmsStValue',
+          'fcpValue',
+          'fcpStValue',
+          'fcpStRetainedValue',
+          'ipiBase',
+          'ipiValue',
+          'iiValue',
+          'pisBase',
+          'pisValue',
+          'cofinsBase',
+          'cofinsValue',
+        ];
+
+        const addNumericFieldValue = (target, source, field) => {
+          if (!target || !source) return;
+          const baseValue = toNumeric(target[field]);
+          const addition = toNumeric(source[field]);
+          if (!Number.isFinite(addition) || Math.abs(addition) <= 0) return;
+          const current = Number.isFinite(baseValue) ? baseValue : 0;
+          const next = current + addition;
+          target[field] = Math.abs(next) <= 0.000001 ? 0 : next;
+        };
+
+        const mergeBonificationGroupIntoBase = (group) => {
+          if (!group || !group.sales.length || !group.bonuses.length) {
+            return null;
+          }
+
+          const base = group.sales[0];
+          const additionalSales = group.sales.slice(1);
+          const regularQuantity = toNumeric(base.quantity) || 0;
+          const regularEntryStock = resolveEntryStockForBonification(base);
+          const bonusQuantity = sumBonificationValues(group.bonuses, (item) => item?.quantity);
+          const bonusEntryStock = sumBonificationValues(group.bonuses, (item) =>
+            resolveEntryStockForBonification(item)
+          );
+
+          BONIFICATION_SUM_FIELDS.forEach((field) => {
+            group.bonuses.forEach((bonus) => addNumericFieldValue(base, bonus, field));
+          });
+
+          const combinedQuantity = regularQuantity + bonusQuantity;
+          if (Number.isFinite(combinedQuantity)) {
+            base.quantity = combinedQuantity;
+          }
+
+          const combinedEntryStock = regularEntryStock + bonusEntryStock;
+          if (Number.isFinite(combinedEntryStock)) {
+            base.entryStockQuantity = combinedEntryStock;
+          }
+
+          const regularCfops = Array.from(
+            new Set(
+              [base.cfop, ...additionalSales.map((item) => item?.cfop)]
+                .map((code) => normalizeCfopCode(code))
+                .filter(Boolean)
+            )
+          );
+          const bonusCfops = Array.from(
+            new Set(group.bonuses.map((item) => normalizeCfopCode(item?.cfop)).filter(Boolean))
+          );
+
+          base.bonificationInfo = {
+            hasBonification: true,
+            regularQuantity,
+            bonusQuantity,
+            combinedQuantity: Number.isFinite(combinedQuantity) ? combinedQuantity : regularQuantity,
+            regularEntryStock,
+            bonusEntryStock,
+            combinedEntryStock: Number.isFinite(combinedEntryStock)
+              ? combinedEntryStock
+              : regularEntryStock,
+            regularCfops,
+            bonusCfops,
+          };
+          base.cfopClassification = 'venda-bonificada';
+          base.hasBonificationMerge = true;
+
+          ensureItemCostWithTaxes(base, { skipTaxComputation: base?.skipTaxComputation });
+
+          return base;
+        };
+
+        const mergeItemsWithBonification = (items) => {
+          if (!Array.isArray(items) || !items.length) return Array.isArray(items) ? items : [];
+
+          const bonusCfopsSet = resolveConfiguredBonusCfops();
+          const unknownCfops = new Set();
+          const groupsMap = new Map();
+
+          items.forEach((item) => {
+            const normalizedCfop = normalizeCfopCode(item?.cfop);
+            if (normalizedCfop) {
+              item.cfop = normalizedCfop;
+            }
+            const classification = classifyCfopForBonification(normalizedCfop, bonusCfopsSet);
+            item.cfopClassification = classification;
+            if (
+              classification === 'indefinido' &&
+              normalizedCfop &&
+              !CFOP_SALE_WITHOUT_ST_CODES.has(normalizedCfop) &&
+              !CFOP_SALE_WITH_ST_CODES.has(normalizedCfop) &&
+              !bonusCfopsSet.has(normalizedCfop)
+            ) {
+              unknownCfops.add(normalizedCfop);
+            }
+
+            ensureItemCostWithTaxes(item, { skipTaxComputation: item?.skipTaxComputation });
+
+            const key = buildBonificationGroupKey(item) ||
+              `INDEX:${Number.isFinite(item?.index) ? item.index : groupsMap.size}`;
+            let group = groupsMap.get(key);
+            if (!group) {
+              group = { key, items: [], bonuses: [], sales: [], others: [], orderIndex: 0, mergedBase: null };
+              groupsMap.set(key, group);
+            }
+            group.items.push(item);
+            if (classification === 'bonificacao') {
+              group.bonuses.push(item);
+            } else if (
+              classification === 'venda-sem-st' ||
+              classification === 'venda-com-st' ||
+              classification === 'venda-bonificada'
+            ) {
+              group.sales.push(item);
+            } else {
+              group.others.push(item);
+            }
+          });
+
+          const orderedGroups = Array.from(groupsMap.values()).map((group) => {
+            group.items.sort(compareByOriginalIndex);
+            group.sales.sort(compareByOriginalIndex);
+            group.bonuses.sort(compareByOriginalIndex);
+            group.others.sort(compareByOriginalIndex);
+            group.orderIndex =
+              group.items.length && Number.isFinite(group.items[0]?.index) ? group.items[0].index : 0;
+            if (group.sales.length && group.bonuses.length) {
+              group.mergedBase = mergeBonificationGroupIntoBase(group);
+            }
+            return group;
+          });
+
+          orderedGroups.sort((a, b) => a.orderIndex - b.orderIndex);
+
+          const mergedItems = [];
+
+          orderedGroups.forEach((group) => {
+            if (group.sales.length && group.bonuses.length && group.mergedBase) {
+              const mergedSet = new Set(group.bonuses);
+              group.items.forEach((item) => {
+                if (mergedSet.has(item)) return;
+                if (item === group.mergedBase) {
+                  mergedItems.push(group.mergedBase);
+                } else {
+                  mergedItems.push(item);
+                }
+              });
+            } else {
+              mergedItems.push(...group.items);
+            }
+          });
+
+          if (unknownCfops.size) {
+            const codesList = Array.from(unknownCfops).sort().join(', ');
+            notify(
+              `CFOP(s) sem classificação no mapa de bonificação: ${codesList}. Esses itens foram tratados como indefinidos.`,
+              'warning'
+            );
+          }
+
+          return mergedItems;
         };
 
         const resolveActiveSupplierInfo = (nfeData) => {
@@ -3647,6 +3999,188 @@
 
           productSupplierLinkPromises.set(cacheKey, requestPromise);
           return requestPromise;
+        };
+
+        const computeSupplierFactorAdjustment = (item, nfeData) => {
+          if (!item || !item.matchedProduct) return null;
+
+          const toNumeric = (value) => (Number.isFinite(value) ? value : parseNumber(value));
+          const targetFactor = toNumeric(item?.conversion);
+          if (!Number.isFinite(targetFactor) || targetFactor <= 0) {
+            return null;
+          }
+
+          let baseFactor = getBaseConversionFactor(item);
+          if (!Number.isFinite(baseFactor) || baseFactor <= 0) {
+            baseFactor = 1;
+          }
+
+          const supplierEntry = findSupplierEntryForProduct(item.matchedProduct, item, nfeData);
+          const existingType = canonicalSupplierCalcType(supplierEntry?.tipoCalculo);
+          const existingValue = parseSupplierCalcValue(supplierEntry?.valorCalculo);
+
+          if (existingType && Number.isFinite(existingValue)) {
+            const computedFactor = (() => {
+              if (existingType === 'divide') {
+                return existingValue > 0 ? baseFactor / existingValue : null;
+              }
+              return baseFactor * existingValue;
+            })();
+            if (
+              Number.isFinite(computedFactor) &&
+              Math.abs(computedFactor - targetFactor) <= FACTOR_COMPARISON_TOLERANCE
+            ) {
+              return null;
+            }
+          }
+
+          let ratio = targetFactor / baseFactor;
+          let calcType = 'multiply';
+
+          if (!Number.isFinite(ratio) || ratio <= 0) {
+            if (targetFactor <= 0) {
+              return null;
+            }
+            ratio = baseFactor / targetFactor;
+            calcType = 'divide';
+          }
+
+          if (!Number.isFinite(ratio) || ratio <= 0) {
+            return null;
+          }
+
+          const normalizedRatio = Number.parseFloat(ratio.toFixed(6));
+          if (!Number.isFinite(normalizedRatio) || normalizedRatio <= 0) {
+            return null;
+          }
+
+          if (
+            existingType &&
+            existingType === calcType &&
+            Number.isFinite(existingValue) &&
+            Math.abs(existingValue - normalizedRatio) <= FACTOR_COMPARISON_TOLERANCE
+          ) {
+            return null;
+          }
+
+          return {
+            calcType,
+            calcValue: normalizedRatio,
+            supplierEntry,
+            targetFactor,
+            baseFactor,
+          };
+        };
+
+        const updateSupplierFactorForItem = (item, nfeData) => {
+          if (!item || !item.matchedProduct) return null;
+
+          const productId = getProductIdFromRecord(item.matchedProduct);
+          if (!productId) return null;
+
+          const supplierInfo = resolveActiveSupplierInfo(nfeData);
+          const supplierName = typeof supplierInfo.name === 'string' ? supplierInfo.name.trim() : '';
+          if (!supplierName) return null;
+
+          const supplierCode = canonicalSupplierProductCode(item?.supplierCode);
+          if (!supplierCode) return null;
+
+          const adjustment = computeSupplierFactorAdjustment(item, nfeData);
+          if (!adjustment) return null;
+
+          const cacheKey = [productId, supplierCode, adjustment.calcType, adjustment.calcValue].join('::');
+          if (supplierFactorUpdatePromises.has(cacheKey)) {
+            return supplierFactorUpdatePromises.get(cacheKey);
+          }
+
+          const headers = buildAuthHeaders();
+          headers.set('Content-Type', 'application/json');
+
+          const payload = {
+            fornecedor: supplierName,
+            codigoProduto: item?.supplierCode || '',
+            nomeProdutoFornecedor: item?.description || '',
+            unidadeEntrada: item?.unit || item?.unitTrib || '',
+            documentoFornecedor: supplierInfo.document || '',
+            tipoCalculo: adjustment.calcType,
+            valorCalculo: adjustment.calcValue,
+          };
+
+          const requestPromise = (async () => {
+            const response = await fetch(`${apiBaseUrl}/products/${productId}/suppliers/link`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(payload),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              const contextLabel =
+                item?.matchedProduct?.nome || item?.description || item?.supplierCode || 'produto';
+              const message = result?.message || `Falha ao atualizar o fator do ${contextLabel}.`;
+              throw new Error(message);
+            }
+
+            if (Array.isArray(result?.fornecedores)) {
+              item.matchedProduct.fornecedores = result.fornecedores;
+            } else if (result?.fornecedor) {
+              const current = Array.isArray(item.matchedProduct.fornecedores)
+                ? [...item.matchedProduct.fornecedores]
+                : [];
+              const normalizedCode = canonicalSupplierProductCode(result.fornecedor?.codigoProduto);
+              const normalizedName = canonicalSupplierName(result.fornecedor?.fornecedor);
+              let replaced = false;
+              const updatedList = current.map((entry) => {
+                const entryCode = canonicalSupplierProductCode(entry?.codigoProduto);
+                const entryName = canonicalSupplierName(entry?.fornecedor);
+                if (!replaced && entryCode === normalizedCode && entryName === normalizedName) {
+                  replaced = true;
+                  return result.fornecedor;
+                }
+                return entry;
+              });
+              if (!replaced) {
+                updatedList.push(result.fornecedor);
+              }
+              item.matchedProduct.fornecedores = updatedList;
+            }
+
+            item.manualConversionOverride = false;
+            item.supplierAppliedConversion = {
+              type: adjustment.calcType,
+              value: adjustment.calcValue,
+              factor: adjustment.targetFactor,
+              baseFactor: adjustment.baseFactor,
+              supplierCode,
+              supplierName,
+            };
+
+            return result;
+          })()
+            .catch((error) => {
+              throw error;
+            })
+            .finally(() => {
+              supplierFactorUpdatePromises.delete(cacheKey);
+            });
+
+          supplierFactorUpdatePromises.set(cacheKey, requestPromise);
+          return requestPromise;
+        };
+
+        const syncSupplierFactorsForItems = async (items, nfeData) => {
+          if (!Array.isArray(items) || !items.length) return;
+          const promises = [];
+          items.forEach((item) => {
+            if (item?.validationStatus !== 'matched' || !item?.matchedProduct) {
+              return;
+            }
+            const updatePromise = updateSupplierFactorForItem(item, nfeData);
+            if (updatePromise && typeof updatePromise.then === 'function') {
+              promises.push(updatePromise);
+            }
+          });
+          if (!promises.length) return;
+          await Promise.all(promises);
         };
 
         const normalizeInternalCode = (value) => {
@@ -5107,6 +5641,59 @@
           return button;
         };
 
+        const buildBonificationIndicator = (item) => {
+          const info = item?.bonificationInfo;
+          if (!info?.hasBonification) return null;
+
+          const indicator = document.createElement('span');
+          indicator.className =
+            'inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-700';
+          indicator.textContent = '!';
+
+          const tooltipLines = [];
+          if (Number.isFinite(info.bonusQuantity)) {
+            tooltipLines.push(`Qtd bonificada: ${formatQuantity(info.bonusQuantity)}`);
+          }
+          if (Number.isFinite(info.regularQuantity)) {
+            tooltipLines.push(`Qtd não bonificada: ${formatQuantity(info.regularQuantity)}`);
+          }
+          if (Array.isArray(info.bonusCfops) && info.bonusCfops.length) {
+            tooltipLines.push(`CFOP bonificação: ${info.bonusCfops.join(', ')}`);
+          }
+          if (Array.isArray(info.regularCfops) && info.regularCfops.length) {
+            tooltipLines.push(`CFOP venda: ${info.regularCfops.join(', ')}`);
+          }
+
+          const tooltipText = tooltipLines.length
+            ? tooltipLines.join('\n')
+            : 'Item com quantidades bonificadas agregadas.';
+          indicator.title = tooltipText;
+          indicator.setAttribute('aria-label', tooltipLines.length ? tooltipLines.join(' · ') : tooltipText);
+
+          return indicator;
+        };
+
+        const buildInternalCodeCell = (item) => {
+          const cell = document.createElement('td');
+          cell.className = 'px-2 py-1.5 font-semibold text-gray-700 whitespace-nowrap';
+
+          const wrapper = document.createElement('div');
+          wrapper.className = 'inline-flex items-center gap-1';
+
+          const codeValue = normalizeInternalCode(item?.internalCode) || '—';
+          const codeSpan = document.createElement('span');
+          codeSpan.textContent = codeValue;
+          wrapper.appendChild(codeSpan);
+
+          const indicator = buildBonificationIndicator(item);
+          if (indicator) {
+            wrapper.appendChild(indicator);
+          }
+
+          cell.appendChild(wrapper);
+          return cell;
+        };
+
         const buildStatusCell = (item) => {
           const cell = document.createElement('td');
           cell.className = 'px-2 py-1.5 bg-white sticky left-0 z-10 whitespace-nowrap';
@@ -5618,7 +6205,7 @@
             key: 'internalCode',
             label: 'Cod. Interno (SKU)',
             headerClass: 'px-2 py-1.5 text-left',
-            cellClass: 'px-2 py-1.5 font-semibold text-gray-700 whitespace-nowrap',
+            renderCell: (item) => buildInternalCodeCell(item),
             getDisplayText: (item) => normalizeInternalCode(item?.internalCode) || '—',
           },
           {
@@ -7368,7 +7955,16 @@
 
             const codeCell = document.createElement('td');
             codeCell.className = 'px-4 py-3 text-gray-600';
-            codeCell.textContent = displays.code;
+            const codeWrapper = document.createElement('div');
+            codeWrapper.className = 'inline-flex items-center gap-1';
+            const codeSpan = document.createElement('span');
+            codeSpan.textContent = displays.code;
+            codeWrapper.appendChild(codeSpan);
+            const mainIndicator = buildBonificationIndicator(item);
+            if (mainIndicator) {
+              codeWrapper.appendChild(mainIndicator);
+            }
+            codeCell.appendChild(codeWrapper);
 
             const descriptionCell = document.createElement('td');
             descriptionCell.className = 'px-4 py-3 text-gray-700';
@@ -8304,6 +8900,8 @@
 
           alignItemsWithTotals(items, totalsData, { skipTaxComputation: shouldSkipTaxComputation });
 
+          const processedItems = mergeItemsWithBonification(items);
+
           return {
             accessKey,
             ambient: getText(ide, 'tpAmb'),
@@ -8371,7 +8969,7 @@
             payments,
             duplicates,
             references,
-            items,
+            items: processedItems,
           };
         };
 
@@ -8742,7 +9340,16 @@
 
         const confirmImportButton = importModal.querySelector('[data-confirm-import]');
         if (confirmImportButton) {
-          confirmImportButton.addEventListener('click', (event) => {
+          const disableConfirmButton = () => {
+            confirmImportButton.disabled = true;
+            confirmImportButton.classList.add('cursor-wait', 'opacity-60');
+          };
+          const restoreConfirmButton = () => {
+            confirmImportButton.disabled = false;
+            confirmImportButton.classList.remove('cursor-wait', 'opacity-60');
+          };
+
+          confirmImportButton.addEventListener('click', async (event) => {
             event.preventDefault();
             if (!lastNfeData) {
               notify('Importe um XML autorizado antes de aplicar os dados na nota.', 'warning');
@@ -8766,6 +9373,21 @@
               return;
             }
 
+            disableConfirmButton();
+
+            try {
+              await syncSupplierFactorsForItems(items, lastNfeData);
+            } catch (error) {
+              console.error('Erro ao atualizar fator dos produtos cadastrados:', error);
+              notify(
+                error?.message ||
+                  'Não foi possível atualizar o fator dos produtos no cadastro. Tente novamente.',
+                'error'
+              );
+              restoreConfirmButton();
+              return;
+            }
+
             try {
               applyImportedDataToMainForm(lastNfeData);
               notify('Dados do XML aplicados à entrada da nota.', 'success');
@@ -8773,6 +9395,8 @@
             } catch (error) {
               console.error('Erro ao aplicar dados importados na nota:', error);
               notify('Não foi possível aplicar os dados do XML na nota. Tente novamente.', 'error');
+            } finally {
+              restoreConfirmButton();
             }
           });
         }
