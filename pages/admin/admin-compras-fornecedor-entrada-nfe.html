@@ -2273,7 +2273,16 @@
                 ? effectiveTotal / quantityForCost
                 : null;
 
-            const unitCost = Number.isFinite(unitPriceValue) && unitPriceValue >= 0
+            const shouldPrioritizeComputedCost =
+              Number.isFinite(entryStockQuantity) && entryStockQuantity > 0;
+
+            const unitCost = shouldPrioritizeComputedCost
+              ? Number.isFinite(computedUnitCost) && computedUnitCost >= 0
+                ? computedUnitCost
+                : Number.isFinite(unitPriceValue) && unitPriceValue >= 0
+                ? unitPriceValue
+                : null
+              : Number.isFinite(unitPriceValue) && unitPriceValue >= 0
               ? unitPriceValue
               : Number.isFinite(computedUnitCost) && computedUnitCost >= 0
               ? computedUnitCost
