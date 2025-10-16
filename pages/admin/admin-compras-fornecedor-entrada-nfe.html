@@ -2325,7 +2325,12 @@
           const { skipTaxComputation = false } = options;
 
           if (skipTaxComputation) {
-            items.forEach((item) => ensureItemCostWithTaxes(item, options));
+            items.forEach((item) => {
+              if (typeof ensureConversionDefaults === 'function') {
+                ensureConversionDefaults(item);
+              }
+              ensureItemCostWithTaxes(item, options);
+            });
             return;
           }
 
