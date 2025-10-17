@@ -92,15 +92,6 @@
               <label for="nfe-series" class="block text-sm font-medium text-gray-700 mb-1">Série</label>
               <input type="text" id="nfe-series" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1">
             </div>
-            <div>
-              <label for="nfe-protocol" class="block text-sm font-medium text-gray-700 mb-1">Protocolo SEFAZ</label>
-              <input type="text" id="nfe-protocol" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="35240784593211000160550010004273341431819234">
-              <p class="mt-1 text-xs text-gray-500">Número conforme retorno da autorização na SEFAZ.</p>
-            </div>
-            <div class="lg:col-span-2">
-              <label for="nfe-reference" class="block text-sm font-medium text-gray-700 mb-1">Referência Fiscal</label>
-              <input type="text" id="nfe-reference" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="NF-e emitida pela SEFAZ/SP em ambiente de produção">
-            </div>
           </div>
         </section>
 
@@ -112,7 +103,6 @@
             <button type="button" class="tab-button" data-tab="produtos">Produtos</button>
             <button type="button" class="tab-button" data-tab="transportadora">Transportadora</button>
             <button type="button" class="tab-button" data-tab="duplicatas">Duplicatas</button>
-            <button type="button" class="tab-button" data-tab="ajustes">Débitos e Créditos</button>
             <button type="button" class="tab-button" data-tab="documentos">Documentos Vinculados</button>
           </nav>
 
@@ -161,47 +151,6 @@
                     <option value="industrializacao">Industrialização</option>
                     <option value="consumo">Uso e Consumo</option>
                     <option value="imobilizado">Ativo Imobilizado</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="natureza-operacao" class="block text-sm font-medium text-gray-700 mb-1">Natureza da Operação (NatOp)</label>
-                  <input type="text" id="natureza-operacao" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.102 - Compra para comercialização">
-                </div>
-                <div>
-                  <label for="cfop" class="block text-sm font-medium text-gray-700 mb-1">CFOP padrão da entrada</label>
-                  <input type="text" id="cfop" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.102">
-                </div>
-                <div>
-                  <label for="finalidade" class="block text-sm font-medium text-gray-700 mb-1">Finalidade da NFe</label>
-                  <select id="finalidade" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="normal" selected>Normal</option>
-                    <option value="devolucao">Devolução</option>
-                    <option value="ajuste">Ajuste</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="indicador-presenca" class="block text-sm font-medium text-gray-700 mb-1">Indicador de Presença (indPres)</label>
-                  <select id="indicador-presenca" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="0">0 – Não se aplica (NF-e)</option>
-                    <option value="1">1 – Operação presencial</option>
-                    <option value="2">2 – Internet</option>
-                    <option value="3">3 – Teleatendimento</option>
-                    <option value="4">4 – Entrega em domicílio</option>
-                    <option value="5">5 – Operação presencial fora do estabelecimento</option>
-                    <option value="9">9 – Operação não presencial, outros</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="tipo-emissao" class="block text-sm font-medium text-gray-700 mb-1">Tipo de Emissão (tpEmis)</label>
-                  <select id="tipo-emissao" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="1" selected>1 – Emissão normal</option>
-                    <option value="2">2 – Contingência FS-IA</option>
-                    <option value="3">3 – Contingência SCAN</option>
-                    <option value="4">4 – Contingência DPEC</option>
-                    <option value="5">5 – Contingência FS-DA</option>
-                    <option value="6">6 – Contingência SVC-AN</option>
-                    <option value="7">7 – Contingência SVC-RS</option>
-                    <option value="9">9 – Contingência off-line da NFC-e</option>
                   </select>
                 </div>
               </div>
@@ -933,81 +882,6 @@
                       <td class="px-4 py-3 text-center text-gray-500" colspan="8">
                         Nenhuma duplicata foi informada no XML.
                       </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div class="tab-panel hidden" data-tab-panel="ajustes">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label for="origem" class="block text-sm font-medium text-gray-700 mb-1">Origem</label>
-                  <select id="origem" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="nacional" selected>Nacional</option>
-                    <option value="importada-direta">Importada - Adquirida no exterior</option>
-                    <option value="importada-interna">Importada - Adquirida no mercado interno</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="cst" class="block text-sm font-medium text-gray-700 mb-1">CST</label>
-                  <input type="text" id="cst" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="090">
-                </div>
-                <div>
-                  <label for="base-calculo" class="block text-sm font-medium text-gray-700 mb-1">Base de Cálculo (R$)</label>
-                  <input type="number" step="0.01" id="base-calculo" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                </div>
-                <div>
-                  <label for="aliquota" class="block text-sm font-medium text-gray-700 mb-1">Alíquota (%)</label>
-                  <input type="number" step="0.01" id="aliquota" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                </div>
-                <div>
-                  <label for="valor-ajuste" class="block text-sm font-medium text-gray-700 mb-1">Valor do Ajuste (R$)</label>
-                  <input type="number" step="0.01" id="valor-ajuste" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                </div>
-                <div>
-                  <label for="motivo-ajuste" class="block text-sm font-medium text-gray-700 mb-1">Motivo</label>
-                  <input type="text" id="motivo-ajuste" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Táxi">
-                </div>
-                <div>
-                  <label for="codigo-ajuste" class="block text-sm font-medium text-gray-700 mb-1">Código do Ajuste (F2)</label>
-                  <input type="text" id="codigo-ajuste" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="RJ090000">
-                </div>
-              </div>
-
-              <div class="mt-6 flex flex-wrap gap-3">
-                <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
-                  <i class="fas fa-plus"></i>
-                  Adicionar
-                </button>
-                <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-                  <i class="fas fa-eraser"></i>
-                  Limpar
-                </button>
-              </div>
-
-              <div class="mt-4 overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead class="bg-gray-50">
-                    <tr>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Origem</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">CST</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Base de Cálculo (R$)</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Alíquota (%)</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Valor do Ajuste (R$)</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Motivo</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Código do Ajuste</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 bg-white">
-                    <tr>
-                      <td class="px-4 py-3 text-gray-600">Nacional</td>
-                      <td class="px-4 py-3 text-gray-600">090</td>
-                      <td class="px-4 py-3 text-gray-600">R$ 1.500,00</td>
-                      <td class="px-4 py-3 text-gray-600">18%</td>
-                      <td class="px-4 py-3 text-gray-600">R$ 270,00</td>
-                      <td class="px-4 py-3 text-gray-600">Táxi</td>
-                      <td class="px-4 py-3 text-gray-600">RJ090000</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1841,15 +1715,10 @@
         const companySelect = document.getElementById('company');
         const nfeNumberInput = document.getElementById('nfe-number');
         const nfeSeriesInput = document.getElementById('nfe-series');
-        const nfeProtocolInput = document.getElementById('nfe-protocol');
-        const nfeReferenceInput = document.getElementById('nfe-reference');
         const issueDateInput = document.getElementById('issue-date');
         const entryDateInput = document.getElementById('entry-date');
         const nfeModelSelect = document.getElementById('nfe-model');
         const nfeTypeSelect = document.getElementById('nfe-type');
-        const tipoEmissaoSelect = document.getElementById('tipo-emissao');
-        const finalidadeSelect = document.getElementById('finalidade');
-        const indicadorPresencaSelect = document.getElementById('indicador-presenca');
         const depositSelect = document.getElementById('deposit');
         const importAccessKeyInput = document.getElementById('import-access-key');
         const accessKeyInput = document.getElementById('access-key');
@@ -7410,15 +7279,12 @@
           if (!data) return;
           if (nfeNumberInput && data.ide?.number) nfeNumberInput.value = data.ide.number;
           if (nfeSeriesInput) nfeSeriesInput.value = data.ide?.serie || '';
-          if (nfeProtocolInput) nfeProtocolInput.value = data.protocol?.number || '';
-          if (nfeReferenceInput) nfeReferenceInput.value = data.ide?.natOp || '';
           const emission = normalizeDate(data.ide?.emissionDate);
           if (issueDateInput) issueDateInput.value = emission.dateInput || '';
           const entry = normalizeDate(data.ide?.entryDate);
           if (entryDateInput) entryDateInput.value = entry.dateInput || '';
           if (nfeModelSelect && data.ide?.model) setSelectValue(nfeModelSelect, data.ide.model);
           if (nfeTypeSelect) setSelectValue(nfeTypeSelect, mapModelToType(data.ide?.model));
-          if (tipoEmissaoSelect && data.ide?.tpEmis) setSelectValue(tipoEmissaoSelect, data.ide.tpEmis);
           if (accessKeyInput && data.accessKey) accessKeyInput.value = data.accessKey;
           if (importAccessKeyInput && data.accessKey) importAccessKeyInput.value = data.accessKey;
           if (companySelect) {
@@ -8712,8 +8578,6 @@
           const inputsToReset = [
             nfeNumberInput,
             nfeSeriesInput,
-            nfeProtocolInput,
-            nfeReferenceInput,
             issueDateInput,
             entryDateInput,
             importAccessKeyInput,
@@ -8763,9 +8627,6 @@
             { element: bankAccountSelect, value: '' },
             { element: nfeModelSelect, value: '55' },
             { element: nfeTypeSelect, value: 'NF' },
-            { element: tipoEmissaoSelect, value: '1' },
-            { element: finalidadeSelect, value: 'normal' },
-            { element: indicadorPresencaSelect, value: '0' },
             { element: depositSelect, value: '' },
             { element: transportUfSelect, value: '' },
             { element: transportPlateUfSelect, value: '' },
