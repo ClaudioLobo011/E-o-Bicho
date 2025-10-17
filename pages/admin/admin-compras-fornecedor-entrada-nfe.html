@@ -904,7 +904,11 @@
               </div>
 
               <div class="mt-6 flex flex-wrap items-center gap-3">
-                <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition"
+                  data-nfe-duplicatas-generate
+                >
                   <i class="fas fa-calculator"></i>
                   Gerar
                 </button>
@@ -1884,6 +1888,7 @@
         const duplicataDaysInput = document.getElementById('dias');
         const duplicataInitialDaysInput = document.getElementById('dias-vencimento');
         const duplicataDaysTypeSelect = document.getElementById('tipo-dias');
+        const duplicataGenerateButton = document.querySelector('[data-nfe-duplicatas-generate]');
         const bankAccountSelect = document.getElementById('conta-corrente');
         const accountingAccountInput = document.getElementById('conta-contabil');
         const paymentConditionInput = document.getElementById('condicao-pagamento');
@@ -7701,6 +7706,273 @@
           duplicatasTableBody.appendChild(fragment);
         };
 
+        const resolveDuplicataManualTotalAmount = () => {
+          const candidates = [];
+
+          if (lastNfeData?.totals) {
+            candidates.push(toNumeric(lastNfeData.totals.totalValue));
+            candidates.push(toNumeric(lastNfeData.totals.products));
+          }
+
+          if (Array.isArray(lastNfeData?.duplicates) && lastNfeData.duplicates.length) {
+            const duplicatesSum = lastNfeData.duplicates.reduce((sum, duplicate) => {
+              const value = toNumeric(duplicate?.value);
+              return Number.isFinite(value) ? sum + value : sum;
+            }, 0);
+            if (Number.isFinite(duplicatesSum) && duplicatesSum > 0) {
+              candidates.push(duplicatesSum);
+            }
+          }
+
+          if (totalsProductsInput && totalsProductsInput.value) {
+            const productsTotal = toNumeric(totalsProductsInput.value);
+            if (Number.isFinite(productsTotal) && productsTotal > 0) {
+              candidates.push(productsTotal);
+            }
+          }
+
+          for (const candidate of candidates) {
+            if (Number.isFinite(candidate) && Math.abs(candidate) > 0) {
+              return Math.abs(candidate);
+            }
+          }
+
+          return null;
+        };
+
+        const resolveDuplicataBaseDate = () => {
+          const emissionFromField = normalizeDate(duplicataEmissionInput?.value || '');
+          if (emissionFromField.dateInput) {
+            return emissionFromField.dateInput;
+          }
+
+          const emissionFromData = normalizeDate(lastNfeData?.ide?.emissionDate || '');
+          if (emissionFromData.dateInput) {
+            return emissionFromData.dateInput;
+          }
+
+          const entryFromData = normalizeDate(lastNfeData?.ide?.entryDate || '');
+          if (entryFromData.dateInput) {
+            return entryFromData.dateInput;
+          }
+
+          const issueFromInput = normalizeDate(issueDateInput?.value || '');
+          if (issueFromInput.dateInput) {
+            return issueFromInput.dateInput;
+          }
+
+          const entryFromInput = normalizeDate(entryDateInput?.value || '');
+          if (entryFromInput.dateInput) {
+            return entryFromInput.dateInput;
+          }
+
+          return '';
+        };
+
+        const generateDuplicatasPreviewFromInputs = () => {
+          if (!duplicataCountInput) {
+            return;
+          }
+
+          if (!lastNfeData) {
+            notify('Importe uma NF-e antes de gerar as duplicatas.', 'warning');
+            return;
+          }
+
+          const parcelsRaw = duplicataCountInput.value ? Number.parseInt(duplicataCountInput.value, 10) : NaN;
+          if (!Number.isFinite(parcelsRaw) || parcelsRaw <= 0) {
+            notify('Informe uma quantidade de parcelas válida para gerar as duplicatas.', 'warning');
+            duplicataCountInput.focus();
+            return;
+          }
+
+          const totalAmount = resolveDuplicataManualTotalAmount();
+          if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+            notify('Não foi possível determinar o valor total da nota para gerar as duplicatas.', 'warning');
+            return;
+          }
+
+          const typeValue = duplicataDaysTypeSelect ? duplicataDaysTypeSelect.value || 'dias' : 'dias';
+          const baseDateInput = resolveDuplicataBaseDate();
+
+          const firstDueInfo = normalizeDate(duplicataFirstDueInput?.value || '');
+          const initialDaysRaw = duplicataInitialDaysInput?.value
+            ? Number.parseInt(duplicataInitialDaysInput.value, 10)
+            : NaN;
+          const intervalDaysRaw = duplicataDaysInput?.value
+            ? Number.parseInt(duplicataDaysInput.value, 10)
+            : NaN;
+
+          if (Number.isFinite(initialDaysRaw) && initialDaysRaw < 0) {
+            notify('Os dias para o primeiro vencimento devem ser maiores ou iguais a zero.', 'warning');
+            duplicataInitialDaysInput?.focus();
+            return;
+          }
+
+          if (Number.isFinite(intervalDaysRaw) && intervalDaysRaw < 0) {
+            notify('Informe um intervalo de dias maior ou igual a zero para as duplicatas.', 'warning');
+            duplicataDaysInput?.focus();
+            return;
+          }
+
+          const hasInitialDays = Number.isFinite(initialDaysRaw);
+          const hasIntervalDays = Number.isFinite(intervalDaysRaw);
+
+          let firstDueDate = firstDueInfo.dateInput || '';
+          if (!firstDueDate && baseDateInput && hasInitialDays) {
+            firstDueDate = addDaysToDateInput(baseDateInput, initialDaysRaw) || '';
+          }
+          if (!firstDueDate && baseDateInput && hasIntervalDays) {
+            firstDueDate = addDaysToDateInput(baseDateInput, intervalDaysRaw) || '';
+          }
+
+          if (!firstDueDate) {
+            notify('Informe um vencimento inicial ou os dias necessários para calcular as duplicatas.', 'warning');
+            duplicataFirstDueInput?.focus();
+            return;
+          }
+
+          let resolvedStepDays = Number.isFinite(intervalDaysRaw) ? intervalDaysRaw : null;
+          if (!Number.isFinite(resolvedStepDays)) {
+            if (Number.isFinite(initialDaysRaw)) {
+              resolvedStepDays = initialDaysRaw;
+            } else if (baseDateInput) {
+              const diff = computeDateDiffInDays(baseDateInput, firstDueDate);
+              if (Number.isFinite(diff)) {
+                resolvedStepDays = diff;
+              }
+            }
+          }
+
+          if (parcelsRaw > 1 && (!Number.isFinite(resolvedStepDays) || resolvedStepDays < 0)) {
+            resolvedStepDays = 30;
+          }
+
+          const firstTermCandidate = baseDateInput && firstDueDate ? computeDateDiffInDays(baseDateInput, firstDueDate) : null;
+          let currentTermDays = Number.isFinite(firstTermCandidate)
+            ? firstTermCandidate
+            : Number.isFinite(initialDaysRaw)
+            ? initialDaysRaw
+            : null;
+
+          const totalCents = Math.round(totalAmount * 100);
+          const baseShare = Math.floor(totalCents / parcelsRaw);
+          let remainder = totalCents - baseShare * parcelsRaw;
+
+          const normalizedBankAccount = bankAccountSelect && bankAccountSelect.value ? String(bankAccountSelect.value) : '';
+          lastNfeData.selectedBankAccountId = normalizedBankAccount || pendingBankAccountId || '';
+
+          const duplicates = [];
+          let currentDueDate = firstDueDate;
+          const paymentTypeValue = parcelsRaw > 1 ? '1' : '0';
+
+          for (let index = 0; index < parcelsRaw; index += 1) {
+            const valueCents = baseShare + (remainder > 0 ? 1 : 0);
+            if (remainder > 0) {
+              remainder -= 1;
+            }
+
+            const termDaysValue = Number.isFinite(currentTermDays) ? currentTermDays : null;
+            const dueDateValue = currentDueDate || '';
+
+            duplicates.push({
+              index,
+              number: `Parcela ${index + 1}`,
+              dueDate: dueDateValue,
+              originalDueDate: dueDateValue,
+              manualDueDate: dueDateValue,
+              value: valueCents / 100,
+              paymentMethod: '',
+              paymentDescription: 'Gerado manualmente',
+              paymentType: paymentTypeValue,
+              termDays: termDaysValue,
+              bankAccount: normalizedBankAccount ? normalizedBankAccount : null,
+            });
+
+            if (index < parcelsRaw - 1) {
+              const step = Number.isFinite(intervalDaysRaw) ? intervalDaysRaw : resolvedStepDays;
+              const increment = Number.isFinite(step) ? step : 0;
+
+              if (currentDueDate && Number.isFinite(increment)) {
+                const nextDue = addDaysToDateInput(currentDueDate, increment);
+                if (nextDue) {
+                  currentDueDate = nextDue;
+                }
+              } else if (!currentDueDate && baseDateInput && Number.isFinite(increment)) {
+                const baseOffset = Number.isFinite(currentTermDays) ? currentTermDays + increment : increment;
+                const nextDue = Number.isFinite(baseOffset) ? addDaysToDateInput(baseDateInput, baseOffset) : '';
+                if (nextDue) {
+                  currentDueDate = nextDue;
+                }
+              }
+
+              if (baseDateInput && currentDueDate) {
+                const diff = computeDateDiffInDays(baseDateInput, currentDueDate);
+                if (Number.isFinite(diff)) {
+                  currentTermDays = diff;
+                } else if (Number.isFinite(currentTermDays) && Number.isFinite(increment)) {
+                  currentTermDays += increment;
+                } else if (Number.isFinite(increment)) {
+                  currentTermDays = increment;
+                } else {
+                  currentTermDays = null;
+                }
+              } else if (Number.isFinite(currentTermDays) && Number.isFinite(increment)) {
+                currentTermDays += increment;
+              } else if (Number.isFinite(increment)) {
+                currentTermDays = Number.isFinite(currentTermDays) ? currentTermDays + increment : increment;
+              } else {
+                currentTermDays = null;
+              }
+            }
+          }
+
+          lastNfeData.duplicates = duplicates;
+
+          if (duplicataFirstDueInput) {
+            duplicataFirstDueInput.value = duplicates[0]?.dueDate || '';
+          }
+
+          if (!hasInitialDays && duplicataInitialDaysInput) {
+            const firstTerm = Number.isFinite(duplicates[0]?.termDays) ? duplicates[0].termDays : null;
+            duplicataInitialDaysInput.value = Number.isFinite(firstTerm) ? String(firstTerm) : duplicataInitialDaysInput.value;
+          }
+
+          if (!hasIntervalDays && duplicataDaysInput && parcelsRaw > 1 && Number.isFinite(resolvedStepDays)) {
+            duplicataDaysInput.value = String(resolvedStepDays);
+          }
+
+          if (duplicataDaysTypeSelect) {
+            setSelectValue(duplicataDaysTypeSelect, typeValue);
+          }
+
+          renderDuplicatasFromNfe(duplicates, lastNfeData);
+
+          if (paymentConditionInput) {
+            const baseForDiff = baseDateInput || duplicates[0]?.dueDate || '';
+            const normalizedBase = normalizeDate(baseForDiff).dateInput;
+            if (normalizedBase) {
+              const diffValues = duplicates
+                .map((duplicate) => {
+                  const dueInfo = normalizeDate(duplicate?.dueDate || '');
+                  if (!dueInfo.dateInput) return null;
+                  const diff = computeDateDiffInDays(normalizedBase, dueInfo.dateInput);
+                  return Number.isFinite(diff) ? diff : null;
+                })
+                .filter((value) => value !== null);
+              if (diffValues.length) {
+                paymentConditionInput.value = diffValues.join('/');
+              } else {
+                paymentConditionInput.value = `${parcelsRaw} parcela${parcelsRaw > 1 ? 's' : ''}`;
+              }
+            } else {
+              paymentConditionInput.value = `${parcelsRaw} parcela${parcelsRaw > 1 ? 's' : ''}`;
+            }
+          }
+
+          notify('Pré-visualização das duplicatas atualizada.', 'success');
+        };
+
         const refreshAccountingAccountBindings = () => {
           const account = resolveSupplierAccountingAccount();
           if (accountingAccountInput) {
@@ -9266,6 +9538,18 @@
               lastNfeData.selectedBankAccountId = bankAccountSelect.value || '';
             }
             syncBankAccountWithDuplicates();
+          });
+        }
+
+        if (duplicataGenerateButton) {
+          duplicataGenerateButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            try {
+              generateDuplicatasPreviewFromInputs();
+            } catch (error) {
+              console.error('Erro ao gerar a pré-visualização das duplicatas:', error);
+              notify('Não foi possível gerar a pré-visualização das duplicatas. Verifique os campos e tente novamente.', 'error');
+            }
           });
         }
 
