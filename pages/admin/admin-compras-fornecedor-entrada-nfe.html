@@ -4539,6 +4539,25 @@
           return 'R$ 0,00';
         };
 
+        const parseMoneyInputValue = (value) => {
+          if (value === null || typeof value === 'undefined') return null;
+          const raw = String(value).trim();
+          if (!raw) return null;
+
+          const cleaned = raw
+            .replace(/[^0-9.,-]/g, '')
+            .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+            .replace(',', '.');
+
+          const numeric = Number.parseFloat(cleaned);
+          if (Number.isFinite(numeric)) {
+            return numeric;
+          }
+
+          const fallback = Number.parseFloat(raw.replace(/[^0-9.-]/g, ''));
+          return Number.isFinite(fallback) ? fallback : null;
+        };
+
         const PAYMENT_METHOD_DESCRIPTIONS = {
           '01': 'Dinheiro',
           '02': 'Cheque',
@@ -7653,7 +7672,33 @@
 
             const valueCell = document.createElement('td');
             valueCell.className = 'px-4 py-3 text-right text-gray-800 font-semibold';
-            valueCell.textContent = formatCurrencyBRL(dup?.value);
+            if (!Number.isFinite(toNumeric(dup?.originalValue))) {
+              const originalNumeric = toNumeric(dup?.value);
+              if (Number.isFinite(originalNumeric)) {
+                dup.originalValue = originalNumeric;
+              }
+            }
+            const valueWrapper = document.createElement('div');
+            valueWrapper.className = 'flex items-center justify-end gap-2';
+
+            const currencyLabel = document.createElement('span');
+            currencyLabel.className = 'text-xs font-semibold uppercase text-gray-500';
+            currencyLabel.textContent = 'R$';
+
+            const valueInput = document.createElement('input');
+            valueInput.type = 'text';
+            valueInput.inputMode = 'decimal';
+            valueInput.autocomplete = 'off';
+            valueInput.placeholder = '0,00';
+            valueInput.className =
+              'w-full max-w-[140px] rounded-lg border border-gray-200 px-3 py-2 text-sm text-right font-semibold text-gray-800 focus:border-primary focus:ring-2 focus:ring-primary/20';
+            valueInput.dataset.duplicateValueInput = 'true';
+            valueInput.dataset.duplicateIndex = String(index);
+            const valueNumeric = toNumeric(dup?.value);
+            valueInput.value = Number.isFinite(valueNumeric) ? formatMoneyValue(valueNumeric) : '';
+
+            valueWrapper.append(currencyLabel, valueInput);
+            valueCell.appendChild(valueWrapper);
 
             const observationCell = document.createElement('td');
             observationCell.className = 'px-4 py-3 text-gray-600';
@@ -9566,13 +9611,44 @@
           duplicatasTableBody.addEventListener('change', (event) => {
             const target = event.target;
             if (!(target instanceof HTMLInputElement)) return;
-            if (target.dataset.duplicateDueInput !== 'true') return;
+
+            if (!lastNfeData || !Array.isArray(lastNfeData.duplicates)) return;
 
             const index = Number.parseInt(target.dataset.duplicateIndex || '', 10);
             if (!Number.isFinite(index)) return;
-            if (!lastNfeData || !Array.isArray(lastNfeData.duplicates)) return;
             const duplicate = lastNfeData.duplicates[index];
             if (!duplicate || typeof duplicate !== 'object') return;
+
+            if (target.dataset.duplicateValueInput === 'true') {
+              const previousValue = Number.isFinite(toNumeric(duplicate?.value))
+                ? toNumeric(duplicate.value)
+                : Number.isFinite(toNumeric(duplicate?.originalValue))
+                ? toNumeric(duplicate.originalValue)
+                : null;
+
+              const parsedValue = parseMoneyInputValue(target.value);
+              if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+                if (Number.isFinite(previousValue)) {
+                  target.value = formatMoneyValue(previousValue);
+                } else {
+                  target.value = '';
+                }
+                notify('Informe um valor válido para a parcela selecionada.', 'warning');
+                return;
+              }
+
+              duplicate.value = parsedValue;
+              duplicate.manualValue = parsedValue;
+              if (!Number.isFinite(toNumeric(duplicate.originalValue))) {
+                duplicate.originalValue = parsedValue;
+              }
+
+              target.value = formatMoneyValue(parsedValue);
+              updateDuplicataSummaryFromData(lastNfeData);
+              return;
+            }
+
+            if (target.dataset.duplicateDueInput !== 'true') return;
 
             const newDueValue = target.value || '';
             duplicate.manualDueDate = newDueValue || '';
