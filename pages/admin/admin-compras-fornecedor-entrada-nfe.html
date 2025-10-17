@@ -4674,6 +4674,19 @@
           return adjusted.toISOString().slice(0, 10);
         };
 
+        const addPaymentDaysToDateInput = (baseInput, termDays) => {
+          if (!baseInput || !Number.isFinite(termDays)) return '';
+          const normalizedOffset = termDays > 0 ? termDays - 1 : 0;
+          return addDaysToDateInput(baseInput, normalizedOffset);
+        };
+
+        const computeInclusiveTermDays = (baseInput, dueInput) => {
+          if (!baseInput || !dueInput) return null;
+          const diff = computeDateDiffInDays(baseInput, dueInput);
+          if (!Number.isFinite(diff)) return null;
+          return diff > 0 ? diff + 1 : diff;
+        };
+
         const normalizeDate = (value) => {
           if (!value) {
             return { dateInput: '', display: '', displayDateTime: '' };
@@ -7645,7 +7658,7 @@
             } else if (baseDateInput) {
               const diffBase = dueInfo.dateInput || manualDueInfo.dateInput;
               if (diffBase) {
-                const diff = computeDateDiffInDays(baseDateInput, diffBase);
+                const diff = computeInclusiveTermDays(baseDateInput, diffBase);
                 if (Number.isFinite(diff)) {
                   diffText = String(diff);
                 }
@@ -7664,7 +7677,7 @@
 
             let dueInputInfo = manualDueInfo.dateInput ? manualDueInfo : dueInfo;
             if (!dueInputInfo.dateInput && Number.isFinite(dup?.termDays) && baseDateInput) {
-              const fallbackDueInput = addDaysToDateInput(baseDateInput, dup.termDays);
+              const fallbackDueInput = addPaymentDaysToDateInput(baseDateInput, dup.termDays);
               dueInputInfo = normalizeDate(fallbackDueInput);
             }
             dueInput.value = dueInputInfo.dateInput || '';
@@ -7865,10 +7878,10 @@
 
           let firstDueDate = firstDueInfo.dateInput || '';
           if (!firstDueDate && baseDateInput && hasInitialDays) {
-            firstDueDate = addDaysToDateInput(baseDateInput, initialDaysRaw) || '';
+            firstDueDate = addPaymentDaysToDateInput(baseDateInput, initialDaysRaw) || '';
           }
           if (!firstDueDate && baseDateInput && hasIntervalDays) {
-            firstDueDate = addDaysToDateInput(baseDateInput, intervalDaysRaw) || '';
+            firstDueDate = addPaymentDaysToDateInput(baseDateInput, intervalDaysRaw) || '';
           }
 
           if (!firstDueDate) {
@@ -7882,7 +7895,7 @@
             if (Number.isFinite(initialDaysRaw)) {
               resolvedStepDays = initialDaysRaw;
             } else if (baseDateInput) {
-              const diff = computeDateDiffInDays(baseDateInput, firstDueDate);
+              const diff = computeInclusiveTermDays(baseDateInput, firstDueDate);
               if (Number.isFinite(diff)) {
                 resolvedStepDays = diff;
               }
@@ -7893,7 +7906,9 @@
             resolvedStepDays = 30;
           }
 
-          const firstTermCandidate = baseDateInput && firstDueDate ? computeDateDiffInDays(baseDateInput, firstDueDate) : null;
+          const firstTermDiff =
+            baseDateInput && firstDueDate ? computeInclusiveTermDays(baseDateInput, firstDueDate) : null;
+          const firstTermCandidate = Number.isFinite(firstTermDiff) ? firstTermDiff : null;
           let currentTermDays = Number.isFinite(firstTermCandidate)
             ? firstTermCandidate
             : Number.isFinite(initialDaysRaw)
@@ -7945,14 +7960,16 @@
                 }
               } else if (!currentDueDate && baseDateInput && Number.isFinite(increment)) {
                 const baseOffset = Number.isFinite(currentTermDays) ? currentTermDays + increment : increment;
-                const nextDue = Number.isFinite(baseOffset) ? addDaysToDateInput(baseDateInput, baseOffset) : '';
+                const nextDue = Number.isFinite(baseOffset)
+                  ? addPaymentDaysToDateInput(baseDateInput, baseOffset)
+                  : '';
                 if (nextDue) {
                   currentDueDate = nextDue;
                 }
               }
 
               if (baseDateInput && currentDueDate) {
-                const diff = computeDateDiffInDays(baseDateInput, currentDueDate);
+                const diff = computeInclusiveTermDays(baseDateInput, currentDueDate);
                 if (Number.isFinite(diff)) {
                   currentTermDays = diff;
                 } else if (Number.isFinite(currentTermDays) && Number.isFinite(increment)) {
@@ -8001,7 +8018,7 @@
                 .map((duplicate) => {
                   const dueInfo = normalizeDate(duplicate?.dueDate || '');
                   if (!dueInfo.dateInput) return null;
-                  const diff = computeDateDiffInDays(normalizedBase, dueInfo.dateInput);
+                  const diff = computeInclusiveTermDays(normalizedBase, dueInfo.dateInput);
                   return Number.isFinite(diff) ? diff : null;
                 })
                 .filter((value) => value !== null);
@@ -8512,7 +8529,7 @@
               if (firstDue.dateInput) {
                 duplicataFirstDueInput.value = firstDue.dateInput;
               } else if (Number.isFinite(firstDuplicate?.termDays) && baseDateInput) {
-                const fallbackDue = addDaysToDateInput(baseDateInput, firstDuplicate.termDays);
+                const fallbackDue = addPaymentDaysToDateInput(baseDateInput, firstDuplicate.termDays);
                 duplicataFirstDueInput.value = fallbackDue || '';
               } else {
                 duplicataFirstDueInput.value = '';
@@ -8528,7 +8545,7 @@
                 duplicataInitialDaysInput.value = String(firstDuplicate.termDays);
               } else if (baseDateInput && (firstDue.dateInput || firstManual.dateInput)) {
                 const diffBase = firstDue.dateInput || firstManual.dateInput;
-                const diff = computeDateDiffInDays(baseDateInput, diffBase);
+                const diff = computeInclusiveTermDays(baseDateInput, diffBase);
                 duplicataInitialDaysInput.value = Number.isFinite(diff) ? String(diff) : '';
               } else {
                 duplicataInitialDaysInput.value = '';
@@ -9045,7 +9062,7 @@
             const emissionInfo = normalizeDate(emissionDate);
             const paymentDueInfo = normalizeDate(rawDueDate);
             if (emissionInfo.dateInput && paymentDueInfo.dateInput) {
-              const diff = computeDateDiffInDays(emissionInfo.dateInput, paymentDueInfo.dateInput);
+              const diff = computeInclusiveTermDays(emissionInfo.dateInput, paymentDueInfo.dateInput);
               if (Number.isFinite(diff)) {
                 termDays = diff;
               }
@@ -9107,7 +9124,7 @@
             let dueDateValue = duplicate?.dueDate || paymentRef?.dueDate || '';
             const dueInfo = normalizeDate(dueDateValue);
             if (!Number.isFinite(termDays) && emissionInfo.dateInput && dueInfo.dateInput) {
-              const diff = computeDateDiffInDays(emissionInfo.dateInput, dueInfo.dateInput);
+              const diff = computeInclusiveTermDays(emissionInfo.dateInput, dueInfo.dateInput);
               if (Number.isFinite(diff)) {
                 termDays = diff;
               }
@@ -9130,7 +9147,7 @@
                 }
               }
               if (Number.isFinite(fallbackDays)) {
-                dueDateValue = addDaysToDateInput(fallbackBaseDateInput, fallbackDays);
+                dueDateValue = addPaymentDaysToDateInput(fallbackBaseDateInput, fallbackDays);
                 if (!Number.isFinite(termDays)) {
                   termDays = fallbackDays;
                 }
@@ -9140,7 +9157,7 @@
             const normalizedDue = normalizeDate(dueDateValue);
             let resolvedTermDays = Number.isFinite(termDays) ? termDays : null;
             if (!Number.isFinite(resolvedTermDays) && emissionInfo.dateInput && normalizedDue.dateInput) {
-              const diff = computeDateDiffInDays(emissionInfo.dateInput, normalizedDue.dateInput);
+              const diff = computeInclusiveTermDays(emissionInfo.dateInput, normalizedDue.dateInput);
               if (Number.isFinite(diff)) {
                 resolvedTermDays = diff;
               }
@@ -9666,7 +9683,7 @@
 
             let computedTerm = null;
             if (baseDateInput && effectiveDueInput) {
-              const diff = computeDateDiffInDays(baseDateInput, effectiveDueInput);
+              const diff = computeInclusiveTermDays(baseDateInput, effectiveDueInput);
               if (Number.isFinite(diff)) {
                 computedTerm = diff;
               }
@@ -9678,7 +9695,7 @@
               const daysCell = row.querySelector('[data-duplicate-term]');
               if (daysCell) {
                 const fallbackDiff = baseDateInput && effectiveDueInput
-                  ? computeDateDiffInDays(baseDateInput, effectiveDueInput)
+                  ? computeInclusiveTermDays(baseDateInput, effectiveDueInput)
                   : null;
                 daysCell.textContent = Number.isFinite(duplicate.termDays)
                   ? String(duplicate.termDays)
