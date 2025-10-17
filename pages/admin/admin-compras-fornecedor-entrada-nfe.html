@@ -4680,11 +4680,52 @@
           return addDaysToDateInput(baseInput, normalizedOffset);
         };
 
+        const stripDiacritics = (value) => {
+          if (typeof value !== 'string') return '';
+          return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        };
+
         const computeInclusiveTermDays = (baseInput, dueInput) => {
           if (!baseInput || !dueInput) return null;
           const diff = computeDateDiffInDays(baseInput, dueInput);
           if (!Number.isFinite(diff)) return null;
           return diff > 0 ? diff + 1 : diff;
+        };
+
+        const extractPaymentConditionHint = (text) => {
+          if (!text || typeof text !== 'string') return '';
+          const compact = text.replace(/\s+/g, ' ');
+          const keywordMatcher = /(cobranc[ao]|pagamento|parcelas?|boleto|duplicat[ao]s?|condica[oa])/i;
+          const pattern = /(\d{1,3})(?:(?:\s*[\/\-]\s*|\s+)\d{1,3})+/g;
+          let fallback = '';
+          let match;
+          while ((match = pattern.exec(compact)) !== null) {
+            const segment = match[0];
+            const parts = segment
+              .split(/[\/\-\s]+/)
+              .map((part) => part.trim())
+              .filter(Boolean);
+            if (parts.length < 2) continue;
+            const normalizedParts = parts.map((part) => {
+              const numeric = Number.parseInt(part, 10);
+              if (!Number.isFinite(numeric) || numeric < 0 || numeric > 999) {
+                return null;
+              }
+              return String(numeric);
+            });
+            if (normalizedParts.some((part) => part === null)) continue;
+            const normalizedSegment = normalizedParts.join('/');
+            if (!fallback) {
+              fallback = normalizedSegment;
+            }
+            const contextStart = Math.max(0, match.index - 60);
+            const contextEnd = Math.min(compact.length, match.index + segment.length + 60);
+            const context = stripDiacritics(compact.slice(contextStart, contextEnd)).toLowerCase();
+            if (keywordMatcher.test(context)) {
+              return normalizedSegment;
+            }
+          }
+          return fallback;
         };
 
         const normalizeDate = (value) => {
@@ -7527,31 +7568,62 @@
           if (paymentConditionInput) {
             const duplicates = Array.isArray(data?.duplicates) ? data.duplicates : [];
             const emission = normalizeDate(data?.ide?.emissionDate);
-            if (duplicates.length && emission.dateInput) {
-              const emissionDateObj = new Date(`${emission.dateInput}T00:00:00`);
-              const dueDiffs = duplicates
+            const meaningfulDuplicates = duplicates.filter((dup) => {
+              const valueNumeric = toNumeric(dup?.value);
+              const dueInfo = normalizeDate(dup?.dueDate);
+              const termDays = Number.isFinite(dup?.termDays) ? dup.termDays : null;
+              return (
+                (Number.isFinite(valueNumeric) && Math.abs(valueNumeric) > 0.000001) ||
+                dueInfo.dateInput ||
+                Number.isFinite(termDays)
+              );
+            });
+            if (meaningfulDuplicates.length && emission.dateInput) {
+              const diffValues = meaningfulDuplicates
                 .map((dup) => {
+                  if (Number.isFinite(dup?.termDays)) {
+                    return dup.termDays;
+                  }
                   const dueInfo = normalizeDate(dup?.dueDate);
-                  if (!dueInfo.dateInput) return null;
-                  const dueDateObj = new Date(`${dueInfo.dateInput}T00:00:00`);
-                  const diff = Math.round((dueDateObj - emissionDateObj) / (24 * 60 * 60 * 1000));
-                  return Number.isFinite(diff) ? diff : null;
+                  if (dueInfo.dateInput) {
+                    const diff = computeInclusiveTermDays(emission.dateInput, dueInfo.dateInput);
+                    if (Number.isFinite(diff)) {
+                      return diff;
+                    }
+                  }
+                  return null;
                 })
                 .filter((value) => value !== null)
                 .sort((a, b) => a - b);
-              if (dueDiffs.length) {
-                paymentConditionInput.value = dueDiffs.join('/');
+              if (diffValues.length) {
+                paymentConditionInput.value = diffValues.join('/');
               } else {
-                paymentConditionInput.value = `${duplicates.length} parcela${
-                  duplicates.length > 1 ? 's' : ''
+                paymentConditionInput.value = `${meaningfulDuplicates.length} parcela${
+                  meaningfulDuplicates.length > 1 ? 's' : ''
                 }`;
               }
-            } else if (payments.length) {
-              paymentConditionInput.value = `${payments.length} parcela${
-                payments.length > 1 ? 's' : ''
-              }`;
             } else {
-              paymentConditionInput.value = '';
+              const paymentConditionHint = data?.paymentConditionHint || '';
+              if (paymentConditionHint) {
+                paymentConditionInput.value = paymentConditionHint;
+              } else {
+                const meaningfulPayments = payments.filter((payment) => {
+                  const amount = toNumeric(payment?.amount);
+                  const dueInfo = normalizeDate(payment?.dueDate);
+                  return (
+                    (Number.isFinite(amount) && Math.abs(amount) > 0.000001) ||
+                    dueInfo.dateInput ||
+                    Number.isFinite(payment?.termDays)
+                  );
+                });
+                if (meaningfulPayments.length) {
+                  paymentConditionInput.value = `${meaningfulPayments.length} parcela${
+                    meaningfulPayments.length > 1 ? 's' : ''
+                  }`;
+                } else {
+                  paymentConditionInput.value = '';
+                }
+              }
             }
           }
         };
@@ -9082,9 +9154,19 @@
             return payment;
           });
 
+          const paymentsForDuplicates = payments.filter((payment) => {
+            const amount = toNumeric(payment?.amount);
+            const dueInfo = normalizeDate(payment?.dueDate);
+            return (
+              (Number.isFinite(amount) && Math.abs(amount) > 0.000001) ||
+              dueInfo.dateInput ||
+              Number.isFinite(payment?.termDays)
+            );
+          });
+
           let duplicates = duplicatesFromXml.length
             ? duplicatesFromXml
-            : payments.map((payment) => ({
+            : paymentsForDuplicates.map((payment) => ({
                 index: payment.index,
                 number: '',
                 dueDate: payment.dueDate,
@@ -9296,6 +9378,11 @@
 
           const processedItems = mergeItemsWithBonification(items);
 
+          const complementaryInfo = getText(infAdic, 'infCpl');
+          const fiscalInfo = getText(infAdic, 'infAdFisco');
+          const paymentConditionHint =
+            extractPaymentConditionHint(complementaryInfo) || extractPaymentConditionHint(fiscalInfo);
+
           return {
             accessKey,
             ambient: getText(ide, 'tpAmb'),
@@ -9357,9 +9444,10 @@
               },
             },
             additionalInfo: {
-              complementary: getText(infAdic, 'infCpl'),
-              fiscal: getText(infAdic, 'infAdFisco'),
+              complementary: complementaryInfo,
+              fiscal: fiscalInfo,
             },
+            paymentConditionHint,
             payments,
             duplicates,
             references,
