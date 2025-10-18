@@ -218,6 +218,17 @@
                     <input type="number" step="0.01" id="valor-produtos" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="14000.00">
                   </div>
                   <div>
+                    <label for="valor-bonificacao" class="block text-sm font-medium text-gray-700 mb-1">Valor Bonificação (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      id="valor-bonificacao"
+                      class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      placeholder="0.00"
+                      readonly
+                    >
+                  </div>
+                  <div>
                     <label for="base-icms" class="block text-sm font-medium text-gray-700 mb-1">Base ICMS (R$)</label>
                     <input type="number" step="0.01" id="base-icms" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
                   </div>
@@ -2079,6 +2090,7 @@
         const weightNetInput = document.getElementById('peso-liquido');
         const freightModeSelect = document.getElementById('modalidade-frete');
         const totalsProductsInput = document.getElementById('valor-produtos');
+        const totalsBonificationInput = document.getElementById('valor-bonificacao');
         const totalsIcmsBaseInput = document.getElementById('base-icms');
         const totalsIcmsValueInput = document.getElementById('valor-icms');
         const totalsIcmsStInput = document.getElementById('icms-st');
@@ -3079,6 +3091,52 @@
           return hasValue ? totals : null;
         };
 
+        const BONIFICATION_VALUE_PRIORITY_FIELDS = ['total', 'netProductValue', 'totalWithTaxes'];
+
+        const extractBonificationAmount = (source) => {
+          if (!source || typeof source !== 'object') return null;
+          for (const field of BONIFICATION_VALUE_PRIORITY_FIELDS) {
+            const value = toNumeric(source[field]);
+            if (Number.isFinite(value)) {
+              return value;
+            }
+          }
+          return null;
+        };
+
+        const computeBonificationTotal = (items) => {
+          if (!Array.isArray(items) || !items.length) return null;
+
+          let total = 0;
+          let hasBonification = false;
+
+          items.forEach((item) => {
+            if (!item || typeof item !== 'object') return;
+            const info = item.bonificationInfo;
+            if (!info || typeof info !== 'object') return;
+
+            let value = extractBonificationAmount(info.bonusTotals);
+            if (!Number.isFinite(value)) {
+              value = extractBonificationAmount(info.originalTotals);
+            }
+            if (!Number.isFinite(value) && item.forceBonificationZeroCost) {
+              value = extractBonificationAmount(item);
+            }
+
+            if (Number.isFinite(value)) {
+              total += value;
+              hasBonification = true;
+            }
+          });
+
+          if (hasBonification) {
+            return total;
+          }
+
+          const hasItems = items.some((entry) => entry && typeof entry === 'object');
+          return hasItems ? 0 : null;
+        };
+
         const mergeBonificationGroupIntoBase = (group) => {
           if (!group || !group.sales.length || !group.bonuses.length) {
             return null;
@@ -3386,6 +3444,11 @@
           if (!baseData.references) {
             baseData.references = [];
           }
+
+          const mergedBonificationTotal = computeBonificationTotal(combinedItems);
+          baseData.totals.bonification = Number.isFinite(mergedBonificationTotal)
+            ? mergedBonificationTotal
+            : null;
 
           const existingReferences = Array.isArray(baseData.references)
             ? baseData.references.slice()
@@ -5228,6 +5291,7 @@
 
           const totalsSnapshot = {
             products: readNumericInputValue(totalsProductsInput),
+            bonification: readNumericInputValue(totalsBonificationInput),
             icmsBase: readNumericInputValue(totalsIcmsBaseInput),
             icmsValue: readNumericInputValue(totalsIcmsValueInput),
             icmsSt: readNumericInputValue(totalsIcmsStInput),
@@ -5242,6 +5306,10 @@
 
           if (!Number.isFinite(totalsSnapshot.products) && Number.isFinite(baseData?.totals?.products)) {
             totalsSnapshot.products = toNumeric(baseData.totals.products);
+          }
+
+          if (!Number.isFinite(totalsSnapshot.bonification) && Number.isFinite(baseData?.totals?.bonification)) {
+            totalsSnapshot.bonification = toNumeric(baseData.totals.bonification);
           }
 
           const duplicatesTotal = computeDuplicatesTotal(duplicatesClone);
@@ -8330,6 +8398,7 @@
         const fillTotalsFromNfeData = (data) => {
           const totals = data?.totals || {};
           setNumericInputValue(totalsProductsInput, totals.products);
+          setNumericInputValue(totalsBonificationInput, totals.bonification);
           setNumericInputValue(totalsIcmsBaseInput, totals.icmsBase);
           setNumericInputValue(totalsIcmsValueInput, totals.icmsValue);
           setNumericInputValue(totalsIcmsStInput, totals.icmsSt);
@@ -9401,6 +9470,18 @@
         const renderMainProductsFromNfe = (items = []) => {
           mainProductTableState.items = Array.isArray(items) ? items : [];
           updateMainProductsTableDisplay();
+
+          const bonificationTotal = computeBonificationTotal(mainProductTableState.items);
+          setNumericInputValue(totalsBonificationInput, bonificationTotal);
+
+          if (lastNfeData && typeof lastNfeData === 'object') {
+            if (!lastNfeData.totals || typeof lastNfeData.totals !== 'object') {
+              lastNfeData.totals = {};
+            }
+            lastNfeData.totals.bonification = Number.isFinite(bonificationTotal)
+              ? bonificationTotal
+              : null;
+          }
         };
 
         const CODE_STATUS_LABELS = {
@@ -10276,6 +10357,7 @@
             weightGrossInput,
             weightNetInput,
             totalsProductsInput,
+            totalsBonificationInput,
             totalsIcmsBaseInput,
             totalsIcmsValueInput,
             totalsIcmsStInput,
@@ -10920,6 +11002,8 @@
           alignItemsWithTotals(items, totalsData, { skipTaxComputation: shouldSkipTaxComputation });
 
           const processedItems = mergeItemsWithBonification(items);
+          const bonificationTotal = computeBonificationTotal(processedItems);
+          totalsData.bonification = Number.isFinite(bonificationTotal) ? bonificationTotal : null;
 
           const complementaryInfo = getText(infAdic, 'infCpl');
           const fiscalInfo = getText(infAdic, 'infAdFisco');
