@@ -228,14 +228,6 @@
                     <label for="valor-fcp-st" class="block text-sm font-medium text-gray-700 mb-1">Valor FCP ST (R$)</label>
                     <input type="number" step="0.01" id="valor-fcp-st" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
                   </div>
-                  <div>
-                    <label for="total-servicos" class="block text-sm font-medium text-gray-700 mb-1">Total Serviços (R$)</label>
-                    <input type="number" step="0.01" id="total-servicos" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="valor-ajuste-esquerda" class="block text-sm font-medium text-gray-700 mb-1">Valor do Ajuste (R$)</label>
-                    <input type="number" step="0.01" id="valor-ajuste-esquerda" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
                 </div>
 
                 <div class="space-y-4">
@@ -1714,8 +1706,6 @@
         const totalsIcmsValueInput = document.getElementById('valor-icms');
         const totalsIcmsStInput = document.getElementById('icms-st');
         const totalsFcpStInput = document.getElementById('valor-fcp-st');
-        const totalsServicesInput = document.getElementById('total-servicos');
-        const totalsAdjustmentInput = document.getElementById('valor-ajuste-esquerda');
         const totalsDiscountInput = document.getElementById('desconto');
         const totalsOtherInput = document.getElementById('outras-despesas');
         const totalsFreightInput = document.getElementById('valor-frete');
@@ -7697,13 +7687,11 @@
           setNumericInputValue(totalsIcmsValueInput, totals.icmsValue);
           setNumericInputValue(totalsIcmsStInput, totals.icmsSt);
           setNumericInputValue(totalsFcpStInput, totals.fcpSt);
-          setNumericInputValue(totalsServicesInput, totals.services);
           setNumericInputValue(totalsDiscountInput, totals.discount);
           setNumericInputValue(totalsOtherInput, totals.other);
           setNumericInputValue(totalsFreightInput, totals.freight);
           setNumericInputValue(totalsIpiInput, totals.ipi);
           setNumericInputValue(totalsInsuranceInput, totals.insurance);
-          setInputValue(totalsAdjustmentInput, '');
           setInputValue(totalsUnitDiscountInput, '');
           setInputValue(totalsDollarInput, '');
         };
@@ -8958,8 +8946,6 @@
             totalsIcmsValueInput,
             totalsIcmsStInput,
             totalsFcpStInput,
-            totalsServicesInput,
-            totalsAdjustmentInput,
             totalsDiscountInput,
             totalsOtherInput,
             totalsFreightInput,
