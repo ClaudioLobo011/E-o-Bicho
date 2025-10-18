@@ -4410,6 +4410,11 @@
       grid-template-columns: repeat(12, minmax(0, 1fr));
     }
   }
+  .md\:grid-cols-\[160px_150px_150px_120px_minmax\(0\,1fr\)\] {
+    @media (width >= 48rem) {
+      grid-template-columns: 160px 150px 150px 120px minmax(0,1fr);
+    }
+  }
   .md\:flex-row {
     @media (width >= 48rem) {
       flex-direction: row;
