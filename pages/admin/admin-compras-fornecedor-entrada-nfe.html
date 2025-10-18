@@ -2941,6 +2941,53 @@
           return mergedItems;
         };
 
+        const buildDocumentReferenceFingerprint = (reference) => {
+          if (!reference || typeof reference !== 'object') return '';
+          const accessKeyDigits = digitsOnly(reference.accessKey);
+          if (accessKeyDigits) {
+            return `accessKey:${accessKeyDigits}`;
+          }
+
+          const parts = [
+            reference.type,
+            reference.model,
+            reference.series,
+            reference.number,
+            reference.emissionDate,
+            reference.issuerUf,
+            digitsOnly(reference.document),
+          ]
+            .map((value) => String(value ?? '').trim().toLowerCase())
+            .filter(Boolean);
+
+          return parts.join('|');
+        };
+
+        const createBonusDocumentReference = (bonusData) => {
+          if (!bonusData || typeof bonusData !== 'object') return null;
+          const ide = bonusData.ide || {};
+          const emitter = bonusData.emit || {};
+          const emitterAddress = emitter.address || {};
+          const emissionInfo = normalizeDate(ide.emissionDate);
+
+          const reference = {
+            type: 'NF-e de bonificação',
+            model: ide.model || '55',
+            number: ide.number || '',
+            series: ide.serie || '',
+            emissionDate: emissionInfo.dateInput || ide.emissionDate || '',
+            issuerUf: emitterAddress.state || '',
+            document: emitter.document || '',
+          };
+
+          const accessKeyDigits = digitsOnly(bonusData.accessKey);
+          if (accessKeyDigits) {
+            reference.accessKey = accessKeyDigits;
+          }
+
+          return reference;
+        };
+
         const mergeBonusItemsIntoCurrentNote = (bonusData) => {
           if (!bonusData) return false;
           const bonusItems = Array.isArray(bonusData.items) ? bonusData.items : [];
@@ -2990,8 +3037,38 @@
             baseData.references = [];
           }
 
+          const existingReferences = Array.isArray(baseData.references)
+            ? baseData.references.slice()
+            : [];
+          const seenReferences = new Set(
+            existingReferences.map((reference) => buildDocumentReferenceFingerprint(reference)).filter(Boolean)
+          );
+
+          const bonusReferences = Array.isArray(bonusData.references) ? bonusData.references : [];
+          bonusReferences.forEach((reference) => {
+            if (!reference || typeof reference !== 'object') return;
+            const fingerprint = buildDocumentReferenceFingerprint(reference);
+            if (fingerprint && seenReferences.has(fingerprint)) return;
+            seenReferences.add(fingerprint);
+            existingReferences.push({ ...reference });
+          });
+
+          const bonusReference = createBonusDocumentReference(bonusData);
+          if (bonusReference) {
+            const fingerprint = buildDocumentReferenceFingerprint(bonusReference);
+            if (!fingerprint || !seenReferences.has(fingerprint)) {
+              if (fingerprint) {
+                seenReferences.add(fingerprint);
+              }
+              existingReferences.push(bonusReference);
+            }
+          }
+
+          baseData.references = existingReferences;
+
           lastNfeData = baseData;
           renderMainProductsFromNfe(combinedItems);
+          renderDocumentsFromNfe(existingReferences);
           return true;
         };
 
