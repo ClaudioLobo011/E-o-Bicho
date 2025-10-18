@@ -2991,6 +2991,86 @@
           return false;
         };
 
+        const getBankAccountOptionsSnapshot = () => {
+          if (!bankAccountSelect) return [];
+          return Array.from(bankAccountSelect.options || []).map((option) => ({
+            value: option.value || '',
+            label: option.textContent || '',
+            disabled: option.disabled,
+            selected: option.selected,
+          }));
+        };
+
+        const populateDuplicateBankAccountSelect = (
+          selectElement,
+          desiredValue = '',
+          optionsSnapshot = null
+        ) => {
+          if (!(selectElement instanceof HTMLSelectElement)) return;
+
+          const snapshot = Array.isArray(optionsSnapshot)
+            ? optionsSnapshot
+            : getBankAccountOptionsSnapshot();
+
+          selectElement.innerHTML = '';
+
+          if (!snapshot.length) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'Nenhuma conta corrente cadastrada';
+            selectElement.appendChild(option);
+            selectElement.disabled = true;
+            return;
+          }
+
+          const normalizedDesired = desiredValue ? String(desiredValue) : '';
+          let hasMatch = false;
+
+          snapshot.forEach((optionData, index) => {
+            const option = document.createElement('option');
+            option.value = optionData.value || '';
+            option.textContent = optionData.label || '';
+            option.disabled = Boolean(optionData.disabled);
+            if (normalizedDesired) {
+              if (option.value === normalizedDesired && !option.disabled) {
+                option.selected = true;
+                hasMatch = true;
+              }
+            } else if (!hasMatch && optionData.selected) {
+              option.selected = true;
+              hasMatch = true;
+            }
+            if (!hasMatch && index === 0 && !option.disabled && !option.value) {
+              option.selected = true;
+            }
+            selectElement.appendChild(option);
+          });
+
+          if (normalizedDesired && !hasMatch) {
+            const registeredAccount = findBankAccountById(normalizedDesired);
+            const fallbackOption = document.createElement('option');
+            fallbackOption.value = normalizedDesired;
+            fallbackOption.textContent = registeredAccount
+              ? buildBankAccountLabel(registeredAccount)
+              : `Conta ${normalizedDesired}`;
+            fallbackOption.selected = true;
+            selectElement.appendChild(fallbackOption);
+            hasMatch = true;
+          }
+
+          if (!hasMatch) {
+            const [firstOption] = selectElement.options;
+            if (firstOption) {
+              firstOption.selected = true;
+            }
+          }
+
+          const hasUsableOptions = Array.from(selectElement.options).some(
+            (option) => !option.disabled && Boolean(option.value)
+          );
+          selectElement.disabled = !hasUsableOptions;
+        };
+
         const findBankAccountById = (id) => {
           if (!id) return null;
           const normalized = String(id);
@@ -3085,11 +3165,15 @@
           const normalizedSelected = selectedId ? String(selectedId) : '';
           lastNfeData.selectedBankAccountId = normalizedSelected || pendingBankAccountId || '';
 
-          if (!duplicates.length) return;
+          if (!duplicates.length) {
+            renderDuplicatasFromNfe(duplicates, lastNfeData);
+            return;
+          }
 
           duplicates.forEach((duplicate) => {
             if (!duplicate || typeof duplicate !== 'object') return;
-            duplicate.bankAccount = normalizedSelected || null;
+            if (duplicate.bankAccountIsManual) return;
+            duplicate.bankAccount = normalizedSelected ? String(normalizedSelected) : null;
           });
 
           renderDuplicatasFromNfe(duplicates, lastNfeData);
@@ -3106,6 +3190,7 @@
               lastNfeData.duplicates.forEach((duplicate) => {
                 if (!duplicate || typeof duplicate !== 'object') return;
                 duplicate.bankAccount = null;
+                duplicate.bankAccountIsManual = false;
               });
               lastNfeData.selectedBankAccountId = '';
               renderDuplicatasFromNfe(lastNfeData.duplicates, lastNfeData);
@@ -7571,6 +7656,7 @@
           const entry = normalizeDate(data?.ide?.entryDate);
           const baseDateInput = emission.dateInput || entry.dateInput || '';
           const supplierAccount = resolveSupplierAccountingAccount();
+          const bankOptionsSnapshot = getBankAccountOptionsSnapshot();
 
           const fragment = document.createDocumentFragment();
           duplicates.forEach((dup, index) => {
@@ -7675,12 +7761,22 @@
             accountCodeCell.textContent = supplierAccount?.code || '—';
 
             const bankCell = document.createElement('td');
-            bankCell.className = 'px-4 py-3 text-gray-600';
-            const resolvedBankAccount =
-              findBankAccountById(dup?.bankAccount) || resolveSelectedBankAccount(data);
-            bankCell.textContent = resolvedBankAccount
-              ? buildBankAccountLabel(resolvedBankAccount)
-              : '—';
+            bankCell.className = 'px-4 py-3';
+            const bankSelect = document.createElement('select');
+            bankSelect.className =
+              'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20';
+            bankSelect.dataset.duplicateBankSelect = 'true';
+            bankSelect.dataset.duplicateIndex = String(index);
+
+            let desiredBankAccountId = dup?.bankAccount ? String(dup.bankAccount) : '';
+            if (!desiredBankAccountId) {
+              const fallbackBankAccount = resolveSelectedBankAccount(data);
+              if (fallbackBankAccount && fallbackBankAccount._id) {
+                desiredBankAccountId = String(fallbackBankAccount._id);
+              }
+            }
+            populateDuplicateBankAccountSelect(bankSelect, desiredBankAccountId, bankOptionsSnapshot);
+            bankCell.appendChild(bankSelect);
 
             row.append(
               parcelCell,
@@ -7881,6 +7977,7 @@
               paymentType: paymentTypeValue,
               termDays: termDaysValue,
               bankAccount: normalizedBankAccount ? normalizedBankAccount : null,
+              bankAccountIsManual: false,
             });
 
             if (index < parcelsRaw - 1) {
@@ -8525,7 +8622,14 @@
             if (!duplicate.originalDueDate) {
               duplicate.originalDueDate = duplicate.dueDate || '';
             }
-            duplicate.bankAccount = activeBankAccountId ? String(activeBankAccountId) : null;
+            if (typeof duplicate.bankAccountIsManual !== 'boolean') {
+              duplicate.bankAccountIsManual = Boolean(duplicate.bankAccount);
+            }
+            if (duplicate.bankAccountIsManual) {
+              duplicate.bankAccount = duplicate.bankAccount ? String(duplicate.bankAccount) : null;
+            } else {
+              duplicate.bankAccount = activeBankAccountId ? String(activeBankAccountId) : null;
+            }
           });
 
           renderDuplicatasFromNfe(duplicates, data);
@@ -9118,6 +9222,7 @@
               paymentType: duplicate?.paymentType || paymentRef?.type || '',
               termDays: Number.isFinite(resolvedTermDays) ? resolvedTermDays : null,
               bankAccount: duplicate?.bankAccount || null,
+              bankAccountIsManual: Boolean(duplicate?.bankAccount),
             };
           });
 
@@ -9572,7 +9677,14 @@
         if (duplicatasTableBody) {
           duplicatasTableBody.addEventListener('change', (event) => {
             const target = event.target;
-            if (!(target instanceof HTMLInputElement)) return;
+            if (
+              !(
+                target instanceof HTMLInputElement ||
+                (typeof HTMLSelectElement !== 'undefined' && target instanceof HTMLSelectElement)
+              )
+            ) {
+              return;
+            }
 
             if (!lastNfeData || !Array.isArray(lastNfeData.duplicates)) return;
 
@@ -9580,6 +9692,20 @@
             if (!Number.isFinite(index)) return;
             const duplicate = lastNfeData.duplicates[index];
             if (!duplicate || typeof duplicate !== 'object') return;
+
+            if (target.dataset.duplicateBankSelect === 'true') {
+              const selectedValue = target.value ? String(target.value) : '';
+              if (selectedValue) {
+                duplicate.bankAccount = selectedValue;
+                duplicate.bankAccountIsManual = true;
+              } else {
+                duplicate.bankAccount = null;
+                duplicate.bankAccountIsManual = false;
+              }
+              return;
+            }
+
+            if (!(target instanceof HTMLInputElement)) return;
 
             if (target.dataset.duplicateValueInput === 'true') {
               const previousValue = Number.isFinite(toNumeric(duplicate?.value))
