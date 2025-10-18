@@ -953,7 +953,7 @@
         </section>
 
         <div class="flex flex-col gap-3 md:flex-row md:justify-end">
-          <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+          <button type="button" data-save-draft class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
             <i class="fas fa-file-archive"></i>
             Salvar rascunho
           </button>
@@ -1677,6 +1677,7 @@
           : [];
         const supplierSelect = document.getElementById('nfe-supplier');
         const companySelect = document.getElementById('company');
+        const nfeCodeInput = document.getElementById('nfe-code');
         const nfeNumberInput = document.getElementById('nfe-number');
         const nfeSeriesInput = document.getElementById('nfe-series');
         const issueDateInput = document.getElementById('issue-date');
@@ -1727,6 +1728,7 @@
         const observationInput = document.getElementById('observacao');
         const complementaryInfoInput = document.getElementById('informacoes-complementares');
         const clearImportButton = document.querySelector('[data-clear-import]');
+        const saveDraftButton = document.querySelector('[data-save-draft]');
         const documentsTableBody = document.querySelector('[data-nfe-documents-body]');
         const documentsEmptyRow = document.querySelector('[data-nfe-documents-empty]');
         const mainProductsTableBody = document.querySelector('[data-nfe-products-body]');
@@ -1754,6 +1756,7 @@
         const suppliersEndpoint = `${apiBaseUrl}/suppliers`;
         const bankAccountsEndpoint = `${apiBaseUrl}/bank-accounts`;
         const depositsEndpoint = `${apiBaseUrl}/deposits`;
+        const nfeDraftsEndpoint = `${apiBaseUrl}/purchase/nfe/drafts`;
 
         const notify = (message, type = 'info') => {
           if (typeof window.showToast === 'function') {
@@ -1833,6 +1836,9 @@
         let pendingCompanyDocumentDigits = '';
         let pendingBankAccountId = '';
         let pendingDepositId = '';
+        let currentDraftId = '';
+        let currentDraftCode = '';
+        let isSavingDraft = false;
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
@@ -4704,6 +4710,214 @@
 
           const fallback = Number.parseFloat(raw.replace(/[^0-9.-]/g, ''));
           return Number.isFinite(fallback) ? fallback : null;
+        };
+
+        const clonePlainObject = (value) => {
+          if (value === null || typeof value === 'undefined') return null;
+          try {
+            return JSON.parse(JSON.stringify(value));
+          } catch (error) {
+            console.warn('Não foi possível clonar os dados informados para o rascunho.', error);
+            return null;
+          }
+        };
+
+        const formatDraftCode = (code) => {
+          if (code === null || typeof code === 'undefined') return '';
+          const numeric = Number(code);
+          if (Number.isFinite(numeric)) {
+            return String(Math.trunc(numeric)).padStart(4, '0');
+          }
+          return String(code).trim();
+        };
+
+        const applyDraftCodeToInput = (codeValue) => {
+          if (!nfeCodeInput) return;
+          if (codeValue === null || typeof codeValue === 'undefined' || codeValue === '') {
+            nfeCodeInput.value = '';
+            delete nfeCodeInput.dataset.rawCode;
+            return;
+          }
+          const formatted = formatDraftCode(codeValue);
+          nfeCodeInput.value = formatted;
+          nfeCodeInput.dataset.rawCode = String(codeValue);
+        };
+
+        const resetDraftState = () => {
+          currentDraftId = '';
+          currentDraftCode = '';
+          applyDraftCodeToInput('');
+        };
+
+        const readNumericInputValue = (input) => {
+          if (!input) return null;
+          const numeric = toNumeric(input.value);
+          return Number.isFinite(numeric) ? numeric : null;
+        };
+
+        const computeDuplicatesTotal = (duplicates) => {
+          if (!Array.isArray(duplicates)) return 0;
+          return duplicates.reduce((sum, duplicate) => {
+            const value = toNumeric(duplicate?.value);
+            return Number.isFinite(value) ? sum + value : sum;
+          }, 0);
+        };
+
+        const buildDraftPayloadFromForm = () => {
+          const baseData = clonePlainObject(lastNfeData) || {};
+          const supplierInfo = resolveActiveSupplierInfo(baseData);
+          const supplierDocumentDigits = digitsOnly(supplierCnpjInput?.value || supplierInfo?.document || '');
+          const supplierOptionLabel =
+            supplierSelect && supplierSelect.selectedOptions && supplierSelect.selectedOptions.length
+              ? supplierSelect.selectedOptions[0].dataset?.supplierName || supplierSelect.selectedOptions[0].textContent || ''
+              : '';
+          const supplierName = (supplierInfo?.name || supplierOptionLabel || '').trim();
+
+          const duplicatesClone =
+            clonePlainObject(baseData.duplicates) || clonePlainObject(lastNfeData?.duplicates) || [];
+          if (Array.isArray(duplicatesClone)) {
+            duplicatesClone.forEach((duplicate, index) => {
+              if (duplicate && typeof duplicate === 'object' && typeof duplicate.index === 'undefined') {
+                duplicate.index = index;
+              }
+            });
+          }
+
+          const itemsSource =
+            (Array.isArray(mainProductTableState?.items) && mainProductTableState.items.length
+              ? mainProductTableState.items
+              : baseData.items) || [];
+          const itemsClone = clonePlainObject(itemsSource) || [];
+          const referencesClone =
+            clonePlainObject(baseData.references) || clonePlainObject(lastNfeData?.references) || [];
+          const paymentsClone =
+            clonePlainObject(baseData.payments) || clonePlainObject(lastNfeData?.payments) || [];
+
+          const totalsSnapshot = {
+            products: readNumericInputValue(totalsProductsInput),
+            icmsBase: readNumericInputValue(totalsIcmsBaseInput),
+            icmsValue: readNumericInputValue(totalsIcmsValueInput),
+            icmsSt: readNumericInputValue(totalsIcmsStInput),
+            fcpSt: readNumericInputValue(totalsFcpStInput),
+            discount: readNumericInputValue(totalsDiscountInput),
+            other: readNumericInputValue(totalsOtherInput),
+            freight: readNumericInputValue(totalsFreightInput),
+            ipi: readNumericInputValue(totalsIpiInput),
+            insurance: readNumericInputValue(totalsInsuranceInput),
+            dollar: readNumericInputValue(totalsDollarInput),
+          };
+
+          if (!Number.isFinite(totalsSnapshot.products) && Number.isFinite(baseData?.totals?.products)) {
+            totalsSnapshot.products = toNumeric(baseData.totals.products);
+          }
+
+          const duplicatesTotal = computeDuplicatesTotal(duplicatesClone);
+          const totalValueCandidate =
+            toNumeric(baseData?.totals?.totalValue) ??
+            (duplicatesTotal > 0 ? duplicatesTotal : totalsSnapshot.products);
+
+          const headerSnapshot = {
+            code: nfeCodeInput?.dataset?.rawCode || currentDraftCode || '',
+            number: nfeNumberInput?.value?.trim() || '',
+            serie: nfeSeriesInput?.value?.trim() || '',
+            type: nfeTypeSelect ? nfeTypeSelect.value || '' : '',
+            model: nfeModelSelect ? nfeModelSelect.value || '' : '',
+            issueDate: issueDateInput?.value || '',
+            entryDate: entryDateInput?.value || '',
+          };
+
+          const transportSnapshot = {
+            mode: freightModeSelect ? freightModeSelect.value || '' : '',
+            transporter: {
+              document: transportCnpjInput?.value || '',
+              stateRegistration: transportIeInput?.value || '',
+              uf: transportUfSelect ? transportUfSelect.value || '' : '',
+              name: transportNameInput?.value || '',
+            },
+            vehicle: {
+              plate: transportPlateInput?.value || '',
+              uf: transportPlateUfSelect ? transportPlateUfSelect.value || '' : '',
+            },
+            volume: {
+              weightGross: readNumericInputValue(weightGrossInput),
+              weightNet: readNumericInputValue(weightNetInput),
+            },
+          };
+
+          const selectionSnapshot = {
+            companyId: companySelect ? companySelect.value || '' : '',
+            supplierId: supplierSelect ? supplierSelect.value || '' : '',
+            depositId: depositSelect ? depositSelect.value || '' : '',
+            bankAccountId: bankAccountSelect ? bankAccountSelect.value || '' : '',
+            accountingAccount: accountingAccountInput?.value?.trim() || '',
+            duplicataEmissionDate: duplicataEmissionInput?.value || '',
+          };
+
+          const additionalInfoSnapshot = {
+            observation: observationInput?.value?.trim() || '',
+            complementaryFiscal: complementaryInfoInput?.value?.trim() || '',
+            paymentCondition: paymentConditionInput?.value?.trim() || '',
+            paymentForm: paymentFormInput?.value?.trim() || '',
+          };
+
+          const xmlSnapshot = {
+            accessKey: accessKeyInput?.value?.trim() || baseData?.accessKey || '',
+            importAccessKey: importAccessKeyInput?.value?.trim() || '',
+            ambient: baseData?.ambient || '',
+          };
+
+          return {
+            draftId: currentDraftId || null,
+            header: headerSnapshot,
+            company: { id: selectionSnapshot.companyId },
+            supplier: {
+              id: selectionSnapshot.supplierId,
+              name: supplierName,
+              document: supplierDocumentDigits,
+              stateRegistration: supplierIeInput?.value?.trim() || '',
+              email: supplierEmailInput?.value?.trim() || '',
+              addressText: supplierAddressInput?.value?.trim() || '',
+            },
+            totals: {
+              ...totalsSnapshot,
+              totalValue: Number.isFinite(totalValueCandidate) ? totalValueCandidate : null,
+            },
+            transport: transportSnapshot,
+            duplicates: Array.isArray(duplicatesClone) ? duplicatesClone : [],
+            duplicatesSummary: {
+              totalAmount: duplicatesTotal,
+              count: Array.isArray(duplicatesClone) ? duplicatesClone.length : 0,
+            },
+            items: Array.isArray(itemsClone) ? itemsClone : [],
+            references: Array.isArray(referencesClone) ? referencesClone : [],
+            payments: Array.isArray(paymentsClone) ? paymentsClone : [],
+            additionalInfo: additionalInfoSnapshot,
+            selection: selectionSnapshot,
+            xml: xmlSnapshot,
+            metadata: {
+              savedAt: new Date().toISOString(),
+              draftCode: currentDraftCode || null,
+            },
+            importedData: baseData,
+          };
+        };
+
+        const applyDraftResponseToState = (draft) => {
+          if (!draft || typeof draft !== 'object') return;
+          if (draft._id || draft.id) {
+            currentDraftId = String(draft._id || draft.id);
+          }
+          if (typeof draft.code !== 'undefined' && draft.code !== null) {
+            currentDraftCode = String(draft.code);
+            applyDraftCodeToInput(draft.code);
+          } else if (draft.codeNumber) {
+            currentDraftCode = String(draft.codeNumber);
+            applyDraftCodeToInput(draft.codeNumber);
+          }
+          if (lastNfeData && typeof lastNfeData === 'object') {
+            lastNfeData.draftId = currentDraftId;
+            lastNfeData.draftCode = currentDraftCode;
+          }
         };
 
         const PAYMENT_METHOD_DESCRIPTIONS = {
@@ -8906,6 +9120,7 @@
           importModalContext = IMPORT_CONTEXT_FULL;
           supplierLinkErrorNotified = false;
           productValidationSequence += 1;
+          resetDraftState();
           resetProductLookupCaches();
           productSupplierLinkCache.clear();
           productSupplierLinkPromises.clear();
@@ -9691,6 +9906,10 @@
                 throw new Error('Não foi possível interpretar o conteúdo do XML informado.');
               }
               const parsed = parseNfeXml(result);
+              if (parsed && typeof parsed === 'object') {
+                if (currentDraftId) parsed.draftId = currentDraftId;
+                if (currentDraftCode) parsed.draftCode = currentDraftCode;
+              }
               parsed.selectedCompanyId = companySelect ? companySelect.value || '' : '';
               parsed.selectedBankAccountId = bankAccountSelect ? bankAccountSelect.value || '' : '';
               parsed.selectedDepositId = depositSelect ? depositSelect.value || '' : '';
@@ -10060,6 +10279,68 @@
           });
         }
 
+        if (saveDraftButton) {
+          saveDraftButton.addEventListener('click', async (event) => {
+            event.preventDefault();
+            if (isSavingDraft) return;
+
+            if (!companySelect || !companySelect.value) {
+              notify('Selecione a empresa responsável antes de salvar o rascunho.', 'warning');
+              companySelect?.focus();
+              return;
+            }
+
+            const payload = buildDraftPayloadFromForm();
+            const headers = buildAuthHeaders();
+            headers.set('Content-Type', 'application/json');
+
+            const endpointUrl = currentDraftId
+              ? `${nfeDraftsEndpoint}/${currentDraftId}`
+              : nfeDraftsEndpoint;
+            const method = currentDraftId ? 'PUT' : 'POST';
+
+            const setSavingState = (isSaving) => {
+              isSavingDraft = Boolean(isSaving);
+              saveDraftButton.disabled = Boolean(isSaving);
+              saveDraftButton.classList.toggle('opacity-60', Boolean(isSaving));
+              saveDraftButton.classList.toggle('cursor-wait', Boolean(isSaving));
+            };
+
+            try {
+              setSavingState(true);
+              const response = await fetch(endpointUrl, {
+                method,
+                headers,
+                body: JSON.stringify(payload),
+              });
+              const result = await response.json().catch(() => ({}));
+              if (!response.ok) {
+                const message =
+                  result?.message ||
+                  `Falha ao salvar o rascunho da NF-e (status ${response.status}).`;
+                throw new Error(message);
+              }
+
+              const draftData = result?.draft || result;
+              applyDraftResponseToState(draftData);
+              const formattedCode = currentDraftCode ? formatDraftCode(currentDraftCode) : '';
+              const successMessage = formattedCode
+                ? `Rascunho salvo como código ${formattedCode}.`
+                : 'Rascunho da nota salvo com sucesso.';
+              notify(successMessage, 'success');
+            } catch (error) {
+              console.error('Erro ao salvar rascunho da NF-e:', error);
+              notify(
+                error?.message ||
+                  'Não foi possível salvar o rascunho da nota. Verifique os dados e tente novamente.',
+                'error'
+              );
+            } finally {
+              setSavingState(false);
+            }
+          });
+        }
+
         if (clearImportButton) {
           clearImportButton.addEventListener('click', (event) => {
             event.preventDefault();
@@ -10244,6 +10525,7 @@
           }
         });
 
+        resetDraftState();
         updateSummaryFromData(null);
         setSupplierSummary(null);
         applyValidationStyles('info');
