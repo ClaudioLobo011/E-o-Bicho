@@ -334,6 +334,15 @@
                     <i class="fas fa-plus-circle"></i>
                     Adicionar Produto
                   </button>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                    data-open-import-modal
+                    data-import-context="bonus"
+                  >
+                    <i class="fas fa-gift"></i>
+                    Adicionar Bonificação
+                  </button>
                   <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
                     <i class="fas fa-exchange-alt"></i>
                     Alterar Fornecedor por Produto
@@ -1390,8 +1399,8 @@
                 class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
                 data-confirm-import
               >
-                <i class="fas fa-file-import"></i>
-                Importar
+                <i class="fas fa-file-import" data-confirm-import-icon></i>
+                <span data-confirm-import-text>Importar</span>
               </button>
             </div>
           </footer>
@@ -1859,6 +1868,10 @@
         let lastSupplierData = null;
         let lastSupplierRecord = null;
         let lastNfeData = null;
+        const IMPORT_CONTEXT_FULL = 'full';
+        const IMPORT_CONTEXT_BONUS = 'bonus';
+        let importModalContext = IMPORT_CONTEXT_FULL;
+        let pendingBonusData = null;
         let pendingCompanyId = '';
         let pendingCompanyDocumentDigits = '';
         let pendingBankAccountId = '';
@@ -2816,6 +2829,51 @@
                 }
               });
             } else {
+              if (!group.sales.length && group.bonuses.length) {
+                group.bonuses.forEach((bonusItem) => {
+                  if (!bonusItem || typeof bonusItem !== 'object') return;
+                  const info =
+                    bonusItem.bonificationInfo && typeof bonusItem.bonificationInfo === 'object'
+                      ? bonusItem.bonificationInfo
+                      : {};
+                  info.hasBonification = true;
+                  if (!Number.isFinite(info.bonusQuantity)) {
+                    const bonusQuantityValue = toNumeric(bonusItem.quantity);
+                    info.bonusQuantity = Number.isFinite(bonusQuantityValue)
+                      ? bonusQuantityValue
+                      : null;
+                  }
+                  if (!Number.isFinite(info.regularQuantity)) {
+                    info.regularQuantity = 0;
+                  }
+                  if (!Number.isFinite(info.bonusEntryStock)) {
+                    const bonusEntryStockValue = resolveEntryStockForBonification(bonusItem);
+                    info.bonusEntryStock = Number.isFinite(bonusEntryStockValue)
+                      ? bonusEntryStockValue
+                      : null;
+                  }
+                  if (!Number.isFinite(info.combinedQuantity)) {
+                    info.combinedQuantity = Number.isFinite(info.bonusQuantity)
+                      ? info.bonusQuantity
+                      : null;
+                  }
+                  if (!Number.isFinite(info.combinedEntryStock)) {
+                    info.combinedEntryStock = Number.isFinite(info.bonusEntryStock)
+                      ? info.bonusEntryStock
+                      : null;
+                  }
+                  const bonusCfop = normalizeCfopCode(bonusItem?.cfop);
+                  const bonusCfops = Array.isArray(info.bonusCfops) ? info.bonusCfops.slice() : [];
+                  if (bonusCfop) {
+                    bonusCfops.push(bonusCfop);
+                  }
+                  info.bonusCfops = Array.from(new Set(bonusCfops));
+                  info.regularCfops = Array.isArray(info.regularCfops)
+                    ? Array.from(new Set(info.regularCfops))
+                    : [];
+                  bonusItem.bonificationInfo = info;
+                });
+              }
               mergedItems.push(...group.items);
             }
           });
@@ -2829,6 +2887,60 @@
           }
 
           return mergedItems;
+        };
+
+        const mergeBonusItemsIntoCurrentNote = (bonusData) => {
+          if (!bonusData) return false;
+          const bonusItems = Array.isArray(bonusData.items) ? bonusData.items : [];
+          if (!bonusItems.length) {
+            return false;
+          }
+
+          const baseData =
+            lastNfeData || {
+              items: [],
+              totals: bonusData.totals || {},
+              duplicates: [],
+              ide: bonusData.ide || {},
+              emit: bonusData.emit || null,
+              dest: bonusData.dest || null,
+              payments: Array.isArray(bonusData.payments) ? bonusData.payments : [],
+              references: Array.isArray(bonusData.references) ? bonusData.references : [],
+              paymentConditionHint: bonusData.paymentConditionHint || '',
+              selectedCompanyId: bonusData.selectedCompanyId || '',
+              selectedBankAccountId: bonusData.selectedBankAccountId || '',
+              selectedDepositId: bonusData.selectedDepositId || '',
+            };
+
+          const existingItems = Array.isArray(baseData.items) ? baseData.items : [];
+          const combinedItems = mergeItemsWithBonification([...existingItems, ...bonusItems]);
+
+          combinedItems.forEach((item, index) => {
+            if (item && typeof item === 'object') {
+              item.index = index;
+            }
+          });
+
+          baseData.items = combinedItems;
+          if (!Array.isArray(baseData.duplicates)) {
+            baseData.duplicates = [];
+          }
+          if (!baseData.totals) {
+            baseData.totals = {};
+          }
+          if (!baseData.ide) {
+            baseData.ide = {};
+          }
+          if (!baseData.payments) {
+            baseData.payments = [];
+          }
+          if (!baseData.references) {
+            baseData.references = [];
+          }
+
+          lastNfeData = baseData;
+          renderMainProductsFromNfe(combinedItems);
+          return true;
         };
 
         const resolveActiveSupplierInfo = (nfeData) => {
@@ -7356,6 +7468,57 @@
           renderImportedProducts(items);
         };
 
+        const setImportModalContext = (context) => {
+          const normalized = context === IMPORT_CONTEXT_BONUS ? IMPORT_CONTEXT_BONUS : IMPORT_CONTEXT_FULL;
+          importModalContext = normalized;
+
+          if (normalized !== IMPORT_CONTEXT_BONUS) {
+            pendingBonusData = null;
+          }
+
+          if (confirmImportIcon) {
+            if (normalized === IMPORT_CONTEXT_BONUS) {
+              confirmImportIcon.className = 'fas fa-gift';
+            } else if (defaultConfirmIconClass) {
+              confirmImportIcon.className = defaultConfirmIconClass;
+            }
+          }
+
+          if (confirmImportText) {
+            confirmImportText.textContent =
+              normalized === IMPORT_CONTEXT_BONUS ? 'Aplicar bonificação' : defaultConfirmText || 'Importar';
+          }
+
+          if (refreshImportedProductsButton) {
+            refreshImportedProductsButton.classList.toggle('hidden', normalized === IMPORT_CONTEXT_BONUS);
+          }
+
+          if (normalized === IMPORT_CONTEXT_BONUS) {
+            const hasPendingBonus = Array.isArray(pendingBonusData?.items) && pendingBonusData.items.length > 0;
+            if (hasPendingBonus) {
+              updateSummaryFromData(pendingBonusData);
+            } else {
+              updateSummaryFromData(null);
+              if (importXmlNumber) {
+                importXmlNumber.textContent = 'XML de bonificação não importado';
+              }
+              if (importXmlValidationText) {
+                importXmlValidationText.textContent = 'Aguardando importação das bonificações';
+                applyValidationStyles('info');
+              }
+            }
+          } else if (normalized === IMPORT_CONTEXT_FULL) {
+            if (lastNfeData) {
+              updateSummaryFromData(lastNfeData);
+            } else {
+              updateSummaryFromData(null);
+            }
+            if (refreshImportedProductsButton) {
+              refreshImportedProductsButton.classList.remove('hidden');
+            }
+          }
+        };
+
         const fillMainFormFromNfeData = (data) => {
           if (!data) return;
           if (nfeNumberInput && data.ide?.number) nfeNumberInput.value = data.ide.number;
@@ -8655,6 +8818,8 @@
           lastNfeData = null;
           lastSupplierData = null;
           lastSupplierRecord = null;
+          pendingBonusData = null;
+          importModalContext = IMPORT_CONTEXT_FULL;
           supplierLinkErrorNotified = false;
           productValidationSequence += 1;
           resetProductLookupCaches();
@@ -9447,16 +9612,27 @@
               parsed.selectedCompanyId = companySelect ? companySelect.value || '' : '';
               parsed.selectedBankAccountId = bankAccountSelect ? bankAccountSelect.value || '' : '';
               parsed.selectedDepositId = depositSelect ? depositSelect.value || '' : '';
-              lastNfeData = parsed;
+              const isBonusContext = importModalContext === IMPORT_CONTEXT_BONUS;
+              if (isBonusContext) {
+                pendingBonusData = parsed;
+              } else {
+                lastNfeData = parsed;
+              }
               updateSummaryFromData(parsed);
-              showFileFeedback('Validando fornecedor importado...', 'info');
-              await handleSupplierSelection(parsed.emit);
-              showFileFeedback('Validando produtos pelo fornecedor e código de barras...', 'info');
+              if (isBonusContext) {
+                showFileFeedback('Validando itens de bonificação...', 'info');
+              } else {
+                showFileFeedback('Validando fornecedor importado...', 'info');
+                await handleSupplierSelection(parsed.emit);
+                showFileFeedback('Validando produtos pelo fornecedor e código de barras...', 'info');
+              }
               await validateImportedProducts(parsed);
 
               const nfNumberText = parsed.ide?.number ? `NF ${parsed.ide.number}` : 'NF-e';
               const emitterText = parsed.emit?.name || 'Emitente não identificado';
-              const baseMessage = `XML importado com sucesso. ${nfNumberText} - ${emitterText}.`;
+              const baseMessage = isBonusContext
+                ? `XML de bonificação importado com sucesso. ${nfNumberText} - ${emitterText}.`
+                : `XML importado com sucesso. ${nfNumberText} - ${emitterText}.`;
               const items = Array.isArray(parsed.items) ? parsed.items : [];
               const errorCount = items.filter((item) => item.validationStatus === 'error').length;
               const unmatchedCount = items.filter((item) => item.validationStatus === 'not-found').length;
@@ -9586,12 +9762,34 @@
           }
         }
 
+        const selectImportMode = (mode) => {
+          let applied = false;
+          importModeRadios.forEach((radio) => {
+            if (radio.value === mode) {
+              radio.checked = true;
+              applied = true;
+            } else if (radio.checked) {
+              radio.checked = false;
+            }
+          });
+          updateImportMode();
+          return applied;
+        };
+
         openImportModalButtons.forEach((button) => {
           button.addEventListener('click', (event) => {
             event.preventDefault();
+            const context = button.dataset.importContext === IMPORT_CONTEXT_BONUS
+              ? IMPORT_CONTEXT_BONUS
+              : IMPORT_CONTEXT_FULL;
+            setImportModalContext(context);
             openImportModal();
             activateImportTab('xml');
-            updateImportMode();
+            if (context === IMPORT_CONTEXT_BONUS) {
+              selectImportMode('file');
+            } else {
+              updateImportMode();
+            }
           });
         });
 
@@ -9847,6 +10045,10 @@
         }
 
         const confirmImportButton = importModal.querySelector('[data-confirm-import]');
+        const confirmImportIcon = confirmImportButton?.querySelector('[data-confirm-import-icon]') || null;
+        const confirmImportText = confirmImportButton?.querySelector('[data-confirm-import-text]') || null;
+        const defaultConfirmIconClass = confirmImportIcon ? confirmImportIcon.className : '';
+        const defaultConfirmText = confirmImportText ? confirmImportText.textContent || '' : '';
         if (confirmImportButton) {
           const disableConfirmButton = () => {
             confirmImportButton.disabled = true;
@@ -9859,6 +10061,33 @@
 
           confirmImportButton.addEventListener('click', async (event) => {
             event.preventDefault();
+            if (importModalContext === IMPORT_CONTEXT_BONUS) {
+              const bonusItems = Array.isArray(pendingBonusData?.items) ? pendingBonusData.items : [];
+              if (!bonusItems.length) {
+                notify('Importe um XML de bonificação válido antes de aplicar os itens.', 'warning');
+                return;
+              }
+
+              disableConfirmButton();
+
+              try {
+                const merged = mergeBonusItemsIntoCurrentNote(pendingBonusData);
+                if (!merged) {
+                  notify('O XML de bonificação não possui itens aplicáveis.', 'warning');
+                  return;
+                }
+                pendingBonusData = null;
+                notify('Itens de bonificação adicionados à nota.', 'success');
+                closeImportModal();
+              } catch (error) {
+                console.error('Erro ao aplicar bonificação na nota:', error);
+                notify('Não foi possível aplicar os itens de bonificação. Tente novamente.', 'error');
+              } finally {
+                restoreConfirmButton();
+              }
+              return;
+            }
+
             if (!lastNfeData) {
               notify('Importe um XML autorizado antes de aplicar os dados na nota.', 'warning');
               return;
