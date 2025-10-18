@@ -52,7 +52,12 @@
           <div class="grid grid-cols-1 md:grid-cols-[160px_150px_150px_120px_minmax(0,1fr)] gap-4">
             <div>
               <label for="nfe-code" class="block text-sm font-medium text-gray-700 mb-1">Código</label>
-              <input type="text" id="nfe-code" class="w-full max-w-[160px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500" readonly>
+              <input
+                type="text"
+                id="nfe-code"
+                class="w-full max-w-[160px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 cursor-pointer"
+                readonly
+              >
             </div>
             <div>
               <label for="nfe-number" class="block text-sm font-medium text-gray-700 mb-1">NF* (número da nota)</label>
@@ -970,6 +975,364 @@
     </div>
   </main>
 
+  <div id="nfe-code-lookup-modal" class="fixed inset-0 z-[999] hidden">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-code-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div
+        data-code-modal-card
+        class="relative flex w-full max-w-[1280px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh]"
+      >
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="space-y-1.5">
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-file-circle-check"></i>
+              Notas cadastradas
+            </span>
+            <h2 class="text-lg font-semibold text-gray-900">Selecionar nota existente</h2>
+            <p class="text-[11px] text-gray-600">
+              Escolha a empresa e localize notas cadastradas ou aprovadas para reutilizar os dados no preenchimento atual.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
+            data-close-code-modal
+          >
+            <span class="sr-only">Fechar modal</span>
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
+
+        <div class="flex flex-col gap-3 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex flex-col gap-1">
+            <label for="nfe-code-company-filter" class="text-xs font-semibold uppercase tracking-wide text-gray-600">Empresa</label>
+            <select
+              id="nfe-code-company-filter"
+              data-code-company
+              class="w-full min-w-[220px] rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">Selecione uma empresa</option>
+            </select>
+          </div>
+          <p class="text-[11px] text-gray-500">
+            Os filtros por coluna podem ser combinados. Clique no cabeçalho para ordenar.
+          </p>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-4 py-4">
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50">
+                <tr class="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="code">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Código</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="code"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela coluna Código"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="code"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela coluna Código"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="code"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="accessKey">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Chave de Acesso</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="accessKey"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela coluna Chave de Acesso"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="accessKey"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela coluna Chave de Acesso"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="accessKey"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="number">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">NF</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="number"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela coluna NF"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="number"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela coluna NF"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="number"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="supplier">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Fornecedor</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="supplier"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela coluna Fornecedor"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="supplier"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela coluna Fornecedor"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="supplier"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-right align-top" data-code-sort-header="total">
+                    <div class="flex flex-col items-end gap-1">
+                      <div class="flex w-full items-center justify-end gap-1">
+                        <span class="whitespace-nowrap">Valor da Nota (R$)</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="total"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pelo valor da nota"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="total"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pelo valor da nota"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="total"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="issueDate">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Data Emissão</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="issueDate"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela data de emissão"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="issueDate"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela data de emissão"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="issueDate"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="entryDate">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Data Entrada</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="entryDate"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela data de entrada"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="entryDate"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela data de entrada"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="entryDate"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="status">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Situação</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="status"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela situação"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="status"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela situação"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="status"
+                      >
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 bg-white" data-code-table-body>
+                <tr class="hidden" data-code-loading>
+                  <td class="px-4 py-6 text-center text-gray-500" colspan="8">
+                    <i class="fas fa-spinner-third fa-spin mr-2"></i>
+                    Carregando notas cadastradas...
+                  </td>
+                </tr>
+                <tr class="hidden" data-code-error>
+                  <td class="px-4 py-6 text-center text-rose-600" colspan="8">
+                    Não foi possível carregar as notas cadastradas para a empresa selecionada.
+                  </td>
+                </tr>
+                <tr class="hidden" data-code-empty>
+                  <td class="px-4 py-6 text-center text-gray-500" colspan="8">
+                    Nenhuma nota encontrada para a empresa selecionada.
+                  </td>
+                </tr>
+                <tr class="hidden" data-code-filtered-empty>
+                  <td class="px-4 py-6 text-center text-gray-500" colspan="8">
+                    Nenhuma nota corresponde aos filtros informados.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <footer class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 text-[11px] text-gray-500 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            Clique em uma linha para carregar a nota. Notas em rascunho aparecem como <span class="font-semibold text-amber-600">Cadastrada</span> e notas aprovadas como <span class="font-semibold text-emerald-600">Aprovada</span>.
+          </p>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 font-semibold text-gray-600 transition hover:bg-gray-50"
+            data-close-code-modal
+          >
+            Fechar
+          </button>
+        </footer>
+      </div>
+    </div>
+  </div>
+
   <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden">
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-import-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
@@ -1578,6 +1941,19 @@
         });
       });
 
+      const codeLookupModal = document.getElementById('nfe-code-lookup-modal');
+      const codeLookupModalCard = codeLookupModal?.querySelector('[data-code-modal-card]') || null;
+      const codeLookupCloseTriggers = codeLookupModal
+        ? codeLookupModal.querySelectorAll('[data-close-code-modal]')
+        : [];
+      const codeLookupCompanySelect = codeLookupModal?.querySelector('[data-code-company]') || null;
+      const codeLookupTableBody = codeLookupModal?.querySelector('[data-code-table-body]') || null;
+      const codeLookupEmptyRow = codeLookupModal?.querySelector('[data-code-empty]') || null;
+      const codeLookupFilteredEmptyRow = codeLookupModal?.querySelector('[data-code-filtered-empty]') || null;
+      const codeLookupLoadingRow = codeLookupModal?.querySelector('[data-code-loading]') || null;
+      const codeLookupErrorRow = codeLookupModal?.querySelector('[data-code-error]') || null;
+      const codeLookupErrorCell = codeLookupErrorRow?.querySelector('td') || null;
+
       const importModal = document.getElementById('import-xml-modal');
       if (importModal) {
         const importModalCard = importModal.querySelector('[data-import-modal-card]');
@@ -1748,6 +2124,17 @@
         let productLinkActiveItem = null;
         let productLinkSearchAbortController = null;
         let productLinkIsLinking = false;
+        const codeLookupTableState = { items: [], filters: {}, sort: { key: '', direction: 'asc' } };
+        const codeLookupFilterInputs = new Map();
+        const codeLookupSortButtons = new Map();
+        const codeLookupSortHeaders = new Map();
+        const codeLookupCache = new Map();
+        let codeLookupPreviousFocus = null;
+        let codeLookupIsOpen = false;
+        let codeLookupIsLoading = false;
+        let codeLookupLastError = null;
+        let codeLookupLastCompanyId = '';
+        let isLoadingDraftDetails = false;
         const apiBaseUrl =
           typeof API_CONFIG !== 'undefined' && API_CONFIG?.BASE_URL
             ? API_CONFIG.BASE_URL.replace(/\/+$/, '')
@@ -3498,23 +3885,23 @@
           return 'Empresa';
         };
 
-        const setCompanyPlaceholder = (message, { disabled = true } = {}) => {
-          if (!companySelect) return;
-          companySelect.innerHTML = '';
+        const setCodeLookupCompanyPlaceholder = (message, { disabled = true } = {}) => {
+          if (!codeLookupCompanySelect) return;
+          codeLookupCompanySelect.innerHTML = '';
           const option = document.createElement('option');
           option.value = '';
           option.textContent = message;
-          companySelect.appendChild(option);
-          companySelect.disabled = Boolean(disabled);
+          codeLookupCompanySelect.appendChild(option);
+          codeLookupCompanySelect.disabled = Boolean(disabled);
         };
 
-        const setCompanyOptions = (companies = [], { placeholder = null } = {}) => {
-          if (!companySelect) return;
-          companySelect.innerHTML = '';
+        const setCodeLookupCompanyOptions = (companies = [], { placeholder = null } = {}) => {
+          if (!codeLookupCompanySelect) return;
+          codeLookupCompanySelect.innerHTML = '';
           const defaultOption = document.createElement('option');
           defaultOption.value = '';
-          defaultOption.textContent = placeholder || 'Selecione a empresa';
-          companySelect.appendChild(defaultOption);
+          defaultOption.textContent = placeholder || 'Selecione uma empresa';
+          codeLookupCompanySelect.appendChild(defaultOption);
           if (Array.isArray(companies)) {
             companies.forEach((company) => {
               if (!company || !company._id) return;
@@ -3532,10 +3919,56 @@
               if (digits && option.dataset) {
                 option.dataset.companyDocument = digits;
               }
-              companySelect.appendChild(option);
+              codeLookupCompanySelect.appendChild(option);
             });
           }
-          companySelect.disabled = !companies || !companies.length;
+          codeLookupCompanySelect.disabled = !companies || !companies.length;
+        };
+
+        const setCompanyPlaceholder = (message, { disabled = true } = {}) => {
+          if (companySelect) {
+            companySelect.innerHTML = '';
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = message;
+            companySelect.appendChild(option);
+            companySelect.disabled = Boolean(disabled);
+          }
+          setCodeLookupCompanyPlaceholder(message, { disabled });
+        };
+
+        const setCompanyOptions = (companies = [], { placeholder = null } = {}) => {
+          if (companySelect) {
+            companySelect.innerHTML = '';
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = placeholder || 'Selecione a empresa';
+            companySelect.appendChild(defaultOption);
+            if (Array.isArray(companies)) {
+              companies.forEach((company) => {
+                if (!company || !company._id) return;
+                const option = document.createElement('option');
+                option.value = String(company._id);
+                option.textContent = buildCompanyLabel(company);
+                const documentValue =
+                  company?.cnpj ||
+                  company?.documento ||
+                  company?.document ||
+                  company?.cpfCnpj ||
+                  company?.taxId ||
+                  '';
+                const digits = digitsOnly(documentValue);
+                if (digits && option.dataset) {
+                  option.dataset.companyDocument = digits;
+                }
+                companySelect.appendChild(option);
+              });
+            }
+            companySelect.disabled = !companies || !companies.length;
+          }
+          setCodeLookupCompanyOptions(companies, {
+            placeholder: placeholder || 'Selecione a empresa',
+          });
         };
 
         const setCompanySelectValue = (value) => {
@@ -8970,6 +9403,361 @@
           updateMainProductsTableDisplay();
         };
 
+        const CODE_STATUS_LABELS = {
+          draft: 'Cadastrada',
+          approved: 'Aprovada',
+        };
+
+        const CODE_STATUS_CLASSES = {
+          cadastrada: ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
+          aprovada: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-700'],
+        };
+
+        const mapDraftStatusLabel = (status) => {
+          if (status === null || typeof status === 'undefined') {
+            return CODE_STATUS_LABELS.draft;
+          }
+          const normalized = String(status).trim().toLowerCase();
+          if (!normalized) return CODE_STATUS_LABELS.draft;
+          if (normalized === 'approved' || normalized === 'aprovado' || normalized === 'aprovada') {
+            return CODE_STATUS_LABELS.approved;
+          }
+          if (normalized === 'draft' || normalized === 'rascunho' || normalized === 'cadastrada') {
+            return CODE_STATUS_LABELS.draft;
+          }
+          return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+        };
+
+        const mapDraftStatusClasses = (statusLabel) => {
+          const normalized = String(statusLabel || '').trim().toLowerCase();
+          return CODE_STATUS_CLASSES[normalized] || ['border-gray-200', 'bg-gray-100', 'text-gray-600'];
+        };
+
+        const parseDateForSort = (value) => {
+          if (!value) return null;
+          const info = normalizeDate(value);
+          if (info.dateInput) {
+            const timestamp = Date.parse(`${info.dateInput}T00:00:00`);
+            return Number.isNaN(timestamp) ? null : timestamp;
+          }
+          const parsed = Date.parse(value);
+          return Number.isNaN(parsed) ? null : parsed;
+        };
+
+        const buildCodeLookupRowData = (item, index) => {
+          const numericCode = Number.isFinite(item?.code) ? Number(item.code) : toNumeric(item?.code);
+          const headerCode = item?.headerCode || item?.header?.code || '';
+          const displayCode = headerCode || formatDraftCode(numericCode ?? item?.code ?? '');
+          const accessKey = item?.accessKey || item?.xml?.accessKey || '';
+          const nfNumber = item?.number || item?.header?.number || '';
+          const serie = item?.serie || item?.header?.serie || '';
+          const nfDisplay = [nfNumber, serie ? `Série ${serie}` : ''].filter(Boolean).join(' · ');
+          const supplierName = item?.supplierName || '';
+          const supplierDocument = item?.supplierDocument || '';
+          const totalNumeric = Number.isFinite(item?.totalValue) ? Number(item.totalValue) : toNumeric(item?.totalValue);
+          const totalDisplay = Number.isFinite(totalNumeric) ? formatCurrencyBRL(totalNumeric) : 'R$ 0,00';
+          const issueSource = item?.issueDate || item?.header?.issueDate || '';
+          const entrySource = item?.entryDate || item?.header?.entryDate || '';
+          const issueInfo = normalizeDate(issueSource);
+          const entryInfo = normalizeDate(entrySource);
+          const statusLabel = mapDraftStatusLabel(item?.status);
+          const issueTimestamp = parseDateForSort(issueSource);
+          const entryTimestamp = parseDateForSort(entrySource);
+          return {
+            item,
+            index,
+            displays: {
+              code: displayCode || '—',
+              accessKey: accessKey || '—',
+              nf: nfDisplay || nfNumber || '—',
+              supplier: supplierName || '—',
+              supplierDocument,
+              total: totalDisplay,
+              issueDate: issueInfo.display || issueInfo.dateInput || '—',
+              entryDate: entryInfo.display || entryInfo.dateInput || '—',
+              status: statusLabel,
+            },
+            sortValues: {
+              code: Number.isFinite(numericCode) ? numericCode : parseNumber(displayCode),
+              accessKey,
+              number: nfNumber,
+              supplier: supplierName,
+              total: Number.isFinite(totalNumeric) ? totalNumeric : 0,
+              issueDate: Number.isFinite(issueTimestamp) ? issueTimestamp : null,
+              entryDate: Number.isFinite(entryTimestamp) ? entryTimestamp : null,
+              status: statusLabel,
+            },
+            filterValues: {
+              code: displayCode,
+              accessKey,
+              number: nfDisplay || nfNumber,
+              supplier: supplierName,
+              total: totalDisplay,
+              issueDate: issueInfo.display || issueInfo.dateInput || '',
+              entryDate: entryInfo.display || entryInfo.dateInput || '',
+              status: statusLabel,
+            },
+          };
+        };
+
+        const applyCodeLookupFiltersToRows = (entries) => {
+          const filters = Object.entries(codeLookupTableState.filters || {}).filter(([, raw]) =>
+            normalizeFilterText(raw).length > 0
+          );
+          if (!filters.length) {
+            return entries.slice();
+          }
+          return entries.filter((entry) =>
+            filters.every(([key, raw]) => {
+              const normalizedFilter = normalizeFilterText(raw);
+              if (!normalizedFilter) return true;
+              const columnValue = entry.filterValues?.[key];
+              const normalizedColumn = normalizeFilterText(columnValue);
+              return normalizedColumn.includes(normalizedFilter);
+            })
+          );
+        };
+
+        const applyCodeLookupSortToRows = (entries) => {
+          if (!Array.isArray(entries) || !entries.length) {
+            return [];
+          }
+          const { sort } = codeLookupTableState;
+          const sortKey = sort?.key || '';
+          if (!sortKey) {
+            return entries.slice();
+          }
+          const sortDirection = sort?.direction === 'desc' ? 'desc' : 'asc';
+          const directionMultiplier = sortDirection === 'desc' ? -1 : 1;
+          return entries
+            .slice()
+            .sort((a, b) => {
+              const sortValuesA = a?.sortValues || {};
+              const sortValuesB = b?.sortValues || {};
+              const valueA = sortValuesA[sortKey];
+              const valueB = sortValuesB[sortKey];
+              const numericA = Number.isFinite(valueA) ? valueA : parseNumber(valueA);
+              const numericB = Number.isFinite(valueB) ? valueB : parseNumber(valueB);
+              if (Number.isFinite(numericA) || Number.isFinite(numericB)) {
+                const safeA = Number.isFinite(numericA) ? numericA : Number.NEGATIVE_INFINITY;
+                const safeB = Number.isFinite(numericB) ? numericB : Number.NEGATIVE_INFINITY;
+                if (safeA === safeB) {
+                  const indexA = Number.isFinite(a?.index) ? a.index : 0;
+                  const indexB = Number.isFinite(b?.index) ? b.index : 0;
+                  return indexA - indexB;
+                }
+                return safeA > safeB ? directionMultiplier : -directionMultiplier;
+              }
+              const textA = String(valueA ?? '').trim();
+              const textB = String(valueB ?? '').trim();
+              const comparison = textA.localeCompare(textB, 'pt-BR', {
+                sensitivity: 'base',
+                numeric: true,
+              });
+              if (comparison === 0) {
+                const indexA = Number.isFinite(a?.index) ? a.index : 0;
+                const indexB = Number.isFinite(b?.index) ? b.index : 0;
+                return indexA - indexB;
+              }
+              return comparison * directionMultiplier;
+            });
+        };
+
+        const updateCodeLookupSortButtons = () => {
+          const { sort } = codeLookupTableState;
+          const activeKey = sort?.key || '';
+          const activeDirection = sort?.direction === 'desc' ? 'desc' : 'asc';
+
+          codeLookupSortHeaders.forEach((header, key) => {
+            if (!header) return;
+            if (key === activeKey && activeKey) {
+              header.setAttribute('aria-sort', activeDirection === 'desc' ? 'descending' : 'ascending');
+            } else {
+              header.removeAttribute('aria-sort');
+            }
+          });
+
+          codeLookupSortButtons.forEach((meta, button) => {
+            if (!button) return;
+            const isActive = activeKey && meta.key === activeKey && meta.direction === activeDirection;
+            button.classList.toggle('text-primary', isActive);
+            button.classList.toggle('border-primary/60', isActive);
+            button.classList.toggle('bg-primary/10', isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+          });
+        };
+
+        const updateCodeLookupTableDisplay = () => {
+          if (!codeLookupTableBody) return;
+
+          updateCodeLookupSortButtons();
+
+          if (codeLookupLoadingRow) {
+            codeLookupLoadingRow.classList.toggle('hidden', !codeLookupIsLoading);
+          }
+
+          if (codeLookupErrorRow) {
+            if (codeLookupLastError) {
+              if (codeLookupErrorCell) {
+                codeLookupErrorCell.textContent = codeLookupLastError;
+              }
+              codeLookupErrorRow.classList.remove('hidden');
+            } else {
+              codeLookupErrorRow.classList.add('hidden');
+            }
+          }
+
+          const shouldHideData = codeLookupIsLoading || Boolean(codeLookupLastError);
+          const existingRows = codeLookupTableBody.querySelectorAll('[data-code-row]');
+          if (shouldHideData) {
+            existingRows.forEach((row) => row.remove());
+            if (codeLookupEmptyRow) codeLookupEmptyRow.classList.add('hidden');
+            if (codeLookupFilteredEmptyRow) codeLookupFilteredEmptyRow.classList.add('hidden');
+            return;
+          }
+
+          const items = Array.isArray(codeLookupTableState.items) ? codeLookupTableState.items : [];
+          const hasItems = items.length > 0;
+
+          if (codeLookupEmptyRow) {
+            codeLookupEmptyRow.classList.toggle('hidden', hasItems);
+          }
+          if (codeLookupFilteredEmptyRow) {
+            codeLookupFilteredEmptyRow.classList.add('hidden');
+          }
+
+          existingRows.forEach((row) => row.remove());
+
+          if (!hasItems) {
+            return;
+          }
+
+          const derivedEntries = items.map((item, index) => buildCodeLookupRowData(item, index));
+          const filteredEntries = applyCodeLookupFiltersToRows(derivedEntries);
+          const entriesToRender = applyCodeLookupSortToRows(filteredEntries);
+
+          if (!entriesToRender.length) {
+            if (codeLookupFilteredEmptyRow) {
+              codeLookupFilteredEmptyRow.classList.remove('hidden');
+            }
+            return;
+          }
+
+          const fragment = document.createDocumentFragment();
+
+          entriesToRender.forEach((entry) => {
+            const { item, displays } = entry;
+            const row = document.createElement('tr');
+            row.dataset.codeRow = 'true';
+            if (item && (item.id || item._id)) {
+              row.dataset.codeRowId = String(item.id || item._id);
+            }
+            if (item && typeof item.code !== 'undefined') {
+              row.dataset.codeRowCode = String(item.code);
+            }
+            row.className = 'cursor-pointer transition hover:bg-gray-50 focus-within:bg-gray-50';
+            row.tabIndex = 0;
+
+            const codeCell = document.createElement('td');
+            codeCell.className = 'px-4 py-3 font-semibold text-gray-700';
+            codeCell.textContent = displays.code;
+
+            const accessKeyCell = document.createElement('td');
+            accessKeyCell.className = 'px-4 py-3 font-mono text-xs text-gray-600';
+            accessKeyCell.textContent = displays.accessKey || '—';
+
+            const nfCell = document.createElement('td');
+            nfCell.className = 'px-4 py-3 text-gray-600';
+            nfCell.textContent = displays.nf;
+
+            const supplierCell = document.createElement('td');
+            supplierCell.className = 'px-4 py-3 text-gray-600';
+            supplierCell.textContent = displays.supplier;
+            if (displays.supplierDocument) {
+              const docLine = document.createElement('p');
+              docLine.className = 'text-xs text-gray-500';
+              docLine.textContent = formatDocument(displays.supplierDocument);
+              supplierCell.appendChild(docLine);
+            }
+
+            const totalCell = document.createElement('td');
+            totalCell.className = 'px-4 py-3 text-right text-gray-800 font-semibold';
+            totalCell.textContent = displays.total;
+
+            const issueCell = document.createElement('td');
+            issueCell.className = 'px-4 py-3 text-gray-600';
+            issueCell.textContent = displays.issueDate;
+
+            const entryCell = document.createElement('td');
+            entryCell.className = 'px-4 py-3 text-gray-600';
+            entryCell.textContent = displays.entryDate;
+
+            const statusCell = document.createElement('td');
+            statusCell.className = 'px-4 py-3 text-gray-600';
+            const statusBadge = document.createElement('span');
+            statusBadge.className =
+              'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide';
+            statusBadge.textContent = displays.status;
+            statusBadge.classList.add(...mapDraftStatusClasses(displays.status));
+            statusCell.appendChild(statusBadge);
+
+            row.append(codeCell, accessKeyCell, nfCell, supplierCell, totalCell, issueCell, entryCell, statusCell);
+            fragment.appendChild(row);
+          });
+
+          codeLookupTableBody.appendChild(fragment);
+        };
+
+        const setCodeLookupTableFilter = (key, value) => {
+          if (!key) return;
+          const nextValue = value || '';
+          if (codeLookupTableState.filters[key] === nextValue) {
+            return;
+          }
+          codeLookupTableState.filters[key] = nextValue;
+          updateCodeLookupTableDisplay();
+        };
+
+        const setCodeLookupSort = (key, direction) => {
+          if (!key) return;
+          const nextDirection = direction === 'desc' ? 'desc' : 'asc';
+          const { sort } = codeLookupTableState;
+          const currentKey = sort?.key || '';
+          const currentDirection = sort?.direction || 'asc';
+          if (currentKey === key && currentDirection === nextDirection) {
+            codeLookupTableState.sort = { key: '', direction: 'asc' };
+          } else {
+            codeLookupTableState.sort = { key, direction: nextDirection };
+          }
+          updateCodeLookupTableDisplay();
+        };
+
+        const renderCodeLookupRows = (items = []) => {
+          codeLookupTableState.items = Array.isArray(items) ? items : [];
+          updateCodeLookupTableDisplay();
+        };
+
+        const resetCodeLookupFilters = () => {
+          codeLookupTableState.filters = {};
+          codeLookupFilterInputs.forEach((input) => {
+            if (input) {
+              input.value = '';
+            }
+          });
+        };
+
+        const findCodeLookupItemById = (id) => {
+          if (!id) return null;
+          const items = Array.isArray(codeLookupTableState.items) ? codeLookupTableState.items : [];
+          return (
+            items.find((entry) => {
+              if (!entry) return false;
+              const candidateId = entry.id || entry._id || '';
+              return candidateId && String(candidateId) === String(id);
+            }) || null
+          );
+        };
+
         document.querySelectorAll('[data-main-products-filter]').forEach((input) => {
           const key = input.dataset.mainProductsFilter;
           if (!key) return;
@@ -8996,6 +9784,337 @@
         });
 
         updateMainProductSortButtons();
+
+        document.querySelectorAll('[data-code-lookup-filter]').forEach((input) => {
+          const key = input.dataset.codeLookupFilter;
+          if (!key) return;
+          codeLookupFilterInputs.set(key, input);
+          codeLookupTableState.filters[key] = input.value || '';
+          input.addEventListener('input', (event) => {
+            setCodeLookupTableFilter(key, event.target.value || '');
+          });
+        });
+
+        document.querySelectorAll('[data-code-lookup-sort]').forEach((button) => {
+          const key = button.dataset.codeLookupSort;
+          if (!key) return;
+          const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+          const header = button.closest('[data-code-sort-header]') || button.closest('th');
+          codeLookupSortButtons.set(button, { key, direction });
+          if (header && !codeLookupSortHeaders.has(key)) {
+            codeLookupSortHeaders.set(key, header);
+          }
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            setCodeLookupSort(key, direction);
+          });
+        });
+
+        updateCodeLookupSortButtons();
+
+        const loadCodeLookupList = async (companyId, { forceReload = false } = {}) => {
+          const normalized = companyId ? String(companyId) : '';
+          if (!normalized) {
+            codeLookupLastCompanyId = '';
+            codeLookupTableState.items = [];
+            codeLookupLastError = null;
+            codeLookupIsLoading = false;
+            updateCodeLookupTableDisplay();
+            return [];
+          }
+
+          if (!forceReload && codeLookupCache.has(normalized)) {
+            const cached = codeLookupCache.get(normalized) || [];
+            codeLookupTableState.items = cached;
+            codeLookupLastError = null;
+            codeLookupIsLoading = false;
+            codeLookupLastCompanyId = normalized;
+            updateCodeLookupTableDisplay();
+            return cached;
+          }
+
+          codeLookupIsLoading = true;
+          codeLookupLastError = null;
+          updateCodeLookupTableDisplay();
+
+          try {
+            const url = new URL(nfeDraftsEndpoint, window.location.origin);
+            url.searchParams.set('companyId', normalized);
+            const response = await fetch(url.toString(), { headers: buildAuthHeaders() });
+            const payload = await response.json().catch(() => ({}));
+
+            if (response.status === 401 || response.status === 403) {
+              handleAuthError();
+            }
+
+            if (!response.ok) {
+              const message =
+                (payload && (payload.message || payload.error)) ||
+                `Falha ao carregar as notas cadastradas (status ${response.status}).`;
+              throw new Error(message);
+            }
+
+            const drafts = Array.isArray(payload?.drafts) ? payload.drafts : [];
+            const normalizedDrafts = drafts.map((draft) => ({
+              ...draft,
+              id: draft.id || draft._id || '',
+              code: draft.code ?? draft.headerCode ?? draft.header?.code ?? '',
+              headerCode: draft.headerCode || draft.header?.code || '',
+              number: draft.number || draft.header?.number || '',
+              serie: draft.serie || draft.header?.serie || '',
+              status: draft.status || 'draft',
+              totalValue:
+                draft.totalValue ?? draft.totals?.totalValue ?? (draft.totals && draft.totals.totalValue) ?? null,
+              issueDate: draft.issueDate || draft.header?.issueDate || '',
+              entryDate: draft.entryDate || draft.header?.entryDate || '',
+              supplierName: draft.supplierName || '',
+              supplierDocument: draft.supplierDocument || '',
+              accessKey: draft.accessKey || draft.xml?.accessKey || '',
+            }));
+
+            codeLookupCache.set(normalized, normalizedDrafts);
+            codeLookupTableState.items = normalizedDrafts;
+            codeLookupLastError = null;
+            codeLookupIsLoading = false;
+            codeLookupLastCompanyId = normalized;
+            updateCodeLookupTableDisplay();
+            return normalizedDrafts;
+          } catch (error) {
+            console.error('Erro ao carregar notas cadastradas:', error);
+            codeLookupLastError =
+              error?.message || 'Não foi possível carregar as notas cadastradas para a empresa selecionada.';
+            codeLookupIsLoading = false;
+            codeLookupTableState.items = [];
+            updateCodeLookupTableDisplay();
+            return [];
+          }
+        };
+
+        const fetchDraftById = async (id) => {
+          const normalized = id ? String(id) : '';
+          if (!normalized) return null;
+          const endpoint = `${nfeDraftsEndpoint}/${normalized}`;
+          const response = await fetch(endpoint, { headers: buildAuthHeaders() });
+          const payload = await response.json().catch(() => ({}));
+
+          if (response.status === 401 || response.status === 403) {
+            handleAuthError();
+          }
+
+          if (!response.ok) {
+            const message =
+              (payload && (payload.message || payload.error)) ||
+              `Falha ao carregar a nota selecionada (status ${response.status}).`;
+            throw new Error(message);
+          }
+
+          const draft = payload?.draft || payload;
+          if (draft && !draft.id && draft._id) {
+            draft.id = String(draft._id);
+          }
+          return draft;
+        };
+
+        const buildNoteDataFromDraft = (draft) => {
+          if (!draft || typeof draft !== 'object') return null;
+          const payload = clonePlainObject(draft.payload) || {};
+          const importedData = clonePlainObject(payload.importedData) || {};
+          const noteData = importedData && typeof importedData === 'object' ? importedData : {};
+          const header = payload.header || {};
+
+          if (!noteData.ide || typeof noteData.ide !== 'object') {
+            noteData.ide = {};
+          }
+          noteData.ide.number = header.number || noteData.ide.number || '';
+          noteData.ide.serie = header.serie || noteData.ide.serie || '';
+          noteData.ide.model = header.model || noteData.ide.model || '';
+          noteData.ide.type = header.type || noteData.ide.type || '';
+          noteData.ide.emissionDate = header.issueDate || noteData.ide.emissionDate || '';
+          noteData.ide.entryDate = header.entryDate || noteData.ide.entryDate || '';
+          if (payload.transport?.mode) {
+            noteData.ide.freightMode = payload.transport.mode;
+          }
+
+          noteData.totals = { ...(noteData.totals || {}), ...(payload.totals || {}) };
+          noteData.transport = { ...(noteData.transport || {}), ...(payload.transport || {}) };
+          noteData.duplicates = Array.isArray(payload.duplicates) ? payload.duplicates : noteData.duplicates || [];
+          noteData.references = Array.isArray(payload.references) ? payload.references : noteData.references || [];
+          noteData.payments = Array.isArray(payload.payments) ? payload.payments : noteData.payments || [];
+
+          const additional = payload.additionalInfo || {};
+          noteData.additionalInfo = {
+            ...(noteData.additionalInfo || {}),
+            complementary: additional.observation || noteData.additionalInfo?.complementary || '',
+            fiscal: additional.complementaryFiscal || noteData.additionalInfo?.fiscal || '',
+            paymentCondition: additional.paymentCondition || noteData.additionalInfo?.paymentCondition || '',
+            paymentForm: additional.paymentForm || noteData.additionalInfo?.paymentForm || '',
+          };
+
+          if (Array.isArray(payload.items) && payload.items.length) {
+            noteData.items = payload.items;
+          }
+
+          const selection = payload.selection || {};
+          noteData.selection = { ...(noteData.selection || {}), ...selection };
+          noteData.selectedCompanyId = selection.companyId || noteData.selectedCompanyId || '';
+          noteData.selectedDepositId = selection.depositId || noteData.selectedDepositId || '';
+          noteData.selectedBankAccountId = selection.bankAccountId || noteData.selectedBankAccountId || '';
+
+          const supplier = payload.supplier || {};
+          if (!noteData.emit || typeof noteData.emit !== 'object') {
+            noteData.emit = {};
+          }
+          if (supplier.name && !noteData.emit.name) noteData.emit.name = supplier.name;
+          if (supplier.document) noteData.emit.document = supplier.document;
+          if (supplier.stateRegistration) noteData.emit.stateRegistration = supplier.stateRegistration;
+          if (supplier.email) noteData.emit.email = supplier.email;
+          if (supplier.addressText) {
+            noteData.emit.address = noteData.emit.address || {};
+            noteData.emit.address.text = supplier.addressText;
+          }
+
+          noteData.accessKey = payload.xml?.accessKey || noteData.accessKey || '';
+          noteData.xml = payload.xml || noteData.xml || {};
+          noteData.metadata = { ...(noteData.metadata || {}), ...(payload.metadata || {}), draftId: draft._id || draft.id || '' };
+          noteData.importedData = payload.importedData || noteData.importedData || {};
+          noteData.draftId = draft._id || draft.id || '';
+          noteData.draftCode = draft.code || noteData.draftCode || '';
+          noteData.paymentConditionHint = additional.paymentCondition || noteData.paymentConditionHint || '';
+          noteData.paymentFormHint = additional.paymentForm || noteData.paymentFormHint || '';
+
+          return noteData;
+        };
+
+        const applyDraftDataToForm = (draft) => {
+          const noteData = buildNoteDataFromDraft(draft);
+          if (!noteData) {
+            throw new Error('Os dados retornados do rascunho estão incompletos.');
+          }
+          resetImportedNfeState();
+          lastNfeData = noteData;
+          applyImportedDataToMainForm(lastNfeData);
+          applyDraftResponseToState(draft);
+          updateSummaryFromData(lastNfeData);
+        };
+
+        const trapCodeLookupFocus = (event) => {
+          if (!codeLookupModal || codeLookupModal.classList.contains('hidden')) return;
+          if (event.key !== 'Tab') return;
+
+          const focusableElements = codeLookupModalCard
+            ? Array.from(codeLookupModalCard.querySelectorAll(MODAL_FOCUSABLE_SELECTORS)).filter(
+                (element) => element instanceof HTMLElement && element.offsetParent !== null
+              )
+            : [];
+          if (!focusableElements.length) return;
+
+          const firstElement = focusableElements[0];
+          const lastElement = focusableElements[focusableElements.length - 1];
+
+          if (event.shiftKey && document.activeElement === firstElement) {
+            event.preventDefault();
+            lastElement.focus();
+          } else if (!event.shiftKey && document.activeElement === lastElement) {
+            event.preventDefault();
+            firstElement.focus();
+          }
+        };
+
+        const openCodeLookupModal = () => {
+          if (!codeLookupModal || codeLookupIsOpen) return;
+
+          codeLookupPreviousFocus = document.activeElement;
+          codeLookupIsOpen = true;
+          codeLookupModal.classList.remove('hidden');
+          document.body.classList.add('overflow-hidden');
+
+          if (codeLookupModalCard) {
+            codeLookupModalCard.classList.add('opacity-0', 'scale-95');
+            requestAnimationFrame(() => {
+              codeLookupModalCard.classList.remove('opacity-0', 'scale-95');
+              codeLookupModalCard.classList.add('opacity-100', 'scale-100');
+            });
+
+            const focusableElements = Array.from(
+              codeLookupModalCard.querySelectorAll(MODAL_FOCUSABLE_SELECTORS)
+            ).filter((element) => element instanceof HTMLElement && element.offsetParent !== null);
+            if (focusableElements.length) {
+              focusableElements[0].focus();
+            }
+          }
+
+          document.addEventListener('keydown', trapCodeLookupFocus);
+
+          resetCodeLookupFilters();
+          codeLookupTableState.sort = { key: '', direction: 'asc' };
+          codeLookupLastError = null;
+
+          const activeCompanyId = companySelect ? companySelect.value || '' : '';
+          if (codeLookupCompanySelect) {
+            codeLookupCompanySelect.value = activeCompanyId || '';
+          }
+
+          if (activeCompanyId) {
+            loadCodeLookupList(activeCompanyId).catch(() => {});
+          } else {
+            codeLookupTableState.items = [];
+            codeLookupIsLoading = false;
+            codeLookupLastError = null;
+            updateCodeLookupTableDisplay();
+          }
+        };
+
+        const closeCodeLookupModal = () => {
+          if (!codeLookupModal || codeLookupModal.classList.contains('hidden')) return;
+
+          codeLookupIsOpen = false;
+
+          if (codeLookupModalCard) {
+            codeLookupModalCard.classList.remove('opacity-100', 'scale-100');
+            codeLookupModalCard.classList.add('opacity-0', 'scale-95');
+          }
+
+          setTimeout(() => {
+            codeLookupModal.classList.add('hidden');
+            if (codeLookupPreviousFocus && typeof codeLookupPreviousFocus.focus === 'function') {
+              codeLookupPreviousFocus.focus();
+            }
+            codeLookupPreviousFocus = null;
+          }, 180);
+
+          if (!importModal || importModal.classList.contains('hidden')) {
+            document.body.classList.remove('overflow-hidden');
+          }
+
+          document.removeEventListener('keydown', trapCodeLookupFocus);
+        };
+
+        const handleCodeLookupRowSelection = async (rowId) => {
+          const normalizedId = rowId ? String(rowId) : '';
+          if (!normalizedId || isLoadingDraftDetails) return;
+          isLoadingDraftDetails = true;
+
+          try {
+            closeCodeLookupModal();
+            notify('Carregando nota selecionada...', 'info');
+            const draft = await fetchDraftById(normalizedId);
+            if (!draft) {
+              throw new Error('Não foi possível localizar a nota selecionada.');
+            }
+            applyDraftDataToForm(draft);
+            const formattedCode = currentDraftCode ? formatDraftCode(currentDraftCode) : '';
+            if (formattedCode) {
+              notify(`Nota ${formattedCode} carregada a partir do rascunho.`, 'success');
+            } else {
+              notify('Nota carregada a partir do rascunho selecionado.', 'success');
+            }
+          } catch (error) {
+            console.error('Erro ao carregar nota selecionada:', error);
+            notify(error?.message || 'Não foi possível carregar a nota selecionada.', 'error');
+          } finally {
+            isLoadingDraftDetails = false;
+          }
+        };
 
         const updateDuplicataSummaryFromData = (data) => {
           const duplicates = Array.isArray(data?.duplicates) ? data.duplicates : [];
@@ -10110,6 +11229,10 @@
 
         document.addEventListener('keydown', (event) => {
           if (event.key === 'Escape') {
+            if (codeLookupModal && !codeLookupModal.classList.contains('hidden')) {
+              closeCodeLookupModal();
+              return;
+            }
             if (productIframeModal && !productIframeModal.classList.contains('hidden')) {
               return;
             }
@@ -10123,6 +11246,73 @@
           refreshImportedProductsButton.addEventListener('click', (event) => {
             event.preventDefault();
             refreshImportedProductsList();
+          });
+        }
+
+        if (codeLookupModal) {
+          codeLookupCloseTriggers.forEach((button) => {
+            button.addEventListener('click', (event) => {
+              event.preventDefault();
+              closeCodeLookupModal();
+            });
+          });
+          codeLookupModal.addEventListener('click', (event) => {
+            const target = event.target;
+            if (target instanceof Element && target.hasAttribute('data-close-code-modal')) {
+              closeCodeLookupModal();
+            }
+          });
+        }
+
+        if (codeLookupTableBody) {
+          codeLookupTableBody.addEventListener('click', (event) => {
+            const row = event.target instanceof Element ? event.target.closest('[data-code-row]') : null;
+            if (!row) return;
+            const rowId = row.getAttribute('data-code-row-id');
+            if (rowId) {
+              event.preventDefault();
+              handleCodeLookupRowSelection(rowId);
+            }
+          });
+          codeLookupTableBody.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            const row = event.target instanceof Element ? event.target.closest('[data-code-row]') : null;
+            if (!row) return;
+            const rowId = row.getAttribute('data-code-row-id');
+            if (rowId) {
+              event.preventDefault();
+              handleCodeLookupRowSelection(rowId);
+            }
+          });
+        }
+
+        if (codeLookupCompanySelect) {
+          codeLookupCompanySelect.addEventListener('change', () => {
+            const selectedCompany = codeLookupCompanySelect.value || '';
+            codeLookupTableState.sort = { key: '', direction: 'asc' };
+            loadCodeLookupList(selectedCompany).catch(() => {});
+          });
+        }
+
+        if (nfeCodeInput) {
+          const shouldOpenCodeLookup = (event) => {
+            const ignoredKeys = ['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Escape'];
+            if (ignoredKeys.includes(event.key)) return false;
+            if (event.ctrlKey || event.metaKey || event.altKey) return false;
+            return true;
+          };
+
+          nfeCodeInput.addEventListener('keydown', (event) => {
+            if (!shouldOpenCodeLookup(event)) {
+              return;
+            }
+            event.preventDefault();
+            openCodeLookupModal();
+          });
+
+          nfeCodeInput.addEventListener('click', (event) => {
+            event.preventDefault();
+            openCodeLookupModal();
           });
         }
 
@@ -10323,6 +11513,9 @@
 
               const draftData = result?.draft || result;
               applyDraftResponseToState(draftData);
+              if (companySelect && companySelect.value) {
+                codeLookupCache.delete(companySelect.value);
+              }
               const formattedCode = currentDraftCode ? formatDraftCode(currentDraftCode) : '';
               const successMessage = formattedCode
                 ? `Rascunho salvo como código ${formattedCode}.`

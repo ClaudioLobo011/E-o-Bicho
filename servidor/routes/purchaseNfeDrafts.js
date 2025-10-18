@@ -162,6 +162,64 @@ const buildDraftDocumentFromPayload = (payload = {}) => {
   };
 };
 
+router.get('/', async (req, res) => {
+  try {
+    const { companyId, status } = req.query || {};
+    const filter = {};
+    if (companyId) {
+      filter.companyId = cleanString(companyId);
+    }
+    if (status) {
+      filter.status = cleanString(status);
+    }
+
+    const drafts = await NfeDraft.find(filter)
+      .sort({ updatedAt: -1 })
+      .select({
+        code: 1,
+        status: 1,
+        companyId: 1,
+        supplierName: 1,
+        supplierDocument: 1,
+        totals: 1,
+        header: 1,
+        xml: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      .lean();
+
+    const payload = Array.isArray(drafts)
+      ? drafts.map((draft) => ({
+          id: String(draft._id || ''),
+          code: draft.code ?? null,
+          status: draft.status || 'draft',
+          companyId: draft.companyId || '',
+          supplierName: draft.supplierName || '',
+          supplierDocument: draft.supplierDocument || '',
+          totalValue: draft.totals?.totalValue ?? null,
+          headerCode: draft.header?.code || '',
+          number: draft.header?.number || '',
+          serie: draft.header?.serie || '',
+          type: draft.header?.type || '',
+          model: draft.header?.model || '',
+          issueDate: draft.header?.issueDate || '',
+          entryDate: draft.header?.entryDate || '',
+          accessKey: draft.xml?.accessKey || '',
+          updatedAt: draft.updatedAt || null,
+          createdAt: draft.createdAt || null,
+        }))
+      : [];
+
+    return res.json({ drafts: payload });
+  } catch (error) {
+    console.error('Erro ao listar rascunhos de NF-e:', error);
+    return res
+      .status(500)
+      .json({ message: error.message || 'Falha ao consultar os rascunhos de NF-e cadastrados.' });
+  }
+});
+
 router.post('/', async (req, res) => {
   try {
     const payload = req.body || {};
@@ -183,6 +241,28 @@ router.post('/', async (req, res) => {
     return res
       .status(500)
       .json({ message: error.message || 'Falha ao salvar o rascunho da NF-e.' });
+  }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Identificador do rascunho não informado.' });
+    }
+
+    const draft = await NfeDraft.findById(id).lean();
+    if (!draft) {
+      return res.status(404).json({ message: 'Rascunho de NF-e não encontrado.' });
+    }
+
+    draft.id = String(draft._id || id);
+    return res.json({ draft });
+  } catch (error) {
+    console.error('Erro ao consultar rascunho da NF-e:', error);
+    return res
+      .status(500)
+      .json({ message: error.message || 'Falha ao recuperar os dados do rascunho da NF-e.' });
   }
 });
 
