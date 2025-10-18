@@ -34,16 +34,6 @@
               <p class="text-sm text-gray-600">Cadastre entradas modelo 55 com dados exigidos pelo Manual de Orientação do Contribuinte 4.0 e notas técnicas vigentes para NFC-e, NF-e e NFSe.</p>
             </div>
           </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <button type="button" data-open-import-modal class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-              <i class="fas fa-file-upload"></i>
-              Importar XML
-            </button>
-            <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
-              <i class="fas fa-barcode"></i>
-              Consultar SEFAZ
-            </button>
-          </div>
         </header>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
@@ -59,17 +49,30 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-[160px_150px_150px_120px_minmax(0,1fr)] gap-4">
             <div>
               <label for="nfe-code" class="block text-sm font-medium text-gray-700 mb-1">Código</label>
-              <div class="relative">
-                <input type="text" id="nfe-code" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500" value="Gerado automaticamente" readonly>
-                <span class="absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">AUTO</span>
-              </div>
+              <input
+                type="text"
+                id="nfe-code"
+                class="w-full max-w-[160px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 cursor-pointer"
+                readonly
+              >
             </div>
             <div>
               <label for="nfe-number" class="block text-sm font-medium text-gray-700 mb-1">NF* (número da nota)</label>
-              <input type="text" id="nfe-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="10245" required>
+              <input type="text" id="nfe-number" class="w-full max-w-[150px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="10245" maxlength="8" required>
+            </div>
+            <div>
+              <label for="nfe-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+              <select id="nfe-type" class="w-full max-w-[150px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="NF" selected>NF</option>
+                <option value="RECIBO">Recibo</option>
+              </select>
+            </div>
+            <div>
+              <label for="nfe-series" class="block text-sm font-medium text-gray-700 mb-1">Série</label>
+              <input type="text" id="nfe-series" class="w-full max-w-[120px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1">
             </div>
             <div>
               <label for="nfe-supplier" class="block text-sm font-medium text-gray-700 mb-1">Fornecedor*</label>
@@ -79,27 +82,6 @@
                 <option value="06117473000150">06117473000150 - MSD Saúde Animal Comércio de Produtos Veterinários Ltda</option>
                 <option value="07404231000110">07404231000110 - Ourofino Saúde Animal Ltda</option>
               </select>
-            </div>
-            <div>
-              <label for="nfe-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-              <select id="nfe-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="NF" selected>NF</option>
-                <option value="NFCe">NFC-e</option>
-                <option value="NFSe">NFS-e</option>
-              </select>
-            </div>
-            <div>
-              <label for="nfe-series" class="block text-sm font-medium text-gray-700 mb-1">Série</label>
-              <input type="text" id="nfe-series" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1">
-            </div>
-            <div>
-              <label for="nfe-protocol" class="block text-sm font-medium text-gray-700 mb-1">Protocolo SEFAZ</label>
-              <input type="text" id="nfe-protocol" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="35240784593211000160550010004273341431819234">
-              <p class="mt-1 text-xs text-gray-500">Número conforme retorno da autorização na SEFAZ.</p>
-            </div>
-            <div class="lg:col-span-2">
-              <label for="nfe-reference" class="block text-sm font-medium text-gray-700 mb-1">Referência Fiscal</label>
-              <input type="text" id="nfe-reference" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="NF-e emitida pela SEFAZ/SP em ambiente de produção">
             </div>
           </div>
         </section>
@@ -112,12 +94,36 @@
             <button type="button" class="tab-button" data-tab="produtos">Produtos</button>
             <button type="button" class="tab-button" data-tab="transportadora">Transportadora</button>
             <button type="button" class="tab-button" data-tab="duplicatas">Duplicatas</button>
-            <button type="button" class="tab-button" data-tab="ajustes">Débitos e Créditos</button>
             <button type="button" class="tab-button" data-tab="documentos">Documentos Vinculados</button>
           </nav>
 
           <div class="p-6 space-y-6">
             <div class="tab-panel" data-tab-panel="dados">
+              <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 class="text-sm font-semibold text-gray-700">Ações principais</h3>
+                  <p class="text-xs text-gray-500">Gerencie a nota importando XML, visualizando lotes ou ajustando preços e pedidos.</p>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <button type="button" data-open-import-modal class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                    <i class="fas fa-file-import"></i>
+                    Importar XML
+                  </button>
+                  <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                    <i class="fas fa-eye"></i>
+                    Visualizar Lotes
+                  </button>
+                  <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                    <i class="fas fa-tags"></i>
+                    Alterar Preços
+                  </button>
+                  <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                    <i class="fas fa-clipboard-list"></i>
+                    Pedidos
+                  </button>
+                </div>
+              </div>
+
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label for="issue-date" class="block text-sm font-medium text-gray-700 mb-1">Data Emissão*</label>
@@ -161,47 +167,6 @@
                     <option value="industrializacao">Industrialização</option>
                     <option value="consumo">Uso e Consumo</option>
                     <option value="imobilizado">Ativo Imobilizado</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="natureza-operacao" class="block text-sm font-medium text-gray-700 mb-1">Natureza da Operação (NatOp)</label>
-                  <input type="text" id="natureza-operacao" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.102 - Compra para comercialização">
-                </div>
-                <div>
-                  <label for="cfop" class="block text-sm font-medium text-gray-700 mb-1">CFOP padrão da entrada</label>
-                  <input type="text" id="cfop" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="1.102">
-                </div>
-                <div>
-                  <label for="finalidade" class="block text-sm font-medium text-gray-700 mb-1">Finalidade da NFe</label>
-                  <select id="finalidade" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="normal" selected>Normal</option>
-                    <option value="devolucao">Devolução</option>
-                    <option value="ajuste">Ajuste</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="indicador-presenca" class="block text-sm font-medium text-gray-700 mb-1">Indicador de Presença (indPres)</label>
-                  <select id="indicador-presenca" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="0">0 – Não se aplica (NF-e)</option>
-                    <option value="1">1 – Operação presencial</option>
-                    <option value="2">2 – Internet</option>
-                    <option value="3">3 – Teleatendimento</option>
-                    <option value="4">4 – Entrega em domicílio</option>
-                    <option value="5">5 – Operação presencial fora do estabelecimento</option>
-                    <option value="9">9 – Operação não presencial, outros</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="tipo-emissao" class="block text-sm font-medium text-gray-700 mb-1">Tipo de Emissão (tpEmis)</label>
-                  <select id="tipo-emissao" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="1" selected>1 – Emissão normal</option>
-                    <option value="2">2 – Contingência FS-IA</option>
-                    <option value="3">3 – Contingência SCAN</option>
-                    <option value="4">4 – Contingência DPEC</option>
-                    <option value="5">5 – Contingência FS-DA</option>
-                    <option value="6">6 – Contingência SVC-AN</option>
-                    <option value="7">7 – Contingência SVC-RS</option>
-                    <option value="9">9 – Contingência off-line da NFC-e</option>
                   </select>
                 </div>
               </div>
@@ -267,14 +232,6 @@
                   <div>
                     <label for="valor-fcp-st" class="block text-sm font-medium text-gray-700 mb-1">Valor FCP ST (R$)</label>
                     <input type="number" step="0.01" id="valor-fcp-st" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="total-servicos" class="block text-sm font-medium text-gray-700 mb-1">Total Serviços (R$)</label>
-                    <input type="number" step="0.01" id="total-servicos" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  </div>
-                  <div>
-                    <label for="valor-ajuste-esquerda" class="block text-sm font-medium text-gray-700 mb-1">Valor do Ajuste (R$)</label>
-                    <input type="number" step="0.01" id="valor-ajuste-esquerda" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
                   </div>
                 </div>
 
@@ -369,6 +326,15 @@
                   <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
                     <i class="fas fa-plus-circle"></i>
                     Adicionar Produto
+                  </button>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                    data-open-import-modal
+                    data-import-context="bonus"
+                  >
+                    <i class="fas fa-gift"></i>
+                    Adicionar Bonificação
                   </button>
                   <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
                     <i class="fas fa-exchange-alt"></i>
@@ -743,10 +709,33 @@
                   <label for="transportadora-uf" class="block text-sm font-medium text-gray-700 mb-1">UF – Transportadora</label>
                   <select id="transportadora-uf" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
                     <option value="">Selecione</option>
-                    <option value="SP">SP - São Paulo</option>
-                    <option value="RJ">RJ - Rio de Janeiro</option>
-                    <option value="MG">MG - Minas Gerais</option>
+                    <option value="AC">AC - Acre</option>
+                    <option value="AL">AL - Alagoas</option>
+                    <option value="AP">AP - Amapá</option>
+                    <option value="AM">AM - Amazonas</option>
+                    <option value="BA">BA - Bahia</option>
+                    <option value="CE">CE - Ceará</option>
+                    <option value="DF">DF - Distrito Federal</option>
                     <option value="ES">ES - Espírito Santo</option>
+                    <option value="GO">GO - Goiás</option>
+                    <option value="MA">MA - Maranhão</option>
+                    <option value="MT">MT - Mato Grosso</option>
+                    <option value="MS">MS - Mato Grosso do Sul</option>
+                    <option value="MG">MG - Minas Gerais</option>
+                    <option value="PA">PA - Pará</option>
+                    <option value="PB">PB - Paraíba</option>
+                    <option value="PR">PR - Paraná</option>
+                    <option value="PE">PE - Pernambuco</option>
+                    <option value="PI">PI - Piauí</option>
+                    <option value="RJ">RJ - Rio de Janeiro</option>
+                    <option value="RN">RN - Rio Grande do Norte</option>
+                    <option value="RS">RS - Rio Grande do Sul</option>
+                    <option value="RO">RO - Rondônia</option>
+                    <option value="RR">RR - Roraima</option>
+                    <option value="SC">SC - Santa Catarina</option>
+                    <option value="SP">SP - São Paulo</option>
+                    <option value="SE">SE - Sergipe</option>
+                    <option value="TO">TO - Tocantins</option>
                   </select>
                 </div>
                 <div>
@@ -757,10 +746,33 @@
                   <label for="transportadora-uf-placa" class="block text-sm font-medium text-gray-700 mb-1">UF Placa – Transportadora</label>
                   <select id="transportadora-uf-placa" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
                     <option value="">Selecione</option>
-                    <option value="SP">SP</option>
-                    <option value="RJ">RJ</option>
-                    <option value="MG">MG</option>
+                    <option value="AC">AC</option>
+                    <option value="AL">AL</option>
+                    <option value="AP">AP</option>
+                    <option value="AM">AM</option>
+                    <option value="BA">BA</option>
+                    <option value="CE">CE</option>
+                    <option value="DF">DF</option>
                     <option value="ES">ES</option>
+                    <option value="GO">GO</option>
+                    <option value="MA">MA</option>
+                    <option value="MT">MT</option>
+                    <option value="MS">MS</option>
+                    <option value="MG">MG</option>
+                    <option value="PA">PA</option>
+                    <option value="PB">PB</option>
+                    <option value="PR">PR</option>
+                    <option value="PE">PE</option>
+                    <option value="PI">PI</option>
+                    <option value="RJ">RJ</option>
+                    <option value="RN">RN</option>
+                    <option value="RS">RS</option>
+                    <option value="RO">RO</option>
+                    <option value="RR">RR</option>
+                    <option value="SC">SC</option>
+                    <option value="SP">SP</option>
+                    <option value="SE">SE</option>
+                    <option value="TO">TO</option>
                   </select>
                 </div>
                 <div>
@@ -858,7 +870,11 @@
               </div>
 
               <div class="mt-6 flex flex-wrap items-center gap-3">
-                <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition"
+                  data-nfe-duplicatas-generate
+                >
                   <i class="fas fa-calculator"></i>
                   Gerar
                 </button>
@@ -883,81 +899,6 @@
                       <td class="px-4 py-3 text-center text-gray-500" colspan="8">
                         Nenhuma duplicata foi informada no XML.
                       </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div class="tab-panel hidden" data-tab-panel="ajustes">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label for="origem" class="block text-sm font-medium text-gray-700 mb-1">Origem</label>
-                  <select id="origem" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="nacional" selected>Nacional</option>
-                    <option value="importada-direta">Importada - Adquirida no exterior</option>
-                    <option value="importada-interna">Importada - Adquirida no mercado interno</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="cst" class="block text-sm font-medium text-gray-700 mb-1">CST</label>
-                  <input type="text" id="cst" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="090">
-                </div>
-                <div>
-                  <label for="base-calculo" class="block text-sm font-medium text-gray-700 mb-1">Base de Cálculo (R$)</label>
-                  <input type="number" step="0.01" id="base-calculo" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                </div>
-                <div>
-                  <label for="aliquota" class="block text-sm font-medium text-gray-700 mb-1">Alíquota (%)</label>
-                  <input type="number" step="0.01" id="aliquota" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                </div>
-                <div>
-                  <label for="valor-ajuste" class="block text-sm font-medium text-gray-700 mb-1">Valor do Ajuste (R$)</label>
-                  <input type="number" step="0.01" id="valor-ajuste" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                </div>
-                <div>
-                  <label for="motivo-ajuste" class="block text-sm font-medium text-gray-700 mb-1">Motivo</label>
-                  <input type="text" id="motivo-ajuste" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Táxi">
-                </div>
-                <div>
-                  <label for="codigo-ajuste" class="block text-sm font-medium text-gray-700 mb-1">Código do Ajuste (F2)</label>
-                  <input type="text" id="codigo-ajuste" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="RJ090000">
-                </div>
-              </div>
-
-              <div class="mt-6 flex flex-wrap gap-3">
-                <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
-                  <i class="fas fa-plus"></i>
-                  Adicionar
-                </button>
-                <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-                  <i class="fas fa-eraser"></i>
-                  Limpar
-                </button>
-              </div>
-
-              <div class="mt-4 overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead class="bg-gray-50">
-                    <tr>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Origem</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">CST</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Base de Cálculo (R$)</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Alíquota (%)</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Valor do Ajuste (R$)</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Motivo</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-700">Código do Ajuste</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 bg-white">
-                    <tr>
-                      <td class="px-4 py-3 text-gray-600">Nacional</td>
-                      <td class="px-4 py-3 text-gray-600">090</td>
-                      <td class="px-4 py-3 text-gray-600">R$ 1.500,00</td>
-                      <td class="px-4 py-3 text-gray-600">18%</td>
-                      <td class="px-4 py-3 text-gray-600">R$ 270,00</td>
-                      <td class="px-4 py-3 text-gray-600">Táxi</td>
-                      <td class="px-4 py-3 text-gray-600">RJ090000</td>
                     </tr>
                   </tbody>
                 </table>
@@ -994,25 +935,6 @@
                 </table>
               </div>
 
-              <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-                <button type="button" data-open-import-modal class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                  <i class="fas fa-file-import"></i>
-                  Importar XML
-                </button>
-                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                  <i class="fas fa-eye"></i>
-                  Visualizar Lotes
-                </button>
-                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                  <i class="fas fa-tags"></i>
-                  Alterar Preços
-                </button>
-                <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
-                  <i class="fas fa-clipboard-list"></i>
-                  Pedidos
-                </button>
-              </div>
-
               <div class="mt-4 flex flex-wrap gap-2 text-xs text-gray-500">
                 <button type="button" class="inline-flex items-center gap-1 rounded border border-gray-200 px-2.5 py-1 font-medium hover:bg-gray-50">
                   <i class="fas fa-file-excel"></i>
@@ -1035,37 +957,8 @@
           </div>
         </section>
 
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
-          <h2 class="text-lg font-semibold text-gray-800">Referências oficiais</h2>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <article class="rounded-lg border border-gray-200 p-4">
-              <h3 class="text-sm font-semibold text-gray-800">Portal Nacional da NF-e</h3>
-              <p class="mt-2 text-sm text-gray-600">Consulta autorizada e download de esquemas para NF-e, NFC-e e eventos vinculados.</p>
-              <a href="https://www.nfe.fazenda.gov.br/portal" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
-                <i class="fas fa-external-link-alt"></i>
-                Acessar portal
-              </a>
-            </article>
-            <article class="rounded-lg border border-gray-200 p-4">
-              <h3 class="text-sm font-semibold text-gray-800">Manual de Orientação do Contribuinte 4.0</h3>
-              <p class="mt-2 text-sm text-gray-600">Layout nacional de NF-e (modelo 55) e NFC-e (modelo 65) atualizado com NT 2023.</p>
-              <a href="https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=j6Nz6xH3O9E=" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
-                <i class="fas fa-external-link-alt"></i>
-                Baixar MOC
-              </a>
-            </article>
-            <article class="rounded-lg border border-gray-200 p-4">
-              <h3 class="text-sm font-semibold text-gray-800">Portal de NFSe Nacional</h3>
-              <p class="mt-2 text-sm text-gray-600">Documentação oficial da ABRASF e padrão nacional de serviços eletrônicos.</p>
-              <a href="https://www.gov.br/nfse/pt-br" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
-                <i class="fas fa-external-link-alt"></i>
-                Consultar NFSe</a>
-            </article>
-          </div>
-        </div>
-
         <div class="flex flex-col gap-3 md:flex-row md:justify-end">
-          <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+          <button type="button" data-save-draft class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
             <i class="fas fa-file-archive"></i>
             Salvar rascunho
           </button>
@@ -1081,6 +974,364 @@
       </div>
     </div>
   </main>
+
+  <div id="nfe-code-lookup-modal" class="fixed inset-0 z-[999] hidden">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-code-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div
+        data-code-modal-card
+        class="relative flex w-full max-w-[1280px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh]"
+      >
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="space-y-1.5">
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-file-circle-check"></i>
+              Notas cadastradas
+            </span>
+            <h2 class="text-lg font-semibold text-gray-900">Selecionar nota existente</h2>
+            <p class="text-[11px] text-gray-600">
+              Escolha a empresa e localize notas cadastradas ou aprovadas para reutilizar os dados no preenchimento atual.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
+            data-close-code-modal
+          >
+            <span class="sr-only">Fechar modal</span>
+            <i class="fas fa-times"></i>
+          </button>
+        </header>
+
+        <div class="flex flex-col gap-3 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex flex-col gap-1">
+            <label for="nfe-code-company-filter" class="text-xs font-semibold uppercase tracking-wide text-gray-600">Empresa</label>
+            <select
+              id="nfe-code-company-filter"
+              data-code-company
+              class="w-full min-w-[220px] rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">Selecione uma empresa</option>
+            </select>
+          </div>
+          <p class="text-[11px] text-gray-500">
+            Os filtros por coluna podem ser combinados. Clique no cabeçalho para ordenar.
+          </p>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-4 py-4">
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50">
+                <tr class="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="code">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Código</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="code"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela coluna Código"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="code"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela coluna Código"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="code"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="accessKey">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Chave de Acesso</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="accessKey"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela coluna Chave de Acesso"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="accessKey"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela coluna Chave de Acesso"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="accessKey"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="number">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">NF</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="number"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela coluna NF"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="number"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela coluna NF"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="number"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="supplier">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Fornecedor</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="supplier"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela coluna Fornecedor"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="supplier"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela coluna Fornecedor"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="supplier"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-right align-top" data-code-sort-header="total">
+                    <div class="flex flex-col items-end gap-1">
+                      <div class="flex w-full items-center justify-end gap-1">
+                        <span class="whitespace-nowrap">Valor da Nota (R$)</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="total"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pelo valor da nota"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="total"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pelo valor da nota"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="total"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="issueDate">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Data Emissão</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="issueDate"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela data de emissão"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="issueDate"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela data de emissão"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="issueDate"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="entryDate">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Data Entrada</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="entryDate"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela data de entrada"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="entryDate"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela data de entrada"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="entryDate"
+                      >
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-3 text-left align-top" data-code-sort-header="status">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Situação</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="status"
+                            data-sort-direction="asc"
+                            aria-label="Ordenar crescente pela situação"
+                          >
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            data-code-lookup-sort="status"
+                            data-sort-direction="desc"
+                            aria-label="Ordenar decrescente pela situação"
+                          >
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Filtrar"
+                        class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        data-code-lookup-filter="status"
+                      >
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 bg-white" data-code-table-body>
+                <tr class="hidden" data-code-loading>
+                  <td class="px-4 py-6 text-center text-gray-500" colspan="8">
+                    <i class="fas fa-spinner-third fa-spin mr-2"></i>
+                    Carregando notas cadastradas...
+                  </td>
+                </tr>
+                <tr class="hidden" data-code-error>
+                  <td class="px-4 py-6 text-center text-rose-600" colspan="8">
+                    Não foi possível carregar as notas cadastradas para a empresa selecionada.
+                  </td>
+                </tr>
+                <tr class="hidden" data-code-empty>
+                  <td class="px-4 py-6 text-center text-gray-500" colspan="8">
+                    Nenhuma nota encontrada para a empresa selecionada.
+                  </td>
+                </tr>
+                <tr class="hidden" data-code-filtered-empty>
+                  <td class="px-4 py-6 text-center text-gray-500" colspan="8">
+                    Nenhuma nota corresponde aos filtros informados.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <footer class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 text-[11px] text-gray-500 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            Clique em uma linha para carregar a nota. Notas em rascunho aparecem como <span class="font-semibold text-amber-600">Cadastrada</span> e notas aprovadas como <span class="font-semibold text-emerald-600">Aprovada</span>.
+          </p>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 font-semibold text-gray-600 transition hover:bg-gray-50"
+            data-close-code-modal
+          >
+            Fechar
+          </button>
+        </footer>
+      </div>
+    </div>
+  </div>
 
   <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden">
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-import-modal></div>
@@ -1470,8 +1721,8 @@
                 class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
                 data-confirm-import
               >
-                <i class="fas fa-file-import"></i>
-                Importar
+                <i class="fas fa-file-import" data-confirm-import-icon></i>
+                <span data-confirm-import-text>Importar</span>
               </button>
             </div>
           </footer>
@@ -1690,6 +1941,19 @@
         });
       });
 
+      const codeLookupModal = document.getElementById('nfe-code-lookup-modal');
+      const codeLookupModalCard = codeLookupModal?.querySelector('[data-code-modal-card]') || null;
+      const codeLookupCloseTriggers = codeLookupModal
+        ? codeLookupModal.querySelectorAll('[data-close-code-modal]')
+        : [];
+      const codeLookupCompanySelect = codeLookupModal?.querySelector('[data-code-company]') || null;
+      const codeLookupTableBody = codeLookupModal?.querySelector('[data-code-table-body]') || null;
+      const codeLookupEmptyRow = codeLookupModal?.querySelector('[data-code-empty]') || null;
+      const codeLookupFilteredEmptyRow = codeLookupModal?.querySelector('[data-code-filtered-empty]') || null;
+      const codeLookupLoadingRow = codeLookupModal?.querySelector('[data-code-loading]') || null;
+      const codeLookupErrorRow = codeLookupModal?.querySelector('[data-code-error]') || null;
+      const codeLookupErrorCell = codeLookupErrorRow?.querySelector('td') || null;
+
       const importModal = document.getElementById('import-xml-modal');
       if (importModal) {
         const importModalCard = importModal.querySelector('[data-import-modal-card]');
@@ -1789,17 +2053,13 @@
           : [];
         const supplierSelect = document.getElementById('nfe-supplier');
         const companySelect = document.getElementById('company');
+        const nfeCodeInput = document.getElementById('nfe-code');
         const nfeNumberInput = document.getElementById('nfe-number');
         const nfeSeriesInput = document.getElementById('nfe-series');
-        const nfeProtocolInput = document.getElementById('nfe-protocol');
-        const nfeReferenceInput = document.getElementById('nfe-reference');
         const issueDateInput = document.getElementById('issue-date');
         const entryDateInput = document.getElementById('entry-date');
         const nfeModelSelect = document.getElementById('nfe-model');
         const nfeTypeSelect = document.getElementById('nfe-type');
-        const tipoEmissaoSelect = document.getElementById('tipo-emissao');
-        const finalidadeSelect = document.getElementById('finalidade');
-        const indicadorPresencaSelect = document.getElementById('indicador-presenca');
         const depositSelect = document.getElementById('deposit');
         const importAccessKeyInput = document.getElementById('import-access-key');
         const accessKeyInput = document.getElementById('access-key');
@@ -1823,8 +2083,6 @@
         const totalsIcmsValueInput = document.getElementById('valor-icms');
         const totalsIcmsStInput = document.getElementById('icms-st');
         const totalsFcpStInput = document.getElementById('valor-fcp-st');
-        const totalsServicesInput = document.getElementById('total-servicos');
-        const totalsAdjustmentInput = document.getElementById('valor-ajuste-esquerda');
         const totalsDiscountInput = document.getElementById('desconto');
         const totalsOtherInput = document.getElementById('outras-despesas');
         const totalsFreightInput = document.getElementById('valor-frete');
@@ -1838,6 +2096,7 @@
         const duplicataDaysInput = document.getElementById('dias');
         const duplicataInitialDaysInput = document.getElementById('dias-vencimento');
         const duplicataDaysTypeSelect = document.getElementById('tipo-dias');
+        const duplicataGenerateButton = document.querySelector('[data-nfe-duplicatas-generate]');
         const bankAccountSelect = document.getElementById('conta-corrente');
         const accountingAccountInput = document.getElementById('conta-contabil');
         const paymentConditionInput = document.getElementById('condicao-pagamento');
@@ -1845,6 +2104,7 @@
         const observationInput = document.getElementById('observacao');
         const complementaryInfoInput = document.getElementById('informacoes-complementares');
         const clearImportButton = document.querySelector('[data-clear-import]');
+        const saveDraftButton = document.querySelector('[data-save-draft]');
         const documentsTableBody = document.querySelector('[data-nfe-documents-body]');
         const documentsEmptyRow = document.querySelector('[data-nfe-documents-empty]');
         const mainProductsTableBody = document.querySelector('[data-nfe-products-body]');
@@ -1864,6 +2124,17 @@
         let productLinkActiveItem = null;
         let productLinkSearchAbortController = null;
         let productLinkIsLinking = false;
+        const codeLookupTableState = { items: [], filters: {}, sort: { key: '', direction: 'asc' } };
+        const codeLookupFilterInputs = new Map();
+        const codeLookupSortButtons = new Map();
+        const codeLookupSortHeaders = new Map();
+        const codeLookupCache = new Map();
+        let codeLookupPreviousFocus = null;
+        let codeLookupIsOpen = false;
+        let codeLookupIsLoading = false;
+        let codeLookupLastError = null;
+        let codeLookupLastCompanyId = '';
+        let isLoadingDraftDetails = false;
         const apiBaseUrl =
           typeof API_CONFIG !== 'undefined' && API_CONFIG?.BASE_URL
             ? API_CONFIG.BASE_URL.replace(/\/+$/, '')
@@ -1872,6 +2143,7 @@
         const suppliersEndpoint = `${apiBaseUrl}/suppliers`;
         const bankAccountsEndpoint = `${apiBaseUrl}/bank-accounts`;
         const depositsEndpoint = `${apiBaseUrl}/deposits`;
+        const nfeDraftsEndpoint = `${apiBaseUrl}/purchase/nfe/drafts`;
 
         const notify = (message, type = 'info') => {
           if (typeof window.showToast === 'function') {
@@ -1943,10 +2215,17 @@
         let lastSupplierData = null;
         let lastSupplierRecord = null;
         let lastNfeData = null;
+        const IMPORT_CONTEXT_FULL = 'full';
+        const IMPORT_CONTEXT_BONUS = 'bonus';
+        let importModalContext = IMPORT_CONTEXT_FULL;
+        let pendingBonusData = null;
         let pendingCompanyId = '';
         let pendingCompanyDocumentDigits = '';
         let pendingBankAccountId = '';
         let pendingDepositId = '';
+        let currentDraftId = '';
+        let currentDraftCode = '';
+        let isSavingDraft = false;
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
@@ -2193,6 +2472,7 @@
             : Boolean(item?.skipTaxComputation);
 
           item.skipTaxComputation = skipTaxComputation;
+          const shouldForceZeroCost = Boolean(item.forceBonificationZeroCost);
 
           const quantityValue = toNumeric(item.quantity);
           const unitPriceValue = toNumeric(item.unitPrice);
@@ -2248,6 +2528,29 @@
               ? quantityValue
               : null;
 
+          if (shouldForceZeroCost) {
+            const quantityForCostCandidates = [
+              entryStockQuantity,
+              effectiveQuantity,
+              quantityValue,
+            ];
+            const quantityForCost = quantityForCostCandidates.find(
+              (candidate) => Number.isFinite(candidate) && candidate > 0
+            ) || null;
+
+            item.discount = 0;
+            item.discountPercent = 0;
+            item.entryStockQuantity =
+              Number.isFinite(entryStockQuantity) && entryStockQuantity >= 0 ? entryStockQuantity : null;
+            item.netProductValue = 0;
+            item.taxesTotal = 0;
+            item.additionalsTotal = 0;
+            item.totalWithTaxes = 0;
+            item.unitCostWithTaxes = Number.isFinite(quantityForCost) && quantityForCost > 0 ? 0 : null;
+
+            return item;
+          }
+
           if (skipTaxComputation) {
             const preservedTotal = Number.isFinite(totalValue)
               ? totalValue
@@ -2273,7 +2576,16 @@
                 ? effectiveTotal / quantityForCost
                 : null;
 
-            const unitCost = Number.isFinite(unitPriceValue) && unitPriceValue >= 0
+            const shouldPrioritizeComputedCost =
+              Number.isFinite(entryStockQuantity) && entryStockQuantity > 0;
+
+            const unitCost = shouldPrioritizeComputedCost
+              ? Number.isFinite(computedUnitCost) && computedUnitCost >= 0
+                ? computedUnitCost
+                : Number.isFinite(unitPriceValue) && unitPriceValue >= 0
+                ? unitPriceValue
+                : null
+              : Number.isFinite(unitPriceValue) && unitPriceValue >= 0
               ? unitPriceValue
               : Number.isFinite(computedUnitCost) && computedUnitCost >= 0
               ? computedUnitCost
@@ -2325,7 +2637,12 @@
           const { skipTaxComputation = false } = options;
 
           if (skipTaxComputation) {
-            items.forEach((item) => ensureItemCostWithTaxes(item, options));
+            items.forEach((item) => {
+              if (typeof ensureConversionDefaults === 'function') {
+                ensureConversionDefaults(item);
+              }
+              ensureItemCostWithTaxes(item, options);
+            });
             return;
           }
 
@@ -2720,34 +3037,46 @@
           }, 0);
         };
 
-        const BONIFICATION_SUM_FIELDS = [
+        const BONIFICATION_FINANCIAL_FIELDS = [
           'total',
-          'discount',
-          'freight',
-          'other',
-          'icmsBase',
-          'icmsValue',
-          'icmsStValue',
-          'fcpValue',
-          'fcpStValue',
-          'fcpStRetainedValue',
-          'ipiBase',
-          'ipiValue',
-          'iiValue',
-          'pisBase',
-          'pisValue',
-          'cofinsBase',
-          'cofinsValue',
+          'netProductValue',
+          'taxesTotal',
+          'additionalsTotal',
+          'totalWithTaxes',
         ];
 
-        const addNumericFieldValue = (target, source, field) => {
-          if (!target || !source) return;
-          const baseValue = toNumeric(target[field]);
-          const addition = toNumeric(source[field]);
-          if (!Number.isFinite(addition) || Math.abs(addition) <= 0) return;
-          const current = Number.isFinite(baseValue) ? baseValue : 0;
-          const next = current + addition;
-          target[field] = Math.abs(next) <= 0.000001 ? 0 : next;
+        const captureItemFinancialSnapshot = (item) => {
+          if (!item || typeof item !== 'object') return null;
+          const snapshot = {};
+          let hasValue = false;
+          BONIFICATION_FINANCIAL_FIELDS.forEach((field) => {
+            const value = toNumeric(item[field]);
+            if (Number.isFinite(value)) {
+              snapshot[field] = value;
+              hasValue = true;
+            }
+          });
+          return hasValue ? snapshot : null;
+        };
+
+        const sumBonusFinancialSnapshots = (items) => {
+          if (!Array.isArray(items) || !items.length) return null;
+          const totals = {};
+          let hasValue = false;
+          BONIFICATION_FINANCIAL_FIELDS.forEach((field) => {
+            const fieldSum = sumBonificationValues(items, (entry) => {
+              const info = entry?.bonificationInfo;
+              if (info && typeof info === 'object' && info.originalTotals && typeof info.originalTotals === 'object') {
+                return info.originalTotals[field];
+              }
+              return entry ? entry[field] : null;
+            });
+            if (Number.isFinite(fieldSum) && Math.abs(fieldSum) > 0.000001) {
+              totals[field] = fieldSum;
+              hasValue = true;
+            }
+          });
+          return hasValue ? totals : null;
         };
 
         const mergeBonificationGroupIntoBase = (group) => {
@@ -2764,10 +3093,6 @@
             resolveEntryStockForBonification(item)
           );
 
-          BONIFICATION_SUM_FIELDS.forEach((field) => {
-            group.bonuses.forEach((bonus) => addNumericFieldValue(base, bonus, field));
-          });
-
           const combinedQuantity = regularQuantity + bonusQuantity;
           if (Number.isFinite(combinedQuantity)) {
             base.quantity = combinedQuantity;
@@ -2777,6 +3102,9 @@
           if (Number.isFinite(combinedEntryStock)) {
             base.entryStockQuantity = combinedEntryStock;
           }
+
+          const regularTotals = captureItemFinancialSnapshot(base);
+          const bonusTotals = sumBonusFinancialSnapshots(group.bonuses);
 
           const regularCfops = Array.from(
             new Set(
@@ -2801,6 +3129,8 @@
               : regularEntryStock,
             regularCfops,
             bonusCfops,
+            regularTotals,
+            bonusTotals,
           };
           base.cfopClassification = 'venda-bonificada';
           base.hasBonificationMerge = true;
@@ -2834,7 +3164,22 @@
               unknownCfops.add(normalizedCfop);
             }
 
+            item.forceBonificationZeroCost = false;
             ensureItemCostWithTaxes(item, { skipTaxComputation: item?.skipTaxComputation });
+
+            if (classification === 'bonificacao') {
+              const info =
+                item.bonificationInfo && typeof item.bonificationInfo === 'object'
+                  ? { ...item.bonificationInfo }
+                  : {};
+              const originalTotals = captureItemFinancialSnapshot(item);
+              if (originalTotals) {
+                info.originalTotals = originalTotals;
+              }
+              item.bonificationInfo = info;
+              item.forceBonificationZeroCost = true;
+              ensureItemCostWithTaxes(item, { skipTaxComputation: item?.skipTaxComputation });
+            }
 
             const key = buildBonificationGroupKey(item) ||
               `INDEX:${Number.isFinite(item?.index) ? item.index : groupsMap.size}`;
@@ -2886,6 +3231,51 @@
                 }
               });
             } else {
+              if (!group.sales.length && group.bonuses.length) {
+                group.bonuses.forEach((bonusItem) => {
+                  if (!bonusItem || typeof bonusItem !== 'object') return;
+                  const info =
+                    bonusItem.bonificationInfo && typeof bonusItem.bonificationInfo === 'object'
+                      ? bonusItem.bonificationInfo
+                      : {};
+                  info.hasBonification = true;
+                  if (!Number.isFinite(info.bonusQuantity)) {
+                    const bonusQuantityValue = toNumeric(bonusItem.quantity);
+                    info.bonusQuantity = Number.isFinite(bonusQuantityValue)
+                      ? bonusQuantityValue
+                      : null;
+                  }
+                  if (!Number.isFinite(info.regularQuantity)) {
+                    info.regularQuantity = 0;
+                  }
+                  if (!Number.isFinite(info.bonusEntryStock)) {
+                    const bonusEntryStockValue = resolveEntryStockForBonification(bonusItem);
+                    info.bonusEntryStock = Number.isFinite(bonusEntryStockValue)
+                      ? bonusEntryStockValue
+                      : null;
+                  }
+                  if (!Number.isFinite(info.combinedQuantity)) {
+                    info.combinedQuantity = Number.isFinite(info.bonusQuantity)
+                      ? info.bonusQuantity
+                      : null;
+                  }
+                  if (!Number.isFinite(info.combinedEntryStock)) {
+                    info.combinedEntryStock = Number.isFinite(info.bonusEntryStock)
+                      ? info.bonusEntryStock
+                      : null;
+                  }
+                  const bonusCfop = normalizeCfopCode(bonusItem?.cfop);
+                  const bonusCfops = Array.isArray(info.bonusCfops) ? info.bonusCfops.slice() : [];
+                  if (bonusCfop) {
+                    bonusCfops.push(bonusCfop);
+                  }
+                  info.bonusCfops = Array.from(new Set(bonusCfops));
+                  info.regularCfops = Array.isArray(info.regularCfops)
+                    ? Array.from(new Set(info.regularCfops))
+                    : [];
+                  bonusItem.bonificationInfo = info;
+                });
+              }
               mergedItems.push(...group.items);
             }
           });
@@ -2899,6 +3289,137 @@
           }
 
           return mergedItems;
+        };
+
+        const buildDocumentReferenceFingerprint = (reference) => {
+          if (!reference || typeof reference !== 'object') return '';
+          const accessKeyDigits = digitsOnly(reference.accessKey);
+          if (accessKeyDigits) {
+            return `accessKey:${accessKeyDigits}`;
+          }
+
+          const parts = [
+            reference.type,
+            reference.model,
+            reference.series,
+            reference.number,
+            reference.emissionDate,
+            reference.issuerUf,
+            digitsOnly(reference.document),
+          ]
+            .map((value) => String(value ?? '').trim().toLowerCase())
+            .filter(Boolean);
+
+          return parts.join('|');
+        };
+
+        const createBonusDocumentReference = (bonusData) => {
+          if (!bonusData || typeof bonusData !== 'object') return null;
+          const ide = bonusData.ide || {};
+          const emitter = bonusData.emit || {};
+          const emitterAddress = emitter.address || {};
+          const emissionInfo = normalizeDate(ide.emissionDate);
+
+          const reference = {
+            type: 'NF-e de bonificação',
+            model: ide.model || '55',
+            number: ide.number || '',
+            series: ide.serie || '',
+            emissionDate: emissionInfo.dateInput || ide.emissionDate || '',
+            issuerUf: emitterAddress.state || '',
+            document: emitter.document || '',
+          };
+
+          const accessKeyDigits = digitsOnly(bonusData.accessKey);
+          if (accessKeyDigits) {
+            reference.accessKey = accessKeyDigits;
+          }
+
+          return reference;
+        };
+
+        const mergeBonusItemsIntoCurrentNote = (bonusData) => {
+          if (!bonusData) return false;
+          const bonusItems = Array.isArray(bonusData.items) ? bonusData.items : [];
+          if (!bonusItems.length) {
+            return false;
+          }
+
+          const baseData =
+            lastNfeData || {
+              items: [],
+              totals: bonusData.totals || {},
+              duplicates: [],
+              ide: bonusData.ide || {},
+              emit: bonusData.emit || null,
+              dest: bonusData.dest || null,
+              payments: Array.isArray(bonusData.payments) ? bonusData.payments : [],
+              references: Array.isArray(bonusData.references) ? bonusData.references : [],
+              paymentConditionHint: bonusData.paymentConditionHint || '',
+              selectedCompanyId: bonusData.selectedCompanyId || '',
+              selectedBankAccountId: bonusData.selectedBankAccountId || '',
+              selectedDepositId: bonusData.selectedDepositId || '',
+            };
+
+          const existingItems = Array.isArray(baseData.items) ? baseData.items : [];
+          const combinedItems = mergeItemsWithBonification([...existingItems, ...bonusItems]);
+
+          combinedItems.forEach((item, index) => {
+            if (item && typeof item === 'object') {
+              item.index = index;
+            }
+          });
+
+          baseData.items = combinedItems;
+          if (!Array.isArray(baseData.duplicates)) {
+            baseData.duplicates = [];
+          }
+          if (!baseData.totals) {
+            baseData.totals = {};
+          }
+          if (!baseData.ide) {
+            baseData.ide = {};
+          }
+          if (!baseData.payments) {
+            baseData.payments = [];
+          }
+          if (!baseData.references) {
+            baseData.references = [];
+          }
+
+          const existingReferences = Array.isArray(baseData.references)
+            ? baseData.references.slice()
+            : [];
+          const seenReferences = new Set(
+            existingReferences.map((reference) => buildDocumentReferenceFingerprint(reference)).filter(Boolean)
+          );
+
+          const bonusReferences = Array.isArray(bonusData.references) ? bonusData.references : [];
+          bonusReferences.forEach((reference) => {
+            if (!reference || typeof reference !== 'object') return;
+            const fingerprint = buildDocumentReferenceFingerprint(reference);
+            if (fingerprint && seenReferences.has(fingerprint)) return;
+            seenReferences.add(fingerprint);
+            existingReferences.push({ ...reference });
+          });
+
+          const bonusReference = createBonusDocumentReference(bonusData);
+          if (bonusReference) {
+            const fingerprint = buildDocumentReferenceFingerprint(bonusReference);
+            if (!fingerprint || !seenReferences.has(fingerprint)) {
+              if (fingerprint) {
+                seenReferences.add(fingerprint);
+              }
+              existingReferences.push(bonusReference);
+            }
+          }
+
+          baseData.references = existingReferences;
+
+          lastNfeData = baseData;
+          renderMainProductsFromNfe(combinedItems);
+          renderDocumentsFromNfe(existingReferences);
+          return true;
         };
 
         const resolveActiveSupplierInfo = (nfeData) => {
@@ -3061,6 +3582,86 @@
           return false;
         };
 
+        const getBankAccountOptionsSnapshot = () => {
+          if (!bankAccountSelect) return [];
+          return Array.from(bankAccountSelect.options || []).map((option) => ({
+            value: option.value || '',
+            label: option.textContent || '',
+            disabled: option.disabled,
+            selected: option.selected,
+          }));
+        };
+
+        const populateDuplicateBankAccountSelect = (
+          selectElement,
+          desiredValue = '',
+          optionsSnapshot = null
+        ) => {
+          if (!(selectElement instanceof HTMLSelectElement)) return;
+
+          const snapshot = Array.isArray(optionsSnapshot)
+            ? optionsSnapshot
+            : getBankAccountOptionsSnapshot();
+
+          selectElement.innerHTML = '';
+
+          if (!snapshot.length) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'Nenhuma conta corrente cadastrada';
+            selectElement.appendChild(option);
+            selectElement.disabled = true;
+            return;
+          }
+
+          const normalizedDesired = desiredValue ? String(desiredValue) : '';
+          let hasMatch = false;
+
+          snapshot.forEach((optionData, index) => {
+            const option = document.createElement('option');
+            option.value = optionData.value || '';
+            option.textContent = optionData.label || '';
+            option.disabled = Boolean(optionData.disabled);
+            if (normalizedDesired) {
+              if (option.value === normalizedDesired && !option.disabled) {
+                option.selected = true;
+                hasMatch = true;
+              }
+            } else if (!hasMatch && optionData.selected) {
+              option.selected = true;
+              hasMatch = true;
+            }
+            if (!hasMatch && index === 0 && !option.disabled && !option.value) {
+              option.selected = true;
+            }
+            selectElement.appendChild(option);
+          });
+
+          if (normalizedDesired && !hasMatch) {
+            const registeredAccount = findBankAccountById(normalizedDesired);
+            const fallbackOption = document.createElement('option');
+            fallbackOption.value = normalizedDesired;
+            fallbackOption.textContent = registeredAccount
+              ? buildBankAccountLabel(registeredAccount)
+              : `Conta ${normalizedDesired}`;
+            fallbackOption.selected = true;
+            selectElement.appendChild(fallbackOption);
+            hasMatch = true;
+          }
+
+          if (!hasMatch) {
+            const [firstOption] = selectElement.options;
+            if (firstOption) {
+              firstOption.selected = true;
+            }
+          }
+
+          const hasUsableOptions = Array.from(selectElement.options).some(
+            (option) => !option.disabled && Boolean(option.value)
+          );
+          selectElement.disabled = !hasUsableOptions;
+        };
+
         const findBankAccountById = (id) => {
           if (!id) return null;
           const normalized = String(id);
@@ -3155,11 +3756,15 @@
           const normalizedSelected = selectedId ? String(selectedId) : '';
           lastNfeData.selectedBankAccountId = normalizedSelected || pendingBankAccountId || '';
 
-          if (!duplicates.length) return;
+          if (!duplicates.length) {
+            renderDuplicatasFromNfe(duplicates, lastNfeData);
+            return;
+          }
 
           duplicates.forEach((duplicate) => {
             if (!duplicate || typeof duplicate !== 'object') return;
-            duplicate.bankAccount = normalizedSelected || null;
+            if (duplicate.bankAccountIsManual) return;
+            duplicate.bankAccount = normalizedSelected ? String(normalizedSelected) : null;
           });
 
           renderDuplicatasFromNfe(duplicates, lastNfeData);
@@ -3176,6 +3781,7 @@
               lastNfeData.duplicates.forEach((duplicate) => {
                 if (!duplicate || typeof duplicate !== 'object') return;
                 duplicate.bankAccount = null;
+                duplicate.bankAccountIsManual = false;
               });
               lastNfeData.selectedBankAccountId = '';
               renderDuplicatasFromNfe(lastNfeData.duplicates, lastNfeData);
@@ -3279,23 +3885,23 @@
           return 'Empresa';
         };
 
-        const setCompanyPlaceholder = (message, { disabled = true } = {}) => {
-          if (!companySelect) return;
-          companySelect.innerHTML = '';
+        const setCodeLookupCompanyPlaceholder = (message, { disabled = true } = {}) => {
+          if (!codeLookupCompanySelect) return;
+          codeLookupCompanySelect.innerHTML = '';
           const option = document.createElement('option');
           option.value = '';
           option.textContent = message;
-          companySelect.appendChild(option);
-          companySelect.disabled = Boolean(disabled);
+          codeLookupCompanySelect.appendChild(option);
+          codeLookupCompanySelect.disabled = Boolean(disabled);
         };
 
-        const setCompanyOptions = (companies = [], { placeholder = null } = {}) => {
-          if (!companySelect) return;
-          companySelect.innerHTML = '';
+        const setCodeLookupCompanyOptions = (companies = [], { placeholder = null } = {}) => {
+          if (!codeLookupCompanySelect) return;
+          codeLookupCompanySelect.innerHTML = '';
           const defaultOption = document.createElement('option');
           defaultOption.value = '';
-          defaultOption.textContent = placeholder || 'Selecione a empresa';
-          companySelect.appendChild(defaultOption);
+          defaultOption.textContent = placeholder || 'Selecione uma empresa';
+          codeLookupCompanySelect.appendChild(defaultOption);
           if (Array.isArray(companies)) {
             companies.forEach((company) => {
               if (!company || !company._id) return;
@@ -3313,10 +3919,56 @@
               if (digits && option.dataset) {
                 option.dataset.companyDocument = digits;
               }
-              companySelect.appendChild(option);
+              codeLookupCompanySelect.appendChild(option);
             });
           }
-          companySelect.disabled = !companies || !companies.length;
+          codeLookupCompanySelect.disabled = !companies || !companies.length;
+        };
+
+        const setCompanyPlaceholder = (message, { disabled = true } = {}) => {
+          if (companySelect) {
+            companySelect.innerHTML = '';
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = message;
+            companySelect.appendChild(option);
+            companySelect.disabled = Boolean(disabled);
+          }
+          setCodeLookupCompanyPlaceholder(message, { disabled });
+        };
+
+        const setCompanyOptions = (companies = [], { placeholder = null } = {}) => {
+          if (companySelect) {
+            companySelect.innerHTML = '';
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = placeholder || 'Selecione a empresa';
+            companySelect.appendChild(defaultOption);
+            if (Array.isArray(companies)) {
+              companies.forEach((company) => {
+                if (!company || !company._id) return;
+                const option = document.createElement('option');
+                option.value = String(company._id);
+                option.textContent = buildCompanyLabel(company);
+                const documentValue =
+                  company?.cnpj ||
+                  company?.documento ||
+                  company?.document ||
+                  company?.cpfCnpj ||
+                  company?.taxId ||
+                  '';
+                const digits = digitsOnly(documentValue);
+                if (digits && option.dataset) {
+                  option.dataset.companyDocument = digits;
+                }
+                companySelect.appendChild(option);
+              });
+            }
+            companySelect.disabled = !companies || !companies.length;
+          }
+          setCodeLookupCompanyOptions(companies, {
+            placeholder: placeholder || 'Selecione a empresa',
+          });
         };
 
         const setCompanySelectValue = (value) => {
@@ -4474,6 +5126,233 @@
           return 'R$ 0,00';
         };
 
+        const parseMoneyInputValue = (value) => {
+          if (value === null || typeof value === 'undefined') return null;
+          const raw = String(value).trim();
+          if (!raw) return null;
+
+          const cleaned = raw
+            .replace(/[^0-9.,-]/g, '')
+            .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+            .replace(',', '.');
+
+          const numeric = Number.parseFloat(cleaned);
+          if (Number.isFinite(numeric)) {
+            return numeric;
+          }
+
+          const fallback = Number.parseFloat(raw.replace(/[^0-9.-]/g, ''));
+          return Number.isFinite(fallback) ? fallback : null;
+        };
+
+        const clonePlainObject = (value) => {
+          if (value === null || typeof value === 'undefined') return null;
+          try {
+            return JSON.parse(JSON.stringify(value));
+          } catch (error) {
+            console.warn('Não foi possível clonar os dados informados para o rascunho.', error);
+            return null;
+          }
+        };
+
+        const formatDraftCode = (code) => {
+          if (code === null || typeof code === 'undefined') return '';
+          const numeric = Number(code);
+          if (Number.isFinite(numeric)) {
+            return String(Math.trunc(numeric)).padStart(4, '0');
+          }
+          return String(code).trim();
+        };
+
+        const applyDraftCodeToInput = (codeValue) => {
+          if (!nfeCodeInput) return;
+          if (codeValue === null || typeof codeValue === 'undefined' || codeValue === '') {
+            nfeCodeInput.value = '';
+            delete nfeCodeInput.dataset.rawCode;
+            return;
+          }
+          const formatted = formatDraftCode(codeValue);
+          nfeCodeInput.value = formatted;
+          nfeCodeInput.dataset.rawCode = String(codeValue);
+        };
+
+        const resetDraftState = () => {
+          currentDraftId = '';
+          currentDraftCode = '';
+          applyDraftCodeToInput('');
+        };
+
+        const readNumericInputValue = (input) => {
+          if (!input) return null;
+          const numeric = toNumeric(input.value);
+          return Number.isFinite(numeric) ? numeric : null;
+        };
+
+        const computeDuplicatesTotal = (duplicates) => {
+          if (!Array.isArray(duplicates)) return 0;
+          return duplicates.reduce((sum, duplicate) => {
+            const value = toNumeric(duplicate?.value);
+            return Number.isFinite(value) ? sum + value : sum;
+          }, 0);
+        };
+
+        const buildDraftPayloadFromForm = () => {
+          const baseData = clonePlainObject(lastNfeData) || {};
+          const supplierInfo = resolveActiveSupplierInfo(baseData);
+          const supplierDocumentDigits = digitsOnly(supplierCnpjInput?.value || supplierInfo?.document || '');
+          const supplierOptionLabel =
+            supplierSelect && supplierSelect.selectedOptions && supplierSelect.selectedOptions.length
+              ? supplierSelect.selectedOptions[0].dataset?.supplierName || supplierSelect.selectedOptions[0].textContent || ''
+              : '';
+          const supplierName = (supplierInfo?.name || supplierOptionLabel || '').trim();
+
+          const duplicatesClone =
+            clonePlainObject(baseData.duplicates) || clonePlainObject(lastNfeData?.duplicates) || [];
+          if (Array.isArray(duplicatesClone)) {
+            duplicatesClone.forEach((duplicate, index) => {
+              if (duplicate && typeof duplicate === 'object' && typeof duplicate.index === 'undefined') {
+                duplicate.index = index;
+              }
+            });
+          }
+
+          const itemsSource =
+            (Array.isArray(mainProductTableState?.items) && mainProductTableState.items.length
+              ? mainProductTableState.items
+              : baseData.items) || [];
+          const itemsClone = clonePlainObject(itemsSource) || [];
+          const referencesClone =
+            clonePlainObject(baseData.references) || clonePlainObject(lastNfeData?.references) || [];
+          const paymentsClone =
+            clonePlainObject(baseData.payments) || clonePlainObject(lastNfeData?.payments) || [];
+
+          const totalsSnapshot = {
+            products: readNumericInputValue(totalsProductsInput),
+            icmsBase: readNumericInputValue(totalsIcmsBaseInput),
+            icmsValue: readNumericInputValue(totalsIcmsValueInput),
+            icmsSt: readNumericInputValue(totalsIcmsStInput),
+            fcpSt: readNumericInputValue(totalsFcpStInput),
+            discount: readNumericInputValue(totalsDiscountInput),
+            other: readNumericInputValue(totalsOtherInput),
+            freight: readNumericInputValue(totalsFreightInput),
+            ipi: readNumericInputValue(totalsIpiInput),
+            insurance: readNumericInputValue(totalsInsuranceInput),
+            dollar: readNumericInputValue(totalsDollarInput),
+          };
+
+          if (!Number.isFinite(totalsSnapshot.products) && Number.isFinite(baseData?.totals?.products)) {
+            totalsSnapshot.products = toNumeric(baseData.totals.products);
+          }
+
+          const duplicatesTotal = computeDuplicatesTotal(duplicatesClone);
+          const totalValueCandidate =
+            toNumeric(baseData?.totals?.totalValue) ??
+            (duplicatesTotal > 0 ? duplicatesTotal : totalsSnapshot.products);
+
+          const headerSnapshot = {
+            code: nfeCodeInput?.dataset?.rawCode || currentDraftCode || '',
+            number: nfeNumberInput?.value?.trim() || '',
+            serie: nfeSeriesInput?.value?.trim() || '',
+            type: nfeTypeSelect ? nfeTypeSelect.value || '' : '',
+            model: nfeModelSelect ? nfeModelSelect.value || '' : '',
+            issueDate: issueDateInput?.value || '',
+            entryDate: entryDateInput?.value || '',
+          };
+
+          const transportSnapshot = {
+            mode: freightModeSelect ? freightModeSelect.value || '' : '',
+            transporter: {
+              document: transportCnpjInput?.value || '',
+              stateRegistration: transportIeInput?.value || '',
+              uf: transportUfSelect ? transportUfSelect.value || '' : '',
+              name: transportNameInput?.value || '',
+            },
+            vehicle: {
+              plate: transportPlateInput?.value || '',
+              uf: transportPlateUfSelect ? transportPlateUfSelect.value || '' : '',
+            },
+            volume: {
+              weightGross: readNumericInputValue(weightGrossInput),
+              weightNet: readNumericInputValue(weightNetInput),
+            },
+          };
+
+          const selectionSnapshot = {
+            companyId: companySelect ? companySelect.value || '' : '',
+            supplierId: supplierSelect ? supplierSelect.value || '' : '',
+            depositId: depositSelect ? depositSelect.value || '' : '',
+            bankAccountId: bankAccountSelect ? bankAccountSelect.value || '' : '',
+            accountingAccount: accountingAccountInput?.value?.trim() || '',
+            duplicataEmissionDate: duplicataEmissionInput?.value || '',
+          };
+
+          const additionalInfoSnapshot = {
+            observation: observationInput?.value?.trim() || '',
+            complementaryFiscal: complementaryInfoInput?.value?.trim() || '',
+            paymentCondition: paymentConditionInput?.value?.trim() || '',
+            paymentForm: paymentFormInput?.value?.trim() || '',
+          };
+
+          const xmlSnapshot = {
+            accessKey: accessKeyInput?.value?.trim() || baseData?.accessKey || '',
+            importAccessKey: importAccessKeyInput?.value?.trim() || '',
+            ambient: baseData?.ambient || '',
+          };
+
+          return {
+            draftId: currentDraftId || null,
+            header: headerSnapshot,
+            company: { id: selectionSnapshot.companyId },
+            supplier: {
+              id: selectionSnapshot.supplierId,
+              name: supplierName,
+              document: supplierDocumentDigits,
+              stateRegistration: supplierIeInput?.value?.trim() || '',
+              email: supplierEmailInput?.value?.trim() || '',
+              addressText: supplierAddressInput?.value?.trim() || '',
+            },
+            totals: {
+              ...totalsSnapshot,
+              totalValue: Number.isFinite(totalValueCandidate) ? totalValueCandidate : null,
+            },
+            transport: transportSnapshot,
+            duplicates: Array.isArray(duplicatesClone) ? duplicatesClone : [],
+            duplicatesSummary: {
+              totalAmount: duplicatesTotal,
+              count: Array.isArray(duplicatesClone) ? duplicatesClone.length : 0,
+            },
+            items: Array.isArray(itemsClone) ? itemsClone : [],
+            references: Array.isArray(referencesClone) ? referencesClone : [],
+            payments: Array.isArray(paymentsClone) ? paymentsClone : [],
+            additionalInfo: additionalInfoSnapshot,
+            selection: selectionSnapshot,
+            xml: xmlSnapshot,
+            metadata: {
+              savedAt: new Date().toISOString(),
+              draftCode: currentDraftCode || null,
+            },
+            importedData: baseData,
+          };
+        };
+
+        const applyDraftResponseToState = (draft) => {
+          if (!draft || typeof draft !== 'object') return;
+          if (draft._id || draft.id) {
+            currentDraftId = String(draft._id || draft.id);
+          }
+          if (typeof draft.code !== 'undefined' && draft.code !== null) {
+            currentDraftCode = String(draft.code);
+            applyDraftCodeToInput(draft.code);
+          } else if (draft.codeNumber) {
+            currentDraftCode = String(draft.codeNumber);
+            applyDraftCodeToInput(draft.codeNumber);
+          }
+          if (lastNfeData && typeof lastNfeData === 'object') {
+            lastNfeData.draftId = currentDraftId;
+            lastNfeData.draftCode = currentDraftCode;
+          }
+        };
+
         const PAYMENT_METHOD_DESCRIPTIONS = {
           '01': 'Dinheiro',
           '02': 'Cheque',
@@ -4588,6 +5467,60 @@
           const adjusted = new Date(baseDate.getTime());
           adjusted.setDate(adjusted.getDate() + daysToAdd);
           return adjusted.toISOString().slice(0, 10);
+        };
+
+        const addPaymentDaysToDateInput = (baseInput, termDays) => {
+          if (!baseInput || !Number.isFinite(termDays)) return '';
+          const normalizedOffset = termDays > 0 ? termDays - 1 : 0;
+          return addDaysToDateInput(baseInput, normalizedOffset);
+        };
+
+        const stripDiacritics = (value) => {
+          if (typeof value !== 'string') return '';
+          return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        };
+
+        const computeInclusiveTermDays = (baseInput, dueInput) => {
+          if (!baseInput || !dueInput) return null;
+          const diff = computeDateDiffInDays(baseInput, dueInput);
+          if (!Number.isFinite(diff)) return null;
+          return diff > 0 ? diff + 1 : diff;
+        };
+
+        const extractPaymentConditionHint = (text) => {
+          if (!text || typeof text !== 'string') return '';
+          const compact = text.replace(/\s+/g, ' ');
+          const keywordMatcher = /(cobranc[ao]|pagamento|parcelas?|boleto|duplicat[ao]s?|condica[oa])/i;
+          const pattern = /(\d{1,3})(?:(?:\s*[\/\-]\s*|\s+)\d{1,3})+/g;
+          let fallback = '';
+          let match;
+          while ((match = pattern.exec(compact)) !== null) {
+            const segment = match[0];
+            const parts = segment
+              .split(/[\/\-\s]+/)
+              .map((part) => part.trim())
+              .filter(Boolean);
+            if (parts.length < 2) continue;
+            const normalizedParts = parts.map((part) => {
+              const numeric = Number.parseInt(part, 10);
+              if (!Number.isFinite(numeric) || numeric < 0 || numeric > 999) {
+                return null;
+              }
+              return String(numeric);
+            });
+            if (normalizedParts.some((part) => part === null)) continue;
+            const normalizedSegment = normalizedParts.join('/');
+            if (!fallback) {
+              fallback = normalizedSegment;
+            }
+            const contextStart = Math.max(0, match.index - 60);
+            const contextEnd = Math.min(compact.length, match.index + segment.length + 60);
+            const context = stripDiacritics(compact.slice(contextStart, contextEnd)).toLowerCase();
+            if (keywordMatcher.test(context)) {
+              return normalizedSegment;
+            }
+          }
+          return fallback;
         };
 
         const normalizeDate = (value) => {
@@ -7268,19 +8201,67 @@
           renderImportedProducts(items);
         };
 
+        const setImportModalContext = (context) => {
+          const normalized = context === IMPORT_CONTEXT_BONUS ? IMPORT_CONTEXT_BONUS : IMPORT_CONTEXT_FULL;
+          importModalContext = normalized;
+
+          if (normalized !== IMPORT_CONTEXT_BONUS) {
+            pendingBonusData = null;
+          }
+
+          if (confirmImportIcon) {
+            if (normalized === IMPORT_CONTEXT_BONUS) {
+              confirmImportIcon.className = 'fas fa-gift';
+            } else if (defaultConfirmIconClass) {
+              confirmImportIcon.className = defaultConfirmIconClass;
+            }
+          }
+
+          if (confirmImportText) {
+            confirmImportText.textContent =
+              normalized === IMPORT_CONTEXT_BONUS ? 'Aplicar bonificação' : defaultConfirmText || 'Importar';
+          }
+
+          if (refreshImportedProductsButton) {
+            refreshImportedProductsButton.classList.toggle('hidden', normalized === IMPORT_CONTEXT_BONUS);
+          }
+
+          if (normalized === IMPORT_CONTEXT_BONUS) {
+            const hasPendingBonus = Array.isArray(pendingBonusData?.items) && pendingBonusData.items.length > 0;
+            if (hasPendingBonus) {
+              updateSummaryFromData(pendingBonusData);
+            } else {
+              updateSummaryFromData(null);
+              if (importXmlNumber) {
+                importXmlNumber.textContent = 'XML de bonificação não importado';
+              }
+              if (importXmlValidationText) {
+                importXmlValidationText.textContent = 'Aguardando importação das bonificações';
+                applyValidationStyles('info');
+              }
+            }
+          } else if (normalized === IMPORT_CONTEXT_FULL) {
+            if (lastNfeData) {
+              updateSummaryFromData(lastNfeData);
+            } else {
+              updateSummaryFromData(null);
+            }
+            if (refreshImportedProductsButton) {
+              refreshImportedProductsButton.classList.remove('hidden');
+            }
+          }
+        };
+
         const fillMainFormFromNfeData = (data) => {
           if (!data) return;
           if (nfeNumberInput && data.ide?.number) nfeNumberInput.value = data.ide.number;
           if (nfeSeriesInput) nfeSeriesInput.value = data.ide?.serie || '';
-          if (nfeProtocolInput) nfeProtocolInput.value = data.protocol?.number || '';
-          if (nfeReferenceInput) nfeReferenceInput.value = data.ide?.natOp || '';
           const emission = normalizeDate(data.ide?.emissionDate);
           if (issueDateInput) issueDateInput.value = emission.dateInput || '';
           const entry = normalizeDate(data.ide?.entryDate);
           if (entryDateInput) entryDateInput.value = entry.dateInput || '';
           if (nfeModelSelect && data.ide?.model) setSelectValue(nfeModelSelect, data.ide.model);
           if (nfeTypeSelect) setSelectValue(nfeTypeSelect, mapModelToType(data.ide?.model));
-          if (tipoEmissaoSelect && data.ide?.tpEmis) setSelectValue(tipoEmissaoSelect, data.ide.tpEmis);
           if (accessKeyInput && data.accessKey) accessKeyInput.value = data.accessKey;
           if (importAccessKeyInput && data.accessKey) importAccessKeyInput.value = data.accessKey;
           if (companySelect) {
@@ -7353,13 +8334,11 @@
           setNumericInputValue(totalsIcmsValueInput, totals.icmsValue);
           setNumericInputValue(totalsIcmsStInput, totals.icmsSt);
           setNumericInputValue(totalsFcpStInput, totals.fcpSt);
-          setNumericInputValue(totalsServicesInput, totals.services);
           setNumericInputValue(totalsDiscountInput, totals.discount);
           setNumericInputValue(totalsOtherInput, totals.other);
           setNumericInputValue(totalsFreightInput, totals.freight);
           setNumericInputValue(totalsIpiInput, totals.ipi);
           setNumericInputValue(totalsInsuranceInput, totals.insurance);
-          setInputValue(totalsAdjustmentInput, '');
           setInputValue(totalsUnitDiscountInput, '');
           setInputValue(totalsDollarInput, '');
         };
@@ -7430,31 +8409,62 @@
           if (paymentConditionInput) {
             const duplicates = Array.isArray(data?.duplicates) ? data.duplicates : [];
             const emission = normalizeDate(data?.ide?.emissionDate);
-            if (duplicates.length && emission.dateInput) {
-              const emissionDateObj = new Date(`${emission.dateInput}T00:00:00`);
-              const dueDiffs = duplicates
+            const meaningfulDuplicates = duplicates.filter((dup) => {
+              const valueNumeric = toNumeric(dup?.value);
+              const dueInfo = normalizeDate(dup?.dueDate);
+              const termDays = Number.isFinite(dup?.termDays) ? dup.termDays : null;
+              return (
+                (Number.isFinite(valueNumeric) && Math.abs(valueNumeric) > 0.000001) ||
+                dueInfo.dateInput ||
+                Number.isFinite(termDays)
+              );
+            });
+            if (meaningfulDuplicates.length && emission.dateInput) {
+              const diffValues = meaningfulDuplicates
                 .map((dup) => {
+                  if (Number.isFinite(dup?.termDays)) {
+                    return dup.termDays;
+                  }
                   const dueInfo = normalizeDate(dup?.dueDate);
-                  if (!dueInfo.dateInput) return null;
-                  const dueDateObj = new Date(`${dueInfo.dateInput}T00:00:00`);
-                  const diff = Math.round((dueDateObj - emissionDateObj) / (24 * 60 * 60 * 1000));
-                  return Number.isFinite(diff) ? diff : null;
+                  if (dueInfo.dateInput) {
+                    const diff = computeInclusiveTermDays(emission.dateInput, dueInfo.dateInput);
+                    if (Number.isFinite(diff)) {
+                      return diff;
+                    }
+                  }
+                  return null;
                 })
                 .filter((value) => value !== null)
                 .sort((a, b) => a - b);
-              if (dueDiffs.length) {
-                paymentConditionInput.value = dueDiffs.join('/');
+              if (diffValues.length) {
+                paymentConditionInput.value = diffValues.join('/');
               } else {
-                paymentConditionInput.value = `${duplicates.length} parcela${
-                  duplicates.length > 1 ? 's' : ''
+                paymentConditionInput.value = `${meaningfulDuplicates.length} parcela${
+                  meaningfulDuplicates.length > 1 ? 's' : ''
                 }`;
               }
-            } else if (payments.length) {
-              paymentConditionInput.value = `${payments.length} parcela${
-                payments.length > 1 ? 's' : ''
-              }`;
             } else {
-              paymentConditionInput.value = '';
+              const paymentConditionHint = data?.paymentConditionHint || '';
+              if (paymentConditionHint) {
+                paymentConditionInput.value = paymentConditionHint;
+              } else {
+                const meaningfulPayments = payments.filter((payment) => {
+                  const amount = toNumeric(payment?.amount);
+                  const dueInfo = normalizeDate(payment?.dueDate);
+                  return (
+                    (Number.isFinite(amount) && Math.abs(amount) > 0.000001) ||
+                    dueInfo.dateInput ||
+                    Number.isFinite(payment?.termDays)
+                  );
+                });
+                if (meaningfulPayments.length) {
+                  paymentConditionInput.value = `${meaningfulPayments.length} parcela${
+                    meaningfulPayments.length > 1 ? 's' : ''
+                  }`;
+                } else {
+                  paymentConditionInput.value = '';
+                }
+              }
             }
           }
         };
@@ -7540,6 +8550,7 @@
           const entry = normalizeDate(data?.ide?.entryDate);
           const baseDateInput = emission.dateInput || entry.dateInput || '';
           const supplierAccount = resolveSupplierAccountingAccount();
+          const bankOptionsSnapshot = getBankAccountOptionsSnapshot();
 
           const fragment = document.createDocumentFragment();
           duplicates.forEach((dup, index) => {
@@ -7561,7 +8572,7 @@
             } else if (baseDateInput) {
               const diffBase = dueInfo.dateInput || manualDueInfo.dateInput;
               if (diffBase) {
-                const diff = computeDateDiffInDays(baseDateInput, diffBase);
+                const diff = computeInclusiveTermDays(baseDateInput, diffBase);
                 if (Number.isFinite(diff)) {
                   diffText = String(diff);
                 }
@@ -7580,7 +8591,7 @@
 
             let dueInputInfo = manualDueInfo.dateInput ? manualDueInfo : dueInfo;
             if (!dueInputInfo.dateInput && Number.isFinite(dup?.termDays) && baseDateInput) {
-              const fallbackDueInput = addDaysToDateInput(baseDateInput, dup.termDays);
+              const fallbackDueInput = addPaymentDaysToDateInput(baseDateInput, dup.termDays);
               dueInputInfo = normalizeDate(fallbackDueInput);
             }
             dueInput.value = dueInputInfo.dateInput || '';
@@ -7588,7 +8599,33 @@
 
             const valueCell = document.createElement('td');
             valueCell.className = 'px-4 py-3 text-right text-gray-800 font-semibold';
-            valueCell.textContent = formatCurrencyBRL(dup?.value);
+            if (!Number.isFinite(toNumeric(dup?.originalValue))) {
+              const originalNumeric = toNumeric(dup?.value);
+              if (Number.isFinite(originalNumeric)) {
+                dup.originalValue = originalNumeric;
+              }
+            }
+            const valueWrapper = document.createElement('div');
+            valueWrapper.className = 'flex items-center justify-end gap-2';
+
+            const currencyLabel = document.createElement('span');
+            currencyLabel.className = 'text-xs font-semibold uppercase text-gray-500';
+            currencyLabel.textContent = 'R$';
+
+            const valueInput = document.createElement('input');
+            valueInput.type = 'text';
+            valueInput.inputMode = 'decimal';
+            valueInput.autocomplete = 'off';
+            valueInput.placeholder = '0,00';
+            valueInput.className =
+              'w-full max-w-[140px] rounded-lg border border-gray-200 px-3 py-2 text-sm text-right font-semibold text-gray-800 focus:border-primary focus:ring-2 focus:ring-primary/20';
+            valueInput.dataset.duplicateValueInput = 'true';
+            valueInput.dataset.duplicateIndex = String(index);
+            const valueNumeric = toNumeric(dup?.value);
+            valueInput.value = Number.isFinite(valueNumeric) ? formatMoneyValue(valueNumeric) : '';
+
+            valueWrapper.append(currencyLabel, valueInput);
+            valueCell.appendChild(valueWrapper);
 
             const observationCell = document.createElement('td');
             observationCell.className = 'px-4 py-3 text-gray-600';
@@ -7618,12 +8655,22 @@
             accountCodeCell.textContent = supplierAccount?.code || '—';
 
             const bankCell = document.createElement('td');
-            bankCell.className = 'px-4 py-3 text-gray-600';
-            const resolvedBankAccount =
-              findBankAccountById(dup?.bankAccount) || resolveSelectedBankAccount(data);
-            bankCell.textContent = resolvedBankAccount
-              ? buildBankAccountLabel(resolvedBankAccount)
-              : '—';
+            bankCell.className = 'px-4 py-3';
+            const bankSelect = document.createElement('select');
+            bankSelect.className =
+              'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20';
+            bankSelect.dataset.duplicateBankSelect = 'true';
+            bankSelect.dataset.duplicateIndex = String(index);
+
+            let desiredBankAccountId = dup?.bankAccount ? String(dup.bankAccount) : '';
+            if (!desiredBankAccountId) {
+              const fallbackBankAccount = resolveSelectedBankAccount(data);
+              if (fallbackBankAccount && fallbackBankAccount._id) {
+                desiredBankAccountId = String(fallbackBankAccount._id);
+              }
+            }
+            populateDuplicateBankAccountSelect(bankSelect, desiredBankAccountId, bankOptionsSnapshot);
+            bankCell.appendChild(bankSelect);
 
             row.append(
               parcelCell,
@@ -7639,6 +8686,278 @@
           });
 
           duplicatasTableBody.appendChild(fragment);
+        };
+
+        const resolveDuplicataManualTotalAmount = () => {
+          const candidates = [];
+
+          if (lastNfeData?.totals) {
+            candidates.push(toNumeric(lastNfeData.totals.totalValue));
+            candidates.push(toNumeric(lastNfeData.totals.products));
+          }
+
+          if (Array.isArray(lastNfeData?.duplicates) && lastNfeData.duplicates.length) {
+            const duplicatesSum = lastNfeData.duplicates.reduce((sum, duplicate) => {
+              const value = toNumeric(duplicate?.value);
+              return Number.isFinite(value) ? sum + value : sum;
+            }, 0);
+            if (Number.isFinite(duplicatesSum) && duplicatesSum > 0) {
+              candidates.push(duplicatesSum);
+            }
+          }
+
+          if (totalsProductsInput && totalsProductsInput.value) {
+            const productsTotal = toNumeric(totalsProductsInput.value);
+            if (Number.isFinite(productsTotal) && productsTotal > 0) {
+              candidates.push(productsTotal);
+            }
+          }
+
+          for (const candidate of candidates) {
+            if (Number.isFinite(candidate) && Math.abs(candidate) > 0) {
+              return Math.abs(candidate);
+            }
+          }
+
+          return null;
+        };
+
+        const resolveDuplicataBaseDate = () => {
+          const emissionFromField = normalizeDate(duplicataEmissionInput?.value || '');
+          if (emissionFromField.dateInput) {
+            return emissionFromField.dateInput;
+          }
+
+          const emissionFromData = normalizeDate(lastNfeData?.ide?.emissionDate || '');
+          if (emissionFromData.dateInput) {
+            return emissionFromData.dateInput;
+          }
+
+          const entryFromData = normalizeDate(lastNfeData?.ide?.entryDate || '');
+          if (entryFromData.dateInput) {
+            return entryFromData.dateInput;
+          }
+
+          const issueFromInput = normalizeDate(issueDateInput?.value || '');
+          if (issueFromInput.dateInput) {
+            return issueFromInput.dateInput;
+          }
+
+          const entryFromInput = normalizeDate(entryDateInput?.value || '');
+          if (entryFromInput.dateInput) {
+            return entryFromInput.dateInput;
+          }
+
+          return '';
+        };
+
+        const generateDuplicatasPreviewFromInputs = () => {
+          if (!duplicataCountInput) {
+            return;
+          }
+
+          if (!lastNfeData) {
+            notify('Importe uma NF-e antes de gerar as duplicatas.', 'warning');
+            return;
+          }
+
+          const parcelsRaw = duplicataCountInput.value ? Number.parseInt(duplicataCountInput.value, 10) : NaN;
+          if (!Number.isFinite(parcelsRaw) || parcelsRaw <= 0) {
+            notify('Informe uma quantidade de parcelas válida para gerar as duplicatas.', 'warning');
+            duplicataCountInput.focus();
+            return;
+          }
+
+          const totalAmount = resolveDuplicataManualTotalAmount();
+          if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+            notify('Não foi possível determinar o valor total da nota para gerar as duplicatas.', 'warning');
+            return;
+          }
+
+          const typeValue = duplicataDaysTypeSelect ? duplicataDaysTypeSelect.value || 'dias' : 'dias';
+          const baseDateInput = resolveDuplicataBaseDate();
+
+          const firstDueInfo = normalizeDate(duplicataFirstDueInput?.value || '');
+          const initialDaysRaw = duplicataInitialDaysInput?.value
+            ? Number.parseInt(duplicataInitialDaysInput.value, 10)
+            : NaN;
+          const intervalDaysRaw = duplicataDaysInput?.value
+            ? Number.parseInt(duplicataDaysInput.value, 10)
+            : NaN;
+
+          if (Number.isFinite(initialDaysRaw) && initialDaysRaw < 0) {
+            notify('Os dias para o primeiro vencimento devem ser maiores ou iguais a zero.', 'warning');
+            duplicataInitialDaysInput?.focus();
+            return;
+          }
+
+          if (Number.isFinite(intervalDaysRaw) && intervalDaysRaw < 0) {
+            notify('Informe um intervalo de dias maior ou igual a zero para as duplicatas.', 'warning');
+            duplicataDaysInput?.focus();
+            return;
+          }
+
+          const hasInitialDays = Number.isFinite(initialDaysRaw);
+          const hasIntervalDays = Number.isFinite(intervalDaysRaw);
+
+          let firstDueDate = firstDueInfo.dateInput || '';
+          if (!firstDueDate && baseDateInput && hasInitialDays) {
+            firstDueDate = addPaymentDaysToDateInput(baseDateInput, initialDaysRaw) || '';
+          }
+          if (!firstDueDate && baseDateInput && hasIntervalDays) {
+            firstDueDate = addPaymentDaysToDateInput(baseDateInput, intervalDaysRaw) || '';
+          }
+
+          if (!firstDueDate) {
+            notify('Informe um vencimento inicial ou os dias necessários para calcular as duplicatas.', 'warning');
+            duplicataFirstDueInput?.focus();
+            return;
+          }
+
+          let resolvedStepDays = Number.isFinite(intervalDaysRaw) ? intervalDaysRaw : null;
+          if (!Number.isFinite(resolvedStepDays)) {
+            if (Number.isFinite(initialDaysRaw)) {
+              resolvedStepDays = initialDaysRaw;
+            } else if (baseDateInput) {
+              const diff = computeInclusiveTermDays(baseDateInput, firstDueDate);
+              if (Number.isFinite(diff)) {
+                resolvedStepDays = diff;
+              }
+            }
+          }
+
+          if (parcelsRaw > 1 && (!Number.isFinite(resolvedStepDays) || resolvedStepDays < 0)) {
+            resolvedStepDays = 30;
+          }
+
+          const firstTermDiff =
+            baseDateInput && firstDueDate ? computeInclusiveTermDays(baseDateInput, firstDueDate) : null;
+          const firstTermCandidate = Number.isFinite(firstTermDiff) ? firstTermDiff : null;
+          let currentTermDays = Number.isFinite(firstTermCandidate)
+            ? firstTermCandidate
+            : Number.isFinite(initialDaysRaw)
+            ? initialDaysRaw
+            : null;
+
+          const totalCents = Math.round(totalAmount * 100);
+          const baseShare = Math.floor(totalCents / parcelsRaw);
+          let remainder = totalCents - baseShare * parcelsRaw;
+
+          const normalizedBankAccount = bankAccountSelect && bankAccountSelect.value ? String(bankAccountSelect.value) : '';
+          lastNfeData.selectedBankAccountId = normalizedBankAccount || pendingBankAccountId || '';
+
+          const duplicates = [];
+          let currentDueDate = firstDueDate;
+          const paymentTypeValue = parcelsRaw > 1 ? '1' : '0';
+
+          for (let index = 0; index < parcelsRaw; index += 1) {
+            const valueCents = baseShare + (remainder > 0 ? 1 : 0);
+            if (remainder > 0) {
+              remainder -= 1;
+            }
+
+            const termDaysValue = Number.isFinite(currentTermDays) ? currentTermDays : null;
+            const dueDateValue = currentDueDate || '';
+
+            duplicates.push({
+              index,
+              number: `Parcela ${index + 1}`,
+              dueDate: dueDateValue,
+              originalDueDate: dueDateValue,
+              manualDueDate: dueDateValue,
+              value: valueCents / 100,
+              paymentMethod: '',
+              paymentDescription: 'Gerado manualmente',
+              paymentType: paymentTypeValue,
+              termDays: termDaysValue,
+              bankAccount: normalizedBankAccount ? normalizedBankAccount : null,
+              bankAccountIsManual: false,
+            });
+
+            if (index < parcelsRaw - 1) {
+              const step = Number.isFinite(intervalDaysRaw) ? intervalDaysRaw : resolvedStepDays;
+              const increment = Number.isFinite(step) ? step : 0;
+
+              if (currentDueDate && Number.isFinite(increment)) {
+                const nextDue = addDaysToDateInput(currentDueDate, increment);
+                if (nextDue) {
+                  currentDueDate = nextDue;
+                }
+              } else if (!currentDueDate && baseDateInput && Number.isFinite(increment)) {
+                const baseOffset = Number.isFinite(currentTermDays) ? currentTermDays + increment : increment;
+                const nextDue = Number.isFinite(baseOffset)
+                  ? addPaymentDaysToDateInput(baseDateInput, baseOffset)
+                  : '';
+                if (nextDue) {
+                  currentDueDate = nextDue;
+                }
+              }
+
+              if (baseDateInput && currentDueDate) {
+                const diff = computeInclusiveTermDays(baseDateInput, currentDueDate);
+                if (Number.isFinite(diff)) {
+                  currentTermDays = diff;
+                } else if (Number.isFinite(currentTermDays) && Number.isFinite(increment)) {
+                  currentTermDays += increment;
+                } else if (Number.isFinite(increment)) {
+                  currentTermDays = increment;
+                } else {
+                  currentTermDays = null;
+                }
+              } else if (Number.isFinite(currentTermDays) && Number.isFinite(increment)) {
+                currentTermDays += increment;
+              } else if (Number.isFinite(increment)) {
+                currentTermDays = Number.isFinite(currentTermDays) ? currentTermDays + increment : increment;
+              } else {
+                currentTermDays = null;
+              }
+            }
+          }
+
+          lastNfeData.duplicates = duplicates;
+
+          if (duplicataFirstDueInput) {
+            duplicataFirstDueInput.value = duplicates[0]?.dueDate || '';
+          }
+
+          if (!hasInitialDays && duplicataInitialDaysInput) {
+            const firstTerm = Number.isFinite(duplicates[0]?.termDays) ? duplicates[0].termDays : null;
+            duplicataInitialDaysInput.value = Number.isFinite(firstTerm) ? String(firstTerm) : duplicataInitialDaysInput.value;
+          }
+
+          if (!hasIntervalDays && duplicataDaysInput && parcelsRaw > 1 && Number.isFinite(resolvedStepDays)) {
+            duplicataDaysInput.value = String(resolvedStepDays);
+          }
+
+          if (duplicataDaysTypeSelect) {
+            setSelectValue(duplicataDaysTypeSelect, typeValue);
+          }
+
+          renderDuplicatasFromNfe(duplicates, lastNfeData);
+
+          if (paymentConditionInput) {
+            const baseForDiff = baseDateInput || duplicates[0]?.dueDate || '';
+            const normalizedBase = normalizeDate(baseForDiff).dateInput;
+            if (normalizedBase) {
+              const diffValues = duplicates
+                .map((duplicate) => {
+                  const dueInfo = normalizeDate(duplicate?.dueDate || '');
+                  if (!dueInfo.dateInput) return null;
+                  const diff = computeInclusiveTermDays(normalizedBase, dueInfo.dateInput);
+                  return Number.isFinite(diff) ? diff : null;
+                })
+                .filter((value) => value !== null);
+              if (diffValues.length) {
+                paymentConditionInput.value = diffValues.join('/');
+              } else {
+                paymentConditionInput.value = `${parcelsRaw} parcela${parcelsRaw > 1 ? 's' : ''}`;
+              }
+            } else {
+              paymentConditionInput.value = `${parcelsRaw} parcela${parcelsRaw > 1 ? 's' : ''}`;
+            }
+          }
+
+          notify('Pré-visualização das duplicatas atualizada.', 'success');
         };
 
         const refreshAccountingAccountBindings = () => {
@@ -8084,6 +9403,361 @@
           updateMainProductsTableDisplay();
         };
 
+        const CODE_STATUS_LABELS = {
+          draft: 'Cadastrada',
+          approved: 'Aprovada',
+        };
+
+        const CODE_STATUS_CLASSES = {
+          cadastrada: ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
+          aprovada: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-700'],
+        };
+
+        const mapDraftStatusLabel = (status) => {
+          if (status === null || typeof status === 'undefined') {
+            return CODE_STATUS_LABELS.draft;
+          }
+          const normalized = String(status).trim().toLowerCase();
+          if (!normalized) return CODE_STATUS_LABELS.draft;
+          if (normalized === 'approved' || normalized === 'aprovado' || normalized === 'aprovada') {
+            return CODE_STATUS_LABELS.approved;
+          }
+          if (normalized === 'draft' || normalized === 'rascunho' || normalized === 'cadastrada') {
+            return CODE_STATUS_LABELS.draft;
+          }
+          return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+        };
+
+        const mapDraftStatusClasses = (statusLabel) => {
+          const normalized = String(statusLabel || '').trim().toLowerCase();
+          return CODE_STATUS_CLASSES[normalized] || ['border-gray-200', 'bg-gray-100', 'text-gray-600'];
+        };
+
+        const parseDateForSort = (value) => {
+          if (!value) return null;
+          const info = normalizeDate(value);
+          if (info.dateInput) {
+            const timestamp = Date.parse(`${info.dateInput}T00:00:00`);
+            return Number.isNaN(timestamp) ? null : timestamp;
+          }
+          const parsed = Date.parse(value);
+          return Number.isNaN(parsed) ? null : parsed;
+        };
+
+        const buildCodeLookupRowData = (item, index) => {
+          const numericCode = Number.isFinite(item?.code) ? Number(item.code) : toNumeric(item?.code);
+          const headerCode = item?.headerCode || item?.header?.code || '';
+          const displayCode = headerCode || formatDraftCode(numericCode ?? item?.code ?? '');
+          const accessKey = item?.accessKey || item?.xml?.accessKey || '';
+          const nfNumber = item?.number || item?.header?.number || '';
+          const serie = item?.serie || item?.header?.serie || '';
+          const nfDisplay = [nfNumber, serie ? `Série ${serie}` : ''].filter(Boolean).join(' · ');
+          const supplierName = item?.supplierName || '';
+          const supplierDocument = item?.supplierDocument || '';
+          const totalNumeric = Number.isFinite(item?.totalValue) ? Number(item.totalValue) : toNumeric(item?.totalValue);
+          const totalDisplay = Number.isFinite(totalNumeric) ? formatCurrencyBRL(totalNumeric) : 'R$ 0,00';
+          const issueSource = item?.issueDate || item?.header?.issueDate || '';
+          const entrySource = item?.entryDate || item?.header?.entryDate || '';
+          const issueInfo = normalizeDate(issueSource);
+          const entryInfo = normalizeDate(entrySource);
+          const statusLabel = mapDraftStatusLabel(item?.status);
+          const issueTimestamp = parseDateForSort(issueSource);
+          const entryTimestamp = parseDateForSort(entrySource);
+          return {
+            item,
+            index,
+            displays: {
+              code: displayCode || '—',
+              accessKey: accessKey || '—',
+              nf: nfDisplay || nfNumber || '—',
+              supplier: supplierName || '—',
+              supplierDocument,
+              total: totalDisplay,
+              issueDate: issueInfo.display || issueInfo.dateInput || '—',
+              entryDate: entryInfo.display || entryInfo.dateInput || '—',
+              status: statusLabel,
+            },
+            sortValues: {
+              code: Number.isFinite(numericCode) ? numericCode : parseNumber(displayCode),
+              accessKey,
+              number: nfNumber,
+              supplier: supplierName,
+              total: Number.isFinite(totalNumeric) ? totalNumeric : 0,
+              issueDate: Number.isFinite(issueTimestamp) ? issueTimestamp : null,
+              entryDate: Number.isFinite(entryTimestamp) ? entryTimestamp : null,
+              status: statusLabel,
+            },
+            filterValues: {
+              code: displayCode,
+              accessKey,
+              number: nfDisplay || nfNumber,
+              supplier: supplierName,
+              total: totalDisplay,
+              issueDate: issueInfo.display || issueInfo.dateInput || '',
+              entryDate: entryInfo.display || entryInfo.dateInput || '',
+              status: statusLabel,
+            },
+          };
+        };
+
+        const applyCodeLookupFiltersToRows = (entries) => {
+          const filters = Object.entries(codeLookupTableState.filters || {}).filter(([, raw]) =>
+            normalizeFilterText(raw).length > 0
+          );
+          if (!filters.length) {
+            return entries.slice();
+          }
+          return entries.filter((entry) =>
+            filters.every(([key, raw]) => {
+              const normalizedFilter = normalizeFilterText(raw);
+              if (!normalizedFilter) return true;
+              const columnValue = entry.filterValues?.[key];
+              const normalizedColumn = normalizeFilterText(columnValue);
+              return normalizedColumn.includes(normalizedFilter);
+            })
+          );
+        };
+
+        const applyCodeLookupSortToRows = (entries) => {
+          if (!Array.isArray(entries) || !entries.length) {
+            return [];
+          }
+          const { sort } = codeLookupTableState;
+          const sortKey = sort?.key || '';
+          if (!sortKey) {
+            return entries.slice();
+          }
+          const sortDirection = sort?.direction === 'desc' ? 'desc' : 'asc';
+          const directionMultiplier = sortDirection === 'desc' ? -1 : 1;
+          return entries
+            .slice()
+            .sort((a, b) => {
+              const sortValuesA = a?.sortValues || {};
+              const sortValuesB = b?.sortValues || {};
+              const valueA = sortValuesA[sortKey];
+              const valueB = sortValuesB[sortKey];
+              const numericA = Number.isFinite(valueA) ? valueA : parseNumber(valueA);
+              const numericB = Number.isFinite(valueB) ? valueB : parseNumber(valueB);
+              if (Number.isFinite(numericA) || Number.isFinite(numericB)) {
+                const safeA = Number.isFinite(numericA) ? numericA : Number.NEGATIVE_INFINITY;
+                const safeB = Number.isFinite(numericB) ? numericB : Number.NEGATIVE_INFINITY;
+                if (safeA === safeB) {
+                  const indexA = Number.isFinite(a?.index) ? a.index : 0;
+                  const indexB = Number.isFinite(b?.index) ? b.index : 0;
+                  return indexA - indexB;
+                }
+                return safeA > safeB ? directionMultiplier : -directionMultiplier;
+              }
+              const textA = String(valueA ?? '').trim();
+              const textB = String(valueB ?? '').trim();
+              const comparison = textA.localeCompare(textB, 'pt-BR', {
+                sensitivity: 'base',
+                numeric: true,
+              });
+              if (comparison === 0) {
+                const indexA = Number.isFinite(a?.index) ? a.index : 0;
+                const indexB = Number.isFinite(b?.index) ? b.index : 0;
+                return indexA - indexB;
+              }
+              return comparison * directionMultiplier;
+            });
+        };
+
+        const updateCodeLookupSortButtons = () => {
+          const { sort } = codeLookupTableState;
+          const activeKey = sort?.key || '';
+          const activeDirection = sort?.direction === 'desc' ? 'desc' : 'asc';
+
+          codeLookupSortHeaders.forEach((header, key) => {
+            if (!header) return;
+            if (key === activeKey && activeKey) {
+              header.setAttribute('aria-sort', activeDirection === 'desc' ? 'descending' : 'ascending');
+            } else {
+              header.removeAttribute('aria-sort');
+            }
+          });
+
+          codeLookupSortButtons.forEach((meta, button) => {
+            if (!button) return;
+            const isActive = activeKey && meta.key === activeKey && meta.direction === activeDirection;
+            button.classList.toggle('text-primary', isActive);
+            button.classList.toggle('border-primary/60', isActive);
+            button.classList.toggle('bg-primary/10', isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+          });
+        };
+
+        const updateCodeLookupTableDisplay = () => {
+          if (!codeLookupTableBody) return;
+
+          updateCodeLookupSortButtons();
+
+          if (codeLookupLoadingRow) {
+            codeLookupLoadingRow.classList.toggle('hidden', !codeLookupIsLoading);
+          }
+
+          if (codeLookupErrorRow) {
+            if (codeLookupLastError) {
+              if (codeLookupErrorCell) {
+                codeLookupErrorCell.textContent = codeLookupLastError;
+              }
+              codeLookupErrorRow.classList.remove('hidden');
+            } else {
+              codeLookupErrorRow.classList.add('hidden');
+            }
+          }
+
+          const shouldHideData = codeLookupIsLoading || Boolean(codeLookupLastError);
+          const existingRows = codeLookupTableBody.querySelectorAll('[data-code-row]');
+          if (shouldHideData) {
+            existingRows.forEach((row) => row.remove());
+            if (codeLookupEmptyRow) codeLookupEmptyRow.classList.add('hidden');
+            if (codeLookupFilteredEmptyRow) codeLookupFilteredEmptyRow.classList.add('hidden');
+            return;
+          }
+
+          const items = Array.isArray(codeLookupTableState.items) ? codeLookupTableState.items : [];
+          const hasItems = items.length > 0;
+
+          if (codeLookupEmptyRow) {
+            codeLookupEmptyRow.classList.toggle('hidden', hasItems);
+          }
+          if (codeLookupFilteredEmptyRow) {
+            codeLookupFilteredEmptyRow.classList.add('hidden');
+          }
+
+          existingRows.forEach((row) => row.remove());
+
+          if (!hasItems) {
+            return;
+          }
+
+          const derivedEntries = items.map((item, index) => buildCodeLookupRowData(item, index));
+          const filteredEntries = applyCodeLookupFiltersToRows(derivedEntries);
+          const entriesToRender = applyCodeLookupSortToRows(filteredEntries);
+
+          if (!entriesToRender.length) {
+            if (codeLookupFilteredEmptyRow) {
+              codeLookupFilteredEmptyRow.classList.remove('hidden');
+            }
+            return;
+          }
+
+          const fragment = document.createDocumentFragment();
+
+          entriesToRender.forEach((entry) => {
+            const { item, displays } = entry;
+            const row = document.createElement('tr');
+            row.dataset.codeRow = 'true';
+            if (item && (item.id || item._id)) {
+              row.dataset.codeRowId = String(item.id || item._id);
+            }
+            if (item && typeof item.code !== 'undefined') {
+              row.dataset.codeRowCode = String(item.code);
+            }
+            row.className = 'cursor-pointer transition hover:bg-gray-50 focus-within:bg-gray-50';
+            row.tabIndex = 0;
+
+            const codeCell = document.createElement('td');
+            codeCell.className = 'px-4 py-3 font-semibold text-gray-700';
+            codeCell.textContent = displays.code;
+
+            const accessKeyCell = document.createElement('td');
+            accessKeyCell.className = 'px-4 py-3 font-mono text-xs text-gray-600';
+            accessKeyCell.textContent = displays.accessKey || '—';
+
+            const nfCell = document.createElement('td');
+            nfCell.className = 'px-4 py-3 text-gray-600';
+            nfCell.textContent = displays.nf;
+
+            const supplierCell = document.createElement('td');
+            supplierCell.className = 'px-4 py-3 text-gray-600';
+            supplierCell.textContent = displays.supplier;
+            if (displays.supplierDocument) {
+              const docLine = document.createElement('p');
+              docLine.className = 'text-xs text-gray-500';
+              docLine.textContent = formatDocument(displays.supplierDocument);
+              supplierCell.appendChild(docLine);
+            }
+
+            const totalCell = document.createElement('td');
+            totalCell.className = 'px-4 py-3 text-right text-gray-800 font-semibold';
+            totalCell.textContent = displays.total;
+
+            const issueCell = document.createElement('td');
+            issueCell.className = 'px-4 py-3 text-gray-600';
+            issueCell.textContent = displays.issueDate;
+
+            const entryCell = document.createElement('td');
+            entryCell.className = 'px-4 py-3 text-gray-600';
+            entryCell.textContent = displays.entryDate;
+
+            const statusCell = document.createElement('td');
+            statusCell.className = 'px-4 py-3 text-gray-600';
+            const statusBadge = document.createElement('span');
+            statusBadge.className =
+              'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide';
+            statusBadge.textContent = displays.status;
+            statusBadge.classList.add(...mapDraftStatusClasses(displays.status));
+            statusCell.appendChild(statusBadge);
+
+            row.append(codeCell, accessKeyCell, nfCell, supplierCell, totalCell, issueCell, entryCell, statusCell);
+            fragment.appendChild(row);
+          });
+
+          codeLookupTableBody.appendChild(fragment);
+        };
+
+        const setCodeLookupTableFilter = (key, value) => {
+          if (!key) return;
+          const nextValue = value || '';
+          if (codeLookupTableState.filters[key] === nextValue) {
+            return;
+          }
+          codeLookupTableState.filters[key] = nextValue;
+          updateCodeLookupTableDisplay();
+        };
+
+        const setCodeLookupSort = (key, direction) => {
+          if (!key) return;
+          const nextDirection = direction === 'desc' ? 'desc' : 'asc';
+          const { sort } = codeLookupTableState;
+          const currentKey = sort?.key || '';
+          const currentDirection = sort?.direction || 'asc';
+          if (currentKey === key && currentDirection === nextDirection) {
+            codeLookupTableState.sort = { key: '', direction: 'asc' };
+          } else {
+            codeLookupTableState.sort = { key, direction: nextDirection };
+          }
+          updateCodeLookupTableDisplay();
+        };
+
+        const renderCodeLookupRows = (items = []) => {
+          codeLookupTableState.items = Array.isArray(items) ? items : [];
+          updateCodeLookupTableDisplay();
+        };
+
+        const resetCodeLookupFilters = () => {
+          codeLookupTableState.filters = {};
+          codeLookupFilterInputs.forEach((input) => {
+            if (input) {
+              input.value = '';
+            }
+          });
+        };
+
+        const findCodeLookupItemById = (id) => {
+          if (!id) return null;
+          const items = Array.isArray(codeLookupTableState.items) ? codeLookupTableState.items : [];
+          return (
+            items.find((entry) => {
+              if (!entry) return false;
+              const candidateId = entry.id || entry._id || '';
+              return candidateId && String(candidateId) === String(id);
+            }) || null
+          );
+        };
+
         document.querySelectorAll('[data-main-products-filter]').forEach((input) => {
           const key = input.dataset.mainProductsFilter;
           if (!key) return;
@@ -8111,6 +9785,337 @@
 
         updateMainProductSortButtons();
 
+        document.querySelectorAll('[data-code-lookup-filter]').forEach((input) => {
+          const key = input.dataset.codeLookupFilter;
+          if (!key) return;
+          codeLookupFilterInputs.set(key, input);
+          codeLookupTableState.filters[key] = input.value || '';
+          input.addEventListener('input', (event) => {
+            setCodeLookupTableFilter(key, event.target.value || '');
+          });
+        });
+
+        document.querySelectorAll('[data-code-lookup-sort]').forEach((button) => {
+          const key = button.dataset.codeLookupSort;
+          if (!key) return;
+          const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+          const header = button.closest('[data-code-sort-header]') || button.closest('th');
+          codeLookupSortButtons.set(button, { key, direction });
+          if (header && !codeLookupSortHeaders.has(key)) {
+            codeLookupSortHeaders.set(key, header);
+          }
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            setCodeLookupSort(key, direction);
+          });
+        });
+
+        updateCodeLookupSortButtons();
+
+        const loadCodeLookupList = async (companyId, { forceReload = false } = {}) => {
+          const normalized = companyId ? String(companyId) : '';
+          if (!normalized) {
+            codeLookupLastCompanyId = '';
+            codeLookupTableState.items = [];
+            codeLookupLastError = null;
+            codeLookupIsLoading = false;
+            updateCodeLookupTableDisplay();
+            return [];
+          }
+
+          if (!forceReload && codeLookupCache.has(normalized)) {
+            const cached = codeLookupCache.get(normalized) || [];
+            codeLookupTableState.items = cached;
+            codeLookupLastError = null;
+            codeLookupIsLoading = false;
+            codeLookupLastCompanyId = normalized;
+            updateCodeLookupTableDisplay();
+            return cached;
+          }
+
+          codeLookupIsLoading = true;
+          codeLookupLastError = null;
+          updateCodeLookupTableDisplay();
+
+          try {
+            const url = new URL(nfeDraftsEndpoint, window.location.origin);
+            url.searchParams.set('companyId', normalized);
+            const response = await fetch(url.toString(), { headers: buildAuthHeaders() });
+            const payload = await response.json().catch(() => ({}));
+
+            if (response.status === 401 || response.status === 403) {
+              handleAuthError();
+            }
+
+            if (!response.ok) {
+              const message =
+                (payload && (payload.message || payload.error)) ||
+                `Falha ao carregar as notas cadastradas (status ${response.status}).`;
+              throw new Error(message);
+            }
+
+            const drafts = Array.isArray(payload?.drafts) ? payload.drafts : [];
+            const normalizedDrafts = drafts.map((draft) => ({
+              ...draft,
+              id: draft.id || draft._id || '',
+              code: draft.code ?? draft.headerCode ?? draft.header?.code ?? '',
+              headerCode: draft.headerCode || draft.header?.code || '',
+              number: draft.number || draft.header?.number || '',
+              serie: draft.serie || draft.header?.serie || '',
+              status: draft.status || 'draft',
+              totalValue:
+                draft.totalValue ?? draft.totals?.totalValue ?? (draft.totals && draft.totals.totalValue) ?? null,
+              issueDate: draft.issueDate || draft.header?.issueDate || '',
+              entryDate: draft.entryDate || draft.header?.entryDate || '',
+              supplierName: draft.supplierName || '',
+              supplierDocument: draft.supplierDocument || '',
+              accessKey: draft.accessKey || draft.xml?.accessKey || '',
+            }));
+
+            codeLookupCache.set(normalized, normalizedDrafts);
+            codeLookupTableState.items = normalizedDrafts;
+            codeLookupLastError = null;
+            codeLookupIsLoading = false;
+            codeLookupLastCompanyId = normalized;
+            updateCodeLookupTableDisplay();
+            return normalizedDrafts;
+          } catch (error) {
+            console.error('Erro ao carregar notas cadastradas:', error);
+            codeLookupLastError =
+              error?.message || 'Não foi possível carregar as notas cadastradas para a empresa selecionada.';
+            codeLookupIsLoading = false;
+            codeLookupTableState.items = [];
+            updateCodeLookupTableDisplay();
+            return [];
+          }
+        };
+
+        const fetchDraftById = async (id) => {
+          const normalized = id ? String(id) : '';
+          if (!normalized) return null;
+          const endpoint = `${nfeDraftsEndpoint}/${normalized}`;
+          const response = await fetch(endpoint, { headers: buildAuthHeaders() });
+          const payload = await response.json().catch(() => ({}));
+
+          if (response.status === 401 || response.status === 403) {
+            handleAuthError();
+          }
+
+          if (!response.ok) {
+            const message =
+              (payload && (payload.message || payload.error)) ||
+              `Falha ao carregar a nota selecionada (status ${response.status}).`;
+            throw new Error(message);
+          }
+
+          const draft = payload?.draft || payload;
+          if (draft && !draft.id && draft._id) {
+            draft.id = String(draft._id);
+          }
+          return draft;
+        };
+
+        const buildNoteDataFromDraft = (draft) => {
+          if (!draft || typeof draft !== 'object') return null;
+          const payload = clonePlainObject(draft.payload) || {};
+          const importedData = clonePlainObject(payload.importedData) || {};
+          const noteData = importedData && typeof importedData === 'object' ? importedData : {};
+          const header = payload.header || {};
+
+          if (!noteData.ide || typeof noteData.ide !== 'object') {
+            noteData.ide = {};
+          }
+          noteData.ide.number = header.number || noteData.ide.number || '';
+          noteData.ide.serie = header.serie || noteData.ide.serie || '';
+          noteData.ide.model = header.model || noteData.ide.model || '';
+          noteData.ide.type = header.type || noteData.ide.type || '';
+          noteData.ide.emissionDate = header.issueDate || noteData.ide.emissionDate || '';
+          noteData.ide.entryDate = header.entryDate || noteData.ide.entryDate || '';
+          if (payload.transport?.mode) {
+            noteData.ide.freightMode = payload.transport.mode;
+          }
+
+          noteData.totals = { ...(noteData.totals || {}), ...(payload.totals || {}) };
+          noteData.transport = { ...(noteData.transport || {}), ...(payload.transport || {}) };
+          noteData.duplicates = Array.isArray(payload.duplicates) ? payload.duplicates : noteData.duplicates || [];
+          noteData.references = Array.isArray(payload.references) ? payload.references : noteData.references || [];
+          noteData.payments = Array.isArray(payload.payments) ? payload.payments : noteData.payments || [];
+
+          const additional = payload.additionalInfo || {};
+          noteData.additionalInfo = {
+            ...(noteData.additionalInfo || {}),
+            complementary: additional.observation || noteData.additionalInfo?.complementary || '',
+            fiscal: additional.complementaryFiscal || noteData.additionalInfo?.fiscal || '',
+            paymentCondition: additional.paymentCondition || noteData.additionalInfo?.paymentCondition || '',
+            paymentForm: additional.paymentForm || noteData.additionalInfo?.paymentForm || '',
+          };
+
+          if (Array.isArray(payload.items) && payload.items.length) {
+            noteData.items = payload.items;
+          }
+
+          const selection = payload.selection || {};
+          noteData.selection = { ...(noteData.selection || {}), ...selection };
+          noteData.selectedCompanyId = selection.companyId || noteData.selectedCompanyId || '';
+          noteData.selectedDepositId = selection.depositId || noteData.selectedDepositId || '';
+          noteData.selectedBankAccountId = selection.bankAccountId || noteData.selectedBankAccountId || '';
+
+          const supplier = payload.supplier || {};
+          if (!noteData.emit || typeof noteData.emit !== 'object') {
+            noteData.emit = {};
+          }
+          if (supplier.name && !noteData.emit.name) noteData.emit.name = supplier.name;
+          if (supplier.document) noteData.emit.document = supplier.document;
+          if (supplier.stateRegistration) noteData.emit.stateRegistration = supplier.stateRegistration;
+          if (supplier.email) noteData.emit.email = supplier.email;
+          if (supplier.addressText) {
+            noteData.emit.address = noteData.emit.address || {};
+            noteData.emit.address.text = supplier.addressText;
+          }
+
+          noteData.accessKey = payload.xml?.accessKey || noteData.accessKey || '';
+          noteData.xml = payload.xml || noteData.xml || {};
+          noteData.metadata = { ...(noteData.metadata || {}), ...(payload.metadata || {}), draftId: draft._id || draft.id || '' };
+          noteData.importedData = payload.importedData || noteData.importedData || {};
+          noteData.draftId = draft._id || draft.id || '';
+          noteData.draftCode = draft.code || noteData.draftCode || '';
+          noteData.paymentConditionHint = additional.paymentCondition || noteData.paymentConditionHint || '';
+          noteData.paymentFormHint = additional.paymentForm || noteData.paymentFormHint || '';
+
+          return noteData;
+        };
+
+        const applyDraftDataToForm = (draft) => {
+          const noteData = buildNoteDataFromDraft(draft);
+          if (!noteData) {
+            throw new Error('Os dados retornados do rascunho estão incompletos.');
+          }
+          resetImportedNfeState();
+          lastNfeData = noteData;
+          applyImportedDataToMainForm(lastNfeData);
+          applyDraftResponseToState(draft);
+          updateSummaryFromData(lastNfeData);
+        };
+
+        const trapCodeLookupFocus = (event) => {
+          if (!codeLookupModal || codeLookupModal.classList.contains('hidden')) return;
+          if (event.key !== 'Tab') return;
+
+          const focusableElements = codeLookupModalCard
+            ? Array.from(codeLookupModalCard.querySelectorAll(MODAL_FOCUSABLE_SELECTORS)).filter(
+                (element) => element instanceof HTMLElement && element.offsetParent !== null
+              )
+            : [];
+          if (!focusableElements.length) return;
+
+          const firstElement = focusableElements[0];
+          const lastElement = focusableElements[focusableElements.length - 1];
+
+          if (event.shiftKey && document.activeElement === firstElement) {
+            event.preventDefault();
+            lastElement.focus();
+          } else if (!event.shiftKey && document.activeElement === lastElement) {
+            event.preventDefault();
+            firstElement.focus();
+          }
+        };
+
+        const openCodeLookupModal = () => {
+          if (!codeLookupModal || codeLookupIsOpen) return;
+
+          codeLookupPreviousFocus = document.activeElement;
+          codeLookupIsOpen = true;
+          codeLookupModal.classList.remove('hidden');
+          document.body.classList.add('overflow-hidden');
+
+          if (codeLookupModalCard) {
+            codeLookupModalCard.classList.add('opacity-0', 'scale-95');
+            requestAnimationFrame(() => {
+              codeLookupModalCard.classList.remove('opacity-0', 'scale-95');
+              codeLookupModalCard.classList.add('opacity-100', 'scale-100');
+            });
+
+            const focusableElements = Array.from(
+              codeLookupModalCard.querySelectorAll(MODAL_FOCUSABLE_SELECTORS)
+            ).filter((element) => element instanceof HTMLElement && element.offsetParent !== null);
+            if (focusableElements.length) {
+              focusableElements[0].focus();
+            }
+          }
+
+          document.addEventListener('keydown', trapCodeLookupFocus);
+
+          resetCodeLookupFilters();
+          codeLookupTableState.sort = { key: '', direction: 'asc' };
+          codeLookupLastError = null;
+
+          const activeCompanyId = companySelect ? companySelect.value || '' : '';
+          if (codeLookupCompanySelect) {
+            codeLookupCompanySelect.value = activeCompanyId || '';
+          }
+
+          if (activeCompanyId) {
+            loadCodeLookupList(activeCompanyId).catch(() => {});
+          } else {
+            codeLookupTableState.items = [];
+            codeLookupIsLoading = false;
+            codeLookupLastError = null;
+            updateCodeLookupTableDisplay();
+          }
+        };
+
+        const closeCodeLookupModal = () => {
+          if (!codeLookupModal || codeLookupModal.classList.contains('hidden')) return;
+
+          codeLookupIsOpen = false;
+
+          if (codeLookupModalCard) {
+            codeLookupModalCard.classList.remove('opacity-100', 'scale-100');
+            codeLookupModalCard.classList.add('opacity-0', 'scale-95');
+          }
+
+          setTimeout(() => {
+            codeLookupModal.classList.add('hidden');
+            if (codeLookupPreviousFocus && typeof codeLookupPreviousFocus.focus === 'function') {
+              codeLookupPreviousFocus.focus();
+            }
+            codeLookupPreviousFocus = null;
+          }, 180);
+
+          if (!importModal || importModal.classList.contains('hidden')) {
+            document.body.classList.remove('overflow-hidden');
+          }
+
+          document.removeEventListener('keydown', trapCodeLookupFocus);
+        };
+
+        const handleCodeLookupRowSelection = async (rowId) => {
+          const normalizedId = rowId ? String(rowId) : '';
+          if (!normalizedId || isLoadingDraftDetails) return;
+          isLoadingDraftDetails = true;
+
+          try {
+            closeCodeLookupModal();
+            notify('Carregando nota selecionada...', 'info');
+            const draft = await fetchDraftById(normalizedId);
+            if (!draft) {
+              throw new Error('Não foi possível localizar a nota selecionada.');
+            }
+            applyDraftDataToForm(draft);
+            const formattedCode = currentDraftCode ? formatDraftCode(currentDraftCode) : '';
+            if (formattedCode) {
+              notify(`Nota ${formattedCode} carregada a partir do rascunho.`, 'success');
+            } else {
+              notify('Nota carregada a partir do rascunho selecionado.', 'success');
+            }
+          } catch (error) {
+            console.error('Erro ao carregar nota selecionada:', error);
+            notify(error?.message || 'Não foi possível carregar a nota selecionada.', 'error');
+          } finally {
+            isLoadingDraftDetails = false;
+          }
+        };
+
         const updateDuplicataSummaryFromData = (data) => {
           const duplicates = Array.isArray(data?.duplicates) ? data.duplicates : [];
           const emission = normalizeDate(data?.ide?.emissionDate);
@@ -8135,7 +10140,7 @@
               if (firstDue.dateInput) {
                 duplicataFirstDueInput.value = firstDue.dateInput;
               } else if (Number.isFinite(firstDuplicate?.termDays) && baseDateInput) {
-                const fallbackDue = addDaysToDateInput(baseDateInput, firstDuplicate.termDays);
+                const fallbackDue = addPaymentDaysToDateInput(baseDateInput, firstDuplicate.termDays);
                 duplicataFirstDueInput.value = fallbackDue || '';
               } else {
                 duplicataFirstDueInput.value = '';
@@ -8151,7 +10156,7 @@
                 duplicataInitialDaysInput.value = String(firstDuplicate.termDays);
               } else if (baseDateInput && (firstDue.dateInput || firstManual.dateInput)) {
                 const diffBase = firstDue.dateInput || firstManual.dateInput;
-                const diff = computeDateDiffInDays(baseDateInput, diffBase);
+                const diff = computeInclusiveTermDays(baseDateInput, diffBase);
                 duplicataInitialDaysInput.value = Number.isFinite(diff) ? String(diff) : '';
               } else {
                 duplicataInitialDaysInput.value = '';
@@ -8197,7 +10202,14 @@
             if (!duplicate.originalDueDate) {
               duplicate.originalDueDate = duplicate.dueDate || '';
             }
-            duplicate.bankAccount = activeBankAccountId ? String(activeBankAccountId) : null;
+            if (typeof duplicate.bankAccountIsManual !== 'boolean') {
+              duplicate.bankAccountIsManual = Boolean(duplicate.bankAccount);
+            }
+            if (duplicate.bankAccountIsManual) {
+              duplicate.bankAccount = duplicate.bankAccount ? String(duplicate.bankAccount) : null;
+            } else {
+              duplicate.bankAccount = activeBankAccountId ? String(activeBankAccountId) : null;
+            }
           });
 
           renderDuplicatasFromNfe(duplicates, data);
@@ -8223,8 +10235,11 @@
           lastNfeData = null;
           lastSupplierData = null;
           lastSupplierRecord = null;
+          pendingBonusData = null;
+          importModalContext = IMPORT_CONTEXT_FULL;
           supplierLinkErrorNotified = false;
           productValidationSequence += 1;
+          resetDraftState();
           resetProductLookupCaches();
           productSupplierLinkCache.clear();
           productSupplierLinkPromises.clear();
@@ -8246,8 +10261,6 @@
           const inputsToReset = [
             nfeNumberInput,
             nfeSeriesInput,
-            nfeProtocolInput,
-            nfeReferenceInput,
             issueDateInput,
             entryDateInput,
             importAccessKeyInput,
@@ -8267,8 +10280,6 @@
             totalsIcmsValueInput,
             totalsIcmsStInput,
             totalsFcpStInput,
-            totalsServicesInput,
-            totalsAdjustmentInput,
             totalsDiscountInput,
             totalsOtherInput,
             totalsFreightInput,
@@ -8297,9 +10308,6 @@
             { element: bankAccountSelect, value: '' },
             { element: nfeModelSelect, value: '55' },
             { element: nfeTypeSelect, value: 'NF' },
-            { element: tipoEmissaoSelect, value: '1' },
-            { element: finalidadeSelect, value: 'normal' },
-            { element: indicadorPresencaSelect, value: '0' },
             { element: depositSelect, value: '' },
             { element: transportUfSelect, value: '' },
             { element: transportPlateUfSelect, value: '' },
@@ -8668,7 +10676,7 @@
             const emissionInfo = normalizeDate(emissionDate);
             const paymentDueInfo = normalizeDate(rawDueDate);
             if (emissionInfo.dateInput && paymentDueInfo.dateInput) {
-              const diff = computeDateDiffInDays(emissionInfo.dateInput, paymentDueInfo.dateInput);
+              const diff = computeInclusiveTermDays(emissionInfo.dateInput, paymentDueInfo.dateInput);
               if (Number.isFinite(diff)) {
                 termDays = diff;
               }
@@ -8688,9 +10696,19 @@
             return payment;
           });
 
+          const paymentsForDuplicates = payments.filter((payment) => {
+            const amount = toNumeric(payment?.amount);
+            const dueInfo = normalizeDate(payment?.dueDate);
+            return (
+              (Number.isFinite(amount) && Math.abs(amount) > 0.000001) ||
+              dueInfo.dateInput ||
+              Number.isFinite(payment?.termDays)
+            );
+          });
+
           let duplicates = duplicatesFromXml.length
             ? duplicatesFromXml
-            : payments.map((payment) => ({
+            : paymentsForDuplicates.map((payment) => ({
                 index: payment.index,
                 number: '',
                 dueDate: payment.dueDate,
@@ -8730,7 +10748,7 @@
             let dueDateValue = duplicate?.dueDate || paymentRef?.dueDate || '';
             const dueInfo = normalizeDate(dueDateValue);
             if (!Number.isFinite(termDays) && emissionInfo.dateInput && dueInfo.dateInput) {
-              const diff = computeDateDiffInDays(emissionInfo.dateInput, dueInfo.dateInput);
+              const diff = computeInclusiveTermDays(emissionInfo.dateInput, dueInfo.dateInput);
               if (Number.isFinite(diff)) {
                 termDays = diff;
               }
@@ -8753,7 +10771,7 @@
                 }
               }
               if (Number.isFinite(fallbackDays)) {
-                dueDateValue = addDaysToDateInput(fallbackBaseDateInput, fallbackDays);
+                dueDateValue = addPaymentDaysToDateInput(fallbackBaseDateInput, fallbackDays);
                 if (!Number.isFinite(termDays)) {
                   termDays = fallbackDays;
                 }
@@ -8763,7 +10781,7 @@
             const normalizedDue = normalizeDate(dueDateValue);
             let resolvedTermDays = Number.isFinite(termDays) ? termDays : null;
             if (!Number.isFinite(resolvedTermDays) && emissionInfo.dateInput && normalizedDue.dateInput) {
-              const diff = computeDateDiffInDays(emissionInfo.dateInput, normalizedDue.dateInput);
+              const diff = computeInclusiveTermDays(emissionInfo.dateInput, normalizedDue.dateInput);
               if (Number.isFinite(diff)) {
                 resolvedTermDays = diff;
               }
@@ -8785,6 +10803,7 @@
               paymentType: duplicate?.paymentType || paymentRef?.type || '',
               termDays: Number.isFinite(resolvedTermDays) ? resolvedTermDays : null,
               bankAccount: duplicate?.bankAccount || null,
+              bankAccountIsManual: Boolean(duplicate?.bankAccount),
             };
           });
 
@@ -8902,6 +10921,11 @@
 
           const processedItems = mergeItemsWithBonification(items);
 
+          const complementaryInfo = getText(infAdic, 'infCpl');
+          const fiscalInfo = getText(infAdic, 'infAdFisco');
+          const paymentConditionHint =
+            extractPaymentConditionHint(complementaryInfo) || extractPaymentConditionHint(fiscalInfo);
+
           return {
             accessKey,
             ambient: getText(ide, 'tpAmb'),
@@ -8963,9 +10987,10 @@
               },
             },
             additionalInfo: {
-              complementary: getText(infAdic, 'infCpl'),
-              fiscal: getText(infAdic, 'infAdFisco'),
+              complementary: complementaryInfo,
+              fiscal: fiscalInfo,
             },
+            paymentConditionHint,
             payments,
             duplicates,
             references,
@@ -9000,19 +11025,34 @@
                 throw new Error('Não foi possível interpretar o conteúdo do XML informado.');
               }
               const parsed = parseNfeXml(result);
+              if (parsed && typeof parsed === 'object') {
+                if (currentDraftId) parsed.draftId = currentDraftId;
+                if (currentDraftCode) parsed.draftCode = currentDraftCode;
+              }
               parsed.selectedCompanyId = companySelect ? companySelect.value || '' : '';
               parsed.selectedBankAccountId = bankAccountSelect ? bankAccountSelect.value || '' : '';
               parsed.selectedDepositId = depositSelect ? depositSelect.value || '' : '';
-              lastNfeData = parsed;
+              const isBonusContext = importModalContext === IMPORT_CONTEXT_BONUS;
+              if (isBonusContext) {
+                pendingBonusData = parsed;
+              } else {
+                lastNfeData = parsed;
+              }
               updateSummaryFromData(parsed);
-              showFileFeedback('Validando fornecedor importado...', 'info');
-              await handleSupplierSelection(parsed.emit);
-              showFileFeedback('Validando produtos pelo fornecedor e código de barras...', 'info');
+              if (isBonusContext) {
+                showFileFeedback('Validando itens de bonificação...', 'info');
+              } else {
+                showFileFeedback('Validando fornecedor importado...', 'info');
+                await handleSupplierSelection(parsed.emit);
+                showFileFeedback('Validando produtos pelo fornecedor e código de barras...', 'info');
+              }
               await validateImportedProducts(parsed);
 
               const nfNumberText = parsed.ide?.number ? `NF ${parsed.ide.number}` : 'NF-e';
               const emitterText = parsed.emit?.name || 'Emitente não identificado';
-              const baseMessage = `XML importado com sucesso. ${nfNumberText} - ${emitterText}.`;
+              const baseMessage = isBonusContext
+                ? `XML de bonificação importado com sucesso. ${nfNumberText} - ${emitterText}.`
+                : `XML importado com sucesso. ${nfNumberText} - ${emitterText}.`;
               const items = Array.isArray(parsed.items) ? parsed.items : [];
               const errorCount = items.filter((item) => item.validationStatus === 'error').length;
               const unmatchedCount = items.filter((item) => item.validationStatus === 'not-found').length;
@@ -9142,12 +11182,34 @@
           }
         }
 
+        const selectImportMode = (mode) => {
+          let applied = false;
+          importModeRadios.forEach((radio) => {
+            if (radio.value === mode) {
+              radio.checked = true;
+              applied = true;
+            } else if (radio.checked) {
+              radio.checked = false;
+            }
+          });
+          updateImportMode();
+          return applied;
+        };
+
         openImportModalButtons.forEach((button) => {
           button.addEventListener('click', (event) => {
             event.preventDefault();
+            const context = button.dataset.importContext === IMPORT_CONTEXT_BONUS
+              ? IMPORT_CONTEXT_BONUS
+              : IMPORT_CONTEXT_FULL;
+            setImportModalContext(context);
             openImportModal();
             activateImportTab('xml');
-            updateImportMode();
+            if (context === IMPORT_CONTEXT_BONUS) {
+              selectImportMode('file');
+            } else {
+              updateImportMode();
+            }
           });
         });
 
@@ -9167,6 +11229,10 @@
 
         document.addEventListener('keydown', (event) => {
           if (event.key === 'Escape') {
+            if (codeLookupModal && !codeLookupModal.classList.contains('hidden')) {
+              closeCodeLookupModal();
+              return;
+            }
             if (productIframeModal && !productIframeModal.classList.contains('hidden')) {
               return;
             }
@@ -9180,6 +11246,73 @@
           refreshImportedProductsButton.addEventListener('click', (event) => {
             event.preventDefault();
             refreshImportedProductsList();
+          });
+        }
+
+        if (codeLookupModal) {
+          codeLookupCloseTriggers.forEach((button) => {
+            button.addEventListener('click', (event) => {
+              event.preventDefault();
+              closeCodeLookupModal();
+            });
+          });
+          codeLookupModal.addEventListener('click', (event) => {
+            const target = event.target;
+            if (target instanceof Element && target.hasAttribute('data-close-code-modal')) {
+              closeCodeLookupModal();
+            }
+          });
+        }
+
+        if (codeLookupTableBody) {
+          codeLookupTableBody.addEventListener('click', (event) => {
+            const row = event.target instanceof Element ? event.target.closest('[data-code-row]') : null;
+            if (!row) return;
+            const rowId = row.getAttribute('data-code-row-id');
+            if (rowId) {
+              event.preventDefault();
+              handleCodeLookupRowSelection(rowId);
+            }
+          });
+          codeLookupTableBody.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            const row = event.target instanceof Element ? event.target.closest('[data-code-row]') : null;
+            if (!row) return;
+            const rowId = row.getAttribute('data-code-row-id');
+            if (rowId) {
+              event.preventDefault();
+              handleCodeLookupRowSelection(rowId);
+            }
+          });
+        }
+
+        if (codeLookupCompanySelect) {
+          codeLookupCompanySelect.addEventListener('change', () => {
+            const selectedCompany = codeLookupCompanySelect.value || '';
+            codeLookupTableState.sort = { key: '', direction: 'asc' };
+            loadCodeLookupList(selectedCompany).catch(() => {});
+          });
+        }
+
+        if (nfeCodeInput) {
+          const shouldOpenCodeLookup = (event) => {
+            const ignoredKeys = ['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Escape'];
+            if (ignoredKeys.includes(event.key)) return false;
+            if (event.ctrlKey || event.metaKey || event.altKey) return false;
+            return true;
+          };
+
+          nfeCodeInput.addEventListener('keydown', (event) => {
+            if (!shouldOpenCodeLookup(event)) {
+              return;
+            }
+            event.preventDefault();
+            openCodeLookupModal();
+          });
+
+          nfeCodeInput.addEventListener('click', (event) => {
+            event.preventDefault();
+            openCodeLookupModal();
           });
         }
 
@@ -9209,6 +11342,18 @@
           });
         }
 
+        if (duplicataGenerateButton) {
+          duplicataGenerateButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            try {
+              generateDuplicatasPreviewFromInputs();
+            } catch (error) {
+              console.error('Erro ao gerar a pré-visualização das duplicatas:', error);
+              notify('Não foi possível gerar a pré-visualização das duplicatas. Verifique os campos e tente novamente.', 'error');
+            }
+          });
+        }
+
         if (depositSelect) {
           depositSelect.addEventListener('change', () => {
             pendingDepositId = '';
@@ -9221,14 +11366,66 @@
         if (duplicatasTableBody) {
           duplicatasTableBody.addEventListener('change', (event) => {
             const target = event.target;
-            if (!(target instanceof HTMLInputElement)) return;
-            if (target.dataset.duplicateDueInput !== 'true') return;
+            if (
+              !(
+                target instanceof HTMLInputElement ||
+                (typeof HTMLSelectElement !== 'undefined' && target instanceof HTMLSelectElement)
+              )
+            ) {
+              return;
+            }
+
+            if (!lastNfeData || !Array.isArray(lastNfeData.duplicates)) return;
 
             const index = Number.parseInt(target.dataset.duplicateIndex || '', 10);
             if (!Number.isFinite(index)) return;
-            if (!lastNfeData || !Array.isArray(lastNfeData.duplicates)) return;
             const duplicate = lastNfeData.duplicates[index];
             if (!duplicate || typeof duplicate !== 'object') return;
+
+            if (target.dataset.duplicateBankSelect === 'true') {
+              const selectedValue = target.value ? String(target.value) : '';
+              if (selectedValue) {
+                duplicate.bankAccount = selectedValue;
+                duplicate.bankAccountIsManual = true;
+              } else {
+                duplicate.bankAccount = null;
+                duplicate.bankAccountIsManual = false;
+              }
+              return;
+            }
+
+            if (!(target instanceof HTMLInputElement)) return;
+
+            if (target.dataset.duplicateValueInput === 'true') {
+              const previousValue = Number.isFinite(toNumeric(duplicate?.value))
+                ? toNumeric(duplicate.value)
+                : Number.isFinite(toNumeric(duplicate?.originalValue))
+                ? toNumeric(duplicate.originalValue)
+                : null;
+
+              const parsedValue = parseMoneyInputValue(target.value);
+              if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+                if (Number.isFinite(previousValue)) {
+                  target.value = formatMoneyValue(previousValue);
+                } else {
+                  target.value = '';
+                }
+                notify('Informe um valor válido para a parcela selecionada.', 'warning');
+                return;
+              }
+
+              duplicate.value = parsedValue;
+              duplicate.manualValue = parsedValue;
+              if (!Number.isFinite(toNumeric(duplicate.originalValue))) {
+                duplicate.originalValue = parsedValue;
+              }
+
+              target.value = formatMoneyValue(parsedValue);
+              updateDuplicataSummaryFromData(lastNfeData);
+              return;
+            }
+
+            if (target.dataset.duplicateDueInput !== 'true') return;
 
             const newDueValue = target.value || '';
             duplicate.manualDueDate = newDueValue || '';
@@ -9246,7 +11443,7 @@
 
             let computedTerm = null;
             if (baseDateInput && effectiveDueInput) {
-              const diff = computeDateDiffInDays(baseDateInput, effectiveDueInput);
+              const diff = computeInclusiveTermDays(baseDateInput, effectiveDueInput);
               if (Number.isFinite(diff)) {
                 computedTerm = diff;
               }
@@ -9258,7 +11455,7 @@
               const daysCell = row.querySelector('[data-duplicate-term]');
               if (daysCell) {
                 const fallbackDiff = baseDateInput && effectiveDueInput
-                  ? computeDateDiffInDays(baseDateInput, effectiveDueInput)
+                  ? computeInclusiveTermDays(baseDateInput, effectiveDueInput)
                   : null;
                 daysCell.textContent = Number.isFinite(duplicate.termDays)
                   ? String(duplicate.termDays)
@@ -9269,6 +11466,71 @@
             }
 
             updateDuplicataSummaryFromData(lastNfeData);
+          });
+        }
+
+        if (saveDraftButton) {
+          saveDraftButton.addEventListener('click', async (event) => {
+            event.preventDefault();
+            if (isSavingDraft) return;
+
+            if (!companySelect || !companySelect.value) {
+              notify('Selecione a empresa responsável antes de salvar o rascunho.', 'warning');
+              companySelect?.focus();
+              return;
+            }
+
+            const payload = buildDraftPayloadFromForm();
+            const headers = buildAuthHeaders();
+            headers.set('Content-Type', 'application/json');
+
+            const endpointUrl = currentDraftId
+              ? `${nfeDraftsEndpoint}/${currentDraftId}`
+              : nfeDraftsEndpoint;
+            const method = currentDraftId ? 'PUT' : 'POST';
+
+            const setSavingState = (isSaving) => {
+              isSavingDraft = Boolean(isSaving);
+              saveDraftButton.disabled = Boolean(isSaving);
+              saveDraftButton.classList.toggle('opacity-60', Boolean(isSaving));
+              saveDraftButton.classList.toggle('cursor-wait', Boolean(isSaving));
+            };
+
+            try {
+              setSavingState(true);
+              const response = await fetch(endpointUrl, {
+                method,
+                headers,
+                body: JSON.stringify(payload),
+              });
+              const result = await response.json().catch(() => ({}));
+              if (!response.ok) {
+                const message =
+                  result?.message ||
+                  `Falha ao salvar o rascunho da NF-e (status ${response.status}).`;
+                throw new Error(message);
+              }
+
+              const draftData = result?.draft || result;
+              applyDraftResponseToState(draftData);
+              if (companySelect && companySelect.value) {
+                codeLookupCache.delete(companySelect.value);
+              }
+              const formattedCode = currentDraftCode ? formatDraftCode(currentDraftCode) : '';
+              const successMessage = formattedCode
+                ? `Rascunho salvo como código ${formattedCode}.`
+                : 'Rascunho da nota salvo com sucesso.';
+              notify(successMessage, 'success');
+            } catch (error) {
+              console.error('Erro ao salvar rascunho da NF-e:', error);
+              notify(
+                error?.message ||
+                  'Não foi possível salvar o rascunho da nota. Verifique os dados e tente novamente.',
+                'error'
+              );
+            } finally {
+              setSavingState(false);
+            }
           });
         }
 
@@ -9339,6 +11601,10 @@
         }
 
         const confirmImportButton = importModal.querySelector('[data-confirm-import]');
+        const confirmImportIcon = confirmImportButton?.querySelector('[data-confirm-import-icon]') || null;
+        const confirmImportText = confirmImportButton?.querySelector('[data-confirm-import-text]') || null;
+        const defaultConfirmIconClass = confirmImportIcon ? confirmImportIcon.className : '';
+        const defaultConfirmText = confirmImportText ? confirmImportText.textContent || '' : '';
         if (confirmImportButton) {
           const disableConfirmButton = () => {
             confirmImportButton.disabled = true;
@@ -9351,6 +11617,33 @@
 
           confirmImportButton.addEventListener('click', async (event) => {
             event.preventDefault();
+            if (importModalContext === IMPORT_CONTEXT_BONUS) {
+              const bonusItems = Array.isArray(pendingBonusData?.items) ? pendingBonusData.items : [];
+              if (!bonusItems.length) {
+                notify('Importe um XML de bonificação válido antes de aplicar os itens.', 'warning');
+                return;
+              }
+
+              disableConfirmButton();
+
+              try {
+                const merged = mergeBonusItemsIntoCurrentNote(pendingBonusData);
+                if (!merged) {
+                  notify('O XML de bonificação não possui itens aplicáveis.', 'warning');
+                  return;
+                }
+                pendingBonusData = null;
+                notify('Itens de bonificação adicionados à nota.', 'success');
+                closeImportModal();
+              } catch (error) {
+                console.error('Erro ao aplicar bonificação na nota:', error);
+                notify('Não foi possível aplicar os itens de bonificação. Tente novamente.', 'error');
+              } finally {
+                restoreConfirmButton();
+              }
+              return;
+            }
+
             if (!lastNfeData) {
               notify('Importe um XML autorizado antes de aplicar os dados na nota.', 'warning');
               return;
@@ -9425,6 +11718,7 @@
           }
         });
 
+        resetDraftState();
         updateSummaryFromData(null);
         setSupplierSummary(null);
         applyValidationStyles('info');
