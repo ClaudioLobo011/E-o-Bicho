@@ -2122,6 +2122,7 @@
             : Boolean(item?.skipTaxComputation);
 
           item.skipTaxComputation = skipTaxComputation;
+          const shouldForceZeroCost = Boolean(item.forceBonificationZeroCost);
 
           const quantityValue = toNumeric(item.quantity);
           const unitPriceValue = toNumeric(item.unitPrice);
@@ -2176,6 +2177,29 @@
               : Number.isFinite(quantityValue) && quantityValue > 0
               ? quantityValue
               : null;
+
+          if (shouldForceZeroCost) {
+            const quantityForCostCandidates = [
+              entryStockQuantity,
+              effectiveQuantity,
+              quantityValue,
+            ];
+            const quantityForCost = quantityForCostCandidates.find(
+              (candidate) => Number.isFinite(candidate) && candidate > 0
+            ) || null;
+
+            item.discount = 0;
+            item.discountPercent = 0;
+            item.entryStockQuantity =
+              Number.isFinite(entryStockQuantity) && entryStockQuantity >= 0 ? entryStockQuantity : null;
+            item.netProductValue = 0;
+            item.taxesTotal = 0;
+            item.additionalsTotal = 0;
+            item.totalWithTaxes = 0;
+            item.unitCostWithTaxes = Number.isFinite(quantityForCost) && quantityForCost > 0 ? 0 : null;
+
+            return item;
+          }
 
           if (skipTaxComputation) {
             const preservedTotal = Number.isFinite(totalValue)
@@ -2663,34 +2687,46 @@
           }, 0);
         };
 
-        const BONIFICATION_SUM_FIELDS = [
+        const BONIFICATION_FINANCIAL_FIELDS = [
           'total',
-          'discount',
-          'freight',
-          'other',
-          'icmsBase',
-          'icmsValue',
-          'icmsStValue',
-          'fcpValue',
-          'fcpStValue',
-          'fcpStRetainedValue',
-          'ipiBase',
-          'ipiValue',
-          'iiValue',
-          'pisBase',
-          'pisValue',
-          'cofinsBase',
-          'cofinsValue',
+          'netProductValue',
+          'taxesTotal',
+          'additionalsTotal',
+          'totalWithTaxes',
         ];
 
-        const addNumericFieldValue = (target, source, field) => {
-          if (!target || !source) return;
-          const baseValue = toNumeric(target[field]);
-          const addition = toNumeric(source[field]);
-          if (!Number.isFinite(addition) || Math.abs(addition) <= 0) return;
-          const current = Number.isFinite(baseValue) ? baseValue : 0;
-          const next = current + addition;
-          target[field] = Math.abs(next) <= 0.000001 ? 0 : next;
+        const captureItemFinancialSnapshot = (item) => {
+          if (!item || typeof item !== 'object') return null;
+          const snapshot = {};
+          let hasValue = false;
+          BONIFICATION_FINANCIAL_FIELDS.forEach((field) => {
+            const value = toNumeric(item[field]);
+            if (Number.isFinite(value)) {
+              snapshot[field] = value;
+              hasValue = true;
+            }
+          });
+          return hasValue ? snapshot : null;
+        };
+
+        const sumBonusFinancialSnapshots = (items) => {
+          if (!Array.isArray(items) || !items.length) return null;
+          const totals = {};
+          let hasValue = false;
+          BONIFICATION_FINANCIAL_FIELDS.forEach((field) => {
+            const fieldSum = sumBonificationValues(items, (entry) => {
+              const info = entry?.bonificationInfo;
+              if (info && typeof info === 'object' && info.originalTotals && typeof info.originalTotals === 'object') {
+                return info.originalTotals[field];
+              }
+              return entry ? entry[field] : null;
+            });
+            if (Number.isFinite(fieldSum) && Math.abs(fieldSum) > 0.000001) {
+              totals[field] = fieldSum;
+              hasValue = true;
+            }
+          });
+          return hasValue ? totals : null;
         };
 
         const mergeBonificationGroupIntoBase = (group) => {
@@ -2707,10 +2743,6 @@
             resolveEntryStockForBonification(item)
           );
 
-          BONIFICATION_SUM_FIELDS.forEach((field) => {
-            group.bonuses.forEach((bonus) => addNumericFieldValue(base, bonus, field));
-          });
-
           const combinedQuantity = regularQuantity + bonusQuantity;
           if (Number.isFinite(combinedQuantity)) {
             base.quantity = combinedQuantity;
@@ -2720,6 +2752,9 @@
           if (Number.isFinite(combinedEntryStock)) {
             base.entryStockQuantity = combinedEntryStock;
           }
+
+          const regularTotals = captureItemFinancialSnapshot(base);
+          const bonusTotals = sumBonusFinancialSnapshots(group.bonuses);
 
           const regularCfops = Array.from(
             new Set(
@@ -2744,6 +2779,8 @@
               : regularEntryStock,
             regularCfops,
             bonusCfops,
+            regularTotals,
+            bonusTotals,
           };
           base.cfopClassification = 'venda-bonificada';
           base.hasBonificationMerge = true;
@@ -2777,7 +2814,22 @@
               unknownCfops.add(normalizedCfop);
             }
 
+            item.forceBonificationZeroCost = false;
             ensureItemCostWithTaxes(item, { skipTaxComputation: item?.skipTaxComputation });
+
+            if (classification === 'bonificacao') {
+              const info =
+                item.bonificationInfo && typeof item.bonificationInfo === 'object'
+                  ? { ...item.bonificationInfo }
+                  : {};
+              const originalTotals = captureItemFinancialSnapshot(item);
+              if (originalTotals) {
+                info.originalTotals = originalTotals;
+              }
+              item.bonificationInfo = info;
+              item.forceBonificationZeroCost = true;
+              ensureItemCostWithTaxes(item, { skipTaxComputation: item?.skipTaxComputation });
+            }
 
             const key = buildBonificationGroupKey(item) ||
               `INDEX:${Number.isFinite(item?.index) ? item.index : groupsMap.size}`;
