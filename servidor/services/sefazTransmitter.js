@@ -526,6 +526,8 @@ const performSoapRequest = async ({
   privateKey,
   timeout = 45000,
   soapAction = SOAP_ACTION,
+  soapVersion = '1.2',
+  extraHeaders = {},
 }) => {
   await ensureClockSynchronization();
 
@@ -590,15 +592,26 @@ const performSoapRequest = async ({
           throw new SefazTransmissionError('Chave privada inválida/ausente.');
         }
 
+        const normalizedSoapVersion = String(soapVersion || '')
+          .trim()
+          .toLowerCase();
+        const isSoap11 = normalizedSoapVersion === '1.1' || normalizedSoapVersion === 'soap11';
+
         const headers = {
-          'Content-Type': 'application/soap+xml; charset=utf-8',
+          'Content-Type': isSoap11
+            ? 'text/xml; charset=utf-8'
+            : 'application/soap+xml; charset=utf-8',
           'Content-Length': Buffer.byteLength(envelopeString, 'utf8'),
           'User-Agent': 'EoBicho-PDV/1.0',
+          ...extraHeaders,
         };
 
         if (soapAction) {
-          headers['Content-Type'] = `${headers['Content-Type']}; action="${soapAction}"`;
-          headers.SOAPAction = soapAction;
+          if (isSoap11) {
+            headers.SOAPAction = headers.SOAPAction || `"${soapAction}"`;
+          } else if (!/;\s*action=/i.test(headers['Content-Type'])) {
+            headers['Content-Type'] = `${headers['Content-Type']}; action="${soapAction}"`;
+          }
         }
 
         const options = {
