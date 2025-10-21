@@ -29,8 +29,17 @@ const extractCertificatePair = (pfxBuffer, password) => {
     throw new Error('Nenhum certificado foi encontrado no PFX fornecido.');
   }
 
+  const toAttributeArray = (attributes) => {
+    if (!attributes) return [];
+    if (Array.isArray(attributes)) return attributes;
+    if (typeof attributes === 'object') {
+      return Object.values(attributes);
+    }
+    return [];
+  };
+
   const keyId = (() => {
-    const attribute = (keyBag.attributes || []).find(
+    const attribute = toAttributeArray(keyBag.attributes).find(
       (attr) => attr && attr.type === forge.pki.oids.localKeyId
     );
     if (!attribute || !attribute.value || !attribute.value.length) {
@@ -60,8 +69,9 @@ const extractCertificatePair = (pfxBuffer, password) => {
       continue;
     }
     certificateChain.push(pem);
-    if (!leafCertificate && keyId && bag.attributes) {
-      const certAttr = bag.attributes.find((attr) => attr && attr.type === forge.pki.oids.localKeyId);
+    const bagAttributes = toAttributeArray(bag.attributes);
+    if (!leafCertificate && keyId && bagAttributes.length) {
+      const certAttr = bagAttributes.find((attr) => attr && attr.type === forge.pki.oids.localKeyId);
       if (certAttr && certAttr.value && certAttr.value[0]) {
         const raw = certAttr.value[0];
         const certId =
