@@ -1394,130 +1394,164 @@
 
         <div class="flex-1 overflow-y-auto px-4 py-4">
           <div data-import-tab-panel="pending" class="space-y-3.5">
-            <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <article class="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="space-y-0.5">
-                    <h3 class="text-[12px] font-semibold text-amber-900">NF-e 35240730290856000160550010000100011999999999</h3>
-                    <p class="text-[10px] text-amber-800">Autorizada em 02/07/2024 · SEFAZ/SP · Distribuidora Nacional de Produtos Veterinários Ltda</p>
-                  </div>
-                  <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700">Pendência</span>
+            <section class="rounded-xl border border-gray-200 bg-white shadow-sm">
+              <header class="flex flex-col gap-1.5 border-b border-gray-100 bg-gray-50 px-4 py-3">
+                <h3 class="text-[12px] font-semibold text-gray-900">Consultar notas autorizadas</h3>
+                <p class="text-[11px] text-gray-600">
+                  Escolha a empresa e o período para gerar um DFe com as notas autorizadas na SEFAZ.
+                </p>
+              </header>
+              <form class="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-end md:gap-4" data-pending-filters>
+                <div class="md:flex-1">
+                  <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500" for="pending-company-select">
+                    Empresa
+                  </label>
+                  <select
+                    id="pending-company-select"
+                    class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    data-pending-company
+                  >
+                    <option value="">Carregando empresas...</option>
+                  </select>
                 </div>
-                <dl class="mt-2.5 grid grid-cols-2 gap-2 text-[10px] text-amber-900">
-                  <div>
-                    <dt class="font-medium">Valor total</dt>
-                    <dd class="text-[12px] font-semibold">R$ 15.487,32</dd>
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-end md:w-auto md:flex-1 md:justify-end">
+                  <div class="sm:w-44 md:w-48">
+                    <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500" for="pending-period-start">
+                      Período inicial
+                    </label>
+                    <input
+                      type="date"
+                      id="pending-period-start"
+                      class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      data-pending-period-start
+                    >
                   </div>
-                  <div>
-                    <dt class="font-medium">CFOP predominante</dt>
-                    <dd>1.102 · Compra para comercialização</dd>
+                  <div class="sm:w-44 md:w-48">
+                    <label class="text-[10px] font-semibold uppercase tracking-wide text-gray-500" for="pending-period-end">
+                      Período final
+                    </label>
+                    <input
+                      type="date"
+                      id="pending-period-end"
+                      class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      data-pending-period-end
+                    >
                   </div>
-                  <div>
-                    <dt class="font-medium">Modelo</dt>
-                    <dd>55 – NF-e</dd>
+                  <div class="sm:self-end">
+                    <button
+                      type="button"
+                      class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      data-pending-generate
+                    >
+                      <i class="fas fa-sync"></i>
+                      Gerar
+                    </button>
                   </div>
-                  <div>
-                    <dt class="font-medium">Origem</dt>
-                    <dd>Portal Nacional da NF-e</dd>
-                  </div>
-                </dl>
-                <div class="mt-2.5 flex flex-wrap items-center gap-2">
-                  <button type="button" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[10px] font-semibold text-white shadow-sm transition hover:bg-primary/90">
-                    <i class="fas fa-download"></i>
-                    Baixar XML autorizado
-                  </button>
-                  <span class="text-[9px] text-amber-700">Baseado em XML de exemplo oficial SEFAZ/SP.</span>
                 </div>
-              </article>
+              </form>
+            </section>
 
-              <article class="rounded-xl border border-sky-200 bg-sky-50/60 p-3.5">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="space-y-0.5">
-                    <h3 class="text-[12px] font-semibold text-sky-900">NFC-e 41230676107918000173550010012345678901234567</h3>
-                    <p class="text-[10px] text-sky-800">Autorizada em 18/06/2024 · SEFAZ/PR · Contingência NFC-e homologação</p>
-                  </div>
-                  <span class="rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-700">Pendente</span>
+            <section class="rounded-xl border border-gray-200 bg-white shadow-sm">
+              <header class="flex flex-col gap-1 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h4 class="text-[12px] font-semibold text-gray-900">Notas pendentes de tratamento</h4>
+                  <p class="text-[11px] text-gray-600">
+                    Utilize as ações para imprimir o DANFE ou enviar o XML direto para a aba de importação.
+                  </p>
                 </div>
-                <dl class="mt-2.5 grid grid-cols-2 gap-2 text-[10px] text-sky-900">
-                  <div>
-                    <dt class="font-medium">Valor total</dt>
-                    <dd class="text-[12px] font-semibold">R$ 289,40</dd>
-                  </div>
-                  <div>
-                    <dt class="font-medium">Destinatário</dt>
-                    <dd>Consumidor final</dd>
-                  </div>
-                  <div>
-                    <dt class="font-medium">Modelo</dt>
-                    <dd>65 – NFC-e</dd>
-                  </div>
-                  <div>
-                    <dt class="font-medium">Prazo</dt>
-                    <dd>Pagamento imediato</dd>
-                  </div>
-                </dl>
-                <div class="mt-2.5 flex flex-wrap items-center gap-2">
-                  <button type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 px-2.5 py-1.5 text-[10px] font-semibold text-sky-800 transition hover:bg-sky-100">
-                    <i class="fas fa-eye"></i>
-                    Visualizar DANFE NFC-e
-                  </button>
-                  <span class="text-[9px] text-sky-700">Com base em arquivo de contingência SEFAZ/PR.</span>
+                <div class="text-[10px] text-gray-500">
+                  Situações possíveis: <span class="font-semibold text-amber-600">Pendente</span>,
+                  <span class="font-semibold text-sky-700">Cadastrada</span> e
+                  <span class="font-semibold text-emerald-600">Aprovada</span>.
                 </div>
-              </article>
-
-              <article class="lg:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="space-y-0.5">
-                    <h3 class="text-[12px] font-semibold text-emerald-900">NFS-e padrão nacional · Exemplo ABRASF</h3>
-                    <p class="text-[10px] text-emerald-800">Competência 06/2024 · Prefeitura do Rio de Janeiro · RPS 23145</p>
-                  </div>
-                  <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700">Pendente</span>
-                </div>
-                <dl class="mt-2.5 grid grid-cols-2 gap-2 text-[10px] text-emerald-900 sm:grid-cols-4">
-                  <div>
-                    <dt class="font-medium">Valor total</dt>
-                    <dd class="text-[12px] font-semibold">R$ 1.250,00</dd>
-                  </div>
-                  <div>
-                    <dt class="font-medium">Alíquota ISS</dt>
-                    <dd>3,00%</dd>
-                  </div>
-                  <div>
-                    <dt class="font-medium">Natureza</dt>
-                    <dd>Código LC 116 · Serviços veterinários</dd>
-                  </div>
-                  <div>
-                    <dt class="font-medium">Município</dt>
-                    <dd>Rio de Janeiro/RJ</dd>
-                  </div>
-                </dl>
-                <div class="mt-2.5 flex flex-wrap items-center gap-2">
-                  <button type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-800 transition hover:bg-emerald-100">
-                    <i class="fas fa-eye"></i>
-                    Visualizar RPS
-                  </button>
-                  <span class="text-[9px] text-emerald-700">Layout Simpliss/ABRASF 2.03 em ambiente oficial.</span>
-                </div>
-              </article>
-            </div>
-
-            <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 text-[10px] text-gray-600">
-              <h4 class="text-xs font-semibold text-gray-800">Fluxo resumido</h4>
-              <ul class="mt-1.5 space-y-1">
-                <li class="flex items-start gap-2">
-                  <i class="fas fa-check-circle text-[9px] text-primary mt-0.5"></i>
-                  <span>Consulta portal nacional NF-e/NFC-e ou NFSe Nacional.</span>
-                </li>
-                <li class="flex items-start gap-2">
-                  <i class="fas fa-check-circle text-[9px] text-primary mt-0.5"></i>
-                  <span>Validação XML conforme MOC 4.0, NT 2023.004 e padrão ABRASF.</span>
-                </li>
-                <li class="flex items-start gap-2">
-                  <i class="fas fa-check-circle text-[9px] text-primary mt-0.5"></i>
-                  <span>Itens e tributos são conciliados antes da escrituração.</span>
-                </li>
-              </ul>
-            </div>
+              </header>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-left text-[11px] text-gray-700" data-pending-table>
+                  <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Danfe</th>
+                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Entrada</th>
+                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">CNPJ Forn</th>
+                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Nome Fornecedor</th>
+                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Data Emissão</th>
+                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Série</th>
+                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">N° NF</th>
+                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Valor (R$)</th>
+                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Chave de Acesso</th>
+                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Situação</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 bg-white" data-pending-table-body>
+                    <tr data-pending-loading class="hidden">
+                      <td colspan="10" class="px-4 py-6 text-center text-gray-500">
+                        <i class="fas fa-circle-notch fa-spin mr-2"></i>
+                        Consultando notas autorizadas...
+                      </td>
+                    </tr>
+                    <tr data-pending-error class="hidden">
+                      <td colspan="10" class="px-4 py-6 text-center text-rose-600">
+                        <span data-pending-error-message>Não foi possível carregar as notas autorizadas para o período informado.</span>
+                      </td>
+                    </tr>
+                    <tr data-pending-empty>
+                      <td colspan="10" class="px-4 py-6 text-center text-gray-500">
+                        Informe os filtros acima e clique em <span class="font-semibold">Gerar</span> para listar as notas.
+                      </td>
+                    </tr>
+                    <tr data-pending-row-template class="hidden">
+                      <td class="whitespace-nowrap px-4 py-3 align-top">
+                        <button
+                          type="button"
+                          class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 transition hover:bg-gray-50"
+                          data-pending-danfe
+                        >
+                          <i class="fas fa-print"></i>
+                          Imprimir
+                        </button>
+                      </td>
+                      <td class="whitespace-nowrap px-4 py-3 align-top">
+                        <button
+                          type="button"
+                          class="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1.5 text-[10px] font-semibold text-primary transition hover:bg-primary/20"
+                          data-pending-import
+                        >
+                          <i class="fas fa-file-import"></i>
+                          Enviar XML
+                        </button>
+                      </td>
+                      <td class="whitespace-nowrap px-4 py-3 align-top font-mono text-[11px] text-gray-600" data-pending-supplier-document>
+                        00.000.000/0000-00
+                      </td>
+                      <td class="px-4 py-3 align-top">
+                        <div class="flex flex-col gap-1 text-[11px]">
+                          <span class="font-semibold text-gray-800" data-pending-supplier-name>Fornecedor</span>
+                          <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 self-start rounded-lg border border-dashed border-gray-300 px-2 py-1 text-[10px] font-medium text-gray-600 transition hover:border-primary/50 hover:text-primary"
+                            data-pending-register-supplier
+                          >
+                            <i class="fas fa-user-plus"></i>
+                            Cadastrar fornecedor
+                          </button>
+                        </div>
+                      </td>
+                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-issue-date>00/00/0000</td>
+                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-series>0</td>
+                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-number>0</td>
+                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-total>0,00</td>
+                      <td class="px-4 py-3 align-top font-mono text-[11px] text-gray-600 break-all" data-pending-access-key>
+                        00000000000000000000000000000000000000000000
+                      </td>
+                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-status>
+                        <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                          Pendente
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
 
           <div data-import-tab-panel="xml" class="hidden space-y-3.5">
@@ -1998,6 +2032,9 @@
         const importTabPanels = importModal.querySelectorAll('[data-import-tab-panel]');
         const importModeRadios = importModal.querySelectorAll('input[name="import-mode"]');
         const importModePanels = importModal.querySelectorAll('[data-import-mode-panel]');
+        const pendingCompanySelect = importModal.querySelector('[data-pending-company]') || null;
+        const pendingPeriodStartInput = importModal.querySelector('[data-pending-period-start]') || null;
+        const pendingPeriodEndInput = importModal.querySelector('[data-pending-period-end]') || null;
         const importFilePanel = importModal.querySelector('[data-import-mode-panel="file"]');
         const importFileInput = document.getElementById('import-file-input');
         const importFileFeedback = importModal.querySelector('[data-file-feedback]');
@@ -4090,6 +4127,14 @@
             companySelect.appendChild(option);
             companySelect.disabled = Boolean(disabled);
           }
+          if (pendingCompanySelect) {
+            pendingCompanySelect.innerHTML = '';
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = message;
+            pendingCompanySelect.appendChild(option);
+            pendingCompanySelect.disabled = Boolean(disabled);
+          }
           setCodeLookupCompanyPlaceholder(message, { disabled });
         };
 
@@ -4122,10 +4167,73 @@
             }
             companySelect.disabled = !companies || !companies.length;
           }
+          if (pendingCompanySelect) {
+            const previousValue = pendingCompanySelect.value || '';
+            let preserveSelection = false;
+            pendingCompanySelect.innerHTML = '';
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = placeholder || 'Selecione a empresa';
+            pendingCompanySelect.appendChild(defaultOption);
+            if (Array.isArray(companies)) {
+              companies.forEach((company) => {
+                if (!company || !company._id) return;
+                const option = document.createElement('option');
+                option.value = String(company._id);
+                option.textContent = buildCompanyLabel(company);
+                const documentValue =
+                  company?.cnpj ||
+                  company?.documento ||
+                  company?.document ||
+                  company?.cpfCnpj ||
+                  company?.taxId ||
+                  '';
+                const digits = digitsOnly(documentValue);
+                if (digits && option.dataset) {
+                  option.dataset.companyDocument = digits;
+                }
+                if (option.value === previousValue) {
+                  preserveSelection = true;
+                }
+                pendingCompanySelect.appendChild(option);
+              });
+            }
+            pendingCompanySelect.disabled = !companies || !companies.length;
+            if (preserveSelection) {
+              pendingCompanySelect.value = previousValue;
+            } else {
+              pendingCompanySelect.value = '';
+            }
+          }
           setCodeLookupCompanyOptions(companies, {
             placeholder: placeholder || 'Selecione a empresa',
           });
         };
+
+        const formatDateToInputValue = (date) => {
+          if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+            return '';
+          }
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
+
+        const setPendingPeriodDefaults = () => {
+          if (!pendingPeriodStartInput || !pendingPeriodEndInput) return;
+          const now = new Date();
+          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+          const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          if (!pendingPeriodStartInput.value) {
+            pendingPeriodStartInput.value = formatDateToInputValue(firstDay);
+          }
+          if (!pendingPeriodEndInput.value) {
+            pendingPeriodEndInput.value = formatDateToInputValue(lastDay);
+          }
+        };
+
+        setPendingPeriodDefaults();
 
         const setCompanySelectValue = (value) => {
           if (!companySelect) return false;
@@ -11819,6 +11927,7 @@
           previouslyFocusedElement = document.activeElement;
           importModal.classList.remove('hidden');
           document.body.classList.add('overflow-hidden');
+          setPendingPeriodDefaults();
 
           if (importModalCard) {
             importModalCard.classList.add('opacity-0', 'scale-95');
