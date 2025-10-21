@@ -5472,6 +5472,12 @@
           return lockStateRegistry.get(element);
         };
 
+        const shouldSkipFormControlLock = (element) => {
+          if (!(element instanceof HTMLElement)) return true;
+          if (element.hasAttribute('data-admin-screen-search-input')) return true;
+          return false;
+        };
+
         const shouldSkipButtonLock = (button) => {
           if (!(button instanceof HTMLButtonElement)) return true;
           if (button.dataset.tab) return true;
@@ -5492,6 +5498,22 @@
           formControls.forEach((element) => {
             if (!(element instanceof HTMLElement)) return;
             const original = rememberLockState(element);
+
+            if (shouldSkipFormControlLock(element)) {
+              if (!isFormLocked) {
+                if ('readOnly' in element && typeof original.readOnly !== 'undefined') {
+                  element.readOnly = Boolean(original.readOnly);
+                } else if ('readOnly' in element) {
+                  element.readOnly = false;
+                }
+
+                if ('disabled' in element) {
+                  element.disabled = Boolean(original.disabled);
+                }
+              }
+              element.classList.remove('cursor-not-allowed');
+              return;
+            }
 
             if (isFormLocked) {
               if ('readOnly' in element) {
