@@ -863,6 +863,10 @@ const consultNfceStatusServico = async ({
 module.exports = {
   transmitNfceToSefaz,
   consultNfceStatusServico,
+  performSoapRequest,
+  resolveUfCode,
+  extractTagContent,
+  extractSection,
   SefazTransmissionError,
   __TESTING__: {
     performSoapRequest,

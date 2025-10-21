@@ -10,6 +10,7 @@ const AccountingAccount = require('../models/AccountingAccount');
 const AccountPayable = require('../models/AccountPayable');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const { collectDistributedDocuments } = require('../services/dfeDistribution');
 
 const router = express.Router();
 
@@ -423,7 +424,7 @@ router.get(
   authorizeRoles('admin', 'admin_master'),
   async (req, res) => {
     try {
-      const { companyId, startDate, endDate } = req.query || {};
+      const { companyId, startDate, endDate, environment } = req.query || {};
       const normalizedCompanyId = cleanString(companyId);
 
       if (!normalizedCompanyId) {
@@ -464,26 +465,6 @@ router.get(
           .json({ message: 'O período informado é inválido. Ajuste as datas e tente novamente.' });
       }
 
-      const rangeFilter = {};
-      const startOfDay = toStartOfDay(periodStart);
-      const endOfDay = toEndOfDay(periodEnd);
-      if (startOfDay) {
-        rangeFilter.$gte = startOfDay;
-      }
-      if (endOfDay) {
-        rangeFilter.$lte = endOfDay;
-      }
-
-      const query = { companyId: normalizedCompanyId };
-      if (Object.keys(rangeFilter).length) {
-        query.createdAt = rangeFilter;
-      }
-
-      const drafts = await NfeDraft.find(query)
-        .sort({ createdAt: -1 })
-        .limit(200)
-        .lean();
-
       const companyDocument = digitsOnly(
         store?.cnpj ||
           store?.documento ||
@@ -493,22 +474,31 @@ router.get(
           ''
       );
 
-      const documents = Array.isArray(drafts)
-        ? drafts.map((draft) => {
-            const issueDateObject = parseDateInput(draft.header?.issueDate);
-            const issueDateIso = issueDateObject ? issueDateObject.toISOString() : '';
-            const totalNumeric = Number(draft.totals?.totalValue);
+      const startOfDay = toStartOfDay(periodStart);
+      const endOfDay = toEndOfDay(periodEnd);
+
+      const distributionResult = await collectDistributedDocuments({
+        store,
+        startDate: startOfDay || periodStart || null,
+        endDate: endOfDay || periodEnd || null,
+        environment,
+      });
+
+      const documents = Array.isArray(distributionResult?.documents)
+        ? distributionResult.documents.map((document) => {
+            const numericTotal = Number.parseFloat(document.totalValue);
             return {
-              id: String(draft._id || ''),
-              accessKey: cleanString(draft.xml?.accessKey),
-              supplierName: cleanString(draft.supplierName),
-              supplierDocument: digitsOnly(draft.supplierDocument),
-              issueDate: issueDateIso,
-              serie: cleanString(draft.header?.serie),
-              number: cleanString(draft.header?.number),
-              totalValue: Number.isFinite(totalNumeric) ? totalNumeric : null,
-              status: cleanString(draft.status) || 'pending',
-              createdAt: draft.createdAt || null,
+              id: cleanString(document.id) || cleanString(document.accessKey),
+              accessKey: cleanString(document.accessKey),
+              supplierName: cleanString(document.supplierName),
+              supplierDocument: digitsOnly(document.supplierDocument),
+              issueDate: document.issueDate || null,
+              serie: cleanString(document.serie),
+              number: cleanString(document.number),
+              totalValue: Number.isFinite(numericTotal) ? numericTotal : null,
+              status: cleanString(document.status) || 'pending',
+              xml: document.xml || null,
+              nsu: cleanString(document.nsu),
             };
           })
         : [];
@@ -527,6 +517,11 @@ router.get(
         period: {
           start: startOfDay ? startOfDay.toISOString() : null,
           end: endOfDay ? endOfDay.toISOString() : null,
+        },
+        distribution: {
+          environment: cleanString(distributionResult?.metadata?.environment) || 'producao',
+          iterations: distributionResult?.metadata?.iterations || 0,
+          count: documents.length,
         },
       });
     } catch (error) {
