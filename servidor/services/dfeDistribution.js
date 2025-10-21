@@ -221,11 +221,17 @@ const decodeDocZip = (content) => {
 };
 
 const getTextContent = (node, tagName) => {
-  if (!node) return '';
-  const elements = node.getElementsByTagName(tagName);
-  if (!elements || !elements.length) return '';
-  const [element] = elements;
-  if (!element || !element.textContent) return '';
+  if (!node || !tagName) return '';
+  const elements = typeof node.getElementsByTagName === 'function' ? node.getElementsByTagName(tagName) : null;
+  if (!elements || typeof elements.length !== 'number' || elements.length === 0) {
+    return '';
+  }
+
+  const element = typeof elements.item === 'function' ? elements.item(0) : elements[0];
+  if (!element || typeof element.textContent === 'undefined' || element.textContent === null) {
+    return '';
+  }
+
   return String(element.textContent).trim();
 };
 
@@ -978,6 +984,7 @@ module.exports = {
     buildDistributionBody,
     parseSoapFault,
     parseDistDFeRet,
+    parseResNFe,
     createMemoryStateStore,
     createPersistentStateStore,
     shouldDowngradeToSoap11,

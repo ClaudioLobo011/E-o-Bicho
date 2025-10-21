@@ -14,6 +14,7 @@ const {
   buildEnvelopeSoap11,
   buildDistributionQuery,
   parseSoapFault,
+  parseResNFe,
   shouldDowngradeToSoap11,
   resolveAuthorUfCode,
 } = __TESTING__;
@@ -135,6 +136,31 @@ describe('dfeDistribution helpers', () => {
     const parsed = parseSoapFault(faultXml);
     assert.equal(parsed.code, 'soap:Receiver');
     assert.equal(parsed.reason, 'Object reference not set to an instance of an object.');
+  });
+
+  test('parseResNFe lê campos sem depender de NodeList iterável', () => {
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
+      <resNFe xmlns="http://www.portalfiscal.inf.br/nfe">
+        <chNFe>35191111111111111111550010000012345678901234</chNFe>
+        <CNPJ>12345678000190</CNPJ>
+        <xNome>Fornecedor Exemplo LTDA</xNome>
+        <dhEmi>2024-01-02T12:34:56-03:00</dhEmi>
+        <serie>1</serie>
+        <nNF>1234</nNF>
+        <vNF>1500.55</vNF>
+        <tpNF>1</tpNF>
+        <cSitNFe>1</cSitNFe>
+        <CNPJDest>07919703000167</CNPJDest>
+      </resNFe>`;
+
+    const parsed = parseResNFe(xml, { companyDocument: '07919703000167' });
+
+    assert.ok(parsed, 'espera objeto retornado');
+    assert.equal(parsed.accessKey, '35191111111111111111550010000012345678901234');
+    assert.equal(parsed.supplierName, 'Fornecedor Exemplo LTDA');
+    assert.equal(parsed.serie, '1');
+    assert.equal(parsed.number, '1234');
+    assert.equal(parsed.statusCode, '1');
   });
 
   test('shouldDowngradeToSoap11 detecta NullReference', () => {
