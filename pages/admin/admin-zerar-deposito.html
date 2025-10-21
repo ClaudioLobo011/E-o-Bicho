@@ -75,27 +75,58 @@
                         <div class="overflow-x-auto rounded-lg border border-gray-200">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">
                                 <thead class="bg-gray-50">
-                                    <tr>
-                                        <th scope="col" class="px-4 py-3">
+                                    <tr class="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                                        <th scope="col" class="px-4 py-3 align-top">
+                                            <span class="sr-only">Selecionar todos</span>
                                             <input type="checkbox" id="select-all" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" disabled>
                                         </th>
-                                        <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">
-                                            <button type="button" class="inline-flex items-center gap-1 text-left font-semibold text-gray-700 transition hover:text-primary" data-sort-field="codbarras">
-                                                Código de barras
-                                                <i class="fas fa-sort text-xs opacity-70" data-sort-icon></i>
-                                            </button>
+                                        <th scope="col" class="px-4 py-3 text-left align-top">
+                                            <div class="flex flex-col gap-1">
+                                                <div class="flex items-center justify-between gap-1">
+                                                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Código de barras</span>
+                                                    <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-sort-field="codbarras" data-sort-order="asc" aria-label="Ordenar crescente por código de barras">
+                                                            <i class="fas fa-sort-up text-[9px]"></i>
+                                                        </button>
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-sort-field="codbarras" data-sort-order="desc" aria-label="Ordenar decrescente por código de barras">
+                                                            <i class="fas fa-sort-down text-[9px]"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-filter-field="codbarras">
+                                            </div>
                                         </th>
-                                        <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">
-                                            <button type="button" class="inline-flex items-center gap-1 text-left font-semibold text-gray-700 transition hover:text-primary" data-sort-field="nome">
-                                                Nome
-                                                <i class="fas fa-sort text-xs opacity-70" data-sort-icon></i>
-                                            </button>
+                                        <th scope="col" class="px-4 py-3 text-left align-top">
+                                            <div class="flex flex-col gap-1">
+                                                <div class="flex items-center justify-between gap-1">
+                                                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Nome</span>
+                                                    <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-sort-field="nome" data-sort-order="asc" aria-label="Ordenar crescente por nome">
+                                                            <i class="fas fa-sort-up text-[9px]"></i>
+                                                        </button>
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-sort-field="nome" data-sort-order="desc" aria-label="Ordenar decrescente por nome">
+                                                            <i class="fas fa-sort-down text-[9px]"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-filter-field="nome">
+                                            </div>
                                         </th>
-                                        <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">
-                                            <button type="button" class="inline-flex items-center gap-1 text-right font-semibold text-gray-700 transition hover:text-primary" data-sort-field="quantidade">
-                                                Quantidade
-                                                <i class="fas fa-sort text-xs opacity-70" data-sort-icon></i>
-                                            </button>
+                                        <th scope="col" class="px-4 py-3 text-right align-top">
+                                            <div class="flex flex-col items-end gap-1">
+                                                <div class="flex w-full items-center justify-end gap-1">
+                                                    <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Quantidade</span>
+                                                    <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-sort-field="quantidade" data-sort-order="asc" aria-label="Ordenar crescente por quantidade">
+                                                            <i class="fas fa-sort-up text-[9px]"></i>
+                                                        </button>
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-sort-field="quantidade" data-sort-order="desc" aria-label="Ordenar decrescente por quantidade">
+                                                            <i class="fas fa-sort-down text-[9px]"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-filter-field="quantidade">
+                                            </div>
                                         </th>
                                     </tr>
                                 </thead>
