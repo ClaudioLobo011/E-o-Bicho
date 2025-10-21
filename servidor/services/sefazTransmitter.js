@@ -528,6 +528,7 @@ const performSoapRequest = async ({
   soapAction = SOAP_ACTION,
   soapVersion = '1.2',
   extraHeaders = {},
+  returnResponseDetails = false,
 }) => {
   await ensureClockSynchronization();
 
@@ -610,6 +611,10 @@ const performSoapRequest = async ({
           headers.Accept = isSoap11 ? 'text/xml' : 'application/soap+xml';
         }
 
+        if (!('Connection' in headers) && !('connection' in headers)) {
+          headers.Connection = 'close';
+        }
+
         if (soapAction) {
           if (isSoap11) {
             headers.SOAPAction = headers.SOAPAction || `"${soapAction}"`;
@@ -627,7 +632,13 @@ const performSoapRequest = async ({
           headers,
           key: normalizedPrivateKey,
           minVersion: 'TLSv1.2',
+          rejectUnauthorized: true,
+          servername: url.hostname,
         };
+
+        if (!('Host' in headers) && !('host' in headers)) {
+          headers.Host = url.host;
+        }
 
         if (formattedCertificate) {
           options.cert = formattedCertificate;
@@ -677,13 +688,31 @@ const performSoapRequest = async ({
             const trimmed = body.trim();
             const firstLine = trimmed.split(/\r?\n/).find((line) => line.trim()) || '';
             console.info(`${logPrefix} Primeira linha da resposta: ${firstLine}`);
+            const contentType = response.headers ? response.headers['content-type'] : undefined;
+            if (contentType) {
+              console.info(
+                `${logPrefix} Cabeçalho Content-Type da resposta: ${String(contentType).trim()}`
+              );
+            }
             if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
-              resolve(trimmed);
+              if (returnResponseDetails) {
+                resolve({
+                  body: trimmed,
+                  statusCode: response.statusCode,
+                  headers: response.headers || {},
+                });
+              } else {
+                resolve(trimmed);
+              }
             } else {
               reject(
                 new SefazTransmissionError(
                   `SEFAZ retornou status HTTP ${response.statusCode || 'desconhecido'}.`,
-                  { statusCode: response.statusCode, body: trimmed }
+                  {
+                    statusCode: response.statusCode,
+                    body: trimmed,
+                    headers: response.headers || {},
+                  }
                 )
               );
             }
