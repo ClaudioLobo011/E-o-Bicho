@@ -21,6 +21,13 @@ const DFE_ENDPOINTS = {
 const DFE_SOAP_ACTION =
   'http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse';
 const DFE_NAMESPACE = 'http://www.portalfiscal.inf.br/nfe';
+const DEFAULT_NATIONAL_AUTHOR_UF = (() => {
+  const fallback = (process.env.SEFAZ_DFE_NATIONAL_AUTHOR_UF || '33')
+    .toString()
+    .replace(/\D+/g, '')
+    .padStart(2, '0');
+  return /^[0-9]{2}$/.test(fallback) && fallback !== '00' ? fallback : '33';
+})();
 const MAX_ITERATIONS = 25;
 const MAX_RESULTS = 500;
 
@@ -74,7 +81,8 @@ const buildDistributionEnvelope = ({ payload }) =>
   [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"',
-    '                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">',
+    '                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    '                 xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
     '  <soap12:Body>',
     '    <nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">',
     `      ${payload}`,
@@ -355,13 +363,16 @@ const collectDistributedDocuments = async ({
   const authorUfCode = (() => {
     const nationalEndpoint = /nfe\.(?:fazenda|sefaz)\.gov\.br/i.test(endpoint);
     const normalized = String(ufCode || '').replace(/\D+/g, '').padStart(2, '0');
+
+    if (/^[0-9]{2}$/.test(normalized) && normalized !== '00') {
+      return normalized;
+    }
+
     if (nationalEndpoint) {
-      return '91';
+      return DEFAULT_NATIONAL_AUTHOR_UF;
     }
-    if (!/^[0-9]{2}$/.test(normalized) || normalized === '00') {
-      return '91';
-    }
-    return normalized;
+
+    return '91';
   })();
 
   const startBoundary = startDate ? toStartOfDay(startDate) : null;

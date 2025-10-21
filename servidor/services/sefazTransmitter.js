@@ -606,6 +606,10 @@ const performSoapRequest = async ({
           ...extraHeaders,
         };
 
+        if (!('Accept' in headers) && !('accept' in headers)) {
+          headers.Accept = isSoap11 ? 'text/xml' : 'application/soap+xml';
+        }
+
         if (soapAction) {
           if (isSoap11) {
             headers.SOAPAction = headers.SOAPAction || `"${soapAction}"`;
