@@ -2243,6 +2243,8 @@
 
         let lastSupplierData = null;
         let lastSupplierRecord = null;
+        let pendingSupplierId = '';
+        let pendingSupplierDocument = '';
         let lastNfeData = null;
         const IMPORT_CONTEXT_FULL = 'full';
         const IMPORT_CONTEXT_BONUS = 'bonus';
@@ -5131,6 +5133,76 @@
           return option;
         };
 
+        const setSupplierSelectValue = (value) => {
+          if (!supplierSelect) return false;
+          const normalized = value ? String(value) : '';
+          if (!normalized) return false;
+          const option = Array.from(supplierSelect.options || []).find(
+            (entry) => entry.value === normalized
+          );
+          if (option) {
+            supplierSelect.value = normalized;
+            return true;
+          }
+          return false;
+        };
+
+        const applyPendingSupplierSelection = () => {
+          if (!supplierSelect) return false;
+
+          if (pendingSupplierId && setSupplierSelectValue(pendingSupplierId)) {
+            pendingSupplierId = '';
+            pendingSupplierDocument = '';
+            const selectedOption =
+              supplierSelect.selectedOptions && supplierSelect.selectedOptions.length
+                ? supplierSelect.selectedOptions[0]
+                : null;
+            if (selectedOption) {
+              const optionDocument = digitsOnly(selectedOption.dataset?.supplierDocument || '');
+              const registered = optionDocument
+                ? supplierRegistry.byDocument.get(optionDocument) || null
+                : null;
+              if (registered) {
+                lastSupplierRecord = registered;
+              } else if (optionDocument) {
+                lastSupplierRecord = {
+                  _id: selectedOption.dataset?.supplierId || null,
+                  legalName: selectedOption.dataset?.supplierName || '',
+                  cnpj: optionDocument,
+                };
+              }
+            }
+            supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+          }
+
+          if (pendingSupplierDocument) {
+            const option = findSupplierOptionByDocument(pendingSupplierDocument);
+            if (option) {
+              supplierSelect.value = option.value;
+              pendingSupplierId = '';
+              pendingSupplierDocument = '';
+              const optionDocument = digitsOnly(option.dataset?.supplierDocument || '');
+              const registered = optionDocument
+                ? supplierRegistry.byDocument.get(optionDocument) || null
+                : null;
+              if (registered) {
+                lastSupplierRecord = registered;
+              } else if (optionDocument) {
+                lastSupplierRecord = {
+                  _id: option.dataset?.supplierId || null,
+                  legalName: option.dataset?.supplierName || '',
+                  cnpj: optionDocument,
+                };
+              }
+              supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
+              return true;
+            }
+          }
+
+          return false;
+        };
+
         const registerSupplierRecord = (supplier) => {
           if (!supplier) return null;
           const documentDigits = digitsOnly(supplier.cnpj || supplier.document);
@@ -5149,11 +5221,15 @@
         };
 
         const loadSuppliersFromApi = async (forceReload = false) => {
-          if (!suppliersEndpoint) return supplierRegistry.byDocument;
+          if (!suppliersEndpoint) {
+            applyPendingSupplierSelection();
+            return supplierRegistry.byDocument;
+          }
           if (forceReload) {
             supplierRegistry.loaded = false;
           }
           if (supplierRegistry.loaded && !forceReload) {
+            applyPendingSupplierSelection();
             return supplierRegistry.byDocument;
           }
           if (supplierRegistry.loadingPromise) {
@@ -5162,6 +5238,7 @@
             } catch (_) {
               // Ignorar erros anteriores, o estado já foi atualizado
             }
+            applyPendingSupplierSelection();
             return supplierRegistry.byDocument;
           }
           supplierRegistry.loadingPromise = (async () => {
@@ -5197,6 +5274,7 @@
           } catch (_) {
             // Erro já tratado no bloco acima
           }
+          applyPendingSupplierSelection();
           return supplierRegistry.byDocument;
         };
 
@@ -8610,6 +8688,7 @@
         const fillSupplierFieldsFromNfe = (data) => {
           const supplier = data?.emit;
           if (!supplier) return;
+          lastSupplierData = supplier;
           setInputValue(
             supplierCnpjInput,
             supplier.document ? formatDocument(supplier.document) : ''
@@ -8620,6 +8699,75 @@
           }
           setInputValue(supplierEmailInput, supplier.email || '');
           setInputValue(supplierAddressInput, formatAddressLine(supplier.address));
+        };
+
+        const applySupplierSelectionFromData = (data) => {
+          if (!supplierSelect) return;
+
+          const selection = data?.selection || {};
+          const desiredSupplierId = selection.supplierId ? String(selection.supplierId).trim() : '';
+          const supplierDocument = digitsOnly(
+            data?.supplier?.document || data?.emit?.document || ''
+          );
+
+          let applied = false;
+
+          if (desiredSupplierId) {
+            applied = setSupplierSelectValue(desiredSupplierId);
+            if (applied) {
+              pendingSupplierId = '';
+            } else {
+              pendingSupplierId = desiredSupplierId;
+            }
+          } else {
+            pendingSupplierId = '';
+          }
+
+          if (!applied && supplierDocument) {
+            const option = findSupplierOptionByDocument(supplierDocument);
+            if (option) {
+              supplierSelect.value = option.value;
+              applied = true;
+              pendingSupplierId = '';
+              pendingSupplierDocument = '';
+            } else {
+              pendingSupplierDocument = supplierDocument;
+            }
+          } else if (!applied) {
+            pendingSupplierDocument = supplierDocument || pendingSupplierDocument;
+          } else {
+            pendingSupplierDocument = '';
+          }
+
+          if (supplierSelect && supplierSelect.value) {
+            const selectedOption =
+              supplierSelect.selectedOptions && supplierSelect.selectedOptions.length
+                ? supplierSelect.selectedOptions[0]
+                : null;
+            if (selectedOption) {
+              const optionDocument = digitsOnly(
+                selectedOption.dataset?.supplierDocument || supplierDocument || ''
+              );
+              const registered = optionDocument
+                ? supplierRegistry.byDocument.get(optionDocument) || null
+                : null;
+              if (registered) {
+                lastSupplierRecord = registered;
+              } else if (optionDocument) {
+                lastSupplierRecord = {
+                  _id: selectedOption.dataset?.supplierId || null,
+                  legalName: selectedOption.dataset?.supplierName || '',
+                  cnpj: optionDocument,
+                };
+              }
+            }
+          }
+
+          if (!applied) {
+            applyPendingSupplierSelection();
+          } else {
+            supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
+          }
         };
 
         const fillTotalsFromNfeData = (data) => {
@@ -10666,6 +10814,7 @@
           if (!data) return;
           fillMainFormFromNfeData(data);
           fillSupplierFieldsFromNfe(data);
+          applySupplierSelectionFromData(data);
           fillTotalsFromNfeData(data);
           fillTransportFromNfeData(data);
           fillDepositSelectionFromNfeData(data);
@@ -10768,6 +10917,8 @@
           pendingCompanyId = '';
           pendingCompanyDocumentDigits = '';
           pendingBankAccountId = '';
+          pendingSupplierId = '';
+          pendingSupplierDocument = '';
           setBankAccountPlaceholder('Selecione uma empresa para listar as contas correntes');
           pendingDepositId = '';
           setDepositPlaceholder('Selecione uma empresa para listar os depósitos');
@@ -10836,6 +10987,8 @@
           }
 
           if (matchedOption) {
+            pendingSupplierId = '';
+            pendingSupplierDocument = '';
             supplierSelect.value = matchedOption.value;
             supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
             const supplierName =
