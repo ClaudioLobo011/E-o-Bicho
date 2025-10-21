@@ -40,6 +40,19 @@ describe('dfeDistribution helpers', () => {
     assert.match(envelope, /<ultNSU>000000000000001<\/ultNSU>/);
   });
 
+  test('buildEnvelopeConsNSU usa envelope SOAP 1.1 quando solicitado', () => {
+    const envelope = buildEnvelopeConsNSU({
+      tpAmb: '1',
+      cUFAutor: '33',
+      cnpj: '07919703000167',
+      ultNSU: '2',
+      soapVersion: '1.1',
+    });
+    assert.match(envelope, /<soap:Envelope/);
+    assert.match(envelope, /<soap:Body>/);
+    assert.match(envelope, /<ultNSU>000000000000002<\/ultNSU>/);
+  });
+
   test('parseSoapFault extrai reason e code', () => {
     const faultXml = `<?xml version="1.0" encoding="utf-8"?>
       <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">

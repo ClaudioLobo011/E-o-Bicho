@@ -125,13 +125,14 @@ const authorUfCode = resolveAuthorUfCode({ store: storeStub, endpoint });
 
 const soapVersionPreference = normalizeSoapVersion(process.env.NFE_DFE_SOAP_VERSION);
 
-const buildEnvelope = () => {
+const buildEnvelope = (soapVersion) => {
   if (mode === 'consChNFe') {
     return buildEnvelopeConsChNFe({
       tpAmb: environment === 'homologacao' ? '2' : '1',
       cUFAutor: authorUfCode,
       cnpj,
       accessKey: chave,
+      soapVersion,
     });
   }
   return buildEnvelopeConsNSU({
@@ -139,6 +140,7 @@ const buildEnvelope = () => {
     cUFAutor: authorUfCode,
     cnpj,
     ultNSU: padNsU(ultNsUArg),
+    soapVersion,
   });
 };
 
@@ -151,7 +153,7 @@ const executeRequest = async () => {
 
     return performSoapRequest({
       endpoint,
-      envelope: buildEnvelope(),
+      envelope: buildEnvelope(version),
       certificate: certificatePair.certificatePem,
       certificateChain: certificatePair.certificateChain,
       privateKey: certificatePair.privateKeyPem,

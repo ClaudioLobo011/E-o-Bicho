@@ -121,30 +121,45 @@ const buildDistributionBody = ({ tpAmb, cUFAutor, cnpj, innerXml }) => {
   ].join('\n');
 };
 
-const buildEnvelope = (body) =>
-  [
+const buildEnvelope = ({ body, soapVersion = SOAP_VERSIONS.SOAP12 }) => {
+  const normalizedVersion =
+    soapVersion === SOAP_VERSIONS.SOAP11 ? SOAP_VERSIONS.SOAP11 : SOAP_VERSIONS.SOAP12;
+
+  const namespaceConfig =
+    normalizedVersion === SOAP_VERSIONS.SOAP11
+      ? { prefix: 'soap', uri: 'http://schemas.xmlsoap.org/soap/envelope/' }
+      : { prefix: 'soap12', uri: 'http://www.w3.org/2003/05/soap-envelope' };
+
+  return [
     '<?xml version="1.0" encoding="utf-8"?>',
-    '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"',
+    `<${namespaceConfig.prefix}:Envelope xmlns:${namespaceConfig.prefix}="${namespaceConfig.uri}"`,
     '                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
     '                 xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
-    '  <soap12:Body>',
+    `  <${namespaceConfig.prefix}:Body>`,
     '    <nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">',
     `      ${body}`,
     '    </nfeDistDFeInteresse>',
-    '  </soap12:Body>',
-    '</soap12:Envelope>',
+    `  </${namespaceConfig.prefix}:Body>`,
+    `</${namespaceConfig.prefix}:Envelope>`,
   ].join('\n');
-
-const buildEnvelopeConsNSU = ({ tpAmb, cUFAutor, cnpj, ultNSU }) => {
-  const normalizedNsU = padNsU(ultNSU || '0');
-  const innerXml = ['<consNSU>', `  <ultNSU>${normalizedNsU}</ultNSU>`, '</consNSU>'].join('\n');
-  return buildEnvelope(buildDistributionBody({ tpAmb, cUFAutor, cnpj, innerXml }));
 };
 
-const buildEnvelopeConsChNFe = ({ tpAmb, cUFAutor, cnpj, accessKey }) => {
+const buildEnvelopeConsNSU = ({ tpAmb, cUFAutor, cnpj, ultNSU, soapVersion }) => {
+  const normalizedNsU = padNsU(ultNSU || '0');
+  const innerXml = ['<consNSU>', `  <ultNSU>${normalizedNsU}</ultNSU>`, '</consNSU>'].join('\n');
+  return buildEnvelope({
+    body: buildDistributionBody({ tpAmb, cUFAutor, cnpj, innerXml }),
+    soapVersion,
+  });
+};
+
+const buildEnvelopeConsChNFe = ({ tpAmb, cUFAutor, cnpj, accessKey, soapVersion }) => {
   const normalizedKey = digitsOnly(accessKey).padStart(44, '0');
   const innerXml = [`<consChNFe>`, `  <chNFe>${normalizedKey}</chNFe>`, '</consChNFe>'].join('\n');
-  return buildEnvelope(buildDistributionBody({ tpAmb, cUFAutor, cnpj, innerXml }));
+  return buildEnvelope({
+    body: buildDistributionBody({ tpAmb, cUFAutor, cnpj, innerXml }),
+    soapVersion,
+  });
 };
 
 const decodeDocZip = (content) => {
@@ -619,7 +634,7 @@ const collectDistributedDocuments = async (
   let currentNsU = padNsU(initialNsU);
   let reachedEnd = false;
 
-  const buildEnvelopeForMode = () => {
+  const buildEnvelopeForMode = (soapVersion) => {
     if (mode === 'consChNFe') {
       if (!chave) {
         throw new Error('Chave de acesso não informada para consulta por chave.');
@@ -629,6 +644,7 @@ const collectDistributedDocuments = async (
         cUFAutor: authorUfCode,
         cnpj: companyDocument,
         accessKey: chave,
+        soapVersion,
       });
     }
     return buildEnvelopeConsNSU({
@@ -636,6 +652,7 @@ const collectDistributedDocuments = async (
       cUFAutor: authorUfCode,
       cnpj: companyDocument,
       ultNSU: currentNsU,
+      soapVersion,
     });
   };
 
@@ -647,7 +664,7 @@ const collectDistributedDocuments = async (
 
     return soapClient.performSoapRequest({
       endpoint,
-      envelope: buildEnvelopeForMode(),
+      envelope: buildEnvelopeForMode(soapVersionToUse),
       certificate: certificatePair.certificatePem,
       certificateChain: certificatePair.certificateChain,
       privateKey: certificatePair.privateKeyPem,
