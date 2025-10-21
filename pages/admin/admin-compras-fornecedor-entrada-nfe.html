@@ -9996,6 +9996,116 @@
           return draft;
         };
 
+        const DUPLICATE_IMPORT_STATUS_SET = new Set([
+          'draft',
+          'rascunho',
+          'cadastrada',
+          'approved',
+          'aprovado',
+          'aprovada',
+        ]);
+
+        const normalizeDraftStatus = (status) => String(status || '').trim().toLowerCase();
+
+        const fetchDraftsByAccessKey = async (accessKey, { companyId } = {}) => {
+          const normalizedKey = digitsOnly(accessKey);
+          if (!normalizedKey) return [];
+
+          const url = new URL(nfeDraftsEndpoint, window.location.origin);
+          url.searchParams.set('accessKey', normalizedKey);
+          if (companyId) {
+            url.searchParams.set('companyId', String(companyId));
+          }
+
+          const response = await fetch(url.toString(), { headers: buildAuthHeaders() });
+          const payload = await response.json().catch(() => ({}));
+
+          if (response.status === 401 || response.status === 403) {
+            handleAuthError();
+          }
+
+          if (!response.ok) {
+            const message =
+              (payload && (payload.message || payload.error)) ||
+              `Falha ao consultar notas existentes para a chave ${normalizedKey} (status ${response.status}).`;
+            throw new Error(message);
+          }
+
+          const drafts = Array.isArray(payload?.drafts) ? payload.drafts : [];
+          return drafts;
+        };
+
+        const findExistingDraftByAccessKey = async (accessKey, { companyId } = {}) => {
+          const drafts = await fetchDraftsByAccessKey(accessKey, { companyId });
+          if (!drafts.length) return null;
+          const matchingDraft = drafts.find((draft) =>
+            DUPLICATE_IMPORT_STATUS_SET.has(normalizeDraftStatus(draft?.status))
+          );
+          return matchingDraft || drafts[0] || null;
+        };
+
+        const handleExistingEntryRedirect = async (data) => {
+          if (!data) return false;
+
+          try {
+            const accessKeyDigits = digitsOnly(data.accessKey || data?.xml?.accessKey || '');
+            if (!accessKeyDigits) return false;
+
+            const selectedCompanyId = data.selectedCompanyId || companySelect?.value || pendingCompanyId || '';
+            const existingDraft = await findExistingDraftByAccessKey(accessKeyDigits, {
+              companyId: selectedCompanyId,
+            });
+
+            if (!existingDraft) {
+              return false;
+            }
+
+            const draftId = existingDraft.id || existingDraft._id || '';
+            if (!draftId) {
+              return false;
+            }
+
+            if (currentDraftId && String(currentDraftId) === String(draftId)) {
+              return false;
+            }
+
+            const draft = await fetchDraftById(draftId);
+            if (!draft) {
+              throw new Error('Não foi possível carregar a entrada já cadastrada para esta NF-e.');
+            }
+
+            applyDraftDataToForm(draft);
+
+            const formattedCode = currentDraftCode ? formatDraftCode(currentDraftCode) : '';
+            const statusLabel = mapDraftStatusLabel(existingDraft.status);
+            const messageParts = ['Esta NF-e já possui uma entrada cadastrada.'];
+            if (formattedCode) {
+              messageParts.push(`Código ${formattedCode}.`);
+            }
+            if (statusLabel) {
+              messageParts.push(`Status ${statusLabel}.`);
+            }
+
+            notify(messageParts.join(' '), 'warning');
+
+            if (importFileInput) {
+              importFileInput.value = '';
+            }
+
+            if (selectedCompanyId) {
+              loadCodeLookupList(selectedCompanyId, { forceReload: true }).catch(() => {});
+            }
+
+            closeImportModal();
+            return true;
+          } catch (error) {
+            console.error('Erro ao verificar existência da NF-e importada:', error);
+            const message =
+              error?.message || 'Não foi possível verificar se esta NF-e já está cadastrada.';
+            throw new Error(message);
+          }
+        };
+
         const buildNoteDataFromDraft = (draft) => {
           if (!draft || typeof draft !== 'object') return null;
           const payload = clonePlainObject(draft.payload) || {};
@@ -11117,6 +11227,24 @@
               parsed.selectedBankAccountId = bankAccountSelect ? bankAccountSelect.value || '' : '';
               parsed.selectedDepositId = depositSelect ? depositSelect.value || '' : '';
               const isBonusContext = importModalContext === IMPORT_CONTEXT_BONUS;
+
+              if (!isBonusContext) {
+                try {
+                  const redirected = await handleExistingEntryRedirect(parsed);
+                  if (redirected) {
+                    return;
+                  }
+                } catch (duplicateError) {
+                  console.error('Erro ao evitar importação duplicada da NF-e:', duplicateError);
+                  showFileFeedback(
+                    duplicateError?.message ||
+                      'Não foi possível verificar se o XML já foi importado anteriormente.',
+                    'error'
+                  );
+                  return;
+                }
+              }
+
               if (isBonusContext) {
                 pendingBonusData = parsed;
               } else {

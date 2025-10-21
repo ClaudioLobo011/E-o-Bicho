@@ -164,13 +164,19 @@ const buildDraftDocumentFromPayload = (payload = {}) => {
 
 router.get('/', async (req, res) => {
   try {
-    const { companyId, status } = req.query || {};
+    const { companyId, status, accessKey } = req.query || {};
     const filter = {};
     if (companyId) {
       filter.companyId = cleanString(companyId);
     }
     if (status) {
       filter.status = cleanString(status);
+    }
+    if (accessKey) {
+      const normalizedAccessKey = digitsOnly(accessKey);
+      if (normalizedAccessKey) {
+        filter['xml.accessKey'] = normalizedAccessKey;
+      }
     }
 
     const drafts = await NfeDraft.find(filter)
