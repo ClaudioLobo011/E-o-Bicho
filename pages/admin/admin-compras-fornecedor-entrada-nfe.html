@@ -5475,6 +5475,7 @@
         const shouldSkipButtonLock = (button) => {
           if (!(button instanceof HTMLButtonElement)) return true;
           if (button.dataset.tab) return true;
+          if (button.hasAttribute('data-accordion-button')) return true;
           if (button.hasAttribute('data-close-code-modal')) return true;
           if (button.hasAttribute('data-close-product-modal')) return true;
           if (button.hasAttribute('data-close-product-link-modal')) return true;
