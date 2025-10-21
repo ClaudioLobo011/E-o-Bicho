@@ -569,6 +569,10 @@ router.get('/:id', async (req, res) => {
       return res.status(400).json({ message: 'Identificador do rascunho não informado.' });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ message: 'Rascunho de NF-e não encontrado.' });
+    }
+
     const draft = await NfeDraft.findById(id).lean();
     if (!draft) {
       return res.status(404).json({ message: 'Rascunho de NF-e não encontrado.' });
