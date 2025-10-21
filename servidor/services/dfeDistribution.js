@@ -545,6 +545,10 @@ const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
     console.warn(`[DF-e] ${message}`);
   };
 
+  const isNationalEndpoint = /(?:^|\/\/)(?:hom\.)?nfe\.(?:fazenda|sefaz)\.gov\.br/i.test(
+    endpoint || ''
+  );
+
   const ufAcronymCandidates = [
     store?.uf,
     store?.UF,
@@ -594,18 +598,35 @@ const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
     if (preferredAcronym) {
       const forced = AUTHOR_UF_OVERRIDES[preferredAcronym];
       if (forced) {
+        if (isNationalEndpoint && forced !== DEFAULT_NATIONAL_AUTHOR_UF) {
+          warn(
+            `UF autora ${forced} do certificado/empresa substituída por ${DEFAULT_NATIONAL_AUTHOR_UF} para Ambiente Nacional.`
+          );
+          return DEFAULT_NATIONAL_AUTHOR_UF;
+        }
         return forced;
       }
+    }
+    if (isNationalEndpoint && code !== DEFAULT_NATIONAL_AUTHOR_UF) {
+      warn(
+        `UF autora ${code} substituída por ${DEFAULT_NATIONAL_AUTHOR_UF} para Ambiente Nacional.`
+      );
+      return DEFAULT_NATIONAL_AUTHOR_UF;
     }
     return code;
   }
 
   const certificateUf = extractUfFromCertificate(certificatePem);
   if (certificateUf) {
+    if (isNationalEndpoint && certificateUf !== DEFAULT_NATIONAL_AUTHOR_UF) {
+      warn(
+        `UF autora ${certificateUf} do certificado substituída por ${DEFAULT_NATIONAL_AUTHOR_UF} para Ambiente Nacional.`
+      );
+      return DEFAULT_NATIONAL_AUTHOR_UF;
+    }
     return certificateUf;
   }
 
-  const isNationalEndpoint = /nfe\.(?:fazenda|sefaz)\.gov\.br/i.test(endpoint || '');
   if (isNationalEndpoint) {
     warn(`UF autora não encontrada. Utilizando fallback ${DEFAULT_NATIONAL_AUTHOR_UF}.`);
     return DEFAULT_NATIONAL_AUTHOR_UF;
