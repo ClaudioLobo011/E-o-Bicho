@@ -19,7 +19,7 @@ const DFE_ENDPOINTS = {
   producao: 'https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
 };
 const DFE_SOAP_ACTION =
-  'http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresseMFA';
+  'http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse';
 const DFE_NAMESPACE = 'http://www.portalfiscal.inf.br/nfe';
 const MAX_ITERATIONS = 25;
 const MAX_RESULTS = 500;
