@@ -977,23 +977,34 @@
           </div>
         </section>
 
-        <div class="flex flex-col gap-3 md:flex-row md:justify-end">
-          <button type="button" data-save-draft class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-            <i class="fas fa-file-archive"></i>
-            Salvar rascunho
-          </button>
-          <button type="button" data-clear-import class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-            <i class="fas fa-eraser"></i>
-            Limpar
-          </button>
+        <div class="flex flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
           <button
             type="button"
-            data-register-entry
-            class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+            data-delete-entry
+            class="inline-flex items-center gap-2 self-start rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 hidden"
           >
-            <i class="fas fa-save" data-register-entry-icon></i>
-            <span data-register-entry-text>Registrar entrada da NF-e</span>
+            <i class="fas fa-trash" data-delete-entry-icon></i>
+            <span data-delete-entry-text>Excluir nota</span>
           </button>
+
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
+            <button type="button" data-save-draft class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-file-archive"></i>
+              Salvar rascunho
+            </button>
+            <button type="button" data-clear-import class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-eraser"></i>
+              Limpar
+            </button>
+            <button
+              type="button"
+              data-register-entry
+              class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+            >
+              <i class="fas fa-save" data-register-entry-icon></i>
+              <span data-register-entry-text>Registrar entrada da NF-e</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2129,10 +2140,13 @@
         const observationInput = document.getElementById('observacao');
         const complementaryInfoInput = document.getElementById('informacoes-complementares');
         const clearImportButton = document.querySelector('[data-clear-import]');
+        const deleteEntryButton = document.querySelector('[data-delete-entry]');
         const saveDraftButton = document.querySelector('[data-save-draft]');
         const registerEntryButton = document.querySelector('[data-register-entry]');
         const registerEntryIcon = registerEntryButton?.querySelector('[data-register-entry-icon]') || null;
         const registerEntryText = registerEntryButton?.querySelector('[data-register-entry-text]') || null;
+        const deleteEntryIcon = deleteEntryButton?.querySelector('[data-delete-entry-icon]') || null;
+        const deleteEntryText = deleteEntryButton?.querySelector('[data-delete-entry-text]') || null;
         const statusBadge = document.querySelector('[data-nfe-status-badge]');
         const documentsTableBody = document.querySelector('[data-nfe-documents-body]');
         const documentsEmptyRow = document.querySelector('[data-nfe-documents-empty]');
@@ -2259,8 +2273,10 @@
         let currentDraftStatus = 'draft';
         let isSavingDraft = false;
         let isApprovingDraft = false;
+        let isDeletingDraft = false;
         let isFormLocked = false;
         let updateStatusBadgeDisplay = () => {};
+        let updateDeleteButtonState = () => {};
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
@@ -5405,6 +5421,8 @@
 
         const defaultRegisterIconClass = registerEntryIcon ? registerEntryIcon.className : '';
         const defaultRegisterText = registerEntryText ? registerEntryText.textContent || '' : '';
+        const defaultDeleteIconClass = deleteEntryIcon ? deleteEntryIcon.className : '';
+        const defaultDeleteText = deleteEntryText ? deleteEntryText.textContent || '' : '';
 
         const setApproveButtonState = (isProcessing) => {
           if (!registerEntryButton) return;
@@ -5421,6 +5439,23 @@
             } else {
               registerEntryText.textContent = defaultRegisterText || 'Registrar entrada da NF-e';
             }
+          }
+        };
+
+        const setDeleteButtonState = (isProcessing) => {
+          if (!deleteEntryButton) return;
+          const hasDraft = Boolean(currentDraftId);
+          const shouldDisable = Boolean(isProcessing) || !hasDraft;
+          deleteEntryButton.disabled = shouldDisable;
+          deleteEntryButton.classList.toggle('opacity-60', shouldDisable);
+          deleteEntryButton.classList.toggle('cursor-wait', Boolean(isProcessing));
+          if (deleteEntryIcon) {
+            deleteEntryIcon.className = isProcessing ? 'fas fa-circle-notch fa-spin' : defaultDeleteIconClass;
+          }
+          if (deleteEntryText) {
+            deleteEntryText.textContent = isProcessing
+              ? 'Excluindo...'
+              : defaultDeleteText || 'Excluir nota';
           }
         };
 
@@ -5443,6 +5478,7 @@
           if (button.hasAttribute('data-close-code-modal')) return true;
           if (button.hasAttribute('data-close-product-modal')) return true;
           if (button.hasAttribute('data-close-product-link-modal')) return true;
+          if (button.hasAttribute('data-delete-entry')) return true;
           return false;
         };
 
@@ -5512,6 +5548,7 @@
           }
           updateStatusBadgeDisplay(normalized);
           setFormLockState(normalized === 'approved');
+          updateDeleteButtonState(normalized);
           return normalized;
         };
 
@@ -9911,7 +9948,31 @@
           classes.forEach((className) => statusBadge.classList.add(className));
         };
 
+        updateDeleteButtonState = (status) => {
+          if (!deleteEntryButton) return;
+          const normalized = determineDraftStatusKey(status ?? currentDraftStatus);
+          const hasDraft = Boolean(currentDraftId);
+          const shouldShow = hasDraft && normalized === 'approved';
+          deleteEntryButton.classList.toggle('hidden', !shouldShow);
+
+          if (!shouldShow) {
+            deleteEntryButton.disabled = true;
+            deleteEntryButton.classList.remove('cursor-wait');
+            deleteEntryButton.classList.remove('opacity-60');
+            if (deleteEntryIcon) {
+              deleteEntryIcon.className = defaultDeleteIconClass;
+            }
+            if (deleteEntryText && defaultDeleteText) {
+              deleteEntryText.textContent = defaultDeleteText;
+            }
+            return;
+          }
+
+          setDeleteButtonState(isDeletingDraft);
+        };
+
         updateStatusBadgeDisplay(currentDraftStatus);
+        updateDeleteButtonState(currentDraftStatus);
         setFormLockState(false);
 
         const parseDateForSort = (value) => {
@@ -12282,6 +12343,72 @@
             } finally {
               isApprovingDraft = false;
               setApproveButtonState(false);
+            }
+          });
+        }
+
+        if (deleteEntryButton) {
+          deleteEntryButton.addEventListener('click', async (event) => {
+            event.preventDefault();
+            if (isDeletingDraft) return;
+
+            if (!currentDraftId) {
+              notify('Nenhuma nota carregada para exclusão.', 'warning');
+              return;
+            }
+
+            const statusKey = determineDraftStatusKey(currentDraftStatus);
+            const confirmationMessage =
+              statusKey === 'approved'
+                ? 'Tem certeza que deseja excluir esta entrada de NF-e aprovada? As contas a pagar serão removidas e o estoque será estornado.'
+                : 'Tem certeza que deseja excluir esta nota?';
+            const confirmed = typeof window !== 'undefined' && typeof window.confirm === 'function'
+              ? window.confirm(confirmationMessage)
+              : true;
+            if (!confirmed) {
+              return;
+            }
+
+            try {
+              isDeletingDraft = true;
+              setDeleteButtonState(true);
+
+              const headers = buildAuthHeaders();
+              const response = await fetch(`${nfeDraftsEndpoint}/${currentDraftId}`, {
+                method: 'DELETE',
+                headers,
+              });
+              const result = await response.json().catch(() => ({}));
+
+              if (response.status === 401 || response.status === 403) {
+                handleAuthError();
+              }
+
+              if (!response.ok) {
+                const message =
+                  result?.message || `Falha ao excluir a entrada da NF-e (status ${response.status}).`;
+                throw new Error(message);
+              }
+
+              const successMessage =
+                statusKey === 'approved'
+                  ? 'Entrada da NF-e aprovada excluída com sucesso.'
+                  : 'Nota excluída com sucesso.';
+              notify(successMessage, 'success');
+
+              const activeCompanyId = companySelect?.value || '';
+              resetImportedNfeState();
+              if (activeCompanyId) {
+                codeLookupCache.delete(activeCompanyId);
+                loadCodeLookupList(activeCompanyId, { forceReload: true }).catch(() => {});
+              }
+            } catch (error) {
+              console.error('Erro ao excluir a entrada da NF-e:', error);
+              notify(error?.message || 'Não foi possível excluir a entrada da NF-e.', 'error');
+            } finally {
+              isDeletingDraft = false;
+              setDeleteButtonState(false);
+              updateDeleteButtonState(currentDraftStatus);
             }
           });
         }

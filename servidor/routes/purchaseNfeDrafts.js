@@ -128,6 +128,63 @@ const computeEntryStockQuantity = (item) => {
   return Number.isFinite(quantityValue) ? quantityValue : null;
 };
 
+const collectProductEntrySummary = (items = []) => {
+  const quantities = new Map();
+  const details = new Map();
+
+  if (!Array.isArray(items)) {
+    return { quantities, details };
+  }
+
+  items.forEach((item) => {
+    if (!item || typeof item !== 'object') return;
+
+    const productId = extractProductId(item.matchedProduct || item);
+    if (!productId) return;
+
+    const quantityValue = computeEntryStockQuantity(item);
+    if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+      return;
+    }
+
+    const normalizedQuantity = quantityValue > 0 ? quantityValue : 0;
+    if (normalizedQuantity <= 0) return;
+
+    const key = String(productId);
+    const current = quantities.get(key) || 0;
+    quantities.set(key, current + normalizedQuantity);
+
+    if (!details.has(key)) {
+      const source = item.matchedProduct || item || {};
+      const nameCandidates = [
+        source?.nome,
+        source?.name,
+        source?.description,
+        item?.description,
+        source?.descricao,
+        source?.title,
+      ];
+      const codeCandidates = [
+        source?.sku,
+        source?.codigo,
+        source?.code,
+        source?.codigoProduto,
+        source?.productCode,
+        item?.sku,
+        item?.code,
+      ];
+      const name = nameCandidates.find((value) => typeof value === 'string' && value.trim());
+      const code = codeCandidates.find((value) => typeof value === 'string' && value.trim());
+      details.set(key, {
+        name: name ? name.trim() : '',
+        code: code ? code.trim() : '',
+      });
+    }
+  });
+
+  return { quantities, details };
+};
+
 const generatePayableSequentialCode = async (session) => {
   const now = new Date();
   const year = now.getUTCFullYear();
@@ -812,6 +869,129 @@ router.post('/:id/approve', async (req, res) => {
       } catch (_) {
         /* ignore */
       }
+    }
+    return res.status(status).json(responsePayload);
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Identificador da nota inválido.' });
+  }
+
+  let session = null;
+  let removedPayableId = null;
+
+  try {
+    session = await mongoose.startSession();
+
+    await session.withTransaction(async () => {
+      const draft = await NfeDraft.findById(id).session(session);
+      if (!draft) {
+        throw buildHttpError(404, 'Entrada de NF-e não encontrada.');
+      }
+
+      const approved = isApprovedStatus(draft.status);
+
+      if (approved) {
+        const depositId = draft.selection?.depositId;
+        if (!depositId || !mongoose.Types.ObjectId.isValid(depositId)) {
+          throw buildHttpError(
+            400,
+            'Não foi possível estornar o estoque da nota aprovada: depósito vinculado inválido.'
+          );
+        }
+
+        const deposit = await Deposit.findById(depositId).session(session);
+        if (!deposit) {
+          throw buildHttpError(
+            400,
+            'Não foi possível estornar o estoque da nota aprovada: depósito vinculado não encontrado.'
+          );
+        }
+
+        const { quantities: productQuantities, details: productDetails } =
+          collectProductEntrySummary(Array.isArray(draft.items) ? draft.items : []);
+        const depositKey = deposit._id.toString();
+
+        for (const [productId, quantity] of productQuantities.entries()) {
+          if (!Number.isFinite(quantity) || quantity <= 0) continue;
+
+          const product = await Product.findById(productId).session(session);
+          if (!product) {
+            const info = productDetails.get(productId) || {};
+            const label = info.name || info.code || 'produto vinculado';
+            throw buildHttpError(
+              400,
+              `Não foi possível localizar o produto ${label} para estornar o estoque da nota.`
+            );
+          }
+
+          if (!Array.isArray(product.estoques)) {
+            const label =
+              product.nome || product.name || (productDetails.get(productId) || {}).name || 'produto';
+            throw buildHttpError(
+              400,
+              `O produto ${label} não possui controle de estoque para o depósito vinculado à nota.`
+            );
+          }
+
+          const stockEntry = product.estoques.find(
+            (entry) => entry?.deposito && entry.deposito.toString() === depositKey
+          );
+          if (!stockEntry) {
+            const info = productDetails.get(productId) || {};
+            const label =
+              info.name || product.nome || product.name || info.code || 'produto vinculado';
+            throw buildHttpError(
+              400,
+              `Não foi possível estornar o estoque do produto ${label}: depósito não localizado no cadastro do produto.`
+            );
+          }
+
+          const currentQuantityValue =
+            typeof stockEntry.quantidade === 'number'
+              ? stockEntry.quantidade
+              : toNumber(stockEntry.quantidade);
+          const baseQuantity = Number.isFinite(currentQuantityValue) ? currentQuantityValue : 0;
+          const nextQuantityRaw = Math.round((baseQuantity - quantity) * 1000000) / 1000000;
+          const nextQuantity = Math.abs(nextQuantityRaw) <= 0.0000005 ? 0 : nextQuantityRaw;
+          stockEntry.quantidade = nextQuantity;
+          product.markModified('estoques');
+          await product.save({ session });
+        }
+
+        const accountPayableId = draft.metadata?.accountPayableId;
+        if (accountPayableId && mongoose.Types.ObjectId.isValid(accountPayableId)) {
+          const payable = await AccountPayable.findById(accountPayableId).session(session);
+          if (payable) {
+            await payable.deleteOne({ session });
+            removedPayableId = payable._id.toString();
+          }
+        }
+      }
+
+      await draft.deleteOne({ session });
+    });
+
+    return res.json({
+      message: 'Entrada da NF-e removida com sucesso.',
+      accountPayableRemoved: Boolean(removedPayableId),
+      accountPayableId: removedPayableId,
+    });
+  } catch (error) {
+    console.error('Erro ao excluir entrada de NF-e:', error);
+    const status = Number.isInteger(error.status) ? error.status : 500;
+    const responsePayload = {
+      message: error.message || 'Não foi possível excluir a entrada da NF-e.',
+    };
+    if (error.details) {
+      responsePayload.details = error.details;
     }
     return res.status(status).json(responsePayload);
   } finally {
