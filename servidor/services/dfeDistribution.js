@@ -52,7 +52,7 @@ const DFE_SOAP_ACTION =
 const DFE_NAMESPACE = 'http://www.portalfiscal.inf.br/nfe';
 
 const DEFAULT_NATIONAL_AUTHOR_UF = (() => {
-  const fallback = (process.env.SEFAZ_DFE_NATIONAL_AUTHOR_UF || '33')
+  const fallback = (process.env.SEFAZ_DFE_NATIONAL_AUTHOR_UF || '91')
     .toString()
     .replace(/\D+/g, '')
     .padStart(2, '0');
@@ -145,9 +145,13 @@ const buildEnvelope = ({ body, soapVersion = SOAP_VERSIONS.SOAP12 }) => {
   ].join('\n');
 };
 
-const buildEnvelopeConsNSU = ({ tpAmb, cUFAutor, cnpj, ultNSU, soapVersion }) => {
-  const normalizedNsU = padNsU(ultNSU || '0');
-  const innerXml = ['<consNSU>', `  <ultNSU>${normalizedNsU}</ultNSU>`, '</consNSU>'].join('\n');
+const buildEnvelopeConsNSU = ({ tpAmb, cUFAutor, cnpj, ultNSU, nsu, soapVersion }) => {
+  const hasSpecificNsu = nsu !== undefined && nsu !== null && String(nsu).trim() !== '';
+  const normalizedNsU = padNsU(hasSpecificNsu ? nsu : ultNSU || '0');
+  const tagName = hasSpecificNsu ? 'consNSU' : 'distNSU';
+  const valueTag = hasSpecificNsu ? 'NSU' : 'ultNSU';
+  const innerXml =
+    [`<${tagName}>`, `  <${valueTag}>${normalizedNsU}</${valueTag}>`, `</${tagName}>`].join('\n');
   return buildEnvelope({
     body: buildDistributionBody({ tpAmb, cUFAutor, cnpj, innerXml }),
     soapVersion,
@@ -536,10 +540,48 @@ const extractUfFromCertificate = (certificatePem) => {
   return null;
 };
 
+const isNationalDistributionEndpoint = (endpoint) => {
+  if (!endpoint) {
+    return false;
+  }
+
+  try {
+    const { hostname } = new URL(String(endpoint));
+    const normalizedHost = String(hostname || '').trim().toLowerCase();
+    if (!normalizedHost) {
+      return false;
+    }
+    if (normalizedHost === 'nfe.fazenda.gov.br') {
+      return true;
+    }
+    if (normalizedHost.endsWith('.nfe.fazenda.gov.br')) {
+      return true;
+    }
+    if (normalizedHost === 'nfe.sefaz.gov.br') {
+      return true;
+    }
+    if (normalizedHost.endsWith('.nfe.sefaz.gov.br')) {
+      return true;
+    }
+  } catch (error) {
+    const normalized = String(endpoint).trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    if (/(?:^|\b)(?:www\d*\.)?nfe\.(?:fazenda|sefaz)\.gov\.br/.test(normalized)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
   const warn = (message) => {
     console.warn(`[DF-e] ${message}`);
   };
+
+  const isNationalEndpoint = isNationalDistributionEndpoint(endpoint);
 
   const ufAcronymCandidates = [
     store?.uf,
@@ -579,8 +621,6 @@ const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
     store?.dadosFiscais?.estado,
   ];
 
-  let warnedAbout91 = false;
-
   for (const candidate of ufCandidates) {
     if (candidate == null) {
       continue;
@@ -589,34 +629,38 @@ const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
     if (!/^[0-9]{2}$/.test(code) || code === '00') {
       continue;
     }
-    if (code === '91') {
-      if (!warnedAbout91) {
-        warn('cUFAutor=91 bloqueado para consultas por NSU. Aplicando fallback.');
-        warnedAbout91 = true;
-      }
-      continue;
-    }
     if (preferredAcronym) {
       const forced = AUTHOR_UF_OVERRIDES[preferredAcronym];
       if (forced) {
+        if (isNationalEndpoint && forced !== DEFAULT_NATIONAL_AUTHOR_UF) {
+          warn(
+            `UF autora ${forced} do certificado/empresa substituída por ${DEFAULT_NATIONAL_AUTHOR_UF} para Ambiente Nacional.`
+          );
+          return DEFAULT_NATIONAL_AUTHOR_UF;
+        }
         return forced;
       }
+    }
+    if (isNationalEndpoint && code !== DEFAULT_NATIONAL_AUTHOR_UF) {
+      warn(
+        `UF autora ${code} substituída por ${DEFAULT_NATIONAL_AUTHOR_UF} para Ambiente Nacional.`
+      );
+      return DEFAULT_NATIONAL_AUTHOR_UF;
     }
     return code;
   }
 
   const certificateUf = extractUfFromCertificate(certificatePem);
   if (certificateUf) {
-    if (certificateUf === '91') {
-      if (!warnedAbout91) {
-        warn('cUFAutor=91 extraído do certificado bloqueado para consultas por NSU. Ignorando valor.');
-      }
-    } else {
-      return certificateUf;
+    if (isNationalEndpoint && certificateUf !== DEFAULT_NATIONAL_AUTHOR_UF) {
+      warn(
+        `UF autora ${certificateUf} do certificado substituída por ${DEFAULT_NATIONAL_AUTHOR_UF} para Ambiente Nacional.`
+      );
+      return DEFAULT_NATIONAL_AUTHOR_UF;
     }
+    return certificateUf;
   }
 
-  const isNationalEndpoint = /nfe\.(?:fazenda|sefaz)\.gov\.br/i.test(endpoint || '');
   if (isNationalEndpoint) {
     warn(`UF autora não encontrada. Utilizando fallback ${DEFAULT_NATIONAL_AUTHOR_UF}.`);
     return DEFAULT_NATIONAL_AUTHOR_UF;

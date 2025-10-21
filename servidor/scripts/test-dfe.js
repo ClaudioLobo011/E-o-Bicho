@@ -69,6 +69,7 @@ const environment = (cliOptions.ambiente || DEFAULT_ENVIRONMENT).trim().toLowerC
 const cnpj = (cliOptions.cnpj || process.env.NFE_DFE_CNPJ || '').trim();
 const uf = (cliOptions.uf || process.env.NFE_DFE_UF || '').trim();
 const ultNsUArg = cliOptions.ultnsu || process.env.NFE_DFE_ULT_NSU || '000000000000000';
+const nsuArg = cliOptions.nsu || process.env.NFE_DFE_NSU || '';
 const chave = (cliOptions.chave || process.env.NFE_DFE_CHAVE || '').trim();
 const endpoint =
   cliOptions.endpoint || DFE_ENDPOINTS[environment] || DFE_ENDPOINTS.producao;
@@ -140,6 +141,7 @@ const buildEnvelope = (soapVersion) => {
     cUFAutor: authorUfCode,
     cnpj,
     ultNSU: padNsU(ultNsUArg),
+    nsu: nsuArg ? padNsU(nsuArg) : undefined,
     soapVersion,
   });
 };
