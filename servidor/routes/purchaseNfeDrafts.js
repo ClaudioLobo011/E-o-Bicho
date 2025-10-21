@@ -8,6 +8,9 @@ const Supplier = require('../models/Supplier');
 const BankAccount = require('../models/BankAccount');
 const AccountingAccount = require('../models/AccountingAccount');
 const AccountPayable = require('../models/AccountPayable');
+const requireAuth = require('../middlewares/requireAuth');
+const authorizeRoles = require('../middlewares/authorizeRoles');
+const { collectDistributedDocuments } = require('../services/dfeDistribution');
 
 const router = express.Router();
 
@@ -202,6 +205,20 @@ const buildHttpError = (status, message, details = null) => {
     error.details = details;
   }
   return error;
+};
+
+const toStartOfDay = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  const clone = new Date(date);
+  clone.setHours(0, 0, 0, 0);
+  return clone;
+};
+
+const toEndOfDay = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  const clone = new Date(date);
+  clone.setHours(23, 59, 59, 999);
+  return clone;
 };
 
 const sanitizeDuplicate = (duplicate = {}) => ({
@@ -401,6 +418,121 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get(
+  '/dfe',
+  requireAuth,
+  authorizeRoles('admin', 'admin_master'),
+  async (req, res) => {
+    try {
+      const { companyId, startDate, endDate, environment } = req.query || {};
+      const normalizedCompanyId = cleanString(companyId);
+
+      if (!normalizedCompanyId) {
+        return res
+          .status(400)
+          .json({ message: 'Selecione uma empresa válida para consultar as notas autorizadas.' });
+      }
+
+      const store = await Store.findById(normalizedCompanyId)
+        .select('+certificadoArquivoCriptografado +certificadoSenhaCriptografada')
+        .lean();
+
+      if (!store) {
+        return res.status(404).json({ message: 'Empresa não encontrada.' });
+      }
+
+      if (!store.certificadoArquivoCriptografado || !store.certificadoSenhaCriptografada) {
+        return res
+          .status(400)
+          .json({ message: 'A empresa não possui certificado digital configurado.' });
+      }
+
+      const validityDate = parseDateInput(store.certificadoValidade);
+      if (validityDate) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (validityDate < today) {
+          return res.status(400).json({ message: 'O certificado digital da empresa está vencido.' });
+        }
+      }
+
+      const periodStart = parseDateInput(startDate);
+      const periodEnd = parseDateInput(endDate);
+
+      if (periodStart && periodEnd && periodEnd < periodStart) {
+        return res
+          .status(400)
+          .json({ message: 'O período informado é inválido. Ajuste as datas e tente novamente.' });
+      }
+
+      const companyDocument = digitsOnly(
+        store?.cnpj ||
+          store?.documento ||
+          store?.document ||
+          store?.cpfCnpj ||
+          store?.taxId ||
+          ''
+      );
+
+      const startOfDay = toStartOfDay(periodStart);
+      const endOfDay = toEndOfDay(periodEnd);
+
+      const distributionResult = await collectDistributedDocuments({
+        store,
+        startDate: startOfDay || periodStart || null,
+        endDate: endOfDay || periodEnd || null,
+        environment,
+      });
+
+      const documents = Array.isArray(distributionResult?.documents)
+        ? distributionResult.documents.map((document) => {
+            const numericTotal = Number.parseFloat(document.totalValue);
+            return {
+              id: cleanString(document.id) || cleanString(document.accessKey),
+              accessKey: cleanString(document.accessKey),
+              supplierName: cleanString(document.supplierName),
+              supplierDocument: digitsOnly(document.supplierDocument),
+              issueDate: document.issueDate || null,
+              serie: cleanString(document.serie),
+              number: cleanString(document.number),
+              totalValue: Number.isFinite(numericTotal) ? numericTotal : null,
+              status: cleanString(document.status) || 'pending',
+              xml: document.xml || null,
+              nsu: cleanString(document.nsu),
+            };
+          })
+        : [];
+
+      return res.json({
+        documents,
+        company: {
+          id: normalizedCompanyId,
+          document: companyDocument,
+          name:
+            cleanString(store?.nomeFantasia) ||
+            cleanString(store?.nome) ||
+            cleanString(store?.razaoSocial) ||
+            '',
+        },
+        period: {
+          start: startOfDay ? startOfDay.toISOString() : null,
+          end: endOfDay ? endOfDay.toISOString() : null,
+        },
+        distribution: {
+          environment: cleanString(distributionResult?.metadata?.environment) || 'producao',
+          iterations: distributionResult?.metadata?.iterations || 0,
+          count: documents.length,
+        },
+      });
+    } catch (error) {
+      console.error('Erro ao consultar DF-e na SEFAZ:', error);
+      return res.status(500).json({
+        message: error.message || 'Não foi possível consultar as notas autorizadas na SEFAZ.',
+      });
+    }
+  }
+);
+
 router.post('/', async (req, res) => {
   try {
     const payload = req.body || {};
@@ -430,6 +562,10 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
     if (!id) {
       return res.status(400).json({ message: 'Identificador do rascunho não informado.' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ message: 'Rascunho de NF-e não encontrado.' });
     }
 
     const draft = await NfeDraft.findById(id).lean();
