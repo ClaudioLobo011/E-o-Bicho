@@ -58,6 +58,15 @@
                 class="w-full max-w-[160px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 cursor-pointer"
                 readonly
               >
+              <div class="mt-2 flex items-center gap-2">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Status</span>
+                <span
+                  data-nfe-status-badge
+                  class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600"
+                >
+                  Cadastrada
+                </span>
+              </div>
             </div>
             <div>
               <label for="nfe-number" class="block text-sm font-medium text-gray-700 mb-1">NF* (número da nota)</label>
@@ -977,9 +986,13 @@
             <i class="fas fa-eraser"></i>
             Limpar
           </button>
-          <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
-            <i class="fas fa-save"></i>
-            Registrar entrada da NF-e
+          <button
+            type="button"
+            data-register-entry
+            class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+          >
+            <i class="fas fa-save" data-register-entry-icon></i>
+            <span data-register-entry-text>Registrar entrada da NF-e</span>
           </button>
         </div>
       </div>
@@ -2117,6 +2130,10 @@
         const complementaryInfoInput = document.getElementById('informacoes-complementares');
         const clearImportButton = document.querySelector('[data-clear-import]');
         const saveDraftButton = document.querySelector('[data-save-draft]');
+        const registerEntryButton = document.querySelector('[data-register-entry]');
+        const registerEntryIcon = registerEntryButton?.querySelector('[data-register-entry-icon]') || null;
+        const registerEntryText = registerEntryButton?.querySelector('[data-register-entry-text]') || null;
+        const statusBadge = document.querySelector('[data-nfe-status-badge]');
         const documentsTableBody = document.querySelector('[data-nfe-documents-body]');
         const documentsEmptyRow = document.querySelector('[data-nfe-documents-empty]');
         const mainProductsTableBody = document.querySelector('[data-nfe-products-body]');
@@ -2237,7 +2254,11 @@
         let pendingDepositId = '';
         let currentDraftId = '';
         let currentDraftCode = '';
+        let currentDraftStatus = 'draft';
         let isSavingDraft = false;
+        let isApprovingDraft = false;
+        let isFormLocked = false;
+        let updateStatusBadgeDisplay = () => {};
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
@@ -5239,10 +5260,156 @@
           nfeCodeInput.dataset.rawCode = String(codeValue);
         };
 
+        const determineDraftStatusKey = (status) => {
+          const normalized = String(status ?? '').trim().toLowerCase();
+          if (normalized === 'approved' || normalized === 'aprovado' || normalized === 'aprovada') {
+            return 'approved';
+          }
+          if (!normalized || normalized === 'draft' || normalized === 'rascunho' || normalized === 'cadastrada') {
+            return 'draft';
+          }
+          return normalized;
+        };
+
+        const defaultRegisterIconClass = registerEntryIcon ? registerEntryIcon.className : '';
+        const defaultRegisterText = registerEntryText ? registerEntryText.textContent || '' : '';
+
+        const setApproveButtonState = (isProcessing) => {
+          if (!registerEntryButton) return;
+          const shouldDisable = Boolean(isProcessing) || isFormLocked;
+          registerEntryButton.disabled = shouldDisable;
+          registerEntryButton.classList.toggle('opacity-60', shouldDisable);
+          registerEntryButton.classList.toggle('cursor-wait', Boolean(isProcessing));
+          if (registerEntryIcon) {
+            registerEntryIcon.className = isProcessing ? 'fas fa-circle-notch fa-spin' : defaultRegisterIconClass;
+          }
+          if (registerEntryText) {
+            if (isProcessing) {
+              registerEntryText.textContent = 'Processando...';
+            } else {
+              registerEntryText.textContent = defaultRegisterText || 'Registrar entrada da NF-e';
+            }
+          }
+        };
+
+        const lockStateRegistry = new WeakMap();
+
+        const rememberLockState = (element) => {
+          if (!element || typeof element !== 'object') return { disabled: false, readOnly: undefined };
+          if (!lockStateRegistry.has(element)) {
+            lockStateRegistry.set(element, {
+              disabled: 'disabled' in element ? element.disabled : false,
+              readOnly: 'readOnly' in element ? element.readOnly : undefined,
+            });
+          }
+          return lockStateRegistry.get(element);
+        };
+
+        const shouldSkipButtonLock = (button) => {
+          if (!(button instanceof HTMLButtonElement)) return true;
+          if (button.dataset.tab) return true;
+          if (button.hasAttribute('data-close-code-modal')) return true;
+          if (button.hasAttribute('data-close-product-modal')) return true;
+          if (button.hasAttribute('data-close-product-link-modal')) return true;
+          return false;
+        };
+
+        const setFormLockState = (locked) => {
+          isFormLocked = Boolean(locked);
+
+          const formControls = document.querySelectorAll('input, select, textarea');
+          formControls.forEach((element) => {
+            if (!(element instanceof HTMLElement)) return;
+            const original = rememberLockState(element);
+
+            if (isFormLocked) {
+              if ('readOnly' in element) {
+                const type = (element.getAttribute('type') || '').toLowerCase();
+                const useReadOnly =
+                  element.tagName === 'TEXTAREA' ||
+                  ['text', 'search', 'email', 'url', 'tel', 'number', 'password'].includes(type);
+                if (useReadOnly) {
+                  element.readOnly = true;
+                } else if ('disabled' in element) {
+                  element.disabled = true;
+                }
+              } else if ('disabled' in element) {
+                element.disabled = true;
+              }
+              element.classList.add('cursor-not-allowed');
+            } else {
+              if ('readOnly' in element && typeof original.readOnly !== 'undefined') {
+                element.readOnly = Boolean(original.readOnly);
+              } else if ('readOnly' in element) {
+                element.readOnly = false;
+              }
+
+              if ('disabled' in element) {
+                element.disabled = Boolean(original.disabled);
+              }
+
+              element.classList.remove('cursor-not-allowed');
+            }
+          });
+
+          const actionableButtons = document.querySelectorAll('button');
+          actionableButtons.forEach((button) => {
+            if (!(button instanceof HTMLButtonElement)) return;
+            const original = rememberLockState(button);
+            if (shouldSkipButtonLock(button)) {
+              return;
+            }
+
+            if (isFormLocked) {
+              button.disabled = true;
+              button.classList.add('cursor-not-allowed', 'opacity-60');
+            } else {
+              button.disabled = Boolean(original.disabled);
+              button.classList.remove('cursor-not-allowed', 'opacity-60');
+            }
+          });
+
+          setApproveButtonState(isApprovingDraft);
+        };
+
+        const setDraftStatus = (status) => {
+          const normalized = determineDraftStatusKey(status);
+          currentDraftStatus = normalized;
+          if (lastNfeData && typeof lastNfeData === 'object') {
+            lastNfeData.status = normalized;
+          }
+          updateStatusBadgeDisplay(normalized);
+          setFormLockState(normalized === 'approved');
+          return normalized;
+        };
+
+        const focusDuplicateField = (index, field) => {
+          if (!duplicatasTableBody) return;
+          const row = duplicatasTableBody.querySelector(`tr[data-duplicate-index="${index}"]`);
+          if (!row) return;
+          let target = null;
+          if (field === 'dueDate') {
+            target = row.querySelector('[data-duplicateDueInput="true"]');
+          } else if (field === 'value') {
+            target = row.querySelector('[data-duplicateValueInput="true"]');
+          } else if (field === 'bankAccount') {
+            target = row.querySelector('[data-duplicateBankSelect="true"]');
+          }
+          if (target instanceof HTMLElement) {
+            target.focus({ preventScroll: false });
+            if (typeof target.scrollIntoView === 'function') {
+              target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            }
+          }
+        };
+
+        setApproveButtonState(false);
+
         const resetDraftState = () => {
           currentDraftId = '';
           currentDraftCode = '';
           applyDraftCodeToInput('');
+          setDraftStatus('draft');
         };
 
         const readNumericInputValue = (input) => {
@@ -5419,6 +5586,7 @@
             lastNfeData.draftId = currentDraftId;
             lastNfeData.draftCode = currentDraftCode;
           }
+          setDraftStatus(draft.status);
         };
 
         const PAYMENT_METHOD_DESCRIPTIONS = {
@@ -9494,6 +9662,10 @@
           aprovada: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-700'],
         };
 
+        const ALL_CODE_STATUS_CLASSES = Array.from(
+          new Set(Object.values(CODE_STATUS_CLASSES).flat())
+        );
+
         const mapDraftStatusLabel = (status) => {
           if (status === null || typeof status === 'undefined') {
             return CODE_STATUS_LABELS.draft;
@@ -9513,6 +9685,18 @@
           const normalized = String(statusLabel || '').trim().toLowerCase();
           return CODE_STATUS_CLASSES[normalized] || ['border-gray-200', 'bg-gray-100', 'text-gray-600'];
         };
+
+        updateStatusBadgeDisplay = (status) => {
+          if (!statusBadge) return;
+          const label = mapDraftStatusLabel(status);
+          statusBadge.textContent = label || '—';
+          statusBadge.classList.remove(...ALL_CODE_STATUS_CLASSES);
+          const classes = mapDraftStatusClasses(label);
+          classes.forEach((className) => statusBadge.classList.add(className));
+        };
+
+        updateStatusBadgeDisplay(currentDraftStatus);
+        setFormLockState(false);
 
         const parseDateForSort = (value) => {
           if (!value) return null;
@@ -11678,6 +11862,202 @@
             }
 
             updateDuplicataSummaryFromData(lastNfeData);
+          });
+        }
+
+        if (registerEntryButton) {
+          registerEntryButton.addEventListener('click', async (event) => {
+            event.preventDefault();
+            if (isFormLocked) {
+              notify('Esta NF-e já está aprovada e não pode ser alterada.', 'info');
+              return;
+            }
+            if (isApprovingDraft) return;
+
+            if (!companySelect || !companySelect.value) {
+              notify('Selecione a empresa responsável antes de aprovar a nota.', 'warning');
+              activateTab('dados');
+              companySelect?.focus();
+              return;
+            }
+
+            if (!depositSelect || !depositSelect.value) {
+              notify('Selecione o depósito para lançar o estoque de entrada.', 'warning');
+              activateTab('dados');
+              depositSelect?.focus();
+              return;
+            }
+
+            const supplierValue = supplierSelect?.value ? String(supplierSelect.value).trim() : '';
+            if (!supplierValue) {
+              notify('Associe o fornecedor cadastrado antes de aprovar a nota.', 'warning');
+              activateTab('dados');
+              supplierSelect?.focus();
+              return;
+            }
+
+            const itemsSource =
+              (Array.isArray(mainProductTableState.items) && mainProductTableState.items.length
+                ? mainProductTableState.items
+                : Array.isArray(lastNfeData?.items)
+                ? lastNfeData.items
+                : []) || [];
+
+            if (!itemsSource.length) {
+              notify('Nenhum item foi importado do XML. Revise os produtos antes de aprovar.', 'warning');
+              activateTab('produtos');
+              return;
+            }
+
+            const pendingItems = itemsSource.filter(
+              (item) => !item || item.validationStatus !== 'matched' || !item.matchedProduct
+            );
+            if (pendingItems.length) {
+              notify('Existem produtos sem vinculação ao cadastro. Resolva todos os itens antes de aprovar.', 'warning');
+              activateTab('produtos');
+              return;
+            }
+
+            const hasEntryStockDefined = itemsSource.some((item) =>
+              Number.isFinite(toNumeric(item?.entryStockQuantity))
+            );
+            if (!hasEntryStockDefined) {
+              notify('Revise o estoque de entrada dos produtos antes de aprovar.', 'warning');
+              activateTab('produtos');
+              return;
+            }
+
+            const duplicates = Array.isArray(lastNfeData?.duplicates) ? lastNfeData.duplicates : [];
+            if (!duplicates.length) {
+              notify('Informe as duplicatas da nota antes de aprovar.', 'warning');
+              activateTab('duplicatas');
+              return;
+            }
+
+            const supplierAccount = resolveSupplierAccountingAccount();
+            if (!supplierAccount || !supplierAccount.id) {
+              notify('Defina a conta contábil vinculada ao fornecedor antes de aprovar.', 'warning');
+              activateTab('duplicatas');
+              accountingAccountInput?.focus();
+              return;
+            }
+
+            for (let index = 0; index < duplicates.length; index += 1) {
+              const duplicate = duplicates[index];
+              const dueInfo = normalizeDate(
+                duplicate?.manualDueDate || duplicate?.dueDate || duplicate?.originalDueDate || ''
+              );
+              if (!dueInfo.dateInput) {
+                notify(`Informe o vencimento da parcela ${duplicate?.number || index + 1}.`, 'warning');
+                activateTab('duplicatas');
+                focusDuplicateField(index, 'dueDate');
+                return;
+              }
+
+              const valueNumeric = toNumeric(duplicate?.value);
+              if (!Number.isFinite(valueNumeric) || valueNumeric <= 0) {
+                notify(`Informe um valor válido para a parcela ${duplicate?.number || index + 1}.`, 'warning');
+                activateTab('duplicatas');
+                focusDuplicateField(index, 'value');
+                return;
+              }
+
+              const duplicateBank = duplicate?.bankAccount || bankAccountSelect?.value || '';
+              if (!duplicateBank) {
+                notify(`Selecione a conta corrente da parcela ${duplicate?.number || index + 1}.`, 'warning');
+                activateTab('duplicatas');
+                focusDuplicateField(index, 'bankAccount');
+                return;
+              }
+            }
+
+            isApprovingDraft = true;
+            setApproveButtonState(true);
+
+            try {
+              let payload = buildDraftPayloadFromForm();
+              if (!currentDraftId) {
+                const createHeaders = buildAuthHeaders();
+                createHeaders.set('Content-Type', 'application/json');
+                const createResponse = await fetch(nfeDraftsEndpoint, {
+                  method: 'POST',
+                  headers: createHeaders,
+                  body: JSON.stringify(payload),
+                });
+                const createPayload = await createResponse.json().catch(() => ({}));
+                if (createResponse.status === 401 || createResponse.status === 403) {
+                  handleAuthError();
+                }
+                if (!createResponse.ok) {
+                  const message =
+                    createPayload?.message ||
+                    createPayload?.error ||
+                    `Não foi possível salvar o rascunho antes da aprovação (status ${createResponse.status}).`;
+                  throw new Error(message);
+                }
+                const createdDraft = createPayload?.draft || null;
+                if (!createdDraft) {
+                  throw new Error('Resposta inesperada ao salvar o rascunho antes da aprovação.');
+                }
+                applyDraftResponseToState(createdDraft);
+                payload = buildDraftPayloadFromForm();
+              }
+
+              const approvalHeaders = buildAuthHeaders();
+              approvalHeaders.set('Content-Type', 'application/json');
+              const approvalEndpoint = `${nfeDraftsEndpoint}/${currentDraftId}`;
+              const approvalResponse = await fetch(`${approvalEndpoint}/approve`, {
+                method: 'POST',
+                headers: approvalHeaders,
+                body: JSON.stringify(payload),
+              });
+              const approvalData = await approvalResponse.json().catch(() => ({}));
+
+              if (approvalResponse.status === 401 || approvalResponse.status === 403) {
+                handleAuthError();
+              }
+
+              if (!approvalResponse.ok) {
+                const message =
+                  approvalData?.message ||
+                  approvalData?.error ||
+                  `Não foi possível aprovar a entrada da NF-e (status ${approvalResponse.status}).`;
+                if (approvalData?.details?.focusTab) {
+                  activateTab(approvalData.details.focusTab);
+                  if (
+                    approvalData.details.focusTab === 'duplicatas' &&
+                    Number.isInteger(approvalData.details.duplicateIndex) &&
+                    approvalData.details.field
+                  ) {
+                    focusDuplicateField(approvalData.details.duplicateIndex, approvalData.details.field);
+                  }
+                }
+                if (approvalData?.draft) {
+                  applyDraftResponseToState(approvalData.draft);
+                }
+                throw new Error(message);
+              }
+
+              const approvedDraft = approvalData?.draft || null;
+              if (approvedDraft) {
+                applyDraftResponseToState(approvedDraft);
+              } else {
+                setDraftStatus('approved');
+              }
+
+              if (companySelect?.value) {
+                loadCodeLookupList(companySelect.value, { forceReload: true }).catch(() => {});
+              }
+
+              notify('Entrada da NF-e aprovada com sucesso.', 'success');
+            } catch (error) {
+              console.error('Erro ao aprovar a entrada da NF-e:', error);
+              notify(error?.message || 'Não foi possível aprovar a entrada da NF-e.', 'error');
+              setFormLockState(determineDraftStatusKey(currentDraftStatus) === 'approved');
+            } finally {
+              isApprovingDraft = false;
+              setApproveButtonState(false);
+            }
           });
         }
 
