@@ -591,10 +591,15 @@ const performSoapRequest = async ({
         }
 
         const headers = {
-          'Content-Type': `application/soap+xml; charset=utf-8; action="${soapAction}"`,
+          'Content-Type': 'application/soap+xml; charset=utf-8',
           'Content-Length': Buffer.byteLength(envelopeString, 'utf8'),
           'User-Agent': 'EoBicho-PDV/1.0',
         };
+
+        if (soapAction) {
+          headers['Content-Type'] = `${headers['Content-Type']}; action="${soapAction}"`;
+          headers.SOAPAction = soapAction;
+        }
 
         const options = {
           method: 'POST',
