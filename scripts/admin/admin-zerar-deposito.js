@@ -9,7 +9,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectAllCheckbox = document.getElementById('select-all');
     const zeroButton = document.getElementById('zero-stock');
     const emptyState = document.getElementById('empty-state');
-    const sortButtons = document.querySelectorAll('button[data-sort-field]');
+    const sortButtons = document.querySelectorAll('button[data-sort-field][data-sort-order]');
+    const filterInputs = document.querySelectorAll('[data-filter-field]');
+
+    const filterParamMap = {
+        codbarras: 'filterBarcode',
+        nome: 'filterName',
+        quantidade: 'filterQuantity',
+    };
+
+    const filterInputMap = new Map();
+    const filterDebounceTimers = new Map();
 
     const state = {
         stores: [],
@@ -24,6 +34,11 @@ document.addEventListener('DOMContentLoaded', () => {
         sortField: 'nome',
         sortOrder: 'asc',
         search: '',
+        filters: {
+            codbarras: '',
+            nome: '',
+            quantidade: '',
+        },
         selectedIds: new Set(),
         activeCompanyId: '',
         activeDepositId: '',
@@ -96,17 +111,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const updateSortIndicators = () => {
         sortButtons.forEach((button) => {
-            const icon = button.querySelector('[data-sort-icon]');
             const field = button.dataset.sortField;
-            if (!icon) return;
-            icon.classList.remove('fa-sort', 'fa-sort-up', 'fa-sort-down', 'text-primary');
-            icon.classList.add('fa-sort');
-            if (field === state.sortField) {
-                icon.classList.remove('fa-sort');
-                icon.classList.add(state.sortOrder === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
-                icon.classList.add('text-primary');
+            const order = button.dataset.sortOrder;
+            const icon = button.querySelector('i');
+            const isActive = field === state.sortField && order === state.sortOrder;
+            button.classList.toggle('text-primary', isActive);
+            button.classList.toggle('border-primary', isActive);
+            button.classList.toggle('text-gray-400', !isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+            if (icon) {
+                icon.classList.toggle('text-primary', isActive);
             }
         });
+    };
+
+    const applyFilterValue = (field, value) => {
+        if (!(field in state.filters)) {
+            return;
+        }
+        const normalized = typeof value === 'string' ? value.trim() : '';
+        if (state.filters[field] === normalized) {
+            return;
+        }
+        state.filters[field] = normalized;
+        state.pagination.page = 1;
+        fetchInventory();
+    };
+
+    const handleFilterInput = (event) => {
+        const input = event.target;
+        const field = input?.dataset?.filterField;
+        if (!field) return;
+        if (filterDebounceTimers.has(field)) {
+            clearTimeout(filterDebounceTimers.get(field));
+        }
+        const timeoutId = setTimeout(() => {
+            applyFilterValue(field, input.value || '');
+            filterDebounceTimers.delete(field);
+        }, 300);
+        filterDebounceTimers.set(field, timeoutId);
     };
 
     const updateSelectAllState = () => {
@@ -284,6 +327,14 @@ document.addEventListener('DOMContentLoaded', () => {
             params.set('search', state.search);
         }
 
+        Object.entries(state.filters).forEach(([field, value]) => {
+            const paramKey = filterParamMap[field];
+            if (!paramKey) return;
+            if (value) {
+                params.set(paramKey, value);
+            }
+        });
+
         setLoading(true);
         try {
             const response = await fetch(`${API_CONFIG.BASE_URL}/deposits/${state.activeDepositId}/inventory?${params.toString()}`, {
@@ -369,6 +420,16 @@ document.addEventListener('DOMContentLoaded', () => {
         state.sortField = 'nome';
         state.sortOrder = 'asc';
         state.pagination.page = 1;
+        filterDebounceTimers.forEach((timeoutId) => clearTimeout(timeoutId));
+        filterDebounceTimers.clear();
+        Object.keys(state.filters).forEach((key) => {
+            state.filters[key] = '';
+        });
+        filterInputMap.forEach((input) => {
+            if (input) {
+                input.value = '';
+            }
+        });
         updateSortIndicators();
         fetchInventory();
     };
@@ -376,13 +437,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleSortClick = (event) => {
         const button = event.currentTarget;
         const field = button?.dataset?.sortField;
-        if (!field) return;
-        if (state.sortField === field) {
-            state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
-        } else {
-            state.sortField = field;
-            state.sortOrder = field === 'quantidade' ? 'desc' : 'asc';
+        const order = button?.dataset?.sortOrder;
+        if (!field || !order) return;
+        if (state.sortField === field && state.sortOrder === order) {
+            return;
         }
+        state.sortField = field;
+        state.sortOrder = order;
         state.pagination.page = 1;
         updateSortIndicators();
         fetchInventory();
@@ -484,6 +545,15 @@ document.addEventListener('DOMContentLoaded', () => {
     zeroButton?.addEventListener('click', handleZeroStock);
     sortButtons.forEach((button) => {
         button.addEventListener('click', handleSortClick);
+    });
+
+    filterInputs.forEach((input) => {
+        const field = input?.dataset?.filterField;
+        if (!field) return;
+        filterInputMap.set(field, input);
+        const initialValue = typeof input.value === 'string' ? input.value.trim() : '';
+        state.filters[field] = initialValue;
+        input.addEventListener('input', handleFilterInput);
     });
 
     updateSortIndicators();

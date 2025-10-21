@@ -47,6 +47,15 @@ const escapeRegExp = (value) => {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
+const parseLocaleNumber = (value) => {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const normalized = trimmed.replace(/\./g, '').replace(',', '.');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
 router.get('/', async (req, res) => {
     try {
         const { empresa } = req.query;
@@ -84,6 +93,10 @@ router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'
         const sortField = typeof req.query.sortField === 'string' ? req.query.sortField.trim() : 'nome';
         const sortOrder = typeof req.query.sortOrder === 'string' && req.query.sortOrder.toLowerCase() === 'desc' ? -1 : 1;
         const searchTerm = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+        const filterBarcode = typeof req.query.filterBarcode === 'string' ? req.query.filterBarcode.trim() : '';
+        const filterName = typeof req.query.filterName === 'string' ? req.query.filterName.trim() : '';
+        const quantityFilterRaw = typeof req.query.filterQuantity === 'string' ? req.query.filterQuantity.trim() : '';
+        const quantityFilterValue = quantityFilterRaw ? parseLocaleNumber(quantityFilterRaw) : null;
 
         const allowedSortFields = new Map([
             ['codbarras', 'codbarras'],
@@ -109,6 +122,14 @@ router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'
             ];
         }
 
+        if (filterBarcode) {
+            matchStage.codbarras = { $regex: new RegExp(escapeRegExp(filterBarcode), 'i') };
+        }
+
+        if (filterName) {
+            matchStage.nome = { $regex: new RegExp(escapeRegExp(filterName), 'i') };
+        }
+
         const basePipeline = [
             { $match: matchStage },
             {
@@ -129,6 +150,13 @@ router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'
                     quantidade: { $ifNull: ['$estoqueSelecionado.quantidade', 0] },
                 },
             },
+        ];
+
+        if (quantityFilterValue !== null) {
+            basePipeline.push({ $match: { quantidade: quantityFilterValue } });
+        }
+
+        basePipeline.push(
             {
                 $project: {
                     estoqueSelecionado: 0,
@@ -140,8 +168,8 @@ router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'
                     fiscal: 0,
                     fiscalPorEmpresa: 0,
                 },
-            },
-        ];
+            }
+        );
 
         const paginatedPipeline = [
             ...basePipeline,
