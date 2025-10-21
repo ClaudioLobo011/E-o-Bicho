@@ -231,6 +231,42 @@ const UF_CODE_BY_ACRONYM = {
   TO: '17',
 };
 
+const UF_CODE_BY_NAME = {
+  'ACRE': '12',
+  'ALAGOAS': '27',
+  'AMAPA': '16',
+  'AMAZONAS': '13',
+  'BAHIA': '29',
+  'CEARA': '23',
+  'DISTRITO FEDERAL': '53',
+  'ESPIRITO SANTO': '32',
+  'GOIAS': '52',
+  'MARANHAO': '21',
+  'MATO GROSSO': '51',
+  'MATO GROSSO DO SUL': '50',
+  'MINAS GERAIS': '31',
+  'PARA': '15',
+  'PARAIBA': '25',
+  'PARANA': '41',
+  'PERNAMBUCO': '26',
+  'PIAUI': '22',
+  'RIO DE JANEIRO': '33',
+  'RIO GRANDE DO NORTE': '24',
+  'RIO GRANDE DO SUL': '43',
+  'RONDONIA': '11',
+  'RORAIMA': '14',
+  'SANTA CATARINA': '42',
+  'SAO PAULO': '35',
+  'SERGIPE': '28',
+  'TOCANTINS': '17',
+};
+
+const stripDiacritics = (value) =>
+  value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}+/gu, '')
+    .replace(/[´`^~¨]/g, '');
+
 const resolveUfCode = (uf) => {
   if (!uf && uf !== 0) {
     return '00';
@@ -246,7 +282,23 @@ const resolveUfCode = (uf) => {
   }
 
   const acronym = normalized.toUpperCase();
-  return UF_CODE_BY_ACRONYM[acronym] || '00';
+  if (UF_CODE_BY_ACRONYM[acronym]) {
+    return UF_CODE_BY_ACRONYM[acronym];
+  }
+
+  try {
+    const nameNormalized = stripDiacritics(normalized)
+      .toUpperCase()
+      .replace(/[^A-Z\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!nameNormalized) {
+      return '00';
+    }
+    return UF_CODE_BY_NAME[nameNormalized] || '00';
+  } catch (error) {
+    return '00';
+  }
 };
 
 const buildSoapEnvelope = ({ enviNfeXml, uf }) => {
@@ -526,6 +578,9 @@ const performSoapRequest = async ({
   privateKey,
   timeout = 45000,
   soapAction = SOAP_ACTION,
+  soapVersion = '1.2',
+  extraHeaders = {},
+  returnResponseDetails = false,
 }) => {
   await ensureClockSynchronization();
 
@@ -590,11 +645,35 @@ const performSoapRequest = async ({
           throw new SefazTransmissionError('Chave privada inválida/ausente.');
         }
 
+        const normalizedSoapVersion = String(soapVersion || '')
+          .trim()
+          .toLowerCase();
+        const isSoap11 = normalizedSoapVersion === '1.1' || normalizedSoapVersion === 'soap11';
+
         const headers = {
-          'Content-Type': `application/soap+xml; charset=utf-8; action="${soapAction}"`,
+          'Content-Type': isSoap11
+            ? 'text/xml; charset=utf-8'
+            : 'application/soap+xml; charset=utf-8',
           'Content-Length': Buffer.byteLength(envelopeString, 'utf8'),
           'User-Agent': 'EoBicho-PDV/1.0',
+          ...extraHeaders,
         };
+
+        if (!('Accept' in headers) && !('accept' in headers)) {
+          headers.Accept = isSoap11 ? 'text/xml' : 'application/soap+xml';
+        }
+
+        if (!('Connection' in headers) && !('connection' in headers)) {
+          headers.Connection = 'close';
+        }
+
+        if (soapAction) {
+          if (isSoap11) {
+            headers.SOAPAction = headers.SOAPAction || `"${soapAction}"`;
+          } else if (!/;\s*action=/i.test(headers['Content-Type'])) {
+            headers['Content-Type'] = `${headers['Content-Type']}; action="${soapAction}"`;
+          }
+        }
 
         const options = {
           method: 'POST',
@@ -605,7 +684,13 @@ const performSoapRequest = async ({
           headers,
           key: normalizedPrivateKey,
           minVersion: 'TLSv1.2',
+          rejectUnauthorized: true,
+          servername: url.hostname,
         };
+
+        if (!('Host' in headers) && !('host' in headers)) {
+          headers.Host = url.host;
+        }
 
         if (formattedCertificate) {
           options.cert = formattedCertificate;
@@ -644,6 +729,15 @@ const performSoapRequest = async ({
 
         const logPrefix = `[SEFAZ] [SOAP tentativa ${attempt}]`;
         console.info(`${logPrefix} Envelope (máx. 2000 chars): ${envelopePreview}`);
+        const requestContentType = headers['Content-Type'] || headers['content-type'];
+        if (requestContentType) {
+          console.info(
+            `${logPrefix} Cabeçalho Content-Type da requisição: ${String(requestContentType).trim()}`
+          );
+        }
+        if (headers.SOAPAction) {
+          console.info(`${logPrefix} Cabeçalho SOAPAction da requisição: ${headers.SOAPAction}`);
+        }
 
         const request = https.request(options, (response) => {
           let body = '';
@@ -655,13 +749,31 @@ const performSoapRequest = async ({
             const trimmed = body.trim();
             const firstLine = trimmed.split(/\r?\n/).find((line) => line.trim()) || '';
             console.info(`${logPrefix} Primeira linha da resposta: ${firstLine}`);
+            const contentType = response.headers ? response.headers['content-type'] : undefined;
+            if (contentType) {
+              console.info(
+                `${logPrefix} Cabeçalho Content-Type da resposta: ${String(contentType).trim()}`
+              );
+            }
             if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
-              resolve(trimmed);
+              if (returnResponseDetails) {
+                resolve({
+                  body: trimmed,
+                  statusCode: response.statusCode,
+                  headers: response.headers || {},
+                });
+              } else {
+                resolve(trimmed);
+              }
             } else {
               reject(
                 new SefazTransmissionError(
                   `SEFAZ retornou status HTTP ${response.statusCode || 'desconhecido'}.`,
-                  { statusCode: response.statusCode, body: trimmed }
+                  {
+                    statusCode: response.statusCode,
+                    body: trimmed,
+                    headers: response.headers || {},
+                  }
                 )
               );
             }

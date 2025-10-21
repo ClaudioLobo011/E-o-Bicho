@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test",
+    "test": "node --test services/__tests__/**/*.test.js",
     "data:import": "node seeder.js",
     "data:destroy": "node seeder.js -d",
     "category:import": "node categorySeeder.js",
