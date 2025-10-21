@@ -540,14 +540,48 @@ const extractUfFromCertificate = (certificatePem) => {
   return null;
 };
 
+const isNationalDistributionEndpoint = (endpoint) => {
+  if (!endpoint) {
+    return false;
+  }
+
+  try {
+    const { hostname } = new URL(String(endpoint));
+    const normalizedHost = String(hostname || '').trim().toLowerCase();
+    if (!normalizedHost) {
+      return false;
+    }
+    if (normalizedHost === 'nfe.fazenda.gov.br') {
+      return true;
+    }
+    if (normalizedHost.endsWith('.nfe.fazenda.gov.br')) {
+      return true;
+    }
+    if (normalizedHost === 'nfe.sefaz.gov.br') {
+      return true;
+    }
+    if (normalizedHost.endsWith('.nfe.sefaz.gov.br')) {
+      return true;
+    }
+  } catch (error) {
+    const normalized = String(endpoint).trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    if (/(?:^|\b)(?:www\d*\.)?nfe\.(?:fazenda|sefaz)\.gov\.br/.test(normalized)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
   const warn = (message) => {
     console.warn(`[DF-e] ${message}`);
   };
 
-  const isNationalEndpoint = /(?:^|\/\/)(?:hom\.)?nfe\.(?:fazenda|sefaz)\.gov\.br/i.test(
-    endpoint || ''
-  );
+  const isNationalEndpoint = isNationalDistributionEndpoint(endpoint);
 
   const ufAcronymCandidates = [
     store?.uf,
