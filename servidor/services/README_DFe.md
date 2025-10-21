@@ -36,6 +36,7 @@ Argumentos opcionais:
 
 * `--ambiente=producao|homologacao`
 * `--chave=<44 dígitos>` (obrigatório quando `--mode=consChNFe`)
+* `--nsu=<15 dígitos>` (quando informado, força consulta específica via `consNSU`)
 * `--endpoint=<URL>` (para testar endpoints alternativos)
 
 Pré-requisitos do script:

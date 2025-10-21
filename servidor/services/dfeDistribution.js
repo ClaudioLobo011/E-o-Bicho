@@ -145,9 +145,13 @@ const buildEnvelope = ({ body, soapVersion = SOAP_VERSIONS.SOAP12 }) => {
   ].join('\n');
 };
 
-const buildEnvelopeConsNSU = ({ tpAmb, cUFAutor, cnpj, ultNSU, soapVersion }) => {
-  const normalizedNsU = padNsU(ultNSU || '0');
-  const innerXml = ['<consNSU>', `  <ultNSU>${normalizedNsU}</ultNSU>`, '</consNSU>'].join('\n');
+const buildEnvelopeConsNSU = ({ tpAmb, cUFAutor, cnpj, ultNSU, nsu, soapVersion }) => {
+  const hasSpecificNsu = nsu !== undefined && nsu !== null && String(nsu).trim() !== '';
+  const normalizedNsU = padNsU(hasSpecificNsu ? nsu : ultNSU || '0');
+  const tagName = hasSpecificNsu ? 'consNSU' : 'distNSU';
+  const valueTag = hasSpecificNsu ? 'NSU' : 'ultNSU';
+  const innerXml =
+    [`<${tagName}>`, `  <${valueTag}>${normalizedNsU}</${valueTag}>`, `</${tagName}>`].join('\n');
   return buildEnvelope({
     body: buildDistributionBody({ tpAmb, cUFAutor, cnpj, innerXml }),
     soapVersion,
