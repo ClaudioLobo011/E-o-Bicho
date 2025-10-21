@@ -231,6 +231,42 @@ const UF_CODE_BY_ACRONYM = {
   TO: '17',
 };
 
+const UF_CODE_BY_NAME = {
+  'ACRE': '12',
+  'ALAGOAS': '27',
+  'AMAPA': '16',
+  'AMAZONAS': '13',
+  'BAHIA': '29',
+  'CEARA': '23',
+  'DISTRITO FEDERAL': '53',
+  'ESPIRITO SANTO': '32',
+  'GOIAS': '52',
+  'MARANHAO': '21',
+  'MATO GROSSO': '51',
+  'MATO GROSSO DO SUL': '50',
+  'MINAS GERAIS': '31',
+  'PARA': '15',
+  'PARAIBA': '25',
+  'PARANA': '41',
+  'PERNAMBUCO': '26',
+  'PIAUI': '22',
+  'RIO DE JANEIRO': '33',
+  'RIO GRANDE DO NORTE': '24',
+  'RIO GRANDE DO SUL': '43',
+  'RONDONIA': '11',
+  'RORAIMA': '14',
+  'SANTA CATARINA': '42',
+  'SAO PAULO': '35',
+  'SERGIPE': '28',
+  'TOCANTINS': '17',
+};
+
+const stripDiacritics = (value) =>
+  value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}+/gu, '')
+    .replace(/[´`^~¨]/g, '');
+
 const resolveUfCode = (uf) => {
   if (!uf && uf !== 0) {
     return '00';
@@ -246,7 +282,23 @@ const resolveUfCode = (uf) => {
   }
 
   const acronym = normalized.toUpperCase();
-  return UF_CODE_BY_ACRONYM[acronym] || '00';
+  if (UF_CODE_BY_ACRONYM[acronym]) {
+    return UF_CODE_BY_ACRONYM[acronym];
+  }
+
+  try {
+    const nameNormalized = stripDiacritics(normalized)
+      .toUpperCase()
+      .replace(/[^A-Z\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!nameNormalized) {
+      return '00';
+    }
+    return UF_CODE_BY_NAME[nameNormalized] || '00';
+  } catch (error) {
+    return '00';
+  }
 };
 
 const buildSoapEnvelope = ({ enviNfeXml, uf }) => {
@@ -677,6 +729,15 @@ const performSoapRequest = async ({
 
         const logPrefix = `[SEFAZ] [SOAP tentativa ${attempt}]`;
         console.info(`${logPrefix} Envelope (máx. 2000 chars): ${envelopePreview}`);
+        const requestContentType = headers['Content-Type'] || headers['content-type'];
+        if (requestContentType) {
+          console.info(
+            `${logPrefix} Cabeçalho Content-Type da requisição: ${String(requestContentType).trim()}`
+          );
+        }
+        if (headers.SOAPAction) {
+          console.info(`${logPrefix} Cabeçalho SOAPAction da requisição: ${headers.SOAPAction}`);
+        }
 
         const request = https.request(options, (response) => {
           let body = '';

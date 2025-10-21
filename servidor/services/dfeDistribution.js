@@ -1,5 +1,6 @@
 const zlib = require('zlib');
 const { DOMParser } = require('@xmldom/xmldom');
+const forge = require('node-forge');
 
 const { decryptBuffer, decryptText } = require('../utils/certificates');
 const { extractCertificatePair } = require('../utils/pkcs12');
@@ -507,33 +508,121 @@ const shouldDowngradeToSoap11 = (error) => {
   return false;
 };
 
-const resolveAuthorUfCode = ({ store, endpoint }) => {
+const extractUfFromCertificate = (certificatePem) => {
+  if (!certificatePem) {
+    return null;
+  }
+
+  try {
+    const certificate = forge.pki.certificateFromPem(certificatePem);
+    const attributes = certificate?.subject?.attributes || [];
+    for (const attribute of attributes) {
+      if (!attribute) continue;
+      const key = String(attribute.shortName || attribute.name || '').toLowerCase();
+      if (!key) continue;
+      if (key === 'st' || key === 'stateorprovincename') {
+        const code = resolveUfCode(attribute.value || '');
+        if (/^[0-9]{2}$/.test(code) && code !== '00') {
+          return code;
+        }
+      }
+    }
+  } catch (error) {
+    if (DEBUG_LOG_ENABLED) {
+      console.debug(`[DF-e] Não foi possível extrair UF do certificado: ${error.message}`);
+    }
+  }
+
+  return null;
+};
+
+const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
+  const warn = (message) => {
+    console.warn(`[DF-e] ${message}`);
+  };
+
+  const ufAcronymCandidates = [
+    store?.uf,
+    store?.UF,
+    store?.estadoSigla,
+    store?.estado_abreviado,
+    store?.estadoAbreviado,
+    store?.dadosFiscais?.uf,
+    store?.dadosFiscais?.UF,
+  ];
+
+  const preferredAcronym = ufAcronymCandidates
+    .map((candidate) => String(candidate || '').trim().toUpperCase())
+    .find((candidate) => /^[A-Z]{2}$/.test(candidate));
+
   const ufCandidates = [
     store?.codigoUf,
     store?.codigoUF,
     store?.uf,
     store?.UF,
     store?.estado,
+    store?.estadoNome,
+    store?.estadoCompleto,
+    store?.estadoDescricao,
+    store?.estadoSigla,
+    store?.enderecoUf,
+    store?.enderecoUF,
+    store?.enderecoEstado,
+    store?.endereco?.uf,
+    store?.endereco?.UF,
+    store?.endereco?.estado,
+    store?.addressState,
+    store?.addressUF,
+    store?.addressUf,
+    store?.companyState,
+    store?.dadosFiscais?.uf,
+    store?.dadosFiscais?.estado,
   ];
-  const normalizedUf = ufCandidates
-    .map((candidate) => resolveUfCode(candidate || ''))
-    .find((code) => /^[0-9]{2}$/.test(code) && code !== '00');
 
-  if (normalizedUf && normalizedUf !== '91') {
-    const ufAcronym = String(store?.uf || store?.UF || '').trim().toUpperCase();
-    const forced = AUTHOR_UF_OVERRIDES[ufAcronym];
-    return forced || normalizedUf;
+  let warnedAbout91 = false;
+
+  for (const candidate of ufCandidates) {
+    if (candidate == null) {
+      continue;
+    }
+    const code = resolveUfCode(candidate);
+    if (!/^[0-9]{2}$/.test(code) || code === '00') {
+      continue;
+    }
+    if (code === '91') {
+      if (!warnedAbout91) {
+        warn('cUFAutor=91 bloqueado para consultas por NSU. Aplicando fallback.');
+        warnedAbout91 = true;
+      }
+      continue;
+    }
+    if (preferredAcronym) {
+      const forced = AUTHOR_UF_OVERRIDES[preferredAcronym];
+      if (forced) {
+        return forced;
+      }
+    }
+    return code;
   }
 
-  if (normalizedUf === '91') {
-    console.warn('[DF-e] cUFAutor=91 bloqueado para consultas por NSU. Aplicando fallback.');
+  const certificateUf = extractUfFromCertificate(certificatePem);
+  if (certificateUf) {
+    if (certificateUf === '91') {
+      if (!warnedAbout91) {
+        warn('cUFAutor=91 extraído do certificado bloqueado para consultas por NSU. Ignorando valor.');
+      }
+    } else {
+      return certificateUf;
+    }
   }
 
-  const isNationalEndpoint = /nfe\.(?:fazenda|sefaz)\.gov\.br/i.test(endpoint);
+  const isNationalEndpoint = /nfe\.(?:fazenda|sefaz)\.gov\.br/i.test(endpoint || '');
   if (isNationalEndpoint) {
+    warn(`UF autora não encontrada. Utilizando fallback ${DEFAULT_NATIONAL_AUTHOR_UF}.`);
     return DEFAULT_NATIONAL_AUTHOR_UF;
   }
 
+  warn('UF autora não encontrada. Utilizando fallback RJ (33).');
   return '33';
 };
 
@@ -615,7 +704,11 @@ const collectDistributedDocuments = async (
     throw new Error('CNPJ da empresa não está configurado para consulta de DF-e.');
   }
 
-  const authorUfCode = resolveAuthorUfCode({ store, endpoint });
+  const authorUfCode = resolveAuthorUfCode({
+    store,
+    endpoint,
+    certificatePem: certificatePair.certificatePem,
+  });
   if (!/^[0-9]{2}$/.test(authorUfCode) || authorUfCode === '00') {
     throw new Error('UF autora inválida para consulta de DF-e.');
   }

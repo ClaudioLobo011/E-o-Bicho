@@ -13,9 +13,57 @@ const {
   buildEnvelopeConsNSU,
   parseSoapFault,
   shouldDowngradeToSoap11,
+  resolveAuthorUfCode,
 } = __TESTING__;
 
 describe('dfeDistribution helpers', () => {
+  test('resolveAuthorUfCode aceita nomes completos de estado', () => {
+    const code = resolveAuthorUfCode({
+      store: { estado: 'Rio Grande do Sul' },
+      endpoint:
+        'https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
+    });
+    assert.equal(code, '43');
+  });
+
+  test('resolveAuthorUfCode extrai UF do certificado quando necessário', () => {
+    const forge = require('node-forge');
+    const original = forge.pki.certificateFromPem;
+    forge.pki.certificateFromPem = () => ({
+      subject: { attributes: [{ shortName: 'ST', value: 'SP' }] },
+    });
+
+    try {
+      const code = resolveAuthorUfCode({
+        store: {},
+        endpoint:
+          'https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
+        certificatePem: '-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----',
+      });
+      assert.equal(code, '35');
+    } finally {
+      forge.pki.certificateFromPem = original;
+    }
+  });
+
+  test('resolveAuthorUfCode bloqueia 91 e aplica fallback', () => {
+    const warnings = [];
+    const originalWarn = console.warn;
+    console.warn = (message) => warnings.push(message);
+
+    try {
+      const code = resolveAuthorUfCode({
+        store: { codigoUf: '91' },
+        endpoint:
+          'https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
+      });
+      assert.equal(code, '33');
+      assert.ok(warnings.some((message) => message.includes('cUFAutor=91')));
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
   test('buildSoap12Headers inclui action no Content-Type', () => {
     const headers = buildSoap12Headers('urn:acao');
     assert.equal(headers['Content-Type'], 'application/soap+xml; charset=utf-8; action="urn:acao"');

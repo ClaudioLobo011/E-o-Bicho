@@ -256,6 +256,13 @@ test('performSoapRequest merges extra CA bundles configured via environment', as
   }
 });
 
+test('resolveUfCode reconhece nomes completos com acentuação', () => {
+  const { resolveUfCode } = require('../sefazTransmitter');
+  assert.strictEqual(resolveUfCode('São Paulo'), '35');
+  assert.strictEqual(resolveUfCode('Rio Grande do Sul'), '43');
+  assert.strictEqual(resolveUfCode('  12  '), '12');
+});
+
 test('loadExtraCertificateAuthorities returns entries from default bundle when present', () => {
   delete process.env.NFCE_EXTRA_CA;
   delete process.env.NFCE_EXTRA_CA_BUNDLE;
