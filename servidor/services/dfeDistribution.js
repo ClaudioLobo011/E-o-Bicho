@@ -52,7 +52,7 @@ const DFE_SOAP_ACTION =
 const DFE_NAMESPACE = 'http://www.portalfiscal.inf.br/nfe';
 
 const DEFAULT_NATIONAL_AUTHOR_UF = (() => {
-  const fallback = (process.env.SEFAZ_DFE_NATIONAL_AUTHOR_UF || '33')
+  const fallback = (process.env.SEFAZ_DFE_NATIONAL_AUTHOR_UF || '91')
     .toString()
     .replace(/\D+/g, '')
     .padStart(2, '0');
@@ -583,21 +583,12 @@ const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
     store?.dadosFiscais?.estado,
   ];
 
-  let warnedAbout91 = false;
-
   for (const candidate of ufCandidates) {
     if (candidate == null) {
       continue;
     }
     const code = resolveUfCode(candidate);
     if (!/^[0-9]{2}$/.test(code) || code === '00') {
-      continue;
-    }
-    if (code === '91') {
-      if (!warnedAbout91) {
-        warn('cUFAutor=91 bloqueado para consultas por NSU. Aplicando fallback.');
-        warnedAbout91 = true;
-      }
       continue;
     }
     if (preferredAcronym) {
@@ -611,13 +602,7 @@ const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
 
   const certificateUf = extractUfFromCertificate(certificatePem);
   if (certificateUf) {
-    if (certificateUf === '91') {
-      if (!warnedAbout91) {
-        warn('cUFAutor=91 extraído do certificado bloqueado para consultas por NSU. Ignorando valor.');
-      }
-    } else {
-      return certificateUf;
-    }
+    return certificateUf;
   }
 
   const isNationalEndpoint = /nfe\.(?:fazenda|sefaz)\.gov\.br/i.test(endpoint || '');
