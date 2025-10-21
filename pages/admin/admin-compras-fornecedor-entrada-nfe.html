@@ -58,6 +58,15 @@
                 class="w-full max-w-[160px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 cursor-pointer"
                 readonly
               >
+              <div class="mt-2 flex items-center gap-2">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Status</span>
+                <span
+                  data-nfe-status-badge
+                  class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600"
+                >
+                  Cadastrada
+                </span>
+              </div>
             </div>
             <div>
               <label for="nfe-number" class="block text-sm font-medium text-gray-700 mb-1">NF* (número da nota)</label>
@@ -216,6 +225,17 @@
                   <div>
                     <label for="valor-produtos" class="block text-sm font-medium text-gray-700 mb-1">Valor Produtos (R$)</label>
                     <input type="number" step="0.01" id="valor-produtos" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="14000.00">
+                  </div>
+                  <div>
+                    <label for="valor-bonificacao" class="block text-sm font-medium text-gray-700 mb-1">Valor Bonificação (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      id="valor-bonificacao"
+                      class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      placeholder="0.00"
+                      readonly
+                    >
                   </div>
                   <div>
                     <label for="base-icms" class="block text-sm font-medium text-gray-700 mb-1">Base ICMS (R$)</label>
@@ -957,19 +977,34 @@
           </div>
         </section>
 
-        <div class="flex flex-col gap-3 md:flex-row md:justify-end">
-          <button type="button" data-save-draft class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-            <i class="fas fa-file-archive"></i>
-            Salvar rascunho
+        <div class="flex flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
+          <button
+            type="button"
+            data-delete-entry
+            class="inline-flex items-center gap-2 self-start rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 hidden"
+          >
+            <i class="fas fa-trash" data-delete-entry-icon></i>
+            <span data-delete-entry-text>Excluir nota</span>
           </button>
-          <button type="button" data-clear-import class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-            <i class="fas fa-eraser"></i>
-            Limpar
-          </button>
-          <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
-            <i class="fas fa-save"></i>
-            Registrar entrada da NF-e
-          </button>
+
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
+            <button type="button" data-save-draft class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-file-archive"></i>
+              Salvar rascunho
+            </button>
+            <button type="button" data-clear-import class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-eraser"></i>
+              Limpar
+            </button>
+            <button
+              type="button"
+              data-register-entry
+              class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+            >
+              <i class="fas fa-save" data-register-entry-icon></i>
+              <span data-register-entry-text>Registrar entrada da NF-e</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2079,6 +2114,7 @@
         const weightNetInput = document.getElementById('peso-liquido');
         const freightModeSelect = document.getElementById('modalidade-frete');
         const totalsProductsInput = document.getElementById('valor-produtos');
+        const totalsBonificationInput = document.getElementById('valor-bonificacao');
         const totalsIcmsBaseInput = document.getElementById('base-icms');
         const totalsIcmsValueInput = document.getElementById('valor-icms');
         const totalsIcmsStInput = document.getElementById('icms-st');
@@ -2104,7 +2140,14 @@
         const observationInput = document.getElementById('observacao');
         const complementaryInfoInput = document.getElementById('informacoes-complementares');
         const clearImportButton = document.querySelector('[data-clear-import]');
+        const deleteEntryButton = document.querySelector('[data-delete-entry]');
         const saveDraftButton = document.querySelector('[data-save-draft]');
+        const registerEntryButton = document.querySelector('[data-register-entry]');
+        const registerEntryIcon = registerEntryButton?.querySelector('[data-register-entry-icon]') || null;
+        const registerEntryText = registerEntryButton?.querySelector('[data-register-entry-text]') || null;
+        const deleteEntryIcon = deleteEntryButton?.querySelector('[data-delete-entry-icon]') || null;
+        const deleteEntryText = deleteEntryButton?.querySelector('[data-delete-entry-text]') || null;
+        const statusBadge = document.querySelector('[data-nfe-status-badge]');
         const documentsTableBody = document.querySelector('[data-nfe-documents-body]');
         const documentsEmptyRow = document.querySelector('[data-nfe-documents-empty]');
         const mainProductsTableBody = document.querySelector('[data-nfe-products-body]');
@@ -2214,6 +2257,8 @@
 
         let lastSupplierData = null;
         let lastSupplierRecord = null;
+        let pendingSupplierId = '';
+        let pendingSupplierDocument = '';
         let lastNfeData = null;
         const IMPORT_CONTEXT_FULL = 'full';
         const IMPORT_CONTEXT_BONUS = 'bonus';
@@ -2225,7 +2270,13 @@
         let pendingDepositId = '';
         let currentDraftId = '';
         let currentDraftCode = '';
+        let currentDraftStatus = 'draft';
         let isSavingDraft = false;
+        let isApprovingDraft = false;
+        let isDeletingDraft = false;
+        let isFormLocked = false;
+        let updateStatusBadgeDisplay = () => {};
+        let updateDeleteButtonState = () => {};
         const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
         const productLookupCache = new Map();
         const productLookupPromises = new Map();
@@ -3079,6 +3130,52 @@
           return hasValue ? totals : null;
         };
 
+        const BONIFICATION_VALUE_PRIORITY_FIELDS = ['total', 'netProductValue', 'totalWithTaxes'];
+
+        const extractBonificationAmount = (source) => {
+          if (!source || typeof source !== 'object') return null;
+          for (const field of BONIFICATION_VALUE_PRIORITY_FIELDS) {
+            const value = toNumeric(source[field]);
+            if (Number.isFinite(value)) {
+              return value;
+            }
+          }
+          return null;
+        };
+
+        const computeBonificationTotal = (items) => {
+          if (!Array.isArray(items) || !items.length) return null;
+
+          let total = 0;
+          let hasBonification = false;
+
+          items.forEach((item) => {
+            if (!item || typeof item !== 'object') return;
+            const info = item.bonificationInfo;
+            if (!info || typeof info !== 'object') return;
+
+            let value = extractBonificationAmount(info.bonusTotals);
+            if (!Number.isFinite(value)) {
+              value = extractBonificationAmount(info.originalTotals);
+            }
+            if (!Number.isFinite(value) && item.forceBonificationZeroCost) {
+              value = extractBonificationAmount(item);
+            }
+
+            if (Number.isFinite(value)) {
+              total += value;
+              hasBonification = true;
+            }
+          });
+
+          if (hasBonification) {
+            return total;
+          }
+
+          const hasItems = items.some((entry) => entry && typeof entry === 'object');
+          return hasItems ? 0 : null;
+        };
+
         const mergeBonificationGroupIntoBase = (group) => {
           if (!group || !group.sales.length || !group.bonuses.length) {
             return null;
@@ -3387,6 +3484,11 @@
             baseData.references = [];
           }
 
+          const mergedBonificationTotal = computeBonificationTotal(combinedItems);
+          baseData.totals.bonification = Number.isFinite(mergedBonificationTotal)
+            ? mergedBonificationTotal
+            : null;
+
           const existingReferences = Array.isArray(baseData.references)
             ? baseData.references.slice()
             : [];
@@ -3466,16 +3568,70 @@
           return result;
         };
 
+        const extractAccountingAccountFromDuplicate = (duplicate) => {
+          if (!duplicate || typeof duplicate !== 'object') return null;
+          const rawId = duplicate.accountingAccountId || duplicate.accountingAccount || '';
+          const code = duplicate.accountingAccountCode || '';
+          const name = duplicate.accountingAccountName || '';
+          if (rawId || code || name) {
+            return {
+              id: rawId ? String(rawId) : null,
+              code,
+              name,
+            };
+          }
+          return null;
+        };
+
         const resolveSupplierAccountingAccount = () => {
           const account = lastSupplierRecord?.otherInfo?.accountingAccount;
           if (account && (account.code || account.name)) {
             return {
-              id: account._id || null,
+              id: account._id ? String(account._id) : null,
               code: account.code || '',
               name: account.name || '',
             };
           }
+
+          const duplicates = Array.isArray(lastNfeData?.duplicates) ? lastNfeData.duplicates : [];
+          for (const duplicate of duplicates) {
+            const extracted = extractAccountingAccountFromDuplicate(duplicate);
+            if (extracted) {
+              return extracted;
+            }
+          }
+
+          const selectionAccountLabel = lastNfeData?.selection?.accountingAccount;
+          if (selectionAccountLabel) {
+            const label = String(selectionAccountLabel).trim();
+            if (label) {
+              return { id: null, code: '', name: label };
+            }
+          }
+
           return null;
+        };
+
+        const applyAccountingAccountToDuplicate = (
+          duplicate,
+          account,
+          { preserveExisting = false } = {}
+        ) => {
+          if (!duplicate || typeof duplicate !== 'object') return;
+          if (account && (account.id || account.code || account.name)) {
+            duplicate.accountingAccountId = account.id ? String(account.id) : '';
+            duplicate.accountingAccountCode = account.code || '';
+            duplicate.accountingAccountName = account.name || '';
+            return;
+          }
+
+          if (preserveExisting) {
+            return;
+          }
+
+          duplicate.accountingAccountId = '';
+          duplicate.accountingAccountCode = '';
+          duplicate.accountingAccountName = '';
         };
 
         const formatAccountingAccountValue = (account) => {
@@ -4993,6 +5149,76 @@
           return option;
         };
 
+        const setSupplierSelectValue = (value) => {
+          if (!supplierSelect) return false;
+          const normalized = value ? String(value) : '';
+          if (!normalized) return false;
+          const option = Array.from(supplierSelect.options || []).find(
+            (entry) => entry.value === normalized
+          );
+          if (option) {
+            supplierSelect.value = normalized;
+            return true;
+          }
+          return false;
+        };
+
+        const applyPendingSupplierSelection = () => {
+          if (!supplierSelect) return false;
+
+          if (pendingSupplierId && setSupplierSelectValue(pendingSupplierId)) {
+            pendingSupplierId = '';
+            pendingSupplierDocument = '';
+            const selectedOption =
+              supplierSelect.selectedOptions && supplierSelect.selectedOptions.length
+                ? supplierSelect.selectedOptions[0]
+                : null;
+            if (selectedOption) {
+              const optionDocument = digitsOnly(selectedOption.dataset?.supplierDocument || '');
+              const registered = optionDocument
+                ? supplierRegistry.byDocument.get(optionDocument) || null
+                : null;
+              if (registered) {
+                lastSupplierRecord = registered;
+              } else if (optionDocument) {
+                lastSupplierRecord = {
+                  _id: selectedOption.dataset?.supplierId || null,
+                  legalName: selectedOption.dataset?.supplierName || '',
+                  cnpj: optionDocument,
+                };
+              }
+            }
+            supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+          }
+
+          if (pendingSupplierDocument) {
+            const option = findSupplierOptionByDocument(pendingSupplierDocument);
+            if (option) {
+              supplierSelect.value = option.value;
+              pendingSupplierId = '';
+              pendingSupplierDocument = '';
+              const optionDocument = digitsOnly(option.dataset?.supplierDocument || '');
+              const registered = optionDocument
+                ? supplierRegistry.byDocument.get(optionDocument) || null
+                : null;
+              if (registered) {
+                lastSupplierRecord = registered;
+              } else if (optionDocument) {
+                lastSupplierRecord = {
+                  _id: option.dataset?.supplierId || null,
+                  legalName: option.dataset?.supplierName || '',
+                  cnpj: optionDocument,
+                };
+              }
+              supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
+              return true;
+            }
+          }
+
+          return false;
+        };
+
         const registerSupplierRecord = (supplier) => {
           if (!supplier) return null;
           const documentDigits = digitsOnly(supplier.cnpj || supplier.document);
@@ -5011,11 +5237,15 @@
         };
 
         const loadSuppliersFromApi = async (forceReload = false) => {
-          if (!suppliersEndpoint) return supplierRegistry.byDocument;
+          if (!suppliersEndpoint) {
+            applyPendingSupplierSelection();
+            return supplierRegistry.byDocument;
+          }
           if (forceReload) {
             supplierRegistry.loaded = false;
           }
           if (supplierRegistry.loaded && !forceReload) {
+            applyPendingSupplierSelection();
             return supplierRegistry.byDocument;
           }
           if (supplierRegistry.loadingPromise) {
@@ -5024,6 +5254,7 @@
             } catch (_) {
               // Ignorar erros anteriores, o estado já foi atualizado
             }
+            applyPendingSupplierSelection();
             return supplierRegistry.byDocument;
           }
           supplierRegistry.loadingPromise = (async () => {
@@ -5059,6 +5290,7 @@
           } catch (_) {
             // Erro já tratado no bloco acima
           }
+          applyPendingSupplierSelection();
           return supplierRegistry.byDocument;
         };
 
@@ -5176,10 +5408,202 @@
           nfeCodeInput.dataset.rawCode = String(codeValue);
         };
 
+        const determineDraftStatusKey = (status) => {
+          const normalized = String(status ?? '').trim().toLowerCase();
+          if (normalized === 'approved' || normalized === 'aprovado' || normalized === 'aprovada') {
+            return 'approved';
+          }
+          if (!normalized || normalized === 'draft' || normalized === 'rascunho' || normalized === 'cadastrada') {
+            return 'draft';
+          }
+          return normalized;
+        };
+
+        const defaultRegisterIconClass = registerEntryIcon ? registerEntryIcon.className : '';
+        const defaultRegisterText = registerEntryText ? registerEntryText.textContent || '' : '';
+        const defaultDeleteIconClass = deleteEntryIcon ? deleteEntryIcon.className : '';
+        const defaultDeleteText = deleteEntryText ? deleteEntryText.textContent || '' : '';
+
+        const setApproveButtonState = (isProcessing) => {
+          if (!registerEntryButton) return;
+          const shouldDisable = Boolean(isProcessing) || isFormLocked;
+          registerEntryButton.disabled = shouldDisable;
+          registerEntryButton.classList.toggle('opacity-60', shouldDisable);
+          registerEntryButton.classList.toggle('cursor-wait', Boolean(isProcessing));
+          if (registerEntryIcon) {
+            registerEntryIcon.className = isProcessing ? 'fas fa-circle-notch fa-spin' : defaultRegisterIconClass;
+          }
+          if (registerEntryText) {
+            if (isProcessing) {
+              registerEntryText.textContent = 'Processando...';
+            } else {
+              registerEntryText.textContent = defaultRegisterText || 'Registrar entrada da NF-e';
+            }
+          }
+        };
+
+        const setDeleteButtonState = (isProcessing) => {
+          if (!deleteEntryButton) return;
+          const hasDraft = Boolean(currentDraftId);
+          const shouldDisable = Boolean(isProcessing) || !hasDraft;
+          deleteEntryButton.disabled = shouldDisable;
+          deleteEntryButton.classList.toggle('opacity-60', shouldDisable);
+          deleteEntryButton.classList.toggle('cursor-wait', Boolean(isProcessing));
+          if (deleteEntryIcon) {
+            deleteEntryIcon.className = isProcessing ? 'fas fa-circle-notch fa-spin' : defaultDeleteIconClass;
+          }
+          if (deleteEntryText) {
+            deleteEntryText.textContent = isProcessing
+              ? 'Excluindo...'
+              : defaultDeleteText || 'Excluir nota';
+          }
+        };
+
+        const lockStateRegistry = new WeakMap();
+
+        const rememberLockState = (element) => {
+          if (!element || typeof element !== 'object') return { disabled: false, readOnly: undefined };
+          if (!lockStateRegistry.has(element)) {
+            lockStateRegistry.set(element, {
+              disabled: 'disabled' in element ? element.disabled : false,
+              readOnly: 'readOnly' in element ? element.readOnly : undefined,
+            });
+          }
+          return lockStateRegistry.get(element);
+        };
+
+        const shouldSkipFormControlLock = (element) => {
+          if (!(element instanceof HTMLElement)) return true;
+          if (element.hasAttribute('data-admin-screen-search-input')) return true;
+          return false;
+        };
+
+        const shouldSkipButtonLock = (button) => {
+          if (!(button instanceof HTMLButtonElement)) return true;
+          if (button.dataset.tab) return true;
+          if (button.hasAttribute('data-accordion-button')) return true;
+          if (button.hasAttribute('data-close-code-modal')) return true;
+          if (button.hasAttribute('data-close-product-modal')) return true;
+          if (button.hasAttribute('data-close-product-link-modal')) return true;
+          if (button.hasAttribute('data-admin-sidebar-trigger')) return true;
+          if (button.hasAttribute('data-admin-sidebar-close')) return true;
+          if (button.hasAttribute('data-delete-entry')) return true;
+          return false;
+        };
+
+        const setFormLockState = (locked) => {
+          isFormLocked = Boolean(locked);
+
+          const formControls = document.querySelectorAll('input, select, textarea');
+          formControls.forEach((element) => {
+            if (!(element instanceof HTMLElement)) return;
+            const original = rememberLockState(element);
+
+            if (shouldSkipFormControlLock(element)) {
+              if (!isFormLocked) {
+                if ('readOnly' in element && typeof original.readOnly !== 'undefined') {
+                  element.readOnly = Boolean(original.readOnly);
+                } else if ('readOnly' in element) {
+                  element.readOnly = false;
+                }
+
+                if ('disabled' in element) {
+                  element.disabled = Boolean(original.disabled);
+                }
+              }
+              element.classList.remove('cursor-not-allowed');
+              return;
+            }
+
+            if (isFormLocked) {
+              if ('readOnly' in element) {
+                const type = (element.getAttribute('type') || '').toLowerCase();
+                const useReadOnly =
+                  element.tagName === 'TEXTAREA' ||
+                  ['text', 'search', 'email', 'url', 'tel', 'number', 'password'].includes(type);
+                if (useReadOnly) {
+                  element.readOnly = true;
+                } else if ('disabled' in element) {
+                  element.disabled = true;
+                }
+              } else if ('disabled' in element) {
+                element.disabled = true;
+              }
+              element.classList.add('cursor-not-allowed');
+            } else {
+              if ('readOnly' in element && typeof original.readOnly !== 'undefined') {
+                element.readOnly = Boolean(original.readOnly);
+              } else if ('readOnly' in element) {
+                element.readOnly = false;
+              }
+
+              if ('disabled' in element) {
+                element.disabled = Boolean(original.disabled);
+              }
+
+              element.classList.remove('cursor-not-allowed');
+            }
+          });
+
+          const actionableButtons = document.querySelectorAll('button');
+          actionableButtons.forEach((button) => {
+            if (!(button instanceof HTMLButtonElement)) return;
+            const original = rememberLockState(button);
+            if (shouldSkipButtonLock(button)) {
+              return;
+            }
+
+            if (isFormLocked) {
+              button.disabled = true;
+              button.classList.add('cursor-not-allowed', 'opacity-60');
+            } else {
+              button.disabled = Boolean(original.disabled);
+              button.classList.remove('cursor-not-allowed', 'opacity-60');
+            }
+          });
+
+          setApproveButtonState(isApprovingDraft);
+        };
+
+        const setDraftStatus = (status) => {
+          const normalized = determineDraftStatusKey(status);
+          currentDraftStatus = normalized;
+          if (lastNfeData && typeof lastNfeData === 'object') {
+            lastNfeData.status = normalized;
+          }
+          updateStatusBadgeDisplay(normalized);
+          setFormLockState(normalized === 'approved');
+          updateDeleteButtonState(normalized);
+          return normalized;
+        };
+
+        const focusDuplicateField = (index, field) => {
+          if (!duplicatasTableBody) return;
+          const row = duplicatasTableBody.querySelector(`tr[data-duplicate-index="${index}"]`);
+          if (!row) return;
+          let target = null;
+          if (field === 'dueDate') {
+            target = row.querySelector('[data-duplicateDueInput="true"]');
+          } else if (field === 'value') {
+            target = row.querySelector('[data-duplicateValueInput="true"]');
+          } else if (field === 'bankAccount') {
+            target = row.querySelector('[data-duplicateBankSelect="true"]');
+          }
+          if (target instanceof HTMLElement) {
+            target.focus({ preventScroll: false });
+            if (typeof target.scrollIntoView === 'function') {
+              target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            }
+          }
+        };
+
+        setApproveButtonState(false);
+
         const resetDraftState = () => {
           currentDraftId = '';
           currentDraftCode = '';
           applyDraftCodeToInput('');
+          setDraftStatus('draft');
         };
 
         const readNumericInputValue = (input) => {
@@ -5208,11 +5632,16 @@
 
           const duplicatesClone =
             clonePlainObject(baseData.duplicates) || clonePlainObject(lastNfeData?.duplicates) || [];
+          const supplierAccountDetails = resolveSupplierAccountingAccount();
           if (Array.isArray(duplicatesClone)) {
             duplicatesClone.forEach((duplicate, index) => {
-              if (duplicate && typeof duplicate === 'object' && typeof duplicate.index === 'undefined') {
+              if (!duplicate || typeof duplicate !== 'object') return;
+              if (typeof duplicate.index === 'undefined') {
                 duplicate.index = index;
               }
+              applyAccountingAccountToDuplicate(duplicate, supplierAccountDetails, {
+                preserveExisting: true,
+              });
             });
           }
 
@@ -5228,6 +5657,7 @@
 
           const totalsSnapshot = {
             products: readNumericInputValue(totalsProductsInput),
+            bonification: readNumericInputValue(totalsBonificationInput),
             icmsBase: readNumericInputValue(totalsIcmsBaseInput),
             icmsValue: readNumericInputValue(totalsIcmsValueInput),
             icmsSt: readNumericInputValue(totalsIcmsStInput),
@@ -5242,6 +5672,10 @@
 
           if (!Number.isFinite(totalsSnapshot.products) && Number.isFinite(baseData?.totals?.products)) {
             totalsSnapshot.products = toNumeric(baseData.totals.products);
+          }
+
+          if (!Number.isFinite(totalsSnapshot.bonification) && Number.isFinite(baseData?.totals?.bonification)) {
+            totalsSnapshot.bonification = toNumeric(baseData.totals.bonification);
           }
 
           const duplicatesTotal = computeDuplicatesTotal(duplicatesClone);
@@ -5351,6 +5785,7 @@
             lastNfeData.draftId = currentDraftId;
             lastNfeData.draftCode = currentDraftCode;
           }
+          setDraftStatus(draft.status);
         };
 
         const PAYMENT_METHOD_DESCRIPTIONS = {
@@ -8315,6 +8750,7 @@
         const fillSupplierFieldsFromNfe = (data) => {
           const supplier = data?.emit;
           if (!supplier) return;
+          lastSupplierData = supplier;
           setInputValue(
             supplierCnpjInput,
             supplier.document ? formatDocument(supplier.document) : ''
@@ -8327,9 +8763,79 @@
           setInputValue(supplierAddressInput, formatAddressLine(supplier.address));
         };
 
+        const applySupplierSelectionFromData = (data) => {
+          if (!supplierSelect) return;
+
+          const selection = data?.selection || {};
+          const desiredSupplierId = selection.supplierId ? String(selection.supplierId).trim() : '';
+          const supplierDocument = digitsOnly(
+            data?.supplier?.document || data?.emit?.document || ''
+          );
+
+          let applied = false;
+
+          if (desiredSupplierId) {
+            applied = setSupplierSelectValue(desiredSupplierId);
+            if (applied) {
+              pendingSupplierId = '';
+            } else {
+              pendingSupplierId = desiredSupplierId;
+            }
+          } else {
+            pendingSupplierId = '';
+          }
+
+          if (!applied && supplierDocument) {
+            const option = findSupplierOptionByDocument(supplierDocument);
+            if (option) {
+              supplierSelect.value = option.value;
+              applied = true;
+              pendingSupplierId = '';
+              pendingSupplierDocument = '';
+            } else {
+              pendingSupplierDocument = supplierDocument;
+            }
+          } else if (!applied) {
+            pendingSupplierDocument = supplierDocument || pendingSupplierDocument;
+          } else {
+            pendingSupplierDocument = '';
+          }
+
+          if (supplierSelect && supplierSelect.value) {
+            const selectedOption =
+              supplierSelect.selectedOptions && supplierSelect.selectedOptions.length
+                ? supplierSelect.selectedOptions[0]
+                : null;
+            if (selectedOption) {
+              const optionDocument = digitsOnly(
+                selectedOption.dataset?.supplierDocument || supplierDocument || ''
+              );
+              const registered = optionDocument
+                ? supplierRegistry.byDocument.get(optionDocument) || null
+                : null;
+              if (registered) {
+                lastSupplierRecord = registered;
+              } else if (optionDocument) {
+                lastSupplierRecord = {
+                  _id: selectedOption.dataset?.supplierId || null,
+                  legalName: selectedOption.dataset?.supplierName || '',
+                  cnpj: optionDocument,
+                };
+              }
+            }
+          }
+
+          if (!applied) {
+            applyPendingSupplierSelection();
+          } else {
+            supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        };
+
         const fillTotalsFromNfeData = (data) => {
           const totals = data?.totals || {};
           setNumericInputValue(totalsProductsInput, totals.products);
+          setNumericInputValue(totalsBonificationInput, totals.bonification);
           setNumericInputValue(totalsIcmsBaseInput, totals.icmsBase);
           setNumericInputValue(totalsIcmsValueInput, totals.icmsValue);
           setNumericInputValue(totalsIcmsStInput, totals.icmsSt);
@@ -8646,13 +9152,16 @@
             }
             observationCell.textContent = observationParts.join(' · ') || '—';
 
+            const duplicateAccount = extractAccountingAccountFromDuplicate(dup);
+            const resolvedAccount = duplicateAccount || supplierAccount || null;
+
             const accountCell = document.createElement('td');
             accountCell.className = 'px-4 py-3 text-gray-600';
-            accountCell.textContent = supplierAccount?.name || '—';
+            accountCell.textContent = resolvedAccount?.name || '—';
 
             const accountCodeCell = document.createElement('td');
             accountCodeCell.className = 'px-4 py-3 text-gray-600';
-            accountCodeCell.textContent = supplierAccount?.code || '—';
+            accountCodeCell.textContent = resolvedAccount?.code || '—';
 
             const bankCell = document.createElement('td');
             bankCell.className = 'px-4 py-3';
@@ -8849,6 +9358,7 @@
           const duplicates = [];
           let currentDueDate = firstDueDate;
           const paymentTypeValue = parcelsRaw > 1 ? '1' : '0';
+          const supplierAccountDetails = resolveSupplierAccountingAccount();
 
           for (let index = 0; index < parcelsRaw; index += 1) {
             const valueCents = baseShare + (remainder > 0 ? 1 : 0);
@@ -8859,7 +9369,7 @@
             const termDaysValue = Number.isFinite(currentTermDays) ? currentTermDays : null;
             const dueDateValue = currentDueDate || '';
 
-            duplicates.push({
+            const duplicate = {
               index,
               number: `Parcela ${index + 1}`,
               dueDate: dueDateValue,
@@ -8872,7 +9382,9 @@
               termDays: termDaysValue,
               bankAccount: normalizedBankAccount ? normalizedBankAccount : null,
               bankAccountIsManual: false,
-            });
+            };
+            applyAccountingAccountToDuplicate(duplicate, supplierAccountDetails);
+            duplicates.push(duplicate);
 
             if (index < parcelsRaw - 1) {
               const step = Number.isFinite(intervalDaysRaw) ? intervalDaysRaw : resolvedStepDays;
@@ -8971,6 +9483,9 @@
         const syncAccountingAccountWithDuplicates = () => {
           const account = refreshAccountingAccountBindings();
           if (lastNfeData && Array.isArray(lastNfeData.duplicates)) {
+            lastNfeData.duplicates.forEach((duplicate) => {
+              applyAccountingAccountToDuplicate(duplicate, account);
+            });
             renderDuplicatasFromNfe(lastNfeData.duplicates, lastNfeData);
           }
           return account;
@@ -9401,6 +9916,18 @@
         const renderMainProductsFromNfe = (items = []) => {
           mainProductTableState.items = Array.isArray(items) ? items : [];
           updateMainProductsTableDisplay();
+
+          const bonificationTotal = computeBonificationTotal(mainProductTableState.items);
+          setNumericInputValue(totalsBonificationInput, bonificationTotal);
+
+          if (lastNfeData && typeof lastNfeData === 'object') {
+            if (!lastNfeData.totals || typeof lastNfeData.totals !== 'object') {
+              lastNfeData.totals = {};
+            }
+            lastNfeData.totals.bonification = Number.isFinite(bonificationTotal)
+              ? bonificationTotal
+              : null;
+          }
         };
 
         const CODE_STATUS_LABELS = {
@@ -9412,6 +9939,10 @@
           cadastrada: ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
           aprovada: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-700'],
         };
+
+        const ALL_CODE_STATUS_CLASSES = Array.from(
+          new Set(Object.values(CODE_STATUS_CLASSES).flat())
+        );
 
         const mapDraftStatusLabel = (status) => {
           if (status === null || typeof status === 'undefined') {
@@ -9432,6 +9963,42 @@
           const normalized = String(statusLabel || '').trim().toLowerCase();
           return CODE_STATUS_CLASSES[normalized] || ['border-gray-200', 'bg-gray-100', 'text-gray-600'];
         };
+
+        updateStatusBadgeDisplay = (status) => {
+          if (!statusBadge) return;
+          const label = mapDraftStatusLabel(status);
+          statusBadge.textContent = label || '—';
+          statusBadge.classList.remove(...ALL_CODE_STATUS_CLASSES);
+          const classes = mapDraftStatusClasses(label);
+          classes.forEach((className) => statusBadge.classList.add(className));
+        };
+
+        updateDeleteButtonState = (status) => {
+          if (!deleteEntryButton) return;
+          const normalized = determineDraftStatusKey(status ?? currentDraftStatus);
+          const hasDraft = Boolean(currentDraftId);
+          const shouldShow = hasDraft && normalized === 'approved';
+          deleteEntryButton.classList.toggle('hidden', !shouldShow);
+
+          if (!shouldShow) {
+            deleteEntryButton.disabled = true;
+            deleteEntryButton.classList.remove('cursor-wait');
+            deleteEntryButton.classList.remove('opacity-60');
+            if (deleteEntryIcon) {
+              deleteEntryIcon.className = defaultDeleteIconClass;
+            }
+            if (deleteEntryText && defaultDeleteText) {
+              deleteEntryText.textContent = defaultDeleteText;
+            }
+            return;
+          }
+
+          setDeleteButtonState(isDeletingDraft);
+        };
+
+        updateStatusBadgeDisplay(currentDraftStatus);
+        updateDeleteButtonState(currentDraftStatus);
+        setFormLockState(false);
 
         const parseDateForSort = (value) => {
           if (!value) return null;
@@ -9915,6 +10482,116 @@
           return draft;
         };
 
+        const DUPLICATE_IMPORT_STATUS_SET = new Set([
+          'draft',
+          'rascunho',
+          'cadastrada',
+          'approved',
+          'aprovado',
+          'aprovada',
+        ]);
+
+        const normalizeDraftStatus = (status) => String(status || '').trim().toLowerCase();
+
+        const fetchDraftsByAccessKey = async (accessKey, { companyId } = {}) => {
+          const normalizedKey = digitsOnly(accessKey);
+          if (!normalizedKey) return [];
+
+          const url = new URL(nfeDraftsEndpoint, window.location.origin);
+          url.searchParams.set('accessKey', normalizedKey);
+          if (companyId) {
+            url.searchParams.set('companyId', String(companyId));
+          }
+
+          const response = await fetch(url.toString(), { headers: buildAuthHeaders() });
+          const payload = await response.json().catch(() => ({}));
+
+          if (response.status === 401 || response.status === 403) {
+            handleAuthError();
+          }
+
+          if (!response.ok) {
+            const message =
+              (payload && (payload.message || payload.error)) ||
+              `Falha ao consultar notas existentes para a chave ${normalizedKey} (status ${response.status}).`;
+            throw new Error(message);
+          }
+
+          const drafts = Array.isArray(payload?.drafts) ? payload.drafts : [];
+          return drafts;
+        };
+
+        const findExistingDraftByAccessKey = async (accessKey, { companyId } = {}) => {
+          const drafts = await fetchDraftsByAccessKey(accessKey, { companyId });
+          if (!drafts.length) return null;
+          const matchingDraft = drafts.find((draft) =>
+            DUPLICATE_IMPORT_STATUS_SET.has(normalizeDraftStatus(draft?.status))
+          );
+          return matchingDraft || drafts[0] || null;
+        };
+
+        const handleExistingEntryRedirect = async (data) => {
+          if (!data) return false;
+
+          try {
+            const accessKeyDigits = digitsOnly(data.accessKey || data?.xml?.accessKey || '');
+            if (!accessKeyDigits) return false;
+
+            const selectedCompanyId = data.selectedCompanyId || companySelect?.value || pendingCompanyId || '';
+            const existingDraft = await findExistingDraftByAccessKey(accessKeyDigits, {
+              companyId: selectedCompanyId,
+            });
+
+            if (!existingDraft) {
+              return false;
+            }
+
+            const draftId = existingDraft.id || existingDraft._id || '';
+            if (!draftId) {
+              return false;
+            }
+
+            if (currentDraftId && String(currentDraftId) === String(draftId)) {
+              return false;
+            }
+
+            const draft = await fetchDraftById(draftId);
+            if (!draft) {
+              throw new Error('Não foi possível carregar a entrada já cadastrada para esta NF-e.');
+            }
+
+            applyDraftDataToForm(draft);
+
+            const formattedCode = currentDraftCode ? formatDraftCode(currentDraftCode) : '';
+            const statusLabel = mapDraftStatusLabel(existingDraft.status);
+            const messageParts = ['Esta NF-e já possui uma entrada cadastrada.'];
+            if (formattedCode) {
+              messageParts.push(`Código ${formattedCode}.`);
+            }
+            if (statusLabel) {
+              messageParts.push(`Status ${statusLabel}.`);
+            }
+
+            notify(messageParts.join(' '), 'warning');
+
+            if (importFileInput) {
+              importFileInput.value = '';
+            }
+
+            if (selectedCompanyId) {
+              loadCodeLookupList(selectedCompanyId, { forceReload: true }).catch(() => {});
+            }
+
+            closeImportModal();
+            return true;
+          } catch (error) {
+            console.error('Erro ao verificar existência da NF-e importada:', error);
+            const message =
+              error?.message || 'Não foi possível verificar se esta NF-e já está cadastrada.';
+            throw new Error(message);
+          }
+        };
+
         const buildNoteDataFromDraft = (draft) => {
           if (!draft || typeof draft !== 'object') return null;
           const payload = clonePlainObject(draft.payload) || {};
@@ -10197,6 +10874,7 @@
           if (data) {
             data.selectedBankAccountId = activeBankAccountId || pendingBankAccountId || '';
           }
+          const supplierAccountDetails = resolveSupplierAccountingAccount();
           duplicates.forEach((duplicate) => {
             if (!duplicate || typeof duplicate !== 'object') return;
             if (!duplicate.originalDueDate) {
@@ -10210,6 +10888,9 @@
             } else {
               duplicate.bankAccount = activeBankAccountId ? String(activeBankAccountId) : null;
             }
+            applyAccountingAccountToDuplicate(duplicate, supplierAccountDetails, {
+              preserveExisting: true,
+            });
           });
 
           renderDuplicatasFromNfe(duplicates, data);
@@ -10219,6 +10900,7 @@
           if (!data) return;
           fillMainFormFromNfeData(data);
           fillSupplierFieldsFromNfe(data);
+          applySupplierSelectionFromData(data);
           fillTotalsFromNfeData(data);
           fillTransportFromNfeData(data);
           fillDepositSelectionFromNfeData(data);
@@ -10276,6 +10958,7 @@
             weightGrossInput,
             weightNetInput,
             totalsProductsInput,
+            totalsBonificationInput,
             totalsIcmsBaseInput,
             totalsIcmsValueInput,
             totalsIcmsStInput,
@@ -10320,6 +11003,8 @@
           pendingCompanyId = '';
           pendingCompanyDocumentDigits = '';
           pendingBankAccountId = '';
+          pendingSupplierId = '';
+          pendingSupplierDocument = '';
           setBankAccountPlaceholder('Selecione uma empresa para listar as contas correntes');
           pendingDepositId = '';
           setDepositPlaceholder('Selecione uma empresa para listar os depósitos');
@@ -10388,6 +11073,8 @@
           }
 
           if (matchedOption) {
+            pendingSupplierId = '';
+            pendingSupplierDocument = '';
             supplierSelect.value = matchedOption.value;
             supplierSelect.dispatchEvent(new Event('change', { bubbles: true }));
             const supplierName =
@@ -10920,6 +11607,8 @@
           alignItemsWithTotals(items, totalsData, { skipTaxComputation: shouldSkipTaxComputation });
 
           const processedItems = mergeItemsWithBonification(items);
+          const bonificationTotal = computeBonificationTotal(processedItems);
+          totalsData.bonification = Number.isFinite(bonificationTotal) ? bonificationTotal : null;
 
           const complementaryInfo = getText(infAdic, 'infCpl');
           const fiscalInfo = getText(infAdic, 'infAdFisco');
@@ -11033,6 +11722,24 @@
               parsed.selectedBankAccountId = bankAccountSelect ? bankAccountSelect.value || '' : '';
               parsed.selectedDepositId = depositSelect ? depositSelect.value || '' : '';
               const isBonusContext = importModalContext === IMPORT_CONTEXT_BONUS;
+
+              if (!isBonusContext) {
+                try {
+                  const redirected = await handleExistingEntryRedirect(parsed);
+                  if (redirected) {
+                    return;
+                  }
+                } catch (duplicateError) {
+                  console.error('Erro ao evitar importação duplicada da NF-e:', duplicateError);
+                  showFileFeedback(
+                    duplicateError?.message ||
+                      'Não foi possível verificar se o XML já foi importado anteriormente.',
+                    'error'
+                  );
+                  return;
+                }
+              }
+
               if (isBonusContext) {
                 pendingBonusData = parsed;
               } else {
@@ -11466,6 +12173,268 @@
             }
 
             updateDuplicataSummaryFromData(lastNfeData);
+          });
+        }
+
+        if (registerEntryButton) {
+          registerEntryButton.addEventListener('click', async (event) => {
+            event.preventDefault();
+            if (isFormLocked) {
+              notify('Esta NF-e já está aprovada e não pode ser alterada.', 'info');
+              return;
+            }
+            if (isApprovingDraft) return;
+
+            if (!companySelect || !companySelect.value) {
+              notify('Selecione a empresa responsável antes de aprovar a nota.', 'warning');
+              activateTab('dados');
+              companySelect?.focus();
+              return;
+            }
+
+            if (!depositSelect || !depositSelect.value) {
+              notify('Selecione o depósito para lançar o estoque de entrada.', 'warning');
+              activateTab('dados');
+              depositSelect?.focus();
+              return;
+            }
+
+            const supplierValue = supplierSelect?.value ? String(supplierSelect.value).trim() : '';
+            if (!supplierValue) {
+              notify('Associe o fornecedor cadastrado antes de aprovar a nota.', 'warning');
+              activateTab('dados');
+              supplierSelect?.focus();
+              return;
+            }
+
+            const itemsSource =
+              (Array.isArray(mainProductTableState.items) && mainProductTableState.items.length
+                ? mainProductTableState.items
+                : Array.isArray(lastNfeData?.items)
+                ? lastNfeData.items
+                : []) || [];
+
+            if (!itemsSource.length) {
+              notify('Nenhum item foi importado do XML. Revise os produtos antes de aprovar.', 'warning');
+              activateTab('produtos');
+              return;
+            }
+
+            const pendingItems = itemsSource.filter(
+              (item) => !item || item.validationStatus !== 'matched' || !item.matchedProduct
+            );
+            if (pendingItems.length) {
+              notify('Existem produtos sem vinculação ao cadastro. Resolva todos os itens antes de aprovar.', 'warning');
+              activateTab('produtos');
+              return;
+            }
+
+            const hasEntryStockDefined = itemsSource.some((item) =>
+              Number.isFinite(toNumeric(item?.entryStockQuantity))
+            );
+            if (!hasEntryStockDefined) {
+              notify('Revise o estoque de entrada dos produtos antes de aprovar.', 'warning');
+              activateTab('produtos');
+              return;
+            }
+
+            const duplicates = Array.isArray(lastNfeData?.duplicates) ? lastNfeData.duplicates : [];
+            if (!duplicates.length) {
+              notify('Informe as duplicatas da nota antes de aprovar.', 'warning');
+              activateTab('duplicatas');
+              return;
+            }
+
+            const supplierAccount = resolveSupplierAccountingAccount();
+            if (!supplierAccount || !supplierAccount.id) {
+              notify('Defina a conta contábil vinculada ao fornecedor antes de aprovar.', 'warning');
+              activateTab('duplicatas');
+              accountingAccountInput?.focus();
+              return;
+            }
+
+            for (let index = 0; index < duplicates.length; index += 1) {
+              const duplicate = duplicates[index];
+              const dueInfo = normalizeDate(
+                duplicate?.manualDueDate || duplicate?.dueDate || duplicate?.originalDueDate || ''
+              );
+              if (!dueInfo.dateInput) {
+                notify(`Informe o vencimento da parcela ${duplicate?.number || index + 1}.`, 'warning');
+                activateTab('duplicatas');
+                focusDuplicateField(index, 'dueDate');
+                return;
+              }
+
+              const valueNumeric = toNumeric(duplicate?.value);
+              if (!Number.isFinite(valueNumeric) || valueNumeric <= 0) {
+                notify(`Informe um valor válido para a parcela ${duplicate?.number || index + 1}.`, 'warning');
+                activateTab('duplicatas');
+                focusDuplicateField(index, 'value');
+                return;
+              }
+
+              const duplicateBank = duplicate?.bankAccount || bankAccountSelect?.value || '';
+              if (!duplicateBank) {
+                notify(`Selecione a conta corrente da parcela ${duplicate?.number || index + 1}.`, 'warning');
+                activateTab('duplicatas');
+                focusDuplicateField(index, 'bankAccount');
+                return;
+              }
+            }
+
+            isApprovingDraft = true;
+            setApproveButtonState(true);
+
+            try {
+              let payload = buildDraftPayloadFromForm();
+              if (!currentDraftId) {
+                const createHeaders = buildAuthHeaders();
+                createHeaders.set('Content-Type', 'application/json');
+                const createResponse = await fetch(nfeDraftsEndpoint, {
+                  method: 'POST',
+                  headers: createHeaders,
+                  body: JSON.stringify(payload),
+                });
+                const createPayload = await createResponse.json().catch(() => ({}));
+                if (createResponse.status === 401 || createResponse.status === 403) {
+                  handleAuthError();
+                }
+                if (!createResponse.ok) {
+                  const message =
+                    createPayload?.message ||
+                    createPayload?.error ||
+                    `Não foi possível salvar o rascunho antes da aprovação (status ${createResponse.status}).`;
+                  throw new Error(message);
+                }
+                const createdDraft = createPayload?.draft || null;
+                if (!createdDraft) {
+                  throw new Error('Resposta inesperada ao salvar o rascunho antes da aprovação.');
+                }
+                applyDraftResponseToState(createdDraft);
+                payload = buildDraftPayloadFromForm();
+              }
+
+              const approvalHeaders = buildAuthHeaders();
+              approvalHeaders.set('Content-Type', 'application/json');
+              const approvalEndpoint = `${nfeDraftsEndpoint}/${currentDraftId}`;
+              const approvalResponse = await fetch(`${approvalEndpoint}/approve`, {
+                method: 'POST',
+                headers: approvalHeaders,
+                body: JSON.stringify(payload),
+              });
+              const approvalData = await approvalResponse.json().catch(() => ({}));
+
+              if (approvalResponse.status === 401 || approvalResponse.status === 403) {
+                handleAuthError();
+              }
+
+              if (!approvalResponse.ok) {
+                const message =
+                  approvalData?.message ||
+                  approvalData?.error ||
+                  `Não foi possível aprovar a entrada da NF-e (status ${approvalResponse.status}).`;
+                if (approvalData?.details?.focusTab) {
+                  activateTab(approvalData.details.focusTab);
+                  if (
+                    approvalData.details.focusTab === 'duplicatas' &&
+                    Number.isInteger(approvalData.details.duplicateIndex) &&
+                    approvalData.details.field
+                  ) {
+                    focusDuplicateField(approvalData.details.duplicateIndex, approvalData.details.field);
+                  }
+                }
+                if (approvalData?.draft) {
+                  applyDraftResponseToState(approvalData.draft);
+                }
+                throw new Error(message);
+              }
+
+              const approvedDraft = approvalData?.draft || null;
+              if (approvedDraft) {
+                applyDraftResponseToState(approvedDraft);
+              } else {
+                setDraftStatus('approved');
+              }
+
+              if (companySelect?.value) {
+                loadCodeLookupList(companySelect.value, { forceReload: true }).catch(() => {});
+              }
+
+              notify('Entrada da NF-e aprovada com sucesso.', 'success');
+            } catch (error) {
+              console.error('Erro ao aprovar a entrada da NF-e:', error);
+              notify(error?.message || 'Não foi possível aprovar a entrada da NF-e.', 'error');
+              setFormLockState(determineDraftStatusKey(currentDraftStatus) === 'approved');
+            } finally {
+              isApprovingDraft = false;
+              setApproveButtonState(false);
+            }
+          });
+        }
+
+        if (deleteEntryButton) {
+          deleteEntryButton.addEventListener('click', async (event) => {
+            event.preventDefault();
+            if (isDeletingDraft) return;
+
+            if (!currentDraftId) {
+              notify('Nenhuma nota carregada para exclusão.', 'warning');
+              return;
+            }
+
+            const statusKey = determineDraftStatusKey(currentDraftStatus);
+            const confirmationMessage =
+              statusKey === 'approved'
+                ? 'Tem certeza que deseja excluir esta entrada de NF-e aprovada? As contas a pagar serão removidas e o estoque será estornado.'
+                : 'Tem certeza que deseja excluir esta nota?';
+            const confirmed = typeof window !== 'undefined' && typeof window.confirm === 'function'
+              ? window.confirm(confirmationMessage)
+              : true;
+            if (!confirmed) {
+              return;
+            }
+
+            try {
+              isDeletingDraft = true;
+              setDeleteButtonState(true);
+
+              const headers = buildAuthHeaders();
+              const response = await fetch(`${nfeDraftsEndpoint}/${currentDraftId}`, {
+                method: 'DELETE',
+                headers,
+              });
+              const result = await response.json().catch(() => ({}));
+
+              if (response.status === 401 || response.status === 403) {
+                handleAuthError();
+              }
+
+              if (!response.ok) {
+                const message =
+                  result?.message || `Falha ao excluir a entrada da NF-e (status ${response.status}).`;
+                throw new Error(message);
+              }
+
+              const successMessage =
+                statusKey === 'approved'
+                  ? 'Entrada da NF-e aprovada excluída com sucesso.'
+                  : 'Nota excluída com sucesso.';
+              notify(successMessage, 'success');
+
+              const activeCompanyId = companySelect?.value || '';
+              resetImportedNfeState();
+              if (activeCompanyId) {
+                codeLookupCache.delete(activeCompanyId);
+                loadCodeLookupList(activeCompanyId, { forceReload: true }).catch(() => {});
+              }
+            } catch (error) {
+              console.error('Erro ao excluir a entrada da NF-e:', error);
+              notify(error?.message || 'Não foi possível excluir a entrada da NF-e.', 'error');
+            } finally {
+              isDeletingDraft = false;
+              setDeleteButtonState(false);
+              updateDeleteButtonState(currentDraftStatus);
+            }
           });
         }
 
