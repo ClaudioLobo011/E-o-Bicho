@@ -50,17 +50,32 @@ const DFE_ENDPOINTS = {
 const DFE_SOAP_ACTION =
   'http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse';
 const DFE_NAMESPACE = 'http://www.portalfiscal.inf.br/nfe';
+const DFE_WSDL_NAMESPACE = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe';
 
-const DEFAULT_NATIONAL_AUTHOR_UF = (() => {
-  const fallback = (process.env.SEFAZ_DFE_NATIONAL_AUTHOR_UF || '91')
-    .toString()
-    .replace(/\D+/g, '')
-    .padStart(2, '0');
-  return /^[0-9]{2}$/.test(fallback) && fallback !== '00' ? fallback : '33';
+const ENV_FORCED_UF = (() => {
+  const raw = digitsOnly(process.env.NFE_EMPRESA_UF);
+  if (/^\d{2}$/.test(raw) && raw !== '00') {
+    return raw;
+  }
+  return null;
 })();
 
-const AUTHOR_UF_OVERRIDES = {
-  RJ: '33',
+const sanitizeForLog = (input) => {
+  const value = String(input || '').slice(0, 2000);
+  return value.replace(/\b(\d{6,})\b/g, (match) => {
+    if (match.length <= 4) return match;
+    const visible = match.slice(-2);
+    return `${'*'.repeat(match.length - 2)}${visible}`;
+  });
+};
+
+const indent = (text, spaces = 0) => {
+  if (!text) return '';
+  const prefix = ' '.repeat(Math.max(0, spaces));
+  return String(text)
+    .split(/\r?\n/)
+    .map((line) => (line ? `${prefix}${line}` : line))
+    .join('\n');
 };
 
 const MAX_ITERATIONS = 25;
@@ -110,19 +125,50 @@ const buildSoap11Headers = (action = DFE_SOAP_ACTION) => ({
   SOAPAction: `"${action}"`,
 });
 
-const buildDistributionBody = ({ tpAmb, cUFAutor, cnpj, innerXml }) => {
+const buildDistributionQuery = ({ modo, valor }) => {
+  const normalizedMode = (() => {
+    const token = String(modo || '').trim();
+    if (token === 'consChNFe') return 'consChNFe';
+    if (token === 'consNSU') return 'consNSU';
+    return 'distNSU';
+  })();
+
+  if (normalizedMode === 'consChNFe') {
+    const normalizedKey = digitsOnly(valor).padStart(44, '0');
+    if (!normalizedKey || normalizedKey.length !== 44) {
+      throw new Error('Chave de acesso inválida para consulta por chave.');
+    }
+    return ['<consChNFe>', `  <chNFe>${normalizedKey}</chNFe>`, '</consChNFe>'].join('\n');
+  }
+
+  const normalizedNsU = padNsU(valor || '0');
+  if (normalizedMode === 'consNSU') {
+    return ['<consNSU>', `  <NSU>${normalizedNsU}</NSU>`, '</consNSU>'].join('\n');
+  }
+
+  return ['<distNSU>', `  <ultNSU>${normalizedNsU}</ultNSU>`, '</distNSU>'].join('\n');
+};
+
+const buildDistributionBody = ({ tpAmb, cUFAutor, cnpj, modo, valor }) => {
   const normalizedCnpj = digitsOnly(cnpj).padStart(14, '0');
+  if (!/^[0-9]{14}$/.test(normalizedCnpj)) {
+    throw new Error('CNPJ inválido informado para consulta de DF-e.');
+  }
+
+  const query = buildDistributionQuery({ modo, valor });
+  const queryIndented = indent(query, 2);
+
   return [
     `<distDFeInt xmlns="${DFE_NAMESPACE}" versao="1.01">`,
     `  <tpAmb>${tpAmb}</tpAmb>`,
     `  <cUFAutor>${cUFAutor}</cUFAutor>`,
     `  <CNPJ>${normalizedCnpj}</CNPJ>`,
-    `  ${innerXml}`,
+    queryIndented,
     '</distDFeInt>',
   ].join('\n');
 };
 
-const buildEnvelope = ({ body, soapVersion = SOAP_VERSIONS.SOAP12 }) => {
+const buildEnvelopeTemplate = ({ soapVersion, payload }) => {
   const normalizedVersion =
     soapVersion === SOAP_VERSIONS.SOAP11 ? SOAP_VERSIONS.SOAP11 : SOAP_VERSIONS.SOAP12;
 
@@ -131,40 +177,32 @@ const buildEnvelope = ({ body, soapVersion = SOAP_VERSIONS.SOAP12 }) => {
       ? { prefix: 'soap', uri: 'http://schemas.xmlsoap.org/soap/envelope/' }
       : { prefix: 'soap12', uri: 'http://www.w3.org/2003/05/soap-envelope' };
 
+  const bodyIndented = indent(payload, 6);
+
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
     `<${namespaceConfig.prefix}:Envelope xmlns:${namespaceConfig.prefix}="${namespaceConfig.uri}"`,
     '                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
     '                 xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
     `  <${namespaceConfig.prefix}:Body>`,
-    '    <nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">',
-    `      ${body}`,
+    `    <nfeDistDFeInteresse xmlns="${DFE_WSDL_NAMESPACE}">`,
+    '      <nfeDadosMsg>',
+    bodyIndented,
+    '      </nfeDadosMsg>',
     '    </nfeDistDFeInteresse>',
     `  </${namespaceConfig.prefix}:Body>`,
     `</${namespaceConfig.prefix}:Envelope>`,
   ].join('\n');
 };
 
-const buildEnvelopeConsNSU = ({ tpAmb, cUFAutor, cnpj, ultNSU, nsu, soapVersion }) => {
-  const hasSpecificNsu = nsu !== undefined && nsu !== null && String(nsu).trim() !== '';
-  const normalizedNsU = padNsU(hasSpecificNsu ? nsu : ultNSU || '0');
-  const tagName = hasSpecificNsu ? 'consNSU' : 'distNSU';
-  const valueTag = hasSpecificNsu ? 'NSU' : 'ultNSU';
-  const innerXml =
-    [`<${tagName}>`, `  <${valueTag}>${normalizedNsU}</${valueTag}>`, `</${tagName}>`].join('\n');
-  return buildEnvelope({
-    body: buildDistributionBody({ tpAmb, cUFAutor, cnpj, innerXml }),
-    soapVersion,
-  });
+const buildEnvelopeSoap12 = ({ tpAmb, cUFAutor, cnpj, modo, valor }) => {
+  const payload = buildDistributionBody({ tpAmb, cUFAutor, cnpj, modo, valor });
+  return buildEnvelopeTemplate({ soapVersion: SOAP_VERSIONS.SOAP12, payload });
 };
 
-const buildEnvelopeConsChNFe = ({ tpAmb, cUFAutor, cnpj, accessKey, soapVersion }) => {
-  const normalizedKey = digitsOnly(accessKey).padStart(44, '0');
-  const innerXml = [`<consChNFe>`, `  <chNFe>${normalizedKey}</chNFe>`, '</consChNFe>'].join('\n');
-  return buildEnvelope({
-    body: buildDistributionBody({ tpAmb, cUFAutor, cnpj, innerXml }),
-    soapVersion,
-  });
+const buildEnvelopeSoap11 = ({ tpAmb, cUFAutor, cnpj, modo, valor }) => {
+  const payload = buildDistributionBody({ tpAmb, cUFAutor, cnpj, modo, valor });
+  return buildEnvelopeTemplate({ soapVersion: SOAP_VERSIONS.SOAP11, payload });
 };
 
 const decodeDocZip = (content) => {
@@ -540,48 +578,14 @@ const extractUfFromCertificate = (certificatePem) => {
   return null;
 };
 
-const isNationalDistributionEndpoint = (endpoint) => {
-  if (!endpoint) {
-    return false;
-  }
-
-  try {
-    const { hostname } = new URL(String(endpoint));
-    const normalizedHost = String(hostname || '').trim().toLowerCase();
-    if (!normalizedHost) {
-      return false;
-    }
-    if (normalizedHost === 'nfe.fazenda.gov.br') {
-      return true;
-    }
-    if (normalizedHost.endsWith('.nfe.fazenda.gov.br')) {
-      return true;
-    }
-    if (normalizedHost === 'nfe.sefaz.gov.br') {
-      return true;
-    }
-    if (normalizedHost.endsWith('.nfe.sefaz.gov.br')) {
-      return true;
-    }
-  } catch (error) {
-    const normalized = String(endpoint).trim().toLowerCase();
-    if (!normalized) {
-      return false;
-    }
-    if (/(?:^|\b)(?:www\d*\.)?nfe\.(?:fazenda|sefaz)\.gov\.br/.test(normalized)) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
-const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
+const resolveAuthorUfCode = ({ store, certificatePem }) => {
   const warn = (message) => {
     console.warn(`[DF-e] ${message}`);
   };
 
-  const isNationalEndpoint = isNationalDistributionEndpoint(endpoint);
+  if (ENV_FORCED_UF) {
+    return ENV_FORCED_UF;
+  }
 
   const ufAcronymCandidates = [
     store?.uf,
@@ -592,10 +596,6 @@ const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
     store?.dadosFiscais?.uf,
     store?.dadosFiscais?.UF,
   ];
-
-  const preferredAcronym = ufAcronymCandidates
-    .map((candidate) => String(candidate || '').trim().toUpperCase())
-    .find((candidate) => /^[A-Z]{2}$/.test(candidate));
 
   const ufCandidates = [
     store?.codigoUf,
@@ -621,7 +621,9 @@ const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
     store?.dadosFiscais?.estado,
   ];
 
-  for (const candidate of ufCandidates) {
+  const normalizedCandidates = [...ufAcronymCandidates, ...ufCandidates];
+
+  for (const candidate of normalizedCandidates) {
     if (candidate == null) {
       continue;
     }
@@ -629,41 +631,12 @@ const resolveAuthorUfCode = ({ store, endpoint, certificatePem }) => {
     if (!/^[0-9]{2}$/.test(code) || code === '00') {
       continue;
     }
-    if (preferredAcronym) {
-      const forced = AUTHOR_UF_OVERRIDES[preferredAcronym];
-      if (forced) {
-        if (isNationalEndpoint && forced !== DEFAULT_NATIONAL_AUTHOR_UF) {
-          warn(
-            `UF autora ${forced} do certificado/empresa substituída por ${DEFAULT_NATIONAL_AUTHOR_UF} para Ambiente Nacional.`
-          );
-          return DEFAULT_NATIONAL_AUTHOR_UF;
-        }
-        return forced;
-      }
-    }
-    if (isNationalEndpoint && code !== DEFAULT_NATIONAL_AUTHOR_UF) {
-      warn(
-        `UF autora ${code} substituída por ${DEFAULT_NATIONAL_AUTHOR_UF} para Ambiente Nacional.`
-      );
-      return DEFAULT_NATIONAL_AUTHOR_UF;
-    }
     return code;
   }
 
   const certificateUf = extractUfFromCertificate(certificatePem);
   if (certificateUf) {
-    if (isNationalEndpoint && certificateUf !== DEFAULT_NATIONAL_AUTHOR_UF) {
-      warn(
-        `UF autora ${certificateUf} do certificado substituída por ${DEFAULT_NATIONAL_AUTHOR_UF} para Ambiente Nacional.`
-      );
-      return DEFAULT_NATIONAL_AUTHOR_UF;
-    }
     return certificateUf;
-  }
-
-  if (isNationalEndpoint) {
-    warn(`UF autora não encontrada. Utilizando fallback ${DEFAULT_NATIONAL_AUTHOR_UF}.`);
-    return DEFAULT_NATIONAL_AUTHOR_UF;
   }
 
   warn('UF autora não encontrada. Utilizando fallback RJ (33).');
@@ -686,8 +659,9 @@ const collectDistributedDocuments = async (
     startDate,
     endDate,
     environment,
-    mode = 'consNSU',
+    mode = 'distNSU',
     chave,
+    nsu,
   },
   dependencyOverrides = {}
 ) => {
@@ -750,7 +724,6 @@ const collectDistributedDocuments = async (
 
   const authorUfCode = resolveAuthorUfCode({
     store,
-    endpoint,
     certificatePem: certificatePair.certificatePem,
   });
   if (!/^[0-9]{2}$/.test(authorUfCode) || authorUfCode === '00') {
@@ -771,26 +744,50 @@ const collectDistributedDocuments = async (
   let currentNsU = padNsU(initialNsU);
   let reachedEnd = false;
 
-  const buildEnvelopeForMode = (soapVersion) => {
-    if (mode === 'consChNFe') {
-      if (!chave) {
-        throw new Error('Chave de acesso não informada para consulta por chave.');
-      }
-      return buildEnvelopeConsChNFe({
-        tpAmb,
-        cUFAutor: authorUfCode,
-        cnpj: companyDocument,
-        accessKey: chave,
-        soapVersion,
-      });
+  const hasSpecificNsu = typeof nsu !== 'undefined' && String(nsu || '').trim() !== '';
+
+  const resolveQueryMode = () => {
+    const token = String(mode || '').trim().toLowerCase();
+    if (token === 'conschnfe') {
+      return 'consChNFe';
     }
-    return buildEnvelopeConsNSU({
+    if (token === 'consnsu' && hasSpecificNsu) {
+      return 'consNSU';
+    }
+    return 'distNSU';
+  };
+
+  const buildEnvelopeForMode = (soapVersion) => {
+    const queryMode = resolveQueryMode();
+    const value =
+      queryMode === 'consChNFe'
+        ? chave
+        : queryMode === 'consNSU'
+        ? nsu
+        : currentNsU;
+
+    if (queryMode === 'consChNFe' && !chave) {
+      throw new Error('Chave de acesso não informada para consulta por chave.');
+    }
+
+    const builder = soapVersion === SOAP_VERSIONS.SOAP11 ? buildEnvelopeSoap11 : buildEnvelopeSoap12;
+    const envelope = builder({
       tpAmb,
       cUFAutor: authorUfCode,
       cnpj: companyDocument,
-      ultNSU: currentNsU,
-      soapVersion,
+      modo: queryMode,
+      valor: value,
     });
+
+    console.info(
+      `[DF-e] Modo ${queryMode} via SOAP ${soapVersion} com parâmetro ${sanitizeForLog(value)}.`
+    );
+
+    if (DEBUG_LOG_ENABLED) {
+      console.debug(`[DF-e] Envelope (resumido) ${sanitizeForLog(envelope)}`);
+    }
+
+    return envelope;
   };
 
   const requestOnce = async (soapVersionToUse) => {
@@ -799,9 +796,16 @@ const collectDistributedDocuments = async (
         ? buildSoap11Headers(DFE_SOAP_ACTION)
         : buildSoap12Headers(DFE_SOAP_ACTION);
 
+    const envelope = buildEnvelopeForMode(soapVersionToUse);
+
+    console.info(
+      `[DF-e] Enviando SOAP ${soapVersionToUse} para ${endpoint} ` +
+        `(Content-Type: ${(headers['Content-Type'] || '').trim()})`
+    );
+
     return soapClient.performSoapRequest({
       endpoint,
-      envelope: buildEnvelopeForMode(soapVersionToUse),
+      envelope,
       certificate: certificatePair.certificatePem,
       certificateChain: certificatePair.certificateChain,
       privateKey: certificatePair.privateKeyPem,
@@ -854,6 +858,21 @@ const collectDistributedDocuments = async (
         throw new Error(error.message || 'Falha ao comunicar com a SEFAZ.');
       }
       throw error;
+    }
+
+    const responseHeaders = response.headers || {};
+    const responseContentType =
+      responseHeaders['content-type'] || responseHeaders['Content-Type'] || '';
+    if (responseContentType) {
+      console.info(`[DF-e] Content-Type da resposta: ${String(responseContentType).trim()}`);
+    }
+
+    const firstLine = String(response.body || '')
+      .trim()
+      .split(/\r?\n/)
+      .find((line) => line.trim());
+    if (firstLine) {
+      console.info(`[DF-e] Primeira linha da resposta: ${sanitizeForLog(firstLine)}`);
     }
 
     const responseXml = response.body;
@@ -953,8 +972,10 @@ module.exports = {
     compareNsU,
     buildSoap12Headers,
     buildSoap11Headers,
-    buildEnvelopeConsNSU,
-    buildEnvelopeConsChNFe,
+    buildEnvelopeSoap12,
+    buildEnvelopeSoap11,
+    buildDistributionQuery,
+    buildDistributionBody,
     parseSoapFault,
     parseDistDFeRet,
     createMemoryStateStore,

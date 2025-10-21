@@ -1,60 +1,65 @@
-# Integração DF-e (Distribuição de Documentos Fiscais Eletrônicos)
+# Distribuição DF-e (NFeDistribuicaoDFe)
 
-Este serviço realiza consultas ao `NFeDistribuicaoDFe` para coletar DF-e por **NSU** ou por **chave** diretamente na SEFAZ.
+Este módulo integra com o serviço **NFeDistribuicaoDFe** da SEFAZ utilizando SOAP 1.2 por padrão, com fallback opcional para SOAP 1.1.
 
-## Variáveis de ambiente relevantes
+## Configuração necessária
 
-| Variável | Descrição |
-| --- | --- |
-| `SEFAZ_DFE_ENVIRONMENT` | Define o ambiente padrão (`producao` ou `homologacao`). |
-| `SEFAZ_DFE_NATIONAL_AUTHOR_UF` | UF utilizada como fallback quando a UF da empresa é inválida (padrão `33`). |
-| `NFE_AN_DFE_URL` / `NFE_AN_DFE_URL_PROD` | Endpoint de produção para o serviço ASMX. |
-| `NFE_AN_DFE_HOMOLOG_URL` / `NFE_AN_DFE_URL_HOMOLOG` | Endpoint de homologação (quando necessário). |
-| `NFE_DFE_SOAP_VERSION` | Força versão SOAP (`12` para 1.2, `11` para 1.1). Quando `12`, o código aplica downgrade automático para 1.1 em respostas `soap:Fault` com `NullReference`. |
-| `NFE_DFE_DEBUG` | Quando igual a `1`, habilita logs verbosos internos do coletor. |
-| `NFE_PFX_PATH` e `NFE_PFX_PASSWORD` | Utilizados pelo script de diagnóstico para carregar o certificado A1. |
+Defina as seguintes variáveis de ambiente:
 
-## Persistência de NSU
+- `NFE_AN_DFE_URL` – URL de produção (`https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx`).
+- `NFE_AN_DFE_HOMOLOG_URL` – URL de homologação (`https://hom.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx`).
+- `NFE_PFX_PATH` – caminho absoluto ou relativo do certificado A1 (arquivo PFX).
+- `NFE_PFX_PASSWORD` – senha do PFX.
+- `NFE_EMPRESA_UF` – código numérico (dois dígitos) da UF autora (ex.: `33`).
+- `NFE_EMPRESA_CNPJ` – CNPJ da empresa utilizado pelo script de diagnóstico.
+- `NFE_DFE_SOAP_VERSION` – `12` (padrão) ou `11` para forçar SOAP 1.1.
+- `NFE_DFE_DEBUG` – defina `1` para habilitar logs adicionais de debug.
 
-* O último NSU obtido é persistido por **CNPJ + ambiente** usando a coleção `Setting` (chave `dfe:last-nsu:<ambiente>:<cnpj>`).
-* Caso o MongoDB não esteja conectado, o sistema registra aviso e utiliza cache em memória como fallback.
-* Para reiniciar a busca do zero, remova a entrada correspondente na coleção ou ajuste manualmente o campo `ultNSU`.
+> A cadeia completa do certificado A1 (intermediários) deve estar instalada no host do Node.js. Falhas de confiança parcial resultam em erros TLS ou SOAP Faults.
 
-## Fallback automático SOAP 1.2 → 1.1
+## Execução do coletor
 
-1. O coletor envia consultas usando SOAP 1.2 com `Content-Type: application/soap+xml; charset=utf-8; action="..."`.
-2. Se a SEFAZ responder com `soap:Fault`/HTTP 500 contendo `Object reference not set to an instance of an object`, ocorre downgrade transparente para SOAP 1.1 (`Content-Type: text/xml; charset=utf-8` + `SOAPAction`).
-3. O downgrade é logado via `console.warn` e pode ser desabilitado definindo `NFE_DFE_SOAP_VERSION=11`.
+A função `collectDistributedDocuments` cuida de:
+
+- Persistir e avançar o `ultNSU` por CNPJ + ambiente.
+- Montar `nfeDadosMsg` corretamente e alternar entre `distNSU`, `consNSU` e `consChNFe`.
+- Aplicar fallback automático para SOAP 1.1 apenas quando necessário.
+
+### Modos suportados
+
+- `distNSU` (padrão): varredura incremental usando `ultNSU` conhecido.
+- `consNSU`: consulta de um NSU específico (requer `nsu`).
+- `consChNFe`: consulta direta por chave de acesso (requer `chave`).
 
 ## Script de diagnóstico
 
+Use o CLI para isolar problemas de comunicação:
+
+```bash
+node scripts/test-dfe.js --mode=distNSU --tpAmb=1 --uf=33 --cnpj=07919703000167 \
+  --nsu=0 --pfx=./certificados/empresa.pfx --pwd=senhaSegura
 ```
-node scripts/test-dfe.js --cnpj=07919703000167 --uf=RJ --mode=consNSU --ultnsu=000000000000000
+
+Outros exemplos:
+
+```bash
+# Consulta por NSU específico via SOAP 1.1
+env NFE_DFE_SOAP_VERSION=11 node scripts/test-dfe.js \
+  --mode=consNSU --nsu=000000000000123 --tpAmb=1 --uf=33 --cnpj=07919703000167
+
+# Consulta por chave de acesso específica
+node scripts/test-dfe.js --mode=consChNFe --chave=35191111111111111111550010000012345678901234 \
+  --tpAmb=1 --uf=33 --cnpj=07919703000167
 ```
 
-Argumentos opcionais:
+A saída apresenta status HTTP, content-type recebido, prévia do corpo (até 400 caracteres) e os campos `cStat`, `xMotivo`, `ultNSU` e `maxNSU` extraídos.
 
-* `--ambiente=producao|homologacao`
-* `--chave=<44 dígitos>` (obrigatório quando `--mode=consChNFe`)
-* `--nsu=<15 dígitos>` (quando informado, força consulta específica via `consNSU`)
-* `--endpoint=<URL>` (para testar endpoints alternativos)
+## Observabilidade
 
-Pré-requisitos do script:
+Os logs produzidos durante a coleta incluem:
 
-* `NFE_PFX_PATH` com o caminho do PFX (A1) e `NFE_PFX_PASSWORD` com a senha.
-* Opcional: `NFE_DFE_SOAP_VERSION` para forçar a versão do SOAP.
+- Versão SOAP utilizada e Content-Type enviado.
+- Primeira linha da resposta e Content-Type recebido.
+- `cStat` e `xMotivo` retornados em chamadas com sucesso.
 
-Saída esperada:
-
-* HTTP status e `Content-Type` retornados pela SEFAZ.
-* Prévia de 400 caracteres do corpo SOAP recebido.
-* `cStat`, `xMotivo`, `ultNSU`, `maxNSU` e quantidade de documentos processados.
-
-## Sintomas comuns
-
-| Sintoma | Possível causa | Ação sugerida |
-| --- | --- | --- |
-| `soap:Fault` com `NullReference` | Falta do atributo `action` no `Content-Type` ou envio via SOAP 1.1 para endpoint que exige SOAP 1.2 | Verifique headers; o coletor já faz downgrade automático caso a SEFAZ responda com essa falha. |
-| `cStat 656` / `573` | Certificado inválido ou cadeia incompleta | Instale certificados intermediários e confirme que o PFX contém chave privada e cadeia completa. |
-| Nenhum documento retornado | `ultNSU` persistido muito alto | Apague o registro `dfe:last-nsu:<ambiente>:<cnpj>` em `Setting` para reiniciar a consulta. |
-
+Dados sensíveis (como CNPJ/NSU completos) são mascarados automaticamente nos logs.

@@ -10,7 +10,9 @@ const { SefazTransmissionError } = require('../sefazTransmitter');
 const {
   buildSoap12Headers,
   buildSoap11Headers,
-  buildEnvelopeConsNSU,
+  buildEnvelopeSoap12,
+  buildEnvelopeSoap11,
+  buildDistributionQuery,
   parseSoapFault,
   shouldDowngradeToSoap11,
   resolveAuthorUfCode,
@@ -20,8 +22,6 @@ describe('dfeDistribution helpers', () => {
   test('resolveAuthorUfCode aceita nomes completos de estado', () => {
     const code = resolveAuthorUfCode({
       store: { estado: 'Rio Grande do Sul' },
-      endpoint:
-        'https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
     });
     assert.equal(code, '43');
   });
@@ -36,8 +36,6 @@ describe('dfeDistribution helpers', () => {
     try {
       const code = resolveAuthorUfCode({
         store: {},
-        endpoint:
-          'https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
         certificatePem: '-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----',
       });
       assert.equal(code, '35');
@@ -46,19 +44,18 @@ describe('dfeDistribution helpers', () => {
     }
   });
 
-  test('resolveAuthorUfCode bloqueia 91 e aplica fallback', () => {
+  test('resolveAuthorUfCode usa fallback 33 quando UF não é encontrada', () => {
     const warnings = [];
     const originalWarn = console.warn;
     console.warn = (message) => warnings.push(message);
 
     try {
-      const code = resolveAuthorUfCode({
-        store: { codigoUf: '91' },
-        endpoint:
-          'https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
-      });
+      const code = resolveAuthorUfCode({ store: {} });
       assert.equal(code, '33');
-      assert.ok(warnings.some((message) => message.includes('cUFAutor=91')));
+      assert.ok(
+        warnings.some((message) => message.includes('fallback RJ (33)')),
+        'espera log de fallback'
+      );
     } finally {
       console.warn = originalWarn;
     }
@@ -76,29 +73,53 @@ describe('dfeDistribution helpers', () => {
     assert.equal(headers.SOAPAction, '"urn:acao"');
   });
 
-  test('buildEnvelopeConsNSU monta envelope com namespaces esperados', () => {
-    const envelope = buildEnvelopeConsNSU({
+  test('buildDistributionQuery gera distNSU com ultNSU', () => {
+    const xml = buildDistributionQuery({ modo: 'distNSU', valor: '5' });
+    assert.match(xml, /<distNSU>/);
+    assert.match(xml, /<ultNSU>000000000000005<\/ultNSU>/);
+  });
+
+  test('buildDistributionQuery gera consNSU com NSU específico', () => {
+    const xml = buildDistributionQuery({ modo: 'consNSU', valor: '7' });
+    assert.match(xml, /<consNSU>/);
+    assert.match(xml, /<NSU>000000000000007<\/NSU>/);
+  });
+
+  test('buildDistributionQuery gera consChNFe com chave normalizada', () => {
+    const xml = buildDistributionQuery({
+      modo: 'consChNFe',
+      valor: '35191111111111111111550010000012345678901234',
+    });
+    assert.match(xml, /<consChNFe>/);
+    assert.match(xml, /<chNFe>35191111111111111111550010000012345678901234<\/chNFe>/);
+  });
+
+  test('buildEnvelopeSoap12 inclui nfeDadosMsg com distDFeInt', () => {
+    const envelope = buildEnvelopeSoap12({
       tpAmb: '1',
       cUFAutor: '33',
       cnpj: '07919703000167',
-      ultNSU: '1',
+      modo: 'distNSU',
+      valor: '1',
     });
     assert.match(envelope, /<soap12:Envelope/);
     assert.match(envelope, /<cUFAutor>33<\/cUFAutor>/);
+    assert.match(envelope, /<nfeDadosMsg>[\s\S]*<distDFeInt/);
     assert.match(envelope, /<ultNSU>000000000000001<\/ultNSU>/);
   });
 
-  test('buildEnvelopeConsNSU usa envelope SOAP 1.1 quando solicitado', () => {
-    const envelope = buildEnvelopeConsNSU({
+  test('buildEnvelopeSoap11 monta envelope SOAP 1.1 com consNSU', () => {
+    const envelope = buildEnvelopeSoap11({
       tpAmb: '1',
       cUFAutor: '33',
       cnpj: '07919703000167',
-      ultNSU: '2',
-      soapVersion: '1.1',
+      modo: 'consNSU',
+      valor: '2',
     });
     assert.match(envelope, /<soap:Envelope/);
     assert.match(envelope, /<soap:Body>/);
-    assert.match(envelope, /<ultNSU>000000000000002<\/ultNSU>/);
+    assert.match(envelope, /<NSU>000000000000002<\/NSU>/);
+    assert.match(envelope, /<nfeDadosMsg>/);
   });
 
   test('parseSoapFault extrai reason e code', () => {
