@@ -163,7 +163,8 @@ router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'
             },
         ];
 
-        const aggregated = await Product.aggregate(paginatedPipeline);
+        const aggregated = await Product.aggregate(paginatedPipeline)
+            .option({ allowDiskUse: true });
         const [result = {}] = aggregated;
         const totalCount = Array.isArray(result.totalCount) && result.totalCount.length > 0
             ? result.totalCount[0].value
@@ -186,7 +187,7 @@ router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'
                 ...sortedPipeline,
                 { $skip: skip },
                 { $limit: limit },
-            ]);
+            ]).option({ allowDiskUse: true });
         }
 
         res.json({
