@@ -352,6 +352,17 @@ const collectDistributedDocuments = async ({
   const ufCode = resolveUfCode(
     store.codigoUf || store.codigoUF || store.uf || store.UF || store.estado || ''
   );
+  const authorUfCode = (() => {
+    const nationalEndpoint = /nfe\.(?:fazenda|sefaz)\.gov\.br/i.test(endpoint);
+    const normalized = String(ufCode || '').replace(/\D+/g, '').padStart(2, '0');
+    if (nationalEndpoint) {
+      return '91';
+    }
+    if (!/^[0-9]{2}$/.test(normalized) || normalized === '00') {
+      return '91';
+    }
+    return normalized;
+  })();
 
   const startBoundary = startDate ? toStartOfDay(startDate) : null;
   const endBoundary = endDate ? toEndOfDay(endDate) : null;
@@ -367,7 +378,7 @@ const collectDistributedDocuments = async ({
     iterations += 1;
     const payload = buildDistributionPayload({
       tpAmb,
-      cUFAutor: ufCode,
+      cUFAutor: authorUfCode,
       cnpj: companyDocument,
       ultNSU: currentNsU,
     });
