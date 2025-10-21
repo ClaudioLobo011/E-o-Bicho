@@ -3550,16 +3550,70 @@
           return result;
         };
 
+        const extractAccountingAccountFromDuplicate = (duplicate) => {
+          if (!duplicate || typeof duplicate !== 'object') return null;
+          const rawId = duplicate.accountingAccountId || duplicate.accountingAccount || '';
+          const code = duplicate.accountingAccountCode || '';
+          const name = duplicate.accountingAccountName || '';
+          if (rawId || code || name) {
+            return {
+              id: rawId ? String(rawId) : null,
+              code,
+              name,
+            };
+          }
+          return null;
+        };
+
         const resolveSupplierAccountingAccount = () => {
           const account = lastSupplierRecord?.otherInfo?.accountingAccount;
           if (account && (account.code || account.name)) {
             return {
-              id: account._id || null,
+              id: account._id ? String(account._id) : null,
               code: account.code || '',
               name: account.name || '',
             };
           }
+
+          const duplicates = Array.isArray(lastNfeData?.duplicates) ? lastNfeData.duplicates : [];
+          for (const duplicate of duplicates) {
+            const extracted = extractAccountingAccountFromDuplicate(duplicate);
+            if (extracted) {
+              return extracted;
+            }
+          }
+
+          const selectionAccountLabel = lastNfeData?.selection?.accountingAccount;
+          if (selectionAccountLabel) {
+            const label = String(selectionAccountLabel).trim();
+            if (label) {
+              return { id: null, code: '', name: label };
+            }
+          }
+
           return null;
+        };
+
+        const applyAccountingAccountToDuplicate = (
+          duplicate,
+          account,
+          { preserveExisting = false } = {}
+        ) => {
+          if (!duplicate || typeof duplicate !== 'object') return;
+          if (account && (account.id || account.code || account.name)) {
+            duplicate.accountingAccountId = account.id ? String(account.id) : '';
+            duplicate.accountingAccountCode = account.code || '';
+            duplicate.accountingAccountName = account.name || '';
+            return;
+          }
+
+          if (preserveExisting) {
+            return;
+          }
+
+          duplicate.accountingAccountId = '';
+          duplicate.accountingAccountCode = '';
+          duplicate.accountingAccountName = '';
         };
 
         const formatAccountingAccountValue = (account) => {
@@ -5438,11 +5492,16 @@
 
           const duplicatesClone =
             clonePlainObject(baseData.duplicates) || clonePlainObject(lastNfeData?.duplicates) || [];
+          const supplierAccountDetails = resolveSupplierAccountingAccount();
           if (Array.isArray(duplicatesClone)) {
             duplicatesClone.forEach((duplicate, index) => {
-              if (duplicate && typeof duplicate === 'object' && typeof duplicate.index === 'undefined') {
+              if (!duplicate || typeof duplicate !== 'object') return;
+              if (typeof duplicate.index === 'undefined') {
                 duplicate.index = index;
               }
+              applyAccountingAccountToDuplicate(duplicate, supplierAccountDetails, {
+                preserveExisting: true,
+              });
             });
           }
 
@@ -8883,13 +8942,16 @@
             }
             observationCell.textContent = observationParts.join(' · ') || '—';
 
+            const duplicateAccount = extractAccountingAccountFromDuplicate(dup);
+            const resolvedAccount = duplicateAccount || supplierAccount || null;
+
             const accountCell = document.createElement('td');
             accountCell.className = 'px-4 py-3 text-gray-600';
-            accountCell.textContent = supplierAccount?.name || '—';
+            accountCell.textContent = resolvedAccount?.name || '—';
 
             const accountCodeCell = document.createElement('td');
             accountCodeCell.className = 'px-4 py-3 text-gray-600';
-            accountCodeCell.textContent = supplierAccount?.code || '—';
+            accountCodeCell.textContent = resolvedAccount?.code || '—';
 
             const bankCell = document.createElement('td');
             bankCell.className = 'px-4 py-3';
@@ -9086,6 +9148,7 @@
           const duplicates = [];
           let currentDueDate = firstDueDate;
           const paymentTypeValue = parcelsRaw > 1 ? '1' : '0';
+          const supplierAccountDetails = resolveSupplierAccountingAccount();
 
           for (let index = 0; index < parcelsRaw; index += 1) {
             const valueCents = baseShare + (remainder > 0 ? 1 : 0);
@@ -9096,7 +9159,7 @@
             const termDaysValue = Number.isFinite(currentTermDays) ? currentTermDays : null;
             const dueDateValue = currentDueDate || '';
 
-            duplicates.push({
+            const duplicate = {
               index,
               number: `Parcela ${index + 1}`,
               dueDate: dueDateValue,
@@ -9109,7 +9172,9 @@
               termDays: termDaysValue,
               bankAccount: normalizedBankAccount ? normalizedBankAccount : null,
               bankAccountIsManual: false,
-            });
+            };
+            applyAccountingAccountToDuplicate(duplicate, supplierAccountDetails);
+            duplicates.push(duplicate);
 
             if (index < parcelsRaw - 1) {
               const step = Number.isFinite(intervalDaysRaw) ? intervalDaysRaw : resolvedStepDays;
@@ -9208,6 +9273,9 @@
         const syncAccountingAccountWithDuplicates = () => {
           const account = refreshAccountingAccountBindings();
           if (lastNfeData && Array.isArray(lastNfeData.duplicates)) {
+            lastNfeData.duplicates.forEach((duplicate) => {
+              applyAccountingAccountToDuplicate(duplicate, account);
+            });
             renderDuplicatasFromNfe(lastNfeData.duplicates, lastNfeData);
           }
           return account;
@@ -10572,6 +10640,7 @@
           if (data) {
             data.selectedBankAccountId = activeBankAccountId || pendingBankAccountId || '';
           }
+          const supplierAccountDetails = resolveSupplierAccountingAccount();
           duplicates.forEach((duplicate) => {
             if (!duplicate || typeof duplicate !== 'object') return;
             if (!duplicate.originalDueDate) {
@@ -10585,6 +10654,9 @@
             } else {
               duplicate.bankAccount = activeBankAccountId ? String(activeBankAccountId) : null;
             }
+            applyAccountingAccountToDuplicate(duplicate, supplierAccountDetails, {
+              preserveExisting: true,
+            });
           });
 
           renderDuplicatasFromNfe(duplicates, data);

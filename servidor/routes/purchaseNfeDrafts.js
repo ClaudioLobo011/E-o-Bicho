@@ -161,6 +161,11 @@ const sanitizeDuplicate = (duplicate = {}) => ({
   termDays: toInteger(duplicate.termDays),
   bankAccount: cleanString(duplicate.bankAccount),
   bankAccountIsManual: Boolean(duplicate.bankAccountIsManual),
+  accountingAccountId: cleanString(
+    duplicate.accountingAccountId || duplicate.accountingAccount
+  ),
+  accountingAccountCode: cleanString(duplicate.accountingAccountCode),
+  accountingAccountName: cleanString(duplicate.accountingAccountName),
 });
 
 const computeDuplicatesSummary = (duplicates) => {

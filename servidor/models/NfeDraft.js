@@ -15,6 +15,9 @@ const DuplicateSchema = new mongoose.Schema(
     termDays: { type: Number, default: null },
     bankAccount: { type: String, default: '' },
     bankAccountIsManual: { type: Boolean, default: false },
+    accountingAccountId: { type: String, default: '' },
+    accountingAccountCode: { type: String, default: '' },
+    accountingAccountName: { type: String, default: '' },
   },
   { _id: false }
 );
