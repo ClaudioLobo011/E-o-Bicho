@@ -143,16 +143,12 @@ router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'
             },
         ];
 
-        const sortedPipeline = [
-            ...basePipeline,
-            { $sort: sortSpec },
-        ];
-
         const paginatedPipeline = [
-            ...sortedPipeline,
+            ...basePipeline,
             {
                 $facet: {
                     data: [
+                        { $sort: sortSpec },
                         { $skip: (page - 1) * limit },
                         { $limit: limit },
                     ],
@@ -164,7 +160,8 @@ router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'
         ];
 
         const aggregated = await Product.aggregate(paginatedPipeline)
-            .option({ allowDiskUse: true });
+            .allowDiskUse(true)
+            .exec();
         const [result = {}] = aggregated;
         const totalCount = Array.isArray(result.totalCount) && result.totalCount.length > 0
             ? result.totalCount[0].value
@@ -184,10 +181,13 @@ router.get('/:id/inventory', requireAuth, authorizeRoles('admin', 'admin_master'
         if (!items.length && totalCount > 0 && page > totalPages) {
             const skip = (currentPage - 1) * limit;
             items = await Product.aggregate([
-                ...sortedPipeline,
+                ...basePipeline,
+                { $sort: sortSpec },
                 { $skip: skip },
                 { $limit: limit },
-            ]).option({ allowDiskUse: true });
+            ])
+                .allowDiskUse(true)
+                .exec();
         }
 
         res.json({
