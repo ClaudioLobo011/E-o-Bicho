@@ -2035,6 +2035,22 @@
         const pendingCompanySelect = importModal.querySelector('[data-pending-company]') || null;
         const pendingPeriodStartInput = importModal.querySelector('[data-pending-period-start]') || null;
         const pendingPeriodEndInput = importModal.querySelector('[data-pending-period-end]') || null;
+        const pendingFiltersForm = importModal.querySelector('[data-pending-filters]') || null;
+        const pendingGenerateButton = importModal.querySelector('[data-pending-generate]') || null;
+        const pendingTable = importModal.querySelector('[data-pending-table]') || null;
+        const pendingTableBody = importModal.querySelector('[data-pending-table-body]') || null;
+        const pendingLoadingRow = importModal.querySelector('[data-pending-loading]') || null;
+        const pendingErrorRow = importModal.querySelector('[data-pending-error]') || null;
+        const pendingErrorMessage = pendingErrorRow
+          ? pendingErrorRow.querySelector('[data-pending-error-message]')
+          : null;
+        const pendingEmptyRow = importModal.querySelector('[data-pending-empty]') || null;
+        const pendingEmptyCell = pendingEmptyRow ? pendingEmptyRow.querySelector('td') : null;
+        const pendingRowTemplate = importModal.querySelector('[data-pending-row-template]') || null;
+        const defaultPendingEmptyContent = pendingEmptyCell ? pendingEmptyCell.innerHTML : '';
+        const defaultPendingErrorText = pendingErrorMessage ? pendingErrorMessage.textContent || '' : '';
+        let pendingDocumentsAbortController = null;
+        let pendingHasPerformedSearch = false;
         const importFilePanel = importModal.querySelector('[data-import-mode-panel="file"]');
         const importFileInput = document.getElementById('import-file-input');
         const importFileFeedback = importModal.querySelector('[data-file-feedback]');
@@ -2219,6 +2235,7 @@
           typeof API_CONFIG !== 'undefined' && API_CONFIG?.BASE_URL
             ? API_CONFIG.BASE_URL.replace(/\/+$/, '')
             : '/api';
+        const pendingDocumentsEndpoint = `${apiBaseUrl}/purchase/nfe/drafts/dfe`;
         const companiesEndpoint = `${apiBaseUrl}/stores`;
         const suppliersEndpoint = `${apiBaseUrl}/suppliers`;
         const bankAccountsEndpoint = `${apiBaseUrl}/bank-accounts`;
@@ -4218,6 +4235,394 @@
           const month = String(date.getMonth() + 1).padStart(2, '0');
           const day = String(date.getDate()).padStart(2, '0');
           return `${year}-${month}-${day}`;
+        };
+
+        const parseDateString = (value) => {
+          if (value instanceof Date && !Number.isNaN(value.getTime())) {
+            return value;
+          }
+          if (!value && value !== 0) return null;
+          const raw = String(value).trim();
+          if (!raw) return null;
+          if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+            const fromIso = new Date(`${raw}T00:00:00`);
+            return Number.isNaN(fromIso.getTime()) ? null : fromIso;
+          }
+          const parsed = new Date(raw);
+          return Number.isNaN(parsed.getTime()) ? null : parsed;
+        };
+
+        const parseDateFromInputValue = (value) => {
+          if (!value) return null;
+          const raw = String(value).trim();
+          if (!raw) return null;
+          const parsed = new Date(`${raw}T00:00:00`);
+          return Number.isNaN(parsed.getTime()) ? null : parsed;
+        };
+
+        const formatDateForDisplay = (value) => {
+          const date = parseDateString(value);
+          if (!date) return '';
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = String(date.getFullYear());
+          return `${day}/${month}/${year}`;
+        };
+
+        const formatSupplierDocumentValue = (value) => {
+          const digits = digitsOnly(value);
+          if (digits.length === 14) {
+            return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+          }
+          if (digits.length === 11) {
+            return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+          }
+          return digits || '';
+        };
+
+        const pendingStatusStyles = {
+          pending: {
+            label: 'Pendente',
+            classes: ['bg-amber-100', 'text-amber-700'],
+          },
+          cadastrado: {
+            label: 'Cadastrada',
+            classes: ['bg-sky-100', 'text-sky-700'],
+          },
+          cadastrada: {
+            label: 'Cadastrada',
+            classes: ['bg-sky-100', 'text-sky-700'],
+          },
+          registered: {
+            label: 'Cadastrada',
+            classes: ['bg-sky-100', 'text-sky-700'],
+          },
+          approved: {
+            label: 'Aprovada',
+            classes: ['bg-emerald-100', 'text-emerald-700'],
+          },
+          aprovado: {
+            label: 'Aprovada',
+            classes: ['bg-emerald-100', 'text-emerald-700'],
+          },
+          aprovada: {
+            label: 'Aprovada',
+            classes: ['bg-emerald-100', 'text-emerald-700'],
+          },
+        };
+
+        const normalizePendingStatus = (value) => {
+          if (typeof value !== 'string') return 'pending';
+          const normalized = value
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toLowerCase();
+          if (!normalized) return 'pending';
+          if (pendingStatusStyles[normalized]) return normalized;
+          if (normalized === 'draft') return 'pending';
+          return 'pending';
+        };
+
+        const buildPendingStatusBadge = (status) => {
+          const normalized = normalizePendingStatus(status);
+          const style = pendingStatusStyles[normalized] || pendingStatusStyles.pending;
+          const badge = document.createElement('span');
+          badge.classList.add(
+            'inline-flex',
+            'items-center',
+            'rounded-full',
+            'px-2',
+            'py-0.5',
+            'text-[10px]',
+            'font-semibold',
+            'uppercase',
+            'tracking-wide'
+          );
+          badge.classList.add(...style.classes);
+          badge.textContent = style.label;
+          return badge;
+        };
+
+        const validateCompanyCertificate = (companyId) => {
+          const normalized = companyId ? String(companyId) : '';
+          if (!normalized) {
+            return {
+              valid: false,
+              message: 'Selecione uma empresa para consultar as notas autorizadas.',
+            };
+          }
+
+          const record = companyRegistry.index.get(normalized) || null;
+          if (!record) {
+            return {
+              valid: false,
+              message:
+                'Não foi possível localizar a empresa selecionada. Atualize a lista de empresas e tente novamente.',
+            };
+          }
+
+          const hasCertificate = Boolean(
+            (record.certificadoArquivoNome && record.certificadoArquivoNome.trim()) ||
+              (record.certificadoFingerprint && record.certificadoFingerprint.trim()) ||
+              (record.certificadoValidade && record.certificadoValidade.trim())
+          );
+
+          if (!hasCertificate) {
+            return {
+              valid: false,
+              message: 'A empresa selecionada não possui certificado digital cadastrado.',
+            };
+          }
+
+          const validityDate = parseDateString(record.certificadoValidade);
+          if (validityDate) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (validityDate < today) {
+              return {
+                valid: false,
+                message:
+                  'O certificado digital da empresa está vencido. Atualize o certificado para consultar a SEFAZ.',
+              };
+            }
+          }
+
+          return { valid: true, record };
+        };
+
+        const setPendingLoading = (isLoading) => {
+          if (pendingLoadingRow) {
+            pendingLoadingRow.classList.toggle('hidden', !isLoading);
+          }
+          if (pendingGenerateButton) {
+            pendingGenerateButton.disabled = Boolean(isLoading);
+            pendingGenerateButton.classList.toggle('cursor-wait', Boolean(isLoading));
+            pendingGenerateButton.classList.toggle('opacity-70', Boolean(isLoading));
+          }
+          if (pendingTable) {
+            pendingTable.classList.toggle('opacity-60', Boolean(isLoading));
+          }
+        };
+
+        const hidePendingFeedback = () => {
+          if (pendingErrorRow) {
+            pendingErrorRow.classList.add('hidden');
+          }
+          if (pendingEmptyRow) {
+            pendingEmptyRow.classList.add('hidden');
+          }
+        };
+
+        const showPendingError = (message) => {
+          if (pendingErrorMessage) {
+            pendingErrorMessage.textContent = message || defaultPendingErrorText || '';
+          }
+          if (pendingErrorRow) {
+            pendingErrorRow.classList.remove('hidden');
+          }
+          if (pendingEmptyRow) {
+            pendingEmptyRow.classList.add('hidden');
+          }
+        };
+
+        const showPendingEmpty = (message) => {
+          if (pendingEmptyCell) {
+            pendingEmptyCell.innerHTML = message || defaultPendingEmptyContent || '';
+          }
+          if (pendingEmptyRow) {
+            pendingEmptyRow.classList.remove('hidden');
+          }
+          if (pendingErrorRow) {
+            pendingErrorRow.classList.add('hidden');
+          }
+        };
+
+        const clearPendingRows = () => {
+          if (!pendingTableBody) return;
+          const rows = pendingTableBody.querySelectorAll('tr[data-pending-row]');
+          rows.forEach((row) => row.remove());
+        };
+
+        const renderPendingDocuments = (documents = []) => {
+          clearPendingRows();
+          if (!Array.isArray(documents) || !documents.length) {
+            const emptyMessage = pendingHasPerformedSearch
+              ? 'Nenhuma nota autorizada foi encontrada para o período informado.'
+              : defaultPendingEmptyContent;
+            showPendingEmpty(emptyMessage);
+            return;
+          }
+
+          if (!pendingRowTemplate || !pendingTableBody) {
+            showPendingError('Estrutura da tabela de notas pendentes não foi encontrada.');
+            return;
+          }
+
+          hidePendingFeedback();
+
+          documents.forEach((document) => {
+            const row = pendingRowTemplate.cloneNode(true);
+            row.classList.remove('hidden');
+            row.removeAttribute('data-pending-row-template');
+            row.dataset.pendingRow = 'true';
+
+            const danfeButton = row.querySelector('[data-pending-danfe]');
+            if (danfeButton) {
+              danfeButton.disabled = true;
+              danfeButton.classList.add('opacity-60', 'cursor-not-allowed');
+              danfeButton.dataset.pendingDocumentId = document.id || '';
+            }
+
+            const importButton = row.querySelector('[data-pending-import]');
+            if (importButton) {
+              importButton.disabled = true;
+              importButton.classList.add('opacity-60', 'cursor-not-allowed');
+              importButton.dataset.pendingDocumentId = document.id || '';
+            }
+
+            const registerButton = row.querySelector('[data-pending-register-supplier]');
+            if (registerButton) {
+              const hasSupplierDocument = Boolean(
+                document.supplierDocument && document.supplierDocument.length >= 11
+              );
+              registerButton.classList.toggle('hidden', hasSupplierDocument);
+              registerButton.dataset.pendingDocumentId = document.id || '';
+            }
+
+            const supplierDocumentCell = row.querySelector('[data-pending-supplier-document]');
+            if (supplierDocumentCell) {
+              supplierDocumentCell.textContent =
+                formatSupplierDocumentValue(document.supplierDocument) || '—';
+            }
+
+            const supplierNameElement = row.querySelector('[data-pending-supplier-name]');
+            if (supplierNameElement) {
+              supplierNameElement.textContent =
+                document.supplierName || 'Fornecedor não informado';
+            }
+
+            const issueDateCell = row.querySelector('[data-pending-issue-date]');
+            if (issueDateCell) {
+              issueDateCell.textContent =
+                formatDateForDisplay(document.issueDate || document.createdAt) || '—';
+            }
+
+            const serieCell = row.querySelector('[data-pending-series]');
+            if (serieCell) {
+              serieCell.textContent = document.serie || '—';
+            }
+
+            const numberCell = row.querySelector('[data-pending-number]');
+            if (numberCell) {
+              numberCell.textContent = document.number || '—';
+            }
+
+            const totalCell = row.querySelector('[data-pending-total]');
+            if (totalCell) {
+              const numericTotal = Number(document.totalValue);
+              totalCell.textContent = Number.isFinite(numericTotal)
+                ? formatCurrencyBRL(numericTotal)
+                : 'R$ 0,00';
+            }
+
+            const accessKeyCell = row.querySelector('[data-pending-access-key]');
+            if (accessKeyCell) {
+              accessKeyCell.textContent = document.accessKey || '—';
+            }
+
+            const statusCell = row.querySelector('[data-pending-status]');
+            if (statusCell) {
+              statusCell.innerHTML = '';
+              statusCell.appendChild(buildPendingStatusBadge(document.status));
+            }
+
+            pendingTableBody.appendChild(row);
+          });
+        };
+
+        const requestPendingDocuments = async () => {
+          if (!pendingCompanySelect) {
+            notify('Não foi possível localizar o seletor de empresas.', 'error');
+            return;
+          }
+
+          const companyId = pendingCompanySelect.value || '';
+          const certificateCheck = validateCompanyCertificate(companyId);
+          if (!certificateCheck.valid) {
+            showPendingError(certificateCheck.message);
+            notify(certificateCheck.message, 'warning');
+            return;
+          }
+
+          const startRaw = pendingPeriodStartInput ? pendingPeriodStartInput.value : '';
+          const endRaw = pendingPeriodEndInput ? pendingPeriodEndInput.value : '';
+          const startDate = parseDateFromInputValue(startRaw);
+          const endDate = parseDateFromInputValue(endRaw);
+
+          if (startDate && endDate && endDate < startDate) {
+            const message = 'O período informado é inválido. Ajuste as datas e tente novamente.';
+            showPendingError(message);
+            notify(message, 'warning');
+            return;
+          }
+
+          if (pendingDocumentsAbortController) {
+            pendingDocumentsAbortController.abort();
+          }
+          pendingDocumentsAbortController = new AbortController();
+
+          const params = new URLSearchParams();
+          params.set('companyId', companyId);
+          if (startRaw) params.set('startDate', startRaw);
+          if (endRaw) params.set('endDate', endRaw);
+
+          setPendingLoading(true);
+          hidePendingFeedback();
+          clearPendingRows();
+
+          try {
+            const response = await fetch(`${pendingDocumentsEndpoint}?${params.toString()}`, {
+              headers: buildAuthHeaders(),
+              signal: pendingDocumentsAbortController.signal,
+            });
+
+            let payload = null;
+            try {
+              payload = await response.json();
+            } catch (error) {
+              payload = null;
+            }
+
+            if (!response.ok) {
+              const message =
+                (payload && (payload.message || payload.error)) ||
+                'Não foi possível consultar as notas autorizadas. Tente novamente em instantes.';
+              showPendingError(message);
+              notify(message, response.status >= 500 ? 'error' : 'warning');
+              return;
+            }
+
+            const documents = Array.isArray(payload?.documents) ? payload.documents : [];
+            pendingHasPerformedSearch = true;
+            renderPendingDocuments(documents);
+
+            if (documents.length) {
+              notify('Consulta concluída com sucesso.', 'success');
+            } else {
+              notify('Nenhuma nota autorizada foi encontrada para o período informado.', 'info');
+            }
+          } catch (error) {
+            if (error?.name === 'AbortError') return;
+            console.error('Erro ao consultar notas autorizadas na SEFAZ:', error);
+            const message =
+              error?.message ||
+              'Não foi possível consultar as notas autorizadas. Verifique a conexão e tente novamente.';
+            showPendingError(message);
+            notify(message, 'error');
+          } finally {
+            setPendingLoading(false);
+          }
         };
 
         const setPendingPeriodDefaults = () => {
@@ -12622,6 +13027,20 @@
               console.error('Erro ao limpar os dados importados da nota:', error);
               notify('Não foi possível limpar os dados importados. Atualize a página e tente novamente.', 'error');
             }
+          });
+        }
+
+        if (pendingGenerateButton) {
+          pendingGenerateButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            requestPendingDocuments();
+          });
+        }
+
+        if (pendingFiltersForm) {
+          pendingFiltersForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            requestPendingDocuments();
           });
         }
 
