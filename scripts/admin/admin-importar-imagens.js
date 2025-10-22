@@ -267,37 +267,86 @@
         return;
       }
 
-      matchedCount.textContent = `${entries.length} ${entries.length === 1 ? 'item' : 'itens'}`;
+      const grouped = new Map();
 
-      const cards = entries.map((entry) => {
-        const product = entry.product || {};
+      entries.forEach((entry) => {
+        const key = entry.productId
+          || entry.product?._id
+          || entry.product?.id
+          || `produto-${entry.barcodeNormalized || entry.barcodeRaw || entry.file.name}`;
+
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            product: entry.product || {},
+            items: [],
+          });
+        }
+
+        grouped.get(key).items.push(entry);
+      });
+
+      const groups = Array.from(grouped.values()).sort((a, b) => {
+        const nameA = (a.product?.nome || a.product?.descricao || a.product?.name || '').toLocaleLowerCase('pt-BR');
+        const nameB = (b.product?.nome || b.product?.descricao || b.product?.name || '').toLocaleLowerCase('pt-BR');
+        return nameA.localeCompare(nameB, 'pt-BR');
+      });
+
+      matchedCount.textContent = `${groups.length} ${groups.length === 1 ? 'produto' : 'produtos'}`;
+
+      const cards = groups.map((group) => {
+        const product = group.product || {};
         const productName = product.nome || product.descricao || product.name || 'Produto sem nome';
         const productCode = product.codigoInterno || product.codigo || product.sku || '';
         const barcode = product.codigoBarras || product.codigoDeBarras || product.codbarras || product.ean || '';
-        const badge = buildUploadBadge(entry);
         const extraCodes = [
           productCode ? `Cód.: ${escapeHtml(productCode)}` : null,
           barcode ? `EAN: ${escapeHtml(barcode)}` : null
         ].filter(Boolean).join(' • ');
-        const sequenceInfo = Number.isInteger(entry.sequence)
-          ? `<p class="text-xs text-gray-500 mt-1">Sequência: ${entry.sequence}</p>`
-          : '';
-        const sharedInfo = entry.multiTarget
-          ? `<p class="text-xs text-gray-500 mt-1">Imagem compartilhada (${entry.targetIndex} de ${entry.targetTotal})</p>`
-          : '';
 
-        return `
-          <div class="border border-gray-200 rounded-lg p-4 bg-white shadow-sm">
-            <div class="flex items-start justify-between gap-3">
+        const items = group.items.slice().sort((a, b) => {
+          const hasSeqA = Number.isInteger(a.sequence);
+          const hasSeqB = Number.isInteger(b.sequence);
+
+          if (hasSeqA && hasSeqB && a.sequence !== b.sequence) {
+            return a.sequence - b.sequence;
+          }
+
+          if (hasSeqA && !hasSeqB) return -1;
+          if (!hasSeqA && hasSeqB) return 1;
+
+          const nameA = a.file?.name || '';
+          const nameB = b.file?.name || '';
+          return nameA.localeCompare(nameB, 'pt-BR');
+        });
+
+        const fileLines = items.map((item) => {
+          const badge = buildUploadBadge(item);
+          const sequenceInfo = Number.isInteger(item.sequence)
+            ? `<span class="text-xs text-gray-500">Sequência ${item.sequence}</span>`
+            : '';
+          const sharedInfo = item.multiTarget
+            ? `<span class="text-xs text-gray-400">Associação ${item.targetIndex} de ${item.targetTotal}</span>`
+            : '';
+          const metaInfo = [sequenceInfo, sharedInfo].filter(Boolean).join('');
+
+          return `
+            <li class="flex items-start justify-between gap-3 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
               <div>
-                <p class="text-sm font-semibold text-gray-800">${escapeHtml(productName)}</p>
-                <p class="text-xs text-gray-500 mt-1">Arquivo: ${escapeHtml(entry.file.name)}</p>
-                ${sequenceInfo}
-                ${sharedInfo}
-                ${extraCodes ? `<p class="text-xs text-gray-500 mt-1">${extraCodes}</p>` : ''}
+                <p class="text-xs font-medium text-gray-700">${escapeHtml(item.file?.name || 'Arquivo')}</p>
+                ${metaInfo ? `<div class="flex flex-wrap gap-x-3 gap-y-1 mt-1">${metaInfo}</div>` : ''}
               </div>
               ${badge}
+            </li>
+          `;
+        }).join('');
+
+        return `
+          <div class="border border-gray-200 rounded-lg p-4 bg-white shadow-sm space-y-3">
+            <div>
+              <p class="text-sm font-semibold text-gray-800">${escapeHtml(productName)}</p>
+              ${extraCodes ? `<p class="text-xs text-gray-500 mt-1">${extraCodes}</p>` : ''}
             </div>
+            <ul class="space-y-2">${fileLines}</ul>
           </div>
         `;
       }).join('');
@@ -314,26 +363,58 @@
         return;
       }
 
-      unmatchedCount.textContent = `${entries.length} ${entries.length === 1 ? 'item' : 'itens'}`;
+      const grouped = new Map();
 
-      const cards = entries.map((entry) => {
-        const sequenceInfo = Number.isInteger(entry.sequence)
-          ? `<p class="text-xs text-red-600 mt-1">Sequência: ${entry.sequence}</p>`
-          : '';
-        const barcodeInfo = entry.barcodeRaw
-          ? `<p class="text-xs text-red-600 mt-1">Código informado: ${escapeHtml(entry.barcodeRaw)}</p>`
-          : '';
-        const sharedInfo = entry.multiTarget
-          ? `<p class="text-xs text-red-600 mt-1">Associação ${entry.targetIndex} de ${entry.targetTotal}</p>`
-          : '';
+      entries.forEach((entry) => {
+        const key = entry.file?.webkitRelativePath || entry.file?.name || entry.id;
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            file: entry.file,
+            items: [],
+          });
+        }
+
+        grouped.get(key).items.push(entry);
+      });
+
+      const groups = Array.from(grouped.values()).sort((a, b) => {
+        const nameA = (a.file?.webkitRelativePath || a.file?.name || '').toLocaleLowerCase('pt-BR');
+        const nameB = (b.file?.webkitRelativePath || b.file?.name || '').toLocaleLowerCase('pt-BR');
+        return nameA.localeCompare(nameB, 'pt-BR');
+      });
+
+      unmatchedCount.textContent = `${groups.length} ${groups.length === 1 ? 'arquivo' : 'arquivos'}`;
+
+      const cards = groups.map((group) => {
+        const fileName = group.file?.webkitRelativePath || group.file?.name || 'Arquivo não identificado';
+        const issues = group.items.map((item) => {
+          const highlights = [];
+          if (item.barcodeRaw) {
+            highlights.push(`<span class="font-semibold">Código: ${escapeHtml(item.barcodeRaw)}</span>`);
+          }
+          if (Number.isInteger(item.sequence)) {
+            highlights.push(`<span>Sequência ${item.sequence}</span>`);
+          }
+          if (item.multiTarget) {
+            highlights.push(`<span>Associação ${item.targetIndex} de ${item.targetTotal}</span>`);
+          }
+
+          const detail = highlights.length
+            ? `<div class="flex flex-wrap gap-x-2 gap-y-1 text-xs text-red-600">${highlights.join(' • ')}</div>`
+            : '';
+
+          return `
+            <li class="border-l-2 border-red-300 pl-3">
+              ${detail}
+              <p class="text-xs text-red-500 mt-1">${escapeHtml(item.message || 'Não foi possível vincular esta imagem.')}</p>
+            </li>
+          `;
+        }).join('');
 
         return `
-          <div class="border border-red-200 rounded-lg p-4 bg-white shadow-sm">
-            <p class="text-sm font-semibold text-red-700">${escapeHtml(entry.file.name)}</p>
-            <p class="text-xs text-red-600 mt-1">${escapeHtml(entry.message || 'Não foi possível vincular esta imagem.')}</p>
-            ${barcodeInfo}
-            ${sequenceInfo}
-            ${sharedInfo}
+          <div class="border border-red-200 rounded-lg p-4 bg-white shadow-sm space-y-2">
+            <p class="text-sm font-semibold text-red-700">${escapeHtml(fileName)}</p>
+            <ul class="space-y-2">${issues}</ul>
           </div>
         `;
       }).join('');
