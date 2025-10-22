@@ -258,10 +258,39 @@ const parseSoapFault = (xml) => {
 };
 
 const parseDecimal = (value) => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (!value && value !== 0) return null;
-  const normalized = String(value).trim().replace('.', '').replace(',', '.');
-  const parsed = Number.parseFloat(normalized);
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) {
+    return null;
+  }
+
+  const compact = raw.replace(/\s+/g, '');
+  const hasComma = compact.includes(',');
+  const hasDot = compact.includes('.');
+  const lastComma = compact.lastIndexOf(',');
+  const lastDot = compact.lastIndexOf('.');
+
+  let sanitized;
+  if (hasComma && hasDot) {
+    if (lastComma > lastDot) {
+      sanitized = compact.replace(/\./g, '').replace(/,/g, '.');
+    } else {
+      sanitized = compact.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    sanitized = compact.replace(/\./g, '').replace(/,/g, '.');
+  } else {
+    sanitized = compact.replace(/,/g, '');
+  }
+
+  const parsed = Number.parseFloat(sanitized);
   return Number.isFinite(parsed) ? parsed : null;
 };
 
