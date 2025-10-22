@@ -63,47 +63,104 @@
       const extension = lastDot >= 0 ? fileName.slice(lastDot) : '';
       const baseName = lastDot >= 0 ? fileName.slice(0, lastDot) : fileName;
       const lastDash = baseName.lastIndexOf('-');
+      const buildLegacyResult = () => {
+        const barcodeRaw = baseName.slice(0, lastDash).trim();
+        const sequencePart = baseName.slice(lastDash + 1).trim();
+        const sequence = Number.parseInt(sequencePart, 10);
 
-      if (lastDash <= 0) {
-        return {
-          folderName,
-          fileName,
-          extension,
-          error: 'Nome do arquivo fora do padrão esperado (código-de-barras-sequência).'
-        };
-      }
+        if (!barcodeRaw) {
+          return {
+            folderName,
+            fileName,
+            extension,
+            error: 'Código de barras ausente no nome do arquivo.'
+          };
+        }
 
-      const barcodeRaw = baseName.slice(0, lastDash).trim();
-      const sequencePart = baseName.slice(lastDash + 1).trim();
-      const sequence = Number.parseInt(sequencePart, 10);
+        if (!Number.isInteger(sequence)) {
+          return {
+            folderName,
+            fileName,
+            extension,
+            barcodeRaw,
+            error: 'Sequência numérica inválida no nome do arquivo.'
+          };
+        }
 
-      if (!barcodeRaw) {
-        return {
-          folderName,
-          fileName,
-          extension,
-          error: 'Código de barras ausente no nome do arquivo.'
-        };
-      }
+        const normalizedBarcode = normalizeBarcode(barcodeRaw);
 
-      if (!Number.isInteger(sequence)) {
         return {
           folderName,
           fileName,
           extension,
           barcodeRaw,
-          error: 'Sequência numérica inválida no nome do arquivo.'
+          normalizedBarcode,
+          sequence,
+          barcodeEntries: [{ barcodeRaw, normalizedBarcode }],
+          format: 'legacy',
+          includeSequenceInFileName: true,
         };
+      };
+
+      const buildMultiBarcodeResult = () => {
+        const normalizedBase = baseName.replace(/_/g, ' ').trim();
+        const parts = normalizedBase.split(/\s+/).filter(Boolean);
+
+        if (parts.length < 2) {
+          return {
+            folderName,
+            fileName,
+            extension,
+            error: 'Nome do arquivo fora do padrão esperado para múltiplos códigos de barras.'
+          };
+        }
+
+        const sequencePart = parts.shift();
+        const sequence = Number.parseInt(sequencePart, 10);
+
+        if (!Number.isInteger(sequence)) {
+          return {
+            folderName,
+            fileName,
+            extension,
+            error: 'Sequência numérica inválida no nome do arquivo.'
+          };
+        }
+
+        const barcodeEntries = parts
+          .map((barcodeRaw) => ({
+            barcodeRaw,
+            normalizedBarcode: normalizeBarcode(barcodeRaw)
+          }))
+          .filter((entry) => entry.barcodeRaw);
+
+        if (!barcodeEntries.length) {
+          return {
+            folderName,
+            fileName,
+            extension,
+            error: 'Nenhum código de barras foi identificado no nome do arquivo.'
+          };
+        }
+
+        return {
+          folderName,
+          fileName,
+          extension,
+          barcodeRaw: barcodeEntries[0].barcodeRaw,
+          normalizedBarcode: barcodeEntries[0].normalizedBarcode,
+          sequence,
+          barcodeEntries,
+          format: 'multi-barcode',
+          includeSequenceInFileName: false,
+        };
+      };
+
+      if (lastDash > 0) {
+        return buildLegacyResult();
       }
 
-      return {
-        folderName,
-        fileName,
-        extension,
-        barcodeRaw,
-        normalizedBarcode: normalizeBarcode(barcodeRaw),
-        sequence,
-      };
+      return buildMultiBarcodeResult();
     };
 
     const getMatchedEntries = () => state.entries.filter((entry) => entry.status === 'matched');
@@ -180,6 +237,12 @@
           productCode ? `Cód.: ${escapeHtml(productCode)}` : null,
           barcode ? `EAN: ${escapeHtml(barcode)}` : null
         ].filter(Boolean).join(' • ');
+        const sequenceInfo = Number.isInteger(entry.sequence)
+          ? `<p class="text-xs text-gray-500 mt-1">Sequência: ${entry.sequence}</p>`
+          : '';
+        const sharedInfo = entry.multiTarget
+          ? `<p class="text-xs text-gray-500 mt-1">Imagem compartilhada (${entry.targetIndex} de ${entry.targetTotal})</p>`
+          : '';
 
         return `
           <div class="border border-gray-200 rounded-lg p-4 bg-white shadow-sm">
@@ -187,7 +250,8 @@
               <div>
                 <p class="text-sm font-semibold text-gray-800">${escapeHtml(productName)}</p>
                 <p class="text-xs text-gray-500 mt-1">Arquivo: ${escapeHtml(entry.file.name)}</p>
-                <p class="text-xs text-gray-500 mt-1">Sequência: ${entry.sequence}</p>
+                ${sequenceInfo}
+                ${sharedInfo}
                 ${extraCodes ? `<p class="text-xs text-gray-500 mt-1">${extraCodes}</p>` : ''}
               </div>
               ${badge}
@@ -210,12 +274,27 @@
 
       unmatchedCount.textContent = `${entries.length} ${entries.length === 1 ? 'item' : 'itens'}`;
 
-      const cards = entries.map((entry) => `
-        <div class="border border-red-200 rounded-lg p-4 bg-white shadow-sm">
-          <p class="text-sm font-semibold text-red-700">${escapeHtml(entry.file.name)}</p>
-          <p class="text-xs text-red-600 mt-1">${escapeHtml(entry.message || 'Não foi possível vincular esta imagem.')} </p>
-        </div>
-      `).join('');
+      const cards = entries.map((entry) => {
+        const sequenceInfo = Number.isInteger(entry.sequence)
+          ? `<p class="text-xs text-red-600 mt-1">Sequência: ${entry.sequence}</p>`
+          : '';
+        const barcodeInfo = entry.barcodeRaw
+          ? `<p class="text-xs text-red-600 mt-1">Código informado: ${escapeHtml(entry.barcodeRaw)}</p>`
+          : '';
+        const sharedInfo = entry.multiTarget
+          ? `<p class="text-xs text-red-600 mt-1">Associação ${entry.targetIndex} de ${entry.targetTotal}</p>`
+          : '';
+
+        return `
+          <div class="border border-red-200 rounded-lg p-4 bg-white shadow-sm">
+            <p class="text-sm font-semibold text-red-700">${escapeHtml(entry.file.name)}</p>
+            <p class="text-xs text-red-600 mt-1">${escapeHtml(entry.message || 'Não foi possível vincular esta imagem.')}</p>
+            ${barcodeInfo}
+            ${sequenceInfo}
+            ${sharedInfo}
+          </div>
+        `;
+      }).join('');
 
       unmatchedList.innerHTML = cards;
     };
@@ -346,72 +425,117 @@
       for (let index = 0; index < sortedFiles.length; index += 1) {
         const file = sortedFiles[index];
         const parsed = parseFileName(file);
-        const entry = {
-          id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `entry-${Date.now()}-${index}`,
-          file,
-          folderName: parsed.folderName,
-          sequence: parsed.sequence,
-          barcodeRaw: parsed.barcodeRaw,
-          barcodeNormalized: parsed.normalizedBarcode,
-          extension: parsed.extension,
-          status: 'pending',
-          uploadStatus: 'pending',
-          message: '',
-          product: null,
-          productId: null,
-        };
 
         logMessage(`(${index + 1}/${sortedFiles.length}) Lendo ${file.name}`, 'info');
 
         if (parsed.error) {
-          entry.status = 'invalid-name';
-          entry.message = parsed.error;
+          const invalidEntry = {
+            id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+              ? crypto.randomUUID()
+              : `entry-${Date.now()}-${index}`,
+            file,
+            folderName: parsed.folderName,
+            sequence: parsed.sequence,
+            barcodeRaw: parsed.barcodeRaw,
+            barcodeNormalized: parsed.normalizedBarcode,
+            extension: parsed.extension,
+            status: 'invalid-name',
+            uploadStatus: 'pending',
+            message: parsed.error,
+            product: null,
+            productId: null,
+            multiTarget: false,
+            targetIndex: 1,
+            targetTotal: 1,
+            shouldIncludeSequenceInFileName: parsed?.includeSequenceInFileName !== false,
+          };
           logMessage(`Arquivo ignorado: ${parsed.error}`, 'warn');
-          state.entries.push(entry);
+          state.entries.push(invalidEntry);
           refreshPreview();
           continue;
         }
 
-        if (!parsed.normalizedBarcode) {
-          entry.status = 'invalid-barcode';
-          entry.message = 'Não foi possível extrair o código de barras do arquivo.';
-          logMessage(`Arquivo ignorado: ${file.name} sem código de barras válido.`, 'warn');
+        const barcodeEntries = Array.isArray(parsed.barcodeEntries) && parsed.barcodeEntries.length
+          ? parsed.barcodeEntries
+          : [{ barcodeRaw: parsed.barcodeRaw, normalizedBarcode: parsed.normalizedBarcode }];
+        const multiTarget = barcodeEntries.length > 1;
+        const shouldIncludeSequenceInFileName = parsed?.includeSequenceInFileName !== false;
+
+        for (let targetIndex = 0; targetIndex < barcodeEntries.length; targetIndex += 1) {
+          const barcodeEntry = barcodeEntries[targetIndex];
+          const entryId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `entry-${Date.now()}-${index}-${targetIndex}`;
+          const entry = {
+            id: entryId,
+            file,
+            folderName: parsed.folderName,
+            sequence: parsed.sequence,
+            barcodeRaw: barcodeEntry?.barcodeRaw,
+            barcodeNormalized: barcodeEntry?.normalizedBarcode,
+            extension: parsed.extension,
+            status: 'pending',
+            uploadStatus: 'pending',
+            message: '',
+            product: null,
+            productId: null,
+            multiTarget,
+            targetIndex: targetIndex + 1,
+            targetTotal: barcodeEntries.length,
+            shouldIncludeSequenceInFileName,
+          };
+
+          if (multiTarget) {
+            logMessage(`  Associação ${entry.targetIndex}/${entry.targetTotal}: código ${barcodeEntry?.barcodeRaw || '(vazio)'}`, 'info');
+          }
+
+          if (!entry.barcodeNormalized) {
+            entry.status = 'invalid-barcode';
+            entry.message = 'Não foi possível extrair o código de barras do arquivo.';
+            logMessage(`Arquivo ignorado: ${file.name} sem código de barras válido.`, 'warn');
+            state.entries.push(entry);
+            refreshPreview();
+            continue;
+          }
+
+          const lookup = await findProductForBarcode({
+            barcodeRaw: entry.barcodeRaw,
+            normalizedBarcode: entry.barcodeNormalized,
+          });
+
+          if (lookup.error) {
+            entry.status = 'lookup-error';
+            entry.message = lookup.error;
+            logMessage(`Falha ao buscar produto para ${entry.barcodeRaw}: ${lookup.error}`, 'error');
+            state.entries.push(entry);
+            refreshPreview();
+            continue;
+          }
+
+          const product = lookup.product;
+          const productId = extractProductId(product);
+
+          if (!product || !productId) {
+            entry.status = 'not-found';
+            entry.message = 'Nenhum produto correspondente foi encontrado.';
+            logMessage(`Nenhum produto encontrado para ${entry.barcodeRaw}.`, 'warn');
+            state.entries.push(entry);
+            refreshPreview();
+            continue;
+          }
+
+          entry.status = 'matched';
+          entry.product = product;
+          entry.productId = productId;
+          entry.message = 'Produto identificado.';
+          const logSuffix = multiTarget
+            ? ` (associação ${entry.targetIndex}/${entry.targetTotal})`
+            : '';
+          logMessage(`Produto identificado: ${product?.nome || product?.descricao || productId} para ${file.name}${logSuffix}.`, 'success');
+
           state.entries.push(entry);
           refreshPreview();
-          continue;
         }
-
-        const lookup = await findProductForBarcode(parsed);
-
-        if (lookup.error) {
-          entry.status = 'lookup-error';
-          entry.message = lookup.error;
-          logMessage(`Falha ao buscar produto para ${parsed.barcodeRaw}: ${lookup.error}`, 'error');
-          state.entries.push(entry);
-          refreshPreview();
-          continue;
-        }
-
-        const product = lookup.product;
-        const productId = extractProductId(product);
-
-        if (!product || !productId) {
-          entry.status = 'not-found';
-          entry.message = 'Nenhum produto correspondente foi encontrado.';
-          logMessage(`Nenhum produto encontrado para ${parsed.barcodeRaw}.`, 'warn');
-          state.entries.push(entry);
-          refreshPreview();
-          continue;
-        }
-
-        entry.status = 'matched';
-        entry.product = product;
-        entry.productId = productId;
-        entry.message = 'Produto identificado.';
-        logMessage(`Produto identificado: ${product?.nome || product?.descricao || productId} para ${file.name}.`, 'success');
-
-        state.entries.push(entry);
-        refreshPreview();
       }
 
       state.isProcessing = false;
@@ -462,13 +586,18 @@
         entry.uploadStatus = 'uploading';
         refreshPreview();
 
-        const sanitizedName = `${entry.barcodeRaw}-${entry.sequence}${entry.extension || ''}`;
+        const hasSequence = Number.isInteger(entry.sequence);
+        const includeSequence = entry.shouldIncludeSequenceInFileName && hasSequence;
+        const sanitizedBaseName = [entry.barcodeRaw, includeSequence ? entry.sequence : null]
+          .filter((part) => part !== null && part !== undefined && String(part).length > 0)
+          .join('-') || entry.barcodeNormalized || 'imagem';
+        const sanitizedName = `${sanitizedBaseName}${entry.extension || ''}`;
         const formData = new FormData();
         const fileToSend = (typeof File === 'function')
           ? new File([entry.file], sanitizedName, { type: entry.file.type })
           : entry.file;
 
-        formData.append('imagens', fileToSend);
+        formData.append('imagens', fileToSend, sanitizedName);
         formData.append('codigoBarras', entry.barcodeRaw || '');
         formData.append('sequencia', String(entry.sequence ?? ''));
         formData.append('nomeOriginal', entry.file.name);
