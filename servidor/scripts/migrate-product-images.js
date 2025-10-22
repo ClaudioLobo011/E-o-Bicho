@@ -11,6 +11,7 @@ const {
   buildProductImagePublicPath,
   buildProductImageStoragePath,
   ensureProductImageFolder,
+  getProductImagesDriveFolderPath,
   getLegacyUploadsDir,
   getLegacyUrlPrefix,
   listProductImageFiles,
@@ -18,6 +19,11 @@ const {
   resolveDiskPathFromPublicPath,
   sanitizeBarcodeSegment,
 } = require('../utils/productImagePath');
+const {
+  findDriveFileByPath,
+  isDriveConfigured,
+  uploadBufferToDrive,
+} = require('../utils/googleDrive');
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
@@ -34,6 +40,68 @@ function log(message) {
   console.log(message);
 }
 
+const MIME_TYPES = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.bmp': 'image/bmp',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+};
+
+let driveAvailabilityChecked = false;
+let driveAvailable = false;
+let driveWarningLogged = false;
+
+function ensureDriveAvailability() {
+  if (!driveAvailabilityChecked) {
+    driveAvailable = isDriveConfigured();
+    driveAvailabilityChecked = true;
+    if (!driveAvailable && !driveWarningLogged) {
+      log('ATENÇÃO: Credenciais do Google Drive não configuradas. Os arquivos serão apenas movidos localmente.');
+      driveWarningLogged = true;
+    }
+  }
+  return driveAvailable;
+}
+
+function inferMimeTypeFromName(fileName) {
+  if (typeof fileName !== 'string') return 'application/octet-stream';
+  const extension = path.extname(fileName).toLowerCase();
+  return MIME_TYPES[extension] || 'application/octet-stream';
+}
+
+async function ensureDriveUpload({ barcodeSegment, fileName, filePath }) {
+  if (isDryRun) {
+    return null;
+  }
+  if (!ensureDriveAvailability()) {
+    return null;
+  }
+  const folderPath = getProductImagesDriveFolderPath(barcodeSegment);
+  try {
+    const existing = await findDriveFileByPath({ folderPath, fileName });
+    if (existing?.id) {
+      return { skipped: true, id: existing.id };
+    }
+  } catch (lookupError) {
+    log(`Aviso: Falha ao verificar arquivo no Drive (${fileName}): ${lookupError.message || lookupError}`);
+  }
+
+  try {
+    const buffer = await fs.promises.readFile(filePath);
+    return await uploadBufferToDrive(buffer, {
+      mimeType: inferMimeTypeFromName(fileName),
+      name: fileName,
+      folderPath,
+    });
+  } catch (uploadError) {
+    log(`ERRO: Falha ao enviar ${fileName} para o Google Drive: ${uploadError.message || uploadError}`);
+    return null;
+  }
+}
+
 async function migrateProductImages(product) {
   const barcodeBase = product.codbarras || product.cod || product._id;
   const barcodeSegment = sanitizeBarcodeSegment(barcodeBase);
@@ -47,6 +115,7 @@ async function migrateProductImages(product) {
   const imageUpdates = new Map();
   const missingFiles = [];
   const movedFiles = [];
+  const driveUploads = [];
 
   const updateImage = async (imageUrl, index) => {
     if (typeof imageUrl !== 'string' || !imageUrl.startsWith(legacyPrefix)) {
@@ -81,6 +150,14 @@ async function migrateProductImages(product) {
 
     if (!isDryRun) {
       await moveFile(sourcePath, targetPath);
+      const driveResult = await ensureDriveUpload({
+        barcodeSegment,
+        fileName: newFilename,
+        filePath: targetPath,
+      });
+      if (driveResult) {
+        driveUploads.push({ fileName: newFilename, result: driveResult });
+      }
     }
 
     imageUpdates.set(imageUrl, newPublicPath);
@@ -120,6 +197,7 @@ async function migrateProductImages(product) {
     missingFiles,
     updatedImages,
     updatedMainImage,
+    driveUploads,
   };
 }
 
@@ -172,11 +250,17 @@ async function moveRemainingLegacyFiles() {
       targetPath = buildProductImageStoragePath(barcodeSegment, newFilename);
     }
 
+    let driveResult = null;
     if (!isDryRun) {
       await moveFile(sourcePath, targetPath);
+      driveResult = await ensureDriveUpload({
+        barcodeSegment,
+        fileName: newFilename,
+        filePath: targetPath,
+      });
     }
 
-    moved.push({ from: sourcePath, to: targetPath });
+    moved.push({ from: sourcePath, to: targetPath, driveResult });
   }
 
   return moved;
@@ -203,6 +287,8 @@ async function main() {
 
     let updatedProducts = 0;
     let migratedFiles = 0;
+    let driveUploadedFiles = 0;
+    let driveSkippedFiles = 0;
     const missingFiles = [];
 
     for (const product of products) {
@@ -213,13 +299,35 @@ async function main() {
         migratedFiles += result.movedFiles.length;
       }
       result.missingFiles.forEach((item) => missingFiles.push({ productId: product._id, ...item }));
+      if (Array.isArray(result.driveUploads)) {
+        result.driveUploads.forEach((entry) => {
+          if (entry?.result?.skipped) {
+            driveSkippedFiles += 1;
+          } else if (entry?.result?.id) {
+            driveUploadedFiles += 1;
+          }
+        });
+      }
     }
 
     const remainingMoves = await moveRemainingLegacyFiles();
     migratedFiles += remainingMoves.length;
+    remainingMoves.forEach((entry) => {
+      if (entry?.driveResult?.skipped) {
+        driveSkippedFiles += 1;
+      } else if (entry?.driveResult?.id) {
+        driveUploadedFiles += 1;
+      }
+    });
 
     log(`Produtos atualizados: ${updatedProducts}`);
     log(`Imagens migradas: ${migratedFiles}`);
+    if (driveUploadedFiles > 0 || driveSkippedFiles > 0) {
+      log(`Uploads no Google Drive: ${driveUploadedFiles}`);
+      if (driveSkippedFiles > 0) {
+        log(`Arquivos já presentes no Drive: ${driveSkippedFiles}`);
+      }
+    }
 
     if (missingFiles.length > 0) {
       log('Algumas imagens não foram encontradas:');

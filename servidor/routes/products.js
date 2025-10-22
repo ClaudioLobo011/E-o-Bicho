@@ -14,10 +14,18 @@ const {
     buildProductImagePublicPath,
     buildProductImageStoragePath,
     ensureProductImageFolder,
+    getProductImagesDriveFolderPath,
     moveFile,
+    parseProductImagePublicPath,
     resolveDiskPathFromPublicPath,
     sanitizeBarcodeSegment,
 } = require('../utils/productImagePath');
+const {
+    deleteFile: deleteDriveFile,
+    findDriveFileByPath,
+    isDriveConfigured,
+    uploadBufferToDrive,
+} = require('../utils/googleDrive');
 
 const tempUploadDir = path.join(__dirname, '..', 'tmp', 'uploads', 'products');
 
@@ -1046,6 +1054,7 @@ router.post('/by-ids', requireAuth, async (req, res) => {
 // POST /api/products/:id/upload (restrito)
 router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'), upload.array('imagens', 10), async (req, res) => {
     const storedFiles = [];
+    const uploadedDriveFiles = [];
     try {
         const product = await Product.findById(req.params.id);
         if (!product) {
@@ -1059,6 +1068,19 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
                 }
             }
             return res.status(404).send('Produto não encontrado');
+        }
+
+        if (!isDriveConfigured()) {
+            for (const file of req.files) {
+                try {
+                    if (file.path && fs.existsSync(file.path)) {
+                        fs.unlinkSync(file.path);
+                    }
+                } catch (cleanupError) {
+                    console.warn('Falha ao remover arquivo temporário de upload:', cleanupError);
+                }
+            }
+            return res.status(500).json({ message: 'Armazenamento no Google Drive não está configurado.' });
         }
 
         const newImagePaths = [];
@@ -1075,8 +1097,40 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
                 originalName: file.originalname,
             });
             const targetPath = buildProductImageStoragePath(barcodeSegment, newFilename);
+            const fileBuffer = await fs.promises.readFile(file.path);
 
             await moveFile(file.path, targetPath);
+
+            try {
+                const folderPath = getProductImagesDriveFolderPath(barcodeSegment);
+                const driveResult = await uploadBufferToDrive(fileBuffer, {
+                    mimeType: file.mimetype || 'application/octet-stream',
+                    name: newFilename,
+                    folderPath,
+                });
+                if (driveResult?.id) {
+                    uploadedDriveFiles.push(driveResult.id);
+                }
+            } catch (driveError) {
+                console.error('Falha ao enviar imagem de produto para o Google Drive:', driveError);
+                try {
+                    if (fs.existsSync(targetPath)) {
+                        await fs.promises.unlink(targetPath);
+                    }
+                } catch (cleanupError) {
+                    console.warn('Falha ao remover arquivo local após erro no Drive:', cleanupError);
+                }
+                throw driveError;
+            } finally {
+                try {
+                    if (file.path && fs.existsSync(file.path)) {
+                        await fs.promises.unlink(file.path);
+                    }
+                } catch (cleanupTempError) {
+                    console.warn('Falha ao limpar arquivo temporário após upload:', cleanupTempError);
+                }
+            }
+
             storedFiles.push(targetPath);
             newImagePaths.push(buildProductImagePublicPath(barcodeSegment, newFilename));
         }
@@ -1109,6 +1163,9 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
                 console.warn('Falha ao remover imagem armazenada após erro:', cleanupError);
             }
         }
+        if (uploadedDriveFiles.length) {
+            await Promise.allSettled(uploadedDriveFiles.map((fileId) => deleteDriveFile(fileId)));
+        }
         res.status(500).send('Erro no servidor');
     }
 });
@@ -1131,6 +1188,23 @@ router.delete('/:productId/images', requireAuth, authorizeRoles('admin', 'admin_
             }
         } catch (fileError) {
             console.warn('Falha ao remover arquivo de imagem ao apagar URL:', fileError);
+        }
+        if (isDriveConfigured()) {
+            try {
+                const parsed = parseProductImagePublicPath(imageUrl);
+                if (parsed) {
+                    const folderPath = getProductImagesDriveFolderPath(parsed.barcodeSegment);
+                    const driveFile = await findDriveFileByPath({
+                        folderPath,
+                        fileName: parsed.fileName,
+                    });
+                    if (driveFile?.id) {
+                        await deleteDriveFile(driveFile.id);
+                    }
+                }
+            } catch (driveCleanupError) {
+                console.warn('Falha ao remover imagem do Google Drive:', driveCleanupError);
+            }
         }
         if (product.imagemPrincipal === imageUrl) {
             product.imagemPrincipal = product.imagens.length > 0 ? product.imagens[0] : '/image/placeholder.png';
@@ -1231,6 +1305,23 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
                 }
             } catch (fileError) {
                 console.warn(`Não foi possível remover a imagem ${absolutePath || imagePath}:`, fileError);
+            }
+            if (isDriveConfigured()) {
+                try {
+                    const parsed = parseProductImagePublicPath(imagePath);
+                    if (parsed) {
+                        const folderPath = getProductImagesDriveFolderPath(parsed.barcodeSegment);
+                        const driveFile = await findDriveFileByPath({
+                            folderPath,
+                            fileName: parsed.fileName,
+                        });
+                        if (driveFile?.id) {
+                            await deleteDriveFile(driveFile.id);
+                        }
+                    }
+                } catch (driveCleanupError) {
+                    console.warn('Não foi possível remover arquivo do Google Drive:', driveCleanupError);
+                }
             }
         }
 
