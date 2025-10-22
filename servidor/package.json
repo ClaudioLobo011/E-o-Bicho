@@ -15,6 +15,8 @@
     "drive:reorganize-fiscals:dry-run": "node scripts/reorganize-fiscal-drive-folders.js --dry-run",
     "products:migrate-images": "node scripts/migrate-product-images.js",
     "products:migrate-images:dry-run": "node scripts/migrate-product-images.js --dry-run",
+    "products:sync-drive": "node scripts/sync-product-images-drive.js",
+    "products:sync-drive:dry-run": "node scripts/sync-product-images-drive.js --dry-run",
     "products:show-image-root": "node scripts/show-product-image-root.js"
   },
   "keywords": [],
