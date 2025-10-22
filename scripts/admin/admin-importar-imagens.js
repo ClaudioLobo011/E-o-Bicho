@@ -64,10 +64,11 @@
       const lastDot = fileName.lastIndexOf('.');
       const extension = lastDot >= 0 ? fileName.slice(lastDot) : '';
       const baseName = lastDot >= 0 ? fileName.slice(0, lastDot) : fileName;
-      const lastDash = baseName.lastIndexOf('-');
+      const trimmedBaseName = baseName.trim();
+      const legacyMatch = trimmedBaseName.match(/^(.*?)-(\d{1,4})$/);
       const buildLegacyResult = () => {
-        const barcodeRaw = baseName.slice(0, lastDash).trim();
-        const sequencePart = baseName.slice(lastDash + 1).trim();
+        const barcodeRaw = legacyMatch[1]?.trim();
+        const sequencePart = legacyMatch[2]?.trim();
         const sequence = Number.parseInt(sequencePart, 10);
 
         if (!barcodeRaw) {
@@ -115,38 +116,39 @@
       };
 
       const buildMultiBarcodeResult = () => {
-        const normalizedBase = baseName.replace(/_/g, ' ').trim();
-        const parts = normalizedBase.split(/\s+/).filter(Boolean);
+        const numericPattern = /\d+/g;
+        const matches = [];
+        let match;
 
-        if (parts.length < 2) {
-          return {
-            folderName,
-            fileName,
-            extension,
-            error: 'Nome do arquivo fora do padrão esperado para múltiplos códigos de barras.'
-          };
+        while ((match = numericPattern.exec(baseName)) !== null) {
+          matches.push({
+            raw: match[0],
+            index: match.index,
+            preceding: match.index > 0 ? baseName[match.index - 1] : '',
+            following: match.index + match[0].length < baseName.length
+              ? baseName[match.index + match[0].length]
+              : '',
+          });
         }
 
-        const sequencePart = parts.shift();
-        const sequence = Number.parseInt(sequencePart, 10);
+        const barcodeMatches = [];
+        const seen = new Set();
 
-        if (!Number.isInteger(sequence)) {
-          return {
-            folderName,
-            fileName,
-            extension,
-            error: 'Sequência numérica inválida no nome do arquivo.'
-          };
-        }
+        matches.forEach((item) => {
+          const normalizedBarcode = normalizeBarcode(item.raw);
+          if (!hasValidDigits(normalizedBarcode)) {
+            return;
+          }
 
-        const barcodeEntries = parts
-          .map((barcodeRaw) => ({
-            barcodeRaw,
-            normalizedBarcode: normalizeBarcode(barcodeRaw)
-          }))
-          .filter((entry) => entry.barcodeRaw && hasValidDigits(entry.normalizedBarcode));
+          if (seen.has(normalizedBarcode)) {
+            return;
+          }
 
-        if (!barcodeEntries.length) {
+          seen.add(normalizedBarcode);
+          barcodeMatches.push({ ...item, normalizedBarcode });
+        });
+
+        if (!barcodeMatches.length) {
           return {
             folderName,
             fileName,
@@ -154,6 +156,34 @@
             error: 'Nenhum código de barras foi identificado no nome do arquivo.'
           };
         }
+
+        const firstBarcodeIndex = barcodeMatches[0].index;
+        const sequenceCandidate = matches.find((item) => {
+          if (item.index >= firstBarcodeIndex) {
+            return false;
+          }
+
+          if (item.raw.length === 0 || item.raw.length > 2) {
+            return false;
+          }
+
+          if (item.preceding && /[0-9.]/.test(item.preceding)) {
+            return false;
+          }
+
+          if (item.following && /[0-9.]/.test(item.following)) {
+            return false;
+          }
+
+          return true;
+        });
+
+        const sequence = sequenceCandidate ? Number.parseInt(sequenceCandidate.raw, 10) : null;
+
+        const barcodeEntries = barcodeMatches.map((item) => ({
+          barcodeRaw: item.raw,
+          normalizedBarcode: item.normalizedBarcode,
+        }));
 
         return {
           folderName,
@@ -164,11 +194,11 @@
           sequence,
           barcodeEntries,
           format: 'multi-barcode',
-          includeSequenceInFileName: false,
+          includeSequenceInFileName: Number.isInteger(sequence),
         };
       };
 
-      if (lastDash > 0) {
+      if (legacyMatch) {
         return buildLegacyResult();
       }
 
