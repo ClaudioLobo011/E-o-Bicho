@@ -37,6 +37,8 @@
       .replace(/[^0-9A-Za-z]/g, '')
       .trim();
 
+    const hasValidDigits = (value) => /\d{6,}/.test(String(value ?? ''));
+
     const logMessage = (message, type = 'info') => {
       const prefix = {
         info: '[INFO]',
@@ -89,6 +91,16 @@
 
         const normalizedBarcode = normalizeBarcode(barcodeRaw);
 
+        if (!hasValidDigits(normalizedBarcode)) {
+          return {
+            folderName,
+            fileName,
+            extension,
+            barcodeRaw,
+            error: 'Nenhum código de barras válido foi identificado no nome do arquivo.'
+          };
+        }
+
         return {
           folderName,
           fileName,
@@ -132,7 +144,7 @@
             barcodeRaw,
             normalizedBarcode: normalizeBarcode(barcodeRaw)
           }))
-          .filter((entry) => entry.barcodeRaw);
+          .filter((entry) => entry.barcodeRaw && hasValidDigits(entry.normalizedBarcode));
 
         if (!barcodeEntries.length) {
           return {
