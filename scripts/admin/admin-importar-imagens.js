@@ -19,6 +19,7 @@
       entries: [],
       isProcessing: false,
       isUploading: false,
+      suppressNextFolderChange: false,
       productCache: new Map(),
     };
 
@@ -530,6 +531,11 @@
     };
 
     const handleFolderChange = async () => {
+      if (state.isUploading) {
+        logMessage('Aguarde o término do envio antes de selecionar outra pasta.', 'warn');
+        return;
+      }
+
       const files = Array.from(folderInput.files || []);
       resetState();
       clearLog();
@@ -726,7 +732,10 @@
 
       state.isUploading = true;
       updateControls();
-      folderInput.disabled = true;
+      if (folderInput) {
+        state.suppressNextFolderChange = true;
+        folderInput.disabled = true;
+      }
       logMessage(`Iniciando envio de ${matchedEntries.length} imagem(ns).`, 'info');
 
       let successCount = 0;
@@ -838,7 +847,10 @@
       }
 
       state.isUploading = false;
-      folderInput.disabled = false;
+      if (folderInput) {
+        folderInput.disabled = false;
+      }
+      state.suppressNextFolderChange = false;
       updateControls();
 
       if (!cancelled) {
@@ -854,7 +866,18 @@
       }
     };
 
-    folderInput.addEventListener('change', () => {
+    folderInput.addEventListener('change', (event) => {
+      if (state.suppressNextFolderChange) {
+        state.suppressNextFolderChange = false;
+        return;
+      }
+
+      if (state.isUploading) {
+        event?.preventDefault?.();
+        logMessage('Seleção de pasta ignorada enquanto o envio está em andamento.', 'warn');
+        return;
+      }
+
       handleFolderChange().catch((error) => {
         logMessage(`Erro inesperado: ${error.message}`, 'error');
         state.isProcessing = false;
@@ -874,7 +897,10 @@
       startUpload().catch((error) => {
         logMessage(`Erro inesperado durante o envio: ${error.message}`, 'error');
         state.isUploading = false;
-        folderInput.disabled = false;
+        if (folderInput) {
+          folderInput.disabled = false;
+        }
+        state.suppressNextFolderChange = false;
         updateControls();
       });
     });
