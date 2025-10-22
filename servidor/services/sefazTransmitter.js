@@ -7,6 +7,16 @@ const fs = require('fs');
 const path = require('path');
 const { sanitizeXmlContent } = require('../utils/xmlSanitizer');
 
+const sanitizeForTransportLog = (input) => {
+  const value = String(input || '');
+  const preview = value.slice(0, 2000);
+  return preview.replace(/\b(\d{6,})\b/g, (match) => {
+    if (match.length <= 4) return match;
+    const suffix = match.slice(-2);
+    return `${'*'.repeat(match.length - 2)}${suffix}`;
+  });
+};
+
 class SefazTransmissionError extends Error {
   constructor(message, details = {}) {
     super(message);
@@ -585,7 +595,7 @@ const performSoapRequest = async ({
   await ensureClockSynchronization();
 
   const envelopeString = typeof envelope === 'string' ? envelope : String(envelope || '');
-  const envelopePreview = envelopeString.slice(0, 2000);
+  const envelopePreview = sanitizeForTransportLog(envelopeString);
   const maxAttempts = 2;
 
   const attemptRequest = (attempt = 1) => {
@@ -748,7 +758,7 @@ const performSoapRequest = async ({
           response.on('end', () => {
             const trimmed = body.trim();
             const firstLine = trimmed.split(/\r?\n/).find((line) => line.trim()) || '';
-            console.info(`${logPrefix} Primeira linha da resposta: ${firstLine}`);
+            console.info(`${logPrefix} Primeira linha da resposta: ${sanitizeForTransportLog(firstLine)}`);
             const contentType = response.headers ? response.headers['content-type'] : undefined;
             if (contentType) {
               console.info(
