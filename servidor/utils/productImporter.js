@@ -1,7 +1,11 @@
 const xlsx = require('xlsx');
 const Product = require('../models/Product');
 const fs = require('fs');
-const path = require('path');
+const {
+    getLegacyUploadsDir,
+    getLegacyUrlPrefix,
+    listProductImagePublicPaths,
+} = require('./productImagePath');
 
 // ▼▼▼ CORREÇÃO 1: Expressão regular corrigida para remover TODOS os acentos ▼▼▼
 const normalizeText = (text) => {
@@ -177,9 +181,13 @@ const importProducts = async (socket, productsFromExcel, options = {}) => {
             `Estoques serão atualizados no depósito ${depositName}${storeName ? ` (${storeName})` : ''}.`
         );
 
-        const uploadsDir = path.join(__dirname, '..', 'public', 'uploads', 'products');
-        const allImageFiles = fs.existsSync(uploadsDir) ? fs.readdirSync(uploadsDir) : [];
-        socket.emit('import-log', `Encontradas ${allImageFiles.length} imagens na pasta de uploads.`);
+        const legacyUploadsDir = getLegacyUploadsDir();
+        const allLegacyImageFiles = fs.existsSync(legacyUploadsDir) ? fs.readdirSync(legacyUploadsDir) : [];
+        if (allLegacyImageFiles.length > 0) {
+            socket.emit('import-log', `Encontradas ${allLegacyImageFiles.length} imagens legadas na pasta de uploads.`);
+        } else {
+            socket.emit('import-log', 'Não foram encontradas imagens na pasta de uploads legada.');
+        }
 
         socket.emit('import-log', `Encontrados ${productsFromExcel.length} produtos na planilha.`);
 
@@ -197,8 +205,13 @@ const importProducts = async (socket, productsFromExcel, options = {}) => {
             const existingProduct = existingProductDoc ? existingProductDoc.toObject() : null;
 
             const productBarcode = product.codbarras ? product.codbarras.toString() : '';
-            const matchingImages = allImageFiles.filter(file => file.startsWith(productBarcode));
-            const imagePathsForDB = matchingImages.map(file => `/uploads/products/${file}`);
+            const driveImages = productBarcode ? listProductImagePublicPaths(productBarcode) : [];
+            let imagePathsForDB = driveImages;
+
+            if ((!Array.isArray(imagePathsForDB) || imagePathsForDB.length === 0) && productBarcode) {
+                const matchingLegacyImages = allLegacyImageFiles.filter(file => file.startsWith(productBarcode));
+                imagePathsForDB = matchingLegacyImages.map(file => `${getLegacyUrlPrefix()}/${file}`);
+            }
 
             const depositIdString = depositIdValue.toString();
 

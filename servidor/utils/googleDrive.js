@@ -209,6 +209,39 @@ async function findFolderByName(name, parentId, token) {
   return null;
 }
 
+async function findFileByName(name, parentId, token) {
+  const sanitized = sanitizeDriveFileName(name);
+  if (!sanitized) return null;
+
+  const parentQuery = parentId ? `'${escapeQueryValue(parentId)}' in parents` : "'root' in parents";
+  const query = `name = '${escapeQueryValue(sanitized)}' and trashed = false and ${parentQuery}`;
+  const params = new URLSearchParams({
+    q: query,
+    spaces: 'drive',
+    fields: 'files(id,name,mimeType,size,parents,webViewLink,webContentLink),nextPageToken',
+    pageSize: '10',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
+  });
+
+  const headers = { Authorization: `Bearer ${token}` };
+  const response = await requestGoogle({
+    url: `${FILES_URI}?${params.toString()}`,
+    method: 'GET',
+    headers,
+  });
+
+  try {
+    const data = JSON.parse(response.body.toString('utf8'));
+    if (Array.isArray(data?.files) && data.files.length > 0) {
+      return data.files[0] || null;
+    }
+  } catch (error) {
+    console.error('googleDrive.findFileByName parse error', error);
+  }
+  return null;
+}
+
 async function createFolder(name, parentId, token) {
   const sanitized = sanitizeDriveFolderName(name);
   if (!sanitized) return null;
@@ -286,6 +319,32 @@ async function ensureFolderPath({ segments = [], baseFolderId = null, token }) {
       throw new Error(`Falha ao garantir a pasta "${segment}" no Google Drive.`);
     }
     currentParent = ensuredId;
+  }
+
+  return currentParent;
+}
+
+async function resolveFolderPath({ segments = [], baseFolderId = null, token }) {
+  if (!token) {
+    throw new Error('Token do Google Drive é obrigatório para localizar pastas.');
+  }
+
+  const list = Array.isArray(segments) ? segments : [];
+  const sanitizedSegments = list
+    .map((segment) => sanitizeDriveFolderName(segment))
+    .filter(Boolean);
+
+  if (!sanitizedSegments.length) {
+    return baseFolderId || null;
+  }
+
+  let currentParent = baseFolderId || null;
+  for (const segment of sanitizedSegments) {
+    const folderId = await findFolderByName(segment, currentParent, token);
+    if (!folderId) {
+      return null;
+    }
+    currentParent = folderId;
   }
 
   return currentParent;
@@ -511,6 +570,40 @@ async function uploadBufferToDrive(buffer, options = {}) {
   return fileData;
 }
 
+async function findDriveFileByPath(options = {}) {
+  const credentials = getCredentials();
+  if (!credentials) {
+    return null;
+  }
+
+  const token = await fetchAccessToken();
+
+  const folderSource =
+    typeof options.folderId !== 'undefined' ? options.folderId : credentials.folderId;
+  const baseFolderId = cleanEnvValue(
+    folderSource === null || folderSource === undefined
+      ? ''
+      : typeof folderSource === 'string'
+        ? folderSource
+        : String(folderSource),
+  );
+
+  const pathSegments = Array.isArray(options.folderPath) ? options.folderPath : [];
+  const fileName = typeof options.fileName === 'string' ? options.fileName : '';
+
+  const folderId = await resolveFolderPath({
+    segments: pathSegments,
+    baseFolderId: baseFolderId || null,
+    token,
+  });
+
+  if (!folderId) {
+    return null;
+  }
+
+  return findFileByName(fileName, folderId, token);
+}
+
 async function moveFileToFolder(fileId, options = {}) {
   if (!fileId) {
     throw new Error('ID do arquivo inválido para mover no Google Drive.');
@@ -624,4 +717,5 @@ module.exports = {
   deleteFile,
   resetCredentialsCache,
   moveFileToFolder,
+  findDriveFileByPath,
 };
