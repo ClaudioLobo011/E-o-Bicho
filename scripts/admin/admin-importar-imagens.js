@@ -60,7 +60,11 @@
       const relativePath = file.webkitRelativePath || file.name;
       const segments = relativePath.split('/');
       const fileName = segments[segments.length - 1];
-      const folderName = segments.length > 1 ? segments[segments.length - 2] : '';
+      const pathSegments = segments
+        .slice(0, -1)
+        .map((segment) => segment.trim())
+        .filter((segment) => segment.length > 0);
+      const folderName = pathSegments.length ? pathSegments[pathSegments.length - 1] : '';
       const lastDot = fileName.lastIndexOf('.');
       const extension = lastDot >= 0 ? fileName.slice(lastDot) : '';
       const baseName = lastDot >= 0 ? fileName.slice(0, lastDot) : fileName;
@@ -74,6 +78,8 @@
         if (!barcodeRaw) {
           return {
             folderName,
+            pathSegments,
+            relativePath: pathSegments.join('/'),
             fileName,
             extension,
             error: 'Código de barras ausente no nome do arquivo.'
@@ -83,6 +89,8 @@
         if (!Number.isInteger(sequence)) {
           return {
             folderName,
+            pathSegments,
+            relativePath: pathSegments.join('/'),
             fileName,
             extension,
             barcodeRaw,
@@ -95,6 +103,8 @@
         if (!hasValidDigits(normalizedBarcode)) {
           return {
             folderName,
+            pathSegments,
+            relativePath: pathSegments.join('/'),
             fileName,
             extension,
             barcodeRaw,
@@ -104,6 +114,8 @@
 
         return {
           folderName,
+          pathSegments,
+          relativePath: pathSegments.join('/'),
           fileName,
           extension,
           barcodeRaw,
@@ -151,6 +163,8 @@
         if (!barcodeMatches.length) {
           return {
             folderName,
+            pathSegments,
+            relativePath: pathSegments.join('/'),
             fileName,
             extension,
             error: 'Nenhum código de barras foi identificado no nome do arquivo.'
@@ -187,6 +201,8 @@
 
         return {
           folderName,
+          pathSegments,
+          relativePath: pathSegments.join('/'),
           fileName,
           extension,
           barcodeRaw: barcodeEntries[0].barcodeRaw,
@@ -322,18 +338,27 @@
         const fileLines = items.map((item) => {
           const badge = buildUploadBadge(item);
           const sequenceInfo = Number.isInteger(item.sequence)
-            ? `<span class="text-xs text-gray-500">Sequência ${item.sequence}</span>`
+            ? `<span class="text-xs text-gray-500 block">Sequência ${item.sequence}</span>`
             : '';
           const sharedInfo = item.multiTarget
-            ? `<span class="text-xs text-gray-400">Associação ${item.targetIndex} de ${item.targetTotal}</span>`
+            ? `<span class="text-xs text-gray-400 block">Associação ${item.targetIndex} de ${item.targetTotal}</span>`
             : '';
-          const metaInfo = [sequenceInfo, sharedInfo].filter(Boolean).join('');
+          const renamedInfo = item.generatedFileName
+            ? `<span class="text-xs text-gray-500 break-all block">Renomeado: ${escapeHtml(item.generatedFileName)}</span>`
+            : '';
+          const uploadedInfo = item.uploadedImageUrl
+            ? `<span class="text-xs text-gray-500 break-all block">URL salva: ${escapeHtml(item.uploadedImageUrl)}</span>`
+            : '';
+          const metaPieces = [sequenceInfo, sharedInfo, renamedInfo, uploadedInfo].filter(Boolean).join('');
+          const metaInfo = metaPieces
+            ? `<div class="mt-1 flex flex-col gap-1">${metaPieces}</div>`
+            : '';
 
           return `
             <li class="flex items-start justify-between gap-3 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
               <div>
                 <p class="text-xs font-medium text-gray-700">${escapeHtml(item.file?.name || 'Arquivo')}</p>
-                ${metaInfo ? `<div class="flex flex-wrap gap-x-3 gap-y-1 mt-1">${metaInfo}</div>` : ''}
+                ${metaInfo || ''}
               </div>
               ${badge}
             </li>
@@ -558,6 +583,8 @@
               : `entry-${Date.now()}-${index}`,
             file,
             folderName: parsed.folderName,
+            relativePathSegments: Array.isArray(parsed.pathSegments) ? parsed.pathSegments.slice() : [],
+            relativePath: typeof parsed.relativePath === 'string' ? parsed.relativePath : '',
             sequence: parsed.sequence,
             barcodeRaw: parsed.barcodeRaw,
             barcodeNormalized: parsed.normalizedBarcode,
@@ -593,6 +620,8 @@
             id: entryId,
             file,
             folderName: parsed.folderName,
+            relativePathSegments: Array.isArray(parsed.pathSegments) ? parsed.pathSegments.slice() : [],
+            relativePath: typeof parsed.relativePath === 'string' ? parsed.relativePath : '',
             sequence: parsed.sequence,
             barcodeRaw: barcodeEntry?.barcodeRaw,
             barcodeNormalized: barcodeEntry?.normalizedBarcode,
@@ -715,6 +744,7 @@
           .filter((part) => part !== null && part !== undefined && String(part).length > 0)
           .join('-') || entry.barcodeNormalized || 'imagem';
         const sanitizedName = `${sanitizedBaseName}${entry.extension || ''}`;
+        entry.generatedFileName = sanitizedName;
         const formData = new FormData();
         const fileToSend = (typeof File === 'function')
           ? new File([entry.file], sanitizedName, { type: entry.file.type })
@@ -724,6 +754,17 @@
         formData.append('codigoBarras', entry.barcodeRaw || '');
         formData.append('sequencia', String(entry.sequence ?? ''));
         formData.append('nomeOriginal', entry.file.name);
+        formData.append('folderName', entry.folderName || '');
+        formData.append('relativePath', entry.relativePath || '');
+        const driveSegments = Array.isArray(entry.relativePathSegments) ? entry.relativePathSegments : [];
+        try {
+          formData.append('driveFolderSegments', JSON.stringify(driveSegments));
+        } catch (serializationError) {
+          console.warn('Não foi possível serializar as pastas relativas para upload:', serializationError);
+        }
+        formData.append('multiTarget', entry.multiTarget ? 'true' : 'false');
+        formData.append('targetIndex', String(entry.targetIndex ?? ''));
+        formData.append('targetTotal', String(entry.targetTotal ?? ''));
 
         try {
           const response = await fetch(`${API_CONFIG.BASE_URL}/products/${entry.productId}/upload`, {
@@ -760,9 +801,33 @@
             continue;
           }
 
+          let responsePayload = null;
+          try {
+            responsePayload = await response.json();
+          } catch (parseError) {
+            responsePayload = null;
+          }
+
+          if (responsePayload && typeof responsePayload === 'object') {
+            entry.uploadResponse = responsePayload;
+            const images = Array.isArray(responsePayload.imagens)
+              ? responsePayload.imagens
+              : Array.isArray(responsePayload.product?.imagens)
+                ? responsePayload.product.imagens
+                : null;
+            if (images && images.length) {
+              entry.uploadedImageUrl = images[images.length - 1];
+            }
+          }
+
           entry.uploadStatus = 'success';
           successCount += 1;
-          logMessage(`Imagem ${entry.file.name} enviada com sucesso.`, 'success');
+          const successDetails = [
+            `Imagem ${entry.file.name} enviada com sucesso.`,
+            entry.generatedFileName ? `Renomeada para ${entry.generatedFileName}.` : null,
+            entry.uploadedImageUrl ? `URL salva: ${entry.uploadedImageUrl}` : null,
+          ].filter(Boolean).join(' ');
+          logMessage(successDetails, 'success');
         } catch (error) {
           entry.uploadStatus = 'error';
           failureCount += 1;
