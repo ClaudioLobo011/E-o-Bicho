@@ -12,7 +12,9 @@
     "nfce:status": "node scripts/test-status-servico.js",
     "nfce:envio:hom": "node scripts/test-autorizacao-hom.js",
     "drive:reorganize-fiscals": "node scripts/reorganize-fiscal-drive-folders.js",
-    "drive:reorganize-fiscals:dry-run": "node scripts/reorganize-fiscal-drive-folders.js --dry-run"
+    "drive:reorganize-fiscals:dry-run": "node scripts/reorganize-fiscal-drive-folders.js --dry-run",
+    "products:migrate-images": "node scripts/migrate-product-images.js",
+    "products:migrate-images:dry-run": "node scripts/migrate-product-images.js --dry-run"
   },
   "keywords": [],
   "author": "",

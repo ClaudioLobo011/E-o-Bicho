@@ -9,11 +9,33 @@ const fs = require('fs');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const PdvState = require('../models/PdvState');
+const {
+    buildProductImageFileName,
+    buildProductImagePublicPath,
+    buildProductImageStoragePath,
+    ensureProductImageFolder,
+    moveFile,
+    resolveDiskPathFromPublicPath,
+    sanitizeBarcodeSegment,
+} = require('../utils/productImagePath');
+
+const tempUploadDir = path.join(__dirname, '..', 'tmp', 'uploads', 'products');
+
+const ensureTempUploadDir = () => {
+    if (!fs.existsSync(tempUploadDir)) {
+        fs.mkdirSync(tempUploadDir, { recursive: true });
+    }
+};
 
 // Configuração do Multer para upload de imagens
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, 'public/uploads/products/');
+        try {
+            ensureTempUploadDir();
+            cb(null, tempUploadDir);
+        } catch (error) {
+            cb(error);
+        }
     },
     filename: function (req, file, cb) {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -1023,27 +1045,43 @@ router.post('/by-ids', requireAuth, async (req, res) => {
 
 // POST /api/products/:id/upload (restrito)
 router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'), upload.array('imagens', 10), async (req, res) => {
+    const storedFiles = [];
     try {
         const product = await Product.findById(req.params.id);
         if (!product) {
-            req.files.forEach(file => fs.unlinkSync(file.path));
+            for (const file of req.files) {
+                try {
+                    if (file.path && fs.existsSync(file.path)) {
+                        fs.unlinkSync(file.path);
+                    }
+                } catch (cleanupError) {
+                    console.warn('Falha ao remover arquivo temporário de upload:', cleanupError);
+                }
+            }
             return res.status(404).send('Produto não encontrado');
         }
 
         const newImagePaths = [];
-        let imageCounter = product.imagens.length;
+        const barcodeSegment = sanitizeBarcodeSegment(product.codbarras || product.cod || product._id);
+        let imageCounter = Array.isArray(product.imagens) ? product.imagens.length : 0;
+
+        await ensureProductImageFolder(barcodeSegment);
 
         for (const file of req.files) {
             imageCounter++;
-            const fileExtension = path.extname(file.originalname);
-            const newFilename = `${product.codbarras}-${imageCounter}${fileExtension}`;
-            const oldPath = file.path;
-            const newPath = path.join('public', 'uploads', 'products', newFilename);
+            const newFilename = buildProductImageFileName({
+                barcode: barcodeSegment,
+                sequence: imageCounter,
+                originalName: file.originalname,
+            });
+            const targetPath = buildProductImageStoragePath(barcodeSegment, newFilename);
 
-            fs.renameSync(oldPath, newPath);
-            newImagePaths.push(`/uploads/products/${newFilename}`);
+            await moveFile(file.path, targetPath);
+            storedFiles.push(targetPath);
+            newImagePaths.push(buildProductImagePublicPath(barcodeSegment, newFilename));
         }
 
+        product.imagens = Array.isArray(product.imagens) ? product.imagens : [];
         product.imagens.push(...newImagePaths);
         if (!product.imagemPrincipal || product.imagemPrincipal.includes('placeholder')) {
             product.imagemPrincipal = newImagePaths[0];
@@ -1053,7 +1091,24 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
         res.send(product);
     } catch (error) {
         console.error("Erro no upload de imagens:", error);
-        req.files.forEach(file => fs.unlinkSync(file.path));
+        for (const file of req.files) {
+            try {
+                if (file.path && fs.existsSync(file.path)) {
+                    fs.unlinkSync(file.path);
+                }
+            } catch (unlinkError) {
+                console.warn('Falha ao remover arquivo temporário de upload:', unlinkError);
+            }
+        }
+        for (const storedFile of storedFiles || []) {
+            try {
+                if (storedFile && fs.existsSync(storedFile)) {
+                    fs.unlinkSync(storedFile);
+                }
+            } catch (cleanupError) {
+                console.warn('Falha ao remover imagem armazenada após erro:', cleanupError);
+            }
+        }
         res.status(500).send('Erro no servidor');
     }
 });
@@ -1067,8 +1122,16 @@ router.delete('/:productId/images', requireAuth, authorizeRoles('admin', 'admin_
         
         const product = await Product.findById(productId);
         if (!product) return res.status(404).json({ message: 'Produto não encontrado.' });
-        
+
         product.imagens.pull(imageUrl);
+        try {
+            const diskPath = resolveDiskPathFromPublicPath(imageUrl);
+            if (diskPath && fs.existsSync(diskPath)) {
+                await fs.promises.unlink(diskPath);
+            }
+        } catch (fileError) {
+            console.warn('Falha ao remover arquivo de imagem ao apagar URL:', fileError);
+        }
         if (product.imagemPrincipal === imageUrl) {
             product.imagemPrincipal = product.imagens.length > 0 ? product.imagens[0] : '/image/placeholder.png';
         }
@@ -1161,14 +1224,13 @@ router.delete('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), asyn
         await product.deleteOne();
 
         for (const imagePath of imagePaths) {
-            const normalizedPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
-            const absolutePath = path.join('public', normalizedPath);
+            const absolutePath = resolveDiskPathFromPublicPath(imagePath);
             try {
-                if (fs.existsSync(absolutePath)) {
+                if (absolutePath && fs.existsSync(absolutePath)) {
                     await fs.promises.unlink(absolutePath);
                 }
             } catch (fileError) {
-                console.warn(`Não foi possível remover a imagem ${absolutePath}:`, fileError);
+                console.warn(`Não foi possível remover a imagem ${absolutePath || imagePath}:`, fileError);
             }
         }
 
