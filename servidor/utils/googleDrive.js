@@ -442,6 +442,10 @@ async function fetchAccessToken() {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => {
+  setTimeout(resolve, Math.max(0, ms));
+});
+
 async function ensureFileIsPublic(fileId, token) {
   if (!fileId) return;
   const body = JSON.stringify({ role: 'reader', type: 'anyone' });
@@ -451,16 +455,34 @@ async function ensureFileIsPublic(fileId, token) {
     'Content-Length': Buffer.byteLength(body),
   };
 
-  try {
-    await requestGoogle({
-      url: `${FILES_URI}/${fileId}/permissions?supportsAllDrives=true`,
-      method: 'POST',
-      headers,
-      body: Buffer.from(body, 'utf8'),
-    });
-  } catch (error) {
-    // Apenas registra o erro e segue.
-    console.error('googleDrive.ensureFileIsPublic', error?.status || '', error?.body?.toString('utf8') || error?.message);
+  const payload = {
+    url: `${FILES_URI}/${fileId}/permissions?supportsAllDrives=true`,
+    method: 'POST',
+    headers,
+    body: Buffer.from(body, 'utf8'),
+  };
+
+  const maxAttempts = 3;
+  const baseDelayMs = 500;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await requestGoogle(payload);
+      return;
+    } catch (error) {
+      const status = error?.status || error?.statusCode;
+      const errorBody = error?.body?.toString('utf8') || error?.message;
+      const isRetryable = !status || status === 429 || status >= 500;
+
+      if (!isRetryable || attempt === maxAttempts) {
+        // Apenas registra o erro e segue.
+        console.error('googleDrive.ensureFileIsPublic', status || '', errorBody);
+        return;
+      }
+
+      const delay = baseDelayMs * 2 ** (attempt - 1);
+      await sleep(delay);
+    }
   }
 }
 

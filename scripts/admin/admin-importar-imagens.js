@@ -22,6 +22,7 @@
       suppressNextFolderChange: false,
       ignoreNextEmptySelection: false,
       productCache: new Map(),
+      lastSelectionSignature: '',
     };
 
     const imageMimePattern = /^image\//i;
@@ -221,6 +222,18 @@
       }
 
       return buildMultiBarcodeResult();
+    };
+
+    const computeSelectionSignature = (files) => {
+      if (!Array.isArray(files) || !files.length) {
+        return '';
+      }
+
+      return files
+        .map((file) => (file?.webkitRelativePath || file?.name || '').trim())
+        .filter((value) => value.length > 0)
+        .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+        .join('||');
     };
 
     const getMatchedEntries = () => state.entries.filter((entry) => entry.status === 'matched');
@@ -466,6 +479,7 @@
       state.isProcessing = false;
       state.isUploading = false;
       state.productCache.clear();
+      state.lastSelectionSignature = '';
     };
 
     const extractProductId = (product) => product?._id || product?.id || product?.productId || null;
@@ -531,7 +545,10 @@
       }
     };
 
-    const handleFolderChange = async (selectedFiles) => {
+    const handleFolderChange = async (selectedFiles, options = {}) => {
+      const {
+        keepPreviousSelectionOnEmpty = false,
+      } = options;
       if (state.isUploading) {
         logMessage('Aguarde o término do envio antes de selecionar outra pasta.', 'warn');
         return;
@@ -546,9 +563,29 @@
         files = Array.from(folderInput.files);
       }
 
+      const currentSignature = computeSelectionSignature(files);
+
+      if (state.suppressNextFolderChange) {
+        const isSameSelection = currentSignature && currentSignature === state.lastSelectionSignature;
+        state.suppressNextFolderChange = false;
+
+        if (!files.length) {
+          state.ignoreNextEmptySelection = false;
+          return;
+        }
+
+        if (isSameSelection) {
+          return;
+        }
+      }
+
       if (!files.length) {
         if (state.ignoreNextEmptySelection) {
           state.ignoreNextEmptySelection = false;
+          return;
+        }
+        if (keepPreviousSelectionOnEmpty && state.entries.length) {
+          logMessage('Nenhum novo arquivo foi selecionado. Mantendo a seleção atual.', 'info');
           return;
         }
         resetState();
@@ -559,7 +596,9 @@
       }
 
       state.ignoreNextEmptySelection = false;
+      const nextSignature = computeSelectionSignature(files);
       resetState();
+      state.lastSelectionSignature = nextSignature;
       clearLog();
 
       const imageFiles = files.filter((file) => imageMimePattern.test(file.type) || /\.(jpe?g|png|gif|bmp|webp)$/i.test(file.name));
@@ -772,9 +811,16 @@
         const sanitizedName = `${sanitizedBaseName}${entry.extension || ''}`;
         entry.generatedFileName = sanitizedName;
         const formData = new FormData();
-        const fileToSend = (typeof File === 'function')
-          ? new File([entry.file], sanitizedName, { type: entry.file.type })
-          : entry.file;
+        let fileToSend = entry.file;
+
+        if (typeof File === 'function' && typeof Blob !== 'undefined' && entry.file instanceof Blob) {
+          try {
+            fileToSend = new File([entry.file], sanitizedName, { type: entry.file.type || 'application/octet-stream' });
+          } catch (fileError) {
+            console.warn('Falha ao preparar arquivo renomeado para upload. Enviando arquivo original.', fileError);
+            fileToSend = entry.file;
+          }
+        }
 
         formData.append('imagens', fileToSend, sanitizedName);
         formData.append('codigoBarras', entry.barcodeRaw || '');
@@ -869,6 +915,9 @@
       }
       updateControls();
 
+      state.suppressNextFolderChange = false;
+      state.ignoreNextEmptySelection = false;
+
       if (!cancelled) {
         const statusType = failureCount > 0 ? 'warn' : 'success';
         logMessage(`Envio concluído. Sucesso: ${successCount}. Falhas: ${failureCount}.`, statusType);
@@ -891,14 +940,8 @@
         return;
       }
 
-      if (state.suppressNextFolderChange) {
-        if (!files.length) {
-          return;
-        }
-        state.suppressNextFolderChange = false;
-      }
-
-      handleFolderChange(files).catch((error) => {
+      const keepPreviousSelection = state.entries.length > 0;
+      handleFolderChange(files, { keepPreviousSelectionOnEmpty: keepPreviousSelection }).catch((error) => {
         logMessage(`Erro inesperado: ${error.message}`, 'error');
         state.isProcessing = false;
         refreshPreview();
@@ -917,6 +960,8 @@
       startUpload().catch((error) => {
         logMessage(`Erro inesperado durante o envio: ${error.message}`, 'error');
         state.isUploading = false;
+        state.suppressNextFolderChange = false;
+        state.ignoreNextEmptySelection = false;
         if (folderInput) {
           folderInput.disabled = false;
         }
