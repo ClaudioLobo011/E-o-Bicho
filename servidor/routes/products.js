@@ -59,13 +59,17 @@ const extractSequenceFromProductImagePath = (imagePath) => {
     }
 
     const parsed = parseProductImagePublicPath(imagePath);
-    const fileName = parsed?.fileName || imagePath;
+    const fileName = typeof parsed?.fileName === 'string' && parsed.fileName.trim()
+        ? parsed.fileName
+        : imagePath;
 
     if (typeof fileName !== 'string') {
         return null;
     }
 
-    const match = fileName.match(/-(\d+)(?:\.[^.]+)?$/);
+    const sanitizedFileName = fileName.split(/[?#]/, 1)[0];
+
+    const match = sanitizedFileName.match(/[\-_](\d+)(?:\.[^.]+)?$/);
     if (!match) {
         return null;
     }
