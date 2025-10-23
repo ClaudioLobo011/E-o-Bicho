@@ -885,17 +885,17 @@
     folderInput.addEventListener('change', (event) => {
       const files = folderInput?.files ? Array.from(folderInput.files) : [];
 
+      if (state.isUploading) {
+        event?.preventDefault?.();
+        logMessage('Seleção de pasta ignorada enquanto o envio está em andamento.', 'warn');
+        return;
+      }
+
       if (state.suppressNextFolderChange) {
         if (!files.length) {
           return;
         }
         state.suppressNextFolderChange = false;
-      }
-
-      if (state.isUploading) {
-        event?.preventDefault?.();
-        logMessage('Seleção de pasta ignorada enquanto o envio está em andamento.', 'warn');
-        return;
       }
 
       handleFolderChange(files).catch((error) => {
