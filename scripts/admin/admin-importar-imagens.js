@@ -20,6 +20,7 @@
       isProcessing: false,
       isUploading: false,
       suppressNextFolderChange: false,
+      ignoreNextEmptySelection: false,
       productCache: new Map(),
     };
 
@@ -530,21 +531,36 @@
       }
     };
 
-    const handleFolderChange = async () => {
+    const handleFolderChange = async (selectedFiles) => {
       if (state.isUploading) {
         logMessage('Aguarde o término do envio antes de selecionar outra pasta.', 'warn');
         return;
       }
 
-      const files = Array.from(folderInput.files || []);
-      resetState();
-      clearLog();
+      let files = [];
+      if (Array.isArray(selectedFiles)) {
+        files = selectedFiles.slice();
+      } else if (selectedFiles) {
+        files = Array.from(selectedFiles);
+      } else if (folderInput?.files) {
+        files = Array.from(folderInput.files);
+      }
 
       if (!files.length) {
+        if (state.ignoreNextEmptySelection) {
+          state.ignoreNextEmptySelection = false;
+          return;
+        }
+        resetState();
+        clearLog();
         if (folderInfo) folderInfo.textContent = 'Nenhuma pasta selecionada.';
         refreshPreview();
         return;
       }
+
+      state.ignoreNextEmptySelection = false;
+      resetState();
+      clearLog();
 
       const imageFiles = files.filter((file) => imageMimePattern.test(file.type) || /\.(jpe?g|png|gif|bmp|webp)$/i.test(file.name));
       const nonImageCount = files.length - imageFiles.length;
@@ -734,6 +750,7 @@
       updateControls();
       if (folderInput) {
         state.suppressNextFolderChange = true;
+        state.ignoreNextEmptySelection = true;
         folderInput.disabled = true;
       }
       logMessage(`Iniciando envio de ${matchedEntries.length} imagem(ns).`, 'info');
@@ -850,7 +867,6 @@
       if (folderInput) {
         folderInput.disabled = false;
       }
-      state.suppressNextFolderChange = false;
       updateControls();
 
       if (!cancelled) {
@@ -867,9 +883,13 @@
     };
 
     folderInput.addEventListener('change', (event) => {
+      const files = folderInput?.files ? Array.from(folderInput.files) : [];
+
       if (state.suppressNextFolderChange) {
+        if (!files.length) {
+          return;
+        }
         state.suppressNextFolderChange = false;
-        return;
       }
 
       if (state.isUploading) {
@@ -878,7 +898,7 @@
         return;
       }
 
-      handleFolderChange().catch((error) => {
+      handleFolderChange(files).catch((error) => {
         logMessage(`Erro inesperado: ${error.message}`, 'error');
         state.isProcessing = false;
         refreshPreview();
@@ -900,7 +920,6 @@
         if (folderInput) {
           folderInput.disabled = false;
         }
-        state.suppressNextFolderChange = false;
         updateControls();
       });
     });
