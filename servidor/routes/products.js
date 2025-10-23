@@ -1053,66 +1053,114 @@ router.post('/by-ids', requireAuth, async (req, res) => {
 
 // POST /api/products/:id/upload (restrito)
 router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'), upload.array('imagens', 10), async (req, res) => {
+    const tempFiles = Array.isArray(req.files) ? req.files : [];
     const storedFiles = [];
     const uploadedDriveFiles = [];
+
+    const cleanupTempUploads = async () => {
+        await Promise.allSettled(tempFiles.map(async (file) => {
+            try {
+                if (file?.path && fs.existsSync(file.path)) {
+                    await fs.promises.unlink(file.path);
+                }
+            } catch (cleanupError) {
+                console.warn('Falha ao remover arquivo temporário de upload:', cleanupError);
+            }
+        }));
+    };
+
     try {
         const product = await Product.findById(req.params.id);
         if (!product) {
-            for (const file of req.files) {
-                try {
-                    if (file.path && fs.existsSync(file.path)) {
-                        fs.unlinkSync(file.path);
-                    }
-                } catch (cleanupError) {
-                    console.warn('Falha ao remover arquivo temporário de upload:', cleanupError);
-                }
-            }
+            await cleanupTempUploads();
             return res.status(404).send('Produto não encontrado');
         }
 
         if (!isDriveConfigured()) {
-            for (const file of req.files) {
-                try {
-                    if (file.path && fs.existsSync(file.path)) {
-                        fs.unlinkSync(file.path);
-                    }
-                } catch (cleanupError) {
-                    console.warn('Falha ao remover arquivo temporário de upload:', cleanupError);
-                }
-            }
+            await cleanupTempUploads();
             return res.status(500).json({ message: 'Armazenamento no Google Drive não está configurado.' });
         }
 
-        const newImagePaths = [];
+        if (!tempFiles.length) {
+            return res.status(400).json({ message: 'Nenhuma imagem foi recebida para upload.' });
+        }
+
         const barcodeSegment = sanitizeBarcodeSegment(product.codbarras || product.cod || product._id);
         let imageCounter = Array.isArray(product.imagens) ? product.imagens.length : 0;
 
         await ensureProductImageFolder(barcodeSegment);
 
-        for (const file of req.files) {
-            imageCounter++;
+        const newImagePaths = [];
+        const uploadResults = [];
+
+        for (const file of tempFiles) {
+            imageCounter += 1;
             const newFilename = buildProductImageFileName({
                 barcode: barcodeSegment,
                 sequence: imageCounter,
                 originalName: file.originalname,
             });
-            const targetPath = buildProductImageStoragePath(barcodeSegment, newFilename);
-            const fileBuffer = await fs.promises.readFile(file.path);
 
-            await moveFile(file.path, targetPath);
+            const targetPath = buildProductImageStoragePath(barcodeSegment, newFilename);
+            let fileBuffer = null;
 
             try {
+                fileBuffer = await fs.promises.readFile(file.path);
+            } catch (readError) {
+                uploadResults.push({
+                    status: 'error',
+                    originalName: file?.originalname || '',
+                    message: `Falha ao ler o arquivo temporário: ${readError.message}`,
+                });
+                try {
+                    if (file.path && fs.existsSync(file.path)) {
+                        await fs.promises.unlink(file.path);
+                    }
+                } catch (cleanupError) {
+                    console.warn('Falha ao remover arquivo temporário após erro de leitura:', cleanupError);
+                }
+                continue;
+            }
+
+            try {
+                await moveFile(file.path, targetPath);
+            } catch (moveError) {
+                uploadResults.push({
+                    status: 'error',
+                    originalName: file?.originalname || '',
+                    message: `Falha ao mover o arquivo para armazenamento interno: ${moveError.message}`,
+                });
+                try {
+                    if (file.path && fs.existsSync(file.path)) {
+                        await fs.promises.unlink(file.path);
+                    }
+                } catch (cleanupError) {
+                    console.warn('Falha ao remover arquivo temporário após erro de movimentação:', cleanupError);
+                }
+                continue;
+            }
+
+            let driveResult = null;
+            let driveErrorMessage = '';
+            try {
                 const folderPath = getProductImagesDriveFolderPath(barcodeSegment);
-                const driveResult = await uploadBufferToDrive(fileBuffer, {
+                driveResult = await uploadBufferToDrive(fileBuffer, {
                     mimeType: file.mimetype || 'application/octet-stream',
                     name: newFilename,
                     folderPath,
                 });
-                if (driveResult?.id) {
-                    uploadedDriveFiles.push(driveResult.id);
-                }
             } catch (driveError) {
+                driveErrorMessage = driveError?.message || 'Erro desconhecido ao enviar para o Google Drive.';
                 console.error('Falha ao enviar imagem de produto para o Google Drive:', driveError);
+            }
+
+            if (!driveResult) {
+                uploadResults.push({
+                    status: 'error',
+                    originalName: file?.originalname || '',
+                    message: driveErrorMessage || 'Não foi possível concluir o upload para o Google Drive.',
+                });
+
                 try {
                     if (fs.existsSync(targetPath)) {
                         await fs.promises.unlink(targetPath);
@@ -1120,19 +1168,42 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
                 } catch (cleanupError) {
                     console.warn('Falha ao remover arquivo local após erro no Drive:', cleanupError);
                 }
-                throw driveError;
-            } finally {
                 try {
                     if (file.path && fs.existsSync(file.path)) {
                         await fs.promises.unlink(file.path);
                     }
-                } catch (cleanupTempError) {
-                    console.warn('Falha ao limpar arquivo temporário após upload:', cleanupTempError);
+                } catch (cleanupError) {
+                    console.warn('Falha ao remover arquivo temporário após erro no Drive:', cleanupError);
                 }
+                continue;
+            }
+
+            if (driveResult?.id) {
+                uploadedDriveFiles.push(driveResult.id);
             }
 
             storedFiles.push(targetPath);
-            newImagePaths.push(buildProductImagePublicPath(barcodeSegment, newFilename));
+            const publicPath = buildProductImagePublicPath(barcodeSegment, newFilename);
+            newImagePaths.push(publicPath);
+            uploadResults.push({
+                status: 'success',
+                originalName: file?.originalname || '',
+                storedFileName: newFilename,
+                driveId: driveResult?.id || null,
+                driveLinks: {
+                    webViewLink: driveResult?.webViewLink || null,
+                    webContentLink: driveResult?.webContentLink || null,
+                },
+                publicPath,
+            });
+        }
+
+        if (!newImagePaths.length) {
+            await cleanupTempUploads();
+            return res.status(500).json({
+                message: 'Não foi possível enviar as imagens selecionadas.',
+                results: uploadResults,
+            });
         }
 
         product.imagens = Array.isArray(product.imagens) ? product.imagens : [];
@@ -1142,22 +1213,26 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
         }
 
         await product.save();
-        res.send(product);
+
+        await cleanupTempUploads();
+
+        const responseProduct = typeof product.toObject === 'function' ? product.toObject() : product;
+        responseProduct._uploadedImages = newImagePaths;
+        responseProduct._uploadResults = uploadResults;
+
+        const hasErrors = uploadResults.some((result) => result.status === 'error');
+        const statusCode = hasErrors ? 207 : 200;
+
+        res.status(statusCode).json(responseProduct);
     } catch (error) {
         console.error("Erro no upload de imagens:", error);
-        for (const file of req.files) {
-            try {
-                if (file.path && fs.existsSync(file.path)) {
-                    fs.unlinkSync(file.path);
-                }
-            } catch (unlinkError) {
-                console.warn('Falha ao remover arquivo temporário de upload:', unlinkError);
-            }
-        }
+
+        await cleanupTempUploads();
+
         for (const storedFile of storedFiles || []) {
             try {
                 if (storedFile && fs.existsSync(storedFile)) {
-                    fs.unlinkSync(storedFile);
+                    await fs.promises.unlink(storedFile);
                 }
             } catch (cleanupError) {
                 console.warn('Falha ao remover imagem armazenada após erro:', cleanupError);
