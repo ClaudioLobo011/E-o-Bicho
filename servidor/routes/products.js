@@ -53,6 +53,32 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 
+const extractSequenceFromProductImagePath = (imagePath) => {
+    if (typeof imagePath !== 'string') {
+        return null;
+    }
+
+    const parsed = parseProductImagePublicPath(imagePath);
+    const fileName = typeof parsed?.fileName === 'string' && parsed.fileName.trim()
+        ? parsed.fileName
+        : imagePath;
+
+    if (typeof fileName !== 'string') {
+        return null;
+    }
+
+    const sanitizedFileName = fileName.split(/[?#]/, 1)[0];
+
+    const match = sanitizedFileName.match(/[\-_](\d+)(?:\.[^.]+)?$/);
+    if (!match) {
+        return null;
+    }
+
+    const sequence = Number.parseInt(match[1], 10);
+    return Number.isNaN(sequence) ? null : sequence;
+};
+
+
 router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
         const payload = req.body || {};
@@ -1086,7 +1112,16 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
         }
 
         const barcodeSegment = sanitizeBarcodeSegment(product.codbarras || product.cod || product._id);
-        let imageCounter = Array.isArray(product.imagens) ? product.imagens.length : 0;
+
+        const existingImages = Array.isArray(product.imagens) ? product.imagens : [];
+        const highestExistingSequence = existingImages.reduce((highest, imagePath) => {
+            const sequence = extractSequenceFromProductImagePath(imagePath);
+            if (Number.isFinite(sequence) && sequence > highest) {
+                return sequence;
+            }
+            return highest;
+        }, 0);
+        let nextImageSequence = Math.max(existingImages.length, highestExistingSequence) + 1;
 
         await ensureProductImageFolder(barcodeSegment);
 
@@ -1094,10 +1129,10 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
         const uploadResults = [];
 
         for (const file of tempFiles) {
-            imageCounter += 1;
+            const currentSequence = nextImageSequence;
             const newFilename = buildProductImageFileName({
                 barcode: barcodeSegment,
-                sequence: imageCounter,
+                sequence: currentSequence,
                 originalName: file.originalname,
             });
 
@@ -1185,6 +1220,7 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
             storedFiles.push(targetPath);
             const publicPath = buildProductImagePublicPath(barcodeSegment, newFilename);
             newImagePaths.push(publicPath);
+            nextImageSequence += 1;
             uploadResults.push({
                 status: 'success',
                 originalName: file?.originalname || '',
