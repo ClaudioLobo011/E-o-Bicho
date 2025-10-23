@@ -23,6 +23,49 @@
       ignoreNextEmptySelection: false,
       productCache: new Map(),
       lastSelectionSignature: '',
+      beforeUnloadHandler: null,
+      beforeUnloadBound: false,
+    };
+
+    const preventUnload = (event) => {
+      if (!state.isUploading) {
+        return;
+      }
+
+      const message = 'O envio de imagens ainda está em andamento. Deseja realmente sair da página?';
+      event.preventDefault();
+      event.returnValue = message;
+      return message;
+    };
+
+    const enableUnloadProtection = () => {
+      if (state.beforeUnloadBound) {
+        return;
+      }
+
+      state.beforeUnloadHandler = preventUnload;
+      window.addEventListener('beforeunload', state.beforeUnloadHandler);
+      state.beforeUnloadBound = true;
+    };
+
+    const disableUnloadProtection = () => {
+      if (!state.beforeUnloadBound) {
+        return;
+      }
+
+      if (state.beforeUnloadHandler) {
+        window.removeEventListener('beforeunload', state.beforeUnloadHandler);
+      }
+      state.beforeUnloadHandler = null;
+      state.beforeUnloadBound = false;
+    };
+
+    const updateUnloadProtection = () => {
+      if (state.isUploading) {
+        enableUnloadProtection();
+      } else {
+        disableUnloadProtection();
+      }
     };
 
     const imageMimePattern = /^image\//i;
@@ -480,6 +523,7 @@
       state.isUploading = false;
       state.productCache.clear();
       state.lastSelectionSignature = '';
+      disableUnloadProtection();
     };
 
     const extractProductId = (product) => product?._id || product?.id || product?.productId || null;
@@ -786,6 +830,7 @@
       }
 
       state.isUploading = true;
+      updateUnloadProtection();
       updateControls();
       if (folderInput) {
         state.suppressNextFolderChange = true;
@@ -934,6 +979,8 @@
       }
       updateControls();
 
+      updateUnloadProtection();
+
       state.suppressNextFolderChange = false;
       state.ignoreNextEmptySelection = false;
 
@@ -987,6 +1034,7 @@
     startUploadBtn.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
+      event.stopImmediatePropagation();
       startUpload().catch((error) => {
         logMessage(`Erro inesperado durante o envio: ${error.message}`, 'error');
         state.isUploading = false;
@@ -996,6 +1044,7 @@
           folderInput.disabled = false;
         }
         updateControls();
+        updateUnloadProtection();
       });
     });
 
