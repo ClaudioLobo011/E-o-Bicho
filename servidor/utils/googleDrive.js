@@ -486,6 +486,112 @@ async function ensureFileIsPublic(fileId, token) {
   }
 }
 
+function normalizeReason(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase();
+}
+
+function extractDriveErrorDetails(error) {
+  const details = {
+    status: error?.status || error?.statusCode || null,
+    message: '',
+    reasons: [],
+    rawBody: '',
+    retryable: false,
+    shouldResetAuth: false,
+    primaryReason: null,
+  };
+
+  if (typeof error?.message === 'string' && error.message.trim()) {
+    details.message = error.message.trim();
+  }
+
+  const bodyBuffer = error?.body;
+  if (bodyBuffer) {
+    try {
+      details.rawBody = bodyBuffer.toString('utf8');
+    } catch (bufferError) {
+      details.rawBody = '';
+    }
+  }
+
+  if (details.rawBody) {
+    try {
+      const parsed = JSON.parse(details.rawBody);
+      const driveError = parsed?.error || parsed;
+      if (driveError) {
+        if (typeof driveError.message === 'string' && driveError.message.trim()) {
+          details.message = driveError.message.trim();
+        }
+        if (Array.isArray(driveError.errors)) {
+          details.reasons = driveError.errors
+            .map((item) => (typeof item?.reason === 'string' ? item.reason : ''))
+            .filter(Boolean);
+        } else if (typeof driveError.reason === 'string' && driveError.reason.trim()) {
+          details.reasons = [driveError.reason.trim()];
+        }
+        if (!details.status && typeof driveError.code === 'number') {
+          details.status = driveError.code;
+        }
+      }
+    } catch (parseError) {
+      // Mantém os detalhes brutos apenas para depuração.
+    }
+  }
+
+  if (!details.message) {
+    details.message = 'Não foi possível concluir o upload para o Google Drive.';
+  }
+
+  const normalizedReasons = details.reasons.map(normalizeReason).filter(Boolean);
+  details.primaryReason = normalizedReasons.length ? normalizedReasons[0] : null;
+
+  const retryableReasons = new Set([
+    'ratelimitexceeded',
+    'userratelimitexceeded',
+    'backenderror',
+    'internalerror',
+    'transienterror',
+  ]);
+
+  if (!details.status) {
+    details.retryable = true;
+  } else if (details.status >= 500) {
+    details.retryable = true;
+  } else if (details.status === 429 || details.status === 408) {
+    details.retryable = true;
+  } else if (details.status === 401) {
+    details.retryable = true;
+    details.shouldResetAuth = true;
+  } else if (details.status === 403 || details.status === 400) {
+    for (const reason of normalizedReasons) {
+      if (retryableReasons.has(reason)) {
+        details.retryable = true;
+        break;
+      }
+    }
+  }
+
+  if (!details.retryable && details.rawBody) {
+    const bodyLower = details.rawBody.toLowerCase();
+    if (bodyLower.includes('ratelimit')) {
+      details.retryable = true;
+    }
+    if (bodyLower.includes('user rate limit')) {
+      details.retryable = true;
+    }
+    if (bodyLower.includes('backenderror') || bodyLower.includes('internal error') || bodyLower.includes('transient')) {
+      details.retryable = true;
+    }
+    if (bodyLower.includes('invalid_grant')) {
+      details.shouldResetAuth = true;
+      details.retryable = true;
+    }
+  }
+
+  return details;
+}
+
 async function getFileMetadata(fileId, token, fields = 'id,name,mimeType,size,webViewLink,webContentLink,parents') {
   const headers = {
     Authorization: `Bearer ${token}`,
@@ -512,8 +618,6 @@ async function uploadBufferToDrive(buffer, options = {}) {
     throw new Error('Credenciais do Google Drive não configuradas.');
   }
 
-  const token = await fetchAccessToken();
-  const boundary = `gc_boundary_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const mimeType = options.mimeType || 'application/octet-stream';
   const parentsRaw = Array.isArray(options.parents) ? options.parents : [];
   const parentCandidates = parentsRaw
@@ -528,68 +632,124 @@ async function uploadBufferToDrive(buffer, options = {}) {
   );
 
   const pathSegments = Array.isArray(options.folderPath) ? options.folderPath : [];
-  let finalFolderId = null;
-  if (pathSegments.length) {
-    finalFolderId = await ensureFolderPath({
-      segments: pathSegments,
-      baseFolderId: baseFolderId || null,
-      token,
-    });
-  } else if (baseFolderId) {
-    finalFolderId = baseFolderId;
+  const maxAttempts = Math.max(1, Number.parseInt(options.retryAttempts ?? 3, 10));
+  const baseDelayMs = Math.max(100, Number.parseInt(options.retryDelayMs ?? 500, 10));
+
+  let lastError = null;
+  let lastErrorDetails = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const token = await fetchAccessToken();
+
+      let finalFolderId = null;
+      if (pathSegments.length) {
+        finalFolderId = await ensureFolderPath({
+          segments: pathSegments,
+          baseFolderId: baseFolderId || null,
+          token,
+        });
+      } else if (baseFolderId) {
+        finalFolderId = baseFolderId;
+      }
+
+      const combinedParents = parentCandidates.slice();
+      if (finalFolderId) {
+        combinedParents.push(finalFolderId);
+      }
+      const uniqueParents = Array.from(new Set(combinedParents)).filter(Boolean);
+
+      const metadata = {
+        name: options.name || `arquivo-${Date.now()}`,
+      };
+      if (uniqueParents.length) {
+        metadata.parents = uniqueParents;
+      }
+
+      const boundary = `gc_boundary_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      const metaString = JSON.stringify(metadata);
+      const preamble = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metaString}\r\n`);
+      const header = Buffer.from(`--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`);
+      const closing = Buffer.from(`\r\n--${boundary}--\r\n`);
+      const multipartBody = Buffer.concat([preamble, header, buffer, closing]);
+
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+        'Content-Length': multipartBody.length,
+      };
+
+      const response = await requestGoogle({
+        url: UPLOAD_URI,
+        method: 'POST',
+        headers,
+        body: multipartBody,
+      });
+
+      let fileData = {};
+      try {
+        fileData = JSON.parse(response.body.toString('utf8'));
+      } catch (parseError) {
+        fileData = {};
+      }
+
+      const fileId = fileData?.id;
+      if (!fileId) {
+        throw new Error('Falha ao criar arquivo no Google Drive.');
+      }
+
+      await ensureFileIsPublic(fileId, token);
+      const metadataResponse = await getFileMetadata(fileId, token);
+      if (metadataResponse) {
+        return metadataResponse;
+      }
+
+      return fileData;
+    } catch (error) {
+      lastError = error;
+      lastErrorDetails = extractDriveErrorDetails(error);
+
+      if (lastErrorDetails.shouldResetAuth) {
+        resetCredentialsCache();
+      }
+
+      if (attempt >= maxAttempts || !lastErrorDetails.retryable) {
+        if (lastErrorDetails) {
+          const statusInfo = lastErrorDetails.status ? `código ${lastErrorDetails.status}` : '';
+          const reasonInfo = lastErrorDetails.primaryReason || '';
+          const suffixParts = [statusInfo, reasonInfo].filter(Boolean).join(' - ');
+          const messageParts = [lastErrorDetails.message];
+          if (suffixParts) {
+            messageParts.push(`(${suffixParts})`);
+          }
+          const finalMessage = messageParts.filter(Boolean).join(' ').trim() || 'Não foi possível concluir o upload para o Google Drive.';
+          const wrappedError = new Error(finalMessage);
+          wrappedError.status = lastErrorDetails.status ?? error?.status ?? error?.statusCode ?? null;
+          wrappedError.reason = lastErrorDetails.primaryReason || null;
+          wrappedError.driveError = lastErrorDetails;
+          wrappedError.originalError = error;
+          throw wrappedError;
+        }
+
+        throw error;
+      }
+
+      const delay = baseDelayMs * 2 ** (attempt - 1);
+      await sleep(delay);
+    }
   }
 
-  if (finalFolderId) {
-    parentCandidates.push(finalFolderId);
+  if (lastErrorDetails) {
+    const fallbackMessage = lastErrorDetails.message || 'Não foi possível concluir o upload para o Google Drive.';
+    const errorWithContext = new Error(fallbackMessage);
+    errorWithContext.status = lastErrorDetails.status ?? lastError?.status ?? lastError?.statusCode ?? null;
+    errorWithContext.reason = lastErrorDetails.primaryReason || null;
+    errorWithContext.driveError = lastErrorDetails;
+    errorWithContext.originalError = lastError || null;
+    throw errorWithContext;
   }
 
-  const uniqueParents = Array.from(new Set(parentCandidates)).filter(Boolean);
-
-  const metadata = {
-    name: options.name || `arquivo-${Date.now()}`,
-  };
-  if (uniqueParents.length) {
-    metadata.parents = uniqueParents;
-  }
-
-  const metaString = JSON.stringify(metadata);
-  const preamble = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metaString}\r\n`);
-  const header = Buffer.from(`--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`);
-  const closing = Buffer.from(`\r\n--${boundary}--\r\n`);
-  const multipartBody = Buffer.concat([preamble, header, buffer, closing]);
-
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': `multipart/related; boundary=${boundary}`,
-    'Content-Length': multipartBody.length,
-  };
-
-  const response = await requestGoogle({
-    url: UPLOAD_URI,
-    method: 'POST',
-    headers,
-    body: multipartBody,
-  });
-
-  let fileData = {};
-  try {
-    fileData = JSON.parse(response.body.toString('utf8'));
-  } catch (error) {
-    fileData = {};
-  }
-
-  const fileId = fileData?.id;
-  if (!fileId) {
-    throw new Error('Falha ao criar arquivo no Google Drive.');
-  }
-
-  await ensureFileIsPublic(fileId, token);
-  const metadataResponse = await getFileMetadata(fileId, token);
-  if (metadataResponse) {
-    return metadataResponse;
-  }
-
-  return fileData;
+  throw lastError || new Error('Falha desconhecida ao enviar arquivo para o Google Drive.');
 }
 
 async function findDriveFileByPath(options = {}) {
