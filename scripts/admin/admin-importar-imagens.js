@@ -974,8 +974,19 @@
       });
     }
 
+    if (startUploadBtn?.tagName === 'BUTTON' && startUploadBtn.type !== 'button') {
+      startUploadBtn.type = 'button';
+    }
+
+    if (startUploadBtn?.form) {
+      startUploadBtn.form.addEventListener('submit', (event) => {
+        event.preventDefault();
+      });
+    }
+
     startUploadBtn.addEventListener('click', (event) => {
       event.preventDefault();
+      event.stopPropagation();
       startUpload().catch((error) => {
         logMessage(`Erro inesperado durante o envio: ${error.message}`, 'error');
         state.isUploading = false;
