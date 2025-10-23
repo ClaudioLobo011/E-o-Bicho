@@ -803,40 +803,58 @@
         entry.uploadStatus = 'uploading';
         refreshPreview();
 
-        const hasSequence = Number.isInteger(entry.sequence);
-        const includeSequence = entry.shouldIncludeSequenceInFileName && hasSequence;
-        const sanitizedBaseName = [entry.barcodeRaw, includeSequence ? entry.sequence : null]
-          .filter((part) => part !== null && part !== undefined && String(part).length > 0)
-          .join('-') || entry.barcodeNormalized || 'imagem';
-        const sanitizedName = `${sanitizedBaseName}${entry.extension || ''}`;
-        entry.generatedFileName = sanitizedName;
-        const formData = new FormData();
-        let fileToSend = entry.file;
+        let sanitizedName = '';
+        let formData;
 
-        if (typeof File === 'function' && typeof Blob !== 'undefined' && entry.file instanceof Blob) {
-          try {
-            fileToSend = new File([entry.file], sanitizedName, { type: entry.file.type || 'application/octet-stream' });
-          } catch (fileError) {
-            console.warn('Falha ao preparar arquivo renomeado para upload. Enviando arquivo original.', fileError);
-            fileToSend = entry.file;
-          }
-        }
-
-        formData.append('imagens', fileToSend, sanitizedName);
-        formData.append('codigoBarras', entry.barcodeRaw || '');
-        formData.append('sequencia', String(entry.sequence ?? ''));
-        formData.append('nomeOriginal', entry.file.name);
-        formData.append('folderName', entry.folderName || '');
-        formData.append('relativePath', entry.relativePath || '');
-        const driveSegments = Array.isArray(entry.relativePathSegments) ? entry.relativePathSegments : [];
         try {
-          formData.append('driveFolderSegments', JSON.stringify(driveSegments));
-        } catch (serializationError) {
-          console.warn('Não foi possível serializar as pastas relativas para upload:', serializationError);
+          const hasSequence = Number.isInteger(entry.sequence);
+          const includeSequence = entry.shouldIncludeSequenceInFileName && hasSequence;
+          const sanitizedBaseName = [entry.barcodeRaw, includeSequence ? entry.sequence : null]
+            .filter((part) => part !== null && part !== undefined && String(part).length > 0)
+            .join('-') || entry.barcodeNormalized || 'imagem';
+
+          sanitizedName = `${sanitizedBaseName}${entry.extension || ''}`;
+          entry.generatedFileName = sanitizedName;
+
+          formData = new FormData();
+          let fileToSend = entry.file;
+
+          if (typeof File === 'function' && typeof Blob !== 'undefined' && entry.file instanceof Blob) {
+            try {
+              fileToSend = new File([entry.file], sanitizedName, { type: entry.file.type || 'application/octet-stream' });
+            } catch (fileError) {
+              console.warn('Falha ao preparar arquivo renomeado para upload. Enviando arquivo original.', fileError);
+              fileToSend = entry.file;
+            }
+          }
+
+          if (typeof Blob === 'undefined' || !(fileToSend instanceof Blob)) {
+            throw new Error('Arquivo de imagem inválido ou ausente.');
+          }
+
+          formData.append('imagens', fileToSend, sanitizedName);
+          formData.append('codigoBarras', entry.barcodeRaw || '');
+          formData.append('sequencia', String(entry.sequence ?? ''));
+          formData.append('nomeOriginal', entry.file?.name || sanitizedName);
+          formData.append('folderName', entry.folderName || '');
+          formData.append('relativePath', entry.relativePath || '');
+          const driveSegments = Array.isArray(entry.relativePathSegments) ? entry.relativePathSegments : [];
+          try {
+            formData.append('driveFolderSegments', JSON.stringify(driveSegments));
+          } catch (serializationError) {
+            console.warn('Não foi possível serializar as pastas relativas para upload:', serializationError);
+          }
+          formData.append('multiTarget', entry.multiTarget ? 'true' : 'false');
+          formData.append('targetIndex', String(entry.targetIndex ?? ''));
+          formData.append('targetTotal', String(entry.targetTotal ?? ''));
+        } catch (prepareError) {
+          entry.uploadStatus = 'error';
+          failureCount += 1;
+          const readableName = entry.file?.name || sanitizedName || entry.generatedFileName || 'arquivo';
+          logMessage(`Falha ao preparar ${readableName} para envio: ${prepareError.message}`, 'error');
+          refreshPreview();
+          continue;
         }
-        formData.append('multiTarget', entry.multiTarget ? 'true' : 'false');
-        formData.append('targetIndex', String(entry.targetIndex ?? ''));
-        formData.append('targetTotal', String(entry.targetTotal ?? ''));
 
         try {
           const response = await fetch(`${API_CONFIG.BASE_URL}/products/${entry.productId}/upload`, {
@@ -903,7 +921,8 @@
         } catch (error) {
           entry.uploadStatus = 'error';
           failureCount += 1;
-          logMessage(`Erro inesperado ao enviar ${entry.file.name}: ${error.message}`, 'error');
+          const fileName = entry.file?.name || sanitizedName || entry.generatedFileName || 'arquivo';
+          logMessage(`Erro inesperado ao enviar ${fileName}: ${error.message}`, 'error');
         }
 
         refreshPreview();
