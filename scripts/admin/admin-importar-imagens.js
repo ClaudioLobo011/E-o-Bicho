@@ -531,7 +531,10 @@
       }
     };
 
-    const handleFolderChange = async (selectedFiles) => {
+    const handleFolderChange = async (selectedFiles, options = {}) => {
+      const {
+        keepPreviousSelectionOnEmpty = false,
+      } = options;
       if (state.isUploading) {
         logMessage('Aguarde o término do envio antes de selecionar outra pasta.', 'warn');
         return;
@@ -549,6 +552,10 @@
       if (!files.length) {
         if (state.ignoreNextEmptySelection) {
           state.ignoreNextEmptySelection = false;
+          return;
+        }
+        if (keepPreviousSelectionOnEmpty && state.entries.length) {
+          logMessage('Nenhum novo arquivo foi selecionado. Mantendo a seleção atual.', 'info');
           return;
         }
         resetState();
@@ -772,9 +779,16 @@
         const sanitizedName = `${sanitizedBaseName}${entry.extension || ''}`;
         entry.generatedFileName = sanitizedName;
         const formData = new FormData();
-        const fileToSend = (typeof File === 'function')
-          ? new File([entry.file], sanitizedName, { type: entry.file.type })
-          : entry.file;
+        let fileToSend = entry.file;
+
+        if (typeof File === 'function' && typeof Blob !== 'undefined' && entry.file instanceof Blob) {
+          try {
+            fileToSend = new File([entry.file], sanitizedName, { type: entry.file.type || 'application/octet-stream' });
+          } catch (fileError) {
+            console.warn('Falha ao preparar arquivo renomeado para upload. Enviando arquivo original.', fileError);
+            fileToSend = entry.file;
+          }
+        }
 
         formData.append('imagens', fileToSend, sanitizedName);
         formData.append('codigoBarras', entry.barcodeRaw || '');
@@ -898,7 +912,8 @@
         state.suppressNextFolderChange = false;
       }
 
-      handleFolderChange(files).catch((error) => {
+      const keepPreviousSelection = state.entries.length > 0;
+      handleFolderChange(files, { keepPreviousSelectionOnEmpty: keepPreviousSelection }).catch((error) => {
         logMessage(`Erro inesperado: ${error.message}`, 'error');
         state.isProcessing = false;
         refreshPreview();
