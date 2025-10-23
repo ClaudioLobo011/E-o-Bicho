@@ -1214,15 +1214,16 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
 
         await product.save();
 
+        await cleanupTempUploads();
+
         const responseProduct = typeof product.toObject === 'function' ? product.toObject() : product;
+        responseProduct._uploadedImages = newImagePaths;
+        responseProduct._uploadResults = uploadResults;
+
         const hasErrors = uploadResults.some((result) => result.status === 'error');
         const statusCode = hasErrors ? 207 : 200;
 
-        res.status(statusCode).json({
-            product: responseProduct,
-            uploadedImages: newImagePaths,
-            results: uploadResults,
-        });
+        res.status(statusCode).json(responseProduct);
     } catch (error) {
         console.error("Erro no upload de imagens:", error);
 
