@@ -23,48 +23,79 @@
       ignoreNextEmptySelection: false,
       productCache: new Map(),
       lastSelectionSignature: '',
-      beforeUnloadHandler: null,
-      beforeUnloadBound: false,
+      navigationGuardActive: false,
     };
 
-    const preventUnload = (event) => {
+    const showUploadInProgressWarning = () => {
+      const warningMessage = 'O envio de imagens está em andamento. Aguarde a conclusão antes de sair desta página.';
+      if (typeof window.showModal === 'function') {
+        window.showModal({
+          title: 'Envio em andamento',
+          message: warningMessage,
+          confirmText: 'Entendi'
+        });
+      } else {
+        alert(warningMessage); // eslint-disable-line no-alert
+      }
+    };
+
+    const handleBlockedNavigation = (event) => {
       if (!state.isUploading) {
         return;
       }
 
-      const message = 'O envio de imagens ainda está em andamento. Deseja realmente sair da página?';
+      const target = event.target instanceof Element ? event.target : null;
+      const anchor = target?.closest?.('a[href]');
+
+      if (!anchor) {
+        return;
+      }
+
+      const href = anchor.getAttribute('href');
+      if (!href || href.trim() === '' || href.startsWith('#') || href.startsWith('javascript:')) {
+        return;
+      }
+
       event.preventDefault();
-      event.returnValue = message;
-      return message;
+      event.stopPropagation();
+      showUploadInProgressWarning();
     };
 
-    const enableUnloadProtection = () => {
-      if (state.beforeUnloadBound) {
+    const handleBlockedFormSubmit = (event) => {
+      if (!state.isUploading) {
         return;
       }
 
-      state.beforeUnloadHandler = preventUnload;
-      window.addEventListener('beforeunload', state.beforeUnloadHandler);
-      state.beforeUnloadBound = true;
+      event.preventDefault();
+      event.stopPropagation();
+      showUploadInProgressWarning();
     };
 
-    const disableUnloadProtection = () => {
-      if (!state.beforeUnloadBound) {
+    const enableNavigationGuard = () => {
+      if (state.navigationGuardActive) {
         return;
       }
 
-      if (state.beforeUnloadHandler) {
-        window.removeEventListener('beforeunload', state.beforeUnloadHandler);
-      }
-      state.beforeUnloadHandler = null;
-      state.beforeUnloadBound = false;
+      document.addEventListener('click', handleBlockedNavigation, true);
+      document.addEventListener('submit', handleBlockedFormSubmit, true);
+      state.navigationGuardActive = true;
     };
 
-    const updateUnloadProtection = () => {
+    const disableNavigationGuard = () => {
+      if (!state.navigationGuardActive) {
+        return;
+      }
+
+      document.removeEventListener('click', handleBlockedNavigation, true);
+      document.removeEventListener('submit', handleBlockedFormSubmit, true);
+      state.navigationGuardActive = false;
+    };
+
+    const updateNavigationProtection = () => {
       if (state.isUploading) {
-        enableUnloadProtection();
+        enableNavigationGuard();
       } else {
-        disableUnloadProtection();
+        disableNavigationGuard();
       }
     };
 
@@ -830,7 +861,7 @@
       }
 
       state.isUploading = true;
-      updateUnloadProtection();
+      updateNavigationProtection();
       updateControls();
       if (folderInput) {
         state.suppressNextFolderChange = true;
@@ -979,7 +1010,7 @@
       }
       updateControls();
 
-      updateUnloadProtection();
+      updateNavigationProtection();
 
       state.suppressNextFolderChange = false;
       state.ignoreNextEmptySelection = false;
@@ -1044,7 +1075,7 @@
           folderInput.disabled = false;
         }
         updateControls();
-        updateUnloadProtection();
+        updateNavigationProtection();
       });
     });
 
