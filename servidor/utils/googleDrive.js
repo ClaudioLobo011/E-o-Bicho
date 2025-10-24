@@ -876,6 +876,107 @@ async function moveFileToFolder(fileId, options = {}) {
   }
 }
 
+async function listFilesInFolderByPath(options = {}) {
+  const credentials = getCredentials();
+  if (!credentials) {
+    return { files: [], folderId: null };
+  }
+
+  const token = await fetchAccessToken();
+
+  const folderSource =
+    typeof options.folderId !== 'undefined' ? options.folderId : credentials.folderId;
+  const baseFolderId = cleanEnvValue(
+    folderSource === null || folderSource === undefined
+      ? ''
+      : typeof folderSource === 'string'
+        ? folderSource
+        : String(folderSource),
+  );
+
+  const pathSegments = Array.isArray(options.folderPath) ? options.folderPath : [];
+  const includeFiles = options.includeFiles !== false;
+  const includeFolders = options.includeFolders === true;
+  const orderBy = typeof options.orderBy === 'string' ? options.orderBy : 'name_natural';
+  const fields =
+    typeof options.fields === 'string' && options.fields.trim()
+      ? options.fields.trim()
+      : 'files(id,name,mimeType,size,modifiedTime,parents,webViewLink,webContentLink),nextPageToken';
+  const pageSize = Math.min(1000, Math.max(1, Number.parseInt(options.pageSize || 1000, 10)));
+
+  const folderId = await resolveFolderPath({
+    segments: pathSegments,
+    baseFolderId: baseFolderId || null,
+    token,
+  });
+
+  if (!folderId) {
+    return { files: [], folderId: null };
+  }
+
+  const files = [];
+  let nextPageToken = null;
+
+  do {
+    const queryParts = [`'${escapeQueryValue(folderId)}' in parents`, 'trashed = false'];
+
+    if (!includeFolders && includeFiles) {
+      queryParts.push(`mimeType != '${DRIVE_FOLDER_MIME}'`);
+    } else if (!includeFiles && includeFolders) {
+      queryParts.push(`mimeType = '${DRIVE_FOLDER_MIME}'`);
+    }
+
+    const params = new URLSearchParams({
+      q: queryParts.join(' and '),
+      spaces: 'drive',
+      fields,
+      pageSize: String(pageSize),
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
+    });
+
+    if (orderBy) {
+      params.set('orderBy', orderBy);
+    }
+
+    if (nextPageToken) {
+      params.set('pageToken', nextPageToken);
+    }
+
+    const headers = { Authorization: `Bearer ${token}` };
+    const response = await requestGoogle({
+      url: `${FILES_URI}?${params.toString()}`,
+      method: 'GET',
+      headers,
+    });
+
+    let data = null;
+    try {
+      data = JSON.parse(response.body.toString('utf8'));
+    } catch (error) {
+      data = null;
+    }
+
+    if (Array.isArray(data?.files) && data.files.length) {
+      for (const item of data.files) {
+        if (!includeFiles && item?.mimeType !== DRIVE_FOLDER_MIME) {
+          continue;
+        }
+        if (!includeFolders && item?.mimeType === DRIVE_FOLDER_MIME) {
+          continue;
+        }
+        files.push(item);
+      }
+    }
+
+    nextPageToken = typeof data?.nextPageToken === 'string' && data.nextPageToken.trim()
+      ? data.nextPageToken.trim()
+      : null;
+  } while (nextPageToken);
+
+  return { files, folderId };
+}
+
 async function deleteFile(fileId) {
   if (!fileId) return;
   try {
@@ -900,4 +1001,5 @@ module.exports = {
   resetCredentialsCache,
   moveFileToFolder,
   findDriveFileByPath,
+  listFilesInFolderByPath,
 };

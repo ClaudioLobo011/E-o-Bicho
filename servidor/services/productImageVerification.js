@@ -3,10 +3,13 @@ const Product = require('../models/Product');
 const {
   buildProductImagePublicPath,
   getProductImageFolderPath,
+  getProductImagesDriveFolderPath,
   sanitizeBarcodeSegment,
 } = require('../utils/productImagePath');
+const { isDriveConfigured, listFilesInFolderByPath } = require('../utils/googleDrive');
 
 const PLACEHOLDER_IMAGE = '/image/placeholder.png';
+const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 function pushLog(logs, message, type = 'info') {
   logs.push({
@@ -31,6 +34,61 @@ function listImagesFromFolder(folderPath) {
   }
 }
 
+function describeProduct(product) {
+  return product?.nome || product?.cod || product?.id || 'produto sem identificação';
+}
+
+async function getProductImageFileNames({ barcodeSegment, product, logs, driveAvailable }) {
+  const productLabel = describeProduct(product);
+
+  if (driveAvailable) {
+    const drivePathSegments = getProductImagesDriveFolderPath(barcodeSegment);
+    const readablePath = drivePathSegments.join('/') || '(raiz)';
+
+    try {
+      const { files, folderId } = await listFilesInFolderByPath({ folderPath: drivePathSegments });
+
+      if (!folderId) {
+        pushLog(
+          logs,
+          `Pasta ${readablePath} não encontrada no Google Drive para o produto ${productLabel}.`,
+          'warning'
+        );
+      } else if (Array.isArray(files) && files.length) {
+        const names = files
+          .filter((file) => file && file.mimeType !== DRIVE_FOLDER_MIME)
+          .map((file) => (typeof file?.name === 'string' ? file.name.trim() : ''))
+          .filter(Boolean)
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+        if (names.length) {
+          return { fileNames: names, source: 'drive', folderPath: readablePath };
+        }
+      }
+    } catch (error) {
+      pushLog(
+        logs,
+        `Falha ao listar imagens no Google Drive (${readablePath}) para o produto ${productLabel}: ${error.message || error}`,
+        'error'
+      );
+    }
+  }
+
+  const folderPath = getProductImageFolderPath(barcodeSegment);
+
+  try {
+    const names = listImagesFromFolder(folderPath);
+    return { fileNames: names, source: 'local', folderPath };
+  } catch (error) {
+    pushLog(
+      logs,
+      `Falha ao ler a pasta de imagens em disco (${folderPath}) para o produto ${productLabel}: ${error.message || error}`,
+      'warning'
+    );
+    return { fileNames: [], source: 'local', folderPath };
+  }
+}
+
 async function verifyAndLinkProductImages() {
   const logs = [];
   const startedAt = new Date();
@@ -42,26 +100,27 @@ async function verifyAndLinkProductImages() {
     images: 0,
   };
 
+  const driveAvailable = isDriveConfigured();
+
   pushLog(logs, 'Iniciando verificação das imagens vinculadas aos produtos.');
+  if (driveAvailable) {
+    const previewSegments = getProductImagesDriveFolderPath('amostra-drive').slice(0, -1);
+    const baseDrivePath = previewSegments.join('/') || '(raiz)';
+    pushLog(logs, 'Integração com o Google Drive detectada. As pastas remotas serão analisadas.', 'info');
+    pushLog(logs, `Caminho base considerado no Google Drive: ${baseDrivePath}.`, 'info');
+  }
 
   const products = await Product.find({}, 'cod nome codbarras imagens imagemPrincipal').exec();
   pushLog(logs, `Total de produtos carregados para análise: ${products.length}.`);
 
   for (const product of products) {
     const barcodeSegment = sanitizeBarcodeSegment(product.codbarras || product.cod || product.id || '');
-    const folderPath = getProductImageFolderPath(barcodeSegment);
-
-    let fileNames;
-    try {
-      fileNames = listImagesFromFolder(folderPath);
-    } catch (error) {
-      pushLog(
-        logs,
-        `Falha ao ler a pasta de imagens para o produto ${product.nome || product.cod || product.id}: ${error.message || error}`,
-        'warning'
-      );
-      continue;
-    }
+    const { fileNames } = await getProductImageFileNames({
+      barcodeSegment,
+      product,
+      logs,
+      driveAvailable,
+    });
 
     if (!fileNames.length) {
       continue;
