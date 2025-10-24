@@ -1,8 +1,45 @@
 (function () {
-  const API_BASE_URL = typeof API_CONFIG !== 'undefined' ? API_CONFIG.BASE_URL : '';
-  if (!API_BASE_URL) {
-    console.error('API_BASE_URL não configurada. Verifique scripts/core/config.js.');
+  function resolveApiBaseUrl() {
+    if (typeof API_CONFIG === 'undefined' || API_CONFIG === null) {
+      console.error('API_CONFIG não definido. Usando fallback "/api".');
+      return '/api';
+    }
+
+    const baseUrl = typeof API_CONFIG.BASE_URL === 'string' ? API_CONFIG.BASE_URL.trim() : '';
+    const serverUrl = typeof API_CONFIG.SERVER_URL === 'string' ? API_CONFIG.SERVER_URL.trim() : '';
+
+    const normalize = (value) => (value || '').replace(/\/+$/, '');
+
+    if (baseUrl) {
+      if (/^https?:\/\//i.test(baseUrl)) {
+        return normalize(baseUrl);
+      }
+
+      const sanitizedBase = baseUrl.startsWith('/') ? baseUrl : `/${baseUrl}`;
+      if (serverUrl && /^https?:\/\//i.test(serverUrl)) {
+        return `${normalize(serverUrl)}${sanitizedBase}`;
+      }
+
+      if (window?.location?.origin) {
+        return `${normalize(window.location.origin)}${sanitizedBase}`;
+      }
+
+      return sanitizedBase;
+    }
+
+    if (serverUrl && /^https?:\/\//i.test(serverUrl)) {
+      return `${normalize(serverUrl)}/api`;
+    }
+
+    if (window?.location?.origin) {
+      return `${normalize(window.location.origin)}/api`;
+    }
+
+    console.error('Não foi possível determinar a BASE_URL da API. Usando fallback "/api".');
+    return '/api';
   }
+
+  const API_BASE_URL = resolveApiBaseUrl();
 
   const API_ENDPOINT_VERIFY = `${API_BASE_URL}/admin/produtos/imagens/verificar`;
   const API_ENDPOINT_STATUS = `${API_BASE_URL}/admin/produtos/imagens/status`;
