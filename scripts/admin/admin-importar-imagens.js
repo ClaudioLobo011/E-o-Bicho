@@ -37,6 +37,7 @@
       historyForward: null,
       historyPushState: null,
       historyReplaceState: null,
+      locationHrefDescriptor: null,
     };
 
     const showUploadInProgressWarning = () => {
@@ -79,7 +80,12 @@
       }
 
       event.preventDefault();
-      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation();
+      }
+      if (typeof event.stopPropagation === 'function') {
+        event.stopPropagation();
+      }
       showUploadInProgressWarning();
     };
 
@@ -89,7 +95,60 @@
       }
 
       event.preventDefault();
-      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation();
+      }
+      if (typeof event.stopPropagation === 'function') {
+        event.stopPropagation();
+      }
+      showUploadInProgressWarning();
+    };
+
+    const isBlockedNavigationKey = (event) => {
+      const key = String(event.key || '').toLowerCase();
+      if (!key) {
+        return false;
+      }
+
+      if (key === 'f5') {
+        return true;
+      }
+
+      if (key === 'r' && (event.ctrlKey || event.metaKey)) {
+        return true;
+      }
+
+      if ((key === 'arrowleft' || key === 'left') && event.altKey) {
+        return true;
+      }
+
+      if ((key === 'arrowright' || key === 'right') && event.altKey) {
+        return true;
+      }
+
+      if (key === 'browserback' || key === 'browserforward' || key === 'browserrefresh') {
+        return true;
+      }
+
+      return false;
+    };
+
+    const handleBlockedKeydown = (event) => {
+      if (!state.isUploading) {
+        return;
+      }
+
+      if (!isBlockedNavigationKey(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation();
+      }
+      if (typeof event.stopPropagation === 'function') {
+        event.stopPropagation();
+      }
       showUploadInProgressWarning();
     };
 
@@ -123,6 +182,68 @@
       }
     };
 
+    const patchLocationHref = () => {
+      if (navigationPatches.locationHrefDescriptor || navigationPatches.locationHrefDescriptor === false) {
+        return;
+      }
+
+      try {
+        const LocationProto = window.Location?.prototype;
+        if (!LocationProto) {
+          navigationPatches.locationHrefDescriptor = false;
+          return;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(LocationProto, 'href');
+        if (!descriptor || typeof descriptor.set !== 'function' || descriptor.configurable === false) {
+          navigationPatches.locationHrefDescriptor = false;
+          return;
+        }
+
+        const originalSet = descriptor.set;
+        const originalGet = descriptor.get;
+
+        Object.defineProperty(LocationProto, 'href', {
+          configurable: true,
+          enumerable: descriptor.enumerable ?? false,
+          get: originalGet,
+          set(value) {
+            if (state.isUploading) {
+              showUploadInProgressWarning();
+              return;
+            }
+
+            return originalSet.call(this, value);
+          },
+        });
+
+        navigationPatches.locationHrefDescriptor = descriptor;
+      } catch (error) {
+        navigationPatches.locationHrefDescriptor = false;
+        console.warn('Não foi possível proteger Location.href.', error);
+      }
+    };
+
+    const restoreLocationHref = () => {
+      if (!navigationPatches.locationHrefDescriptor || navigationPatches.locationHrefDescriptor === false) {
+        return;
+      }
+
+      try {
+        const LocationProto = window.Location?.prototype;
+        if (!LocationProto) {
+          navigationPatches.locationHrefDescriptor = null;
+          return;
+        }
+
+        Object.defineProperty(LocationProto, 'href', navigationPatches.locationHrefDescriptor);
+      } catch (error) {
+        console.warn('Não foi possível restaurar Location.href original.', error);
+      }
+
+      navigationPatches.locationHrefDescriptor = null;
+    };
+
     const applyNavigationMethodGuards = () => {
       if (navigationPatches.applied) {
         return;
@@ -144,6 +265,7 @@
         patchMethod(history, 'replaceState', 'historyReplaceState', history);
       }
 
+      patchLocationHref();
       navigationPatches.applied = true;
     };
 
@@ -183,6 +305,7 @@
         restoreMethod(history, 'replaceState', 'historyReplaceState');
       }
 
+      restoreLocationHref();
       navigationPatches.applied = false;
     };
 
@@ -211,6 +334,7 @@
 
       document.addEventListener('click', handleBlockedNavigation, true);
       document.addEventListener('submit', handleBlockedFormSubmit, true);
+      document.addEventListener('keydown', handleBlockedKeydown, true);
       applyNavigationMethodGuards();
       state.navigationGuardActive = true;
     };
@@ -222,6 +346,7 @@
 
       document.removeEventListener('click', handleBlockedNavigation, true);
       document.removeEventListener('submit', handleBlockedFormSubmit, true);
+      document.removeEventListener('keydown', handleBlockedKeydown, true);
       restoreNavigationMethodGuards();
       state.navigationGuardActive = false;
     };
