@@ -29,6 +29,7 @@
   let beforeUnloadAttached = false;
   let autoCancelDialogElement = null;
   let autoCancelDialogTimeout = null;
+  let navigationInterceptorsAttached = false;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', setup);
@@ -767,12 +768,16 @@
     return completed < totalFilesForProducts;
   }
 
+  function getNavigationWarningMessage() {
+    return 'Há um envio em andamento ou alterações não concluídas. Deseja realmente recarregar a página?';
+  }
+
   function handleBeforeUnload(event) {
     if (!shouldWarnBeforeUnload()) {
       return undefined;
     }
 
-    const message = 'Há um envio em andamento ou alterações não concluídas. Deseja realmente recarregar a página?';
+    const message = getNavigationWarningMessage();
     event.preventDefault();
     event.returnValue = message;
     triggerAutomaticReloadCancellation(message);
@@ -785,6 +790,7 @@
         window.addEventListener('beforeunload', handleBeforeUnload);
         beforeUnloadAttached = true;
       }
+      attachNavigationInterceptors();
       return;
     }
 
@@ -792,6 +798,8 @@
       window.removeEventListener('beforeunload', handleBeforeUnload);
       beforeUnloadAttached = false;
     }
+
+    detachNavigationInterceptors();
   }
 
   function triggerAutomaticReloadCancellation(message) {
@@ -808,6 +816,148 @@
     window.setTimeout(() => {
       showAutoCancelDialog(message);
     }, 0);
+  }
+
+  function attachNavigationInterceptors() {
+    if (navigationInterceptorsAttached || typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    window.addEventListener('keydown', handleNavigationShortcuts, true);
+    window.addEventListener('popstate', handlePopStateNavigation, true);
+    document.addEventListener('click', handlePotentialAnchorNavigation, true);
+    document.addEventListener('submit', handlePotentialFormNavigation, true);
+
+    if (typeof window.navigation !== 'undefined' && typeof window.navigation.addEventListener === 'function') {
+      window.navigation.addEventListener('navigate', handleNavigationApiEvent);
+    }
+
+    navigationInterceptorsAttached = true;
+  }
+
+  function detachNavigationInterceptors() {
+    if (!navigationInterceptorsAttached || typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    window.removeEventListener('keydown', handleNavigationShortcuts, true);
+    window.removeEventListener('popstate', handlePopStateNavigation, true);
+    document.removeEventListener('click', handlePotentialAnchorNavigation, true);
+    document.removeEventListener('submit', handlePotentialFormNavigation, true);
+
+    if (typeof window.navigation !== 'undefined' && typeof window.navigation.removeEventListener === 'function') {
+      window.navigation.removeEventListener('navigate', handleNavigationApiEvent);
+    }
+
+    navigationInterceptorsAttached = false;
+  }
+
+  function handleNavigationShortcuts(event) {
+    if (!shouldWarnBeforeUnload()) {
+      return;
+    }
+
+    const key = typeof event.key === 'string' ? event.key : '';
+    const lowerKey = key.toLowerCase();
+    const isMetaKey = event.metaKey || event.ctrlKey;
+
+    const isReloadShortcut = key === 'F5' || lowerKey === 'f5' || (lowerKey === 'r' && isMetaKey) || key === 'BrowserRefresh';
+
+    let isBackspaceNavigation = lowerKey === 'backspace';
+    if (isBackspaceNavigation && isEditableTarget(event.target)) {
+      isBackspaceNavigation = false;
+    }
+
+    const isBackNavigation =
+      (key === 'ArrowLeft' && event.altKey) ||
+      (lowerKey === 'bracketleft' && isMetaKey) ||
+      key === 'BrowserBack';
+
+    const isForwardNavigation =
+      (key === 'ArrowRight' && event.altKey) ||
+      (lowerKey === 'bracketright' && isMetaKey) ||
+      key === 'BrowserForward';
+
+    if (!isReloadShortcut && !isBackspaceNavigation && !isBackNavigation && !isForwardNavigation) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const message = getNavigationWarningMessage();
+    triggerAutomaticReloadCancellation(message);
+  }
+
+  function handlePopStateNavigation(event) {
+    if (!shouldWarnBeforeUnload()) {
+      return;
+    }
+
+    event.preventDefault?.();
+    const message = getNavigationWarningMessage();
+    triggerAutomaticReloadCancellation(message);
+
+    if (typeof history !== 'undefined' && typeof history.pushState === 'function') {
+      try {
+        history.pushState(history.state, document.title, window.location.href);
+      } catch (error) {
+        console.warn('Não foi possível restaurar o histórico após cancelar a navegação.', error);
+      }
+    }
+  }
+
+  function handlePotentialAnchorNavigation(event) {
+    if (!shouldWarnBeforeUnload()) {
+      return;
+    }
+
+    const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
+    if (!anchor) {
+      return;
+    }
+
+    const href = anchor.getAttribute('href');
+    if (!href || href.startsWith('#') || anchor.target === '_blank' || anchor.hasAttribute('download')) {
+      return;
+    }
+
+    event.preventDefault();
+    const message = getNavigationWarningMessage();
+    triggerAutomaticReloadCancellation(message);
+  }
+
+  function handlePotentialFormNavigation(event) {
+    if (!shouldWarnBeforeUnload()) {
+      return;
+    }
+
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    if (form.target === '_blank') {
+      return;
+    }
+
+    event.preventDefault();
+    const message = getNavigationWarningMessage();
+    triggerAutomaticReloadCancellation(message);
+  }
+
+  function handleNavigationApiEvent(event) {
+    if (!shouldWarnBeforeUnload()) {
+      return;
+    }
+
+    try {
+      event.preventDefault();
+    } catch (error) {
+      console.warn('Não foi possível interceptar a navegação via Navigation API.', error);
+    }
+
+    const message = getNavigationWarningMessage();
+    triggerAutomaticReloadCancellation(message);
   }
 
   function showAutoCancelDialog(message) {
@@ -852,6 +1002,27 @@
     autoCancelDialogTimeout = window.setTimeout(() => {
       hideAutoCancelDialog();
     }, 3500);
+  }
+
+  function isEditableTarget(target) {
+    if (!(target instanceof Element)) {
+      return false;
+    }
+
+    if (target.isContentEditable) {
+      return true;
+    }
+
+    if (target instanceof HTMLTextAreaElement) {
+      return true;
+    }
+
+    if (target instanceof HTMLInputElement) {
+      const editableTypes = ['text', 'search', 'email', 'url', 'tel', 'password', 'number', 'date', 'datetime-local', 'month', 'time', 'week'];
+      return editableTypes.includes((target.type || 'text').toLowerCase());
+    }
+
+    return false;
   }
 
   function hideAutoCancelDialog() {
