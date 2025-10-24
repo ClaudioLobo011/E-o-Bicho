@@ -66,11 +66,64 @@
 
       window.__adminImportImagesNoReloadGuard = true;
 
-      try {
-        window.onbeforeunload = null;
-      } catch (error) {
-        console.warn('Falha ao limpar manipuladores anteriores de beforeunload.', error);
-      }
+      const clearLegacyHandlers = (target) => {
+        if (!target) {
+          return;
+        }
+
+        try {
+          target.onbeforeunload = null;
+        } catch (error) {
+          console.warn('Falha ao limpar manipuladores anteriores de beforeunload.', error);
+        }
+      };
+
+      const blockAssignments = (target, label) => {
+        if (!target) {
+          return;
+        }
+
+        try {
+          Object.defineProperty(target, 'onbeforeunload', {
+            configurable: true,
+            enumerable: false,
+            get: () => undefined,
+            set: () => {
+              console.warn(`Atribuição bloqueada para onbeforeunload em ${label}.`);
+            },
+          });
+        } catch (error) {
+          console.warn(`Não foi possível proteger onbeforeunload em ${label}.`, error);
+        }
+      };
+
+      const blockEventRegistration = (target, label) => {
+        if (!target || typeof target.addEventListener !== 'function') {
+          return;
+        }
+
+        const originalAdd = target.addEventListener.bind(target);
+        const originalRemove = target.removeEventListener?.bind(target);
+
+        const normalizeType = (type) => String(type || '').toLowerCase();
+
+        target.addEventListener = (type, listener, options) => {
+          if (normalizeType(type) === 'beforeunload') {
+            console.warn(`Listener de beforeunload bloqueado em ${label}.`);
+            return undefined;
+          }
+          return originalAdd(type, listener, options);
+        };
+
+        if (typeof originalRemove === 'function') {
+          target.removeEventListener = (type, listener, options) => {
+            if (normalizeType(type) === 'beforeunload') {
+              return undefined;
+            }
+            return originalRemove(type, listener, options);
+          };
+        }
+      };
 
       const swallowBeforeUnload = (event) => {
         if (!event) {
@@ -92,7 +145,16 @@
         }
       };
 
+      clearLegacyHandlers(window);
+      clearLegacyHandlers(document);
+
+      blockAssignments(window, 'window');
+      blockAssignments(document, 'document');
+      blockEventRegistration(window, 'window');
+      blockEventRegistration(document, 'document');
+
       window.addEventListener('beforeunload', swallowBeforeUnload, { capture: true });
+      document.addEventListener('beforeunload', swallowBeforeUnload, { capture: true });
     };
 
     disablePageReloadTriggers();
