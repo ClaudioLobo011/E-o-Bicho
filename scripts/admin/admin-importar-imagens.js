@@ -27,6 +27,8 @@
   const refs = {};
   let analysisRunId = 0;
   let beforeUnloadAttached = false;
+  let autoCancelDialogElement = null;
+  let autoCancelDialogTimeout = null;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', setup);
@@ -773,6 +775,7 @@
     const message = 'Há um envio em andamento ou alterações não concluídas. Deseja realmente recarregar a página?';
     event.preventDefault();
     event.returnValue = message;
+    triggerAutomaticReloadCancellation(message);
     return message;
   }
 
@@ -789,6 +792,75 @@
       window.removeEventListener('beforeunload', handleBeforeUnload);
       beforeUnloadAttached = false;
     }
+  }
+
+  function triggerAutomaticReloadCancellation(message) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.stop();
+    } catch (error) {
+      console.warn('Não foi possível interromper o recarregamento automaticamente.', error);
+    }
+
+    window.setTimeout(() => {
+      showAutoCancelDialog(message);
+    }, 0);
+  }
+
+  function showAutoCancelDialog(message) {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const formattedMessage = `${message} O recarregamento foi cancelado automaticamente.`;
+
+    if (!autoCancelDialogElement) {
+      if (!document.body) {
+        console.warn('Não foi possível exibir o aviso de cancelamento automático porque o <body> não está disponível.');
+        return;
+      }
+      autoCancelDialogElement = document.createElement('div');
+      autoCancelDialogElement.setAttribute('data-auto-cancel-dialog', 'true');
+      autoCancelDialogElement.className =
+        'fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 transition-opacity duration-200 opacity-0 pointer-events-none';
+      autoCancelDialogElement.setAttribute('aria-hidden', 'true');
+      autoCancelDialogElement.innerHTML = `
+        <div class="bg-white max-w-sm w-full mx-6 rounded-lg shadow-xl p-6 space-y-3" role="alertdialog" aria-modal="true" aria-live="assertive">
+          <h2 class="text-lg font-semibold text-gray-800">Recarregamento cancelado</h2>
+          <p class="text-sm text-gray-600" data-auto-cancel-message></p>
+          <p class="text-xs text-gray-400">A página permanecerá aberta para evitar perda de progresso.</p>
+        </div>
+      `;
+      document.body.appendChild(autoCancelDialogElement);
+    }
+
+    const messageElement = autoCancelDialogElement.querySelector('[data-auto-cancel-message]');
+    if (messageElement) {
+      messageElement.textContent = formattedMessage;
+    }
+
+    autoCancelDialogElement.classList.remove('opacity-0', 'pointer-events-none');
+    autoCancelDialogElement.setAttribute('aria-hidden', 'false');
+
+    if (autoCancelDialogTimeout) {
+      window.clearTimeout(autoCancelDialogTimeout);
+    }
+
+    autoCancelDialogTimeout = window.setTimeout(() => {
+      hideAutoCancelDialog();
+    }, 3500);
+  }
+
+  function hideAutoCancelDialog() {
+    if (!autoCancelDialogElement) {
+      return;
+    }
+
+    autoCancelDialogElement.classList.add('opacity-0', 'pointer-events-none');
+    autoCancelDialogElement.setAttribute('aria-hidden', 'true');
   }
 
   function updateGroupStatus(productId, status) {
