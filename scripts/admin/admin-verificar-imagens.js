@@ -1,6 +1,11 @@
 (function () {
-  const API_ENDPOINT_VERIFY = '/api/admin/produtos/imagens/verificar';
-  const API_ENDPOINT_STATUS = '/api/admin/produtos/imagens/status';
+  const API_BASE_URL = typeof API_CONFIG !== 'undefined' ? API_CONFIG.BASE_URL : '';
+  if (!API_BASE_URL) {
+    console.error('API_BASE_URL não configurada. Verifique scripts/core/config.js.');
+  }
+
+  const API_ENDPOINT_VERIFY = `${API_BASE_URL}/admin/produtos/imagens/verificar`;
+  const API_ENDPOINT_STATUS = `${API_BASE_URL}/admin/produtos/imagens/status`;
   const CONSOLE_MAX_LINES = 200;
 
   const state = {
@@ -90,20 +95,35 @@
     appendLog('Iniciando verificação de imagens no drive...', 'info');
 
     try {
+      const token = getAuthToken();
+      if (!token) {
+        appendLog('Sessão expirada. Faça login novamente para continuar.', 'error');
+        setProcessing(false);
+        return;
+      }
+
       const response = await fetch(API_ENDPOINT_VERIFY, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ acionadoEm: new Date().toISOString() }),
       });
 
       if (!response.ok) {
-        throw new Error(`Falha na requisição: ${response.status} ${response.statusText}`);
+        const errorPayload = await safeJson(response);
+        const message = errorPayload?.message || `Falha na requisição: ${response.status} ${response.statusText}`;
+        throw new Error(message);
       }
 
       const payload = await safeJson(response);
       processVerificationResult(payload);
     } catch (error) {
       console.error('Erro ao executar verificação de imagens:', error);
+      if (error?.message) {
+        appendLog(error.message, 'error');
+      }
       appendLog('Não foi possível concluir a verificação. Verifique sua conexão ou tente novamente mais tarde.', 'error');
     } finally {
       setProcessing(false);
@@ -112,10 +132,23 @@
 
   async function loadCurrentStatus() {
     try {
-      const response = await fetch(API_ENDPOINT_STATUS, { method: 'GET' });
+      const token = getAuthToken();
+      if (!token) {
+        appendLog('Sessão expirada. Faça login novamente para consultar o histórico.', 'warning');
+        return;
+      }
+
+      const response = await fetch(API_ENDPOINT_STATUS, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       if (!response.ok) {
         if (response.status !== 404) {
-          throw new Error(`Status ${response.status}`);
+          const errorPayload = await safeJson(response);
+          const message = errorPayload?.message || `Status ${response.status}`;
+          throw new Error(message);
         }
         appendLog('Nenhum histórico de verificação foi encontrado.', 'warning');
         return;
@@ -126,6 +159,9 @@
       appendLog('Status de verificação carregado com sucesso.', 'success');
     } catch (error) {
       console.warn('Não foi possível carregar o status atual de imagens:', error);
+      if (error?.message) {
+        appendLog(error.message, 'warning');
+      }
       appendLog('Não foi possível carregar o status atual de imagens.', 'warning');
     }
   }
@@ -409,6 +445,16 @@
     } catch (error) {
       appendLog('Não foi possível interpretar a resposta do servidor.', 'error');
       throw error;
+    }
+  }
+
+  function getAuthToken() {
+    try {
+      const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+      return loggedInUser?.token || '';
+    } catch (error) {
+      console.error('Não foi possível obter o token de autenticação:', error);
+      return '';
     }
   }
 
