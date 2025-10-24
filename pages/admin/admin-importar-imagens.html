@@ -65,6 +65,30 @@
             <h2 class="text-lg font-semibold text-gray-800">Arquivos encontrados</h2>
             <span class="text-xs text-gray-500" id="table-helper">Nenhum arquivo foi carregado.</span>
           </div>
+          <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label class="flex flex-col gap-1 text-sm text-gray-600">
+              <span class="font-medium text-gray-700">Filtrar por código de barras</span>
+              <input
+                id="filter-barcode-input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="Ex.: 7891234567890"
+                class="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+            </label>
+            <label class="flex flex-col gap-1 text-sm text-gray-600">
+              <span class="font-medium text-gray-700">Filtrar por sequência</span>
+              <input
+                id="filter-sequence-input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="Ex.: 1"
+                class="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+            </label>
+          </div>
           <div class="mt-4 overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
               <thead class="bg-gray-50">

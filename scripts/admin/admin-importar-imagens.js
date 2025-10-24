@@ -11,6 +11,8 @@
     const summaryErrors = document.getElementById('summary-errors');
     const entriesTable = document.getElementById('entries-table');
     const tableHelper = document.getElementById('table-helper');
+    const filterBarcodeInput = document.getElementById('filter-barcode-input');
+    const filterSequenceInput = document.getElementById('filter-sequence-input');
 
     if (!folderInput || !startUploadBtn || !logContainer || !entriesTable) {
       console.warn('Elementos essenciais da página de importação não foram encontrados.');
@@ -22,9 +24,73 @@
       productCache: new Map(),
       isProcessing: false,
       isUploading: false,
+      filters: {
+        barcode: '',
+        sequence: '',
+      },
     };
 
     const imagePattern = /\.(jpe?g|png|gif|bmp|tiff?|webp)$/i;
+
+    const getInputValue = (input) => (typeof input?.value === 'string' ? input.value : '');
+
+    const syncFiltersFromInputs = () => {
+      state.filters.barcode = getInputValue(filterBarcodeInput);
+      state.filters.sequence = getInputValue(filterSequenceInput);
+    };
+
+    const hasActiveFilters = () => Boolean((state.filters.barcode || '').trim() || (state.filters.sequence || '').trim());
+
+    const getFilteredEntries = () => {
+      if (!state.entries.length) {
+        return [];
+      }
+
+      const barcodeFilterRaw = (state.filters.barcode || '').trim();
+      const sequenceFilterRaw = (state.filters.sequence || '').trim();
+
+      if (!barcodeFilterRaw && !sequenceFilterRaw) {
+        return state.entries.slice();
+      }
+
+      const normalizedBarcodeFilter = normalizeBarcode(barcodeFilterRaw).toLowerCase();
+      const barcodeFilterLower = barcodeFilterRaw.toLowerCase();
+
+      return state.entries.filter((entry) => {
+        if (barcodeFilterRaw) {
+          const entryBarcodeRaw = (entry.barcodeRaw || '').toLowerCase();
+          const entryBarcodeNormalized = (entry.barcodeNormalized || '').toLowerCase();
+
+          const normalizedMatches = normalizedBarcodeFilter
+            ? entryBarcodeNormalized.includes(normalizedBarcodeFilter)
+            : false;
+
+          const rawMatches = entryBarcodeRaw.includes(barcodeFilterLower);
+
+          if (!normalizedMatches && !rawMatches) {
+            return false;
+          }
+        }
+
+        if (sequenceFilterRaw) {
+          const sequenceText = Number.isInteger(entry.sequence)
+            ? String(entry.sequence)
+            : '';
+          const digitsOnlyFilter = sequenceFilterRaw.replace(/[^0-9]/g, '');
+          const normalizedDigitsFilter = digitsOnlyFilter.replace(/^0+/, '') || digitsOnlyFilter;
+          const matchesRaw = sequenceText.includes(sequenceFilterRaw);
+          const matchesDigits = normalizedDigitsFilter
+            ? sequenceText.includes(normalizedDigitsFilter)
+            : false;
+
+          if (!matchesRaw && !matchesDigits) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+    };
 
     const logMessage = (message, type = 'info') => {
       const prefixMap = {
@@ -95,7 +161,20 @@
         return;
       }
 
-      const rows = state.entries.map((entry) => {
+      const filteredEntries = getFilteredEntries();
+      const hasFilters = hasActiveFilters();
+
+      if (!filteredEntries.length) {
+        entriesTable.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-gray-500">Nenhum arquivo corresponde aos filtros informados.</td></tr>';
+        if (tableHelper) {
+          tableHelper.textContent = hasFilters
+            ? 'Nenhum arquivo corresponde aos filtros aplicados.'
+            : 'Nenhum arquivo foi carregado.';
+        }
+        return;
+      }
+
+      const rows = filteredEntries.map((entry) => {
         const productName = entry.product?.nome || entry.product?.descricao || entry.productId || '--';
         const statusText = describeStatus(entry);
         const statusClass = {
@@ -123,7 +202,13 @@
 
       entriesTable.innerHTML = rows;
       if (tableHelper) {
-        tableHelper.textContent = `${state.entries.length} arquivo(s) processado(s).`;
+        if (hasFilters) {
+          tableHelper.textContent = filteredEntries.length === state.entries.length
+            ? `Exibindo ${filteredEntries.length} arquivo(s).`
+            : `Exibindo ${filteredEntries.length} de ${state.entries.length} arquivo(s).`;
+        } else {
+          tableHelper.textContent = `${state.entries.length} arquivo(s) processado(s).`;
+        }
       }
     };
 
@@ -439,6 +524,14 @@
       logMessage(`Envio finalizado: ${resumeText}.`, failureCount ? 'warn' : 'success');
     };
 
+    const handleFiltersChange = () => {
+      syncFiltersFromInputs();
+      renderTable();
+    };
+
+    filterBarcodeInput?.addEventListener('input', handleFiltersChange);
+    filterSequenceInput?.addEventListener('input', handleFiltersChange);
+
     folderInput.addEventListener('change', (event) => {
       const files = Array.from(event.target.files || []);
       handleSelection(files);
@@ -447,6 +540,7 @@
     startUploadBtn.addEventListener('click', startUpload);
     clearLogBtn?.addEventListener('click', clearLog);
 
+    syncFiltersFromInputs();
     renderSummary();
     renderTable();
     updateControls();
