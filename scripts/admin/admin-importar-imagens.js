@@ -23,48 +23,186 @@
       ignoreNextEmptySelection: false,
       productCache: new Map(),
       lastSelectionSignature: '',
-      beforeUnloadHandler: null,
-      beforeUnloadBound: false,
+      navigationGuardActive: false,
     };
 
-    const preventUnload = (event) => {
+    const navigationPatches = {
+      applied: false,
+      locationAssign: null,
+      locationReplace: null,
+      locationReload: null,
+      historyGo: null,
+      historyBack: null,
+      historyForward: null,
+      historyPushState: null,
+      historyReplaceState: null,
+    };
+
+    const showUploadInProgressWarning = () => {
+      const warningMessage = 'O envio de imagens está em andamento. Aguarde a conclusão antes de sair desta página.';
+      if (typeof window.showModal === 'function') {
+        window.showModal({
+          title: 'Envio em andamento',
+          message: warningMessage,
+          confirmText: 'Entendi'
+        });
+      } else {
+        alert(warningMessage); // eslint-disable-line no-alert
+      }
+    };
+
+    const handleBlockedNavigation = (event) => {
       if (!state.isUploading) {
         return;
       }
 
-      const message = 'O envio de imagens ainda está em andamento. Deseja realmente sair da página?';
+      const target = event.target instanceof Element ? event.target : null;
+      const anchor = target?.closest?.('a[href]');
+
+      if (!anchor) {
+        return;
+      }
+
+      const href = anchor.getAttribute('href');
+      if (!href || href.trim() === '' || href.startsWith('#') || href.startsWith('javascript:')) {
+        return;
+      }
+
       event.preventDefault();
-      event.returnValue = message;
-      return message;
+      event.stopPropagation();
+      showUploadInProgressWarning();
     };
 
-    const enableUnloadProtection = () => {
-      if (state.beforeUnloadBound) {
+    const handleBlockedFormSubmit = (event) => {
+      if (!state.isUploading) {
         return;
       }
 
-      state.beforeUnloadHandler = preventUnload;
-      window.addEventListener('beforeunload', state.beforeUnloadHandler);
-      state.beforeUnloadBound = true;
+      event.preventDefault();
+      event.stopPropagation();
+      showUploadInProgressWarning();
     };
 
-    const disableUnloadProtection = () => {
-      if (!state.beforeUnloadBound) {
-        return;
-      }
-
-      if (state.beforeUnloadHandler) {
-        window.removeEventListener('beforeunload', state.beforeUnloadHandler);
-      }
-      state.beforeUnloadHandler = null;
-      state.beforeUnloadBound = false;
-    };
-
-    const updateUnloadProtection = () => {
+    const createGuardedNavigation = (originalFn, context) => function guardedNavigation(...args) {
       if (state.isUploading) {
-        enableUnloadProtection();
+        showUploadInProgressWarning();
+        return undefined;
+      }
+
+      try {
+        return originalFn.apply(context || this, args);
+      } catch (error) {
+        console.error('Falha ao executar navegação original:', error);
+        throw error;
+      }
+    };
+
+    const patchMethod = (target, methodName, storeKey, context = target) => {
+      if (!target || typeof target[methodName] !== 'function') {
+        navigationPatches[storeKey] = null;
+        return;
+      }
+
+      try {
+        const original = target[methodName].bind(context);
+        target[methodName] = createGuardedNavigation(original, context);
+        navigationPatches[storeKey] = original;
+      } catch (error) {
+        navigationPatches[storeKey] = null;
+        console.warn(`Não foi possível proteger a navegação para ${methodName}.`, error);
+      }
+    };
+
+    const applyNavigationMethodGuards = () => {
+      if (navigationPatches.applied) {
+        return;
+      }
+
+      const { location, history } = window;
+
+      if (location) {
+        patchMethod(location, 'assign', 'locationAssign', location);
+        patchMethod(location, 'replace', 'locationReplace', location);
+        patchMethod(location, 'reload', 'locationReload', location);
+      }
+
+      if (history) {
+        patchMethod(history, 'go', 'historyGo', history);
+        patchMethod(history, 'back', 'historyBack', history);
+        patchMethod(history, 'forward', 'historyForward', history);
+        patchMethod(history, 'pushState', 'historyPushState', history);
+        patchMethod(history, 'replaceState', 'historyReplaceState', history);
+      }
+
+      navigationPatches.applied = true;
+    };
+
+    const restoreMethod = (target, methodName, storeKey) => {
+      if (!target || !navigationPatches[storeKey]) {
+        navigationPatches[storeKey] = null;
+        return;
+      }
+
+      try {
+        target[methodName] = navigationPatches[storeKey];
+      } catch (error) {
+        console.warn(`Não foi possível restaurar a navegação original para ${methodName}.`, error);
+      }
+
+      navigationPatches[storeKey] = null;
+    };
+
+    const restoreNavigationMethodGuards = () => {
+      if (!navigationPatches.applied) {
+        return;
+      }
+
+      const { location, history } = window;
+
+      if (location) {
+        restoreMethod(location, 'assign', 'locationAssign');
+        restoreMethod(location, 'replace', 'locationReplace');
+        restoreMethod(location, 'reload', 'locationReload');
+      }
+
+      if (history) {
+        restoreMethod(history, 'go', 'historyGo');
+        restoreMethod(history, 'back', 'historyBack');
+        restoreMethod(history, 'forward', 'historyForward');
+        restoreMethod(history, 'pushState', 'historyPushState');
+        restoreMethod(history, 'replaceState', 'historyReplaceState');
+      }
+
+      navigationPatches.applied = false;
+    };
+
+    const enableNavigationGuard = () => {
+      if (state.navigationGuardActive) {
+        return;
+      }
+
+      document.addEventListener('click', handleBlockedNavigation, true);
+      document.addEventListener('submit', handleBlockedFormSubmit, true);
+      applyNavigationMethodGuards();
+      state.navigationGuardActive = true;
+    };
+
+    const disableNavigationGuard = () => {
+      if (!state.navigationGuardActive) {
+        return;
+      }
+
+      document.removeEventListener('click', handleBlockedNavigation, true);
+      document.removeEventListener('submit', handleBlockedFormSubmit, true);
+      restoreNavigationMethodGuards();
+      state.navigationGuardActive = false;
+    };
+
+    const updateNavigationProtection = () => {
+      if (state.isUploading) {
+        enableNavigationGuard();
       } else {
-        disableUnloadProtection();
+        disableNavigationGuard();
       }
     };
 
@@ -523,7 +661,7 @@
       state.isUploading = false;
       state.productCache.clear();
       state.lastSelectionSignature = '';
-      disableUnloadProtection();
+      disableNavigationGuard();
     };
 
     const extractProductId = (product) => product?._id || product?.id || product?.productId || null;
@@ -830,7 +968,7 @@
       }
 
       state.isUploading = true;
-      updateUnloadProtection();
+      updateNavigationProtection();
       updateControls();
       if (folderInput) {
         state.suppressNextFolderChange = true;
@@ -979,7 +1117,7 @@
       }
       updateControls();
 
-      updateUnloadProtection();
+      updateNavigationProtection();
 
       state.suppressNextFolderChange = false;
       state.ignoreNextEmptySelection = false;
@@ -1044,7 +1182,7 @@
           folderInput.disabled = false;
         }
         updateControls();
-        updateUnloadProtection();
+        updateNavigationProtection();
       });
     });
 
