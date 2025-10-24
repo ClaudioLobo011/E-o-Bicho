@@ -24,6 +24,7 @@
       productCache: new Map(),
       lastSelectionSignature: '',
       navigationGuardActive: false,
+      beforeUnloadGuardActive: false,
     };
 
     const navigationPatches = {
@@ -51,20 +52,29 @@
       }
     };
 
+    const beforeUnloadHandler = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+      return '';
+    };
+
     const handleBlockedNavigation = (event) => {
       if (!state.isUploading) {
         return;
       }
 
       const target = event.target instanceof Element ? event.target : null;
-      const anchor = target?.closest?.('a[href]');
+      const anchor = target?.closest?.('a');
 
-      if (!anchor) {
+      if (!anchor || !anchor.hasAttribute('href')) {
         return;
       }
 
-      const href = anchor.getAttribute('href');
-      if (!href || href.trim() === '' || href.startsWith('#') || href.startsWith('javascript:')) {
+      const href = anchor.getAttribute('href') ?? '';
+      const normalizedHref = href.trim().toLowerCase();
+      const isNonNavigational = normalizedHref.startsWith('#') || normalizedHref.startsWith('javascript:');
+
+      if (isNonNavigational) {
         return;
       }
 
@@ -176,6 +186,24 @@
       navigationPatches.applied = false;
     };
 
+    const enableBeforeUnloadGuard = () => {
+      if (state.beforeUnloadGuardActive) {
+        return;
+      }
+
+      window.addEventListener('beforeunload', beforeUnloadHandler);
+      state.beforeUnloadGuardActive = true;
+    };
+
+    const disableBeforeUnloadGuard = () => {
+      if (!state.beforeUnloadGuardActive) {
+        return;
+      }
+
+      window.removeEventListener('beforeunload', beforeUnloadHandler);
+      state.beforeUnloadGuardActive = false;
+    };
+
     const enableNavigationGuard = () => {
       if (state.navigationGuardActive) {
         return;
@@ -201,8 +229,10 @@
     const updateNavigationProtection = () => {
       if (state.isUploading) {
         enableNavigationGuard();
+        enableBeforeUnloadGuard();
       } else {
         disableNavigationGuard();
+        disableBeforeUnloadGuard();
       }
     };
 
