@@ -26,6 +26,18 @@
       navigationGuardActive: false,
     };
 
+    const navigationPatches = {
+      applied: false,
+      locationAssign: null,
+      locationReplace: null,
+      locationReload: null,
+      historyGo: null,
+      historyBack: null,
+      historyForward: null,
+      historyPushState: null,
+      historyReplaceState: null,
+    };
+
     const showUploadInProgressWarning = () => {
       const warningMessage = 'O envio de imagens está em andamento. Aguarde a conclusão antes de sair desta página.';
       if (typeof window.showModal === 'function') {
@@ -71,6 +83,99 @@
       showUploadInProgressWarning();
     };
 
+    const createGuardedNavigation = (originalFn, context) => function guardedNavigation(...args) {
+      if (state.isUploading) {
+        showUploadInProgressWarning();
+        return undefined;
+      }
+
+      try {
+        return originalFn.apply(context || this, args);
+      } catch (error) {
+        console.error('Falha ao executar navegação original:', error);
+        throw error;
+      }
+    };
+
+    const patchMethod = (target, methodName, storeKey, context = target) => {
+      if (!target || typeof target[methodName] !== 'function') {
+        navigationPatches[storeKey] = null;
+        return;
+      }
+
+      try {
+        const original = target[methodName].bind(context);
+        target[methodName] = createGuardedNavigation(original, context);
+        navigationPatches[storeKey] = original;
+      } catch (error) {
+        navigationPatches[storeKey] = null;
+        console.warn(`Não foi possível proteger a navegação para ${methodName}.`, error);
+      }
+    };
+
+    const applyNavigationMethodGuards = () => {
+      if (navigationPatches.applied) {
+        return;
+      }
+
+      const { location, history } = window;
+
+      if (location) {
+        patchMethod(location, 'assign', 'locationAssign', location);
+        patchMethod(location, 'replace', 'locationReplace', location);
+        patchMethod(location, 'reload', 'locationReload', location);
+      }
+
+      if (history) {
+        patchMethod(history, 'go', 'historyGo', history);
+        patchMethod(history, 'back', 'historyBack', history);
+        patchMethod(history, 'forward', 'historyForward', history);
+        patchMethod(history, 'pushState', 'historyPushState', history);
+        patchMethod(history, 'replaceState', 'historyReplaceState', history);
+      }
+
+      navigationPatches.applied = true;
+    };
+
+    const restoreMethod = (target, methodName, storeKey) => {
+      if (!target || !navigationPatches[storeKey]) {
+        navigationPatches[storeKey] = null;
+        return;
+      }
+
+      try {
+        target[methodName] = navigationPatches[storeKey];
+      } catch (error) {
+        console.warn(`Não foi possível restaurar a navegação original para ${methodName}.`, error);
+      }
+
+      navigationPatches[storeKey] = null;
+    };
+
+    const restoreNavigationMethodGuards = () => {
+      if (!navigationPatches.applied) {
+        return;
+      }
+
+      const { location, history } = window;
+
+      if (location) {
+        restoreMethod(location, 'assign', 'locationAssign');
+        restoreMethod(location, 'replace', 'locationReplace');
+        restoreMethod(location, 'reload', 'locationReload');
+      }
+
+      if (history) {
+        restoreMethod(history, 'go', 'historyGo');
+        restoreMethod(history, 'back', 'historyBack');
+        restoreMethod(history, 'forward', 'historyForward');
+        restoreMethod(history, 'pushState', 'historyPushState');
+        restoreMethod(history, 'replaceState', 'historyReplaceState');
+      }
+
+      navigationPatches.applied = false;
+    };
+
     const enableNavigationGuard = () => {
       if (state.navigationGuardActive) {
         return;
@@ -78,6 +183,7 @@
 
       document.addEventListener('click', handleBlockedNavigation, true);
       document.addEventListener('submit', handleBlockedFormSubmit, true);
+      applyNavigationMethodGuards();
       state.navigationGuardActive = true;
     };
 
@@ -88,6 +194,7 @@
 
       document.removeEventListener('click', handleBlockedNavigation, true);
       document.removeEventListener('submit', handleBlockedFormSubmit, true);
+      restoreNavigationMethodGuards();
       state.navigationGuardActive = false;
     };
 
