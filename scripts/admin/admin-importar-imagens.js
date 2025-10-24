@@ -24,7 +24,6 @@
       productCache: new Map(),
       lastSelectionSignature: '',
       navigationGuardActive: false,
-      beforeUnloadGuardActive: false,
     };
 
     const navigationPatches = {
@@ -51,12 +50,6 @@
       } else {
         alert(warningMessage); // eslint-disable-line no-alert
       }
-    };
-
-    const beforeUnloadHandler = (event) => {
-      event.preventDefault();
-      event.returnValue = '';
-      return '';
     };
 
     const handleBlockedNavigation = (event) => {
@@ -309,24 +302,6 @@
       navigationPatches.applied = false;
     };
 
-    const enableBeforeUnloadGuard = () => {
-      if (state.beforeUnloadGuardActive) {
-        return;
-      }
-
-      window.addEventListener('beforeunload', beforeUnloadHandler);
-      state.beforeUnloadGuardActive = true;
-    };
-
-    const disableBeforeUnloadGuard = () => {
-      if (!state.beforeUnloadGuardActive) {
-        return;
-      }
-
-      window.removeEventListener('beforeunload', beforeUnloadHandler);
-      state.beforeUnloadGuardActive = false;
-    };
-
     const enableNavigationGuard = () => {
       if (state.navigationGuardActive) {
         return;
@@ -354,10 +329,8 @@
     const updateNavigationProtection = () => {
       if (state.isUploading) {
         enableNavigationGuard();
-        enableBeforeUnloadGuard();
       } else {
         disableNavigationGuard();
-        disableBeforeUnloadGuard();
       }
     };
 
