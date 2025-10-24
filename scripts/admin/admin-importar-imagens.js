@@ -26,6 +26,7 @@
   let root = null;
   const refs = {};
   let analysisRunId = 0;
+  let beforeUnloadAttached = false;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', setup);
@@ -204,6 +205,8 @@
     if (refs.folderInput) {
       refs.folderInput.disabled = state.uploading;
     }
+
+    updateBeforeUnloadGuard();
   }
 
   function renderProductMatches() {
@@ -734,6 +737,58 @@
         reject(error instanceof Error ? error : new Error('Erro inesperado durante o upload.'));
       }
     });
+  }
+
+  function shouldWarnBeforeUnload() {
+    if (!state) {
+      return false;
+    }
+
+    if (state.uploading) {
+      return true;
+    }
+
+    if (!state.products.size) {
+      return false;
+    }
+
+    const totalFilesForProducts = Array.from(state.products.values()).reduce(
+      (sum, group) => sum + (Array.isArray(group?.files) ? group.files.length : 0),
+      0,
+    );
+
+    if (totalFilesForProducts === 0) {
+      return false;
+    }
+
+    const completed = state.stats.uploaded + state.stats.failed;
+    return completed < totalFilesForProducts;
+  }
+
+  function handleBeforeUnload(event) {
+    if (!shouldWarnBeforeUnload()) {
+      return undefined;
+    }
+
+    const message = 'Há um envio em andamento ou alterações não concluídas. Deseja realmente recarregar a página?';
+    event.preventDefault();
+    event.returnValue = message;
+    return message;
+  }
+
+  function updateBeforeUnloadGuard() {
+    if (shouldWarnBeforeUnload()) {
+      if (!beforeUnloadAttached) {
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        beforeUnloadAttached = true;
+      }
+      return;
+    }
+
+    if (beforeUnloadAttached) {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      beforeUnloadAttached = false;
+    }
   }
 
   function updateGroupStatus(productId, status) {
