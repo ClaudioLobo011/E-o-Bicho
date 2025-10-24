@@ -58,14 +58,15 @@
 
       return state.entries.filter((entry) => {
         if (barcodeFilterRaw) {
-          const entryBarcodeRaw = (entry.barcodeRaw || '').toLowerCase();
-          const entryBarcodeNormalized = (entry.barcodeNormalized || '').toLowerCase();
+          const candidates = Array.isArray(entry.barcodeCandidates) && entry.barcodeCandidates.length
+            ? entry.barcodeCandidates
+            : [{ raw: entry.barcodeRaw || '', normalized: entry.barcodeNormalized || '' }];
 
           const normalizedMatches = normalizedBarcodeFilter
-            ? entryBarcodeNormalized.includes(normalizedBarcodeFilter)
+            ? candidates.some((candidate) => (candidate.normalized || '').toLowerCase().includes(normalizedBarcodeFilter))
             : false;
 
-          const rawMatches = entryBarcodeRaw.includes(barcodeFilterLower);
+          const rawMatches = candidates.some((candidate) => (candidate.raw || '').toLowerCase().includes(barcodeFilterLower));
 
           if (!normalizedMatches && !rawMatches) {
             return false;
@@ -114,6 +115,58 @@
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^0-9A-Za-z]/g, '')
       .trim();
+
+    const buildBarcodeCandidates = (label) => {
+      const baseLabel = String(label ?? '').trim();
+      const digitMatches = baseLabel.match(/\d{6,}/g) || [];
+      const uniqueMatches = [];
+
+      digitMatches.forEach((match) => {
+        if (!uniqueMatches.includes(match)) {
+          uniqueMatches.push(match);
+        }
+      });
+
+      const prioritize = (value) => {
+        const length = value.length;
+        if (length === 13) return 0;
+        if (length === 12) return 1;
+        if (length === 14) return 2;
+        return 3;
+      };
+
+      const orderedCandidates = uniqueMatches
+        .map((value, index) => ({
+          raw: value,
+          normalized: normalizeBarcode(value),
+          order: index,
+          priority: prioritize(value),
+        }))
+        .sort((a, b) => {
+          if (a.priority !== b.priority) {
+            return a.priority - b.priority;
+          }
+          if (b.raw.length !== a.raw.length) {
+            return b.raw.length - a.raw.length;
+          }
+          return a.order - b.order;
+        });
+
+      const labelCandidate = {
+        raw: baseLabel,
+        normalized: normalizeBarcode(baseLabel),
+      };
+
+      const candidates = orderedCandidates.length
+        ? orderedCandidates
+        : [labelCandidate];
+
+      if (!candidates.some((candidate) => candidate.normalized === labelCandidate.normalized)) {
+        candidates.push(labelCandidate);
+      }
+
+      return candidates.map(({ raw, normalized }) => ({ raw, normalized }));
+    };
 
     const hasValidDigits = (value) => /\d{6,}/.test(String(value ?? ''));
 
@@ -189,10 +242,17 @@
 
         const message = entry.message || '';
 
+        const hasSecondaryLabel = entry.barcodeLabel
+          && entry.barcodeLabel !== entry.barcodeRaw
+          && entry.barcodeLabel.trim().length > 0;
+        const barcodeCell = hasSecondaryLabel
+          ? `${entry.barcodeRaw || '--'}<div class="text-xs text-gray-400">${entry.barcodeLabel}</div>`
+          : (entry.barcodeRaw || '--');
+
         return `
           <tr>
             <td class="px-4 py-2 text-gray-700">${entry.file?.name || '--'}</td>
-            <td class="px-4 py-2 text-gray-600">${entry.barcodeRaw || '--'}</td>
+            <td class="px-4 py-2 text-gray-600">${barcodeCell}</td>
             <td class="px-4 py-2 text-gray-600">${productName}</td>
             <td class="px-4 py-2 ${statusClass}">${statusText}</td>
             <td class="px-4 py-2 text-gray-500">${message}</td>
@@ -232,63 +292,91 @@
       const sequence = sequenceMatch ? Number.parseInt(sequenceMatch[1], 10) : null;
       const barcodePart = sequenceMatch ? baseName.slice(0, -sequenceMatch[0].length) : baseName;
       const trimmedBarcode = barcodePart.trim();
-      const normalizedBarcode = normalizeBarcode(trimmedBarcode);
+      const barcodeCandidates = buildBarcodeCandidates(trimmedBarcode);
+      const [primaryCandidate] = barcodeCandidates;
+      const normalizedBarcode = primaryCandidate ? primaryCandidate.normalized : normalizeBarcode(trimmedBarcode);
 
       return {
         relativePath,
         relativePathSegments: segments.slice(0, -1),
         folderName,
         extension,
-        barcodeRaw: trimmedBarcode,
+        barcodeRaw: primaryCandidate?.raw || trimmedBarcode,
         normalizedBarcode,
         sequence,
+        barcodeLabel: trimmedBarcode,
+        barcodeCandidates,
       };
     };
 
     const extractProductId = (product) => product?._id || product?.id || product?.productId || null;
 
     const findProductForBarcode = async (entry) => {
-      const cacheKey = entry.barcodeNormalized;
-      if (!cacheKey || !hasValidDigits(cacheKey)) {
-        return { product: null, error: 'Código de barras inválido.' };
+      const candidates = Array.isArray(entry.barcodeCandidates)
+        ? entry.barcodeCandidates.filter((candidate) => hasValidDigits(candidate.normalized))
+        : [];
+
+      if (!candidates.length) {
+        return { product: null, error: 'Código de barras inválido.', candidate: null };
       }
 
-      if (state.productCache.has(cacheKey)) {
-        return state.productCache.get(cacheKey);
-      }
-
-      const searchParams = new URLSearchParams({
-        search: entry.barcodeRaw || entry.barcodeNormalized,
-        limit: '25',
-      });
-
-      try {
-        const response = await fetch(`${API_CONFIG.BASE_URL}/products?${searchParams.toString()}`);
-        if (!response.ok) {
-          throw new Error(`Resposta ${response.status} da API.`);
+      for (const candidate of candidates) {
+        const cacheKey = candidate.normalized;
+        if (!cacheKey) {
+          continue;
         }
-        const payload = await response.json();
-        const items = collectProductsFromResponse(payload);
-        const normalized = entry.barcodeNormalized;
-        const product = items.find((item) => {
-          const candidates = [
-            item?.codigoBarras,
-            item?.codigoDeBarras,
-            item?.codbarras,
-            item?.ean,
-            item?.barcode,
-          ].map((value) => normalizeBarcode(value)).filter(Boolean);
-          return candidates.includes(normalized);
-        }) || items[0] || null;
 
-        const result = { product, error: null };
-        state.productCache.set(cacheKey, result);
-        return result;
-      } catch (error) {
-        const result = { product: null, error: error.message || 'Falha ao consultar produto.' };
-        state.productCache.set(cacheKey, result);
-        return result;
+        if (state.productCache.has(cacheKey)) {
+          const cached = state.productCache.get(cacheKey);
+          if (cached?.product) {
+            return { product: cached.product, error: null, candidate };
+          }
+          if (cached?.error) {
+            return { product: null, error: cached.error, candidate };
+          }
+          continue;
+        }
+
+        const searchParams = new URLSearchParams({
+          search: candidate.raw,
+          limit: '25',
+        });
+
+        try {
+          const response = await fetch(`${API_CONFIG.BASE_URL}/products?${searchParams.toString()}`);
+          if (!response.ok) {
+            throw new Error(`Resposta ${response.status} da API.`);
+          }
+          const payload = await response.json();
+          const items = collectProductsFromResponse(payload);
+          const product = items.find((item) => {
+            const possibilities = [
+              item?.codigoBarras,
+              item?.codigoDeBarras,
+              item?.codbarras,
+              item?.ean,
+              item?.barcode,
+            ].map((value) => normalizeBarcode(value)).filter(Boolean);
+            return possibilities.includes(candidate.normalized);
+          }) || items[0] || null;
+
+          const result = { product, error: null };
+          state.productCache.set(cacheKey, result);
+
+          if (product) {
+            return { product, error: null, candidate };
+          }
+
+          continue;
+        } catch (error) {
+          const errorMessage = error.message || 'Falha ao consultar produto.';
+          const result = { product: null, error: errorMessage };
+          state.productCache.set(cacheKey, result);
+          return { product: null, error: errorMessage, candidate };
+        }
       }
+
+      return { product: null, error: null, candidate: candidates[0] };
     };
 
     const resetState = () => {
@@ -354,6 +442,8 @@
           relativePathSegments: parsed.relativePathSegments,
           barcodeRaw: parsed.barcodeRaw,
           barcodeNormalized: parsed.normalizedBarcode,
+          barcodeLabel: parsed.barcodeLabel,
+          barcodeCandidates: parsed.barcodeCandidates,
           sequence: parsed.sequence,
           extension: parsed.extension,
           status: 'pending',
@@ -380,14 +470,27 @@
 
         logMessage(`Buscando produto para ${entry.fileName} (${entry.barcodeRaw || 'sem código'})...`, 'info');
         const lookup = await findProductForBarcode(entry);
+        if (lookup.candidate) {
+          entry.barcodeRaw = lookup.candidate.raw;
+          entry.barcodeNormalized = lookup.candidate.normalized;
+          if (Array.isArray(entry.barcodeCandidates)) {
+            entry.barcodeCandidates = [
+              lookup.candidate,
+              ...entry.barcodeCandidates.filter((candidate) => candidate.normalized !== lookup.candidate.normalized),
+            ];
+          }
+        }
+
+        const candidateLabel = entry.barcodeRaw || entry.barcodeLabel || 'sem código';
+
         if (lookup.error) {
           entry.status = 'lookup-error';
           entry.message = lookup.error;
-          logMessage(`Erro na consulta de produto para ${entry.fileName}: ${lookup.error}`, 'error');
+          logMessage(`Erro na consulta de produto para ${entry.fileName} (${candidateLabel}): ${lookup.error}`, 'error');
         } else if (!lookup.product) {
           entry.status = 'not-found';
           entry.message = 'Produto não encontrado.';
-          logMessage(`Produto não encontrado para ${entry.fileName}.`, 'warn');
+          logMessage(`Produto não encontrado para ${entry.fileName} (${candidateLabel}).`, 'warn');
         } else {
           const productId = extractProductId(lookup.product);
           if (!productId) {
