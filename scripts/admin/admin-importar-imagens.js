@@ -23,315 +23,6 @@
       ignoreNextEmptySelection: false,
       productCache: new Map(),
       lastSelectionSignature: '',
-      navigationGuardActive: false,
-    };
-
-    const navigationPatches = {
-      applied: false,
-      locationAssign: null,
-      locationReplace: null,
-      locationReload: null,
-      historyGo: null,
-      historyBack: null,
-      historyForward: null,
-      historyPushState: null,
-      historyReplaceState: null,
-      locationHrefDescriptor: null,
-    };
-
-    const showUploadInProgressWarning = () => {
-      const warningMessage = 'O envio de imagens está em andamento. Aguarde a conclusão antes de sair desta página.';
-      if (typeof window.showModal === 'function') {
-        window.showModal({
-          title: 'Envio em andamento',
-          message: warningMessage,
-          confirmText: 'Entendi'
-        });
-      } else {
-        alert(warningMessage); // eslint-disable-line no-alert
-      }
-    };
-
-    const handleBlockedNavigation = (event) => {
-      if (!state.isUploading) {
-        return;
-      }
-
-      const target = event.target instanceof Element ? event.target : null;
-      const anchor = target?.closest?.('a');
-
-      if (!anchor || !anchor.hasAttribute('href')) {
-        return;
-      }
-
-      const href = anchor.getAttribute('href') ?? '';
-      const normalizedHref = href.trim().toLowerCase();
-      const isNonNavigational = normalizedHref.startsWith('#') || normalizedHref.startsWith('javascript:');
-
-      if (isNonNavigational) {
-        return;
-      }
-
-      event.preventDefault();
-      if (typeof event.stopImmediatePropagation === 'function') {
-        event.stopImmediatePropagation();
-      }
-      if (typeof event.stopPropagation === 'function') {
-        event.stopPropagation();
-      }
-      showUploadInProgressWarning();
-    };
-
-    const handleBlockedFormSubmit = (event) => {
-      if (!state.isUploading) {
-        return;
-      }
-
-      event.preventDefault();
-      if (typeof event.stopImmediatePropagation === 'function') {
-        event.stopImmediatePropagation();
-      }
-      if (typeof event.stopPropagation === 'function') {
-        event.stopPropagation();
-      }
-      showUploadInProgressWarning();
-    };
-
-    const isBlockedNavigationKey = (event) => {
-      const key = String(event.key || '').toLowerCase();
-      if (!key) {
-        return false;
-      }
-
-      if (key === 'f5') {
-        return true;
-      }
-
-      if (key === 'r' && (event.ctrlKey || event.metaKey)) {
-        return true;
-      }
-
-      if ((key === 'arrowleft' || key === 'left') && event.altKey) {
-        return true;
-      }
-
-      if ((key === 'arrowright' || key === 'right') && event.altKey) {
-        return true;
-      }
-
-      if (key === 'browserback' || key === 'browserforward' || key === 'browserrefresh') {
-        return true;
-      }
-
-      return false;
-    };
-
-    const handleBlockedKeydown = (event) => {
-      if (!state.isUploading) {
-        return;
-      }
-
-      if (!isBlockedNavigationKey(event)) {
-        return;
-      }
-
-      event.preventDefault();
-      if (typeof event.stopImmediatePropagation === 'function') {
-        event.stopImmediatePropagation();
-      }
-      if (typeof event.stopPropagation === 'function') {
-        event.stopPropagation();
-      }
-      showUploadInProgressWarning();
-    };
-
-    const createGuardedNavigation = (originalFn, context) => function guardedNavigation(...args) {
-      if (state.isUploading) {
-        showUploadInProgressWarning();
-        return undefined;
-      }
-
-      try {
-        return originalFn.apply(context || this, args);
-      } catch (error) {
-        console.error('Falha ao executar navegação original:', error);
-        throw error;
-      }
-    };
-
-    const patchMethod = (target, methodName, storeKey, context = target) => {
-      if (!target || typeof target[methodName] !== 'function') {
-        navigationPatches[storeKey] = null;
-        return;
-      }
-
-      try {
-        const original = target[methodName].bind(context);
-        target[methodName] = createGuardedNavigation(original, context);
-        navigationPatches[storeKey] = original;
-      } catch (error) {
-        navigationPatches[storeKey] = null;
-        console.warn(`Não foi possível proteger a navegação para ${methodName}.`, error);
-      }
-    };
-
-    const patchLocationHref = () => {
-      if (navigationPatches.locationHrefDescriptor || navigationPatches.locationHrefDescriptor === false) {
-        return;
-      }
-
-      try {
-        const LocationProto = window.Location?.prototype;
-        if (!LocationProto) {
-          navigationPatches.locationHrefDescriptor = false;
-          return;
-        }
-
-        const descriptor = Object.getOwnPropertyDescriptor(LocationProto, 'href');
-        if (!descriptor || typeof descriptor.set !== 'function' || descriptor.configurable === false) {
-          navigationPatches.locationHrefDescriptor = false;
-          return;
-        }
-
-        const originalSet = descriptor.set;
-        const originalGet = descriptor.get;
-
-        Object.defineProperty(LocationProto, 'href', {
-          configurable: true,
-          enumerable: descriptor.enumerable ?? false,
-          get: originalGet,
-          set(value) {
-            if (state.isUploading) {
-              showUploadInProgressWarning();
-              return;
-            }
-
-            return originalSet.call(this, value);
-          },
-        });
-
-        navigationPatches.locationHrefDescriptor = descriptor;
-      } catch (error) {
-        navigationPatches.locationHrefDescriptor = false;
-        console.warn('Não foi possível proteger Location.href.', error);
-      }
-    };
-
-    const restoreLocationHref = () => {
-      if (!navigationPatches.locationHrefDescriptor || navigationPatches.locationHrefDescriptor === false) {
-        return;
-      }
-
-      try {
-        const LocationProto = window.Location?.prototype;
-        if (!LocationProto) {
-          navigationPatches.locationHrefDescriptor = null;
-          return;
-        }
-
-        Object.defineProperty(LocationProto, 'href', navigationPatches.locationHrefDescriptor);
-      } catch (error) {
-        console.warn('Não foi possível restaurar Location.href original.', error);
-      }
-
-      navigationPatches.locationHrefDescriptor = null;
-    };
-
-    const applyNavigationMethodGuards = () => {
-      if (navigationPatches.applied) {
-        return;
-      }
-
-      const { location, history } = window;
-
-      if (location) {
-        patchMethod(location, 'assign', 'locationAssign', location);
-        patchMethod(location, 'replace', 'locationReplace', location);
-        patchMethod(location, 'reload', 'locationReload', location);
-      }
-
-      if (history) {
-        patchMethod(history, 'go', 'historyGo', history);
-        patchMethod(history, 'back', 'historyBack', history);
-        patchMethod(history, 'forward', 'historyForward', history);
-        patchMethod(history, 'pushState', 'historyPushState', history);
-        patchMethod(history, 'replaceState', 'historyReplaceState', history);
-      }
-
-      patchLocationHref();
-      navigationPatches.applied = true;
-    };
-
-    const restoreMethod = (target, methodName, storeKey) => {
-      if (!target || !navigationPatches[storeKey]) {
-        navigationPatches[storeKey] = null;
-        return;
-      }
-
-      try {
-        target[methodName] = navigationPatches[storeKey];
-      } catch (error) {
-        console.warn(`Não foi possível restaurar a navegação original para ${methodName}.`, error);
-      }
-
-      navigationPatches[storeKey] = null;
-    };
-
-    const restoreNavigationMethodGuards = () => {
-      if (!navigationPatches.applied) {
-        return;
-      }
-
-      const { location, history } = window;
-
-      if (location) {
-        restoreMethod(location, 'assign', 'locationAssign');
-        restoreMethod(location, 'replace', 'locationReplace');
-        restoreMethod(location, 'reload', 'locationReload');
-      }
-
-      if (history) {
-        restoreMethod(history, 'go', 'historyGo');
-        restoreMethod(history, 'back', 'historyBack');
-        restoreMethod(history, 'forward', 'historyForward');
-        restoreMethod(history, 'pushState', 'historyPushState');
-        restoreMethod(history, 'replaceState', 'historyReplaceState');
-      }
-
-      restoreLocationHref();
-      navigationPatches.applied = false;
-    };
-
-    const enableNavigationGuard = () => {
-      if (state.navigationGuardActive) {
-        return;
-      }
-
-      document.addEventListener('click', handleBlockedNavigation, true);
-      document.addEventListener('submit', handleBlockedFormSubmit, true);
-      document.addEventListener('keydown', handleBlockedKeydown, true);
-      applyNavigationMethodGuards();
-      state.navigationGuardActive = true;
-    };
-
-    const disableNavigationGuard = () => {
-      if (!state.navigationGuardActive) {
-        return;
-      }
-
-      document.removeEventListener('click', handleBlockedNavigation, true);
-      document.removeEventListener('submit', handleBlockedFormSubmit, true);
-      document.removeEventListener('keydown', handleBlockedKeydown, true);
-      restoreNavigationMethodGuards();
-      state.navigationGuardActive = false;
-    };
-
-    const updateNavigationProtection = () => {
-      if (state.isUploading) {
-        enableNavigationGuard();
-      } else {
-        disableNavigationGuard();
-      }
     };
 
     const imageMimePattern = /^image\//i;
@@ -789,7 +480,6 @@
       state.isUploading = false;
       state.productCache.clear();
       state.lastSelectionSignature = '';
-      disableNavigationGuard();
     };
 
     const extractProductId = (product) => product?._id || product?.id || product?.productId || null;
@@ -1096,7 +786,6 @@
       }
 
       state.isUploading = true;
-      updateNavigationProtection();
       updateControls();
       if (folderInput) {
         state.suppressNextFolderChange = true;
@@ -1245,8 +934,6 @@
       }
       updateControls();
 
-      updateNavigationProtection();
-
       state.suppressNextFolderChange = false;
       state.ignoreNextEmptySelection = false;
 
@@ -1310,7 +997,6 @@
           folderInput.disabled = false;
         }
         updateControls();
-        updateNavigationProtection();
       });
     });
 
