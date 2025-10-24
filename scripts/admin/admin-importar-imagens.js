@@ -30,6 +30,8 @@
   let autoCancelDialogElement = null;
   let autoCancelDialogTimeout = null;
   let navigationInterceptorsAttached = false;
+  let pendingNavigationCancellation = false;
+  let pendingNavigationCancellationTimer = null;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', setup);
@@ -348,6 +350,7 @@
     const files = Array.from(event.target?.files || []);
 
     state = createInitialState();
+    clearPendingNavigationCancellation();
     updateEntireUI();
 
     if (!files.length) {
@@ -765,7 +768,11 @@
     }
 
     const completed = state.stats.uploaded + state.stats.failed;
-    return completed < totalFilesForProducts;
+    if (completed < totalFilesForProducts) {
+      return true;
+    }
+
+    return pendingNavigationCancellation;
   }
 
   function getNavigationWarningMessage() {
@@ -806,6 +813,17 @@
     if (typeof window === 'undefined') {
       return;
     }
+
+    pendingNavigationCancellation = true;
+    if (pendingNavigationCancellationTimer) {
+      window.clearTimeout(pendingNavigationCancellationTimer);
+    }
+    pendingNavigationCancellationTimer = window.setTimeout(() => {
+      pendingNavigationCancellation = false;
+      pendingNavigationCancellationTimer = null;
+      updateBeforeUnloadGuard();
+    }, 1500);
+    updateBeforeUnloadGuard();
 
     try {
       window.stop();
@@ -850,6 +868,14 @@
     }
 
     navigationInterceptorsAttached = false;
+  }
+
+  function clearPendingNavigationCancellation() {
+    pendingNavigationCancellation = false;
+    if (pendingNavigationCancellationTimer) {
+      window.clearTimeout(pendingNavigationCancellationTimer);
+      pendingNavigationCancellationTimer = null;
+    }
   }
 
   function handleNavigationShortcuts(event) {
