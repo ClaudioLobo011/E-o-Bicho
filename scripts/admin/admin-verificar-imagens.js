@@ -60,6 +60,17 @@
       images: 0,
     },
     console: [],
+    serverLogIds: new Set(),
+    meta: {
+      totalProducts: 0,
+      processedProducts: 0,
+    },
+    polling: {
+      timerId: null,
+      delay: 4000,
+    },
+    isLoadingStatus: false,
+    awaitingBackgroundResult: false,
   };
 
   const elements = {};
@@ -86,6 +97,7 @@
     elements.startButton.addEventListener('click', handleStartVerification);
     elements.clearConsoleBtn?.addEventListener('click', () => {
       state.console = [];
+      state.serverLogIds.clear();
       renderConsole();
     });
 
@@ -120,16 +132,20 @@
     });
 
     appendLog('Tela pronta para iniciar a verificação.', 'info');
-    loadCurrentStatus();
+    loadCurrentStatus({ skipCompletionMessage: true });
   }
 
   async function handleStartVerification() {
     if (state.isProcessing) {
+      appendLog('Uma verificação já está em andamento. Aguarde a conclusão antes de iniciar outra.', 'warning');
       return;
     }
 
     setProcessing(true);
-    appendLog('Iniciando verificação de imagens no drive...', 'info');
+    state.awaitingBackgroundResult = false;
+    appendLog('Enviando solicitação para verificar imagens no drive...', 'info');
+
+    let waitingForBackground = false;
 
     try {
       const token = getAuthToken();
@@ -148,6 +164,22 @@
         body: JSON.stringify({ acionadoEm: new Date().toISOString() }),
       });
 
+      if (response.status === 202) {
+        waitingForBackground = true;
+        state.awaitingBackgroundResult = true;
+
+        const payload = await safeJson(response);
+        if (payload?.message) {
+          appendLog(payload.message, 'info');
+        } else {
+          appendLog('Verificação iniciada. Acompanhe o progresso no console.', 'info');
+        }
+
+        startStatusPolling();
+        await loadCurrentStatus({ fromPolling: true, suppressNotFound: true, skipCompletionMessage: true });
+        return;
+      }
+
       if (!response.ok) {
         const errorPayload = await safeJson(response);
         const message = errorPayload?.message || `Falha na requisição: ${response.status} ${response.statusText}`;
@@ -163,15 +195,32 @@
       }
       appendLog('Não foi possível concluir a verificação. Verifique sua conexão ou tente novamente mais tarde.', 'error');
     } finally {
-      setProcessing(false);
+      if (!waitingForBackground) {
+        stopStatusPolling();
+        setProcessing(false);
+        state.awaitingBackgroundResult = false;
+      }
     }
   }
 
-  async function loadCurrentStatus() {
+  async function loadCurrentStatus(options = {}) {
+    const { fromPolling = false, suppressNotFound = false, skipCompletionMessage = false } = options;
+
+    if (state.isLoadingStatus) {
+      return;
+    }
+
+    state.isLoadingStatus = true;
+
     try {
       const token = getAuthToken();
       if (!token) {
-        appendLog('Sessão expirada. Faça login novamente para consultar o histórico.', 'warning');
+        if (!fromPolling) {
+          appendLog('Sessão expirada. Faça login novamente para consultar o histórico.', 'warning');
+        }
+        stopStatusPolling();
+        setProcessing(false);
+        state.awaitingBackgroundResult = false;
         return;
       }
 
@@ -181,30 +230,46 @@
           Authorization: `Bearer ${token}`,
         },
       });
+
       if (!response.ok) {
-        if (response.status !== 404) {
-          const errorPayload = await safeJson(response);
-          const message = errorPayload?.message || `Status ${response.status}`;
-          throw new Error(message);
+        if (response.status === 404) {
+          if (!suppressNotFound && !fromPolling) {
+            appendLog('Nenhum histórico de verificação foi encontrado.', 'warning');
+          }
+          state.products = [];
+          state.stats.linked = 0;
+          state.stats.already = 0;
+          state.stats.products = 0;
+          state.stats.images = 0;
+          state.meta.totalProducts = 0;
+          state.meta.processedProducts = 0;
+          renderStats();
+          renderProducts();
+          return;
         }
-        appendLog('Nenhum histórico de verificação foi encontrado.', 'warning');
-        return;
+
+        const errorPayload = await safeJson(response);
+        const message = errorPayload?.message || `Status ${response.status}`;
+        throw new Error(message);
       }
 
       const payload = await safeJson(response);
-      processVerificationResult(payload, { silentConsole: true });
-      appendLog('Status de verificação carregado com sucesso.', 'success');
+      processVerificationResult(payload, { fromPolling, skipCompletionMessage });
     } catch (error) {
       console.warn('Não foi possível carregar o status atual de imagens:', error);
-      if (error?.message) {
-        appendLog(error.message, 'warning');
+      if (!fromPolling) {
+        if (error?.message) {
+          appendLog(error.message, 'warning');
+        }
+        appendLog('Não foi possível carregar o status atual de imagens.', 'warning');
       }
-      appendLog('Não foi possível carregar o status atual de imagens.', 'warning');
+    } finally {
+      state.isLoadingStatus = false;
     }
   }
 
   function processVerificationResult(payload, options = {}) {
-    const { silentConsole = false } = options;
+    const { fromPolling = false, skipCompletionMessage = false } = options;
 
     if (!payload || typeof payload !== 'object') {
       appendLog('Resposta inesperada do servidor durante a verificação de imagens.', 'error');
@@ -212,18 +277,47 @@
     }
 
     const logs = Array.isArray(payload.logs) ? payload.logs : [];
+    logs.forEach((entry) => {
+      const message = entry?.message ?? String(entry);
+      const type = entry?.type || 'info';
+      const timestamp = entry?.timestamp || Date.now();
+      const id = typeof entry?.id === 'string' && entry.id.trim()
+        ? entry.id.trim()
+        : `${entry?.timestamp || ''}::${entry?.message || ''}::${entry?.type || ''}`;
+
+      appendLog(message, type, {
+        timestamp,
+        id,
+        skipDuplicates: true,
+        fromServer: true,
+      });
+    });
+
     const data = payload.data || {};
-
-    if (!silentConsole) {
-      logs.forEach((entry) => appendLog(entry.message || String(entry), entry.type || 'info'));
-    }
-
     const summary = data.summary || {};
 
-    state.stats.linked = Number(summary.linked) || 0;
-    state.stats.already = Number(summary.already) || 0;
-    state.stats.products = Number(summary.products) || 0;
-    state.stats.images = Number(summary.images) || 0;
+    if (Object.prototype.hasOwnProperty.call(summary, 'linked')) {
+      state.stats.linked = Number(summary.linked) || 0;
+    }
+    if (Object.prototype.hasOwnProperty.call(summary, 'already')) {
+      state.stats.already = Number(summary.already) || 0;
+    }
+    if (Object.prototype.hasOwnProperty.call(summary, 'products')) {
+      state.stats.products = Number(summary.products) || 0;
+    }
+    if (Object.prototype.hasOwnProperty.call(summary, 'images')) {
+      state.stats.images = Number(summary.images) || 0;
+    }
+
+    const meta = (payload.meta && typeof payload.meta === 'object') ? payload.meta : (data.meta || {});
+    if (meta && typeof meta === 'object') {
+      if (Object.prototype.hasOwnProperty.call(meta, 'totalProducts')) {
+        state.meta.totalProducts = Number(meta.totalProducts) || 0;
+      }
+      if (Object.prototype.hasOwnProperty.call(meta, 'processedProducts')) {
+        state.meta.processedProducts = Number(meta.processedProducts) || 0;
+      }
+    }
 
     const products = Array.isArray(data.products) ? data.products : [];
     state.products = products.map(normalizeProduct);
@@ -231,11 +325,48 @@
     renderStats();
     renderProducts();
 
-    if (!silentConsole) {
-      appendLog(
-        `Verificação finalizada. ${state.stats.linked} imagem(ns) vinculada(s) e ${state.stats.already} já vinculada(s).`,
-        'success'
-      );
+    let status = data.status || payload.status || null;
+
+    if (!status) {
+      if (data.error) {
+        status = 'failed';
+      } else if (data.finishedAt) {
+        status = 'completed';
+      }
+    }
+
+    if (status === 'processing') {
+      if (!state.isProcessing) {
+        setProcessing(true);
+      }
+      state.awaitingBackgroundResult = true;
+      if (!fromPolling) {
+        startStatusPolling();
+      }
+      return;
+    }
+
+    if (status === 'failed') {
+      state.awaitingBackgroundResult = false;
+      stopStatusPolling();
+      setProcessing(false);
+      const errorMessage = data.error || payload.message || 'A verificação de imagens foi finalizada com erro.';
+      appendLog(errorMessage, 'error');
+      return;
+    }
+
+    if (status === 'completed') {
+      const shouldLogCompletion = !skipCompletionMessage || state.awaitingBackgroundResult;
+      state.awaitingBackgroundResult = false;
+      stopStatusPolling();
+      setProcessing(false);
+
+      if (shouldLogCompletion) {
+        appendLog(
+          `Verificação finalizada. ${state.stats.linked} imagem(ns) vinculada(s) e ${state.stats.already} já vinculada(s).`,
+          'success'
+        );
+      }
     }
   }
 
@@ -362,7 +493,15 @@
       elements.statsAlready.textContent = state.stats.already;
     }
     if (elements.statsProducts) {
-      elements.statsProducts.textContent = state.stats.products || state.products.length;
+      const productsValue = state.stats.products || state.products.length || 0;
+      let productsText = String(productsValue);
+
+      if (state.meta.totalProducts > 0 && (state.awaitingBackgroundResult || state.meta.processedProducts > 0)) {
+        const processed = Math.min(state.meta.processedProducts || 0, state.meta.totalProducts);
+        productsText += ` (${processed}/${state.meta.totalProducts})`;
+      }
+
+      elements.statsProducts.textContent = productsText;
     }
     if (elements.statsImages) {
       const totalImages = state.stats.images || state.products.reduce((total, product) => total + product.images.length, 0);
@@ -399,7 +538,32 @@
     });
   }
 
+  function startStatusPolling() {
+    const delay = Number(state.polling?.delay) > 0 ? Number(state.polling.delay) : 4000;
+
+    if (state.polling.timerId) {
+      return;
+    }
+
+    state.polling.timerId = window.setInterval(() => {
+      loadCurrentStatus({ fromPolling: true });
+    }, delay);
+  }
+
+  function stopStatusPolling() {
+    if (!state.polling.timerId) {
+      return;
+    }
+
+    window.clearInterval(state.polling.timerId);
+    state.polling.timerId = null;
+  }
+
   function setProcessing(isProcessing) {
+    if (state.isProcessing === isProcessing) {
+      return;
+    }
+
     state.isProcessing = isProcessing;
 
     if (elements.startButton) {
@@ -417,12 +581,27 @@
     }
   }
 
-  function appendLog(message, type = 'info') {
+  function appendLog(message, type = 'info', options = {}) {
     if (!message) {
       return;
     }
 
-    state.console.push({ message: String(message), type, timestamp: new Date() });
+    const baseId = typeof options.id === 'string' && options.id.trim() ? options.id.trim() : null;
+    const logId = baseId || `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    if (options.skipDuplicates && baseId && state.serverLogIds.has(baseId)) {
+      return;
+    }
+
+    if (options.fromServer && baseId) {
+      state.serverLogIds.add(baseId);
+    }
+
+    const providedTimestamp = options.timestamp instanceof Date ? options.timestamp : new Date(options.timestamp || Date.now());
+    const isValidTimestamp = providedTimestamp instanceof Date && !Number.isNaN(providedTimestamp.getTime());
+    const timestamp = isValidTimestamp ? providedTimestamp : new Date();
+
+    state.console.push({ message: String(message), type, timestamp, id: logId });
     if (state.console.length > CONSOLE_MAX_LINES) {
       state.console.splice(0, state.console.length - CONSOLE_MAX_LINES);
     }

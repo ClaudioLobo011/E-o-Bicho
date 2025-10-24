@@ -11,12 +11,16 @@ const { isDriveConfigured, listFilesInFolderByPath } = require('../utils/googleD
 const PLACEHOLDER_IMAGE = '/image/placeholder.png';
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
 
-function pushLog(logs, message, type = 'info') {
-  logs.push({
-    message,
-    type,
-    timestamp: new Date().toISOString(),
-  });
+function safeNotify(callback, payload) {
+  if (typeof callback !== 'function') {
+    return;
+  }
+
+  try {
+    callback(payload);
+  } catch (error) {
+    console.error('Erro ao notificar progresso da verificação de imagens:', error);
+  }
 }
 
 function listImagesFromFolder(folderPath) {
@@ -38,7 +42,7 @@ function describeProduct(product) {
   return product?.nome || product?.cod || product?.id || 'produto sem identificação';
 }
 
-async function getProductImageFileNames({ barcodeSegment, product, logs, driveAvailable }) {
+async function getProductImageFileNames({ barcodeSegment, product, emitLog, driveAvailable }) {
   const productLabel = describeProduct(product);
 
   if (driveAvailable) {
@@ -49,11 +53,7 @@ async function getProductImageFileNames({ barcodeSegment, product, logs, driveAv
       const { files, folderId } = await listFilesInFolderByPath({ folderPath: drivePathSegments });
 
       if (!folderId) {
-        pushLog(
-          logs,
-          `Pasta ${readablePath} não encontrada no Google Drive para o produto ${productLabel}.`,
-          'warning'
-        );
+        emitLog(`Pasta ${readablePath} não encontrada no Google Drive para o produto ${productLabel}.`, 'warning');
       } else if (Array.isArray(files) && files.length) {
         const names = files
           .filter((file) => file && file.mimeType !== DRIVE_FOLDER_MIME)
@@ -66,8 +66,7 @@ async function getProductImageFileNames({ barcodeSegment, product, logs, driveAv
         }
       }
     } catch (error) {
-      pushLog(
-        logs,
+      emitLog(
         `Falha ao listar imagens no Google Drive (${readablePath}) para o produto ${productLabel}: ${error.message || error}`,
         'error'
       );
@@ -80,8 +79,7 @@ async function getProductImageFileNames({ barcodeSegment, product, logs, driveAv
     const names = listImagesFromFolder(folderPath);
     return { fileNames: names, source: 'local', folderPath };
   } catch (error) {
-    pushLog(
-      logs,
+    emitLog(
       `Falha ao ler a pasta de imagens em disco (${folderPath}) para o produto ${productLabel}: ${error.message || error}`,
       'warning'
     );
@@ -89,7 +87,7 @@ async function getProductImageFileNames({ barcodeSegment, product, logs, driveAv
   }
 }
 
-async function verifyAndLinkProductImages() {
+async function verifyAndLinkProductImages(options = {}) {
   const logs = [];
   const startedAt = new Date();
   const productsResult = [];
@@ -100,31 +98,88 @@ async function verifyAndLinkProductImages() {
     images: 0,
   };
 
+  const meta = {
+    totalProducts: 0,
+    processedProducts: 0,
+  };
+
+  const callbacks = {
+    onLog: typeof options.onLog === 'function' ? options.onLog : null,
+    onStart: typeof options.onStart === 'function' ? options.onStart : null,
+    onProgress: typeof options.onProgress === 'function' ? options.onProgress : null,
+    onProduct: typeof options.onProduct === 'function' ? options.onProduct : null,
+  };
+
+  const nextLogId = (() => {
+    let counter = 0;
+    return () => {
+      counter += 1;
+      return `log-${startedAt.getTime()}-${counter}`;
+    };
+  })();
+
+  const emitLog = (message, type = 'info') => {
+    const entry = {
+      id: nextLogId(),
+      message,
+      type,
+      timestamp: new Date().toISOString(),
+    };
+    logs.push(entry);
+    safeNotify(callbacks.onLog, entry);
+    return entry;
+  };
+
+  const emitProgress = () => {
+    safeNotify(callbacks.onProgress, {
+      summary: { ...summary },
+      meta: { ...meta },
+    });
+  };
+
   const driveAvailable = isDriveConfigured();
 
-  pushLog(logs, 'Iniciando verificação das imagens vinculadas aos produtos.');
+  emitLog('Iniciando verificação das imagens vinculadas aos produtos.');
   if (driveAvailable) {
     const previewSegments = getProductImagesDriveFolderPath('amostra-drive').slice(0, -1);
     const baseDrivePath = previewSegments.join('/') || '(raiz)';
-    pushLog(logs, 'Integração com o Google Drive detectada. As pastas remotas serão analisadas.', 'info');
-    pushLog(logs, `Caminho base considerado no Google Drive: ${baseDrivePath}.`, 'info');
+    emitLog('Integração com o Google Drive detectada. As pastas remotas serão analisadas.', 'info');
+    emitLog(`Caminho base considerado no Google Drive: ${baseDrivePath}.`, 'info');
   }
 
   const products = await Product.find({}, 'cod nome codbarras imagens imagemPrincipal').exec();
-  pushLog(logs, `Total de produtos carregados para análise: ${products.length}.`);
+  meta.totalProducts = products.length;
+  safeNotify(callbacks.onStart, { totalProducts: meta.totalProducts });
+  emitLog(`Total de produtos carregados para análise: ${products.length}.`);
+
+  let currentIndex = 0;
 
   for (const product of products) {
+    currentIndex += 1;
     const barcodeSegment = sanitizeBarcodeSegment(product.codbarras || product.cod || product.id || '');
-    const { fileNames } = await getProductImageFileNames({
+    emitLog(`(${currentIndex}/${products.length || 1}) Preparando análise do produto ${describeProduct(product)}.`);
+
+    const { fileNames, source, folderPath } = await getProductImageFileNames({
       barcodeSegment,
       product,
-      logs,
+      emitLog,
       driveAvailable,
     });
 
     if (!fileNames.length) {
+      emitLog(
+        `(${currentIndex}/${products.length || 1}) Nenhuma imagem encontrada nas pastas esperadas (${folderPath}).`,
+        'warning'
+      );
+      meta.processedProducts = currentIndex;
+      emitProgress();
       continue;
     }
+
+    emitLog(
+      `(${currentIndex}/${products.length || 1}) ${fileNames.length} imagem(ns) localizada(s) em ${folderPath} (${source}).`,
+      'info'
+    );
 
     const existingImages = Array.isArray(product.imagens) ? product.imagens.slice() : [];
     const existingSet = new Set(existingImages);
@@ -143,11 +198,7 @@ async function verifyAndLinkProductImages() {
         existingSet.add(publicPath);
         productLinked += 1;
         hasChanges = true;
-        pushLog(
-          logs,
-          `Imagem ${fileName} vinculada ao produto ${product.nome || product.cod || product.id}.`,
-          'success'
-        );
+        emitLog(`Imagem ${fileName} vinculada ao produto ${product.nome || product.cod || product.id}.`, 'success');
       } else {
         productAlready += 1;
       }
@@ -170,18 +221,14 @@ async function verifyAndLinkProductImages() {
     ) {
       product.imagemPrincipal = existingImages[0];
       hasChanges = true;
-      pushLog(logs, `Imagem principal atualizada para o produto ${product.nome || product.cod || product.id}.`, 'info');
+      emitLog(`Imagem principal atualizada para o produto ${product.nome || product.cod || product.id}.`, 'info');
     }
 
     if (hasChanges) {
       try {
         await product.save();
       } catch (error) {
-        pushLog(
-          logs,
-          `Erro ao salvar o produto ${product.nome || product.cod || product.id}: ${error.message || error}`,
-          'error'
-        );
+        emitLog(`Erro ao salvar o produto ${product.nome || product.cod || product.id}: ${error.message || error}`, 'error');
       }
     }
 
@@ -197,10 +244,21 @@ async function verifyAndLinkProductImages() {
       summary.images += productImages.length;
       summary.linked += productLinked;
       summary.already += productAlready;
+      safeNotify(callbacks.onProduct, {
+        id: String(product._id),
+        name: product.nome || '',
+        code: product.cod || '',
+        barcode: product.codbarras || '',
+        images: productImages,
+      });
     }
+
+    meta.processedProducts = currentIndex;
+    emitProgress();
   }
 
-  pushLog(logs, 'Verificação concluída.');
+  emitLog('Verificação concluída.');
+  emitProgress();
 
   return {
     logs,
@@ -209,7 +267,9 @@ async function verifyAndLinkProductImages() {
       products: productsResult,
       startedAt: startedAt.toISOString(),
       finishedAt: new Date().toISOString(),
+      status: 'completed',
     },
+    meta,
   };
 }
 
