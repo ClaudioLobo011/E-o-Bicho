@@ -554,7 +554,7 @@
       state.isUploading = false;
       state.productCache.clear();
       state.lastSelectionSignature = '';
-      disableUnloadProtection();
+      disableNavigationGuard();
     };
 
     const extractProductId = (product) => product?._id || product?.id || product?.productId || null;
