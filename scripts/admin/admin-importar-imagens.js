@@ -2,7 +2,7 @@
   const ACCEPTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
   const BARCODE_REGEX = /\d{8,14}/g;
 
-  const state = {
+  const createInitialState = () => ({
     files: [],
     products: new Map(),
     unmatched: [],
@@ -15,86 +15,337 @@
       uploaded: 0,
       failed: 0,
     },
-  };
+    status: {
+      type: '',
+      message: '',
+    },
+    uploading: false,
+  });
 
-  const elements = {};
+  let state = createInitialState();
+  let root = null;
+  const refs = {};
+  let analysisRunId = 0;
 
-  const initialize = () => {
-    elements.folderInput = document.getElementById('image-folder-input');
-    elements.uploadButton = document.getElementById('start-upload-btn');
-    elements.statusMessage = document.getElementById('status-message');
-    elements.summaryProducts = document.getElementById('summary-products');
-    elements.summaryImages = document.getElementById('summary-images');
-    elements.summaryUploaded = document.getElementById('summary-uploaded');
-    elements.summaryFailed = document.getElementById('summary-failed');
-    elements.productMatches = document.getElementById('product-matches');
-    elements.unmatchedSection = document.getElementById('unmatched-section');
-    elements.unmatchedList = document.getElementById('unmatched-list');
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setup);
+  } else {
+    setup();
+  }
 
-    if (!elements.folderInput || !elements.uploadButton || !elements.productMatches) {
+  function setup() {
+    root = document.getElementById('importar-imagens-root');
+    if (!root) {
       return;
     }
 
-    const enclosingForm = elements.uploadButton.form || elements.folderInput.form;
-    if (enclosingForm && !enclosingForm.dataset.preventRefresh) {
-      enclosingForm.dataset.preventRefresh = 'true';
-      enclosingForm.addEventListener(
-        'submit',
-        (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-        },
-        true
-      );
-    }
-
-    elements.folderInput.addEventListener('change', handleFolderSelection);
-    elements.uploadButton.addEventListener('click', (event) => {
-      if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (typeof event.stopImmediatePropagation === 'function') {
-          event.stopImmediatePropagation();
-        }
-      }
-      handleUpload().catch((error) => {
-        console.error('Erro inesperado durante o upload de imagens:', error);
-        elements.uploadButton.disabled = false;
-        elements.uploadButton.classList.remove('opacity-75');
-        setStatus('Não foi possível concluir o upload. Verifique os erros e tente novamente.', 'error');
-      });
-    });
-
-    updateSummary();
-  };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initialize);
-  } else {
-    initialize();
+    renderLayout();
+    cacheRefs();
+    attachEvents();
+    updateEntireUI();
   }
 
-  function handleFolderSelection(event) {
-    const files = Array.from(event.target.files || []);
-    resetState();
+  function renderLayout() {
+    root.innerHTML = `
+      <section class="bg-white p-6 rounded-lg shadow space-y-6">
+        <header class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-800">Importar Imagens de Produtos</h1>
+            <p class="text-gray-600 mt-1 max-w-3xl">
+              Escolha uma pasta com imagens nomeadas com códigos de barras para que o sistema identifique os produtos e envie as fotos automaticamente.
+            </p>
+          </div>
+        </header>
+
+        <div class="bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4 space-y-3">
+          <label for="image-folder-input" class="block text-sm font-medium text-gray-700">Selecionar pasta com imagens</label>
+          <div class="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+            <input type="file" id="image-folder-input" data-folder-input webkitdirectory multiple class="text-sm text-gray-600" />
+            <button type="button" data-upload-button class="bg-primary hover:bg-secondary text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+              <span class="inline-flex items-center gap-2">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <span>Iniciar Upload</span>
+              </span>
+            </button>
+          </div>
+          <p class="text-xs text-gray-500">
+            Arquivos aceitos: JPG, JPEG, PNG, WEBP, GIF e BMP. Utilize nomes que contenham códigos de barras para que o produto seja identificado automaticamente.
+          </p>
+        </div>
+
+        <div data-status class="hidden rounded-lg border px-4 py-3 text-sm"></div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <p class="text-xs uppercase text-gray-500">Produtos encontrados</p>
+            <p data-summary-products class="mt-1 text-2xl font-semibold text-gray-800">0</p>
+          </div>
+          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <p class="text-xs uppercase text-gray-500">Imagens reconhecidas</p>
+            <p data-summary-images class="mt-1 text-2xl font-semibold text-gray-800">0</p>
+          </div>
+          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <p class="text-xs uppercase text-gray-500">Uploads concluídos</p>
+            <p data-summary-uploaded class="mt-1 text-2xl font-semibold text-gray-800">0</p>
+          </div>
+          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <p class="text-xs uppercase text-gray-500">Falhas</p>
+            <p data-summary-failed class="mt-1 text-2xl font-semibold text-gray-800">0</p>
+          </div>
+        </div>
+
+        <section class="space-y-3">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-800">Resumo por produto</h2>
+            <p class="text-sm text-gray-500">Veja como cada imagem foi relacionada e acompanhe o status durante o upload.</p>
+          </div>
+          <div data-product-matches class="space-y-4"></div>
+        </section>
+
+        <section data-unmatched-section class="hidden space-y-3">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-800">Imagens não vinculadas</h2>
+            <p class="text-sm text-gray-500">Revise os nomes dos arquivos para incluir códigos de barras válidos ou cadastre os produtos faltantes.</p>
+          </div>
+          <div data-unmatched-list class="space-y-2"></div>
+        </section>
+      </section>
+    `;
+  }
+
+  function cacheRefs() {
+    refs.folderInput = root.querySelector('[data-folder-input]');
+    refs.uploadButton = root.querySelector('[data-upload-button]');
+    refs.statusMessage = root.querySelector('[data-status]');
+    refs.summaryProducts = root.querySelector('[data-summary-products]');
+    refs.summaryImages = root.querySelector('[data-summary-images]');
+    refs.summaryUploaded = root.querySelector('[data-summary-uploaded]');
+    refs.summaryFailed = root.querySelector('[data-summary-failed]');
+    refs.productMatches = root.querySelector('[data-product-matches]');
+    refs.unmatchedSection = root.querySelector('[data-unmatched-section]');
+    refs.unmatchedList = root.querySelector('[data-unmatched-list]');
+  }
+
+  function attachEvents() {
+    if (refs.folderInput) {
+      refs.folderInput.addEventListener('change', handleFolderSelection);
+    }
+
+    if (refs.uploadButton) {
+      refs.uploadButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handleUpload().catch((error) => {
+          console.error('Erro inesperado durante o upload de imagens:', error);
+          state.uploading = false;
+          updateControlStates();
+          setStatus('Não foi possível concluir o upload. Verifique os erros e tente novamente.', 'error');
+        });
+      });
+    }
+  }
+
+  function updateEntireUI() {
+    updateSummaryIndicators();
+    renderProductMatches();
+    renderUnmatchedList();
+    updateStatusMessage();
+    updateControlStates();
+  }
+
+  function updateSummaryIndicators() {
+    if (refs.summaryProducts) {
+      refs.summaryProducts.textContent = state.stats.productsTotal;
+    }
+    if (refs.summaryImages) {
+      refs.summaryImages.textContent = state.stats.imagesTotal;
+    }
+    if (refs.summaryUploaded) {
+      refs.summaryUploaded.textContent = state.stats.uploaded;
+    }
+    if (refs.summaryFailed) {
+      refs.summaryFailed.textContent = state.stats.failed;
+    }
+  }
+
+  function updateStatusMessage() {
+    if (!refs.statusMessage) {
+      return;
+    }
+
+    if (!state.status.message) {
+      refs.statusMessage.textContent = '';
+      refs.statusMessage.className = 'hidden rounded-lg border px-4 py-3 text-sm';
+      return;
+    }
+
+    const variants = {
+      info: 'border-blue-200 bg-blue-50 text-blue-800',
+      success: 'border-green-200 bg-green-50 text-green-800',
+      warning: 'border-amber-200 bg-amber-50 text-amber-800',
+      error: 'border-red-200 bg-red-50 text-red-800',
+    };
+
+    const variantClass = variants[state.status.type] || variants.info;
+    refs.statusMessage.textContent = state.status.message;
+    refs.statusMessage.className = `rounded-lg border px-4 py-3 text-sm ${variantClass}`;
+  }
+
+  function updateControlStates() {
+    const hasProducts = state.products.size > 0;
+    if (refs.uploadButton) {
+      refs.uploadButton.disabled = !hasProducts || state.uploading;
+      refs.uploadButton.setAttribute('aria-busy', state.uploading ? 'true' : 'false');
+      refs.uploadButton.innerHTML = state.uploading
+        ? '<span class="inline-flex items-center gap-2"><i class="fas fa-spinner fa-spin"></i><span>Enviando...</span></span>'
+        : '<span class="inline-flex items-center gap-2"><i class="fas fa-cloud-upload-alt"></i><span>Iniciar Upload</span></span>';
+    }
+
+    if (refs.folderInput) {
+      refs.folderInput.disabled = state.uploading;
+    }
+  }
+
+  function renderProductMatches() {
+    if (!refs.productMatches) {
+      return;
+    }
+
+    if (!state.products.size) {
+      refs.productMatches.innerHTML = `
+        <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+          Nenhum produto associado até o momento.
+        </div>
+      `;
+      return;
+    }
+
+    const fragments = [];
+    state.products.forEach((group, productId) => {
+      const productName = escapeHtml(String(group.product?.nome || group.product?.name || 'Produto sem nome'));
+      const productCode = escapeHtml(String(group.product?.cod || group.product?.codigo || group.product?.codigoInterno || '—'));
+      const barcode = escapeHtml(String(group.product?.codbarras || group.product?.codigoBarras || '—'));
+      const matchesMarkup = group.barcodes.size
+        ? Array.from(group.barcodes)
+            .map((code) => `<code class="text-[11px] bg-gray-100 px-1 py-0.5 rounded">${escapeHtml(String(code))}</code>`)
+            .join(' ')
+        : '<span class="text-gray-300">—</span>';
+
+      const filesMarkup = group.files
+        .map((fileEntry, index) => {
+          const fileName = escapeHtml(String(fileEntry.file?.name || fileEntry.relativePath || 'Arquivo sem nome'));
+          const sequenceLabel = fileEntry.sequence
+            ? `<span class="text-xs text-gray-400">Sequência: ${escapeHtml(String(fileEntry.sequence))}</span>`
+            : '';
+          const barcodesMarkup = fileEntry.barcodes && fileEntry.barcodes.length
+            ? fileEntry.barcodes
+                .map((code) => `<code class="text-[11px] bg-gray-100 px-1 py-0.5 rounded">${escapeHtml(String(code))}</code>`)
+                .join(' ')
+            : '<span class="text-gray-300">—</span>';
+          const status = translateStatus(fileEntry.status || 'pending');
+          const statusClass = statusToClass(fileEntry.status || 'pending');
+          const errorText = fileEntry.error ? escapeHtml(String(fileEntry.error)) : '';
+          const errorClass = fileEntry.error ? 'text-xs text-red-500' : 'text-xs text-red-500 hidden';
+
+          return `
+            <li class="rounded border border-gray-200 bg-white px-3 py-2 text-sm flex flex-col gap-1" data-product-id="${group.safeId}" data-file-index="${index}">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="font-medium text-gray-700 truncate" title="${fileName}">${fileName}</span>
+                ${sequenceLabel}
+              </div>
+              <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span class="text-gray-500">Status: <span class="font-semibold ${statusClass}" data-status>${status}</span></span>
+                <span class="text-gray-400">Códigos detectados: ${barcodesMarkup}</span>
+              </div>
+              <p class="${errorClass}" data-error>${errorText}</p>
+            </li>
+          `;
+        })
+        .join('');
+
+      fragments.push(`
+        <article class="rounded-lg border border-gray-200 p-4 shadow-sm">
+          <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 class="text-base font-semibold text-gray-800">${productName}</h3>
+              <p class="text-sm text-gray-500">Cód.: <span class="font-medium text-gray-700">${productCode}</span> • Barras: <span class="font-medium text-gray-700">${barcode}</span></p>
+              <p class="text-xs text-gray-400">Correspondências: ${matchesMarkup}</p>
+            </div>
+          </div>
+          <ul class="mt-3 space-y-2">
+            ${filesMarkup}
+          </ul>
+        </article>
+      `);
+    });
+
+    refs.productMatches.innerHTML = fragments.join('');
+  }
+
+  function renderUnmatchedList() {
+    if (!refs.unmatchedSection || !refs.unmatchedList) {
+      return;
+    }
+
+    if (!state.unmatched.length) {
+      refs.unmatchedSection.classList.add('hidden');
+      refs.unmatchedList.innerHTML = '';
+      return;
+    }
+
+    refs.unmatchedSection.classList.remove('hidden');
+    const fragments = state.unmatched.map((entry) => {
+      const fileName = escapeHtml(String(entry.file?.name || entry.relativePath || 'Arquivo sem nome'));
+      const hasBarcodeErrors = entry.barcodesTried.some((code) => state.errorBarcodes.has(code));
+      let reason;
+      if (!entry.barcodesTried.length) {
+        reason = 'Nenhum código de barras foi identificado no nome do arquivo.';
+      } else if (hasBarcodeErrors) {
+        reason = 'Não foi possível consultar alguns códigos de barras. Tente novamente mais tarde.';
+      } else {
+        reason = 'Nenhum produto encontrado com os códigos identificados.';
+      }
+
+      const codesMarkup = entry.barcodesTried.length
+        ? `<div class="text-xs mt-1 text-amber-700">Códigos identificados: ${entry.barcodesTried
+            .map((code) => `<code class="bg-amber-100 px-1 py-0.5 rounded">${escapeHtml(String(code))}</code>`)
+            .join(' ')}</div>`
+        : '';
+
+      return `
+        <div class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <div class="font-medium">${fileName}</div>
+          <div class="text-xs">${escapeHtml(reason)}</div>
+          ${codesMarkup}
+        </div>
+      `;
+    });
+
+    refs.unmatchedList.innerHTML = fragments.join('');
+  }
+
+  async function handleFolderSelection(event) {
+    const runId = ++analysisRunId;
+    const files = Array.from(event.target?.files || []);
+
+    state = createInitialState();
+    updateEntireUI();
 
     if (!files.length) {
       setStatus('Nenhum arquivo foi selecionado.', 'warning');
-      updateSummary();
-      renderProductMatches();
+      updateControlStates();
       return;
     }
 
     const imageFiles = files.filter(isImageFile);
     if (!imageFiles.length) {
       setStatus('Os arquivos selecionados não possuem extensões de imagem suportadas.', 'warning');
-      updateSummary();
-      renderProductMatches();
+      updateControlStates();
       return;
     }
 
     state.stats.imagesTotal = imageFiles.length;
-    setStatus('Analisando nomes dos arquivos e procurando produtos...', 'info');
+    updateSummaryIndicators();
 
     const allBarcodes = new Set();
     state.files = imageFiles.map((file) => {
@@ -110,74 +361,67 @@
     });
 
     if (!allBarcodes.size) {
-      setStatus(
-        'Nenhum código de barras foi identificado nos nomes dos arquivos. Ajuste os nomes e tente novamente.',
-        'warning'
-      );
-      elements.uploadButton.disabled = true;
-      updateSummary();
+      setStatus('Nenhum código de barras foi identificado nos nomes dos arquivos. Ajuste os nomes e tente novamente.', 'warning');
       renderProductMatches();
-      renderUnmatched();
+      renderUnmatchedList();
+      updateControlStates();
       return;
     }
 
-    resolveBarcodes(Array.from(allBarcodes))
-      .then(() => {
-        associateFilesToProducts();
-        renderProductMatches();
-        renderUnmatched();
-        updateSummary();
+    setStatus('Analisando nomes dos arquivos e procurando produtos...', 'info');
+    updateStatusMessage();
+    updateControlStates();
 
-        const warnings = [];
-        if (state.notFoundBarcodes.size) {
-          warnings.push(`${state.notFoundBarcodes.size} código(s) sem produto correspondente.`);
-        }
-        if (state.errorBarcodes.size) {
-          warnings.push(`${state.errorBarcodes.size} código(s) não puderam ser consultados.`);
-        }
+    try {
+      await resolveBarcodes(Array.from(allBarcodes), runId);
+      if (runId !== analysisRunId) {
+        return;
+      }
 
-        if (!state.products.size) {
-          if (warnings.length) {
-            setStatus(`Nenhum produto foi associado. ${warnings.join(' ')}`, 'warning');
-          } else {
-            setStatus('Nenhum produto foi associado às imagens selecionadas.', 'warning');
-          }
-          elements.uploadButton.disabled = true;
+      associateFilesToProducts();
+      if (runId !== analysisRunId) {
+        return;
+      }
+
+      renderProductMatches();
+      renderUnmatchedList();
+      updateSummaryIndicators();
+
+      const warnings = [];
+      if (state.notFoundBarcodes.size) {
+        warnings.push(`${state.notFoundBarcodes.size} código(s) sem produto correspondente.`);
+      }
+      if (state.errorBarcodes.size) {
+        warnings.push(`${state.errorBarcodes.size} código(s) não puderam ser consultados.`);
+      }
+
+      if (!state.products.size) {
+        if (warnings.length) {
+          setStatus(`Nenhum produto foi associado. ${warnings.join(' ')}`, 'warning');
         } else {
-          if (warnings.length) {
-            setStatus(`Análise concluída com avisos. ${warnings.join(' ')}`, 'warning');
-          } else {
-            setStatus('Análise concluída. Revise os agrupamentos e inicie o upload quando estiver pronto.', 'success');
-          }
-          elements.uploadButton.disabled = false;
+          setStatus('Nenhum produto foi associado às imagens selecionadas.', 'warning');
         }
-      })
-      .catch((error) => {
-        console.error('Erro ao analisar códigos de barras:', error);
-        setStatus('Ocorreu um erro durante a análise das imagens. Tente novamente mais tarde.', 'error');
-        elements.uploadButton.disabled = true;
-        renderProductMatches();
-        renderUnmatched();
-        updateSummary();
-      });
-  }
+        updateControlStates();
+        return;
+      }
 
-  function resetState() {
-    state.files = [];
-    state.products.clear();
-    state.unmatched = [];
-    state.barcodeCache.clear();
-    state.notFoundBarcodes.clear();
-    state.errorBarcodes.clear();
-    state.stats.imagesTotal = 0;
-    state.stats.productsTotal = 0;
-    state.stats.uploaded = 0;
-    state.stats.failed = 0;
-    elements.uploadButton.disabled = true;
-    clearStatus();
-    renderProductMatches();
-    renderUnmatched();
-    updateSummary();
+      if (warnings.length) {
+        setStatus(`Análise concluída com avisos. ${warnings.join(' ')}`, 'warning');
+      } else {
+        setStatus('Análise concluída. Revise os agrupamentos e inicie o upload quando estiver pronto.', 'success');
+      }
+    } catch (error) {
+      if (runId !== analysisRunId) {
+        return;
+      }
+      console.error('Erro ao analisar códigos de barras:', error);
+      setStatus('Ocorreu um erro durante a análise das imagens. Tente novamente mais tarde.', 'error');
+      renderProductMatches();
+      renderUnmatchedList();
+      updateSummaryIndicators();
+    }
+
+    updateControlStates();
   }
 
   function isImageFile(file) {
@@ -216,13 +460,22 @@
     return '';
   }
 
-  async function resolveBarcodes(barcodes) {
+  async function resolveBarcodes(barcodes, runId) {
+    const baseUrl = getApiBaseUrl();
+    if (!baseUrl) {
+      throw new Error('Configuração da API não encontrada.');
+    }
+
     for (const barcode of barcodes) {
+      if (runId !== analysisRunId) {
+        return;
+      }
+
       if (state.barcodeCache.has(barcode)) {
         continue;
       }
       try {
-        const response = await fetch(`${API_CONFIG.BASE_URL}/products/by-barcode/${encodeURIComponent(barcode)}`);
+        const response = await fetch(`${baseUrl}/products/by-barcode/${encodeURIComponent(barcode)}`);
         if (!response.ok) {
           if (response.status === 404) {
             state.barcodeCache.set(barcode, { status: 'not_found' });
@@ -248,8 +501,8 @@
   }
 
   function associateFilesToProducts() {
-    state.products.clear();
-    state.unmatched = [];
+    const products = new Map();
+    const unmatched = [];
 
     state.files.forEach((entry) => {
       const matchedProducts = new Map();
@@ -268,7 +521,7 @@
       });
 
       if (!matchedProducts.size) {
-        state.unmatched.push({
+        unmatched.push({
           file: entry.file,
           relativePath: entry.relativePath,
           barcodesTried: entry.barcodes,
@@ -279,170 +532,62 @@
 
       matchedProducts.forEach((payload, productId) => {
         const { product, barcodes } = payload;
-        if (!state.products.has(productId)) {
-          state.products.set(productId, {
+        if (!products.has(productId)) {
+          products.set(productId, {
             product,
             files: [],
             barcodes: new Set(),
             safeId: generateSafeId(productId),
           });
         }
-        const productEntry = state.products.get(productId);
-        barcodes.forEach((barcode) => productEntry.barcodes.add(barcode));
+        const productEntry = products.get(productId);
+        barcodes.forEach((code) => productEntry.barcodes.add(code));
         productEntry.files.push({
           file: entry.file,
           relativePath: entry.relativePath,
           barcodes: Array.from(barcodes),
           sequence: entry.sequence,
           status: 'pending',
-          error: null,
+          error: '',
         });
       });
     });
 
+    state.products = products;
+    state.unmatched = unmatched;
     state.stats.productsTotal = state.products.size;
-  }
-
-  function renderProductMatches() {
-    if (!elements.productMatches) return;
-    elements.productMatches.innerHTML = '';
-
-    if (!state.products.size) {
-      const emptyState = document.createElement('div');
-      emptyState.className = 'rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500';
-      emptyState.textContent = 'Nenhum produto associado até o momento.';
-      elements.productMatches.appendChild(emptyState);
-      return;
-    }
-
-    state.products.forEach((group, productId) => {
-      const card = document.createElement('article');
-      card.className = 'rounded-lg border border-gray-200 p-4 shadow-sm';
-
-      const rawName = group.product?.nome || group.product?.name || 'Produto sem nome';
-      const rawCode = group.product?.cod || group.product?.codigo || group.product?.codigoInterno || '—';
-      const rawBarcode = group.product?.codbarras || group.product?.codigoBarras || '—';
-      const productName = String(rawName);
-      const productCode = rawCode ? String(rawCode) : '—';
-      const barcode = rawBarcode ? String(rawBarcode) : '—';
-      const safeId = group.safeId || generateSafeId(productId);
-
-      const matchesMarkup = group.barcodes.size
-        ? Array.from(group.barcodes)
-            .map((code) => `<code class="text-[11px] bg-gray-100 px-1 py-0.5 rounded">${escapeHtml(String(code))}</code>`)
-            .join(' ')
-        : '<span class="text-gray-300">—</span>';
-
-      const header = document.createElement('div');
-      header.className = 'flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between';
-
-      const info = document.createElement('div');
-      info.innerHTML = `
-        <h3 class="text-base font-semibold text-gray-800">${escapeHtml(productName)}</h3>
-        <p class="text-sm text-gray-500">Cód.: <span class="font-medium text-gray-700">${escapeHtml(productCode)}</span> • Barras: <span class="font-medium text-gray-700">${escapeHtml(barcode)}</span></p>
-        <p class="text-xs text-gray-400">Correspondências: ${matchesMarkup}</p>
-      `;
-
-      header.appendChild(info);
-      card.appendChild(header);
-
-      const list = document.createElement('ul');
-      list.className = 'mt-3 space-y-2';
-
-      group.files.forEach((fileEntry, index) => {
-        const item = document.createElement('li');
-        item.className = 'rounded border border-gray-200 bg-white px-3 py-2 text-sm flex flex-col gap-1';
-        item.dataset.productId = safeId;
-        item.dataset.fileIndex = String(index);
-
-        const fileName = fileEntry.file?.name || fileEntry.relativePath;
-        const sequenceLabel = fileEntry.sequence
-          ? `<span class="text-xs text-gray-400">Sequência: ${escapeHtml(fileEntry.sequence)}</span>`
-          : '';
-        const barcodesMarkup = (fileEntry.barcodes || []).length
-          ? fileEntry.barcodes
-              .map((code) => `<code class="text-[11px] bg-gray-100 px-1 py-0.5 rounded">${escapeHtml(String(code))}</code>`)
-              .join(' ')
-          : '<span class="text-gray-300">—</span>';
-
-        item.innerHTML = `
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <span class="font-medium text-gray-700 truncate" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</span>
-            ${sequenceLabel}
-          </div>
-          <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <span class="text-gray-500">Status: <span class="font-semibold text-gray-700" data-status>aguardando</span></span>
-            <span class="text-gray-400">Códigos detectados: ${barcodesMarkup}</span>
-          </div>
-          <p class="text-xs text-red-500 hidden" data-error></p>
-        `;
-
-        list.appendChild(item);
-      });
-
-      card.appendChild(list);
-      elements.productMatches.appendChild(card);
-    });
-  }
-
-  function renderUnmatched() {
-    if (!elements.unmatchedSection || !elements.unmatchedList) return;
-
-    elements.unmatchedList.innerHTML = '';
-
-    if (!state.unmatched.length) {
-      elements.unmatchedSection.classList.add('hidden');
-      return;
-    }
-
-    elements.unmatchedSection.classList.remove('hidden');
-
-    state.unmatched.forEach((entry) => {
-      const item = document.createElement('div');
-      item.className = 'rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800';
-      const fileName = entry.file?.name || entry.relativePath;
-      const hasBarcodeErrors = entry.barcodesTried.some((code) => state.errorBarcodes.has(code));
-      let reason;
-      if (!entry.barcodesTried.length) {
-        reason = 'Nenhum código de barras foi identificado no nome do arquivo.';
-      } else if (hasBarcodeErrors) {
-        reason = 'Não foi possível consultar alguns códigos de barras. Tente novamente mais tarde.';
-      } else {
-        reason = 'Nenhum produto encontrado com os códigos identificados.';
-      }
-      item.innerHTML = `
-        <div class="font-medium">${escapeHtml(fileName)}</div>
-        <div class="text-xs">${escapeHtml(reason)}</div>
-        ${entry.barcodesTried.length
-          ? `<div class="text-xs mt-1 text-amber-700">Códigos identificados: ${entry.barcodesTried
-              .map((code) => `<code class="bg-amber-100 px-1 py-0.5 rounded">${escapeHtml(String(code))}</code>`)
-              .join(' ')}</div>`
-          : ''}
-      `;
-      elements.unmatchedList.appendChild(item);
-    });
+    state.stats.uploaded = 0;
+    state.stats.failed = 0;
   }
 
   async function handleUpload() {
+    if (state.uploading) {
+      return;
+    }
+
     if (!state.products.size) {
       setStatus('Nenhum produto disponível para upload.', 'warning');
       return;
     }
 
-    const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
-    const token = loggedInUser?.token;
+    const token = getToken();
     if (!token) {
       setStatus('Sessão expirada. Faça login novamente antes de enviar as imagens.', 'error');
       return;
     }
 
-    elements.uploadButton.disabled = true;
-    elements.uploadButton.classList.add('opacity-75');
-    setStatus('Enviando imagens. Aguarde a conclusão para verificar o resultado.', 'info');
+    const baseUrl = getApiBaseUrl();
+    if (!baseUrl) {
+      setStatus('Configuração da API não encontrada. Verifique as definições antes de prosseguir.', 'error');
+      return;
+    }
 
+    state.uploading = true;
+    setStatus('Enviando imagens. Aguarde a conclusão para verificar o resultado.', 'info');
     state.stats.uploaded = 0;
     state.stats.failed = 0;
-    updateSummary();
+    updateSummaryIndicators();
+    updateControlStates();
 
     for (const [productId, group] of state.products.entries()) {
       if (!group.files.length) {
@@ -457,7 +602,7 @@
       });
 
       try {
-        const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}/upload`, {
+        const response = await fetch(`${baseUrl}/products/${productId}/upload`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -471,7 +616,7 @@
 
         group.files.forEach((fileEntry, index) => {
           fileEntry.status = 'success';
-          fileEntry.error = null;
+          fileEntry.error = '';
           updateFileStatus(productId, index, 'success');
         });
         state.stats.uploaded += group.files.length;
@@ -485,11 +630,11 @@
         state.stats.failed += group.files.length;
       }
 
-      updateSummary();
+      updateSummaryIndicators();
     }
 
-    elements.uploadButton.disabled = false;
-    elements.uploadButton.classList.remove('opacity-75');
+    state.uploading = false;
+    updateControlStates();
 
     if (state.stats.failed > 0 && state.stats.uploaded > 0) {
       setStatus('Upload finalizado com algumas falhas. Revise os itens destacados em vermelho.', 'warning');
@@ -502,28 +647,42 @@
 
   function updateGroupStatus(productId, status) {
     const group = state.products.get(productId);
-    const selectorId = group?.safeId || generateSafeId(productId);
-    const items = elements.productMatches?.querySelectorAll(`li[data-product-id="${selectorId}"] [data-status]`);
-    if (!items) return;
+    if (!group || !refs.productMatches) {
+      return;
+    }
+
+    const selectorId = group.safeId || generateSafeId(productId);
+    const items = refs.productMatches.querySelectorAll(`li[data-product-id="${selectorId}"] [data-status]`);
     items.forEach((statusElement) => {
-      statusElement.textContent = status === 'enviando' ? 'enviando...' : status;
+      statusElement.textContent = status === 'enviando' ? 'enviando...' : translateStatus(status);
       statusElement.classList.remove('text-gray-700', 'text-green-600', 'text-red-600', 'text-blue-600');
-      if (status === 'enviando') {
+      if (status === 'success') {
+        statusElement.classList.add('text-green-600');
+      } else if (status === 'error') {
+        statusElement.classList.add('text-red-600');
+      } else if (status === 'enviando') {
         statusElement.classList.add('text-blue-600');
+      } else {
+        statusElement.classList.add('text-gray-700');
       }
     });
   }
 
   function updateFileStatus(productId, index, status, errorMessage = '') {
     const group = state.products.get(productId);
-    const selectorId = group?.safeId || generateSafeId(productId);
-    const item = elements.productMatches?.querySelector(
-      `li[data-product-id="${selectorId}"][data-file-index="${index}"]`
-    );
-    if (!item) return;
+    if (!group || !refs.productMatches) {
+      return;
+    }
+
+    const selectorId = group.safeId || generateSafeId(productId);
+    const item = refs.productMatches.querySelector(`li[data-product-id="${selectorId}"][data-file-index="${index}"]`);
+    if (!item) {
+      return;
+    }
 
     const statusElement = item.querySelector('[data-status]');
     const errorElement = item.querySelector('[data-error]');
+
     if (statusElement) {
       statusElement.textContent = translateStatus(status);
       statusElement.classList.remove('text-gray-700', 'text-green-600', 'text-red-600', 'text-blue-600');
@@ -562,42 +721,47 @@
     }
   }
 
-  function updateSummary() {
-    if (elements.summaryProducts) {
-      elements.summaryProducts.textContent = state.stats.productsTotal;
+  function statusToClass(status) {
+    switch (status) {
+      case 'success':
+        return 'text-green-600';
+      case 'error':
+        return 'text-red-600';
+      case 'enviando':
+        return 'text-blue-600';
+      default:
+        return 'text-gray-700';
     }
-    if (elements.summaryImages) {
-      elements.summaryImages.textContent = state.stats.imagesTotal;
-    }
-    if (elements.summaryUploaded) {
-      elements.summaryUploaded.textContent = state.stats.uploaded;
-    }
-    if (elements.summaryFailed) {
-      elements.summaryFailed.textContent = state.stats.failed;
-    }
-  }
-
-  function clearStatus() {
-    if (!elements.statusMessage) return;
-    elements.statusMessage.textContent = '';
-    elements.statusMessage.className = 'hidden rounded-lg border px-4 py-3 text-sm';
   }
 
   function setStatus(message, type = 'info') {
-    if (!elements.statusMessage) return;
-    const baseClasses = 'rounded-lg border px-4 py-3 text-sm';
-    const variants = {
-      info: 'border-blue-200 bg-blue-50 text-blue-800',
-      success: 'border-green-200 bg-green-50 text-green-800',
-      warning: 'border-amber-200 bg-amber-50 text-amber-800',
-      error: 'border-red-200 bg-red-50 text-red-800',
-    };
-    elements.statusMessage.textContent = message;
-    elements.statusMessage.className = `${baseClasses} ${variants[type] || variants.info}`;
+    state.status = { message, type };
+    updateStatusMessage();
+  }
+
+  function getToken() {
+    try {
+      const raw = localStorage.getItem('loggedInUser');
+      if (!raw) return '';
+      const parsed = JSON.parse(raw);
+      return parsed?.token || '';
+    } catch (error) {
+      console.warn('Não foi possível obter o token do usuário logado.', error);
+      return '';
+    }
+  }
+
+  function getApiBaseUrl() {
+    if (typeof API_CONFIG === 'object' && API_CONFIG && typeof API_CONFIG.BASE_URL === 'string') {
+      return API_CONFIG.BASE_URL;
+    }
+    return '';
   }
 
   function escapeHtml(value) {
-    if (typeof value !== 'string') return value;
+    if (typeof value !== 'string') {
+      return value;
+    }
     return value
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
