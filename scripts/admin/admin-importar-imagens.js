@@ -390,7 +390,10 @@
     });
   }
 
-  async function handleUpload() {
+  async function handleUpload(event) {
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
     if (!state.products.size) {
       setStatus('Nenhum produto disponível para upload.', 'warning');
       return;
