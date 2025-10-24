@@ -3,6 +3,7 @@ const Product = require('../models/Product');
 const {
   buildProductImagePublicPath,
   getProductImageFolderPath,
+  getProductImagesDriveBaseSegments,
   getProductImagesDriveFolderPath,
   sanitizeBarcodeSegment,
 } = require('../utils/productImagePath');
@@ -10,6 +11,8 @@ const { isDriveConfigured, listFilesInFolderByPath } = require('../utils/googleD
 
 const PLACEHOLDER_IMAGE = '/image/placeholder.png';
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
+const MAX_DRIVE_FOLDER_DEPTH = 6;
+const FALLBACK_BARCODE_SEGMENT = sanitizeBarcodeSegment('');
 
 function safeNotify(callback, payload) {
   if (typeof callback !== 'function') {
@@ -40,6 +43,230 @@ function listImagesFromFolder(folderPath) {
 
 function describeProduct(product) {
   return product?.nome || product?.cod || product?.id || 'produto sem identificação';
+}
+
+function stripLeadingZeros(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const withoutZeros = trimmed.replace(/^0+/, '');
+  if (withoutZeros) {
+    return withoutZeros;
+  }
+
+  return /0/.test(trimmed) ? '0' : '';
+}
+
+function getProductUniqueKey(product) {
+  if (!product) {
+    return '';
+  }
+
+  if (product._id) {
+    try {
+      return String(product._id);
+    } catch (error) {
+      return `id:${product._id}`;
+    }
+  }
+
+  if (product.id) {
+    return `id:${product.id}`;
+  }
+
+  if (product.cod) {
+    return `cod:${product.cod}`;
+  }
+
+  if (product.codbarras) {
+    return `barcode:${product.codbarras}`;
+  }
+
+  return `nome:${product.nome || 'desconhecido'}`;
+}
+
+function getBarcodeIndexKeys(rawValue) {
+  const keys = new Set();
+  const sanitized = sanitizeBarcodeSegment(rawValue || '');
+
+  if (!sanitized || sanitized === FALLBACK_BARCODE_SEGMENT) {
+    return keys;
+  }
+
+  keys.add(sanitized);
+
+  const withoutZeros = stripLeadingZeros(sanitized);
+  if (withoutZeros && withoutZeros !== sanitized) {
+    keys.add(withoutZeros);
+  }
+
+  return keys;
+}
+
+function combineDrivePath(parent, child) {
+  const safeChild = typeof child === 'string' ? child.trim() : '';
+  if (!parent || parent === '(raiz)') {
+    return safeChild || '(raiz)';
+  }
+  if (!safeChild) {
+    return parent;
+  }
+  return `${parent}/${safeChild}`.replace(/\/{2,}/g, '/');
+}
+
+function looksLikeBarcodeFolder(folderName) {
+  const sanitized = sanitizeBarcodeSegment(folderName || '');
+  if (!sanitized || sanitized === FALLBACK_BARCODE_SEGMENT) {
+    return false;
+  }
+
+  const digitCount = sanitized.replace(/[^0-9]/g, '').length;
+  if (digitCount === 0) {
+    return false;
+  }
+
+  if (digitCount < 4) {
+    return false;
+  }
+
+  return true;
+}
+
+async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
+  const baseReadablePath = Array.isArray(baseSegments) && baseSegments.length ? baseSegments.join('/') : '(raiz)';
+  const barcodeFolders = [];
+  const pending = [];
+  const visitedFolders = new Set();
+
+  let initialListing;
+
+  try {
+    initialListing = await listFilesInFolderByPath({
+      folderPath: baseSegments,
+      includeFiles: false,
+      includeFolders: true,
+      orderBy: 'name_natural',
+    });
+  } catch (error) {
+    emitLog(
+      `Falha ao listar as pastas iniciais no Google Drive (${baseReadablePath}): ${error.message || error}.`,
+      'error'
+    );
+    return { barcodeFolders, baseReadablePath };
+  }
+
+  if (!initialListing?.folderId) {
+    emitLog(
+      `Pasta ${baseReadablePath} não encontrada ou inacessível no Google Drive.`,
+      'warning'
+    );
+  }
+
+  const initialFolders = Array.isArray(initialListing?.files)
+    ? initialListing.files.filter((item) => item?.mimeType === DRIVE_FOLDER_MIME)
+    : [];
+
+  for (const folder of initialFolders) {
+    const folderName = typeof folder?.name === 'string' ? folder.name.trim() : '';
+    const readablePath = combineDrivePath(baseReadablePath, folderName);
+    pending.push({
+      folder,
+      pathSegments: [...(Array.isArray(baseSegments) ? baseSegments : []), folderName].filter(Boolean),
+      readablePath,
+      depth: 0,
+    });
+  }
+
+  if (!pending.length) {
+    emitLog(`Nenhuma subpasta encontrada em ${baseReadablePath}.`, 'warning');
+  }
+
+  while (pending.length) {
+    const current = pending.shift();
+    const folderId = typeof current.folder?.id === 'string' ? current.folder.id.trim() : '';
+    const folderName = typeof current.folder?.name === 'string' ? current.folder.name.trim() : '';
+
+    if (!folderId) {
+      emitLog(`Pasta ${current.readablePath} ignorada por não possuir identificador válido no Drive.`, 'warning');
+      continue;
+    }
+
+    if (visitedFolders.has(folderId)) {
+      continue;
+    }
+    visitedFolders.add(folderId);
+
+    if (!folderName) {
+      emitLog(`Pasta em ${current.readablePath} ignorada por não possuir nome.`, 'warning');
+      continue;
+    }
+
+    if (looksLikeBarcodeFolder(folderName)) {
+      barcodeFolders.push({
+        folderId,
+        barcodeSegment: sanitizeBarcodeSegment(folderName),
+        folderName,
+        pathSegments: current.pathSegments.slice(),
+        readablePath: current.readablePath,
+      });
+      continue;
+    }
+
+    if (current.depth + 1 > MAX_DRIVE_FOLDER_DEPTH) {
+      emitLog(
+        `Limite de profundidade atingido ao analisar ${current.readablePath}. Verifique a estrutura das pastas no Drive.`,
+        'warning'
+      );
+      continue;
+    }
+
+    emitLog(`Explorando subpastas em ${current.readablePath} para localizar códigos de barras.`, 'info');
+
+    let listing;
+    try {
+      listing = await listFilesInFolderByPath({
+        folderId,
+        folderPath: [],
+        includeFiles: false,
+        includeFolders: true,
+        orderBy: 'name_natural',
+      });
+    } catch (error) {
+      emitLog(
+        `Falha ao listar subpastas em ${current.readablePath}: ${error.message || error}.`,
+        'error'
+      );
+      continue;
+    }
+
+    const subfolders = Array.isArray(listing?.files)
+      ? listing.files.filter((item) => item?.mimeType === DRIVE_FOLDER_MIME)
+      : [];
+
+    if (!subfolders.length) {
+      emitLog(`Nenhuma subpasta de código de barras encontrada dentro de ${current.readablePath}.`, 'warning');
+      continue;
+    }
+
+    for (const subfolder of subfolders) {
+      const childName = typeof subfolder?.name === 'string' ? subfolder.name.trim() : '';
+      const readablePath = combineDrivePath(current.readablePath, childName);
+      pending.push({
+        folder: subfolder,
+        pathSegments: [...current.pathSegments, childName].filter(Boolean),
+        readablePath,
+        depth: current.depth + 1,
+      });
+    }
+  }
+
+  return { barcodeFolders, baseReadablePath };
 }
 
 async function processProductImages({
@@ -230,8 +457,6 @@ async function verifyAndLinkProductImages(options = {}) {
     onProduct: typeof options.onProduct === 'function' ? options.onProduct : null,
   };
 
-  const fallbackBarcodeSegment = sanitizeBarcodeSegment('');
-
   const nextLogId = (() => {
     let counter = 0;
     return () => {
@@ -267,17 +492,17 @@ async function verifyAndLinkProductImages(options = {}) {
 
   const barcodeIndex = new Map();
   for (const product of products) {
-    if (!product || typeof product.codbarras !== 'string' || !product.codbarras.trim()) {
+    const keys = getBarcodeIndexKeys(product?.codbarras);
+    if (!keys.size) {
       continue;
     }
-    const key = sanitizeBarcodeSegment(product.codbarras);
-    if (!key || key === fallbackBarcodeSegment) {
-      continue;
+
+    for (const key of keys) {
+      if (!barcodeIndex.has(key)) {
+        barcodeIndex.set(key, []);
+      }
+      barcodeIndex.get(key).push(product);
     }
-    if (!barcodeIndex.has(key)) {
-      barcodeIndex.set(key, []);
-    }
-    barcodeIndex.get(key).push(product);
   }
 
   if (!driveAvailable) {
@@ -290,6 +515,15 @@ async function verifyAndLinkProductImages(options = {}) {
     for (const product of products) {
       currentIndex += 1;
       const barcodeSegment = sanitizeBarcodeSegment(product.codbarras || product.cod || product.id || '');
+      if (!barcodeSegment || barcodeSegment === FALLBACK_BARCODE_SEGMENT) {
+        emitLog(
+          `(${currentIndex}/${products.length || 1}) Produto ${describeProduct(product)} ignorado por não possuir código de barras válido.`,
+          'warning'
+        );
+        meta.processedProducts = currentIndex;
+        emitProgress();
+        continue;
+      }
       await processProductImages({
         product,
         barcodeSegment,
@@ -305,90 +539,79 @@ async function verifyAndLinkProductImages(options = {}) {
       emitProgress();
     }
   } else {
-    const driveBaseSegments = getProductImagesDriveFolderPath('amostra-drive').slice(0, -1);
+    const driveBaseSegments = getProductImagesDriveBaseSegments();
     const baseDrivePath = driveBaseSegments.join('/') || '(raiz)';
     emitLog('Integração com o Google Drive detectada. As pastas remotas serão analisadas.', 'info');
     emitLog(`Caminho base considerado no Google Drive: ${baseDrivePath}.`, 'info');
 
-    let driveFolders = [];
-    try {
-      const listResult = await listFilesInFolderByPath({
-        folderPath: driveBaseSegments,
-        includeFiles: false,
-        includeFolders: true,
-      });
-      if (Array.isArray(listResult?.files)) {
-        driveFolders = listResult.files.filter((item) => item?.mimeType === DRIVE_FOLDER_MIME);
-      }
-    } catch (error) {
-      emitLog(
-        `Falha ao listar pastas de códigos de barras no Google Drive (${baseDrivePath}): ${error.message || error}.`,
-        'error'
-      );
-    }
+    const { barcodeFolders } = await collectDriveBarcodeFolders({
+      baseSegments: driveBaseSegments,
+      emitLog,
+    });
 
-    meta.totalProducts = driveFolders.length;
+    const foldersToProcess = barcodeFolders.slice().sort((a, b) =>
+      (a?.folderName || '').localeCompare(b?.folderName || '', undefined, { numeric: true, sensitivity: 'base' })
+    );
+
+    meta.totalProducts = foldersToProcess.length;
     safeNotify(callbacks.onStart, { totalProducts: meta.totalProducts });
-    emitLog(`Total de pastas encontradas no Google Drive para análise: ${driveFolders.length}.`);
+    emitLog(`Total de pastas encontradas no Google Drive para análise: ${foldersToProcess.length}.`);
 
-    if (!driveFolders.length) {
-      emitLog('Nenhuma pasta de código de barras encontrada no Google Drive.', 'warning');
+    if (!foldersToProcess.length) {
+      emitLog(
+        'Nenhuma pasta de código de barras localizada no Google Drive. Verifique se os diretórios estão dentro do caminho configurado.',
+        'warning'
+      );
     }
 
     let currentIndex = 0;
 
-    for (const folder of driveFolders) {
+    for (const entry of foldersToProcess) {
       currentIndex += 1;
-      const folderName = typeof folder?.name === 'string' ? folder.name.trim() : '';
-      if (!folderName) {
-        emitLog(`(${currentIndex}/${driveFolders.length || 1}) Pasta sem nome ignorada.`, 'warning');
-        meta.processedProducts = currentIndex;
-        emitProgress();
-        continue;
-      }
+      const progressPrefix = `(${currentIndex}/${foldersToProcess.length || 1})`;
+      const lookupKeys = Array.from(getBarcodeIndexKeys(entry.folderName || entry.barcodeSegment));
+      const seenProducts = new Set();
+      const matchingProducts = [];
 
-      const barcodeSegment = sanitizeBarcodeSegment(folderName);
-      if (!barcodeSegment || barcodeSegment === fallbackBarcodeSegment) {
-        emitLog(
-          `(${currentIndex}/${driveFolders.length || 1}) Pasta ${folderName} ignorada por não representar um código de barras válido.`,
-          'warning'
-        );
-        meta.processedProducts = currentIndex;
-        emitProgress();
-        continue;
-      }
+      for (const key of lookupKeys) {
+        const productsForKey = barcodeIndex.get(key);
+        if (!Array.isArray(productsForKey) || !productsForKey.length) {
+          continue;
+        }
 
-      const matchingProducts = barcodeIndex.get(barcodeSegment) || [];
+        for (const product of productsForKey) {
+          const productKey = getProductUniqueKey(product);
+          if (!productKey || seenProducts.has(productKey)) {
+            continue;
+          }
+          seenProducts.add(productKey);
+          matchingProducts.push(product);
+        }
+      }
 
       if (!matchingProducts.length) {
         emitLog(
-          `(${currentIndex}/${driveFolders.length || 1}) Nenhum produto encontrado com o código de barras ${folderName}.`,
+          `${progressPrefix} Nenhum produto encontrado com o código de barras ${entry.folderName} (${entry.readablePath}).`,
           'warning'
         );
         meta.processedProducts = currentIndex;
         emitProgress();
         continue;
       }
-
-      const driveFolderSegments = [...driveBaseSegments, folderName];
-      const readablePath =
-        baseDrivePath === '(raiz)'
-          ? folderName
-          : `${baseDrivePath}/${folderName}`.replace(/\/{2,}/g, '/');
 
       for (const product of matchingProducts) {
         await processProductImages({
           product,
-          barcodeSegment,
+          barcodeSegment: entry.barcodeSegment,
           emitLog,
           driveAvailable,
           summary,
           productsResult,
           callbacks,
-          progressLabel: `(${currentIndex}/${driveFolders.length || 1})`,
-          driveFolderId: folder.id,
-          driveFolderPathSegments: driveFolderSegments,
-          driveReadablePath: readablePath,
+          progressLabel: progressPrefix,
+          driveFolderId: entry.folderId,
+          driveFolderPathSegments: entry.pathSegments,
+          driveReadablePath: entry.readablePath,
         });
       }
 
