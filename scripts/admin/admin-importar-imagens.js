@@ -246,6 +246,10 @@
           const statusClass = statusToClass(fileEntry.status || 'pending');
           const errorText = fileEntry.error ? escapeHtml(String(fileEntry.error)) : '';
           const errorClass = fileEntry.error ? 'text-xs text-red-500' : 'text-xs text-red-500 hidden';
+          const progressValue = Number.isFinite(fileEntry.progress)
+            ? Math.max(0, Math.min(100, Math.round(fileEntry.progress)))
+            : 0;
+          const progressPercent = `${progressValue}%`;
 
           return `
             <li class="rounded border border-gray-200 bg-white px-3 py-2 text-sm flex flex-col gap-1" data-product-id="${group.safeId}" data-file-index="${index}">
@@ -256,6 +260,15 @@
               <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
                 <span class="text-gray-500">Status: <span class="font-semibold ${statusClass}" data-status>${status}</span></span>
                 <span class="text-gray-400">Códigos detectados: ${barcodesMarkup}</span>
+              </div>
+              <div class="mt-1 space-y-1">
+                <div class="h-1.5 w-full rounded-full bg-gray-100" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressValue}">
+                  <div class="h-full rounded-full bg-blue-500 transition-all duration-300" data-progress-bar style="width: ${progressPercent};"></div>
+                </div>
+                <div class="flex items-center justify-between text-xs text-gray-400">
+                  <span>Progresso</span>
+                  <span data-progress-text>${progressPercent}</span>
+                </div>
               </div>
               <p class="${errorClass}" data-error>${errorText}</p>
             </li>
@@ -357,6 +370,7 @@
         relativePath,
         barcodes,
         sequence: extractSequence(relativePath),
+        progress: 0,
       };
     });
 
@@ -526,6 +540,7 @@
           relativePath: entry.relativePath,
           barcodesTried: entry.barcodes,
           sequence: entry.sequence,
+          progress: entry.progress || 0,
         });
         return;
       }
@@ -549,6 +564,7 @@
           sequence: entry.sequence,
           status: 'pending',
           error: '',
+          progress: entry.progress || 0,
         });
       });
     });
@@ -601,23 +617,20 @@
         formData.append('imagens', fileEntry.file);
       });
 
+      group.files.forEach((fileEntry, index) => {
+        fileEntry.status = 'enviando';
+        fileEntry.error = '';
+        updateFileStatus(productId, index, 'enviando');
+        updateFileProgress(productId, index, 0);
+      });
+
       try {
-        const response = await fetch(`${baseUrl}/products/${productId}/upload`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        });
-
-        if (!response.ok) {
-          throw new Error('Falha ao enviar imagens para este produto.');
-        }
-
+        await uploadGroupWithProgress(productId, group, baseUrl, token, formData);
         group.files.forEach((fileEntry, index) => {
           fileEntry.status = 'success';
           fileEntry.error = '';
           updateFileStatus(productId, index, 'success');
+          updateFileProgress(productId, index, 100);
         });
         state.stats.uploaded += group.files.length;
       } catch (error) {
@@ -626,6 +639,7 @@
           fileEntry.status = 'error';
           fileEntry.error = error?.message || 'Erro desconhecido durante o upload.';
           updateFileStatus(productId, index, 'error', fileEntry.error);
+          updateFileProgress(productId, index, 100);
         });
         state.stats.failed += group.files.length;
       }
@@ -643,6 +657,83 @@
     } else {
       setStatus('Upload concluído com sucesso! Todas as imagens foram enviadas.', 'success');
     }
+  }
+
+  function uploadGroupWithProgress(productId, group, baseUrl, token, formData) {
+    return new Promise((resolve, reject) => {
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${baseUrl}/products/${productId}/upload`);
+        xhr.responseType = 'json';
+        if (token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
+
+        const sizes = group.files.map((fileEntry) => {
+          const size = Number(fileEntry.file?.size);
+          return Number.isFinite(size) && size > 0 ? size : 0;
+        });
+        const totalSize = sizes.reduce((sum, value) => sum + value, 0);
+        const fileCount = group.files.length || 1;
+
+        xhr.upload.addEventListener('progress', (event) => {
+          if (!refs.productMatches) {
+            return;
+          }
+
+          if (!event.lengthComputable) {
+            const fallbackProgress = event.loaded > 0 ? 50 : 0;
+            group.files.forEach((_, index) => {
+              updateFileProgress(productId, index, fallbackProgress);
+            });
+            return;
+          }
+
+          const loaded = event.loaded;
+          const total = event.total > 0 ? event.total : totalSize;
+          const effectiveTotal = total > 0 ? total : totalSize || fileCount;
+          let accumulated = 0;
+
+          group.files.forEach((_, index) => {
+            const size = sizes[index] || effectiveTotal / fileCount;
+            const start = accumulated;
+            const end = start + size;
+            let ratio;
+
+            if (size <= 0) {
+              ratio = Math.min(1, effectiveTotal ? loaded / effectiveTotal : 0);
+            } else {
+              const portion = Math.min(Math.max(loaded - start, 0), size);
+              ratio = portion / size;
+            }
+
+            const percent = Math.max(0, Math.min(100, Math.round(ratio * 100)));
+            updateFileProgress(productId, index, percent);
+            accumulated = end;
+          });
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(xhr.response);
+          } else {
+            reject(new Error('Falha ao enviar imagens para este produto.'));
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          reject(new Error('Falha na conexão durante o upload.'));
+        });
+
+        xhr.addEventListener('abort', () => {
+          reject(new Error('Upload cancelado.'));
+        });
+
+        xhr.send(formData);
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error('Erro inesperado durante o upload.'));
+      }
+    });
   }
 
   function updateGroupStatus(productId, status) {
@@ -666,6 +757,41 @@
         statusElement.classList.add('text-gray-700');
       }
     });
+  }
+
+  function updateFileProgress(productId, index, progress) {
+    const group = state.products.get(productId);
+    if (!group || !refs.productMatches) {
+      return;
+    }
+
+    const selectorId = group.safeId || generateSafeId(productId);
+    const item = refs.productMatches.querySelector(`li[data-product-id="${selectorId}"][data-file-index="${index}"]`);
+    if (!item) {
+      return;
+    }
+
+    const normalized = Number.isFinite(progress) ? Math.max(0, Math.min(100, Math.round(progress))) : 0;
+
+    const barElement = item.querySelector('[data-progress-bar]');
+    if (barElement) {
+      barElement.style.width = `${normalized}%`;
+      barElement.setAttribute('aria-valuenow', String(normalized));
+    }
+
+    const progressContainer = item.querySelector('[role="progressbar"]');
+    if (progressContainer) {
+      progressContainer.setAttribute('aria-valuenow', String(normalized));
+    }
+
+    const textElement = item.querySelector('[data-progress-text]');
+    if (textElement) {
+      textElement.textContent = `${normalized}%`;
+    }
+
+    if (group.files[index]) {
+      group.files[index].progress = normalized;
+    }
   }
 
   function updateFileStatus(productId, index, status, errorMessage = '') {
