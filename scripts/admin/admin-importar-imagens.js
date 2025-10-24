@@ -19,7 +19,7 @@
 
   const elements = {};
 
-  document.addEventListener('DOMContentLoaded', () => {
+  const initialize = () => {
     elements.folderInput = document.getElementById('image-folder-input');
     elements.uploadButton = document.getElementById('start-upload-btn');
     elements.statusMessage = document.getElementById('status-message');
@@ -35,11 +35,44 @@
       return;
     }
 
+    const enclosingForm = elements.uploadButton.form || elements.folderInput.form;
+    if (enclosingForm && !enclosingForm.dataset.preventRefresh) {
+      enclosingForm.dataset.preventRefresh = 'true';
+      enclosingForm.addEventListener(
+        'submit',
+        (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        },
+        true
+      );
+    }
+
     elements.folderInput.addEventListener('change', handleFolderSelection);
-    elements.uploadButton.addEventListener('click', handleUpload);
+    elements.uploadButton.addEventListener('click', (event) => {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+          event.stopImmediatePropagation();
+        }
+      }
+      handleUpload().catch((error) => {
+        console.error('Erro inesperado durante o upload de imagens:', error);
+        elements.uploadButton.disabled = false;
+        elements.uploadButton.classList.remove('opacity-75');
+        setStatus('Não foi possível concluir o upload. Verifique os erros e tente novamente.', 'error');
+      });
+    });
 
     updateSummary();
-  });
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize);
+  } else {
+    initialize();
+  }
 
   function handleFolderSelection(event) {
     const files = Array.from(event.target.files || []);
@@ -390,10 +423,7 @@
     });
   }
 
-  async function handleUpload(event) {
-    if (event && typeof event.preventDefault === 'function') {
-      event.preventDefault();
-    }
+  async function handleUpload() {
     if (!state.products.size) {
       setStatus('Nenhum produto disponível para upload.', 'warning');
       return;
