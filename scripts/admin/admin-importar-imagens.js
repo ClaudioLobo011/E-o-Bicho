@@ -59,6 +59,44 @@
       logContainer.textContent = '';
     };
 
+    const disablePageReloadTriggers = () => {
+      if (window.__adminImportImagesNoReloadGuard) {
+        return;
+      }
+
+      window.__adminImportImagesNoReloadGuard = true;
+
+      try {
+        window.onbeforeunload = null;
+      } catch (error) {
+        console.warn('Falha ao limpar manipuladores anteriores de beforeunload.', error);
+      }
+
+      const swallowBeforeUnload = (event) => {
+        if (!event) {
+          return;
+        }
+
+        try {
+          event.stopImmediatePropagation();
+        } catch (stopError) {
+          console.warn('Não foi possível interromper propagação do beforeunload.', stopError);
+        }
+
+        if ('returnValue' in event) {
+          try {
+            event.returnValue = undefined;
+          } catch (clearError) {
+            console.warn('Não foi possível limpar event.returnValue no beforeunload.', clearError);
+          }
+        }
+      };
+
+      window.addEventListener('beforeunload', swallowBeforeUnload, { capture: true });
+    };
+
+    disablePageReloadTriggers();
+
     const parseFileName = (file) => {
       const relativePath = file.webkitRelativePath || file.name;
       const segments = relativePath.split('/');
