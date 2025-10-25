@@ -32,10 +32,33 @@ function safeNotify(callback, payload) {
 function listImagesFromFolder(folderPath) {
   try {
     const entries = fs.readdirSync(folderPath, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isFile())
-      .map((entry) => entry.name)
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    const files = [];
+
+    for (const entry of entries) {
+      if (!entry || typeof entry.name !== 'string' || !entry.name.trim()) {
+        continue;
+      }
+
+      let isFileEntry = typeof entry.isFile === 'function' ? entry.isFile() : false;
+
+      if (!isFileEntry) {
+        const candidatePath = path.join(folderPath, entry.name);
+        try {
+          const stats = fs.statSync(candidatePath);
+          isFileEntry = stats.isFile();
+        } catch (statError) {
+          if (statError?.code !== 'ENOENT') {
+            throw statError;
+          }
+        }
+      }
+
+      if (isFileEntry) {
+        files.push(entry.name);
+      }
+    }
+
+    return files.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
   } catch (error) {
     if (error?.code === 'ENOENT') {
       return [];
