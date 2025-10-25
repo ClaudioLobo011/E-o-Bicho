@@ -476,6 +476,7 @@ async function processProductImages({
   driveReadablePath,
   localFolderPath,
   driveFolderName,
+  driveFolderSummary,
 }) {
   const prefix = progressLabel ? `${progressLabel} ` : '';
   const emitWithPrefix = (message, type) => emitLog(`${prefix}${message}`, type);
@@ -503,6 +504,17 @@ async function processProductImages({
 
   if (!fileNames.length) {
     emitWithPrefix(`Nenhuma imagem encontrada nas pastas esperadas (${folderPath}).`, 'warning');
+    if (driveFolderSummary && typeof driveFolderSummary === 'object') {
+      if (!driveFolderSummary.id && resolvedDriveFolderId) {
+        driveFolderSummary.id = String(resolvedDriveFolderId).trim();
+      }
+      if (!driveFolderSummary.name && resolvedDriveFolderName) {
+        driveFolderSummary.name = String(resolvedDriveFolderName).trim();
+      }
+      if (!driveFolderSummary.path && folderPath) {
+        driveFolderSummary.path = folderPath;
+      }
+    }
     return;
   }
 
@@ -538,6 +550,18 @@ async function processProductImages({
         path: normalizedDriveFolderPath || '',
       }
     : null;
+
+  if (driveFolderSummary && typeof driveFolderSummary === 'object') {
+    if (!driveFolderSummary.id && driveFolderInfo?.id) {
+      driveFolderSummary.id = driveFolderInfo.id;
+    }
+    if (!driveFolderSummary.name && driveFolderInfo?.name) {
+      driveFolderSummary.name = driveFolderInfo.name;
+    }
+    if (!driveFolderSummary.path && driveFolderInfo?.path) {
+      driveFolderSummary.path = driveFolderInfo.path;
+    }
+  }
 
   fileNames.forEach((fileName, index) => {
     const publicPath = buildProductImagePublicPath(barcodeSegment, fileName);
@@ -600,6 +624,12 @@ async function processProductImages({
     summary.linked += productLinked;
     summary.already += productAlready;
     safeNotify(callbacks.onProduct, productPayload);
+
+    if (driveFolderSummary && typeof driveFolderSummary === 'object') {
+      driveFolderSummary.productCount = (driveFolderSummary.productCount || 0) + 1;
+      driveFolderSummary.imageCount = (driveFolderSummary.imageCount || 0) + productImages.length;
+      driveFolderSummary.status = 'matched';
+    }
   }
 }
 
@@ -748,6 +778,7 @@ async function verifyAndLinkProductImages(options = {}) {
   const logs = [];
   const startedAt = new Date();
   const productsResult = [];
+  const driveFoldersResult = [];
   const summary = {
     linked: 0,
     already: 0,
@@ -791,6 +822,7 @@ async function verifyAndLinkProductImages(options = {}) {
     safeNotify(callbacks.onProgress, {
       summary: { ...summary },
       meta: { ...meta },
+      driveFolders: driveFoldersResult.slice(),
     });
   };
 
@@ -961,6 +993,32 @@ async function verifyAndLinkProductImages(options = {}) {
       const seenProducts = new Set();
       const matchingProducts = [];
 
+      const normalizeValue = (value) => {
+        if (value === null || value === undefined) {
+          return '';
+        }
+        if (typeof value === 'string') {
+          return value.trim();
+        }
+        try {
+          return String(value).trim();
+        } catch (error) {
+          return '';
+        }
+      };
+
+      const driveFolderSummary = {
+        id: normalizeValue(entry.folderId),
+        name: normalizeValue(entry.folderName),
+        path: normalizeValue(entry.readablePath || entry.localFolderPath || ''),
+        barcode: normalizeValue(entry.barcodeSegment),
+        source: entry.hasDrive ? 'drive' : entry.localFolderPath ? 'local' : 'unknown',
+        hasDrive: Boolean(entry.hasDrive),
+        productCount: 0,
+        imageCount: 0,
+        status: entry.hasDrive ? 'pending' : 'local-only',
+      };
+
       for (const key of lookupKeys) {
         const productsForKey = barcodeIndex.get(key);
         if (!Array.isArray(productsForKey) || !productsForKey.length) {
@@ -982,6 +1040,10 @@ async function verifyAndLinkProductImages(options = {}) {
           `${progressPrefix} Nenhum produto encontrado com o código de barras ${entry.folderName} (${entry.readablePath || entry.localFolderPath || entry.folderName}).`,
           'warning'
         );
+        if (entry.hasDrive) {
+          driveFolderSummary.status = 'unmatched';
+          driveFoldersResult.push(driveFolderSummary);
+        }
         meta.processedProducts = currentIndex;
         emitProgress();
         continue;
@@ -1002,7 +1064,19 @@ async function verifyAndLinkProductImages(options = {}) {
           driveReadablePath: entry.readablePath,
           localFolderPath: entry.localFolderPath,
           driveFolderName: entry.folderName,
+          driveFolderSummary,
         });
+      }
+
+      if (entry.hasDrive) {
+        if (driveFolderSummary.productCount > 0) {
+          if (!driveFolderSummary.status || driveFolderSummary.status === 'pending') {
+            driveFolderSummary.status = 'matched';
+          }
+        } else if (!driveFolderSummary.status || driveFolderSummary.status === 'pending') {
+          driveFolderSummary.status = 'no-images';
+        }
+        driveFoldersResult.push(driveFolderSummary);
       }
 
       meta.processedProducts = currentIndex;
@@ -1018,6 +1092,7 @@ async function verifyAndLinkProductImages(options = {}) {
     data: {
       summary,
       products: productsResult,
+      driveFolders: driveFoldersResult,
       startedAt: startedAt.toISOString(),
       finishedAt: new Date().toISOString(),
       status: 'completed',

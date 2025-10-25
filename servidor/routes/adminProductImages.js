@@ -23,6 +23,7 @@ function createEmptyResult() {
         images: 0,
       },
       products: [],
+      driveFolders: [],
       startedAt,
       finishedAt: null,
       status: 'processing',
@@ -72,6 +73,10 @@ function applyProgress(result, progress) {
       ...result.meta,
       ...progress.meta,
     };
+  }
+
+  if (Array.isArray(progress.driveFolders)) {
+    result.data.driveFolders = progress.driveFolders.slice();
   }
 }
 
