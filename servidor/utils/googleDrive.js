@@ -192,6 +192,10 @@ async function findFolderByName(name, parentId, token) {
     includeItemsFromAllDrives: 'true',
   });
 
+  if (!params.has('corpora')) {
+    params.set('corpora', 'allDrives');
+  }
+
   const headers = { Authorization: `Bearer ${token}` };
   const response = await requestGoogle({
     url: `${FILES_URI}?${params.toString()}`,
@@ -224,6 +228,10 @@ async function findFileByName(name, parentId, token) {
     supportsAllDrives: 'true',
     includeItemsFromAllDrives: 'true',
   });
+
+  if (!params.has('corpora')) {
+    params.set('corpora', 'allDrives');
+  }
 
   const headers = { Authorization: `Bearer ${token}` };
   const response = await requestGoogle({
@@ -942,6 +950,10 @@ async function listFilesInFolderByPath(options = {}) {
       supportsAllDrives: 'true',
       includeItemsFromAllDrives: 'true',
     });
+
+    if (!params.has('corpora')) {
+      params.set('corpora', 'allDrives');
+    }
 
     if (orderBy) {
       params.set('orderBy', orderBy);
