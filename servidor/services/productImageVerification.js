@@ -9,7 +9,7 @@ const {
   getProductImagesDriveFolderPath,
   sanitizeBarcodeSegment,
 } = require('../utils/productImagePath');
-const { isDriveConfigured, listFilesInFolderByPath } = require('../utils/googleDrive');
+const { isDriveConfigured, listFilesInFolderByPath, getDriveFolderId } = require('../utils/googleDrive');
 
 const PLACEHOLDER_IMAGE = '/image/placeholder.png';
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
@@ -248,26 +248,64 @@ function normalizeDriveFolderItem({ item, emitLog, parentPath }) {
 }
 
 async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
-  const baseReadablePath = Array.isArray(baseSegments) && baseSegments.length ? baseSegments.join('/') : '(raiz)';
+  const baseSegmentsList = Array.isArray(baseSegments)
+    ? baseSegments
+        .map((segment) => (typeof segment === 'string' ? segment.trim() : ''))
+        .filter(Boolean)
+    : [];
+  const baseReadableFromSegments = baseSegmentsList.length ? baseSegmentsList.join('/') : '';
+  const driveBaseFolderId = typeof getDriveFolderId === 'function' ? getDriveFolderId() : null;
+  let baseReadablePath = baseReadableFromSegments || (driveBaseFolderId ? `(id:${driveBaseFolderId})` : '(raiz)');
   const barcodeFolders = [];
   const pending = [];
   const visitedFolders = new Set();
 
   let initialListing;
 
-  try {
-    initialListing = await listFilesInFolderByPath({
-      folderPath: baseSegments,
-      includeFiles: false,
-      includeFolders: true,
-      includeFolderShortcuts: true,
-      orderBy: 'name_natural',
+  const buildListingOptions = (extraOptions = {}) => ({
+    includeFiles: false,
+    includeFolders: true,
+    includeFolderShortcuts: true,
+    orderBy: 'name_natural',
+    ...extraOptions,
+  });
+
+  const listingAttempts = [];
+
+  if (driveBaseFolderId) {
+    listingAttempts.push({
+      options: buildListingOptions({ folderId: driveBaseFolderId, folderPath: [] }),
+      readablePath: baseReadableFromSegments ? `${baseReadableFromSegments} (id:${driveBaseFolderId})` : `(id:${driveBaseFolderId})`,
     });
-  } catch (error) {
-    emitLog(
-      `Falha ao listar as pastas iniciais no Google Drive (${baseReadablePath}): ${error.message || error}.`,
-      'error'
-    );
+
+    if (baseSegmentsList.length) {
+      listingAttempts.push({
+        options: buildListingOptions({ folderId: driveBaseFolderId, folderPath: baseSegmentsList }),
+        readablePath: `${baseSegmentsList.join('/')} (id:${driveBaseFolderId})`,
+      });
+    }
+  }
+
+  listingAttempts.push({
+    options: buildListingOptions({ folderPath: baseSegmentsList }),
+    readablePath: baseReadableFromSegments || '(raiz)',
+  });
+
+  for (const attempt of listingAttempts) {
+    try {
+      initialListing = await listFilesInFolderByPath(attempt.options);
+      baseReadablePath = attempt.readablePath;
+      break;
+    } catch (error) {
+      emitLog(
+        `Falha ao listar as pastas iniciais no Google Drive (${attempt.readablePath}): ${error.message || error}.`,
+        'error'
+      );
+    }
+  }
+
+  if (!initialListing) {
+    emitLog('Não foi possível acessar a pasta base configurada no Google Drive.', 'error');
     return { barcodeFolders, baseReadablePath };
   }
 
@@ -297,7 +335,7 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
     pending.push({
       folderId: normalized.folderId,
       folderName,
-      pathSegments: [...(Array.isArray(baseSegments) ? baseSegments : []), folderName].filter(Boolean),
+      pathSegments: [...baseSegmentsList, folderName].filter(Boolean),
       readablePath,
       depth: 0,
     });
