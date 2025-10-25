@@ -1,8 +1,10 @@
 const fs = require('fs');
+const path = require('path');
 const Product = require('../models/Product');
 const {
   buildProductImagePublicPath,
   getProductImageFolderPath,
+  getProductImagesRoot,
   getProductImagesDriveBaseSegments,
   getProductImagesDriveFolderPath,
   sanitizeBarcodeSegment,
@@ -30,10 +32,33 @@ function safeNotify(callback, payload) {
 function listImagesFromFolder(folderPath) {
   try {
     const entries = fs.readdirSync(folderPath, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isFile())
-      .map((entry) => entry.name)
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    const files = [];
+
+    for (const entry of entries) {
+      if (!entry || typeof entry.name !== 'string' || !entry.name.trim()) {
+        continue;
+      }
+
+      let isFileEntry = typeof entry.isFile === 'function' ? entry.isFile() : false;
+
+      if (!isFileEntry) {
+        const candidatePath = path.join(folderPath, entry.name);
+        try {
+          const stats = fs.statSync(candidatePath);
+          isFileEntry = stats.isFile();
+        } catch (statError) {
+          if (statError?.code !== 'ENOENT') {
+            throw statError;
+          }
+        }
+      }
+
+      if (isFileEntry) {
+        files.push(entry.name);
+      }
+    }
+
+    return files.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
   } catch (error) {
     if (error?.code === 'ENOENT') {
       return [];
@@ -381,6 +406,62 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
   return { barcodeFolders, baseReadablePath };
 }
 
+function collectLocalBarcodeFolders({ basePath, emitLog }) {
+  const resolvedBasePath = typeof basePath === 'string' && basePath.trim() ? basePath.trim() : getProductImagesRoot();
+  const barcodeFolders = [];
+
+  let entries;
+  try {
+    entries = fs.readdirSync(resolvedBasePath, { withFileTypes: true });
+  } catch (error) {
+    emitLog(
+      `Falha ao ler a pasta local de imagens (${resolvedBasePath}): ${error.message || error}.`,
+      'error'
+    );
+    return { barcodeFolders, basePath: resolvedBasePath };
+  }
+
+  if (!entries.length) {
+    emitLog(`Nenhuma pasta encontrada em ${resolvedBasePath}.`, 'warning');
+    return { barcodeFolders, basePath: resolvedBasePath };
+  }
+
+  for (const entry of entries) {
+    if (!entry || typeof entry.name !== 'string') {
+      continue;
+    }
+
+    const folderName = entry.name.trim();
+    if (!folderName) {
+      continue;
+    }
+
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    if (!looksLikeBarcodeFolder(folderName)) {
+      emitLog(
+        `Pasta ${folderName} ignorada em ${resolvedBasePath} por não corresponder a um código de barras válido.`,
+        'warning'
+      );
+      continue;
+    }
+
+    barcodeFolders.push({
+      folderName,
+      barcodeSegment: sanitizeBarcodeSegment(folderName),
+      folderPath: path.join(resolvedBasePath, folderName),
+    });
+  }
+
+  if (!barcodeFolders.length) {
+    emitLog(`Nenhuma pasta de código de barras válida encontrada em ${resolvedBasePath}.`, 'warning');
+  }
+
+  return { barcodeFolders, basePath: resolvedBasePath };
+}
+
 async function processProductImages({
   product,
   barcodeSegment,
@@ -393,6 +474,7 @@ async function processProductImages({
   driveFolderId,
   driveFolderPathSegments,
   driveReadablePath,
+  localFolderPath,
 }) {
   const prefix = progressLabel ? `${progressLabel} ` : '';
   const emitWithPrefix = (message, type) => emitLog(`${prefix}${message}`, type);
@@ -407,6 +489,7 @@ async function processProductImages({
     driveFolderId,
     driveFolderPathSegments,
     driveReadablePath,
+    localFolderPath,
   });
 
   if (!fileNames.length) {
@@ -492,6 +575,7 @@ async function getProductImageFileNames({
   driveFolderId,
   driveFolderPathSegments,
   driveReadablePath,
+  localFolderPath,
 }) {
   const productLabel = describeProduct(product);
 
@@ -532,18 +616,53 @@ async function getProductImageFileNames({
     }
   }
 
-  const folderPath = getProductImageFolderPath(barcodeSegment);
+  const localCandidates = [];
+  const manualPath = typeof localFolderPath === 'string' && localFolderPath.trim() ? localFolderPath.trim() : '';
 
-  try {
-    const names = listImagesFromFolder(folderPath);
-    return { fileNames: names, source: 'local', folderPath };
-  } catch (error) {
-    emitLog(
-      `Falha ao ler a pasta de imagens em disco (${folderPath}) para o produto ${productLabel}: ${error.message || error}`,
-      'warning'
-    );
-    return { fileNames: [], source: 'local', folderPath };
+  if (manualPath) {
+    localCandidates.push(manualPath);
   }
+
+  const defaultFolderPath = getProductImageFolderPath(barcodeSegment);
+  if (
+    !localCandidates.some((candidate) => {
+      try {
+        return path.resolve(candidate) === path.resolve(defaultFolderPath);
+      } catch (error) {
+        return false;
+      }
+    })
+  ) {
+    localCandidates.push(defaultFolderPath);
+  }
+
+  for (const folderPath of localCandidates) {
+    try {
+      const names = listImagesFromFolder(folderPath);
+      if (names.length) {
+        return { fileNames: names, source: 'local', folderPath };
+      }
+
+      if (folderPath === manualPath && manualPath !== defaultFolderPath) {
+        emitLog(
+          `Nenhuma imagem encontrada na pasta local manual (${folderPath}) para o produto ${productLabel}.`,
+          'warning'
+        );
+      }
+    } catch (error) {
+      emitLog(
+        `Falha ao ler a pasta de imagens em disco (${folderPath}) para o produto ${productLabel}: ${error.message || error}`,
+        'warning'
+      );
+    }
+  }
+
+  if (localCandidates.length) {
+    const lastPath = localCandidates[localCandidates.length - 1];
+    return { fileNames: [], source: 'local', folderPath: lastPath };
+  }
+
+  return { fileNames: [], source: 'local', folderPath: defaultFolderPath };
 }
 
 async function verifyAndLinkProductImages(options = {}) {
@@ -618,34 +737,72 @@ async function verifyAndLinkProductImages(options = {}) {
   }
 
   if (!driveAvailable) {
-    meta.totalProducts = products.length;
+    const localRoot = getProductImagesRoot();
+    emitLog('Integração com o Google Drive não configurada. As pastas locais serão analisadas.', 'info');
+    emitLog(`Diretório base considerado: ${localRoot}.`, 'info');
+
+    const { barcodeFolders } = collectLocalBarcodeFolders({ basePath: localRoot, emitLog });
+    const foldersToProcess = barcodeFolders
+      .slice()
+      .sort((a, b) => (a?.folderName || '').localeCompare(b?.folderName || '', undefined, { numeric: true, sensitivity: 'base' }));
+
+    meta.totalProducts = foldersToProcess.length;
     safeNotify(callbacks.onStart, { totalProducts: meta.totalProducts });
-    emitLog(`Total de produtos carregados para análise: ${products.length}.`);
+    emitLog(`Total de pastas locais encontradas para análise: ${foldersToProcess.length}.`);
+
+    if (!foldersToProcess.length) {
+      emitProgress();
+      emitLog('Nenhuma pasta local disponível para processamento.', 'warning');
+    }
 
     let currentIndex = 0;
 
-    for (const product of products) {
+    for (const entry of foldersToProcess) {
       currentIndex += 1;
-      const barcodeSegment = sanitizeBarcodeSegment(product.codbarras || product.cod || product.id || '');
-      if (!barcodeSegment || barcodeSegment === FALLBACK_BARCODE_SEGMENT) {
+      const progressPrefix = `(${currentIndex}/${foldersToProcess.length || 1})`;
+      const lookupKeys = Array.from(getBarcodeIndexKeys(entry.folderName || entry.barcodeSegment));
+      const seenProducts = new Set();
+      const matchingProducts = [];
+
+      for (const key of lookupKeys) {
+        const productsForKey = barcodeIndex.get(key);
+        if (!Array.isArray(productsForKey) || !productsForKey.length) {
+          continue;
+        }
+
+        for (const product of productsForKey) {
+          const productKey = getProductUniqueKey(product);
+          if (!productKey || seenProducts.has(productKey)) {
+            continue;
+          }
+          seenProducts.add(productKey);
+          matchingProducts.push(product);
+        }
+      }
+
+      if (!matchingProducts.length) {
         emitLog(
-          `(${currentIndex}/${products.length || 1}) Produto ${describeProduct(product)} ignorado por não possuir código de barras válido.`,
+          `${progressPrefix} Nenhum produto encontrado com o código de barras ${entry.folderName} (${entry.folderPath}).`,
           'warning'
         );
         meta.processedProducts = currentIndex;
         emitProgress();
         continue;
       }
-      await processProductImages({
-        product,
-        barcodeSegment,
-        emitLog,
-        driveAvailable,
-        summary,
-        productsResult,
-        callbacks,
-        progressLabel: `(${currentIndex}/${products.length || 1})`,
-      });
+
+      for (const product of matchingProducts) {
+        await processProductImages({
+          product,
+          barcodeSegment: entry.barcodeSegment,
+          emitLog,
+          driveAvailable,
+          summary,
+          productsResult,
+          callbacks,
+          progressLabel: progressPrefix,
+          localFolderPath: entry.folderPath,
+        });
+      }
 
       meta.processedProducts = currentIndex;
       emitProgress();
@@ -661,13 +818,52 @@ async function verifyAndLinkProductImages(options = {}) {
       emitLog,
     });
 
-    const foldersToProcess = barcodeFolders.slice().sort((a, b) =>
+    const { barcodeFolders: localFolders } = collectLocalBarcodeFolders({ basePath: getProductImagesRoot(), emitLog });
+
+    const totalDriveFolders = Array.isArray(barcodeFolders) ? barcodeFolders.length : 0;
+    const totalLocalFolders = Array.isArray(localFolders) ? localFolders.length : 0;
+
+    const combinedFolders = new Map();
+
+    for (const entry of barcodeFolders) {
+      if (!entry || !entry.barcodeSegment) {
+        continue;
+      }
+      combinedFolders.set(entry.barcodeSegment, { ...entry, hasDrive: true });
+    }
+
+    for (const localEntry of localFolders) {
+      if (!localEntry || !localEntry.barcodeSegment) {
+        continue;
+      }
+
+      const existing = combinedFolders.get(localEntry.barcodeSegment);
+      if (existing) {
+        existing.localFolderPath = localEntry.folderPath;
+        if (!existing.folderName) {
+          existing.folderName = localEntry.folderName;
+        }
+      } else {
+        combinedFolders.set(localEntry.barcodeSegment, {
+          barcodeSegment: localEntry.barcodeSegment,
+          folderName: localEntry.folderName,
+          readablePath: localEntry.folderPath,
+          localFolderPath: localEntry.folderPath,
+          pathSegments: [],
+          hasDrive: false,
+        });
+      }
+    }
+
+    const foldersToProcess = Array.from(combinedFolders.values()).sort((a, b) =>
       (a?.folderName || '').localeCompare(b?.folderName || '', undefined, { numeric: true, sensitivity: 'base' })
     );
 
     meta.totalProducts = foldersToProcess.length;
     safeNotify(callbacks.onStart, { totalProducts: meta.totalProducts });
-    emitLog(`Total de pastas encontradas no Google Drive para análise: ${foldersToProcess.length}.`);
+    emitLog(
+      `Total de pastas consideradas para análise: ${foldersToProcess.length} (Drive: ${totalDriveFolders}, Locais: ${totalLocalFolders}).`
+    );
 
     if (!foldersToProcess.length) {
       emitLog(
@@ -703,7 +899,7 @@ async function verifyAndLinkProductImages(options = {}) {
 
       if (!matchingProducts.length) {
         emitLog(
-          `${progressPrefix} Nenhum produto encontrado com o código de barras ${entry.folderName} (${entry.readablePath}).`,
+          `${progressPrefix} Nenhum produto encontrado com o código de barras ${entry.folderName} (${entry.readablePath || entry.localFolderPath || entry.folderName}).`,
           'warning'
         );
         meta.processedProducts = currentIndex;
@@ -716,7 +912,7 @@ async function verifyAndLinkProductImages(options = {}) {
           product,
           barcodeSegment: entry.barcodeSegment,
           emitLog,
-          driveAvailable,
+          driveAvailable: driveAvailable && !!entry.hasDrive,
           summary,
           productsResult,
           callbacks,
@@ -724,6 +920,7 @@ async function verifyAndLinkProductImages(options = {}) {
           driveFolderId: entry.folderId,
           driveFolderPathSegments: entry.pathSegments,
           driveReadablePath: entry.readablePath,
+          localFolderPath: entry.localFolderPath,
         });
       }
 
