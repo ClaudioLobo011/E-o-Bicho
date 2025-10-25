@@ -1,8 +1,10 @@
 const fs = require('fs');
+const path = require('path');
 const Product = require('../models/Product');
 const {
   buildProductImagePublicPath,
   getProductImageFolderPath,
+  getProductImagesRoot,
   getProductImagesDriveBaseSegments,
   getProductImagesDriveFolderPath,
   sanitizeBarcodeSegment,
@@ -381,6 +383,62 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
   return { barcodeFolders, baseReadablePath };
 }
 
+function collectLocalBarcodeFolders({ basePath, emitLog }) {
+  const resolvedBasePath = typeof basePath === 'string' && basePath.trim() ? basePath.trim() : getProductImagesRoot();
+  const barcodeFolders = [];
+
+  let entries;
+  try {
+    entries = fs.readdirSync(resolvedBasePath, { withFileTypes: true });
+  } catch (error) {
+    emitLog(
+      `Falha ao ler a pasta local de imagens (${resolvedBasePath}): ${error.message || error}.`,
+      'error'
+    );
+    return { barcodeFolders, basePath: resolvedBasePath };
+  }
+
+  if (!entries.length) {
+    emitLog(`Nenhuma pasta encontrada em ${resolvedBasePath}.`, 'warning');
+    return { barcodeFolders, basePath: resolvedBasePath };
+  }
+
+  for (const entry of entries) {
+    if (!entry || typeof entry.name !== 'string') {
+      continue;
+    }
+
+    const folderName = entry.name.trim();
+    if (!folderName) {
+      continue;
+    }
+
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    if (!looksLikeBarcodeFolder(folderName)) {
+      emitLog(
+        `Pasta ${folderName} ignorada em ${resolvedBasePath} por não corresponder a um código de barras válido.`,
+        'warning'
+      );
+      continue;
+    }
+
+    barcodeFolders.push({
+      folderName,
+      barcodeSegment: sanitizeBarcodeSegment(folderName),
+      folderPath: path.join(resolvedBasePath, folderName),
+    });
+  }
+
+  if (!barcodeFolders.length) {
+    emitLog(`Nenhuma pasta de código de barras válida encontrada em ${resolvedBasePath}.`, 'warning');
+  }
+
+  return { barcodeFolders, basePath: resolvedBasePath };
+}
+
 async function processProductImages({
   product,
   barcodeSegment,
@@ -618,34 +676,71 @@ async function verifyAndLinkProductImages(options = {}) {
   }
 
   if (!driveAvailable) {
-    meta.totalProducts = products.length;
+    const localRoot = getProductImagesRoot();
+    emitLog('Integração com o Google Drive não configurada. As pastas locais serão analisadas.', 'info');
+    emitLog(`Diretório base considerado: ${localRoot}.`, 'info');
+
+    const { barcodeFolders } = collectLocalBarcodeFolders({ basePath: localRoot, emitLog });
+    const foldersToProcess = barcodeFolders
+      .slice()
+      .sort((a, b) => (a?.folderName || '').localeCompare(b?.folderName || '', undefined, { numeric: true, sensitivity: 'base' }));
+
+    meta.totalProducts = foldersToProcess.length;
     safeNotify(callbacks.onStart, { totalProducts: meta.totalProducts });
-    emitLog(`Total de produtos carregados para análise: ${products.length}.`);
+    emitLog(`Total de pastas locais encontradas para análise: ${foldersToProcess.length}.`);
+
+    if (!foldersToProcess.length) {
+      emitProgress();
+      emitLog('Nenhuma pasta local disponível para processamento.', 'warning');
+    }
 
     let currentIndex = 0;
 
-    for (const product of products) {
+    for (const entry of foldersToProcess) {
       currentIndex += 1;
-      const barcodeSegment = sanitizeBarcodeSegment(product.codbarras || product.cod || product.id || '');
-      if (!barcodeSegment || barcodeSegment === FALLBACK_BARCODE_SEGMENT) {
+      const progressPrefix = `(${currentIndex}/${foldersToProcess.length || 1})`;
+      const lookupKeys = Array.from(getBarcodeIndexKeys(entry.folderName || entry.barcodeSegment));
+      const seenProducts = new Set();
+      const matchingProducts = [];
+
+      for (const key of lookupKeys) {
+        const productsForKey = barcodeIndex.get(key);
+        if (!Array.isArray(productsForKey) || !productsForKey.length) {
+          continue;
+        }
+
+        for (const product of productsForKey) {
+          const productKey = getProductUniqueKey(product);
+          if (!productKey || seenProducts.has(productKey)) {
+            continue;
+          }
+          seenProducts.add(productKey);
+          matchingProducts.push(product);
+        }
+      }
+
+      if (!matchingProducts.length) {
         emitLog(
-          `(${currentIndex}/${products.length || 1}) Produto ${describeProduct(product)} ignorado por não possuir código de barras válido.`,
+          `${progressPrefix} Nenhum produto encontrado com o código de barras ${entry.folderName} (${entry.folderPath}).`,
           'warning'
         );
         meta.processedProducts = currentIndex;
         emitProgress();
         continue;
       }
-      await processProductImages({
-        product,
-        barcodeSegment,
-        emitLog,
-        driveAvailable,
-        summary,
-        productsResult,
-        callbacks,
-        progressLabel: `(${currentIndex}/${products.length || 1})`,
-      });
+
+      for (const product of matchingProducts) {
+        await processProductImages({
+          product,
+          barcodeSegment: entry.barcodeSegment,
+          emitLog,
+          driveAvailable,
+          summary,
+          productsResult,
+          callbacks,
+          progressLabel: progressPrefix,
+        });
+      }
 
       meta.processedProducts = currentIndex;
       emitProgress();
