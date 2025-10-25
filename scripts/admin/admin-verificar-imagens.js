@@ -53,6 +53,9 @@
       barcode: '',
     },
     products: [],
+    filteredProducts: [],
+    currentFolders: [],
+    showFoldersOnly: false,
     stats: {
       linked: 0,
       already: 0,
@@ -88,6 +91,11 @@
     elements.statsAlready = document.getElementById('stats-already');
     elements.statsProducts = document.getElementById('stats-products');
     elements.statsImages = document.getElementById('stats-images');
+    elements.toggleFolderViewBtn = document.getElementById('toggle-folder-view-btn');
+    elements.folderResults = document.getElementById('folder-results');
+    elements.folderEmptyState = document.getElementById('folder-empty-state');
+    elements.folderPanel = document.getElementById('folder-panel');
+    elements.productPanel = document.getElementById('product-panel');
 
     if (!elements.startButton || !elements.console || !elements.productResults) {
       console.error('Não foi possível inicializar a tela de verificação de imagens. Elementos não encontrados.');
@@ -104,6 +112,7 @@
     elements.filterName?.addEventListener('input', handleFilterChange);
     elements.filterCode?.addEventListener('input', handleFilterChange);
     elements.filterBarcode?.addEventListener('input', handleFilterChange);
+    elements.toggleFolderViewBtn?.addEventListener('click', handleToggleFolderView);
 
     elements.productResults.addEventListener('click', (event) => {
       const button = event.target.closest('[data-product-toggle]');
@@ -133,6 +142,8 @@
 
     appendLog('Tela pronta para iniciar a verificação.', 'info');
     loadCurrentStatus({ skipCompletionMessage: true });
+    renderFolders();
+    renderViewMode();
   }
 
   async function handleStartVerification() {
@@ -243,8 +254,13 @@
           state.stats.images = 0;
           state.meta.totalProducts = 0;
           state.meta.processedProducts = 0;
+          state.filteredProducts = [];
+          state.currentFolders = [];
+          state.showFoldersOnly = false;
           renderStats();
           renderProducts();
+          renderFolders();
+          renderViewMode();
           return;
         }
 
@@ -324,6 +340,7 @@
 
     renderStats();
     renderProducts();
+    renderFolders();
 
     let status = data.status || payload.status || null;
 
@@ -387,6 +404,33 @@
 
     const images = Array.isArray(rawProduct.images) ? rawProduct.images : [];
 
+    const rawDriveFolder = rawProduct.driveFolder && typeof rawProduct.driveFolder === 'object'
+      ? rawProduct.driveFolder
+      : null;
+    const rawDriveFolderId = rawDriveFolder?.id ?? rawProduct.driveFolderId ?? null;
+    const rawDriveFolderName = rawDriveFolder?.name ?? rawProduct.driveFolderName ?? null;
+    const rawDriveFolderPath = rawDriveFolder?.path ?? rawProduct.driveFolderPath ?? null;
+
+    const normalizedFolderId = typeof rawDriveFolderId === 'string' && rawDriveFolderId.trim()
+      ? rawDriveFolderId.trim()
+      : rawDriveFolderId !== null && rawDriveFolderId !== undefined
+        ? String(rawDriveFolderId).trim()
+        : '';
+    const normalizedFolderName = typeof rawDriveFolderName === 'string' && rawDriveFolderName.trim()
+      ? rawDriveFolderName.trim()
+      : '';
+    const normalizedFolderPath = typeof rawDriveFolderPath === 'string' && rawDriveFolderPath.trim()
+      ? rawDriveFolderPath.trim()
+      : '';
+
+    const driveFolder = (normalizedFolderId || normalizedFolderName || normalizedFolderPath)
+      ? {
+          id: normalizedFolderId || '',
+          name: normalizedFolderName || '',
+          path: normalizedFolderPath || '',
+        }
+      : null;
+
     return {
       id: String(rawProduct.id ?? rawProduct.codigo ?? rawProduct.code ?? Math.random()).trim(),
       name: String(rawProduct.nome ?? rawProduct.name ?? 'Produto sem nome').trim(),
@@ -398,6 +442,7 @@
         alreadyLinked: Boolean(image?.jaVinculada ?? image?.alreadyLinked),
         path: String(image?.path ?? image?.caminho ?? image?.url ?? '').trim(),
       })),
+      driveFolder,
     };
   }
 
@@ -409,6 +454,7 @@
     elements.productResults.innerHTML = '';
 
     const filtered = applyFilters(state.products);
+    state.filteredProducts = filtered;
 
     if (!filtered.length) {
       elements.productEmptyState?.classList.remove('hidden');
@@ -455,6 +501,186 @@
     });
 
     elements.productResults.appendChild(fragment);
+  }
+
+  function renderFolders() {
+    if (!elements.folderResults) {
+      if (state.showFoldersOnly) {
+        state.showFoldersOnly = false;
+        renderViewMode();
+      }
+      return;
+    }
+
+    const filteredProducts = Array.isArray(state.filteredProducts) ? state.filteredProducts : applyFilters(state.products);
+    const folders = buildDriveFolderMirror(filteredProducts);
+    state.currentFolders = folders;
+
+    const hasFolders = folders.length > 0;
+
+    if (elements.toggleFolderViewBtn) {
+      elements.toggleFolderViewBtn.disabled = !hasFolders;
+      elements.toggleFolderViewBtn.classList.toggle('opacity-60', !hasFolders);
+      elements.toggleFolderViewBtn.classList.toggle('cursor-not-allowed', !hasFolders);
+      elements.toggleFolderViewBtn.setAttribute('aria-disabled', hasFolders ? 'false' : 'true');
+    }
+
+    if (!hasFolders) {
+      if (elements.folderEmptyState) {
+        elements.folderEmptyState.classList.remove('hidden');
+      }
+      elements.folderResults.classList.add('hidden');
+      elements.folderResults.innerHTML = '';
+      if (state.showFoldersOnly) {
+        state.showFoldersOnly = false;
+      }
+      renderViewMode();
+      return;
+    }
+
+    if (elements.folderEmptyState) {
+      elements.folderEmptyState.classList.add('hidden');
+    }
+    elements.folderResults.classList.remove('hidden');
+
+    const fragment = document.createDocumentFragment();
+
+    folders.forEach((folder) => {
+      const item = document.createElement('li');
+      item.className = 'px-4 py-3 text-sm text-gray-700';
+
+      const folderName = escapeHtml(folder.name || 'Pasta sem nome');
+      const folderId = folder.id ? `drive://${escapeHtml(folder.id)}` : 'Não informado';
+      const folderPath = folder.path ? escapeHtml(folder.path) : '';
+      const folderPathTitle = folder.path ? escapeHtml(folder.path) : '';
+      const count = Number(folder.productCount) || 0;
+
+      item.innerHTML = `
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-semibold text-gray-800">${folderName}</span>
+            <span class="text-xs text-gray-500">${count} produto(s)</span>
+          </div>
+          <p class="text-xs text-gray-500 break-all">ID: ${folderId}</p>
+          ${folderPath
+            ? `<p class="text-xs text-gray-500 truncate" title="${folderPathTitle}">${folderPath}</p>`
+            : ''}
+        </div>
+      `;
+
+      fragment.appendChild(item);
+    });
+
+    elements.folderResults.innerHTML = '';
+    elements.folderResults.appendChild(fragment);
+
+    renderViewMode();
+  }
+
+  function buildDriveFolderMirror(products) {
+    if (!Array.isArray(products)) {
+      return [];
+    }
+
+    const foldersMap = new Map();
+
+    products.forEach((product) => {
+      const folder = product?.driveFolder;
+      if (!folder || typeof folder !== 'object') {
+        return;
+      }
+
+      const rawId = folder.id;
+      const rawName = folder.name;
+      const rawPath = folder.path;
+
+      const id = typeof rawId === 'string' && rawId.trim()
+        ? rawId.trim()
+        : rawId !== null && rawId !== undefined
+          ? String(rawId).trim()
+          : '';
+      const path = typeof rawPath === 'string' ? rawPath.trim() : '';
+      const name = typeof rawName === 'string' && rawName.trim()
+        ? rawName.trim()
+        : path || id;
+
+      if (!(id || name || path)) {
+        return;
+      }
+
+      const key = id || path || name;
+      if (!foldersMap.has(key)) {
+        foldersMap.set(key, {
+          id,
+          name,
+          path,
+          productCount: 0,
+        });
+      }
+
+      const entry = foldersMap.get(key);
+      entry.productCount += 1;
+      if (!entry.name && name) {
+        entry.name = name;
+      }
+      if (!entry.path && path) {
+        entry.path = path;
+      }
+      if (!entry.id && id) {
+        entry.id = id;
+      }
+    });
+
+    return Array.from(foldersMap.values()).sort((a, b) => {
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+      return nameA.localeCompare(nameB, 'pt-BR', { numeric: true, sensitivity: 'base' });
+    });
+  }
+
+  function renderViewMode() {
+    const showOnlyFolders = Boolean(state.showFoldersOnly);
+
+    if (elements.productPanel) {
+      elements.productPanel.classList.toggle('hidden', showOnlyFolders);
+    }
+
+    if (elements.folderPanel) {
+      if (showOnlyFolders) {
+        elements.folderPanel.classList.remove('lg:col-span-2');
+        elements.folderPanel.classList.add('lg:col-span-5');
+      } else {
+        elements.folderPanel.classList.remove('lg:col-span-5');
+        elements.folderPanel.classList.add('lg:col-span-2');
+      }
+    }
+
+    if (elements.toggleFolderViewBtn) {
+      const label = elements.toggleFolderViewBtn.querySelector('span');
+      const icon = elements.toggleFolderViewBtn.querySelector('i');
+      if (label) {
+        label.textContent = showOnlyFolders ? 'Mostrar produtos e pastas' : 'Listar apenas pastas';
+      }
+      if (icon) {
+        icon.className = showOnlyFolders ? 'fas fa-layer-group' : 'fas fa-folder-open';
+      }
+      elements.toggleFolderViewBtn.setAttribute('aria-pressed', showOnlyFolders ? 'true' : 'false');
+    }
+  }
+
+  function handleToggleFolderView() {
+    if (elements.toggleFolderViewBtn?.disabled) {
+      appendLog('Nenhuma pasta disponível para exibição no momento.', 'warning');
+      return;
+    }
+
+    if (!Array.isArray(state.currentFolders) || !state.currentFolders.length) {
+      appendLog('Nenhuma pasta disponível para exibição no momento.', 'warning');
+      return;
+    }
+
+    state.showFoldersOnly = !state.showFoldersOnly;
+    renderViewMode();
   }
 
   function renderImages(images) {
@@ -514,6 +740,7 @@
     state.filters.code = elements.filterCode?.value?.trim().toLowerCase() || '';
     state.filters.barcode = elements.filterBarcode?.value?.trim().toLowerCase() || '';
     renderProducts();
+    renderFolders();
   }
 
   function applyFilters(products) {
