@@ -131,9 +131,10 @@
               <aside class="space-y-3 lg:col-span-2" id="folder-panel">
                 <div class="rounded-lg border border-gray-200 bg-white shadow-sm">
                   <header class="flex flex-col gap-2 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
+                    <div class="space-y-1">
                       <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-600">Pastas do Drive</h3>
                       <p class="text-xs text-gray-500">Espelho das pastas vinculadas aos produtos analisados.</p>
+                      <p id="folder-count" class="text-xs font-semibold text-gray-500">0 pastas</p>
                     </div>
                     <button
                       type="button"
@@ -144,6 +145,17 @@
                       <span>Listar apenas pastas</span>
                     </button>
                   </header>
+                  <div class="border-b border-gray-200 px-4 py-3">
+                    <label class="flex flex-col gap-1 text-xs font-semibold text-gray-600">
+                      <span>ID da pasta</span>
+                      <input
+                        type="text"
+                        id="filter-folder-id"
+                        placeholder="Pesquisar por ID da pasta"
+                        class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal text-gray-800 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </label>
+                  </div>
                   <div
                     id="folder-empty-state"
                     class="px-4 py-6 text-center text-sm text-gray-500"

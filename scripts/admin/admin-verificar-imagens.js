@@ -55,6 +55,7 @@
     products: [],
     filteredProducts: [],
     currentFolders: [],
+    folderSearch: '',
     showFoldersOnly: false,
     stats: {
       linked: 0,
@@ -95,6 +96,8 @@
     elements.folderResults = document.getElementById('folder-results');
     elements.folderEmptyState = document.getElementById('folder-empty-state');
     elements.folderPanel = document.getElementById('folder-panel');
+    elements.folderCount = document.getElementById('folder-count');
+    elements.folderIdFilter = document.getElementById('filter-folder-id');
     elements.productPanel = document.getElementById('product-panel');
 
     if (!elements.startButton || !elements.console || !elements.productResults) {
@@ -113,6 +116,7 @@
     elements.filterCode?.addEventListener('input', handleFilterChange);
     elements.filterBarcode?.addEventListener('input', handleFilterChange);
     elements.toggleFolderViewBtn?.addEventListener('click', handleToggleFolderView);
+    elements.folderIdFilter?.addEventListener('input', handleFolderSearchChange);
 
     elements.productResults.addEventListener('click', (event) => {
       const button = event.target.closest('[data-product-toggle]');
@@ -142,6 +146,7 @@
 
     appendLog('Tela pronta para iniciar a verificação.', 'info');
     loadCurrentStatus({ skipCompletionMessage: true });
+    updateFolderCount(0, 0);
     renderFolders();
     renderViewMode();
   }
@@ -514,19 +519,32 @@
 
     const filteredProducts = Array.isArray(state.filteredProducts) ? state.filteredProducts : applyFilters(state.products);
     const folders = buildDriveFolderMirror(filteredProducts);
-    state.currentFolders = folders;
+    const totalFolders = folders.length;
+    const searchTerm = typeof state.folderSearch === 'string' ? state.folderSearch.trim().toLowerCase() : '';
+    const searchActive = Boolean(searchTerm);
+    const filteredFolders = searchTerm
+      ? folders.filter((folder) => (folder.id || '').toLowerCase().includes(searchTerm))
+      : folders;
 
-    const hasFolders = folders.length > 0;
+    state.currentFolders = filteredFolders;
+
+    updateFolderCount(totalFolders, filteredFolders.length);
+
+    const hasFolders = filteredFolders.length > 0;
 
     if (elements.toggleFolderViewBtn) {
-      elements.toggleFolderViewBtn.disabled = !hasFolders;
-      elements.toggleFolderViewBtn.classList.toggle('opacity-60', !hasFolders);
-      elements.toggleFolderViewBtn.classList.toggle('cursor-not-allowed', !hasFolders);
-      elements.toggleFolderViewBtn.setAttribute('aria-disabled', hasFolders ? 'false' : 'true');
+      const disableToggle = !hasFolders;
+      elements.toggleFolderViewBtn.disabled = disableToggle;
+      elements.toggleFolderViewBtn.classList.toggle('opacity-60', disableToggle);
+      elements.toggleFolderViewBtn.classList.toggle('cursor-not-allowed', disableToggle);
+      elements.toggleFolderViewBtn.setAttribute('aria-disabled', disableToggle ? 'true' : 'false');
     }
 
     if (!hasFolders) {
       if (elements.folderEmptyState) {
+        elements.folderEmptyState.textContent = searchActive
+          ? 'Nenhuma pasta encontrada para o ID informado.'
+          : 'Nenhuma pasta disponível. Execute uma verificação para carregar os dados.';
         elements.folderEmptyState.classList.remove('hidden');
       }
       elements.folderResults.classList.add('hidden');
@@ -540,12 +558,13 @@
 
     if (elements.folderEmptyState) {
       elements.folderEmptyState.classList.add('hidden');
+      elements.folderEmptyState.textContent = 'Nenhuma pasta disponível. Execute uma verificação para carregar os dados.';
     }
     elements.folderResults.classList.remove('hidden');
 
     const fragment = document.createDocumentFragment();
 
-    folders.forEach((folder) => {
+    filteredFolders.forEach((folder) => {
       const item = document.createElement('li');
       item.className = 'px-4 py-3 text-sm text-gray-700';
 
@@ -668,6 +687,12 @@
     }
   }
 
+  function handleFolderSearchChange(event) {
+    const value = typeof event?.target?.value === 'string' ? event.target.value : '';
+    state.folderSearch = value;
+    renderFolders();
+  }
+
   function handleToggleFolderView() {
     if (elements.toggleFolderViewBtn?.disabled) {
       appendLog('Nenhuma pasta disponível para exibição no momento.', 'warning');
@@ -741,6 +766,44 @@
     state.filters.barcode = elements.filterBarcode?.value?.trim().toLowerCase() || '';
     renderProducts();
     renderFolders();
+  }
+
+  function updateFolderCount(total, visible) {
+    if (!elements.folderCount) {
+      return;
+    }
+
+    const safeTotal = normalizeFolderCount(total);
+    const safeVisible = normalizeFolderCount(visible);
+
+    let text;
+    if (safeTotal === 0) {
+      text = '0 pastas';
+    } else if (safeTotal === safeVisible) {
+      text = formatFolderCountLabel(safeVisible);
+    } else {
+      text = `${formatFolderCountLabel(safeVisible)} de ${formatFolderCountLabel(safeTotal)}`;
+    }
+
+    elements.folderCount.textContent = text;
+  }
+
+  function formatFolderCountLabel(value) {
+    const normalized = normalizeFolderCount(value);
+    return normalized === 1 ? '1 pasta' : `${normalized} pastas`;
+  }
+
+  function normalizeFolderCount(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.max(0, Math.floor(value));
+    }
+
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return Math.max(0, Math.floor(numeric));
+    }
+
+    return 0;
   }
 
   function applyFilters(products) {
