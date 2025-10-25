@@ -11,6 +11,7 @@ const { isDriveConfigured, listFilesInFolderByPath } = require('../utils/googleD
 
 const PLACEHOLDER_IMAGE = '/image/placeholder.png';
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
+const DRIVE_SHORTCUT_MIME = 'application/vnd.google-apps.shortcut';
 const MAX_DRIVE_FOLDER_DEPTH = 6;
 const FALLBACK_BARCODE_SEGMENT = sanitizeBarcodeSegment('');
 
@@ -91,6 +92,26 @@ function getProductUniqueKey(product) {
   return `nome:${product.nome || 'desconhecido'}`;
 }
 
+function addBarcodeKey(keys, value) {
+  if (!value) {
+    return;
+  }
+
+  const sanitized = sanitizeBarcodeSegment(value);
+  if (!sanitized || sanitized === FALLBACK_BARCODE_SEGMENT) {
+    return;
+  }
+
+  if (!keys.has(sanitized)) {
+    keys.add(sanitized);
+  }
+
+  const withoutZeros = stripLeadingZeros(sanitized);
+  if (withoutZeros && withoutZeros !== sanitized && !keys.has(withoutZeros)) {
+    keys.add(withoutZeros);
+  }
+}
+
 function getBarcodeIndexKeys(rawValue) {
   const keys = new Set();
   const sanitized = sanitizeBarcodeSegment(rawValue || '');
@@ -99,11 +120,20 @@ function getBarcodeIndexKeys(rawValue) {
     return keys;
   }
 
-  keys.add(sanitized);
+  addBarcodeKey(keys, sanitized);
 
-  const withoutZeros = stripLeadingZeros(sanitized);
-  if (withoutZeros && withoutZeros !== sanitized) {
-    keys.add(withoutZeros);
+  const digitsOnly = sanitized.replace(/[^0-9]/g, '');
+  if (digitsOnly) {
+    addBarcodeKey(keys, digitsOnly);
+  }
+
+  const numericSegments = sanitized
+    .split(/[^0-9]+/g)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length >= 4);
+
+  for (const segment of numericSegments) {
+    addBarcodeKey(keys, segment);
   }
 
   return keys;
@@ -138,6 +168,60 @@ function looksLikeBarcodeFolder(folderName) {
   return true;
 }
 
+function normalizeDriveFolderItem({ item, emitLog, parentPath }) {
+  if (!item) {
+    return null;
+  }
+
+  const mimeType = typeof item.mimeType === 'string' ? item.mimeType.trim() : '';
+  const displayName = typeof item.name === 'string' ? item.name.trim() : '';
+
+  if (mimeType === DRIVE_FOLDER_MIME) {
+    const folderId = typeof item.id === 'string' ? item.id.trim() : '';
+    if (!folderId) {
+      emitLog(
+        `Pasta ${displayName || '(sem nome)'} em ${parentPath || '(desconhecido)'} ignorada por não possuir identificador válido.`,
+        'warning'
+      );
+      return null;
+    }
+    return { folderId, folderName: displayName || folderId, kind: 'folder' };
+  }
+
+  if (mimeType === DRIVE_SHORTCUT_MIME) {
+    const targetId =
+      typeof item?.shortcutDetails?.targetId === 'string' ? item.shortcutDetails.targetId.trim() : '';
+    const targetMime =
+      typeof item?.shortcutDetails?.targetMimeType === 'string'
+        ? item.shortcutDetails.targetMimeType.trim()
+        : '';
+
+    if (!targetId) {
+      emitLog(
+        `Atalho ${displayName || '(sem nome)'} em ${parentPath || '(desconhecido)'} ignorado por não apontar para uma pasta válida.`,
+        'warning'
+      );
+      return null;
+    }
+
+    if (targetMime && targetMime !== DRIVE_FOLDER_MIME) {
+      emitLog(
+        `Atalho ${displayName || '(sem nome)'} em ${parentPath || '(desconhecido)'} ignorado por não direcionar para uma pasta do Drive.`,
+        'warning'
+      );
+      return null;
+    }
+
+    return {
+      folderId: targetId,
+      folderName: displayName || targetId,
+      kind: 'shortcut',
+    };
+  }
+
+  return null;
+}
+
 async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
   const baseReadablePath = Array.isArray(baseSegments) && baseSegments.length ? baseSegments.join('/') : '(raiz)';
   const barcodeFolders = [];
@@ -151,6 +235,7 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
       folderPath: baseSegments,
       includeFiles: false,
       includeFolders: true,
+      includeFolderShortcuts: true,
       orderBy: 'name_natural',
     });
   } catch (error) {
@@ -168,15 +253,25 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
     );
   }
 
-  const initialFolders = Array.isArray(initialListing?.files)
-    ? initialListing.files.filter((item) => item?.mimeType === DRIVE_FOLDER_MIME)
-    : [];
+  const initialFoldersRaw = Array.isArray(initialListing?.files) ? initialListing.files : [];
+  for (const item of initialFoldersRaw) {
+    const normalized = normalizeDriveFolderItem({ item, emitLog, parentPath: baseReadablePath });
+    if (!normalized) {
+      continue;
+    }
 
-  for (const folder of initialFolders) {
-    const folderName = typeof folder?.name === 'string' ? folder.name.trim() : '';
+    if (normalized.kind === 'shortcut') {
+      emitLog(
+        `Atalho ${normalized.folderName} resolvido para análise como pasta do Drive.`,
+        'info'
+      );
+    }
+
+    const folderName = normalized.folderName || normalized.folderId;
     const readablePath = combineDrivePath(baseReadablePath, folderName);
     pending.push({
-      folder,
+      folderId: normalized.folderId,
+      folderName,
       pathSegments: [...(Array.isArray(baseSegments) ? baseSegments : []), folderName].filter(Boolean),
       readablePath,
       depth: 0,
@@ -189,8 +284,8 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
 
   while (pending.length) {
     const current = pending.shift();
-    const folderId = typeof current.folder?.id === 'string' ? current.folder.id.trim() : '';
-    const folderName = typeof current.folder?.name === 'string' ? current.folder.name.trim() : '';
+    const folderId = typeof current.folderId === 'string' ? current.folderId.trim() : '';
+    const folderName = typeof current.folderName === 'string' ? current.folderName.trim() : '';
 
     if (!folderId) {
       emitLog(`Pasta ${current.readablePath} ignorada por não possuir identificador válido no Drive.`, 'warning');
@@ -235,6 +330,7 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
         folderPath: [],
         includeFiles: false,
         includeFolders: true,
+        includeFolderShortcuts: true,
         orderBy: 'name_natural',
       });
     } catch (error) {
@@ -245,9 +341,24 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
       continue;
     }
 
-    const subfolders = Array.isArray(listing?.files)
-      ? listing.files.filter((item) => item?.mimeType === DRIVE_FOLDER_MIME)
-      : [];
+    const subfoldersRaw = Array.isArray(listing?.files) ? listing.files : [];
+    const subfolders = [];
+
+    for (const item of subfoldersRaw) {
+      const normalized = normalizeDriveFolderItem({ item, emitLog, parentPath: current.readablePath });
+      if (!normalized) {
+        continue;
+      }
+
+      if (normalized.kind === 'shortcut') {
+        emitLog(
+          `Atalho ${normalized.folderName} resolvido para análise como pasta do Drive.`,
+          'info'
+        );
+      }
+
+      subfolders.push(normalized);
+    }
 
     if (!subfolders.length) {
       emitLog(`Nenhuma subpasta de código de barras encontrada dentro de ${current.readablePath}.`, 'warning');
@@ -255,10 +366,11 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
     }
 
     for (const subfolder of subfolders) {
-      const childName = typeof subfolder?.name === 'string' ? subfolder.name.trim() : '';
+      const childName = subfolder.folderName || subfolder.folderId;
       const readablePath = combineDrivePath(current.readablePath, childName);
       pending.push({
-        folder: subfolder,
+        folderId: subfolder.folderId,
+        folderName: childName,
         pathSegments: [...current.pathSegments, childName].filter(Boolean),
         readablePath,
         depth: current.depth + 1,

@@ -4,6 +4,7 @@ const TOKEN_URI = 'https://oauth2.googleapis.com/token';
 const UPLOAD_URI = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,mimeType,size,webViewLink,webContentLink';
 const FILES_URI = 'https://www.googleapis.com/drive/v3/files';
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
+const DRIVE_SHORTCUT_MIME = 'application/vnd.google-apps.shortcut';
 
 const folderCache = new Map();
 
@@ -897,11 +898,12 @@ async function listFilesInFolderByPath(options = {}) {
   const pathSegments = Array.isArray(options.folderPath) ? options.folderPath : [];
   const includeFiles = options.includeFiles !== false;
   const includeFolders = options.includeFolders === true;
+  const includeFolderShortcuts = options.includeFolderShortcuts === true;
   const orderBy = typeof options.orderBy === 'string' ? options.orderBy : 'name_natural';
   const fields =
     typeof options.fields === 'string' && options.fields.trim()
       ? options.fields.trim()
-      : 'files(id,name,mimeType,size,modifiedTime,parents,webViewLink,webContentLink),nextPageToken';
+      : 'files(id,name,mimeType,size,modifiedTime,parents,webViewLink,webContentLink,shortcutDetails),nextPageToken';
   const pageSize = Math.min(1000, Math.max(1, Number.parseInt(options.pageSize || 1000, 10)));
 
   const folderId = await resolveFolderPath({
@@ -923,7 +925,13 @@ async function listFilesInFolderByPath(options = {}) {
     if (!includeFolders && includeFiles) {
       queryParts.push(`mimeType != '${DRIVE_FOLDER_MIME}'`);
     } else if (!includeFiles && includeFolders) {
-      queryParts.push(`mimeType = '${DRIVE_FOLDER_MIME}'`);
+      if (includeFolderShortcuts) {
+        queryParts.push(
+          `(mimeType = '${DRIVE_FOLDER_MIME}' or mimeType = '${DRIVE_SHORTCUT_MIME}')`
+        );
+      } else {
+        queryParts.push(`mimeType = '${DRIVE_FOLDER_MIME}'`);
+      }
     }
 
     const params = new URLSearchParams({
