@@ -70,6 +70,14 @@ const productSchema = new mongoose.Schema({
     imagens: [{ // Um array que guardará os caminhos para as imagens
         type: String
     }],
+    driveImages: {
+        type: [{
+            sequence: { type: String, trim: true, default: '' },
+            fileId: { type: String, trim: true, default: '' },
+        }],
+        default: [],
+    },
+    driveImagesUpdatedAt: { type: Date, default: null },
     codigosComplementares: {
         type: [String],
         default: []
