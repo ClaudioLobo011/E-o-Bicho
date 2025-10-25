@@ -966,7 +966,12 @@ async function verifyAndLinkProductImages(options = {}) {
     }
   } else {
     const driveBaseSegments = getProductImagesDriveBaseSegments();
-    const baseDrivePath = driveBaseSegments.join('/') || '(raiz)';
+    const driveBaseFolderId = getDriveFolderId();
+    const baseDrivePath = driveBaseSegments.length
+      ? driveBaseSegments.join('/')
+      : driveBaseFolderId
+        ? `(id:${driveBaseFolderId})`
+        : '(raiz)';
     emitLog('Integração com o Google Drive detectada. As pastas remotas serão analisadas.', 'info');
     emitLog(`Caminho base considerado no Google Drive: ${baseDrivePath}.`, 'info');
 

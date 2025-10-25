@@ -35,6 +35,96 @@ const splitPathSegments = (value) => {
     .filter(Boolean);
 };
 
+const decodeDriveSegment = (segment) => {
+  if (typeof segment !== 'string') return '';
+  const trimmed = segment.trim();
+  if (!trimmed) return '';
+  try {
+    return decodeURIComponent(trimmed);
+  } catch (error) {
+    return trimmed;
+  }
+};
+
+const DRIVE_ID_PATTERN = /[A-Za-z0-9_-]{16,}/;
+
+const extractDriveFolderId = (value) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const queryMatch = trimmed.match(/[?&]id=([A-Za-z0-9_-]{16,})/i);
+  if (queryMatch) {
+    return queryMatch[1];
+  }
+
+  const folderMatch = trimmed.match(/\/folders\/([A-Za-z0-9_-]{16,})/i);
+  if (folderMatch) {
+    return folderMatch[1];
+  }
+
+  if (DRIVE_ID_PATTERN.test(trimmed) && /^[A-Za-z0-9_-]+$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  return null;
+};
+
+const parseDrivePathConfig = (rawValue) => {
+  if (typeof rawValue !== 'string') {
+    return { segments: [], folderId: null };
+  }
+
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return { segments: [], folderId: null };
+  }
+
+  const folderId = extractDriveFolderId(trimmed);
+
+  let remainder = trimmed;
+  if (folderId) {
+    const marker = trimmed.indexOf(folderId);
+    if (marker >= 0) {
+      remainder = trimmed.slice(marker + folderId.length);
+    }
+  }
+
+  const withoutQuery = remainder.split('?')[0].split('#')[0];
+  const segments = splitPathSegments(withoutQuery).map(decodeDriveSegment).filter(Boolean);
+
+  return { segments, folderId };
+};
+
+let cachedDriveBaseConfig = null;
+
+const getProductImagesDriveBaseConfig = () => {
+  if (cachedDriveBaseConfig) {
+    return cachedDriveBaseConfig;
+  }
+
+  const primary = parseDrivePathConfig(process.env.PRODUCT_IMAGE_DRIVE_PATH || '');
+  if (primary.folderId || primary.segments.length) {
+    cachedDriveBaseConfig = primary;
+    return cachedDriveBaseConfig;
+  }
+
+  const secondary = parseDrivePathConfig(process.env.PRODUCT_IMAGE_ROOT || '');
+  if (secondary.folderId || secondary.segments.length) {
+    cachedDriveBaseConfig = secondary;
+    return cachedDriveBaseConfig;
+  }
+
+  const fallback = parseDrivePathConfig(DEFAULT_DRIVE_PATH);
+  if (fallback.segments.length) {
+    cachedDriveBaseConfig = fallback;
+  } else {
+    cachedDriveBaseConfig = { segments: splitPathSegments(DEFAULT_DRIVE_PATH), folderId: null };
+  }
+
+  return cachedDriveBaseConfig;
+};
+
 function getProductImagesRoot() {
   const envPath = cleanEnvPath(process.env.PRODUCT_IMAGE_ROOT || '');
   return envPath || DEFAULT_IMAGE_ROOT;
@@ -46,21 +136,18 @@ function getProductImagesUrlPrefix() {
 }
 
 function getProductImagesDriveBaseSegments() {
-  const rawValue =
-    typeof process.env.PRODUCT_IMAGE_DRIVE_PATH === 'string' && process.env.PRODUCT_IMAGE_DRIVE_PATH.trim()
-      ? process.env.PRODUCT_IMAGE_DRIVE_PATH
-      : process.env.PRODUCT_IMAGE_ROOT || '';
-  const envSegments = splitPathSegments(rawValue);
-  if (envSegments.length > 0) {
-    return envSegments;
-  }
-  return splitPathSegments(DEFAULT_DRIVE_PATH);
+  return getProductImagesDriveBaseConfig().segments;
 }
 
 function getProductImagesDriveFolderPath(barcode) {
   const baseSegments = getProductImagesDriveBaseSegments();
   const folderSegment = sanitizeBarcodeSegment(barcode);
   return [...baseSegments, folderSegment];
+}
+
+function getProductImagesDriveFolderIdHint() {
+  const { folderId } = getProductImagesDriveBaseConfig();
+  return folderId || null;
 }
 
 function getLegacyUploadsDir() {
@@ -243,6 +330,7 @@ module.exports = {
   getLegacyUrlPrefix,
   getProductImageFolderPath,
   getProductImagesDriveBaseSegments,
+  getProductImagesDriveFolderIdHint,
   getProductImagesDriveFolderPath,
   getProductImagesRoot,
   getProductImagesUrlPrefix,
