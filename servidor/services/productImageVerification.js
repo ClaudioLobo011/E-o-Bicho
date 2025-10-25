@@ -327,15 +327,22 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
       continue;
     }
 
-    if (looksLikeBarcodeFolder(folderName)) {
+    const sanitizedSegment = sanitizeBarcodeSegment(folderName);
+    const digitCount = sanitizedSegment.replace(/[^0-9]/g, '').length;
+    const isLikelyBarcode = looksLikeBarcodeFolder(folderName);
+
+    if (sanitizedSegment && sanitizedSegment !== FALLBACK_BARCODE_SEGMENT && digitCount > 0) {
       barcodeFolders.push({
         folderId,
-        barcodeSegment: sanitizeBarcodeSegment(folderName),
+        barcodeSegment: sanitizedSegment,
         folderName,
         pathSegments: current.pathSegments.slice(),
         readablePath: current.readablePath,
       });
-      continue;
+
+      if (isLikelyBarcode) {
+        continue;
+      }
     }
 
     if (current.depth + 1 > MAX_DRIVE_FOLDER_DEPTH) {
