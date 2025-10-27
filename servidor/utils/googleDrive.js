@@ -42,6 +42,29 @@ function cleanEnvValue(value) {
   return cleaned.trim();
 }
 
+const DRIVE_ID_PATTERN = /[A-Za-z0-9_-]{16,}/;
+
+function extractDriveFolderIdFromValue(rawValue) {
+  const cleaned = cleanEnvValue(rawValue || '');
+  if (!cleaned) return null;
+
+  const queryMatch = cleaned.match(/[?&]id=([A-Za-z0-9_-]{16,})/i);
+  if (queryMatch) {
+    return queryMatch[1];
+  }
+
+  const folderMatch = cleaned.match(/\/folders\/([A-Za-z0-9_-]{16,})/i);
+  if (folderMatch) {
+    return folderMatch[1];
+  }
+
+  if (DRIVE_ID_PATTERN.test(cleaned) && /^[A-Za-z0-9_-]+$/.test(cleaned)) {
+    return cleaned;
+  }
+
+  return null;
+}
+
 function sanitizeDriveFolderName(name) {
   if (name === null || name === undefined) return '';
   return String(name)
@@ -84,7 +107,13 @@ function getCredentials() {
     return null;
   }
 
-  const folderId = cleanEnvValue(process.env.GOOGLE_DRIVE_FOLDER_ID || '') || null;
+  let folderId = cleanEnvValue(process.env.GOOGLE_DRIVE_FOLDER_ID || '') || null;
+  if (!folderId) {
+    folderId =
+      extractDriveFolderIdFromValue(process.env.PRODUCT_IMAGE_DRIVE_PATH || '') ||
+      extractDriveFolderIdFromValue(process.env.PRODUCT_IMAGE_ROOT || '') ||
+      null;
+  }
 
   cachedCredentials = { clientId, clientSecret, refreshToken, folderId };
   return cachedCredentials;

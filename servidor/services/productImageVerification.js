@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const mime = require('mime-types');
 const Product = require('../models/Product');
 const {
   buildProductImagePublicPath,
@@ -9,7 +10,12 @@ const {
   getProductImagesDriveFolderPath,
   sanitizeBarcodeSegment,
 } = require('../utils/productImagePath');
-const { isDriveConfigured, listFilesInFolderByPath } = require('../utils/googleDrive');
+const {
+  isDriveConfigured,
+  listFilesInFolderByPath,
+  getDriveFolderId,
+  uploadBufferToDrive,
+} = require('../utils/googleDrive');
 
 const PLACEHOLDER_IMAGE = '/image/placeholder.png';
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
@@ -248,26 +254,64 @@ function normalizeDriveFolderItem({ item, emitLog, parentPath }) {
 }
 
 async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
-  const baseReadablePath = Array.isArray(baseSegments) && baseSegments.length ? baseSegments.join('/') : '(raiz)';
+  const baseSegmentsList = Array.isArray(baseSegments)
+    ? baseSegments
+        .map((segment) => (typeof segment === 'string' ? segment.trim() : ''))
+        .filter(Boolean)
+    : [];
+  const baseReadableFromSegments = baseSegmentsList.length ? baseSegmentsList.join('/') : '';
+  const driveBaseFolderId = typeof getDriveFolderId === 'function' ? getDriveFolderId() : null;
+  let baseReadablePath = baseReadableFromSegments || (driveBaseFolderId ? `(id:${driveBaseFolderId})` : '(raiz)');
   const barcodeFolders = [];
   const pending = [];
   const visitedFolders = new Set();
 
   let initialListing;
 
-  try {
-    initialListing = await listFilesInFolderByPath({
-      folderPath: baseSegments,
-      includeFiles: false,
-      includeFolders: true,
-      includeFolderShortcuts: true,
-      orderBy: 'name_natural',
+  const buildListingOptions = (extraOptions = {}) => ({
+    includeFiles: false,
+    includeFolders: true,
+    includeFolderShortcuts: true,
+    orderBy: 'name_natural',
+    ...extraOptions,
+  });
+
+  const listingAttempts = [];
+
+  if (driveBaseFolderId) {
+    listingAttempts.push({
+      options: buildListingOptions({ folderId: driveBaseFolderId, folderPath: [] }),
+      readablePath: baseReadableFromSegments ? `${baseReadableFromSegments} (id:${driveBaseFolderId})` : `(id:${driveBaseFolderId})`,
     });
-  } catch (error) {
-    emitLog(
-      `Falha ao listar as pastas iniciais no Google Drive (${baseReadablePath}): ${error.message || error}.`,
-      'error'
-    );
+
+    if (baseSegmentsList.length) {
+      listingAttempts.push({
+        options: buildListingOptions({ folderId: driveBaseFolderId, folderPath: baseSegmentsList }),
+        readablePath: `${baseSegmentsList.join('/')} (id:${driveBaseFolderId})`,
+      });
+    }
+  }
+
+  listingAttempts.push({
+    options: buildListingOptions({ folderPath: baseSegmentsList }),
+    readablePath: baseReadableFromSegments || '(raiz)',
+  });
+
+  for (const attempt of listingAttempts) {
+    try {
+      initialListing = await listFilesInFolderByPath(attempt.options);
+      baseReadablePath = attempt.readablePath;
+      break;
+    } catch (error) {
+      emitLog(
+        `Falha ao listar as pastas iniciais no Google Drive (${attempt.readablePath}): ${error.message || error}.`,
+        'error'
+      );
+    }
+  }
+
+  if (!initialListing) {
+    emitLog('Não foi possível acessar a pasta base configurada no Google Drive.', 'error');
     return { barcodeFolders, baseReadablePath };
   }
 
@@ -297,7 +341,7 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
     pending.push({
       folderId: normalized.folderId,
       folderName,
-      pathSegments: [...(Array.isArray(baseSegments) ? baseSegments : []), folderName].filter(Boolean),
+      pathSegments: [...baseSegmentsList, folderName].filter(Boolean),
       readablePath,
       depth: 0,
     });
@@ -327,15 +371,22 @@ async function collectDriveBarcodeFolders({ baseSegments, emitLog }) {
       continue;
     }
 
-    if (looksLikeBarcodeFolder(folderName)) {
+    const sanitizedSegment = sanitizeBarcodeSegment(folderName);
+    const digitCount = sanitizedSegment.replace(/[^0-9]/g, '').length;
+    const isLikelyBarcode = looksLikeBarcodeFolder(folderName);
+
+    if (sanitizedSegment && sanitizedSegment !== FALLBACK_BARCODE_SEGMENT && digitCount > 0) {
       barcodeFolders.push({
         folderId,
-        barcodeSegment: sanitizeBarcodeSegment(folderName),
+        barcodeSegment: sanitizedSegment,
         folderName,
         pathSegments: current.pathSegments.slice(),
         readablePath: current.readablePath,
       });
-      continue;
+
+      if (isLikelyBarcode) {
+        continue;
+      }
     }
 
     if (current.depth + 1 > MAX_DRIVE_FOLDER_DEPTH) {
@@ -477,19 +528,30 @@ async function processProductImages({
   localFolderPath,
   driveFolderName,
   driveFolderSummary,
+  folderProcessingState,
 }) {
   const prefix = progressLabel ? `${progressLabel} ` : '';
   const emitWithPrefix = (message, type) => emitLog(`${prefix}${message}`, type);
 
   emitWithPrefix(`Preparando análise do produto ${describeProduct(product)}.`);
 
+  const sharedState = folderProcessingState && typeof folderProcessingState === 'object'
+    ? folderProcessingState
+    : null;
+
+  if (sharedState && !(sharedState.uploadedFilesSet instanceof Set)) {
+    sharedState.uploadedFilesSet = new Set();
+  }
+
   const {
     fileNames,
     source,
     folderPath,
-    driveFolderId: resolvedDriveFolderId,
-    driveFolderName: resolvedDriveFolderName,
+    driveFolderId: resolvedDriveFolderIdInitial,
+    driveFolderName: resolvedDriveFolderNameInitial,
     driveFolderPath,
+    drivePathSegments: resolvedDrivePathSegments,
+    existingDriveFileNames: initialExistingDriveFileNames,
   } = await getProductImageFileNames({
     barcodeSegment,
     product,
@@ -500,7 +562,31 @@ async function processProductImages({
     driveReadablePath,
     localFolderPath,
     driveFolderName,
+    folderProcessingState: sharedState,
   });
+
+  let resolvedDriveFolderId = resolvedDriveFolderIdInitial;
+  let resolvedDriveFolderName = resolvedDriveFolderNameInitial;
+
+  let existingDriveFileNames = Array.isArray(initialExistingDriveFileNames)
+    ? initialExistingDriveFileNames.slice()
+    : [];
+  let resolvedDriveFolderPathReadable = typeof driveFolderPath === 'string' && driveFolderPath.trim()
+    ? driveFolderPath.trim()
+    : '';
+
+  if (sharedState) {
+    sharedState.cachedFileNames = Array.isArray(fileNames) ? fileNames.slice() : [];
+    sharedState.cachedSource = source;
+    sharedState.cachedFolderPath = folderPath;
+    sharedState.cachedDriveFolderId = resolvedDriveFolderId || null;
+    sharedState.cachedDriveFolderName = resolvedDriveFolderName || null;
+    sharedState.cachedDriveFolderPath = resolvedDriveFolderPathReadable || '';
+    sharedState.cachedDrivePathSegments = Array.isArray(resolvedDrivePathSegments)
+      ? resolvedDrivePathSegments.slice()
+      : [];
+    sharedState.cachedExistingDriveFiles = existingDriveFileNames.slice();
+  }
 
   if (!fileNames.length) {
     emitWithPrefix(`Nenhuma imagem encontrada nas pastas esperadas (${folderPath}).`, 'warning');
@@ -520,6 +606,126 @@ async function processProductImages({
 
   emitWithPrefix(`${fileNames.length} imagem(ns) localizada(s) em ${folderPath} (${source}).`, 'info');
 
+  const driveExistingNameSet = new Set(
+    existingDriveFileNames.map((name) => (typeof name === 'string' ? name.trim().toLowerCase() : '')).filter(Boolean),
+  );
+  const uploadPathSegments = Array.isArray(resolvedDrivePathSegments) && resolvedDrivePathSegments.length
+    ? resolvedDrivePathSegments.slice()
+    : getProductImagesDriveFolderPath(barcodeSegment);
+
+  if (!resolvedDriveFolderPathReadable && uploadPathSegments.length) {
+    resolvedDriveFolderPathReadable = uploadPathSegments.join('/');
+  }
+
+  if (driveFolderSummary && typeof driveFolderSummary === 'object') {
+    if (!driveFolderSummary.path && resolvedDriveFolderPathReadable) {
+      driveFolderSummary.path = resolvedDriveFolderPathReadable;
+    }
+    if (driveExistingNameSet.size > 0) {
+      driveFolderSummary.hasDrive = true;
+    }
+  }
+
+  if (source === 'local' && driveAvailable) {
+    const uploadedFilesSet = sharedState?.uploadedFilesSet instanceof Set ? sharedState.uploadedFilesSet : null;
+
+    for (const fileName of fileNames) {
+      const normalizedKey = typeof fileName === 'string' ? fileName.trim().toLowerCase() : '';
+      if (!normalizedKey) {
+        continue;
+      }
+
+      if (uploadedFilesSet && uploadedFilesSet.has(normalizedKey)) {
+        continue;
+      }
+
+      if (driveExistingNameSet.has(normalizedKey)) {
+        if (driveFolderSummary) {
+          driveFolderSummary.hasDrive = true;
+        }
+        emitWithPrefix(`Imagem ${fileName} já está presente no Google Drive.`, 'info');
+        if (uploadedFilesSet) {
+          uploadedFilesSet.add(normalizedKey);
+        }
+        continue;
+      }
+
+      const absolutePath = path.join(folderPath, fileName);
+      let buffer;
+      try {
+        buffer = await fs.promises.readFile(absolutePath);
+      } catch (error) {
+        emitWithPrefix(
+          `Falha ao ler o arquivo ${fileName} em ${absolutePath}: ${error.message || error}.`,
+          'error',
+        );
+        continue;
+      }
+
+      const mimeType = mime.lookup(fileName) || 'application/octet-stream';
+      emitWithPrefix(`Enviando ${fileName} para o Google Drive...`, 'info');
+
+      try {
+        if (driveFolderSummary) {
+          driveFolderSummary.status = 'uploading';
+        }
+
+        const uploadResult = await uploadBufferToDrive(buffer, {
+          name: fileName,
+          mimeType,
+          folderId: resolvedDriveFolderId || undefined,
+          folderPath: resolvedDriveFolderId ? [] : uploadPathSegments,
+        });
+
+        if (uploadResult?.parents?.length && !resolvedDriveFolderId) {
+          const candidateId = uploadResult.parents.find((value) => typeof value === 'string' && value.trim());
+          if (candidateId) {
+            resolvedDriveFolderId = candidateId.trim();
+          }
+        }
+
+        if (!resolvedDriveFolderName && uploadPathSegments.length) {
+          resolvedDriveFolderName = uploadPathSegments[uploadPathSegments.length - 1] || resolvedDriveFolderName;
+        }
+
+        if (!resolvedDriveFolderPathReadable && uploadPathSegments.length) {
+          resolvedDriveFolderPathReadable = uploadPathSegments.join('/');
+        }
+
+        if (uploadResult?.id) {
+          emitWithPrefix(`Upload de ${fileName} concluído no Google Drive.`, 'success');
+          driveExistingNameSet.add(normalizedKey);
+          existingDriveFileNames.push(fileName);
+          if (uploadedFilesSet) {
+            uploadedFilesSet.add(normalizedKey);
+          }
+          if (driveFolderSummary) {
+            driveFolderSummary.hasDrive = true;
+            if (!driveFolderSummary.path && resolvedDriveFolderPathReadable) {
+              driveFolderSummary.path = resolvedDriveFolderPathReadable;
+            }
+          }
+        } else {
+          emitWithPrefix(
+            `Upload de ${fileName} concluído, mas não foi possível confirmar o arquivo no Google Drive.`,
+            'warning',
+          );
+        }
+      } catch (error) {
+        emitWithPrefix(`Erro ao enviar ${fileName} para o Google Drive: ${error.message || error}`, 'error');
+        continue;
+      }
+    }
+
+    if (sharedState) {
+      sharedState.cachedDriveFolderId = resolvedDriveFolderId || null;
+      sharedState.cachedDriveFolderName = resolvedDriveFolderName || null;
+      sharedState.cachedDriveFolderPath = resolvedDriveFolderPathReadable || '';
+      sharedState.cachedExistingDriveFiles = existingDriveFileNames.slice();
+      sharedState.cachedDrivePathSegments = uploadPathSegments.slice();
+    }
+  }
+
   const existingImages = Array.isArray(product.imagens) ? product.imagens.slice() : [];
   const existingSet = new Set(existingImages);
   const productImages = [];
@@ -537,8 +743,8 @@ async function processProductImages({
     : resolvedDriveFolderName
       ? String(resolvedDriveFolderName).trim()
       : (typeof driveFolderName === 'string' ? driveFolderName.trim() : '');
-  const normalizedDriveFolderPath = typeof driveFolderPath === 'string'
-    ? driveFolderPath.trim()
+  const normalizedDriveFolderPath = resolvedDriveFolderPathReadable
+    ? resolvedDriveFolderPathReadable
     : typeof driveReadablePath === 'string' && driveReadablePath.trim()
       ? driveReadablePath.trim()
       : '';
@@ -643,6 +849,7 @@ async function getProductImageFileNames({
   driveReadablePath,
   localFolderPath,
   driveFolderName,
+  folderProcessingState,
 }) {
   const productLabel = describeProduct(product);
   const explicitDriveFolderName = typeof driveFolderName === 'string' && driveFolderName.trim()
@@ -655,79 +862,45 @@ async function getProductImageFileNames({
     return String(value).trim();
   };
 
+  const sharedState = folderProcessingState && typeof folderProcessingState === 'object'
+    ? folderProcessingState
+    : null;
+
+  if (sharedState?.cachedFileNames) {
+    return {
+      fileNames: sharedState.cachedFileNames.slice(),
+      source: sharedState.cachedSource || 'local',
+      folderPath: sharedState.cachedFolderPath || '',
+      driveFolderId: sharedState.cachedDriveFolderId || null,
+      driveFolderName: sharedState.cachedDriveFolderName || null,
+      driveFolderPath: sharedState.cachedDriveFolderPath || '',
+      drivePathSegments: Array.isArray(sharedState.cachedDrivePathSegments)
+        ? sharedState.cachedDrivePathSegments.slice()
+        : [],
+      existingDriveFileNames: Array.isArray(sharedState.cachedExistingDriveFiles)
+        ? sharedState.cachedExistingDriveFiles.slice()
+        : [],
+    };
+  }
+
   let resolvedDriveFolderId = normalizeId(driveFolderId);
   let resolvedDriveFolderName = explicitDriveFolderName;
   const initialDriveReadablePath = typeof driveReadablePath === 'string' && driveReadablePath.trim()
     ? driveReadablePath.trim()
     : '';
   let resolvedDriveFolderPath = initialDriveReadablePath;
+  let drivePathSegments = Array.isArray(driveFolderPathSegments) && driveFolderPathSegments.length
+    ? driveFolderPathSegments.slice()
+    : [];
+  const existingDriveFileNames = [];
 
-  const buildResult = ({ fileNames = [], source = 'local', folderPath = '' } = {}) => ({
-    fileNames,
-    source,
-    folderPath,
-    driveFolderId: resolvedDriveFolderId || null,
-    driveFolderName: resolvedDriveFolderName || null,
-    driveFolderPath: resolvedDriveFolderPath || '',
-  });
-
-  if (driveAvailable) {
-    const drivePathSegments = Array.isArray(driveFolderPathSegments) && driveFolderPathSegments.length
-      ? driveFolderPathSegments
-      : getProductImagesDriveFolderPath(barcodeSegment);
-    const readablePath = typeof driveReadablePath === 'string' && driveReadablePath.trim()
-      ? driveReadablePath.trim()
-      : drivePathSegments.join('/') || '(raiz)';
-
-    resolvedDriveFolderPath = readablePath;
-    const fallbackDriveName = drivePathSegments.length
-      ? drivePathSegments[drivePathSegments.length - 1]
-      : readablePath;
-
-    try {
-      const { files, folderId } = await listFilesInFolderByPath({
-        folderId: resolvedDriveFolderId || undefined,
-        folderPath: resolvedDriveFolderId ? [] : drivePathSegments,
-      });
-
-      const effectiveFolderId = normalizeId(resolvedDriveFolderId || folderId);
-
-      if (!effectiveFolderId) {
-        emitLog(`Pasta ${readablePath} não encontrada no Google Drive para o produto ${productLabel}.`, 'warning');
-      } else {
-        resolvedDriveFolderId = effectiveFolderId;
-      }
-
-      if (!resolvedDriveFolderName) {
-        resolvedDriveFolderName = fallbackDriveName || effectiveFolderId || readablePath;
-      }
-
-      if (Array.isArray(files) && files.length) {
-        const names = files
-          .filter((file) => file && file.mimeType !== DRIVE_FOLDER_MIME)
-          .map((file) => (typeof file?.name === 'string' ? file.name.trim() : ''))
-          .filter(Boolean)
-          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-
-        if (names.length) {
-          return buildResult({ fileNames: names, source: 'drive', folderPath: readablePath });
-        }
-      }
-    } catch (error) {
-      emitLog(
-        `Falha ao listar imagens no Google Drive (${readablePath}) para o produto ${productLabel}: ${error.message || error}`,
-        'error'
-      );
-    }
+  const defaultDriveSegments = getProductImagesDriveFolderPath(barcodeSegment);
+  if (!drivePathSegments.length) {
+    drivePathSegments = defaultDriveSegments.slice();
   }
 
-  if (!resolvedDriveFolderName && resolvedDriveFolderPath) {
-    resolvedDriveFolderName = resolvedDriveFolderPath.split('/').pop() || resolvedDriveFolderPath;
-  }
-
-  const localCandidates = [];
   const manualPath = typeof localFolderPath === 'string' && localFolderPath.trim() ? localFolderPath.trim() : '';
-
+  const localCandidates = [];
   if (manualPath) {
     localCandidates.push(manualPath);
   }
@@ -745,11 +918,60 @@ async function getProductImageFileNames({
     localCandidates.push(defaultFolderPath);
   }
 
+  if (driveAvailable) {
+    const readablePath = resolvedDriveFolderPath || drivePathSegments.join('/') || '(raiz)';
+    const fallbackDriveName = drivePathSegments.length
+      ? drivePathSegments[drivePathSegments.length - 1]
+      : readablePath;
+
+    try {
+      const { files, folderId } = await listFilesInFolderByPath({
+        folderId: resolvedDriveFolderId || undefined,
+        folderPath: resolvedDriveFolderId ? [] : drivePathSegments,
+      });
+
+      const effectiveFolderId = normalizeId(resolvedDriveFolderId || folderId);
+      if (!effectiveFolderId) {
+        emitLog(`Pasta ${readablePath} não encontrada no Google Drive para o produto ${productLabel}.`, 'warning');
+      } else {
+        resolvedDriveFolderId = effectiveFolderId;
+      }
+
+      if (!resolvedDriveFolderName) {
+        resolvedDriveFolderName = fallbackDriveName || effectiveFolderId || readablePath;
+      }
+
+      if (!resolvedDriveFolderPath) {
+        resolvedDriveFolderPath = readablePath;
+      }
+
+      if (Array.isArray(files) && files.length) {
+        const names = files
+          .filter((file) => file && file.mimeType !== DRIVE_FOLDER_MIME)
+          .map((file) => (typeof file?.name === 'string' ? file.name.trim() : ''))
+          .filter(Boolean)
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+        existingDriveFileNames.push(...names);
+      }
+    } catch (error) {
+      emitLog(
+        `Falha ao listar imagens no Google Drive (${readablePath}) para o produto ${productLabel}: ${error.message || error}`,
+        'error'
+      );
+    }
+  } else {
+    drivePathSegments = [];
+  }
+
+  let localResult = null;
+
   for (const folderPath of localCandidates) {
     try {
       const names = listImagesFromFolder(folderPath);
       if (names.length) {
-        return buildResult({ fileNames: names, source: 'local', folderPath });
+        localResult = { fileNames: names, folderPath };
+        break;
       }
 
       if (folderPath === manualPath && manualPath !== defaultFolderPath) {
@@ -766,12 +988,54 @@ async function getProductImageFileNames({
     }
   }
 
-  if (localCandidates.length) {
+  const buildResult = ({ fileNames = [], source = 'local', folderPath = '' } = {}) => ({
+    fileNames,
+    source,
+    folderPath,
+    driveFolderId: resolvedDriveFolderId || null,
+    driveFolderName: resolvedDriveFolderName || null,
+    driveFolderPath: resolvedDriveFolderPath || '',
+    drivePathSegments: drivePathSegments.slice(),
+    existingDriveFileNames: existingDriveFileNames.slice(),
+  });
+
+  let finalResult;
+
+  if (localResult) {
+    finalResult = buildResult({
+      fileNames: localResult.fileNames,
+      source: 'local',
+      folderPath: localResult.folderPath,
+    });
+  } else if (existingDriveFileNames.length) {
+    finalResult = buildResult({
+      fileNames: existingDriveFileNames,
+      source: 'drive',
+      folderPath: resolvedDriveFolderPath || drivePathSegments.join('/') || '(raiz)',
+    });
+  } else if (localCandidates.length) {
     const lastPath = localCandidates[localCandidates.length - 1];
-    return buildResult({ fileNames: [], source: 'local', folderPath: lastPath });
+    finalResult = buildResult({ fileNames: [], source: 'local', folderPath: lastPath });
+  } else {
+    finalResult = buildResult({ fileNames: [], source: 'local', folderPath: defaultFolderPath });
   }
 
-  return buildResult({ fileNames: [], source: 'local', folderPath: defaultFolderPath });
+  if (!resolvedDriveFolderName && finalResult.driveFolderPath) {
+    finalResult.driveFolderName = finalResult.driveFolderPath.split('/').pop() || finalResult.driveFolderPath;
+  }
+
+  if (sharedState) {
+    sharedState.cachedFileNames = finalResult.fileNames.slice();
+    sharedState.cachedSource = finalResult.source;
+    sharedState.cachedFolderPath = finalResult.folderPath;
+    sharedState.cachedDriveFolderId = finalResult.driveFolderId || null;
+    sharedState.cachedDriveFolderName = finalResult.driveFolderName || null;
+    sharedState.cachedDriveFolderPath = finalResult.driveFolderPath || '';
+    sharedState.cachedDrivePathSegments = finalResult.drivePathSegments.slice();
+    sharedState.cachedExistingDriveFiles = finalResult.existingDriveFileNames.slice();
+  }
+
+  return finalResult;
 }
 
 async function verifyAndLinkProductImages(options = {}) {
@@ -901,6 +1165,8 @@ async function verifyAndLinkProductImages(options = {}) {
         continue;
       }
 
+      const folderProcessingState = {};
+
       for (const product of matchingProducts) {
         await processProductImages({
           product,
@@ -913,6 +1179,7 @@ async function verifyAndLinkProductImages(options = {}) {
           progressLabel: progressPrefix,
           localFolderPath: entry.folderPath,
           driveFolderName: entry.folderName,
+          folderProcessingState,
         });
       }
 
@@ -921,7 +1188,12 @@ async function verifyAndLinkProductImages(options = {}) {
     }
   } else {
     const driveBaseSegments = getProductImagesDriveBaseSegments();
-    const baseDrivePath = driveBaseSegments.join('/') || '(raiz)';
+    const driveBaseFolderId = getDriveFolderId();
+    const baseDrivePath = driveBaseSegments.length
+      ? driveBaseSegments.join('/')
+      : driveBaseFolderId
+        ? `(id:${driveBaseFolderId})`
+        : '(raiz)';
     emitLog('Integração com o Google Drive detectada. As pastas remotas serão analisadas.', 'info');
     emitLog(`Caminho base considerado no Google Drive: ${baseDrivePath}.`, 'info');
 
@@ -955,15 +1227,24 @@ async function verifyAndLinkProductImages(options = {}) {
         if (!existing.folderName) {
           existing.folderName = localEntry.folderName;
         }
+        if (!Array.isArray(existing.pathSegments) || !existing.pathSegments.length) {
+          existing.pathSegments = getProductImagesDriveFolderPath(localEntry.barcodeSegment);
+        }
       } else {
         combinedFolders.set(localEntry.barcodeSegment, {
           barcodeSegment: localEntry.barcodeSegment,
           folderName: localEntry.folderName,
           readablePath: localEntry.folderPath,
           localFolderPath: localEntry.folderPath,
-          pathSegments: [],
+          pathSegments: getProductImagesDriveFolderPath(localEntry.barcodeSegment),
           hasDrive: false,
         });
+      }
+    }
+
+    for (const entry of combinedFolders.values()) {
+      if (!Array.isArray(entry.pathSegments) || !entry.pathSegments.length) {
+        entry.pathSegments = getProductImagesDriveFolderPath(entry.barcodeSegment);
       }
     }
 
@@ -1049,12 +1330,14 @@ async function verifyAndLinkProductImages(options = {}) {
         continue;
       }
 
+      const folderProcessingState = {};
+
       for (const product of matchingProducts) {
         await processProductImages({
           product,
           barcodeSegment: entry.barcodeSegment,
           emitLog,
-          driveAvailable: driveAvailable && !!entry.hasDrive,
+          driveAvailable,
           summary,
           productsResult,
           callbacks,
@@ -1065,6 +1348,7 @@ async function verifyAndLinkProductImages(options = {}) {
           localFolderPath: entry.localFolderPath,
           driveFolderName: entry.folderName,
           driveFolderSummary,
+          folderProcessingState,
         });
       }
 
