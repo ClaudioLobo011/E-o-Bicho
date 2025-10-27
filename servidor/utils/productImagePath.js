@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_IMAGE_ROOT = '/Compras/C_Produto/Imagens';
+const DEFAULT_IMAGE_ROOT = path.join(__dirname, '..', 'public', 'uploads', 'Imagens');
 const DEFAULT_DRIVE_PATH = '/Compras/C_Produto/Imagens';
 const DEFAULT_URL_PREFIX = '/product-images';
 const LEGACY_URL_PREFIX = '/uploads/products';
