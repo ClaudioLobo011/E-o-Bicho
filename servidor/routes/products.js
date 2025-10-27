@@ -774,6 +774,14 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
 
         const updatePayload = {};
 
+        if (payload.nome !== undefined) {
+            const normalizedName = normalizeString(payload.nome);
+            if (!normalizedName) {
+                return res.status(400).json({ message: 'Informe a descrição do produto.' });
+            }
+            updatePayload.nome = normalizedName;
+        }
+
         if (payload.descricao !== undefined) updatePayload.descricao = payload.descricao;
         if (payload.marca !== undefined) updatePayload.marca = payload.marca;
         if (payload.categorias !== undefined) updatePayload.categorias = Array.isArray(payload.categorias) ? payload.categorias : [];

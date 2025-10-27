@@ -2408,6 +2408,17 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>${loadingText}`;
 
         const formData = new FormData(form);
+        const productName = (formData.get('nome') || '').trim();
+        if (!productName) {
+            showModal({
+                title: 'Dados obrigatórios',
+                message: 'Informe o nome do produto antes de salvar.',
+                confirmText: 'Entendi',
+            });
+            submitButton.disabled = false;
+            setSubmitButtonIdleText();
+            return;
+        }
         const additionalBarcodesRaw = (formData.get('barcode-additional') || '')
             .split('\n')
             .map((code) => code.trim())
@@ -2439,7 +2450,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         const updateData = {
-            nome: (formData.get('nome') || '').trim(),
+            nome: productName,
             cod: (formData.get('cod') || '').trim(),
             codbarras: (formData.get('codbarras') || '').trim(),
             descricao: detailedDescriptionInput ? detailedDescriptionInput.value : formData.get('descricao'),
