@@ -1,5 +1,6 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
+const zlib = require('node:zlib');
 
 const {
   collectDistributedDocuments,
@@ -225,6 +226,73 @@ describe('dfeDistribution helpers', () => {
 });
 
 describe('collectDistributedDocuments', () => {
+  test('utiliza o último ultNSU persistido nas consultas distNSU', async () => {
+    let capturedEnvelope = '';
+    let persistedNsU = null;
+
+    const sampleResponse = `<?xml version="1.0" encoding="utf-8"?>
+      <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+        <soap:Body>
+          <nfeDistDFeInteresseResponse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
+            <nfeDistDFeInteresseResult>
+              <retDistDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">
+                <tpAmb>1</tpAmb>
+                <verAplic>1.00</verAplic>
+                <cStat>137</cStat>
+                <xMotivo>Nenhum documento localizado</xMotivo>
+                <ultNSU>000000000000123</ultNSU>
+                <maxNSU>000000000000123</maxNSU>
+              </retDistDFeInt>
+            </nfeDistDFeInteresseResult>
+          </nfeDistDFeInteresseResponse>
+        </soap:Body>
+      </soap:Envelope>`;
+
+    const dependencies = {
+      decryptBuffer: () => Buffer.from('pfx'),
+      decryptText: () => 'senha',
+      extractCertificatePair: () => ({
+        certificatePem: '-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----',
+        certificateChain: [],
+        privateKeyPem: '-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----',
+      }),
+      soapClient: {
+        performSoapRequest: async (options) => {
+          capturedEnvelope = options.envelope || '';
+          return {
+            body: sampleResponse,
+            statusCode: 200,
+            headers: { 'content-type': 'application/soap+xml' },
+          };
+        },
+      },
+      stateStore: {
+        getLastNsU: async () => '000000000000123',
+        setLastNsU: async ({ ultNSU }) => {
+          persistedNsU = ultNSU;
+        },
+      },
+    };
+
+    await collectDistributedDocuments(
+      {
+        store: {
+          certificadoArquivoCriptografado: 'fake',
+          certificadoSenhaCriptografada: 'fake',
+          cnpj: '07919703000167',
+          uf: 'RJ',
+        },
+      },
+      dependencies
+    );
+
+    assert.ok(
+      capturedEnvelope.includes('<ultNSU>000000000000123</ultNSU>'),
+      'espera que a requisição reutilize o último NSU conhecido'
+    );
+    assert.equal(persistedNsU, null);
+  });
+
   test('faz downgrade para SOAP 1.1 e persiste ultNSU', async () => {
     const calls = [];
     let persistedNsU = null;
@@ -304,5 +372,159 @@ describe('collectDistributedDocuments', () => {
     assert.equal(result.metadata.lastNsU, '000000000000123');
     assert.equal(Array.isArray(result.documents), true);
     assert.equal(result.documents.length, 0);
+  });
+
+  test('processa docZip com resNFe retornado pela SEFAZ', async () => {
+    let capturedEnvelope = '';
+    let persistedNsU = null;
+
+    const sampleResponse = `<?xml version="1.0" encoding="utf-8"?>
+      <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+        <soap:Body>
+          <nfeDistDFeInteresseResponse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
+            <nfeDistDFeInteresseResult>
+              <retDistDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">
+                <tpAmb>1</tpAmb>
+                <verAplic>1.7.6</verAplic>
+                <cStat>138</cStat>
+                <xMotivo>Documento(s) localizado(s)</xMotivo>
+                <dhResp>2025-10-27T18:33:55-03:00</dhResp>
+                <ultNSU>000000000000003</ultNSU>
+                <maxNSU>000000000000003</maxNSU>
+                <loteDistDFeInt>
+                  <docZip NSU="000000000000002" schema="resEvento_v1.01.xsd">H4sIAAAAAAAEAIVSy27DIBD8Fct3mwU/cCxiqWqbQ9U81PTQK7GJjRRDCjTO55ckrttKlcoBDbszu6MRzAj7eBLK6eDcH5Qtz7aZh51zxxKhYRjiIYm1aREBwOht+bytO9HzcCLL/8mRVNZxVYswOAljuZ6HOAY8zvilP2rj+GEvbc0PsVT7eGeQ2ouwYvXatFxXM8LQCNn9avNUFRSTNCv8RsCQMnQtsrpbLUSVZCTDADRJKS3yCyOnWQbXg71u5m9CfLsoqB971bCmu8VRESBZhCEC+gqkxKRMkwiSEoChicPccUR+UZ741lRgaiveR4wZ+vFi5xG8iFZaZ3TQiGDDreWt6IO7D6d77mStg7WRrVS80cHyYSEY+tJ5jy+i3v3pMf/2OHKY2hjtKnJJAwidpbTA4GO8lRmaPkD1Cb10q0IMAgAA</docZip>
+                  <docZip NSU="000000000000003" schema="resNFe_v1.01.xsd">H4sIAAAAAAAEAIWSW2+jMBCF/wridRXs8SUmaGKJEpKybQmFJNp9pIQ0VAEioE323y8Jvaj7sn6wR0ffmTMaGZu8Dee5cS4PVeuc2+3U3Hfd0SHkdDpZJ27VzTNhlAL59XCfZPu8TM1PuPg/PCqqtkurLDeNt7xp03pqgkXhvcc3/7FuuvSwK9osPVhFtbOeGlLtclNjtu9H1FwyCZQqLpSyx7SPGSsp6fWAYrYQMBbSnlAFHMngQS+MfurvHiRXEc9hXeba88OVHxue+xAFoZsYsyBZxcHNOvDcpTHzjSheztarZWK4i3gZ+d7aRTI4MfA1E2IyAUE5AEPSC7jd+2WhGWVyBHTE1IraDucOlyPKHUqRDAB2x3CuAcn1xbf+kmBb0CuXGrfF8yY96Hjz+njnqeNd+UdsXqLN/evv3Xxxc7v4EUz7VgPUZ8Z59tTV/8ZKR7Cv2HcGq6ipOw2XdXLGuA0K2BjJIGOWFN1lc/0gHyWS4ZPov3+HOJotAgAA</docZip>
+                </loteDistDFeInt>
+              </retDistDFeInt>
+            </nfeDistDFeInteresseResult>
+          </nfeDistDFeInteresseResponse>
+        </soap:Body>
+      </soap:Envelope>`;
+
+    const dependencies = {
+      decryptBuffer: () => Buffer.from('pfx'),
+      decryptText: () => 'senha',
+      extractCertificatePair: () => ({
+        certificatePem: '-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----',
+        certificateChain: [],
+        privateKeyPem: '-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----',
+      }),
+      soapClient: {
+        performSoapRequest: async (options) => {
+          capturedEnvelope = options.envelope || '';
+          return {
+            body: sampleResponse,
+            statusCode: 200,
+            headers: { 'content-type': 'application/soap+xml' },
+          };
+        },
+      },
+      stateStore: {
+        getLastNsU: async () => '000000000000002',
+        setLastNsU: async ({ ultNSU }) => {
+          persistedNsU = ultNSU;
+        },
+      },
+    };
+
+    const result = await collectDistributedDocuments(
+      {
+        store: {
+          certificadoArquivoCriptografado: 'fake',
+          certificadoSenhaCriptografada: 'fake',
+          cnpj: '07919703000167',
+          uf: 'RJ',
+        },
+      },
+      dependencies
+    );
+
+    assert.ok(
+      capturedEnvelope.includes('<ultNSU>000000000000002</ultNSU>'),
+      'espera que a consulta reutilize o último NSU armazenado'
+    );
+    assert.equal(persistedNsU, '000000000000003');
+    assert.ok(Array.isArray(result.documents));
+    assert.equal(result.documents.length, 1);
+    const [document] = result.documents;
+    assert.equal(document.accessKey, '35251007347786000167550000001728441645890713');
+    assert.equal(document.totalValue, 518.11);
+    assert.equal(document.status, 'approved');
+    assert.ok(document.xml.includes('<resNFe'));
+  });
+
+  test('retorna documento de tpNF=1 destinado à empresa', async () => {
+    const companyDocument = '07919703000167';
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
+      <resNFe xmlns="http://www.portalfiscal.inf.br/nfe">
+        <chNFe>35251007347786000167550000001728441645890713</chNFe>
+        <CNPJ>07347786000167</CNPJ>
+        <xNome>Fornecedor Exemplo LTDA</xNome>
+        <dhEmi>2025-10-27T08:33:35-03:00</dhEmi>
+        <tpNF>1</tpNF>
+        <vNF>518.11</vNF>
+        <cSitNFe>1</cSitNFe>
+        <CNPJDest>${companyDocument}</CNPJDest>
+      </resNFe>`;
+    const docZip = zlib.gzipSync(xml).toString('base64');
+
+    const sampleResponse = `<?xml version="1.0" encoding="utf-8"?>
+      <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+        <soap:Body>
+          <nfeDistDFeInteresseResponse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
+            <nfeDistDFeInteresseResult>
+              <retDistDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">
+                <tpAmb>1</tpAmb>
+                <verAplic>1.7.6</verAplic>
+                <cStat>138</cStat>
+                <xMotivo>Documento(s) localizado(s)</xMotivo>
+                <ultNSU>000000000000003</ultNSU>
+                <maxNSU>000000000000003</maxNSU>
+                <loteDistDFeInt>
+                  <docZip NSU="000000000000002" schema="resNFe_v1.01.xsd">${docZip}</docZip>
+                </loteDistDFeInt>
+              </retDistDFeInt>
+            </nfeDistDFeInteresseResult>
+          </nfeDistDFeInteresseResponse>
+        </soap:Body>
+      </soap:Envelope>`;
+
+    const dependencies = {
+      decryptBuffer: () => Buffer.from('pfx'),
+      decryptText: () => 'senha',
+      extractCertificatePair: () => ({
+        certificatePem: '-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----',
+        certificateChain: [],
+        privateKeyPem: '-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----',
+      }),
+      soapClient: {
+        performSoapRequest: async () => ({
+          body: sampleResponse,
+          statusCode: 200,
+          headers: { 'content-type': 'application/soap+xml' },
+        }),
+      },
+      stateStore: {
+        getLastNsU: async () => '000000000000002',
+        setLastNsU: async () => {},
+      },
+    };
+
+    const result = await collectDistributedDocuments(
+      {
+        store: {
+          certificadoArquivoCriptografado: 'fake',
+          certificadoSenhaCriptografada: 'fake',
+          cnpj: companyDocument,
+          uf: 'SP',
+        },
+      },
+      dependencies
+    );
+
+    assert.equal(result.documents.length, 1);
+    assert.equal(result.documents[0].accessKey, '35251007347786000167550000001728441645890713');
+    assert.equal(result.documents[0].supplierName, 'Fornecedor Exemplo LTDA');
+    assert.equal(result.documents[0].status, 'approved');
   });
 });

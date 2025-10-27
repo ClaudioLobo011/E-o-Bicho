@@ -112,6 +112,22 @@ const compareNsU = (a, b) => {
   }
 };
 
+const stepBackNsU = (value) => {
+  try {
+    const current = BigInt(padNsU(value));
+    if (current <= 0n) {
+      return padNsU('0');
+    }
+    return padNsU((current - 1n).toString());
+  } catch (error) {
+    const numeric = Number(padNsU(value));
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return padNsU('0');
+    }
+    return padNsU(String(Math.max(0, Math.trunc(numeric - 1))));
+  }
+};
+
 const buildSoap12Headers = (action = DFE_SOAP_ACTION) => ({
   'Content-Type': `application/soap+xml; charset=utf-8; action="${action}"`,
   Accept: 'application/soap+xml',
@@ -773,24 +789,31 @@ const collectDistributedDocuments = async (
   const collected = [];
   let iterations = 0;
 
-  const initialNsU =
+  const storedNsU =
     (await stateStore.getLastNsU({ environment: environmentToken, cnpj: companyDocument })) ||
     '000000000000000';
-  let currentNsU = padNsU(initialNsU);
+  const initialNsU = padNsU(storedNsU);
+  let currentNsU = initialNsU;
   let reachedEnd = false;
 
   const hasSpecificNsu = typeof nsu !== 'undefined' && String(nsu || '').trim() !== '';
 
-  const resolveQueryMode = () => {
-    const token = String(mode || '').trim().toLowerCase();
-    if (token === 'conschnfe') {
+  const normalizedModeToken = String(mode || '').trim().toLowerCase();
+  const queryMode = (() => {
+    if (normalizedModeToken === 'conschnfe') {
       return 'consChNFe';
     }
-    if (token === 'consnsu' && hasSpecificNsu) {
+    if (normalizedModeToken === 'consnsu' && hasSpecificNsu) {
       return 'consNSU';
     }
     return 'distNSU';
-  };
+  })();
+
+  if (queryMode === 'consNSU' && hasSpecificNsu) {
+    currentNsU = padNsU(nsu);
+  }
+
+  const resolveQueryMode = () => queryMode;
 
   const buildEnvelopeForMode = (soapVersion) => {
     const queryMode = resolveQueryMode();
@@ -932,9 +955,6 @@ const collectDistributedDocuments = async (
       const parsedDocument = parseDistributionDocument(entry, { companyDocument });
       seenNsus.add(entry.nsu);
       if (!parsedDocument) continue;
-      if (parsedDocument.tpNF && String(parsedDocument.tpNF).trim() === '1') {
-        continue; // notas de saída
-      }
       if (!parsedDocument.accessKey || seenAccessKeys.has(parsedDocument.accessKey)) {
         continue;
       }
@@ -962,7 +982,7 @@ const collectDistributedDocuments = async (
       });
     }
 
-    if (mode === 'consChNFe') {
+    if (queryMode === 'consChNFe') {
       reachedEnd = true;
     } else if (!parsed.ultNSU || compareNsU(parsed.ultNSU, currentNsU) <= 0) {
       reachedEnd = true;
@@ -1018,5 +1038,6 @@ module.exports = {
     createPersistentStateStore,
     shouldDowngradeToSoap11,
     resolveAuthorUfCode,
+    stepBackNsU,
   },
 };
