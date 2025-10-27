@@ -225,6 +225,69 @@ describe('dfeDistribution helpers', () => {
 });
 
 describe('collectDistributedDocuments', () => {
+  test('retrocede ultNSU em uma unidade para repetir o último lote', async () => {
+    let capturedEnvelope = '';
+
+    const sampleResponse = `<?xml version="1.0" encoding="utf-8"?>
+      <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+        <soap:Body>
+          <nfeDistDFeInteresseResponse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
+            <nfeDistDFeInteresseResult>
+              <retDistDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">
+                <tpAmb>1</tpAmb>
+                <verAplic>1.00</verAplic>
+                <cStat>137</cStat>
+                <xMotivo>Nenhum documento localizado</xMotivo>
+                <ultNSU>000000000000123</ultNSU>
+                <maxNSU>000000000000123</maxNSU>
+              </retDistDFeInt>
+            </nfeDistDFeInteresseResult>
+          </nfeDistDFeInteresseResponse>
+        </soap:Body>
+      </soap:Envelope>`;
+
+    const dependencies = {
+      decryptBuffer: () => Buffer.from('pfx'),
+      decryptText: () => 'senha',
+      extractCertificatePair: () => ({
+        certificatePem: '-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----',
+        certificateChain: [],
+        privateKeyPem: '-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----',
+      }),
+      soapClient: {
+        performSoapRequest: async (options) => {
+          capturedEnvelope = options.envelope || '';
+          return {
+            body: sampleResponse,
+            statusCode: 200,
+            headers: { 'content-type': 'application/soap+xml' },
+          };
+        },
+      },
+      stateStore: {
+        getLastNsU: async () => '000000000000123',
+        setLastNsU: async () => {},
+      },
+    };
+
+    await collectDistributedDocuments(
+      {
+        store: {
+          certificadoArquivoCriptografado: 'fake',
+          certificadoSenhaCriptografada: 'fake',
+          cnpj: '07919703000167',
+          uf: 'RJ',
+        },
+      },
+      dependencies
+    );
+
+    assert.ok(
+      capturedEnvelope.includes('<ultNSU>000000000000122</ultNSU>'),
+      'espera que a requisição utilize o NSU anterior'
+    );
+  });
+
   test('faz downgrade para SOAP 1.1 e persiste ultNSU', async () => {
     const calls = [];
     let persistedNsU = null;
