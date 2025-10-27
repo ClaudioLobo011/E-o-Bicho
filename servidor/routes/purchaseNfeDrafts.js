@@ -496,12 +496,76 @@ router.get(
               serie: cleanString(document.serie),
               number: cleanString(document.number),
               totalValue: Number.isFinite(numericTotal) ? numericTotal : null,
-              status: cleanString(document.status) || 'pending',
+              sefazStatus: cleanString(document.status) || 'pending',
+              status: 'pending',
               xml: document.xml || null,
               nsu: cleanString(document.nsu),
             };
           })
         : [];
+
+      if (documents.length) {
+        const accessKeySet = new Set();
+        documents.forEach((document) => {
+          const key = digitsOnly(document.accessKey);
+          if (key) {
+            accessKeySet.add(key);
+          }
+        });
+
+        if (accessKeySet.size > 0) {
+          const accessKeyList = Array.from(accessKeySet);
+          const draftFilter = {
+            companyId: normalizedCompanyId,
+            $or: [
+              { 'xml.accessKey': { $in: accessKeyList } },
+              { 'xml.importAccessKey': { $in: accessKeyList } },
+              { 'payload.accessKey': { $in: accessKeyList } },
+            ],
+          };
+
+          const existingDrafts = await NfeDraft.find(draftFilter)
+            .select('status xml.accessKey xml.importAccessKey payload.accessKey')
+            .lean();
+
+          const statusByAccessKey = new Map();
+
+          existingDrafts.forEach((draft) => {
+            if (!draft || typeof draft !== 'object') {
+              return;
+            }
+
+            const candidateKeys = [
+              draft?.xml?.accessKey,
+              draft?.xml?.importAccessKey,
+              draft?.payload?.accessKey,
+            ];
+
+            candidateKeys
+              .map((value) => digitsOnly(value))
+              .filter(Boolean)
+              .forEach((key) => {
+                if (isApprovedStatus(draft.status)) {
+                  statusByAccessKey.set(key, 'approved');
+                  return;
+                }
+                if (!statusByAccessKey.has(key)) {
+                  statusByAccessKey.set(key, 'registered');
+                }
+              });
+          });
+
+          documents.forEach((document) => {
+            const normalizedKey = digitsOnly(document.accessKey);
+            if (!normalizedKey) {
+              document.status = 'pending';
+              return;
+            }
+            const computedStatus = statusByAccessKey.get(normalizedKey);
+            document.status = computedStatus || 'pending';
+          });
+        }
+      }
 
       return res.json({
         documents,

@@ -1478,23 +1478,24 @@
                       <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">N° NF</th>
                       <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Valor (R$)</th>
                       <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Chave de Acesso</th>
+                      <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Situação SEFAZ</th>
                       <th scope="col" class="whitespace-nowrap px-4 py-2 font-semibold">Situação</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100 bg-white" data-pending-table-body>
                     <tr data-pending-loading class="hidden">
-                      <td colspan="10" class="px-4 py-6 text-center text-gray-500">
+                      <td colspan="11" class="px-4 py-6 text-center text-gray-500">
                         <i class="fas fa-circle-notch fa-spin mr-2"></i>
                         Consultando notas autorizadas...
                       </td>
                     </tr>
                     <tr data-pending-error class="hidden">
-                      <td colspan="10" class="px-4 py-6 text-center text-rose-600">
+                      <td colspan="11" class="px-4 py-6 text-center text-rose-600">
                         <span data-pending-error-message>Não foi possível carregar as notas autorizadas para o período informado.</span>
                       </td>
                     </tr>
                     <tr data-pending-empty>
-                      <td colspan="10" class="px-4 py-6 text-center text-gray-500">
+                      <td colspan="11" class="px-4 py-6 text-center text-gray-500">
                         Informe os filtros acima e clique em <span class="font-semibold">Gerar</span> para listar as notas.
                       </td>
                     </tr>
@@ -1541,6 +1542,11 @@
                       <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-total>0,00</td>
                       <td class="px-4 py-3 align-top font-mono text-[11px] text-gray-600 break-all" data-pending-access-key>
                         00000000000000000000000000000000000000000000
+                      </td>
+                      <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-sefaz-status>
+                        <span class="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+                          Cadastrada
+                        </span>
                       </td>
                       <td class="whitespace-nowrap px-4 py-3 align-top" data-pending-status>
                         <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
@@ -4311,6 +4317,80 @@
           },
         };
 
+        const sefazStatusStyles = {
+          authorized: {
+            label: 'Autorizada',
+            classes: ['bg-emerald-100', 'text-emerald-700'],
+          },
+          cancelled: {
+            label: 'Cancelada',
+            classes: ['bg-rose-100', 'text-rose-700'],
+          },
+          denied: {
+            label: 'Denegada',
+            classes: ['bg-amber-200', 'text-amber-800'],
+          },
+          registered: {
+            label: 'Cadastrada',
+            classes: ['bg-sky-100', 'text-sky-700'],
+          },
+        };
+
+        const normalizeSefazStatus = (value) => {
+          if (typeof value !== 'string') return 'registered';
+          const normalized = value
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toLowerCase();
+          if (!normalized) return 'registered';
+
+          if (['authorized', 'autorizada', 'autorizado', 'approved', 'aprovada', 'aprovado'].includes(normalized)) {
+            return 'authorized';
+          }
+          if (['cancelled', 'cancelada', 'cancelado', 'canceled'].includes(normalized)) {
+            return 'cancelled';
+          }
+          if (['denied', 'denegada', 'denegado'].includes(normalized)) {
+            return 'denied';
+          }
+          if (
+            [
+              'registered',
+              'registrada',
+              'registrado',
+              'pending',
+              'pendente',
+              'cadastrada',
+              'cadastrado',
+            ].includes(normalized)
+          ) {
+            return 'registered';
+          }
+
+          return sefazStatusStyles[normalized] ? normalized : 'registered';
+        };
+
+        const buildPendingSefazStatusBadge = (status) => {
+          const normalized = normalizeSefazStatus(status);
+          const style = sefazStatusStyles[normalized] || sefazStatusStyles.registered;
+          const badge = document.createElement('span');
+          badge.classList.add(
+            'inline-flex',
+            'items-center',
+            'rounded-full',
+            'px-2',
+            'py-0.5',
+            'text-[10px]',
+            'font-semibold',
+            'uppercase',
+            'tracking-wide'
+          );
+          badge.classList.add(...style.classes);
+          badge.textContent = style.label;
+          return badge;
+        };
+
         const normalizePendingStatus = (value) => {
           if (typeof value !== 'string') return 'pending';
           const normalized = value
@@ -4529,6 +4609,14 @@
             const accessKeyCell = row.querySelector('[data-pending-access-key]');
             if (accessKeyCell) {
               accessKeyCell.textContent = document.accessKey || '—';
+            }
+
+            const sefazStatusCell = row.querySelector('[data-pending-sefaz-status]');
+            if (sefazStatusCell) {
+              sefazStatusCell.innerHTML = '';
+              sefazStatusCell.appendChild(
+                buildPendingSefazStatusBadge(document.sefazStatus || 'registered')
+              );
             }
 
             const statusCell = row.querySelector('[data-pending-status]');
