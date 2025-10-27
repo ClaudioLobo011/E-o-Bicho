@@ -7521,32 +7521,80 @@
           const costValue = sanitizeCurrencyValue(entry.costNew);
           entry.costNew = costValue;
 
+          const previousMarkup = Number.isFinite(entry.markupPrevious)
+            ? entry.markupPrevious
+            : computeMarkupPercentage(entry.costPrevious, entry.salePrevious);
+
+          const resolveMarkup = (value) => {
+            if (Number.isFinite(value)) return value;
+            if (Number.isFinite(previousMarkup)) return previousMarkup;
+            const derived = computeMarkupPercentage(costValue, entry.saleNew);
+            return Number.isFinite(derived) ? derived : 0;
+          };
+
           if (priceAdjustmentState.maintainMarkup) {
-            const baseMarkup = Number.isFinite(entry.markupPrevious)
-              ? entry.markupPrevious
-              : computeMarkupPercentage(entry.costPrevious, entry.salePrevious);
-            entry.markupCurrent = Number.isFinite(baseMarkup) ? baseMarkup : 0;
+            const markupToApply = Number.isFinite(previousMarkup)
+              ? previousMarkup
+              : resolveMarkup(entry.markupCurrent);
+            entry.markupCurrent = Number.isFinite(markupToApply) ? markupToApply : 0;
             entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
           } else if (priceAdjustmentState.usarMarkup) {
-            if (!Number.isFinite(entry.markupCurrent)) {
-              const fallbackMarkup = computeMarkupPercentage(entry.costPrevious, entry.salePrevious);
-              entry.markupCurrent = Number.isFinite(fallbackMarkup) ? fallbackMarkup : 0;
+            if (source === 'sale-update') {
+              entry.markupCurrent = resolveMarkup(computeMarkupPercentage(costValue, entry.saleNew));
+            } else if (source === 'markup-update') {
+              entry.markupCurrent = resolveMarkup(entry.markupCurrent);
+              entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
+            } else if (source === 'cost-update') {
+              entry.markupCurrent = resolveMarkup(entry.markupCurrent);
+              entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
+            } else if (source === 'toggle-use-markup' || source === 'maintain-toggle') {
+              const markupToApply = Number.isFinite(previousMarkup)
+                ? previousMarkup
+                : resolveMarkup(entry.markupCurrent);
+              entry.markupCurrent = Number.isFinite(markupToApply) ? markupToApply : 0;
+              entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
+            } else {
+              entry.markupCurrent = resolveMarkup(entry.markupCurrent);
+              if (!Number.isFinite(entry.saleNew)) {
+                entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
+              }
             }
-            entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
           } else {
-            if (!Number.isFinite(entry.saleNew) || source === 'reset-sale') {
-              entry.saleNew = Number.isFinite(entry.salePrevious) ? entry.salePrevious : computeSaleFromMarkup(costValue, entry.markupCurrent);
+            if (source === 'markup-update') {
+              entry.markupCurrent = resolveMarkup(entry.markupCurrent);
+              entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
+            } else if (source === 'sale-update') {
+              entry.markupCurrent = resolveMarkup(computeMarkupPercentage(costValue, entry.saleNew));
+            } else {
+              if (!Number.isFinite(entry.saleNew) || source === 'cost-update' || source === 'toggle-use-markup') {
+                if (!Number.isFinite(entry.saleNew)) {
+                  const fallbackSale = Number.isFinite(entry.salePrevious)
+                    ? entry.salePrevious
+                    : computeSaleFromMarkup(costValue, resolveMarkup(entry.markupCurrent));
+                  entry.saleNew = Number.isFinite(fallbackSale) ? fallbackSale : 0;
+                }
+              }
+              entry.markupCurrent = resolveMarkup(computeMarkupPercentage(costValue, entry.saleNew));
             }
-            entry.markupCurrent = computeMarkupPercentage(costValue, entry.saleNew);
+          }
+
+          if (!Number.isFinite(entry.saleNew)) {
+            entry.saleNew = Number.isFinite(entry.salePrevious)
+              ? entry.salePrevious
+              : computeSaleFromMarkup(costValue, resolveMarkup(entry.markupCurrent));
+          }
+
+          if (!Number.isFinite(entry.markupCurrent)) {
+            entry.markupCurrent = resolveMarkup(entry.markupCurrent);
           }
 
           updateEntryDisplays(entry);
         };
 
-        const recomputeAllEntries = () => {
+        const recomputeAllEntries = ({ source } = {}) => {
           if (!Array.isArray(priceAdjustmentState.items)) return;
           priceAdjustmentState.items.forEach((entry) => {
-            recomputeEntryPricing(entry);
+            recomputeEntryPricing(entry, { source });
           });
         };
 
@@ -7635,7 +7683,7 @@
               return;
             }
             entry.costNew = value;
-            recomputeEntryPricing(entry);
+            recomputeEntryPricing(entry, { source: 'cost-update' });
             costInput.value = entry.displays.costNew;
             renderPriceAdjustmentTable();
           });
@@ -7647,7 +7695,7 @@
           markupInput.type = 'text';
           markupInput.inputMode = 'decimal';
           markupInput.value = entry.displays.markup;
-          const markupReadOnly = priceAdjustmentState.maintainMarkup || !priceAdjustmentState.usarMarkup;
+          const markupReadOnly = priceAdjustmentState.maintainMarkup;
           markupInput.readOnly = markupReadOnly;
           markupInput.className = buildReadOnlyInputClasses(markupReadOnly).replace('w-24', 'w-20');
           markupInput.addEventListener('keydown', (event) => {
@@ -7665,7 +7713,7 @@
             }
             entry.markupCurrent = value;
             entry.saleNew = computeSaleFromMarkup(entry.costNew, entry.markupCurrent);
-            recomputeEntryPricing(entry);
+            recomputeEntryPricing(entry, { source: 'markup-update' });
             renderPriceAdjustmentTable();
           });
           markupCell.appendChild(markupInput);
@@ -7676,7 +7724,7 @@
           saleInput.type = 'text';
           saleInput.inputMode = 'decimal';
           saleInput.value = entry.displays.saleNew;
-          const saleReadOnly = priceAdjustmentState.usarMarkup || priceAdjustmentState.maintainMarkup;
+          const saleReadOnly = priceAdjustmentState.maintainMarkup;
           saleInput.readOnly = saleReadOnly;
           saleInput.className = buildReadOnlyInputClasses(saleReadOnly);
           saleInput.addEventListener('keydown', (event) => {
@@ -7785,7 +7833,7 @@
             priceUseMarkupButton.classList.toggle('text-gray-600', !normalized);
           }
           if (!silent) {
-            recomputeAllEntries();
+            recomputeAllEntries({ source: 'toggle-use-markup' });
             renderPriceAdjustmentTable();
           }
         };
@@ -7804,7 +7852,7 @@
           if (normalized) {
             setUseMarkupState(true, { silent: true });
           }
-          recomputeAllEntries();
+          recomputeAllEntries({ source: 'maintain-toggle' });
           renderPriceAdjustmentTable();
         };
 
@@ -7902,7 +7950,7 @@
           if (!priceAdjustmentState.maintainMarkup) {
             const useMarkupActive = priceUseMarkupButton?.getAttribute('aria-pressed') === 'true';
             setUseMarkupState(useMarkupActive, { silent: true });
-            recomputeAllEntries();
+            recomputeAllEntries({ source: 'toggle-use-markup' });
           }
           renderPriceAdjustmentTable();
           priceAdjustmentState.items.forEach((entry) => {
