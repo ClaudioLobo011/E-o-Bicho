@@ -955,9 +955,6 @@ const collectDistributedDocuments = async (
       const parsedDocument = parseDistributionDocument(entry, { companyDocument });
       seenNsus.add(entry.nsu);
       if (!parsedDocument) continue;
-      if (parsedDocument.tpNF && String(parsedDocument.tpNF).trim() === '1') {
-        continue; // notas de saída
-      }
       if (!parsedDocument.accessKey || seenAccessKeys.has(parsedDocument.accessKey)) {
         continue;
       }

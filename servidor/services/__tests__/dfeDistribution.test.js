@@ -1,5 +1,6 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
+const zlib = require('node:zlib');
 
 const {
   collectDistributedDocuments,
@@ -367,5 +368,80 @@ describe('collectDistributedDocuments', () => {
     assert.equal(result.metadata.lastNsU, '000000000000123');
     assert.equal(Array.isArray(result.documents), true);
     assert.equal(result.documents.length, 0);
+  });
+
+  test('retorna documento de tpNF=1 destinado à empresa', async () => {
+    const companyDocument = '07919703000167';
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
+      <resNFe xmlns="http://www.portalfiscal.inf.br/nfe">
+        <chNFe>35251007347786000167550000001728441645890713</chNFe>
+        <CNPJ>07347786000167</CNPJ>
+        <xNome>Fornecedor Exemplo LTDA</xNome>
+        <dhEmi>2025-10-27T08:33:35-03:00</dhEmi>
+        <tpNF>1</tpNF>
+        <vNF>518.11</vNF>
+        <cSitNFe>1</cSitNFe>
+        <CNPJDest>${companyDocument}</CNPJDest>
+      </resNFe>`;
+    const docZip = zlib.gzipSync(xml).toString('base64');
+
+    const sampleResponse = `<?xml version="1.0" encoding="utf-8"?>
+      <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+        <soap:Body>
+          <nfeDistDFeInteresseResponse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
+            <nfeDistDFeInteresseResult>
+              <retDistDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">
+                <tpAmb>1</tpAmb>
+                <verAplic>1.7.6</verAplic>
+                <cStat>138</cStat>
+                <xMotivo>Documento(s) localizado(s)</xMotivo>
+                <ultNSU>000000000000003</ultNSU>
+                <maxNSU>000000000000003</maxNSU>
+                <loteDistDFeInt>
+                  <docZip NSU="000000000000002" schema="resNFe_v1.01.xsd">${docZip}</docZip>
+                </loteDistDFeInt>
+              </retDistDFeInt>
+            </nfeDistDFeInteresseResult>
+          </nfeDistDFeInteresseResponse>
+        </soap:Body>
+      </soap:Envelope>`;
+
+    const dependencies = {
+      decryptBuffer: () => Buffer.from('pfx'),
+      decryptText: () => 'senha',
+      extractCertificatePair: () => ({
+        certificatePem: '-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----',
+        certificateChain: [],
+        privateKeyPem: '-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----',
+      }),
+      soapClient: {
+        performSoapRequest: async () => ({
+          body: sampleResponse,
+          statusCode: 200,
+          headers: { 'content-type': 'application/soap+xml' },
+        }),
+      },
+      stateStore: {
+        getLastNsU: async () => '000000000000002',
+        setLastNsU: async () => {},
+      },
+    };
+
+    const result = await collectDistributedDocuments(
+      {
+        store: {
+          certificadoArquivoCriptografado: 'fake',
+          certificadoSenhaCriptografada: 'fake',
+          cnpj: companyDocument,
+          uf: 'SP',
+        },
+      },
+      dependencies
+    );
+
+    assert.equal(result.documents.length, 1);
+    assert.equal(result.documents[0].accessKey, '35251007347786000167550000001728441645890713');
+    assert.equal(result.documents[0].supplierName, 'Fornecedor Exemplo LTDA');
+    assert.equal(result.documents[0].status, 'approved');
   });
 });
