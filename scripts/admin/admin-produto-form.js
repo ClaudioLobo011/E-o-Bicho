@@ -52,6 +52,71 @@ document.addEventListener('DOMContentLoaded', () => {
         aprovado: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
     };
 
+    const PRODUCT_EDIT_STATE_STORAGE_KEY = 'adminProductEditState';
+    const loadPersistedProductEditState = () => {
+        if (typeof localStorage === 'undefined') return {};
+        try {
+            const raw = localStorage.getItem(PRODUCT_EDIT_STATE_STORAGE_KEY);
+            if (!raw) return {};
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (error) {
+            console.warn('Não foi possível carregar o estado persistido da edição do produto.', error);
+            return {};
+        }
+    };
+    let persistedProductEditState = loadPersistedProductEditState();
+    const syncPersistedProductEditState = () => {
+        if (typeof localStorage === 'undefined') return;
+        try {
+            if (persistedProductEditState && Object.keys(persistedProductEditState).length) {
+                localStorage.setItem(
+                    PRODUCT_EDIT_STATE_STORAGE_KEY,
+                    JSON.stringify(persistedProductEditState),
+                );
+            } else {
+                localStorage.removeItem(PRODUCT_EDIT_STATE_STORAGE_KEY);
+            }
+        } catch (error) {
+            console.warn('Não foi possível salvar o estado da edição do produto.', error);
+        }
+    };
+    const updatePersistedProductEditState = (updates = {}) => {
+        if (!updates || typeof updates !== 'object') return;
+        persistedProductEditState = { ...(persistedProductEditState || {}) };
+        Object.entries(updates).forEach(([key, value]) => {
+            if (value === null || value === undefined || value === '') {
+                delete persistedProductEditState[key];
+                return;
+            }
+            const normalized = String(value).trim();
+            if (!normalized) {
+                delete persistedProductEditState[key];
+                return;
+            }
+            persistedProductEditState[key] = normalized;
+        });
+        if (persistedProductEditState && Object.keys(persistedProductEditState).length) {
+            syncPersistedProductEditState();
+        } else {
+            persistedProductEditState = {};
+            syncPersistedProductEditState();
+        }
+    };
+    const getPersistedProductEditStateValue = (key) => {
+        if (!persistedProductEditState || typeof persistedProductEditState !== 'object') return null;
+        const rawValue = persistedProductEditState[key];
+        if (typeof rawValue === 'string') {
+            const trimmed = rawValue.trim();
+            return trimmed ? trimmed : null;
+        }
+        if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
+            return String(rawValue);
+        }
+        return null;
+    };
+    const storedActiveTab = getPersistedProductEditStateValue('activeTab');
+
     let storesList = [];
     let storeNameMap = new Map();
     let fiscalByCompany = new Map([[FISCAL_GENERAL_KEY, {}]]);
@@ -416,6 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function activateProductTab(tabId) {
+        if (!tabId) return;
         Object.entries(productTabContents).forEach(([id, el]) => {
             if (!el) return;
             if (id === tabId) {
@@ -432,13 +498,23 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.toggle('border-primary', isActive);
             btn.classList.toggle('border-transparent', !isActive);
         });
+
+        updatePersistedProductEditState({ activeTab: tabId });
     }
 
     if (productTabLinks.length) {
         productTabLinks.forEach((btn) => {
             btn.addEventListener('click', () => activateProductTab(btn.dataset.tab));
         });
-        const initialTab = document.querySelector('#product-tabs .tab-link.text-primary')?.dataset.tab || productTabLinks[0]?.dataset.tab;
+        const availableTabIds = Array.from(productTabLinks)
+            .map((btn) => btn.dataset.tab)
+            .filter(Boolean);
+        let initialTab = storedActiveTab && availableTabIds.includes(storedActiveTab)
+            ? storedActiveTab
+            : document.querySelector('#product-tabs .tab-link.text-primary')?.dataset.tab;
+        if (!initialTab) {
+            initialTab = productTabLinks[0]?.dataset.tab;
+        }
         if (initialTab) activateProductTab(initialTab);
     }
 
@@ -457,6 +533,22 @@ document.addEventListener('DOMContentLoaded', () => {
     let pendingImportedProductDraft = null;
     let currentImages = [];
     let imageOrderStatusTimeoutId = null;
+
+    const storedProductId = getPersistedProductEditStateValue('productId');
+    if (!productId && storedProductId) {
+        productId = storedProductId;
+        isEditMode = true;
+        try {
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('id', productId);
+            window.history.replaceState({}, '', currentUrl.toString());
+        } catch (error) {
+            console.warn('Não foi possível atualizar a URL com o produto persistido.', error);
+        }
+    }
+    if (productId) {
+        updatePersistedProductEditState({ productId });
+    }
 
     const supplierDirectoryState = {
         items: [],
@@ -1613,6 +1705,8 @@ document.addEventListener('DOMContentLoaded', () => {
         makeFieldEditable(barcodeInput);
         hideDeleteButton();
 
+        updatePersistedProductEditState({ productId: null });
+
         if (skuInput) skuInput.value = '';
         if (nameInput) nameInput.value = '';
         if (barcodeInput) barcodeInput.value = '';
@@ -1748,6 +1842,19 @@ document.addEventListener('DOMContentLoaded', () => {
         makeFieldEditable(barcodeInput);
         setSubmitButtonIdleText();
         showDeleteButton();
+        const resolvedProductId = product?._id || product?.id;
+        if (resolvedProductId) {
+            productId = String(resolvedProductId);
+            isEditMode = true;
+            updatePersistedProductEditState({ productId });
+            try {
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('id', productId);
+                window.history.replaceState({}, '', currentUrl.toString());
+            } catch (error) {
+                console.warn('Não foi possível registrar o produto atual na URL.', error);
+            }
+        }
         pageTitle.textContent = `Editar Produto: ${product.nome}`;
         if (pageDescription) {
             pageDescription.textContent = 'Altere os dados do produto abaixo.';
