@@ -1246,6 +1246,83 @@ router.post('/:id/upload', requireAuth, authorizeRoles('admin', 'admin_master'),
 });
 
 // DELETE /api/products/:productId/images (restrito)
+router.patch(
+    '/:productId/images/order',
+    requireAuth,
+    authorizeRoles('admin', 'admin_master'),
+    async (req, res) => {
+        try {
+            const { productId } = req.params;
+            const receivedOrder = Array.isArray(req.body?.imagens) ? req.body.imagens : null;
+
+            if (!receivedOrder) {
+                return res.status(400).json({ message: 'É necessário informar a nova ordem das imagens.' });
+            }
+
+            const product = await Product.findById(productId);
+            if (!product) {
+                return res.status(404).json({ message: 'Produto não encontrado.' });
+            }
+
+            const currentImages = Array.isArray(product.imagens)
+                ? product.imagens.map((url) => (typeof url === 'string' ? url.trim() : '')).filter(Boolean)
+                : [];
+
+            if (currentImages.length === 0) {
+                return res.status(400).json({ message: 'O produto não possui imagens para reordenar.' });
+            }
+
+            const sanitizedReceived = receivedOrder
+                .map((url) => (typeof url === 'string' ? url.trim() : ''))
+                .filter(Boolean);
+
+            if (sanitizedReceived.length === 0) {
+                return res.status(400).json({ message: 'A nova ordem não contém imagens válidas.' });
+            }
+
+            const validOrder = [];
+            const seen = new Set();
+
+            for (const url of sanitizedReceived) {
+                if (seen.has(url)) continue;
+                if (currentImages.includes(url)) {
+                    validOrder.push(url);
+                    seen.add(url);
+                }
+            }
+
+            for (const url of currentImages) {
+                if (!seen.has(url)) {
+                    validOrder.push(url);
+                    seen.add(url);
+                }
+            }
+
+            if (validOrder.length === 0) {
+                return res.status(400).json({ message: 'Não foi possível aplicar a nova ordem informada.' });
+            }
+
+            product.imagens = validOrder;
+            if (validOrder.length > 0) {
+                product.imagemPrincipal = validOrder[0];
+            } else if (!product.imagemPrincipal || product.imagemPrincipal.includes('placeholder')) {
+                product.imagemPrincipal = '/image/placeholder.png';
+            }
+
+            await product.save();
+
+            res.json({
+                message: 'Ordem das imagens atualizada com sucesso.',
+                imagens: product.imagens,
+                imagemPrincipal: product.imagemPrincipal,
+            });
+        } catch (error) {
+            console.error('Erro ao atualizar a ordem das imagens:', error);
+            res.status(500).json({ message: 'Erro ao atualizar a ordem das imagens do produto.' });
+        }
+    }
+);
+
 router.delete('/:productId/images', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
         const { productId } = req.params;

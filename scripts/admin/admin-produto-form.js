@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearFormButton = document.getElementById('clear-form-button');
     const imageUploadInput = document.getElementById('imageUpload');
     const existingImagesGrid = document.getElementById('existing-images-grid');
+    const imageOrderStatus = document.getElementById('image-order-status');
     const pageTitle = document.getElementById('product-page-title');
     const pageDescription = document.getElementById('product-page-description');
     const categoryTagsContainer = document.getElementById('category-tags-container');
@@ -454,6 +455,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastSelectedProductUnit = getSelectedProductUnit();
     let duplicateCheckInProgress = false;
     let pendingImportedProductDraft = null;
+    let currentImages = [];
+    let imageOrderStatusTimeoutId = null;
 
     const supplierDirectoryState = {
         items: [],
@@ -513,6 +516,267 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return digits;
     };
+
+    const hideImageOrderStatus = () => {
+        if (!imageOrderStatus) return;
+        imageOrderStatus.classList.add('hidden');
+        imageOrderStatus.textContent = '';
+    };
+
+    const showImageOrderStatus = ({ message = '', tone = 'info', persistent = false } = {}) => {
+        if (!imageOrderStatus) return;
+        if (imageOrderStatusTimeoutId) {
+            clearTimeout(imageOrderStatusTimeoutId);
+            imageOrderStatusTimeoutId = null;
+        }
+
+        const toneClasses = {
+            info: 'text-gray-500',
+            saving: 'text-primary',
+            success: 'text-emerald-600',
+            error: 'text-red-600',
+        };
+
+        imageOrderStatus.classList.remove('hidden', 'text-gray-500', 'text-primary', 'text-emerald-600', 'text-red-600');
+        imageOrderStatus.classList.add(toneClasses[tone] || toneClasses.info);
+        imageOrderStatus.textContent = message;
+
+        if (!persistent) {
+            imageOrderStatusTimeoutId = window.setTimeout(() => {
+                imageOrderStatus?.classList.add('hidden');
+            }, 3500);
+        }
+    };
+
+    const getAbsoluteImageUrl = (imagePath = '') => {
+        if (typeof imagePath !== 'string') return '';
+        if (/^https?:\/\//i.test(imagePath)) return imagePath;
+        return `${API_CONFIG.SERVER_URL}${imagePath}`;
+    };
+
+    const renderExistingImages = () => {
+        if (!existingImagesGrid) return;
+
+        if (!Array.isArray(currentImages) || currentImages.length === 0) {
+            existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada até o momento.</p>';
+            hideImageOrderStatus();
+            return;
+        }
+
+        const allowDrag = currentImages.length > 1;
+
+        existingImagesGrid.innerHTML = currentImages
+            .map((imgUrl, index) => {
+                const safeUrl = escapeHtml(imgUrl);
+                const absoluteUrl = escapeHtml(getAbsoluteImageUrl(imgUrl));
+                const positionLabel = `#${index + 1}`;
+                return `
+                    <div class="group relative rounded-md border border-gray-200 bg-white shadow-sm transition hover:shadow-md focus-within:ring-2 focus-within:ring-primary/70" draggable="${allowDrag ? 'true' : 'false'}" data-index="${index}" data-image-url="${safeUrl}">
+                        <span class="pointer-events-none absolute left-1 top-1 z-10 rounded-full bg-black/60 px-2 py-0.5 text-xs font-semibold text-white">${positionLabel}</span>
+                        <img src="${absoluteUrl}" alt="Imagem do produto" class="h-24 w-full rounded-md object-cover" draggable="false">
+                        <div class="absolute inset-0 flex flex-col justify-between gap-2 bg-black/50 px-2 py-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                            <div class="flex items-center justify-between gap-2">
+                                <button type="button" class="reorder-image-btn move-left inline-flex h-7 w-1/2 items-center justify-center rounded bg-white/90 px-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-white" data-direction="left" data-image-url="${safeUrl}">
+                                    ←
+                                </button>
+                                <button type="button" class="reorder-image-btn move-right inline-flex h-7 w-1/2 items-center justify-center rounded bg-white/90 px-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-white" data-direction="right" data-image-url="${safeUrl}">
+                                    →
+                                </button>
+                            </div>
+                            <div class="flex justify-end">
+                                <button type="button" class="delete-image-btn rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-red-700" data-image-url="${safeUrl}">Apagar</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            })
+            .join('');
+    };
+
+    const toggleImageDragHighlight = (card, active) => {
+        if (!card) return;
+        card.classList.toggle('ring-2', active);
+        card.classList.toggle('ring-primary/70', active);
+        card.classList.toggle('ring-offset-2', active);
+    };
+
+    const clearImageDragIndicators = () => {
+        if (!existingImagesGrid) return;
+        existingImagesGrid.querySelectorAll('[data-index]').forEach((card) => {
+            card.classList.remove('ring-2', 'ring-primary/70', 'ring-offset-2', 'opacity-60');
+        });
+    };
+
+    const getCardIndexFromElement = (element) => {
+        if (!element || typeof element.closest !== 'function') return null;
+        const card = element.closest('[data-index]');
+        if (!card) return null;
+        const parsedIndex = Number(card.dataset.index);
+        return Number.isFinite(parsedIndex) ? parsedIndex : null;
+    };
+
+    const persistImageOrder = async () => {
+        if (!isEditMode || !productId) return;
+
+        showImageOrderStatus({ message: 'Salvando nova ordem...', tone: 'saving', persistent: true });
+
+        let token = null;
+        try {
+            token = JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token || null;
+        } catch (storageError) {
+            console.error('Erro ao recuperar o token para reordenar imagens:', storageError);
+        }
+
+        if (!token) {
+            const error = new Error('Sessão expirada. Faça login novamente.');
+            showImageOrderStatus({ message: error.message, tone: 'error' });
+            throw error;
+        }
+
+        const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}/images/order`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ imagens: currentImages })
+        });
+
+        let payload = null;
+        try {
+            payload = await response.json();
+        } catch (parseError) {
+            payload = null;
+        }
+
+        if (!response.ok) {
+            const errorMessage = payload?.message || 'Não foi possível atualizar a ordem das imagens.';
+            showImageOrderStatus({ message: errorMessage, tone: 'error' });
+            const error = new Error(errorMessage);
+            error.payload = payload;
+            throw error;
+        }
+
+        if (Array.isArray(payload?.imagens)) {
+            const sanitized = payload.imagens
+                .map((url) => (typeof url === 'string' ? url.trim() : ''))
+                .filter(Boolean);
+            const differs = sanitized.length === currentImages.length
+                ? sanitized.some((url, index) => url !== currentImages[index])
+                : true;
+            if (differs) {
+                currentImages = sanitized;
+                renderExistingImages();
+            }
+        }
+
+        showImageOrderStatus({ message: 'Ordem salva com sucesso.', tone: 'success' });
+    };
+
+    const moveImageToPosition = async (fromIndex, toIndex) => {
+        if (!Array.isArray(currentImages) || currentImages.length <= 1) return;
+        if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex)) return;
+
+        const clampedFrom = Math.max(0, Math.min(currentImages.length - 1, fromIndex));
+        const clampedTo = Math.max(0, Math.min(currentImages.length - 1, toIndex));
+        if (clampedFrom === clampedTo) return;
+
+        const previousOrder = currentImages.slice();
+        const [movedImage] = currentImages.splice(clampedFrom, 1);
+        currentImages.splice(clampedTo, 0, movedImage);
+        renderExistingImages();
+
+        if (!isEditMode || !productId) {
+            showImageOrderStatus({ message: 'A ordem será mantida após salvar o produto.', tone: 'info' });
+            return;
+        }
+
+        try {
+            await persistImageOrder();
+        } catch (error) {
+            currentImages = previousOrder;
+            renderExistingImages();
+            showModal({
+                title: 'Erro',
+                message: `Não foi possível atualizar a ordem das imagens: ${error.message}`,
+                confirmText: 'OK'
+            });
+            console.error('Falha ao persistir a nova ordem das imagens:', error);
+        }
+    };
+
+    const reorderImageByDirection = async (currentIndex, direction) => {
+        if (!Number.isInteger(currentIndex)) return;
+        const delta = direction === 'left' ? -1 : 1;
+        const targetIndex = currentIndex + delta;
+        if (targetIndex < 0 || targetIndex >= currentImages.length) return;
+        await moveImageToPosition(currentIndex, targetIndex);
+    };
+
+    let dragSourceIndex = null;
+
+    const handleImageDragStart = (event) => {
+        if (!existingImagesGrid || currentImages.length <= 1) return;
+        const card = event.target.closest('[data-index]');
+        if (!card || card.getAttribute('draggable') === 'false') return;
+        dragSourceIndex = getCardIndexFromElement(card);
+        if (!Number.isInteger(dragSourceIndex)) return;
+        if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', String(dragSourceIndex));
+        }
+        card.classList.add('opacity-60');
+    };
+
+    const handleImageDragOver = (event) => {
+        if (!Number.isInteger(dragSourceIndex)) return;
+        event.preventDefault();
+        const card = event.target.closest('[data-index]');
+        if (card) {
+            toggleImageDragHighlight(card, true);
+        }
+    };
+
+    const handleImageDragLeave = (event) => {
+        const card = event.target.closest('[data-index]');
+        if (card) {
+            toggleImageDragHighlight(card, false);
+        }
+    };
+
+    const handleImageDrop = async (event) => {
+        event.preventDefault();
+        const card = event.target.closest('[data-index]');
+        const targetIndex = getCardIndexFromElement(card);
+        let sourceIndex = dragSourceIndex;
+        if (!Number.isInteger(sourceIndex) && event.dataTransfer) {
+            const parsed = Number(event.dataTransfer.getData('text/plain'));
+            sourceIndex = Number.isFinite(parsed) ? parsed : null;
+        }
+
+        toggleImageDragHighlight(card, false);
+
+        if (!Number.isInteger(sourceIndex)) {
+            dragSourceIndex = null;
+            clearImageDragIndicators();
+            return;
+        }
+
+        const finalTarget = Number.isInteger(targetIndex) ? targetIndex : currentImages.length - 1;
+
+        if (sourceIndex !== finalTarget) {
+            await moveImageToPosition(sourceIndex, finalTarget);
+        }
+
+        dragSourceIndex = null;
+        clearImageDragIndicators();
+    };
+
+    const handleImageDragEnd = () => {
+        clearImageDragIndicators();
+        dragSourceIndex = null;
+    };
+
 
     const getSupplierDisplayName = (supplier) => {
         if (!supplier || typeof supplier !== 'object') return '';
@@ -1374,6 +1638,8 @@ document.addEventListener('DOMContentLoaded', () => {
         updateDepositTotalDisplay();
         lastSelectedProductUnit = getSelectedProductUnit();
 
+        currentImages = [];
+        hideImageOrderStatus();
         if (existingImagesGrid) {
             existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada até o momento.</p>';
         }
@@ -1588,21 +1854,13 @@ document.addEventListener('DOMContentLoaded', () => {
         productCategories = categoriasAtuais.map(cat => cat._id);
         renderCategoryTags(categoriasAtuais);
 
-        const imagens = Array.isArray(product.imagens) ? product.imagens : [];
-        if (existingImagesGrid) {
-            if (imagens.length > 0) {
-                existingImagesGrid.innerHTML = imagens.map(imgUrl => `
-                    <div class="relative group">
-                        <img src="${API_CONFIG.SERVER_URL}${imgUrl}" alt="Imagem do produto" class="w-full h-24 object-cover rounded-md border">
-                        <div class="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button type="button" class="delete-image-btn text-white text-xs bg-red-600 hover:bg-red-700 px-2 py-1 rounded" data-image-url="${imgUrl}">Apagar</button>
-                        </div>
-                    </div>
-                `).join('');
-            } else {
-                existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada até o momento.</p>';
-            }
-        }
+        const imagens = Array.isArray(product.imagens)
+            ? product.imagens
+                .map((url) => (typeof url === 'string' ? url.trim() : ''))
+                .filter(Boolean)
+            : [];
+        currentImages = imagens;
+        renderExistingImages();
 
         // --- Especificações ---
         const espec = product.especificacoes || {};
@@ -2253,42 +2511,73 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    existingImagesGrid.addEventListener('click', async (event) => {
-        if (event.target.classList.contains('delete-image-btn')) {
-            const button = event.target;
-            const imageUrlToDelete = button.dataset.imageUrl;
+    if (existingImagesGrid) {
+        existingImagesGrid.addEventListener('click', async (event) => {
+            const deleteButton = event.target.closest('.delete-image-btn');
+            if (deleteButton) {
+                const card = deleteButton.closest('[data-index]');
+                const imageIndex = getCardIndexFromElement(card);
+                const imageUrlToDelete = deleteButton.dataset.imageUrl;
 
-            showModal({
-                title: 'Confirmar Exclusão',
-                message: `Tem a certeza de que deseja apagar esta imagem? Esta ação não pode ser desfeita.`,
-                confirmText: 'Apagar',
-                cancelText: 'Cancelar',
-                onConfirm: async () => {
-                    try {
-                        const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
-                        const token = loggedInUser?.token;
-                        const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}/images`, {
-                            method: 'DELETE',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            },
-                            body: JSON.stringify({ imageUrl: imageUrlToDelete })
-                        });
-                        
-                        const result = await response.json();
-                        if (!response.ok) {
-                            throw new Error(result.message || 'Falha ao apagar a imagem.');
+                showModal({
+                    title: 'Confirmar Exclusão',
+                    message: 'Tem certeza de que deseja apagar esta imagem? Esta ação não pode ser desfeita.',
+                    confirmText: 'Apagar',
+                    cancelText: 'Cancelar',
+                    onConfirm: async () => {
+                        try {
+                            const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+                            const token = loggedInUser?.token;
+                            if (!token) {
+                                throw new Error('Sessão expirada. Faça login novamente.');
+                            }
+
+                            const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}/images`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                },
+                                body: JSON.stringify({ imageUrl: imageUrlToDelete })
+                            });
+
+                            const result = await response.json().catch(() => ({}));
+                            if (!response.ok) {
+                                throw new Error(result?.message || 'Falha ao apagar a imagem.');
+                            }
+
+                            showModal({ title: 'Sucesso!', message: result?.message || 'Imagem removida com sucesso.', confirmText: 'OK' });
+                            if (Number.isInteger(imageIndex)) {
+                                currentImages.splice(imageIndex, 1);
+                            } else if (imageUrlToDelete) {
+                                currentImages = currentImages.filter((url) => url !== imageUrlToDelete);
+                            }
+                            renderExistingImages();
+                        } catch (error) {
+                            showModal({ title: 'Erro', message: `Não foi possível excluir a imagem: ${error.message}`, confirmText: 'OK' });
                         }
-                        showModal({ title: 'Sucesso!', message: result.message, confirmText: 'OK' });
-                        button.closest('.relative.group').remove();
-                    } catch (error) {
-                        showModal({ title: 'Erro', message: `Não foi possível excluir a imagem: ${error.message}`, confirmText: 'Ok' });
                     }
-                }
-            });
-        }
-    });
+                });
+                return;
+            }
+
+            const reorderButton = event.target.closest('.reorder-image-btn');
+            if (reorderButton) {
+                event.preventDefault();
+                const direction = reorderButton.dataset.direction === 'left' ? 'left' : 'right';
+                const card = reorderButton.closest('[data-index]');
+                const currentIndex = getCardIndexFromElement(card);
+                if (!Number.isInteger(currentIndex)) return;
+                await reorderImageByDirection(currentIndex, direction);
+            }
+        });
+
+        existingImagesGrid.addEventListener('dragstart', handleImageDragStart);
+        existingImagesGrid.addEventListener('dragover', handleImageDragOver);
+        existingImagesGrid.addEventListener('dragleave', handleImageDragLeave);
+        existingImagesGrid.addEventListener('drop', handleImageDrop);
+        existingImagesGrid.addEventListener('dragend', handleImageDragEnd);
+    }
 
     initializePage();
 });
