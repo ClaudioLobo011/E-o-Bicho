@@ -809,8 +809,8 @@ const collectDistributedDocuments = async (
     return 'distNSU';
   })();
 
-  if (queryMode === 'distNSU' && compareNsU(currentNsU, '0') > 0) {
-    currentNsU = stepBackNsU(currentNsU);
+  if (queryMode === 'consNSU' && hasSpecificNsu) {
+    currentNsU = padNsU(nsu);
   }
 
   const resolveQueryMode = () => queryMode;
