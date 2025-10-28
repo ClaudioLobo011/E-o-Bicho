@@ -5,6 +5,7 @@
     pagination: { page: 1, limit: 20, total: 0, pages: 0 },
     products: [],
     selected: new Set(),
+    selectingAllMatches: false,
     categories: [],
     suppliers: [],
     loading: false,
@@ -164,12 +165,17 @@
     return filters;
   }
 
-  function buildQueryString(filters, page) {
+  function buildFiltersParams(filters) {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
       if (value === undefined || value === null || value === '') return;
       params.set(key, value);
     });
+    return params;
+  }
+
+  function buildQueryString(filters, page) {
+    const params = buildFiltersParams(filters);
     if (page && Number.isFinite(page)) {
       params.set('page', page);
     }
@@ -535,15 +541,15 @@
       toggleSelection(productId, target.checked);
     });
 
-    elements.selectAllCheckbox.addEventListener('change', () => {
+    elements.selectAllCheckbox.addEventListener('change', async () => {
       const shouldSelectAll = elements.selectAllCheckbox.checked;
-      state.products.forEach((product) => {
-        if (shouldSelectAll) {
-          state.selected.add(product.id);
-        } else {
-          state.selected.delete(product.id);
-        }
-      });
+      if (shouldSelectAll) {
+        await selectAllMatches();
+        return;
+      }
+
+      state.selected.clear();
+      elements.selectAllCheckbox.indeterminate = false;
       renderProductsTable();
       updateSelectionSummary();
     });
@@ -560,6 +566,55 @@
       renderProductsTable();
       updateSelectionSummary();
     });
+  }
+
+  async function selectAllMatches() {
+    if (state.selectingAllMatches) return;
+
+    if (!state.pagination.total) {
+      elements.selectAllCheckbox.checked = false;
+      elements.selectAllCheckbox.indeterminate = false;
+      alert('Nenhum produto encontrado para selecionar.');
+      return;
+    }
+
+    state.selectingAllMatches = true;
+    elements.selectAllCheckbox.disabled = true;
+    elements.selectAllCheckbox.indeterminate = true;
+
+    try {
+      const params = buildFiltersParams(state.filters || {});
+      params.set('idsOnly', 'true');
+      const response = await fetchWithAuth(`${API_CONFIG.BASE_URL}/admin/products/bulk?${params.toString()}`);
+      if (!response) {
+        throw new Error('Falha ao carregar todos os produtos selecionados.');
+      }
+      if (!response.ok) {
+        throw new Error('Não foi possível selecionar todos os produtos.');
+      }
+
+      const payload = await response.json();
+      const ids = Array.isArray(payload?.ids) ? payload.ids : [];
+
+      state.selected = new Set(ids);
+
+      if (typeof payload?.total === 'number') {
+        state.pagination.total = payload.total;
+      }
+
+      renderProductsTable();
+      elements.selectAllCheckbox.checked = ids.length > 0;
+      elements.selectAllCheckbox.indeterminate = false;
+      updateSelectionSummary();
+    } catch (error) {
+      console.error('Erro ao selecionar todos os produtos:', error);
+      alert(error.message || 'Não foi possível selecionar todos os produtos.');
+      elements.selectAllCheckbox.checked = false;
+      elements.selectAllCheckbox.indeterminate = false;
+    } finally {
+      state.selectingAllMatches = false;
+      elements.selectAllCheckbox.disabled = false;
+    }
   }
 
   function resetBulkSelections() {

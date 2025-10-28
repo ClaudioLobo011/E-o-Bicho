@@ -46,6 +46,7 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
   try {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 200);
+    const idsOnly = String(req.query.idsOnly || '').toLowerCase() === 'true';
 
     const {
       sku,
@@ -128,6 +129,12 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     const query = { ...filters };
     if (andConditions.length) {
       query.$and = andConditions;
+    }
+
+    if (idsOnly) {
+      const ids = await Product.find(query).select('_id').lean();
+      const mappedIds = ids.map((product) => product._id.toString());
+      return res.json({ ids: mappedIds, total: mappedIds.length });
     }
 
     const [products, total] = await Promise.all([
