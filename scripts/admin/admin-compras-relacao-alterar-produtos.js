@@ -9,9 +9,24 @@
     categories: [],
     suppliers: [],
     loading: false,
+    tableFilters: {
+      sku: '',
+      nome: '',
+      unidade: '',
+      custo: '',
+      markup: '',
+      venda: '',
+      stock: '',
+      fornecedor: '',
+      situacao: '',
+    },
+    tableSort: { key: '', direction: 'asc' },
   };
 
   const elements = {};
+  const tableFilterInputs = new Map();
+  const tableSortButtons = new Map();
+  const tableSortHeaders = new Map();
 
   function initElements() {
     elements.filtersForm = document.getElementById('filters-form');
@@ -92,6 +107,248 @@
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(number)}%`;
+  }
+
+  function normalizeText(value) {
+    if (value === null || value === undefined) return '';
+    try {
+      return String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    } catch (error) {
+      return String(value).toLowerCase();
+    }
+  }
+
+  function getFilterCandidates(product = {}, key) {
+    switch (key) {
+      case 'sku':
+        return [product.cod || ''];
+      case 'nome':
+        return [product.nome || ''];
+      case 'unidade':
+        return [product.unidade || ''];
+      case 'custo': {
+        const value = Number(product.custo);
+        if (Number.isFinite(value)) {
+          return [String(value), formatCurrency(value)];
+        }
+        if (product.custo !== undefined && product.custo !== null && product.custo !== '') {
+          return [String(product.custo)];
+        }
+        return [''];
+      }
+      case 'markup': {
+        const original = product.markup;
+        if (original === null || original === undefined || original === '') {
+          return [''];
+        }
+        const value = Number(original);
+        if (!Number.isFinite(value)) {
+          return [String(original)];
+        }
+        return [String(value), formatPercentage(value)];
+      }
+      case 'venda': {
+        const value = Number(product.venda);
+        if (Number.isFinite(value)) {
+          return [String(value), formatCurrency(value)];
+        }
+        if (product.venda !== undefined && product.venda !== null && product.venda !== '') {
+          return [String(product.venda)];
+        }
+        return [''];
+      }
+      case 'stock': {
+        const value = Number(product.stock);
+        if (Number.isFinite(value)) {
+          return [String(value), formatNumber(value)];
+        }
+        if (product.stock !== undefined && product.stock !== null && product.stock !== '') {
+          return [String(product.stock)];
+        }
+        return [''];
+      }
+      case 'fornecedor':
+        return [product.fornecedor || ''];
+      case 'situacao':
+        return [product.inativo ? 'Inativo' : 'Ativo'];
+      default:
+        return [product[key] || ''];
+    }
+  }
+
+  function matchesColumnFilter(product, key, filterValue) {
+    if (!key) return true;
+    const normalizedFilter = normalizeText(filterValue || '');
+    if (!normalizedFilter) return true;
+    const candidates = getFilterCandidates(product, key);
+    return candidates.some((candidate) => normalizeText(candidate).includes(normalizedFilter));
+  }
+
+  function applyColumnFilters(products) {
+    const list = Array.isArray(products) ? products : [];
+    const filters = state.tableFilters || {};
+    const activeFilters = Object.entries(filters).filter(([, value]) => typeof value === 'string' && value.trim() !== '');
+    if (!activeFilters.length) {
+      return list.slice();
+    }
+    return list.filter((product) =>
+      activeFilters.every(([key, value]) => matchesColumnFilter(product, key, value)),
+    );
+  }
+
+  function getSortValue(product, key) {
+    switch (key) {
+      case 'sku':
+        return product.cod || '';
+      case 'nome':
+        return product.nome || '';
+      case 'unidade':
+        return product.unidade || '';
+      case 'custo':
+        return Number(product.custo);
+      case 'markup':
+        return product.markup === null || product.markup === undefined ? null : Number(product.markup);
+      case 'venda':
+        return Number(product.venda);
+      case 'stock':
+        return Number(product.stock);
+      case 'fornecedor':
+        return product.fornecedor || '';
+      case 'situacao':
+        return product.inativo ? 'Inativo' : 'Ativo';
+      default:
+        return product[key];
+    }
+  }
+
+  function applyColumnSort(products) {
+    const list = Array.isArray(products) ? products.slice() : [];
+    const sort = state.tableSort || {};
+    const sortKey = sort.key || '';
+    if (!sortKey) {
+      return list;
+    }
+    const direction = sort.direction === 'desc' ? 'desc' : 'asc';
+    const multiplier = direction === 'desc' ? -1 : 1;
+    return list.sort((a, b) => {
+      const valueA = getSortValue(a, sortKey);
+      const valueB = getSortValue(b, sortKey);
+
+      const numericA = typeof valueA === 'number' ? valueA : Number.NaN;
+      const numericB = typeof valueB === 'number' ? valueB : Number.NaN;
+      const isNumericA = Number.isFinite(numericA);
+      const isNumericB = Number.isFinite(numericB);
+
+      if (isNumericA || isNumericB) {
+        const safeA = isNumericA ? numericA : Number.NEGATIVE_INFINITY;
+        const safeB = isNumericB ? numericB : Number.NEGATIVE_INFINITY;
+        if (safeA === safeB) {
+          const indexA = Number.isFinite(a?.__position) ? a.__position : 0;
+          const indexB = Number.isFinite(b?.__position) ? b.__position : 0;
+          return indexA - indexB;
+        }
+        return safeA > safeB ? multiplier : -multiplier;
+      }
+
+      const textA = normalizeText(valueA);
+      const textB = normalizeText(valueB);
+      const comparison = textA.localeCompare(textB, 'pt-BR', {
+        sensitivity: 'base',
+        numeric: true,
+      });
+      if (comparison === 0) {
+        const indexA = Number.isFinite(a?.__position) ? a.__position : 0;
+        const indexB = Number.isFinite(b?.__position) ? b.__position : 0;
+        return indexA - indexB;
+      }
+      return comparison * multiplier;
+    });
+  }
+
+  function getVisibleProducts() {
+    const filtered = applyColumnFilters(state.products);
+    return applyColumnSort(filtered);
+  }
+
+  function setTableFilter(key, value) {
+    if (!key) return;
+    const current = state.tableFilters[key] || '';
+    const nextValue = typeof value === 'string' ? value : '';
+    if (current === nextValue) {
+      return;
+    }
+    state.tableFilters[key] = nextValue;
+    renderProductsTable();
+  }
+
+  function setTableSort(key, direction) {
+    if (!key) return;
+    const nextDirection = direction === 'desc' ? 'desc' : 'asc';
+    const { key: currentKey, direction: currentDirection } = state.tableSort || {};
+    if (currentKey === key && currentDirection === nextDirection) {
+      state.tableSort = { key: '', direction: 'asc' };
+    } else {
+      state.tableSort = { key, direction: nextDirection };
+    }
+    renderProductsTable();
+  }
+
+  function updateTableSortButtons() {
+    const { key: activeKey, direction: activeDirectionRaw } = state.tableSort || {};
+    const activeDirection = activeDirectionRaw === 'desc' ? 'desc' : 'asc';
+
+    tableSortHeaders.forEach((header, headerKey) => {
+      if (!header) return;
+      if (activeKey && headerKey === activeKey) {
+        header.setAttribute('aria-sort', activeDirection === 'desc' ? 'descending' : 'ascending');
+      } else {
+        header.removeAttribute('aria-sort');
+      }
+    });
+
+    tableSortButtons.forEach((meta, button) => {
+      if (!button) return;
+      const isActive = Boolean(activeKey) && meta.key === activeKey && meta.direction === activeDirection;
+      button.classList.toggle('text-primary', isActive);
+      button.classList.toggle('border-primary/60', isActive);
+      button.classList.toggle('bg-primary/10', isActive);
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  }
+
+  function setupTableControls() {
+    document.querySelectorAll('[data-products-filter]').forEach((input) => {
+      const key = input.dataset.productsFilter;
+      if (!key) return;
+      tableFilterInputs.set(key, input);
+      const currentValue = state.tableFilters[key] || '';
+      if (input.value !== currentValue) {
+        input.value = currentValue;
+      }
+      input.addEventListener('input', (event) => {
+        setTableFilter(key, event.target.value || '');
+      });
+    });
+
+    document.querySelectorAll('[data-products-sort]').forEach((button) => {
+      const key = button.dataset.productsSort;
+      if (!key) return;
+      const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+      tableSortButtons.set(button, { key, direction });
+      const header = button.closest('[data-products-sort-header]');
+      if (header && !tableSortHeaders.has(key)) {
+        tableSortHeaders.set(key, header);
+      }
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        setTableSort(key, direction);
+      });
+    });
+
+    updateTableSortButtons();
   }
 
   function renderAppliedFilters(filters) {
@@ -261,16 +518,37 @@
     if (!elements.productsTableBody) return;
     elements.productsTableBody.innerHTML = '';
 
-    if (!state.products.length) {
+    updateTableSortButtons();
+
+    const rawProducts = Array.isArray(state.products) ? state.products : [];
+    const visibleProducts = getVisibleProducts();
+    const hasActiveColumnFilters = Object.values(state.tableFilters || {}).some(
+      (value) => typeof value === 'string' && value.trim() !== '',
+    );
+
+    if (!rawProducts.length) {
       const emptyRow = document.createElement('tr');
       emptyRow.innerHTML = '<td colspan="10" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto encontrado para os filtros informados.</td>';
       elements.productsTableBody.appendChild(emptyRow);
-      elements.selectAllCheckbox.checked = false;
-      elements.selectAllCheckbox.indeterminate = false;
+      if (elements.selectAllCheckbox) {
+        elements.selectAllCheckbox.checked = false;
+        elements.selectAllCheckbox.indeterminate = false;
+      }
       return;
     }
 
-    state.products.forEach((product) => {
+    if (!visibleProducts.length && hasActiveColumnFilters) {
+      const emptyRow = document.createElement('tr');
+      emptyRow.innerHTML = '<td colspan="10" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto corresponde aos filtros digitados na tabela.</td>';
+      elements.productsTableBody.appendChild(emptyRow);
+      if (elements.selectAllCheckbox) {
+        elements.selectAllCheckbox.checked = false;
+        elements.selectAllCheckbox.indeterminate = false;
+      }
+      return;
+    }
+
+    visibleProducts.forEach((product) => {
       const row = document.createElement('tr');
       row.className = 'hover:bg-gray-50';
       const isSelected = state.selected.has(product.id);
@@ -293,9 +571,13 @@
       elements.productsTableBody.appendChild(row);
     });
 
-    const pageSelection = state.products.filter((product) => state.selected.has(product.id)).length;
-    elements.selectAllCheckbox.checked = pageSelection === state.products.length;
-    elements.selectAllCheckbox.indeterminate = pageSelection > 0 && pageSelection < state.products.length;
+    if (elements.selectAllCheckbox) {
+      const pageSelection = visibleProducts.filter((product) => state.selected.has(product.id)).length;
+      elements.selectAllCheckbox.checked =
+        visibleProducts.length > 0 && pageSelection === visibleProducts.length;
+      elements.selectAllCheckbox.indeterminate =
+        pageSelection > 0 && pageSelection < visibleProducts.length;
+    }
   }
 
   function renderPagination() {
@@ -382,16 +664,26 @@
         throw new Error('Falha ao buscar produtos.');
       }
       const data = await response.json();
-      state.products = Array.isArray(data?.products) ? data.products : [];
+      const baseProducts = Array.isArray(data?.products) ? data.products : [];
+      const nextPage = Number(data?.pagination?.page) || page;
+      const nextLimit = (() => {
+        const parsed = Number(data?.pagination?.limit);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : state.pagination.limit;
+      })();
+      const nextTotal = Number(data?.pagination?.total) || 0;
+      const nextPages = Math.max(Number(data?.pagination?.pages) || 1, 1);
+
       state.pagination = {
-        page: Number(data?.pagination?.page) || page,
-        limit: (() => {
-          const parsed = Number(data?.pagination?.limit);
-          return Number.isFinite(parsed) && parsed > 0 ? parsed : state.pagination.limit;
-        })(),
-        total: Number(data?.pagination?.total) || 0,
-        pages: Math.max(Number(data?.pagination?.pages) || 1, 1),
+        page: nextPage,
+        limit: nextLimit,
+        total: nextTotal,
+        pages: nextPages,
       };
+
+      state.products = baseProducts.map((product, index) => ({
+        ...product,
+        __position: (nextPage - 1) * nextLimit + index,
+      }));
       state.loading = false;
       renderProductsTable();
       renderPagination();
@@ -566,8 +858,12 @@
     });
 
     elements.selectAllCurrentButton.addEventListener('click', () => {
-      const allSelected = state.products.every((product) => state.selected.has(product.id));
-      state.products.forEach((product) => {
+      const visibleProducts = getVisibleProducts();
+      if (!visibleProducts.length) {
+        return;
+      }
+      const allSelected = visibleProducts.every((product) => state.selected.has(product.id));
+      visibleProducts.forEach((product) => {
         if (allSelected) {
           state.selected.delete(product.id);
         } else {
@@ -782,6 +1078,7 @@
     setupBulkFieldToggles();
     resetBulkSelections();
     setupEventListeners();
+    setupTableControls();
     injectBulkCategoryCollector();
     attachBulkCategoryExtractor();
 

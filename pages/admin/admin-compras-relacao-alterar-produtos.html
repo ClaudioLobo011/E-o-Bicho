@@ -497,19 +497,154 @@
           <div class="rounded-lg border border-gray-200 overflow-hidden">
             <table class="min-w-full divide-y divide-gray-200 text-xs">
               <thead class="bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th scope="col" class="px-4 py-3">
+                <tr class="align-top">
+                  <th scope="col" class="px-4 py-2">
                     <input type="checkbox" id="select-all-checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
                   </th>
-                  <th scope="col" class="px-4 py-3 text-left">SKU</th>
-                  <th scope="col" class="px-4 py-3 text-left">Descrição</th>
-                  <th scope="col" class="px-4 py-3 text-left">Unidade</th>
-                  <th scope="col" class="px-4 py-3 text-left">Preço custo</th>
-                  <th scope="col" class="px-4 py-3 text-left">Markup</th>
-                  <th scope="col" class="px-4 py-3 text-left">Preço venda</th>
-                  <th scope="col" class="px-4 py-3 text-left">Estoque</th>
-                  <th scope="col" class="px-4 py-3 text-left">Fornecedor</th>
-                  <th scope="col" class="px-4 py-3 text-left">Situação</th>
+                  <th scope="col" class="px-4 py-2 text-left" data-products-sort-header="sku">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">SKU</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="sku" data-sort-direction="asc" aria-label="Ordenar crescente por SKU">
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="sku" data-sort-direction="desc" aria-label="Ordenar decrescente por SKU">
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="sku">
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-left" data-products-sort-header="nome">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Descrição</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="nome" data-sort-direction="asc" aria-label="Ordenar crescente pela descrição">
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="nome" data-sort-direction="desc" aria-label="Ordenar decrescente pela descrição">
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="nome">
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-left" data-products-sort-header="unidade">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Unidade</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="unidade" data-sort-direction="asc" aria-label="Ordenar crescente por unidade">
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="unidade" data-sort-direction="desc" aria-label="Ordenar decrescente por unidade">
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="unidade">
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-right" data-products-sort-header="custo">
+                    <div class="flex flex-col items-end gap-1">
+                      <div class="flex w-full items-center justify-end gap-1">
+                        <span class="whitespace-nowrap">Preço custo</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="custo" data-sort-direction="asc" aria-label="Ordenar crescente por preço de custo">
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="custo" data-sort-direction="desc" aria-label="Ordenar decrescente por preço de custo">
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="custo">
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-right" data-products-sort-header="markup">
+                    <div class="flex flex-col items-end gap-1">
+                      <div class="flex w-full items-center justify-end gap-1">
+                        <span class="whitespace-nowrap">Markup</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="markup" data-sort-direction="asc" aria-label="Ordenar crescente por markup">
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="markup" data-sort-direction="desc" aria-label="Ordenar decrescente por markup">
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="markup">
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-right" data-products-sort-header="venda">
+                    <div class="flex flex-col items-end gap-1">
+                      <div class="flex w-full items-center justify-end gap-1">
+                        <span class="whitespace-nowrap">Preço venda</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="venda" data-sort-direction="asc" aria-label="Ordenar crescente por preço de venda">
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="venda" data-sort-direction="desc" aria-label="Ordenar decrescente por preço de venda">
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="venda">
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-right" data-products-sort-header="stock">
+                    <div class="flex flex-col items-end gap-1">
+                      <div class="flex w-full items-center justify-end gap-1">
+                        <span class="whitespace-nowrap">Estoque</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="stock" data-sort-direction="asc" aria-label="Ordenar crescente por estoque">
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="stock" data-sort-direction="desc" aria-label="Ordenar decrescente por estoque">
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="stock">
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-left" data-products-sort-header="fornecedor">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Fornecedor</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="fornecedor" data-sort-direction="asc" aria-label="Ordenar crescente por fornecedor">
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="fornecedor" data-sort-direction="desc" aria-label="Ordenar decrescente por fornecedor">
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="fornecedor">
+                    </div>
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-left" data-products-sort-header="situacao">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Situação</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="situacao" data-sort-direction="asc" aria-label="Ordenar crescente por situação">
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="situacao" data-sort-direction="desc" aria-label="Ordenar decrescente por situação">
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="situacao">
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody id="products-table-body" class="divide-y divide-gray-100 bg-white"></tbody>
