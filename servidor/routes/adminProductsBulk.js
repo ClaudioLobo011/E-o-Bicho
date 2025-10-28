@@ -419,36 +419,33 @@ router.put('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
     return res.status(400).json({ message: 'Os identificadores dos produtos são inválidos.' });
   }
 
-  const session = await mongoose.startSession();
   const result = { updated: 0, errors: [] };
 
   try {
-    await session.withTransaction(async () => {
-      const products = await Product.find({ _id: { $in: validIds } }).session(session);
-      const foundIds = new Set(products.map((product) => product._id.toString()));
-      validIds.forEach((objectId) => {
-        const stringId = objectId.toString();
-        if (!foundIds.has(stringId)) {
-          result.errors.push({ id: stringId, message: 'Produto não encontrado.' });
-        }
-      });
-      for (const product of products) {
-        try {
-          applyUpdatesToProduct(product, updates, req.user || {});
-          await product.save({ session });
-          result.updated += 1;
-        } catch (error) {
-          result.errors.push({ id: product._id.toString(), message: error.message || 'Falha ao atualizar o produto.' });
-        }
+    const products = await Product.find({ _id: { $in: validIds } });
+    const foundIds = new Set(products.map((product) => product._id.toString()));
+
+    validIds.forEach((objectId) => {
+      const stringId = objectId.toString();
+      if (!foundIds.has(stringId)) {
+        result.errors.push({ id: stringId, message: 'Produto não encontrado.' });
       }
     });
+
+    for (const product of products) {
+      try {
+        applyUpdatesToProduct(product, updates, req.user || {});
+        await product.save();
+        result.updated += 1;
+      } catch (error) {
+        result.errors.push({ id: product._id.toString(), message: error.message || 'Falha ao atualizar o produto.' });
+      }
+    }
 
     res.json(result);
   } catch (error) {
     console.error('Erro ao aplicar alterações em massa de produtos:', error);
     res.status(500).json({ message: 'Erro ao aplicar alterações em massa.' });
-  } finally {
-    session.endSession();
   }
 });
 
