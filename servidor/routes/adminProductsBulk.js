@@ -155,6 +155,16 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
         markup = Number.isFinite(computed) ? computed : null;
       }
 
+      const imagensVinculadas = Array.isArray(product.imagens)
+        ? product.imagens
+            .map((imagem) => (typeof imagem === 'string' ? imagem.trim() : ''))
+            .filter((imagem) => imagem && imagem !== '/image/placeholder.png')
+        : [];
+      const imagemPrincipal = typeof product.imagemPrincipal === 'string' ? product.imagemPrincipal.trim() : '';
+      const temImagem =
+        imagensVinculadas.length > 0 ||
+        (imagemPrincipal && imagemPrincipal !== '/image/placeholder.png');
+
       return {
         id: product._id.toString(),
         cod: product.cod || '',
@@ -169,6 +179,7 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
           : '',
         inativo: Boolean(product.inativo),
         naoMostrarNoSite: Boolean(product.naoMostrarNoSite),
+        temImagem,
       };
     });
 

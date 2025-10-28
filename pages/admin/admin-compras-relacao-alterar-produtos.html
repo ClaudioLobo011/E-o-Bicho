@@ -549,6 +549,22 @@
                       <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="unidade">
                     </div>
                   </th>
+                  <th scope="col" class="px-4 py-2 text-left" data-products-sort-header="imagem">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="whitespace-nowrap">Imagens</span>
+                        <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="imagem" data-sort-direction="asc" aria-label="Ordenar crescente por presença de imagem">
+                            <i class="fas fa-sort-up text-[9px]"></i>
+                          </button>
+                          <button type="button" class="flex h-3 w-3 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-products-sort="imagem" data-sort-direction="desc" aria-label="Ordenar decrescente por presença de imagem">
+                            <i class="fas fa-sort-down text-[9px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-products-filter="imagem">
+                    </div>
+                  </th>
                   <th scope="col" class="px-4 py-2 text-right" data-products-sort-header="custo">
                     <div class="flex flex-col items-end gap-1">
                       <div class="flex w-full items-center justify-end gap-1">

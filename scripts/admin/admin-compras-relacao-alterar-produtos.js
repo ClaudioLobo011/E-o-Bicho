@@ -13,6 +13,7 @@
       sku: '',
       nome: '',
       unidade: '',
+      imagem: '',
       custo: '',
       markup: '',
       venda: '',
@@ -129,6 +130,8 @@
         return [product.nome || ''];
       case 'unidade':
         return [product.unidade || ''];
+      case 'imagem':
+        return [product.temImagem ? 'Sim' : 'Não'];
       case 'custo': {
         const value = Number(product.custo);
         if (Number.isFinite(value)) {
@@ -207,6 +210,8 @@
         return product.nome || '';
       case 'unidade':
         return product.unidade || '';
+      case 'imagem':
+        return product.temImagem ? 'Sim' : 'Não';
       case 'custo':
         return Number(product.custo);
       case 'markup':
@@ -528,7 +533,7 @@
 
     if (!rawProducts.length) {
       const emptyRow = document.createElement('tr');
-      emptyRow.innerHTML = '<td colspan="10" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto encontrado para os filtros informados.</td>';
+      emptyRow.innerHTML = '<td colspan="11" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto encontrado para os filtros informados.</td>';
       elements.productsTableBody.appendChild(emptyRow);
       if (elements.selectAllCheckbox) {
         elements.selectAllCheckbox.checked = false;
@@ -539,7 +544,7 @@
 
     if (!visibleProducts.length && hasActiveColumnFilters) {
       const emptyRow = document.createElement('tr');
-      emptyRow.innerHTML = '<td colspan="10" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto corresponde aos filtros digitados na tabela.</td>';
+      emptyRow.innerHTML = '<td colspan="11" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto corresponde aos filtros digitados na tabela.</td>';
       elements.productsTableBody.appendChild(emptyRow);
       if (elements.selectAllCheckbox) {
         elements.selectAllCheckbox.checked = false;
@@ -559,6 +564,7 @@
         <td class="px-4 py-3 font-semibold text-gray-700">${product.cod || '-'}</td>
         <td class="px-4 py-3 text-gray-600">${product.nome || '-'}</td>
         <td class="px-4 py-3 text-gray-600">${product.unidade || '-'}</td>
+        <td class="px-4 py-3 text-gray-600">${product.temImagem ? 'Sim' : 'Não'}</td>
         <td class="px-4 py-3 text-gray-700">${formatCurrency(product.custo)}</td>
         <td class="px-4 py-3 text-gray-700">${product.markup === null || product.markup === undefined ? '—' : formatPercentage(product.markup)}</td>
         <td class="px-4 py-3 text-gray-700">${formatCurrency(product.venda)}</td>
