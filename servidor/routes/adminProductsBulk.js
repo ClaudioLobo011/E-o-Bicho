@@ -20,6 +20,26 @@ const normalizeString = (value) => {
 
 const normalizeDigits = (value) => normalizeString(value).replace(/\D+/g, '');
 
+const normalizeImagePath = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'object') {
+    if (typeof value.path === 'string') return value.path.trim();
+    if (typeof value.url === 'string') return value.url.trim();
+  }
+  return '';
+};
+
+const isValidImagePath = (value) => {
+  const normalized = normalizeImagePath(value);
+  if (!normalized) return false;
+  const lower = normalized.toLowerCase();
+  if (lower === '/image/placeholder.png') return false;
+  if (lower.endsWith('/placeholder.png')) return false;
+  if (lower.includes('placeholder')) return false;
+  return true;
+};
+
 const parseNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
@@ -157,13 +177,35 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
 
       const imagensVinculadas = Array.isArray(product.imagens)
         ? product.imagens
-            .map((imagem) => (typeof imagem === 'string' ? imagem.trim() : ''))
-            .filter((imagem) => imagem && imagem !== '/image/placeholder.png')
+            .map((imagem) => normalizeImagePath(imagem))
+            .filter((imagem) => isValidImagePath(imagem))
         : [];
-      const imagemPrincipal = typeof product.imagemPrincipal === 'string' ? product.imagemPrincipal.trim() : '';
+      const imagemPrincipal = normalizeImagePath(product.imagemPrincipal);
+      const driveImages = Array.isArray(product.driveImages)
+        ? product.driveImages.filter((entry) => {
+            if (!entry) return false;
+            if (typeof entry === 'string') {
+              return isValidImagePath(entry);
+            }
+            if (typeof entry === 'object') {
+              if (typeof entry.fileId === 'string' && entry.fileId.trim()) {
+                return true;
+              }
+              if (typeof entry.path === 'string' && isValidImagePath(entry.path)) {
+                return true;
+              }
+              if (typeof entry.url === 'string' && isValidImagePath(entry.url)) {
+                return true;
+              }
+            }
+            return false;
+          })
+        : [];
+
       const temImagem =
         imagensVinculadas.length > 0 ||
-        (imagemPrincipal && imagemPrincipal !== '/image/placeholder.png');
+        (imagemPrincipal && isValidImagePath(imagemPrincipal)) ||
+        driveImages.length > 0;
 
       return {
         id: product._id.toString(),

@@ -688,6 +688,7 @@
 
       state.products = baseProducts.map((product, index) => ({
         ...product,
+        temImagem: Boolean(product.temImagem),
         __position: (nextPage - 1) * nextLimit + index,
       }));
       state.loading = false;
