@@ -81,6 +81,81 @@ const ensureObjectId = (value) => {
   return mongoose.Types.ObjectId.isValid(normalized) ? new mongoose.Types.ObjectId(normalized) : null;
 };
 
+const extractId = (doc) => {
+  if (!doc) return '';
+  const raw = doc._id !== undefined ? doc._id : doc.id;
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw;
+  if (raw instanceof mongoose.Types.ObjectId) return raw.toString();
+  if (typeof raw.toString === 'function') return raw.toString();
+  return String(raw);
+};
+
+const mapProductForResponse = (productDoc) => {
+  const product = productDoc && typeof productDoc === 'object' ? productDoc : {};
+
+  const saleValue = parseNumber(product.venda);
+  const costValue = parseNumber(product.custo);
+
+  let markup = null;
+  if (costValue !== null && costValue > 0 && saleValue !== null) {
+    const computed = ((saleValue - costValue) / costValue) * 100;
+    markup = Number.isFinite(computed) ? computed : null;
+  }
+
+  const imagensVinculadas = Array.isArray(product.imagens)
+    ? product.imagens
+        .map((imagem) => normalizeImagePath(imagem))
+        .filter((imagem) => isValidImagePath(imagem))
+    : [];
+
+  const imagemPrincipal = normalizeImagePath(product.imagemPrincipal);
+
+  const driveImages = Array.isArray(product.driveImages)
+    ? product.driveImages.filter((entry) => {
+        if (!entry) return false;
+        if (typeof entry === 'string') {
+          return isValidImagePath(entry);
+        }
+        if (typeof entry === 'object') {
+          if (typeof entry.fileId === 'string' && entry.fileId.trim()) {
+            return true;
+          }
+          if (typeof entry.path === 'string' && isValidImagePath(entry.path)) {
+            return true;
+          }
+          if (typeof entry.url === 'string' && isValidImagePath(entry.url)) {
+            return true;
+          }
+        }
+        return false;
+      })
+    : [];
+
+  const temImagem =
+    imagensVinculadas.length > 0 ||
+    (imagemPrincipal && isValidImagePath(imagemPrincipal)) ||
+    driveImages.length > 0;
+
+  return {
+    id: extractId(product),
+    cod: product.cod || '',
+    nome: product.nome || '',
+    unidade: product.unidade || '',
+    venda: saleValue || 0,
+    custo: costValue || 0,
+    markup,
+    stock: parseNumber(product.stock) || 0,
+    fornecedor:
+      Array.isArray(product.fornecedores) && product.fornecedores.length
+        ? product.fornecedores[0]?.fornecedor || ''
+        : '',
+    inativo: Boolean(product.inativo),
+    naoMostrarNoSite: Boolean(product.naoMostrarNoSite),
+    temImagem,
+  };
+};
+
 const hasEnabledField = (updates = {}, key) => {
   const entry = updates[key];
   return entry && typeof entry === 'object' && entry.enabled === true;
@@ -233,6 +308,39 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       query.$and = andConditions;
     }
 
+    const markupFilterRaw = columnFilters.markup;
+    const imagemFilter = normalizeBooleanFilter(columnFilters.imagem);
+    const requiresComputedFilters = Boolean(markupFilterRaw) || imagemFilter !== null;
+
+    if (idsOnly && !requiresComputedFilters) {
+      const idsDocs = await Product.find(query).select({ _id: 1 }).lean();
+      const mappedIds = idsDocs.map((product) => extractId(product)).filter(Boolean);
+      return res.json({ ids: mappedIds, total: mappedIds.length });
+    }
+
+    if (!requiresComputedFilters && !idsOnly) {
+      const [productsDocs, total] = await Promise.all([
+        Product.find(query)
+          .sort({ nome: 1, _id: 1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean(),
+        Product.countDocuments(query),
+      ]);
+
+      const mappedProducts = productsDocs.map((product) => mapProductForResponse(product));
+
+      return res.json({
+        products: mappedProducts,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: total > 0 ? Math.ceil(total / limit) : 1,
+        },
+      });
+    }
+
     const pipeline = [{ $match: query }];
 
     pipeline.push({
@@ -380,7 +488,6 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       },
     });
 
-    const markupFilterRaw = columnFilters.markup;
     if (markupFilterRaw) {
       const markupAsNumber = parseDecimalString(markupFilterRaw);
       if (markupAsNumber !== null) {
@@ -419,7 +526,6 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       }
     }
 
-    const imagemFilter = normalizeBooleanFilter(columnFilters.imagem);
     if (imagemFilter === true) {
       pipeline.push({ $match: { temImagem: true } });
     } else if (imagemFilter === false) {
@@ -427,12 +533,11 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     }
 
     if (idsOnly) {
-      const idsAggregation = Product.aggregate([
-        ...pipeline,
-        { $project: { _id: 1 } },
-      ]).option({ allowDiskUse: true });
-      const ids = await idsAggregation;
-      const mappedIds = ids.map((product) => product._id.toString());
+      const idsAggregation = await Product.aggregate(
+        [...pipeline, { $project: { _id: 1 } }],
+        { allowDiskUse: true },
+      );
+      const mappedIds = idsAggregation.map((product) => extractId(product)).filter(Boolean);
       return res.json({ ids: mappedIds, total: mappedIds.length });
     }
 
@@ -450,71 +555,14 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       },
     ];
 
-    const aggregation = await Product.aggregate(paginationPipeline).option({ allowDiskUse: true });
+    const aggregation = await Product.aggregate(paginationPipeline, { allowDiskUse: true });
     const aggregationResult = Array.isArray(aggregation) && aggregation.length ? aggregation[0] : { data: [], totalCount: [] };
     const products = Array.isArray(aggregationResult.data) ? aggregationResult.data : [];
     const total = Array.isArray(aggregationResult.totalCount) && aggregationResult.totalCount.length
       ? aggregationResult.totalCount[0].count || 0
       : 0;
 
-    const mapped = products.map((product) => {
-      const saleValue = parseNumber(product.venda);
-      const costValue = parseNumber(product.custo);
-      let markup = null;
-      if (costValue !== null && costValue > 0 && saleValue !== null) {
-        const computed = ((saleValue - costValue) / costValue) * 100;
-        markup = Number.isFinite(computed) ? computed : null;
-      }
-
-      const imagensVinculadas = Array.isArray(product.imagens)
-        ? product.imagens
-            .map((imagem) => normalizeImagePath(imagem))
-            .filter((imagem) => isValidImagePath(imagem))
-        : [];
-      const imagemPrincipal = normalizeImagePath(product.imagemPrincipal);
-      const driveImages = Array.isArray(product.driveImages)
-        ? product.driveImages.filter((entry) => {
-            if (!entry) return false;
-            if (typeof entry === 'string') {
-              return isValidImagePath(entry);
-            }
-            if (typeof entry === 'object') {
-              if (typeof entry.fileId === 'string' && entry.fileId.trim()) {
-                return true;
-              }
-              if (typeof entry.path === 'string' && isValidImagePath(entry.path)) {
-                return true;
-              }
-              if (typeof entry.url === 'string' && isValidImagePath(entry.url)) {
-                return true;
-              }
-            }
-            return false;
-          })
-        : [];
-
-      const temImagem =
-        imagensVinculadas.length > 0 ||
-        (imagemPrincipal && isValidImagePath(imagemPrincipal)) ||
-        driveImages.length > 0;
-
-      return {
-        id: product._id.toString(),
-        cod: product.cod || '',
-        nome: product.nome || '',
-        unidade: product.unidade || '',
-        venda: saleValue || 0,
-        custo: costValue || 0,
-        markup,
-        stock: parseNumber(product.stock) || 0,
-        fornecedor: Array.isArray(product.fornecedores) && product.fornecedores.length
-          ? product.fornecedores[0]?.fornecedor || ''
-          : '',
-        inativo: Boolean(product.inativo),
-        naoMostrarNoSite: Boolean(product.naoMostrarNoSite),
-        temImagem,
-      };
-    });
+    const mapped = products.map((product) => mapProductForResponse(product));
 
     res.json({
       products: mapped,
@@ -522,7 +570,7 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
         page,
         limit,
         total,
-        pages: Math.max(Math.ceil(total / limit), 1),
+        pages: total > 0 ? Math.ceil(total / limit) : 1,
       },
     });
   } catch (error) {
