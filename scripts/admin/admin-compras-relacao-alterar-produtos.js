@@ -19,6 +19,7 @@
     elements.productsTableBody = document.getElementById('products-table-body');
     elements.resultsSummary = document.getElementById('results-summary');
     elements.paginationControls = document.getElementById('pagination-controls');
+    elements.pageSizeSelect = document.getElementById('page-size-select');
     elements.selectAllCheckbox = document.getElementById('select-all-checkbox');
     elements.selectAllCurrentButton = document.getElementById('select-all-current');
     elements.selectedSummary = document.getElementById('selected-summary');
@@ -313,7 +314,11 @@
   }
 
   function updateResultsSummary() {
-    const { total, page, pages } = state.pagination;
+    if (!elements.resultsSummary) return;
+    const { total, page } = state.pagination;
+    if (elements.pageSizeSelect && elements.pageSizeSelect.value !== String(state.pagination.limit)) {
+      elements.pageSizeSelect.value = String(state.pagination.limit);
+    }
     if (!total) {
       elements.resultsSummary.textContent = 'Nenhum produto carregado.';
       return;
@@ -323,9 +328,27 @@
     elements.resultsSummary.textContent = `${formatNumber(start)}-${formatNumber(end)} de ${formatNumber(total)} produtos.`;
   }
 
+  function handlePageSizeChange(event) {
+    const value = parseInt(event.target.value, 10);
+    if (!Number.isFinite(value) || value <= 0) {
+      event.target.value = String(state.pagination.limit);
+      return;
+    }
+    if (state.pagination.limit === value) {
+      return;
+    }
+    state.pagination.limit = value;
+    state.pagination.page = 1;
+    fetchProducts(1);
+  }
+
   async function fetchProducts(page = 1) {
     state.loading = true;
     updateBulkButtonsState();
+    if (elements.pageSizeSelect) {
+      elements.pageSizeSelect.disabled = true;
+    }
+    renderPagination();
     const filters = collectFilters();
     state.filters = filters;
     renderAppliedFilters(filters);
@@ -344,11 +367,15 @@
       const data = await response.json();
       state.products = Array.isArray(data?.products) ? data.products : [];
       state.pagination = {
-        page: data?.pagination?.page || page,
-        limit: data?.pagination?.limit || state.pagination.limit,
-        total: data?.pagination?.total || 0,
-        pages: data?.pagination?.pages || 1,
+        page: Number(data?.pagination?.page) || page,
+        limit: (() => {
+          const parsed = Number(data?.pagination?.limit);
+          return Number.isFinite(parsed) && parsed > 0 ? parsed : state.pagination.limit;
+        })(),
+        total: Number(data?.pagination?.total) || 0,
+        pages: Math.max(Number(data?.pagination?.pages) || 1, 1),
       };
+      state.loading = false;
       renderProductsTable();
       renderPagination();
       updateResultsSummary();
@@ -357,6 +384,11 @@
       alert('Não foi possível carregar os produtos. Tente novamente mais tarde.');
     } finally {
       state.loading = false;
+      if (elements.pageSizeSelect) {
+        elements.pageSizeSelect.disabled = state.loading;
+      }
+      renderPagination();
+      updateResultsSummary();
       updateBulkButtonsState();
     }
   }
@@ -636,6 +668,7 @@
     elements.clearFiltersButton.addEventListener('click', clearFilters);
     elements.confirmBulkUpdateButton.addEventListener('click', applyBulkUpdates);
     elements.applyMassFromHeaderButton.addEventListener('click', applyBulkUpdates);
+    elements.pageSizeSelect?.addEventListener('change', handlePageSizeChange);
 
     handleTableEvents();
   }

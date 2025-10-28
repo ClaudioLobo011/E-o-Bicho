@@ -508,7 +508,18 @@
           </div>
 
           <div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between text-[11px] text-gray-500">
-            <p id="results-summary">Nenhum produto carregado.</p>
+            <div class="flex flex-wrap items-center gap-2.5">
+              <p id="results-summary" class="text-gray-600">Nenhum produto carregado.</p>
+              <label for="page-size-select" class="flex items-center gap-1.5 text-gray-500">
+                <span class="uppercase tracking-wide font-semibold">Itens por página</span>
+                <select id="page-size-select" class="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                  <option value="20" selected>20</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                </select>
+              </label>
+            </div>
             <div class="flex items-center gap-2" id="pagination-controls"></div>
           </div>
         </section>

@@ -45,7 +45,7 @@ const getFieldValue = (updates = {}, key) => {
 router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_master'), async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 200);
 
     const {
       sku,
