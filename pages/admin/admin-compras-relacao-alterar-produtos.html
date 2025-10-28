@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Relação para Alterar Produtos - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="md:col-span-4 space-y-6">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div class="space-y-2">
+            <div class="flex items-center gap-2 text-sm text-gray-500">
+              <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                <i class="fas fa-shopping-basket"></i>
+                Compras
+              </span>
+              <i class="fas fa-angle-right text-xs"></i>
+              <span class="font-medium text-gray-600">Estoque</span>
+              <i class="fas fa-angle-right text-xs"></i>
+              <span class="font-semibold text-gray-800">Relação para alterar produtos</span>
+            </div>
+            <div>
+              <h1 class="text-2xl font-bold text-gray-800">Relação para alterar produtos</h1>
+              <p class="text-sm text-gray-600">Centralize ajustes de preço, disponibilidade e parâmetros fiscais dos produtos com segurança e rastreabilidade.</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-file-import"></i>
+              Importar planilha
+            </button>
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+              <i class="fas fa-save"></i>
+              Aplicar alterações
+            </button>
+          </div>
+        </header>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Filtros avançados</h2>
+              <p class="text-sm text-gray-600">Combine filtros para localizar os produtos que precisam de atualização em massa.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+                <i class="fas fa-rotate"></i>
+                Limpar filtros
+              </button>
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-primary px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10 transition">
+                <i class="fas fa-magnifying-glass"></i>
+                Buscar produtos
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-6 gap-4">
+            <div class="lg:col-span-2">
+              <label for="filter-deposito" class="block text-sm font-medium text-gray-700 mb-1">Depósito</label>
+              <select id="filter-deposito" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todos</option>
+                <option>CD Fortaleza</option>
+                <option>Loja Aldeota</option>
+                <option>Clínica Vet Iguatemi</option>
+              </select>
+            </div>
+            <div class="lg:col-span-2">
+              <label for="filter-departamento" class="block text-sm font-medium text-gray-700 mb-1">Departamento</label>
+              <select id="filter-departamento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todos</option>
+                <option>Pet Shop</option>
+                <option>Veterinária</option>
+                <option>Serviços</option>
+              </select>
+            </div>
+            <div class="lg:col-span-2">
+              <label for="filter-categoria" class="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+              <select id="filter-categoria" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todas</option>
+                <option>Rações</option>
+                <option>Brinquedos</option>
+                <option>Higiene e beleza</option>
+              </select>
+            </div>
+            <div class="lg:col-span-2">
+              <label for="filter-fornecedor" class="block text-sm font-medium text-gray-700 mb-1">Fornecedor</label>
+              <select id="filter-fornecedor" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todos</option>
+                <option>Royal Canin</option>
+                <option>PremierPet</option>
+                <option>Purina</option>
+              </select>
+            </div>
+            <div>
+              <label for="filter-status" class="block text-sm font-medium text-gray-700 mb-1">Status comercial</label>
+              <select id="filter-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todos</option>
+                <option>Disponível</option>
+                <option>Indisponível</option>
+                <option>Em pré-venda</option>
+              </select>
+            </div>
+            <div>
+              <label for="filter-preco" class="block text-sm font-medium text-gray-700 mb-1">Faixa de preço</label>
+              <div class="flex items-center gap-2">
+                <input type="number" id="filter-preco" placeholder="Mín." class="w-1/2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <input type="number" placeholder="Máx." class="w-1/2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+            </div>
+            <div>
+              <label for="filter-data" class="block text-sm font-medium text-gray-700 mb-1">Última alteração</label>
+              <input type="date" id="filter-data" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div>
+              <label for="filter-tags" class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+              <input type="text" id="filter-tags" placeholder="Ex.: petiscos, premium" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            </div>
+            <div class="lg:col-span-2">
+              <label for="filter-curva" class="block text-sm font-medium text-gray-700 mb-1">Curva ABC</label>
+              <div class="flex items-center gap-3">
+                <label class="inline-flex items-center gap-2 text-sm text-gray-600">
+                  <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                  Curva A
+                </label>
+                <label class="inline-flex items-center gap-2 text-sm text-gray-600">
+                  <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                  Curva B
+                </label>
+                <label class="inline-flex items-center gap-2 text-sm text-gray-600">
+                  <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                  Curva C
+                </label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Produtos localizados</h2>
+              <p class="text-sm text-gray-600">Selecione itens para aplicar alterações em lote. Informações críticas permanecem disponíveis para conferência.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+                <i class="fas fa-file-export"></i>
+                Exportar CSV
+              </button>
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+                <i class="fas fa-bars-progress"></i>
+                Salvar seleção
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-3 py-3 text-left">
+                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                  </th>
+                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Produto</th>
+                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Categoria</th>
+                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Depósito</th>
+                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Preço venda</th>
+                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Estoque</th>
+                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Status</th>
+                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Última atualização</th>
+                  <th class="px-3 py-3 text-right font-semibold text-gray-700">Ações</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr>
+                  <td class="px-3 py-3">
+                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                  </td>
+                  <td class="px-3 py-3">
+                    <div class="font-medium text-gray-800">Ração Premium Cães Adultos 10kg</div>
+                    <div class="text-xs text-gray-500">EAN 7891234567890 · SKU RAC-001</div>
+                  </td>
+                  <td class="px-3 py-3 text-gray-600">Rações</td>
+                  <td class="px-3 py-3 text-gray-600">CD Fortaleza</td>
+                  <td class="px-3 py-3 text-gray-800 font-semibold">R$ 249,90</td>
+                  <td class="px-3 py-3 text-gray-600">82 un.</td>
+                  <td class="px-3 py-3">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                      <i class="fas fa-circle-check"></i>
+                      Disponível
+                    </span>
+                  </td>
+                  <td class="px-3 py-3 text-gray-500">Atualizado há 2 dias</td>
+                  <td class="px-3 py-3 text-right">
+                    <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+                      <i class="fas fa-pen"></i>
+                      Editar
+                    </button>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-3">
+                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                  </td>
+                  <td class="px-3 py-3">
+                    <div class="font-medium text-gray-800">Areia Sanitária Super Absorvente 4kg</div>
+                    <div class="text-xs text-gray-500">EAN 7899876543210 · SKU ARE-214</div>
+                  </td>
+                  <td class="px-3 py-3 text-gray-600">Higiene e beleza</td>
+                  <td class="px-3 py-3 text-gray-600">Loja Aldeota</td>
+                  <td class="px-3 py-3 text-gray-800 font-semibold">R$ 46,90</td>
+                  <td class="px-3 py-3 text-gray-600">34 un.</td>
+                  <td class="px-3 py-3">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                      <i class="fas fa-hourglass-half"></i>
+                      Em pré-venda
+                    </span>
+                  </td>
+                  <td class="px-3 py-3 text-gray-500">Atualizado há 5 dias</td>
+                  <td class="px-3 py-3 text-right">
+                    <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+                      <i class="fas fa-pen"></i>
+                      Editar
+                    </button>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="px-3 py-3">
+                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                  </td>
+                  <td class="px-3 py-3">
+                    <div class="font-medium text-gray-800">Antipulgas Spot-On Gatos até 4kg</div>
+                    <div class="text-xs text-gray-500">EAN 7893216549870 · SKU MED-045</div>
+                  </td>
+                  <td class="px-3 py-3 text-gray-600">Medicamentos</td>
+                  <td class="px-3 py-3 text-gray-600">CD Fortaleza</td>
+                  <td class="px-3 py-3 text-gray-800 font-semibold">R$ 78,50</td>
+                  <td class="px-3 py-3 text-gray-600">12 un.</td>
+                  <td class="px-3 py-3">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">
+                      <i class="fas fa-circle-xmark"></i>
+                      Indisponível
+                    </span>
+                  </td>
+                  <td class="px-3 py-3 text-gray-500">Atualizado há 12 dias</td>
+                  <td class="px-3 py-3 text-right">
+                    <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+                      <i class="fas fa-pen"></i>
+                      Editar
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600">
+            <span>3 produtos selecionados de um total de 128 resultados.</span>
+            <div class="flex items-center gap-2">
+              <button type="button" class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">Anterior</button>
+              <span class="font-medium text-gray-800">Página 1 de 13</span>
+              <button type="button" class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">Próxima</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
+          <div class="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Painel de alterações em massa</h2>
+              <p class="text-sm text-gray-600">Defina os parâmetros que serão aplicados aos produtos selecionados. Campos não preenchidos permanecerão inalterados.</p>
+            </div>
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-eye"></i>
+              Pré-visualizar mudanças
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div class="lg:col-span-1 space-y-4">
+              <div>
+                <label for="mass-price" class="block text-sm font-medium text-gray-700 mb-1">Ajuste percentual de preço (%)</label>
+                <input type="number" id="mass-price" placeholder="Ex.: 5 para aumentar, -5 para reduzir" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <p class="mt-1 text-xs text-gray-500">Aplica a variação sobre o preço de venda atual.</p>
+              </div>
+              <div>
+                <label for="mass-price-fixed" class="block text-sm font-medium text-gray-700 mb-1">Preço fixo</label>
+                <input type="number" id="mass-price-fixed" placeholder="Ex.: 199,90" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <p class="mt-1 text-xs text-gray-500">Sobrescreve o preço de venda com o valor informado.</p>
+              </div>
+              <div>
+                <label for="mass-status" class="block text-sm font-medium text-gray-700 mb-1">Status comercial</label>
+                <select id="mass-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Manter</option>
+                  <option>Disponível</option>
+                  <option>Indisponível</option>
+                  <option>Em pré-venda</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="lg:col-span-1 space-y-4">
+              <div>
+                <label for="mass-deposito" class="block text-sm font-medium text-gray-700 mb-1">Redistribuir para depósito</label>
+                <select id="mass-deposito" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Não alterar</option>
+                  <option>CD Fortaleza</option>
+                  <option>Loja Aldeota</option>
+                  <option>Clínica Vet Iguatemi</option>
+                </select>
+              </div>
+              <div>
+                <label for="mass-curva" class="block text-sm font-medium text-gray-700 mb-1">Curva ABC</label>
+                <select id="mass-curva" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Não alterar</option>
+                  <option>Curva A</option>
+                  <option>Curva B</option>
+                  <option>Curva C</option>
+                </select>
+              </div>
+              <div>
+                <label for="mass-tags" class="block text-sm font-medium text-gray-700 mb-1">Adicionar tags</label>
+                <input type="text" id="mass-tags" placeholder="Ex.: black friday, lançamento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <p class="mt-1 text-xs text-gray-500">As tags informadas serão somadas às existentes.</p>
+              </div>
+            </div>
+
+            <div class="lg:col-span-1 space-y-4">
+              <div>
+                <label for="mass-fiscal" class="block text-sm font-medium text-gray-700 mb-1">Regime fiscal</label>
+                <select id="mass-fiscal" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Manter</option>
+                  <option>Tributado integral</option>
+                  <option>Isento</option>
+                  <option>Substituição tributária</option>
+                </select>
+              </div>
+              <div>
+                <label for="mass-validade" class="block text-sm font-medium text-gray-700 mb-1">Atualizar validade (dias)</label>
+                <input type="number" id="mass-validade" placeholder="Ex.: 180" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <p class="mt-1 text-xs text-gray-500">Utilizado para medicamentos e perecíveis que exigem controle.</p>
+              </div>
+              <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                <div class="flex items-start gap-2">
+                  <i class="fas fa-triangle-exclamation mt-0.5"></i>
+                  <p>Revise atentamente antes de aplicar. Todas as alterações ficam registradas no log de auditoria com usuário, data e motivo.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Histórico recente de alterações</h2>
+              <p class="text-sm text-gray-600">Acompanhe as últimas movimentações e valide se os ajustes foram concluídos corretamente.</p>
+            </div>
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-clock-rotate-left"></i>
+              Ver log completo
+            </button>
+          </div>
+
+          <div class="mt-4 space-y-3">
+            <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+              <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary"><i class="fas fa-user"></i></span>
+                  <div>
+                    <p class="font-semibold text-gray-800">Amanda Ribeiro</p>
+                    <p>Aplicou reajuste de +5% para 42 produtos da Curva A.</p>
+                  </div>
+                </div>
+                <div class="text-xs text-gray-500">Hoje às 10h14 · Origem: CD Fortaleza</div>
+              </div>
+            </div>
+            <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+              <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary"><i class="fas fa-user"></i></span>
+                  <div>
+                    <p class="font-semibold text-gray-800">João Paulo</p>
+                    <p>Alterou status para indisponível em 12 produtos por falta de estoque.</p>
+                  </div>
+                </div>
+                <div class="text-xs text-gray-500">Ontem às 18h22 · Origem: Loja Aldeota</div>
+              </div>
+            </div>
+            <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+              <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary"><i class="fas fa-user"></i></span>
+                  <div>
+                    <p class="font-semibold text-gray-800">Sistema</p>
+                    <p>Atualizou validade de medicamentos conforme planilha importada.</p>
+                  </div>
+                </div>
+                <div class="text-xs text-gray-500">14/03/2024 às 09h05 · Importação automatizada</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+</body>
+</html>
