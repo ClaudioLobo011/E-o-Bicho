@@ -43,431 +43,433 @@
           </div>
         </header>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3" aria-labelledby="filtros-title">
-          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <h2 id="filtros-title" class="text-base font-semibold text-gray-800">Filtros</h2>
-              <p class="text-xs text-gray-600">Use os mesmos campos do cadastro de produto para refinar o resultado antes de aplicar alterações.</p>
-            </div>
-            <div class="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
-              <button type="button" id="clear-filters" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 transition">
-                <i class="fas fa-rotate"></i>
-                Limpar filtros
-              </button>
-              <button type="submit" form="filters-form" class="inline-flex items-center gap-2 rounded-lg border border-primary px-2.5 py-1.5 text-primary hover:bg-primary/10 transition">
-                <i class="fas fa-magnifying-glass"></i>
-                Buscar produtos
-              </button>
-            </div>
-          </div>
-
-          <div class="border border-dashed border-gray-200 rounded-lg bg-gray-50/60 p-3 space-y-2">
-            <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Filtros aplicados</p>
-            <div id="applied-filters" class="flex flex-wrap gap-2 text-xs text-gray-600"></div>
-          </div>
-
-          <form id="filters-form" class="space-y-5">
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
-              <div class="lg:col-span-3">
-                <label for="filter-sku" class="block text-xs font-semibold text-gray-700">Cod. Interno (SKU)</label>
-                <input type="text" id="filter-sku" name="sku" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 12345">
+        <div class="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
+          <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3" aria-labelledby="filtros-title">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 id="filtros-title" class="text-base font-semibold text-gray-800">Filtros</h2>
+                <p class="text-xs text-gray-600">Use os mesmos campos do cadastro de produto para refinar o resultado antes de aplicar alterações.</p>
               </div>
-              <div class="lg:col-span-5">
-                <label for="filter-name" class="block text-xs font-semibold text-gray-700">Descrição</label>
-                <input type="text" id="filter-name" name="nome" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe o nome do produto">
-              </div>
-              <div class="lg:col-span-4">
-                <label for="filter-barcode" class="block text-xs font-semibold text-gray-700">Código de Barras</label>
-                <input type="text" id="filter-barcode" name="barcode" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="EAN principal ou complementar">
-              </div>
-              <div class="lg:col-span-3">
-                <label for="filter-unidade" class="block text-xs font-semibold text-gray-700">Unidade</label>
-                <select id="filter-unidade" name="unidade" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Todas</option>
-                  <option value="UN">Unidade (UN)</option>
-                  <option value="CX">Caixa (CX)</option>
-                  <option value="FD">Fardo (FD)</option>
-                  <option value="DZ">Dúzia (DZ)</option>
-                  <option value="KG">Quilograma (KG)</option>
-                  <option value="G">Grama (G)</option>
-                  <option value="MG">Miligrama (MG)</option>
-                  <option value="L">Litro (L)</option>
-                  <option value="ML">Mililitro (ML)</option>
-                  <option value="PCT">Pacote (PCT)</option>
-                  <option value="SC">Saco (SC)</option>
-                </select>
-              </div>
-              <div class="lg:col-span-3">
-                <label for="filter-referencia" class="block text-xs font-semibold text-gray-700">Referência do fabricante</label>
-                <input type="text" id="filter-referencia" name="referencia" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe a referência">
-              </div>
-              <div class="lg:col-span-3">
-                <label for="filter-tipo" class="block text-xs font-semibold text-gray-700">Tipo de Produto</label>
-                <select id="filter-tipo" name="tipoProduto" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Todos</option>
-                  <option value="Revenda">Revenda</option>
-                  <option value="Consumo Interno">Consumo Interno</option>
-                  <option value="Bonificação">Bonificação</option>
-                </select>
-              </div>
-              <div class="lg:col-span-3">
-                <label for="filter-marca" class="block text-xs font-semibold text-gray-700">Marca</label>
-                <input type="text" id="filter-marca" name="marca" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: PremierPet">
-              </div>
-              <div class="lg:col-span-3">
-                <label for="filter-categoria" class="block text-xs font-semibold text-gray-700">Categoria</label>
-                <select id="filter-categoria" name="categoria" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Todas</option>
-                </select>
-              </div>
-              <div class="lg:col-span-3">
-                <label for="filter-fornecedor" class="block text-xs font-semibold text-gray-700">Fornecedor</label>
-                <select id="filter-fornecedor" name="fornecedor" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Todos</option>
-                </select>
-              </div>
-              <div class="lg:col-span-3">
-                <label for="filter-situacao" class="block text-xs font-semibold text-gray-700">Situação</label>
-                <select id="filter-situacao" name="situacao" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Todas</option>
-                  <option value="ativo">Ativo</option>
-                  <option value="inativo">Inativo</option>
-                </select>
-              </div>
-              <div class="lg:col-span-3">
-                <label class="block text-xs font-semibold text-gray-700">Saldo de estoque</label>
-                <div class="mt-1 flex gap-2">
-                  <input type="number" name="estoqueMin" class="w-1/2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Mín.">
-                  <input type="number" name="estoqueMax" class="w-1/2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Máx.">
-                </div>
+              <div class="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                <button type="button" id="clear-filters" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 transition">
+                  <i class="fas fa-rotate"></i>
+                  Limpar filtros
+                </button>
+                <button type="submit" form="filters-form" class="inline-flex items-center gap-2 rounded-lg border border-primary px-2.5 py-1.5 text-primary hover:bg-primary/10 transition">
+                  <i class="fas fa-magnifying-glass"></i>
+                  Buscar produtos
+                </button>
               </div>
             </div>
-          </form>
-        </section>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-4" aria-labelledby="mass-update-title">
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div class="space-y-1">
-              <h2 id="mass-update-title" class="text-base font-semibold text-gray-800">Alterações em massa</h2>
-              <p class="text-xs text-gray-600">Marque os campos que deseja alterar. Somente os itens selecionados serão enviados ao banco de dados.</p>
+            <div class="border border-dashed border-gray-200 rounded-lg bg-gray-50/60 p-3 space-y-2">
+              <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Filtros aplicados</p>
+              <div id="applied-filters" class="flex flex-wrap gap-2 text-xs text-gray-600"></div>
             </div>
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-              <span id="selected-summary" class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
-                <i class="fas fa-boxes-stacked"></i>
-                Nenhum produto selecionado
-              </span>
-              <button type="button" id="confirm-bulk-update" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-60 disabled:cursor-not-allowed">
-                <i class="fas fa-check"></i>
-                Confirmar alterações
-              </button>
-            </div>
-          </div>
 
-          <form id="bulk-form" class="grid grid-cols-1 gap-2.5 xl:grid-cols-2" autocomplete="off">
-            <details class="group rounded-lg border border-gray-200 p-2.5" open>
-              <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
-                <span class="inline-flex items-center gap-2"><i class="fas fa-tags text-primary"></i> Preços</span>
-                <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
-              </summary>
-              <div class="mt-2.5 space-y-2.5 text-xs text-gray-700">
-                <div data-bulk-field="custo">
-                  <label class="flex items-center gap-2 font-medium">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Preço de custo (R$)
-                  </label>
-                  <input type="number" step="0.01" data-bulk-input data-type="number" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Informe o novo custo" disabled>
+            <form id="filters-form" class="space-y-5">
+              <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                <div class="lg:col-span-3">
+                  <label for="filter-sku" class="block text-xs font-semibold text-gray-700">Cod. Interno (SKU)</label>
+                  <input type="text" id="filter-sku" name="sku" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 12345">
                 </div>
-                <div data-bulk-field="markup">
-                  <label class="flex items-center gap-2 font-medium">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Markup (%)
-                  </label>
-                  <input type="number" step="0.01" data-bulk-input data-type="number" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 45,00" disabled>
-                  <p class="mt-1 text-[11px] text-gray-500">Se o custo também for alterado, o preço de venda calculado usará o novo valor.</p>
+                <div class="lg:col-span-5">
+                  <label for="filter-name" class="block text-xs font-semibold text-gray-700">Descrição</label>
+                  <input type="text" id="filter-name" name="nome" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe o nome do produto">
                 </div>
-                <div data-bulk-field="venda">
-                  <label class="flex items-center gap-2 font-medium">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Preço de venda (R$)
-                  </label>
-                  <input type="number" step="0.01" data-bulk-input data-type="number" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Informe o novo preço" disabled>
+                <div class="lg:col-span-4">
+                  <label for="filter-barcode" class="block text-xs font-semibold text-gray-700">Código de Barras</label>
+                  <input type="text" id="filter-barcode" name="barcode" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="EAN principal ou complementar">
                 </div>
-              </div>
-            </details>
-
-            <details class="group rounded-lg border border-gray-200 p-2.5">
-              <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
-                <span class="inline-flex items-center gap-2"><i class="fas fa-sliders-h text-primary"></i> Configurações</span>
-                <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
-              </summary>
-              <div class="mt-2.5 space-y-2.5 text-xs text-gray-700">
-                <div data-bulk-field="marca">
-                  <label class="flex items-center gap-2 font-medium">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Marca
-                  </label>
-                  <input type="text" data-bulk-input data-type="text" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Informe a marca" disabled>
-                </div>
-                <div data-bulk-field="especificacoes.apresentacao">
-                  <label class="flex items-center gap-2 font-medium">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Apresentação
-                  </label>
-                  <input type="text" data-bulk-input data-type="text" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 500g, unidade, kit" disabled>
-                </div>
-                <div data-bulk-field="inativo">
-                  <label class="flex items-center gap-2 font-medium">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Situação
-                  </label>
-                  <select data-bulk-input data-type="boolean" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
-                    <option value="false">Ativo</option>
-                    <option value="true">Inativo</option>
+                <div class="lg:col-span-3">
+                  <label for="filter-unidade" class="block text-xs font-semibold text-gray-700">Unidade</label>
+                  <select id="filter-unidade" name="unidade" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Todas</option>
+                    <option value="UN">Unidade (UN)</option>
+                    <option value="CX">Caixa (CX)</option>
+                    <option value="FD">Fardo (FD)</option>
+                    <option value="DZ">Dúzia (DZ)</option>
+                    <option value="KG">Quilograma (KG)</option>
+                    <option value="G">Grama (G)</option>
+                    <option value="MG">Miligrama (MG)</option>
+                    <option value="L">Litro (L)</option>
+                    <option value="ML">Mililitro (ML)</option>
+                    <option value="PCT">Pacote (PCT)</option>
+                    <option value="SC">Saco (SC)</option>
                   </select>
                 </div>
-              </div>
-            </details>
-
-            <details class="group rounded-lg border border-gray-200 p-2.5">
-              <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
-                <span class="inline-flex items-center gap-2"><i class="fas fa-info-circle text-primary"></i> Informações gerais</span>
-                <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
-              </summary>
-              <div class="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-gray-700">
-                <div data-bulk-field="peso">
-                  <label class="flex items-center gap-2 font-medium">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Peso (Kg)
-                  </label>
-                  <input type="number" step="0.001" data-bulk-input data-type="number" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 0,450" disabled>
+                <div class="lg:col-span-3">
+                  <label for="filter-referencia" class="block text-xs font-semibold text-gray-700">Referência do fabricante</label>
+                  <input type="text" id="filter-referencia" name="referencia" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe a referência">
                 </div>
-                <div data-bulk-field="iat">
-                  <label class="flex items-center gap-2 font-medium">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    IAT
-                  </label>
-                  <select data-bulk-input data-type="text" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
-                    <option value="">Selecione...</option>
-                    <option value="Arredondamento">Arredondamento</option>
-                    <option value="Truncamento">Truncamento</option>
-                  </select>
-                </div>
-                <div data-bulk-field="tipoProduto">
-                  <label class="flex items-center gap-2 font-medium">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Tipo de produto
-                  </label>
-                  <select data-bulk-input data-type="text" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
-                    <option value="">Selecione...</option>
+                <div class="lg:col-span-3">
+                  <label for="filter-tipo" class="block text-xs font-semibold text-gray-700">Tipo de Produto</label>
+                  <select id="filter-tipo" name="tipoProduto" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Todos</option>
                     <option value="Revenda">Revenda</option>
                     <option value="Consumo Interno">Consumo Interno</option>
                     <option value="Bonificação">Bonificação</option>
                   </select>
                 </div>
-                <div data-bulk-field="stock">
+                <div class="lg:col-span-3">
+                  <label for="filter-marca" class="block text-xs font-semibold text-gray-700">Marca</label>
+                  <input type="text" id="filter-marca" name="marca" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: PremierPet">
+                </div>
+                <div class="lg:col-span-3">
+                  <label for="filter-categoria" class="block text-xs font-semibold text-gray-700">Categoria</label>
+                  <select id="filter-categoria" name="categoria" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Todas</option>
+                  </select>
+                </div>
+                <div class="lg:col-span-3">
+                  <label for="filter-fornecedor" class="block text-xs font-semibold text-gray-700">Fornecedor</label>
+                  <select id="filter-fornecedor" name="fornecedor" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Todos</option>
+                  </select>
+                </div>
+                <div class="lg:col-span-3">
+                  <label for="filter-situacao" class="block text-xs font-semibold text-gray-700">Situação</label>
+                  <select id="filter-situacao" name="situacao" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    <option value="">Todas</option>
+                    <option value="ativo">Ativo</option>
+                    <option value="inativo">Inativo</option>
+                  </select>
+                </div>
+                <div class="lg:col-span-3">
+                  <label class="block text-xs font-semibold text-gray-700">Saldo de estoque</label>
+                  <div class="mt-1 flex gap-2">
+                    <input type="number" name="estoqueMin" class="w-1/2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Mín.">
+                    <input type="number" name="estoqueMax" class="w-1/2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Máx.">
+                  </div>
+                </div>
+              </div>
+            </form>
+          </section>
+
+          <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-4 flex flex-col" aria-labelledby="mass-update-title">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div class="space-y-1">
+                <h2 id="mass-update-title" class="text-base font-semibold text-gray-800">Alterações em massa</h2>
+                <p class="text-xs text-gray-600">Marque os campos que deseja alterar. Somente os itens selecionados serão enviados ao banco de dados.</p>
+              </div>
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <span id="selected-summary" class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
+                  <i class="fas fa-boxes-stacked"></i>
+                  Nenhum produto selecionado
+                </span>
+                <button type="button" id="confirm-bulk-update" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-60 disabled:cursor-not-allowed">
+                  <i class="fas fa-check"></i>
+                  Confirmar alterações
+                </button>
+              </div>
+            </div>
+
+            <form id="bulk-form" class="grid grid-cols-1 gap-2.5 xl:grid-cols-2" autocomplete="off">
+              <details class="group rounded-lg border border-gray-200 p-2.5" open>
+                <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
+                  <span class="inline-flex items-center gap-2"><i class="fas fa-tags text-primary"></i> Preços</span>
+                  <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
+                </summary>
+                <div class="mt-2.5 space-y-2.5 text-xs text-gray-700">
+                  <div data-bulk-field="custo">
+                    <label class="flex items-center gap-2 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Preço de custo (R$)
+                    </label>
+                    <input type="number" step="0.01" data-bulk-input data-type="number" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Informe o novo custo" disabled>
+                  </div>
+                  <div data-bulk-field="markup">
+                    <label class="flex items-center gap-2 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Markup (%)
+                    </label>
+                    <input type="number" step="0.01" data-bulk-input data-type="number" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 45,00" disabled>
+                    <p class="mt-1 text-[11px] text-gray-500">Se o custo também for alterado, o preço de venda calculado usará o novo valor.</p>
+                  </div>
+                  <div data-bulk-field="venda">
+                    <label class="flex items-center gap-2 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Preço de venda (R$)
+                    </label>
+                    <input type="number" step="0.01" data-bulk-input data-type="number" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Informe o novo preço" disabled>
+                  </div>
+                </div>
+              </details>
+
+              <details class="group rounded-lg border border-gray-200 p-2.5">
+                <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
+                  <span class="inline-flex items-center gap-2"><i class="fas fa-sliders-h text-primary"></i> Configurações</span>
+                  <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
+                </summary>
+                <div class="mt-2.5 space-y-2.5 text-xs text-gray-700">
+                  <div data-bulk-field="marca">
+                    <label class="flex items-center gap-2 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Marca
+                    </label>
+                    <input type="text" data-bulk-input data-type="text" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Informe a marca" disabled>
+                  </div>
+                  <div data-bulk-field="especificacoes.apresentacao">
+                    <label class="flex items-center gap-2 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Apresentação
+                    </label>
+                    <input type="text" data-bulk-input data-type="text" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 500g, unidade, kit" disabled>
+                  </div>
+                  <div data-bulk-field="inativo">
+                    <label class="flex items-center gap-2 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Situação
+                    </label>
+                    <select data-bulk-input data-type="boolean" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
+                      <option value="false">Ativo</option>
+                      <option value="true">Inativo</option>
+                    </select>
+                  </div>
+                </div>
+              </details>
+
+              <details class="group rounded-lg border border-gray-200 p-2.5">
+                <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
+                  <span class="inline-flex items-center gap-2"><i class="fas fa-info-circle text-primary"></i> Informações gerais</span>
+                  <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
+                </summary>
+                <div class="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-gray-700">
+                  <div data-bulk-field="peso">
+                    <label class="flex items-center gap-2 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Peso (Kg)
+                    </label>
+                    <input type="number" step="0.001" data-bulk-input data-type="number" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 0,450" disabled>
+                  </div>
+                  <div data-bulk-field="iat">
+                    <label class="flex items-center gap-2 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      IAT
+                    </label>
+                    <select data-bulk-input data-type="text" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
+                      <option value="">Selecione...</option>
+                      <option value="Arredondamento">Arredondamento</option>
+                      <option value="Truncamento">Truncamento</option>
+                    </select>
+                  </div>
+                  <div data-bulk-field="tipoProduto">
+                    <label class="flex items-center gap-2 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Tipo de produto
+                    </label>
+                    <select data-bulk-input data-type="text" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
+                      <option value="">Selecione...</option>
+                      <option value="Revenda">Revenda</option>
+                      <option value="Consumo Interno">Consumo Interno</option>
+                      <option value="Bonificação">Bonificação</option>
+                    </select>
+                  </div>
+                  <div data-bulk-field="stock">
+                    <label class="flex items-center gap-2 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Saldo em estoque
+                    </label>
+                    <input type="number" step="1" data-bulk-input data-type="number" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Quantidade" disabled>
+                  </div>
+                </div>
+              </details>
+
+              <details class="group rounded-lg border border-gray-200 p-2.5">
+                <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
+                  <span class="inline-flex items-center gap-2"><i class="fas fa-layer-group text-primary"></i> Classificação</span>
+                  <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
+                </summary>
+                <div class="mt-2.5 space-y-3 text-xs text-gray-700">
+                  <div data-bulk-field="categorias">
+                    <label class="flex items-center gap-2 font-medium text-gray-700">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Categorias
+                    </label>
+                    <select multiple size="6" data-bulk-input data-type="multi-select" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
+                    </select>
+                    <p class="mt-1 text-[11px] text-gray-500">Segure Ctrl (ou Cmd) para selecionar mais de uma categoria.</p>
+                  </div>
+                  <div data-bulk-field="especificacoes.idade">
+                    <label class="flex items-center gap-2 font-medium text-gray-700">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Idade
+                    </label>
+                    <div class="mt-1 grid grid-cols-2 gap-1.5" data-bulk-options>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Filhotes" data-bulk-option disabled> Filhotes</label>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Adulto" data-bulk-option disabled> Adulto</label>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Sênior" data-bulk-option disabled> Sênior</label>
+                    </div>
+                  </div>
+                  <div data-bulk-field="especificacoes.pet">
+                    <label class="flex items-center gap-2 font-medium text-gray-700">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Espécie
+                    </label>
+                    <div class="mt-1 grid grid-cols-2 gap-1.5" data-bulk-options>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Cachorro" data-bulk-option disabled> Cachorro</label>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Gato" data-bulk-option disabled> Gato</label>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Pássaros" data-bulk-option disabled> Pássaros</label>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Outros" data-bulk-option disabled> Outros</label>
+                    </div>
+                  </div>
+                  <div data-bulk-field="especificacoes.porteRaca">
+                    <label class="flex items-center gap-2 font-medium text-gray-700">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Porte da raça
+                    </label>
+                    <div class="mt-1 grid grid-cols-2 gap-1.5" data-bulk-options>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Mini" data-bulk-option disabled> Mini</label>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Pequeno" data-bulk-option disabled> Pequeno</label>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Médio" data-bulk-option disabled> Médio</label>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Grande" data-bulk-option disabled> Grande</label>
+                      <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Gigante" data-bulk-option disabled> Gigante</label>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <details class="group rounded-lg border border-gray-200 p-2.5">
+                <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
+                  <span class="inline-flex items-center gap-2"><i class="fas fa-file-invoice text-primary"></i> Informações fiscais</span>
+                  <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
+                </summary>
+                <div class="mt-2.5 space-y-3 text-xs text-gray-700">
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div data-bulk-field="ncm">
+                      <label class="block text-xs font-semibold text-gray-700">NCM</label>
+                      <div class="mt-1 flex items-center gap-2 min-w-0">
+                        <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        <input type="text" data-bulk-input data-type="text" class="flex-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 23091000" disabled>
+                      </div>
+                    </div>
+                    <div data-bulk-field="fiscal.cest">
+                      <label class="block text-xs font-semibold text-gray-700">CEST</label>
+                      <div class="mt-1 flex items-center gap-2 min-w-0">
+                        <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        <input type="text" data-bulk-input data-type="text" class="flex-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Informe o CEST" disabled>
+                      </div>
+                    </div>
+                    <div data-bulk-field="fiscal.origem">
+                      <label class="block text-xs font-semibold text-gray-700">Origem</label>
+                      <div class="mt-1 flex items-center gap-2 min-w-0">
+                        <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        <select data-bulk-input data-type="text" class="flex-1 min-w-0 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
+                          <option value="0">0 - Nacional</option>
+                          <option value="1">1 - Estrangeira (importação direta)</option>
+                          <option value="2">2 - Estrangeira (adquirida no mercado interno)</option>
+                          <option value="3">3 - Nacional, conte&uacute;do de importação &gt; 40%</option>
+                          <option value="4">4 - Nacional, processo básico</option>
+                          <option value="5">5 - Nacional, conte&uacute;do de importação &le; 40%</option>
+                          <option value="6">6 - Estrangeira, sem similar nacional</option>
+                          <option value="7">7 - Estrangeira, com similar nacional</option>
+                          <option value="8">8 - Nacional, conte&uacute;do de importação &gt; 70%</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div data-bulk-field="fiscal.csosn">
+                      <label class="block text-xs font-semibold text-gray-700">CSOSN</label>
+                      <div class="mt-1 flex items-center gap-2 min-w-0">
+                        <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        <input type="text" data-bulk-input data-type="text" class="flex-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 102" disabled>
+                      </div>
+                    </div>
+                    <div data-bulk-field="fiscal.cst">
+                      <label class="block text-xs font-semibold text-gray-700">CST</label>
+                      <div class="mt-1 flex items-center gap-2 min-w-0">
+                        <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        <input type="text" data-bulk-input data-type="text" class="flex-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 060" disabled>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div data-bulk-field="fiscal.status.nfe">
+                      <label class="block text-xs font-semibold text-gray-700">Status NF-e</label>
+                      <div class="mt-1 flex items-center gap-2 min-w-0">
+                        <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        <select data-bulk-input data-type="text" class="flex-1 min-w-0 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
+                          <option value="pendente">Pendente</option>
+                          <option value="parcial">Parcial</option>
+                          <option value="aprovado">Aprovado</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div data-bulk-field="fiscal.status.nfce">
+                      <label class="block text-xs font-semibold text-gray-700">Status NFC-e</label>
+                      <div class="mt-1 flex items-center gap-2 min-w-0">
+                        <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        <select data-bulk-input data-type="text" class="flex-1 min-w-0 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
+                          <option value="pendente">Pendente</option>
+                          <option value="parcial">Parcial</option>
+                          <option value="aprovado">Aprovado</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <details class="group rounded-lg border border-gray-200 p-2.5">
+                <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
+                  <span class="inline-flex items-center gap-2"><i class="fas fa-truck-field text-primary"></i> Fornecedor principal</span>
+                  <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
+                </summary>
+                <div class="mt-2.5 space-y-2.5 text-xs text-gray-700" data-bulk-field="fornecedor">
                   <label class="flex items-center gap-2 font-medium">
                     <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Saldo em estoque
+                    Substituir fornecedor cadastrado
                   </label>
-                  <input type="number" step="1" data-bulk-input data-type="number" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Quantidade" disabled>
-                </div>
-              </div>
-            </details>
-
-            <details class="group rounded-lg border border-gray-200 p-2.5">
-              <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
-                <span class="inline-flex items-center gap-2"><i class="fas fa-layer-group text-primary"></i> Classificação</span>
-                <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
-              </summary>
-              <div class="mt-2.5 space-y-3 text-xs text-gray-700">
-                <div data-bulk-field="categorias">
-                  <label class="flex items-center gap-2 font-medium text-gray-700">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Categorias
-                  </label>
-                  <select multiple size="6" data-bulk-input data-type="multi-select" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
-                  </select>
-                  <p class="mt-1 text-[11px] text-gray-500">Segure Ctrl (ou Cmd) para selecionar mais de uma categoria.</p>
-                </div>
-                <div data-bulk-field="especificacoes.idade">
-                  <label class="flex items-center gap-2 font-medium text-gray-700">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Idade
-                  </label>
-                  <div class="mt-1 grid grid-cols-2 gap-1.5" data-bulk-options>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Filhotes" data-bulk-option disabled> Filhotes</label>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Adulto" data-bulk-option disabled> Adulto</label>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Sênior" data-bulk-option disabled> Sênior</label>
-                  </div>
-                </div>
-                <div data-bulk-field="especificacoes.pet">
-                  <label class="flex items-center gap-2 font-medium text-gray-700">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Espécie
-                  </label>
-                  <div class="mt-1 grid grid-cols-2 gap-1.5" data-bulk-options>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Cachorro" data-bulk-option disabled> Cachorro</label>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Gato" data-bulk-option disabled> Gato</label>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Pássaros" data-bulk-option disabled> Pássaros</label>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Outros" data-bulk-option disabled> Outros</label>
-                  </div>
-                </div>
-                <div data-bulk-field="especificacoes.porteRaca">
-                  <label class="flex items-center gap-2 font-medium text-gray-700">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Porte da raça
-                  </label>
-                  <div class="mt-1 grid grid-cols-2 gap-1.5" data-bulk-options>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Mini" data-bulk-option disabled> Mini</label>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Pequeno" data-bulk-option disabled> Pequeno</label>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Médio" data-bulk-option disabled> Médio</label>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Grande" data-bulk-option disabled> Grande</label>
-                    <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" value="Gigante" data-bulk-option disabled> Gigante</label>
-                  </div>
-                </div>
-              </div>
-            </details>
-
-            <details class="group rounded-lg border border-gray-200 p-2.5">
-              <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
-                <span class="inline-flex items-center gap-2"><i class="fas fa-file-invoice text-primary"></i> Informações fiscais</span>
-                <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
-              </summary>
-              <div class="mt-2.5 space-y-3 text-xs text-gray-700">
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div data-bulk-field="ncm">
-                    <label class="block text-xs font-semibold text-gray-700">NCM</label>
-                    <div class="mt-1 flex items-center gap-2 min-w-0">
-                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                      <input type="text" data-bulk-input data-type="text" class="flex-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 23091000" disabled>
+                  <div class="grid grid-cols-1 gap-2.5" data-bulk-wrapper>
+                    <input type="text" data-bulk-input name="supplier-name" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Nome do fornecedor" disabled>
+                    <input type="text" data-bulk-input name="supplier-document" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Documento (CNPJ/CPF)" disabled>
+                    <input type="text" data-bulk-input name="supplier-product-name" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Descrição no fornecedor" disabled>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <input type="text" data-bulk-input name="supplier-product-code" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Código no fornecedor" disabled>
+                      <input type="text" data-bulk-input name="supplier-entry-unit" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Unidade de entrada" disabled>
                     </div>
-                  </div>
-                  <div data-bulk-field="fiscal.cest">
-                    <label class="block text-xs font-semibold text-gray-700">CEST</label>
-                    <div class="mt-1 flex items-center gap-2 min-w-0">
-                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                      <input type="text" data-bulk-input data-type="text" class="flex-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Informe o CEST" disabled>
-                    </div>
-                  </div>
-                  <div data-bulk-field="fiscal.origem">
-                    <label class="block text-xs font-semibold text-gray-700">Origem</label>
-                    <div class="mt-1 flex items-center gap-2 min-w-0">
-                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                      <select data-bulk-input data-type="text" class="flex-1 min-w-0 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
-                        <option value="0">0 - Nacional</option>
-                        <option value="1">1 - Estrangeira (importação direta)</option>
-                        <option value="2">2 - Estrangeira (adquirida no mercado interno)</option>
-                        <option value="3">3 - Nacional, conte&uacute;do de importação &gt; 40%</option>
-                        <option value="4">4 - Nacional, processo básico</option>
-                        <option value="5">5 - Nacional, conte&uacute;do de importação &le; 40%</option>
-                        <option value="6">6 - Estrangeira, sem similar nacional</option>
-                        <option value="7">7 - Estrangeira, com similar nacional</option>
-                        <option value="8">8 - Nacional, conte&uacute;do de importação &gt; 70%</option>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <select data-bulk-input name="supplier-calc-type" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
+                        <option value="">Tipo de cálculo</option>
+                        <option value="percentual">Percentual</option>
+                        <option value="valor">Valor fixo</option>
                       </select>
+                      <input type="number" step="0.0001" data-bulk-input name="supplier-calc-value" data-type="number" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Valor/Percentual" disabled>
                     </div>
                   </div>
+                  <p class="text-[11px] text-gray-500">Os dados informados substituirão o primeiro fornecedor cadastrado em todos os produtos selecionados.</p>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div data-bulk-field="fiscal.csosn">
-                    <label class="block text-xs font-semibold text-gray-700">CSOSN</label>
-                    <div class="mt-1 flex items-center gap-2 min-w-0">
-                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                      <input type="text" data-bulk-input data-type="text" class="flex-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 102" disabled>
-                    </div>
-                  </div>
-                  <div data-bulk-field="fiscal.cst">
-                    <label class="block text-xs font-semibold text-gray-700">CST</label>
-                    <div class="mt-1 flex items-center gap-2 min-w-0">
-                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                      <input type="text" data-bulk-input data-type="text" class="flex-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Ex.: 060" disabled>
-                    </div>
-                  </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div data-bulk-field="fiscal.status.nfe">
-                    <label class="block text-xs font-semibold text-gray-700">Status NF-e</label>
-                    <div class="mt-1 flex items-center gap-2 min-w-0">
-                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                      <select data-bulk-input data-type="text" class="flex-1 min-w-0 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
-                        <option value="pendente">Pendente</option>
-                        <option value="parcial">Parcial</option>
-                        <option value="aprovado">Aprovado</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div data-bulk-field="fiscal.status.nfce">
-                    <label class="block text-xs font-semibold text-gray-700">Status NFC-e</label>
-                    <div class="mt-1 flex items-center gap-2 min-w-0">
-                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                      <select data-bulk-input data-type="text" class="flex-1 min-w-0 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
-                        <option value="pendente">Pendente</option>
-                        <option value="parcial">Parcial</option>
-                        <option value="aprovado">Aprovado</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </details>
+              </details>
 
-            <details class="group rounded-lg border border-gray-200 p-2.5">
-              <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
-                <span class="inline-flex items-center gap-2"><i class="fas fa-truck-field text-primary"></i> Fornecedor principal</span>
-                <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
-              </summary>
-              <div class="mt-2.5 space-y-2.5 text-xs text-gray-700" data-bulk-field="fornecedor">
-                <label class="flex items-center gap-2 font-medium">
-                  <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                  Substituir fornecedor cadastrado
-                </label>
-                <div class="grid grid-cols-1 gap-2.5" data-bulk-wrapper>
-                  <input type="text" data-bulk-input name="supplier-name" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Nome do fornecedor" disabled>
-                  <input type="text" data-bulk-input name="supplier-document" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Documento (CNPJ/CPF)" disabled>
-                  <input type="text" data-bulk-input name="supplier-product-name" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Descrição no fornecedor" disabled>
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <input type="text" data-bulk-input name="supplier-product-code" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Código no fornecedor" disabled>
-                    <input type="text" data-bulk-input name="supplier-entry-unit" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Unidade de entrada" disabled>
-                  </div>
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <select data-bulk-input name="supplier-calc-type" data-type="text" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
-                      <option value="">Tipo de cálculo</option>
-                      <option value="percentual">Percentual</option>
-                      <option value="valor">Valor fixo</option>
+              <details class="group rounded-lg border border-gray-200 p-2.5">
+                <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
+                  <span class="inline-flex items-center gap-2"><i class="fas fa-plug text-primary"></i> Integração e site</span>
+                  <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
+                </summary>
+                <div class="mt-2.5 space-y-2.5 text-xs text-gray-700">
+                  <div data-bulk-field="naoMostrarNoSite">
+                    <label class="flex items-center gap-2.5 text-gray-700 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Visibilidade no site
+                    </label>
+                    <select data-bulk-input data-type="boolean" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
+                      <option value="false">Mostrar na vitrine online</option>
+                      <option value="true">Ocultar do site</option>
                     </select>
-                    <input type="number" step="0.0001" data-bulk-input name="supplier-calc-value" data-type="number" class="rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Valor/Percentual" disabled>
+                  </div>
+                  <div data-bulk-field="descricao">
+                    <label class="flex items-center gap-2.5 text-gray-700 font-medium">
+                      <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Atualizar descrição detalhada
+                    </label>
+                    <textarea rows="4" data-bulk-input data-type="text" class="w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Cole aqui a nova descrição para os produtos selecionados." disabled></textarea>
                   </div>
                 </div>
-                <p class="text-[11px] text-gray-500">Os dados informados substituirão o primeiro fornecedor cadastrado em todos os produtos selecionados.</p>
-              </div>
-            </details>
-
-            <details class="group rounded-lg border border-gray-200 p-2.5">
-              <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
-                <span class="inline-flex items-center gap-2"><i class="fas fa-plug text-primary"></i> Integração e site</span>
-                <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
-              </summary>
-              <div class="mt-2.5 space-y-2.5 text-xs text-gray-700">
-                <div data-bulk-field="naoMostrarNoSite">
-                  <label class="flex items-center gap-2.5 text-gray-700 font-medium">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Visibilidade no site
-                  </label>
-                  <select data-bulk-input data-type="boolean" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" disabled>
-                    <option value="false">Mostrar na vitrine online</option>
-                    <option value="true">Ocultar do site</option>
-                  </select>
-                </div>
-                <div data-bulk-field="descricao">
-                  <label class="flex items-center gap-2.5 text-gray-700 font-medium">
-                    <input type="checkbox" data-bulk-toggle class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                    Atualizar descrição detalhada
-                  </label>
-                  <textarea rows="4" data-bulk-input data-type="text" class="w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60" placeholder="Cole aqui a nova descrição para os produtos selecionados." disabled></textarea>
-                </div>
-              </div>
-            </details>
-          </form>
-        </section>
+              </details>
+            </form>
+          </section>
+        </div>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3.5" aria-labelledby="products-table-title">
           <div class="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
