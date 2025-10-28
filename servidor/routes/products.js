@@ -9,6 +9,8 @@ const fs = require('fs');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
 const PdvState = require('../models/PdvState');
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 const {
     buildProductImageFileName,
     buildProductImagePublicPath,
@@ -51,6 +53,27 @@ const storage = multer.diskStorage({
     }
 });
 const upload = multer({ storage: storage });
+
+
+const resolveAuthenticatedUser = async (req) => {
+    try {
+        const header = typeof req.headers?.authorization === 'string' ? req.headers.authorization.trim() : '';
+        if (!header) return null;
+        const [scheme, token] = header.split(' ');
+        if (scheme?.toLowerCase() !== 'bearer' || !token) return null;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (!decoded?.id) return null;
+        const user = await User.findById(decoded.id).select('role email');
+        if (!user) return null;
+        return {
+            id: decoded.id,
+            role: user.role,
+            email: user.email,
+        };
+    } catch (error) {
+        return null;
+    }
+};
 
 
 router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
@@ -375,8 +398,15 @@ router.get('/by-category', async (req, res) => {
 // GET /api/products (pública, listagem com paginação e busca)
 router.get('/', async (req, res) => {
     try {
-        const { page = 1, limit = 20, search = '' } = req.query;
-        const query = { naoMostrarNoSite: { $ne: true } };
+        const { page = 1, limit = 20, search = '', includeHidden = 'false', audience = '' } = req.query;
+
+        let allowHiddenProducts = false;
+        if (includeHidden === 'true' || audience === 'pdv') {
+            const authenticated = await resolveAuthenticatedUser(req);
+            allowHiddenProducts = Boolean(authenticated);
+        }
+
+        const query = allowHiddenProducts ? {} : { naoMostrarNoSite: { $ne: true } };
 
         if (search) {
             const normalizedSearch = search.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -478,10 +508,19 @@ router.get('/by-barcode/:barcode', async (req, res) => {
         const baseBarcode = parts[0];
         const imageIndex = parts.length > 1 ? parseInt(parts[1], 10) - 1 : -1;
 
-        const product = await Product.findOne({
-            codbarras: baseBarcode,
-            naoMostrarNoSite: { $ne: true },
-        }).populate('categorias').lean();
+        const wantsHidden = req.query?.includeHidden === 'true' || req.query?.audience === 'pdv';
+        let allowHidden = false;
+        if (wantsHidden) {
+            const authenticated = await resolveAuthenticatedUser(req);
+            allowHidden = Boolean(authenticated);
+        }
+
+        const filters = { codbarras: baseBarcode };
+        if (!allowHidden) {
+            filters.naoMostrarNoSite = { $ne: true };
+        }
+
+        const product = await Product.findOne(filters).populate('categorias').lean();
         if (!product) return res.status(404).json({ message: 'Produto não encontrado.' });
 
         if (imageIndex >= 0 && product.imagens && product.imagens[imageIndex]) {
