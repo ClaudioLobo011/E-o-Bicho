@@ -56,7 +56,12 @@ router.get('/suggest', async (req, res) => {
     const termList = terms.map(t => t.original || t.term);
 
     // Produtos sugeridos (usa searchableString)
-    const products = await Product.find(norm ? { searchableString: { $regex: norm, $options: 'i' } } : {})
+    const productFilters = { naoMostrarNoSite: { $ne: true } };
+    if (norm) {
+      productFilters.searchableString = { $regex: norm, $options: 'i' };
+    }
+
+    const products = await Product.find(productFilters)
       .limit(limit)
       .sort({ nome: 1 })
       .lean();
