@@ -142,6 +142,10 @@ const productSchema = new mongoose.Schema({
         quantidadeMinima: { type: Number, default: 0 },
         descontoPorcentagem: { type: Number, default: 0 }
     },
+    naoMostrarNoSite: {
+        type: Boolean,
+        default: true,
+    },
     inativo: {
         type: Boolean,
         default: false

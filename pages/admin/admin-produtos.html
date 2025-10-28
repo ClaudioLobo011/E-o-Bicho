@@ -547,21 +547,15 @@
                         </div>
 
                         <div id="tab-integration" class="space-y-6 hidden">
-                            <p class="text-sm text-gray-500">Configure parâmetros específicos de integrações externas, como marketplaces ou ERP, quando disponíveis.</p>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label for="integration-sku" class="block text-sm font-medium text-gray-700">SKU Externo</label>
-                                    <input type="text" id="integration-sku" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" placeholder="Identificador utilizado em sistemas externos">
-                                </div>
-                                <div>
-                                    <label for="integration-status" class="block text-sm font-medium text-gray-700">Status de Integração</label>
-                                    <select id="integration-status" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
-                                        <option value="">Não sincronizado</option>
-                                        <option value="synced">Sincronizado</option>
-                                        <option value="pending">Pendente de sincronização</option>
-                                        <option value="error">Erro na última sincronização</option>
-                                    </select>
-                                </div>
+                            <p class="text-sm text-gray-500">Configure os parâmetros de exibição para integrações externas e para o site.</p>
+                            <div class="space-y-4">
+                                <label class="inline-flex items-start gap-3 text-sm font-medium text-gray-700">
+                                    <input type="checkbox" id="hide-on-site" name="naoMostrarNoSite" class="form-checkbox h-4 w-4 text-primary" checked>
+                                    <span class="leading-tight">
+                                        Não mostrar no Site
+                                        <span class="block text-xs font-normal text-gray-500">Se marcado, o produto não aparece nas buscas ou nas páginas do site.</span>
+                                    </span>
+                                </label>
                             </div>
                         </div>
 

@@ -175,6 +175,9 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
             iat: normalizeString(payload.iat),
             tipoProduto: normalizeString(payload.tipoProduto),
             ncm: normalizeString(payload.ncm),
+            naoMostrarNoSite: payload.naoMostrarNoSite === undefined
+                ? true
+                : Boolean(payload.naoMostrarNoSite),
             inativo: Boolean(payload.inativo),
             codigosComplementares: Array.isArray(payload.codigosComplementares)
                 ? payload.codigosComplementares.map((code) => normalizeString(code)).filter(Boolean)
@@ -352,7 +355,11 @@ router.get('/by-category', async (req, res) => {
         if (!topCategory) return res.json({ products: [], page: 1, pages: 1, total: 0 });
 
         const allCategoryIds = await findAllSubCategoryIds(topCategory._id);
-        const products = await Product.find({ categorias: { $in: allCategoryIds } })
+        const categoryFilters = {
+            categorias: { $in: allCategoryIds },
+            naoMostrarNoSite: { $ne: true },
+        };
+        const products = await Product.find(categoryFilters)
             .populate('categorias')
             .sort({ nome: 1 })
             .lean();
@@ -369,7 +376,7 @@ router.get('/by-category', async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const { page = 1, limit = 20, search = '' } = req.query;
-        const query = {};
+        const query = { naoMostrarNoSite: { $ne: true } };
 
         if (search) {
             const normalizedSearch = search.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -416,7 +423,10 @@ router.get('/', async (req, res) => {
 // GET /api/products/destaques (pública)
 router.get('/destaques', async (req, res) => {
     try {
-        const destaques = await Product.find({ isDestaque: true }).sort({ destaqueOrder: 1 });
+        const destaques = await Product.find({
+            isDestaque: true,
+            naoMostrarNoSite: { $ne: true },
+        }).sort({ destaqueOrder: 1 });
         res.json(destaques);
     } catch (error) {
         res.status(500).json({ message: 'Erro ao buscar produtos em destaque.' });
@@ -468,7 +478,10 @@ router.get('/by-barcode/:barcode', async (req, res) => {
         const baseBarcode = parts[0];
         const imageIndex = parts.length > 1 ? parseInt(parts[1], 10) - 1 : -1;
 
-        const product = await Product.findOne({ codbarras: baseBarcode }).populate('categorias').lean();
+        const product = await Product.findOne({
+            codbarras: baseBarcode,
+            naoMostrarNoSite: { $ne: true },
+        }).populate('categorias').lean();
         if (!product) return res.status(404).json({ message: 'Produto não encontrado.' });
 
         if (imageIndex >= 0 && product.imagens && product.imagens[imageIndex]) {
@@ -799,6 +812,9 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             updatePayload.codigosComplementares = Array.isArray(payload.codigosComplementares)
                 ? payload.codigosComplementares.map((code) => normalizeString(code)).filter(Boolean)
                 : [];
+        }
+        if (payload.naoMostrarNoSite !== undefined) {
+            updatePayload.naoMostrarNoSite = Boolean(payload.naoMostrarNoSite);
         }
 
         updatePayload.fornecedores = fornecedores;
