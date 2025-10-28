@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const detailedDescriptionInput = document.getElementById('descricao');
     const unitSelect = document.getElementById('unidade');
     const inactiveCheckbox = document.getElementById('inativo');
+    const hideOnSiteCheckbox = document.getElementById('hide-on-site');
     const fiscalCompanySelect = document.getElementById('fiscal-company-select');
     const fiscalCompanySummary = document.getElementById('fiscal-company-summary');
     const deleteProductButton = document.getElementById('delete-product-button');
@@ -1744,6 +1745,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        if (hideOnSiteCheckbox) {
+            hideOnSiteCheckbox.checked = true;
+        }
+
         updateMarkupFromValues();
         setSubmitButtonIdleText();
     };
@@ -1865,6 +1870,10 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelector('#codbarras').value = product.codbarras || '';
         form.querySelector('#descricao').value = product.descricao || '';
         setInputValue(inactiveCheckbox, product.inativo);
+        setInputValue(
+            hideOnSiteCheckbox,
+            product.naoMostrarNoSite !== undefined ? product.naoMostrarNoSite : true,
+        );
         if (unitSelect) {
             unitSelect.value = product.unidade || '';
             lastSelectedProductUnit = getSelectedProductUnit();
@@ -2480,6 +2489,7 @@ document.addEventListener('DOMContentLoaded', () => {
             stock: totalStock,
             fiscal: generalFiscal,
             fiscalPorEmpresa: fiscalPerCompanyPayload,
+            naoMostrarNoSite: Boolean(hideOnSiteCheckbox?.checked),
             inativo: Boolean(inactiveCheckbox?.checked),
         };
 

@@ -13446,14 +13446,14 @@
     elements.searchResults.classList.remove('hidden');
     elements.searchResults.innerHTML = '<div class="p-4 text-sm text-gray-500">Buscando produtos...</div>';
     try {
-      const response = await fetch(
-        `${API_BASE}/products?search=${encodeURIComponent(normalized)}&limit=8`,
-        { signal: state.searchController.signal }
-      );
-      if (!response.ok) {
-        throw new Error('Não foi possível buscar produtos.');
-      }
-      const payload = await response.json();
+      const token = getToken();
+      const endpoint =
+        `${API_BASE}/products?search=${encodeURIComponent(normalized)}&limit=8&includeHidden=true&audience=pdv`;
+      const payload = await fetchWithOptionalAuth(endpoint, {
+        token,
+        signal: state.searchController.signal,
+        errorMessage: 'Não foi possível buscar produtos.',
+      });
       const products = Array.isArray(payload?.products) ? payload.products : Array.isArray(payload) ? payload : [];
       state.searchResults = products;
       renderSearchResults(products, normalized);
@@ -13489,13 +13489,13 @@
     const normalized = normalizeBarcodeValue(barcode);
     if (!normalized) return null;
     try {
-      const response = await fetch(
-        `${API_BASE}/products?search=${encodeURIComponent(normalized)}&limit=6`
-      );
-      if (!response.ok) {
-        throw new Error('Não foi possível buscar o produto pelo código informado.');
-      }
-      const payload = await response.json();
+      const token = getToken();
+      const endpoint =
+        `${API_BASE}/products?search=${encodeURIComponent(normalized)}&limit=6&includeHidden=true&audience=pdv`;
+      const payload = await fetchWithOptionalAuth(endpoint, {
+        token,
+        errorMessage: 'Não foi possível buscar o produto pelo código informado.',
+      });
       const products = Array.isArray(payload?.products)
         ? payload.products
         : Array.isArray(payload)

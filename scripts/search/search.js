@@ -64,6 +64,7 @@ async function renderSearchResults(term) {
 
 function renderProducts(products, container) {
   if (!Array.isArray(products)) products = [];
+  else products = products.filter(p => p && p.naoMostrarNoSite !== true);
   if (!container) return;
   const toReais = (n)=> `R$ ${Number(n||0).toFixed(2).replace('.', ',')}`;
 
