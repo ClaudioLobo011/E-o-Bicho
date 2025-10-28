@@ -28,6 +28,20 @@
   const tableFilterInputs = new Map();
   const tableSortButtons = new Map();
   const tableSortHeaders = new Map();
+  let tableFilterFetchTimeout = null;
+
+  const TABLE_FILTER_QUERY_KEYS = {
+    sku: 'col_sku',
+    nome: 'col_nome',
+    unidade: 'col_unidade',
+    imagem: 'col_imagem',
+    custo: 'col_custo',
+    markup: 'col_markup',
+    venda: 'col_venda',
+    stock: 'col_stock',
+    fornecedor: 'col_fornecedor',
+    situacao: 'col_situacao',
+  };
 
   function initElements() {
     elements.filtersForm = document.getElementById('filters-form');
@@ -286,7 +300,13 @@
       return;
     }
     state.tableFilters[key] = nextValue;
-    renderProductsTable();
+    state.pagination.page = 1;
+    if (tableFilterFetchTimeout) {
+      clearTimeout(tableFilterFetchTimeout);
+    }
+    tableFilterFetchTimeout = setTimeout(() => {
+      fetchProducts(1);
+    }, 300);
   }
 
   function setTableSort(key, direction) {
@@ -439,19 +459,41 @@
   function buildFiltersParams(filters) {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
-      if (value === undefined || value === null || value === '') return;
-      params.set(key, value);
+      if (value === undefined || value === null) return;
+      const normalized = typeof value === 'string' ? value.trim() : value;
+      if (normalized === '') return;
+      params.set(key, normalized);
     });
     return params;
   }
 
-  function buildQueryString(filters, page) {
+  function applyTableFiltersToParams(params) {
+    const tableFilters = state.tableFilters || {};
+    Object.entries(tableFilters).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      const normalized = typeof value === 'string' ? value.trim() : value;
+      if (normalized === '') return;
+      const paramKey = TABLE_FILTER_QUERY_KEYS[key];
+      if (!paramKey) return;
+      params.set(paramKey, normalized);
+    });
+    return params;
+  }
+
+  function buildQueryParams(filters, { page, includePagination = true } = {}) {
     const params = buildFiltersParams(filters);
+    applyTableFiltersToParams(params);
     if (page && Number.isFinite(page)) {
       params.set('page', page);
     }
-    params.set('limit', state.pagination.limit);
-    return params.toString();
+    if (includePagination) {
+      params.set('limit', state.pagination.limit);
+    }
+    return params;
+  }
+
+  function buildQueryString(filters, page) {
+    return buildQueryParams(filters, { page }).toString();
   }
 
   function enableBulkField(fieldWrapper, enabled) {
@@ -494,6 +536,17 @@
     elements.filtersForm.reset();
     state.filters = collectFilters();
     renderAppliedFilters(state.filters);
+    Object.keys(state.tableFilters || {}).forEach((key) => {
+      state.tableFilters[key] = '';
+      const input = tableFilterInputs.get(key);
+      if (input && input.value !== '') {
+        input.value = '';
+      }
+    });
+    if (tableFilterFetchTimeout) {
+      clearTimeout(tableFilterFetchTimeout);
+      tableFilterFetchTimeout = null;
+    }
     fetchProducts(1);
   }
 
@@ -706,6 +759,7 @@
       renderPagination();
       updateResultsSummary();
       updateBulkButtonsState();
+      tableFilterFetchTimeout = null;
     }
   }
 
@@ -897,7 +951,7 @@
     elements.selectAllCheckbox.indeterminate = true;
 
     try {
-      const params = buildFiltersParams(state.filters || {});
+      const params = buildQueryParams(state.filters || {}, { includePagination: false });
       params.set('idsOnly', 'true');
       const response = await fetchWithAuth(`${API_CONFIG.BASE_URL}/admin/products/bulk?${params.toString()}`);
       if (!response) {
