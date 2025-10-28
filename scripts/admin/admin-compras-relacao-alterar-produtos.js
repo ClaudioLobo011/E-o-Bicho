@@ -991,7 +991,8 @@
 
   async function loadSuppliers() {
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/suppliers`);
+      const response = await fetchWithAuth(`${API_CONFIG.BASE_URL}/suppliers`);
+      if (!response) return;
       if (!response.ok) throw new Error('Falha ao carregar fornecedores');
       const payload = await response.json();
       const suppliers = Array.isArray(payload?.suppliers) ? payload.suppliers : [];
