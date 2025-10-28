@@ -146,20 +146,31 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       Product.countDocuments(query),
     ]);
 
-    const mapped = products.map((product) => ({
-      id: product._id.toString(),
-      cod: product.cod || '',
-      nome: product.nome || '',
-      unidade: product.unidade || '',
-      venda: parseNumber(product.venda) || 0,
-      custo: parseNumber(product.custo) || 0,
-      stock: parseNumber(product.stock) || 0,
-      fornecedor: Array.isArray(product.fornecedores) && product.fornecedores.length
-        ? product.fornecedores[0]?.fornecedor || ''
-        : '',
-      inativo: Boolean(product.inativo),
-      naoMostrarNoSite: Boolean(product.naoMostrarNoSite),
-    }));
+    const mapped = products.map((product) => {
+      const saleValue = parseNumber(product.venda);
+      const costValue = parseNumber(product.custo);
+      let markup = null;
+      if (costValue !== null && costValue > 0 && saleValue !== null) {
+        const computed = ((saleValue - costValue) / costValue) * 100;
+        markup = Number.isFinite(computed) ? computed : null;
+      }
+
+      return {
+        id: product._id.toString(),
+        cod: product.cod || '',
+        nome: product.nome || '',
+        unidade: product.unidade || '',
+        venda: saleValue || 0,
+        custo: costValue || 0,
+        markup,
+        stock: parseNumber(product.stock) || 0,
+        fornecedor: Array.isArray(product.fornecedores) && product.fornecedores.length
+          ? product.fornecedores[0]?.fornecedor || ''
+          : '',
+        inativo: Boolean(product.inativo),
+        naoMostrarNoSite: Boolean(product.naoMostrarNoSite),
+      };
+    });
 
     res.json({
       products: mapped,

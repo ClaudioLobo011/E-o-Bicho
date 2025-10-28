@@ -85,6 +85,15 @@
     return new Intl.NumberFormat('pt-BR').format(number);
   }
 
+  function formatPercentage(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '0%';
+    return `${new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(number)}%`;
+  }
+
   function renderAppliedFilters(filters) {
     if (!elements.appliedFilters) return;
     elements.appliedFilters.innerHTML = '';
@@ -254,7 +263,7 @@
 
     if (!state.products.length) {
       const emptyRow = document.createElement('tr');
-      emptyRow.innerHTML = '<td colspan="8" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto encontrado para os filtros informados.</td>';
+      emptyRow.innerHTML = '<td colspan="10" class="px-4 py-6 text-center text-xs text-gray-500">Nenhum produto encontrado para os filtros informados.</td>';
       elements.productsTableBody.appendChild(emptyRow);
       elements.selectAllCheckbox.checked = false;
       elements.selectAllCheckbox.indeterminate = false;
@@ -272,6 +281,8 @@
         <td class="px-4 py-3 font-semibold text-gray-700">${product.cod || '-'}</td>
         <td class="px-4 py-3 text-gray-600">${product.nome || '-'}</td>
         <td class="px-4 py-3 text-gray-600">${product.unidade || '-'}</td>
+        <td class="px-4 py-3 text-gray-700">${formatCurrency(product.custo)}</td>
+        <td class="px-4 py-3 text-gray-700">${product.markup === null || product.markup === undefined ? '—' : formatPercentage(product.markup)}</td>
         <td class="px-4 py-3 text-gray-700">${formatCurrency(product.venda)}</td>
         <td class="px-4 py-3 text-gray-600">${formatNumber(product.stock)}</td>
         <td class="px-4 py-3 text-gray-600">${product.fornecedor || '—'}</td>
