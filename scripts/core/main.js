@@ -515,6 +515,20 @@ function initializeHeaderSearch() {
   };
 
   const renderSuggest = (terms, products)=>{
+    const visibleProducts = Array.isArray(products)
+      ? products.filter(item => item && item.naoMostrarNoSite !== true)
+      : [];
+    const productCards = visibleProducts.map(p=>{
+      const imgSrc = p.imagemPrincipal ? `${API_CONFIG.SERVER_URL}${p.imagemPrincipal}` : `${API_CONFIG.SERVER_URL}/image/placeholder.png`;
+      return `<a href="/pages/menu-departments-item/product.html?id=${p._id}" class="flex gap-3 border rounded-lg p-2 hover:shadow">
+              <img src="${imgSrc}" class="w-16 h-16 object-contain bg-white rounded" alt="${p.nome}">
+              <div class="min-w-0">
+                <div class="text-sm text-gray-800 line-clamp-2">${p.nome}</div>
+                <div class="mt-1">${priceHtml(p)}</div>
+              </div>
+            </a>`;
+    }).join('');
+
     panel.innerHTML = `
       <ul class="divide-y">
         ${terms.map(t=>`<li class="px-4 py-3 hover:bg-primary/10 cursor-pointer flex items-center gap-3" data-term="${t}"><i class=\"fa-solid fa-magnifying-glass text-gray-500\"></i><span>${t}</span></li>`).join('')}
@@ -522,13 +536,7 @@ function initializeHeaderSearch() {
       <div class="mt-2 border-t">
         <div class="p-3 bg-gray-50 font-semibold text-gray-700">Produtos sugeridos</div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3">
-          ${products.map(p=>`<a href="/pages/menu-departments-item/product.html?id=${p._id}" class="flex gap-3 border rounded-lg p-2 hover:shadow">
-              <img src="${API_CONFIG.SERVER_URL}${p.imagemPrincipal}" class="w-16 h-16 object-contain bg-white rounded" alt="${p.nome}">
-              <div class="min-w-0">
-                <div class="text-sm text-gray-800 line-clamp-2">${p.nome}</div>
-                <div class="mt-1">${priceHtml(p)}</div>
-              </div>
-            </a>`).join('')}
+          ${productCards || '<p class="col-span-full text-sm text-gray-500">Nenhum produto disponível.</p>'}
         </div>
       </div>`;
     panel.classList.remove('hidden');
