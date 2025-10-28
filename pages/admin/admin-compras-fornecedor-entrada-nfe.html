@@ -122,7 +122,12 @@
                     <i class="fas fa-eye"></i>
                     Visualizar Lotes
                   </button>
-                  <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">
+                  <button
+                    type="button"
+                    data-open-price-modal
+                    class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-400 transition opacity-60 cursor-not-allowed"
+                    disabled
+                  >
                     <i class="fas fa-tags"></i>
                     Alterar Preços
                   </button>
@@ -1368,6 +1373,199 @@
     </div>
   </div>
 
+  <div
+    id="price-adjust-modal"
+    class="fixed inset-0 z-[1000] hidden"
+    aria-hidden="true"
+  >
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-price-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div
+        data-price-modal-card
+        class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh] min-h-0 text-[12px] leading-[1.35]"
+      >
+        <header class="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+          <div class="space-y-1.5">
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-tags"></i>
+              Ajuste de preços
+            </span>
+            <h2 class="text-lg font-semibold text-gray-900">Atualizar preços dos produtos da NF-e</h2>
+            <p class="text-[10px] text-gray-600">
+              Revise os custos calculados, defina markup ou mantenha o preço de venda atual antes de aplicar as alterações aos produtos selecionados.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              data-price-use-markup
+              class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-50"
+              aria-pressed="false"
+            >
+              <i class="fas fa-percentage"></i>
+              Usar markup
+            </button>
+            <label class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-[10px] font-semibold text-gray-600">
+              <input type="checkbox" class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary" data-price-maintain-markup>
+              Manter markup
+            </label>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
+              data-close-price-modal
+              aria-label="Fechar ajuste de preços"
+            >
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </header>
+
+        <div class="flex flex-col gap-4 px-5 pt-4">
+          <div class="flex flex-col gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 sm:flex-row sm:items-end sm:justify-between">
+            <div class="flex flex-wrap items-end gap-3">
+              <div class="flex flex-col">
+                <label for="price-adjust-cost-percent" class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Alterar custo %</label>
+                <input
+                  id="price-adjust-cost-percent"
+                  data-price-cost-percent
+                  type="text"
+                  inputmode="decimal"
+                  class="w-24 rounded border border-gray-200 bg-white px-2 py-1 text-right text-[11px] font-semibold text-gray-700 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  placeholder="0,00"
+                />
+              </div>
+              <div class="flex items-center gap-2" role="group" aria-label="Modo de ajuste">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-100"
+                  data-price-cost-mode="add"
+                  aria-pressed="true"
+                >
+                  Somar
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-100"
+                  data-price-cost-mode="subtract"
+                  aria-pressed="false"
+                >
+                  Subtrair
+                </button>
+              </div>
+              <button
+                type="button"
+                data-price-generate
+                class="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-[10px] font-semibold text-white shadow-sm transition hover:bg-primary/90"
+              >
+                <i class="fas fa-calculator"></i>
+                Gerar
+              </button>
+            </div>
+            <p class="text-[10px] text-gray-500">
+              Informe o percentual para atualizar o custo novo dos produtos selecionados. Percentual 0 restaura o valor calculado originalmente.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-hidden px-5 pb-4">
+          <div class="flex h-full flex-col overflow-hidden rounded-xl border border-gray-100">
+            <div class="overflow-auto">
+              <table class="min-w-full divide-y divide-gray-100 text-[11px]" data-price-table>
+                <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
+                  <tr class="text-left">
+                    <th class="px-3 py-2 text-center">
+                      <input type="checkbox" class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary" data-price-select-all />
+                    </th>
+                    <th class="px-3 py-2">Código</th>
+                    <th class="px-3 py-2">Descrição</th>
+                    <th class="px-3 py-2 text-right">Custo anterior</th>
+                    <th class="px-3 py-2 text-right">Custo novo</th>
+                    <th class="px-3 py-2 text-right">Markup (%)</th>
+                    <th class="px-3 py-2 text-right">Venda novo</th>
+                    <th class="px-3 py-2 text-right">Venda anterior</th>
+                    <th class="px-3 py-2 text-right">Estoque entrada</th>
+                    <th class="px-3 py-2 text-right">Estoque atual</th>
+                    <th class="px-3 py-2 text-right">Estoque anterior</th>
+                    <th class="px-3 py-2 text-center">Regra de imposto</th>
+                  </tr>
+                  <tr class="bg-white text-[10px] text-gray-500">
+                    <th class="px-3 py-2"></th>
+                    <th class="px-3 py-2">
+                      <input type="text" data-price-filter="code" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    </th>
+                    <th class="px-3 py-2">
+                      <input type="text" data-price-filter="description" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    </th>
+                    <th class="px-3 py-2">
+                      <input type="text" data-price-filter="costPrevious" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    </th>
+                    <th class="px-3 py-2">
+                      <input type="text" data-price-filter="costNew" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    </th>
+                    <th class="px-3 py-2">
+                      <input type="text" data-price-filter="markup" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    </th>
+                    <th class="px-3 py-2">
+                      <input type="text" data-price-filter="saleNew" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    </th>
+                    <th class="px-3 py-2">
+                      <input type="text" data-price-filter="salePrevious" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    </th>
+                    <th class="px-3 py-2">
+                      <input type="text" data-price-filter="entryStock" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    </th>
+                    <th class="px-3 py-2">
+                      <input type="text" data-price-filter="currentStock" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    </th>
+                    <th class="px-3 py-2">
+                      <input type="text" data-price-filter="previousStock" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    </th>
+                    <th class="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 bg-white" data-price-table-body>
+                  <tr data-price-empty>
+                    <td colspan="12" class="px-4 py-4 text-center text-[11px] text-gray-500">
+                      Nenhum produto disponível para ajuste de preço.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <footer class="flex flex-col gap-3 border-t border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-center gap-3 text-[11px]">
+            <button type="button" data-price-mark-all class="inline-flex items-center gap-1 rounded border border-gray-200 px-3 py-1 font-semibold text-gray-600 transition hover:bg-gray-50">
+              Marcar todos
+            </button>
+            <button type="button" data-price-unmark-all class="inline-flex items-center gap-1 rounded border border-gray-200 px-3 py-1 font-semibold text-gray-600 transition hover:bg-gray-50">
+              Desmarcar todos
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              data-price-cancel
+              class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-[11px] font-semibold text-gray-600 transition hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              data-price-update
+              class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-primary/90"
+            >
+              <i class="fas fa-rotate" data-price-update-icon></i>
+              <span data-price-update-text>Atualizar</span>
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  </div>
+
   <div id="import-xml-modal" class="fixed inset-0 z-[999] hidden">
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-import-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
@@ -2206,6 +2404,36 @@
         const registerEntryText = registerEntryButton?.querySelector('[data-register-entry-text]') || null;
         const deleteEntryIcon = deleteEntryButton?.querySelector('[data-delete-entry-icon]') || null;
         const deleteEntryText = deleteEntryButton?.querySelector('[data-delete-entry-text]') || null;
+        const priceAdjustmentButton = document.querySelector('[data-open-price-modal]');
+        const priceModal = document.getElementById('price-adjust-modal');
+        const priceModalCard = priceModal?.querySelector('[data-price-modal-card]') || null;
+        const priceModalCloseButtons = priceModal ? priceModal.querySelectorAll('[data-close-price-modal]') : [];
+        const priceUseMarkupButton = priceModal?.querySelector('[data-price-use-markup]') || null;
+        const priceMaintainMarkupToggle = priceModal?.querySelector('[data-price-maintain-markup]') || null;
+        const priceCostPercentInput = priceModal?.querySelector('[data-price-cost-percent]') || null;
+        const priceCostModeButtons = priceModal ? priceModal.querySelectorAll('[data-price-cost-mode]') : [];
+        const priceGenerateButton = priceModal?.querySelector('[data-price-generate]') || null;
+        const priceSelectAllCheckbox = priceModal?.querySelector('[data-price-select-all]') || null;
+        const priceTableBody = priceModal?.querySelector('[data-price-table-body]') || null;
+        const priceEmptyRow = priceModal?.querySelector('[data-price-empty]') || null;
+        const priceMarkAllButton = priceModal?.querySelector('[data-price-mark-all]') || null;
+        const priceUnmarkAllButton = priceModal?.querySelector('[data-price-unmark-all]') || null;
+        const priceCancelButton = priceModal?.querySelector('[data-price-cancel]') || null;
+        const priceUpdateButton = priceModal?.querySelector('[data-price-update]') || null;
+        const priceUpdateButtonIcon = priceUpdateButton?.querySelector('[data-price-update-icon]') || priceUpdateButton?.querySelector('i') || null;
+        const priceUpdateButtonText = priceUpdateButton?.querySelector('[data-price-update-text]') || null;
+        const priceFilterInputs = new Map();
+        let updatePriceButtonAvailability = () => {};
+        let closePriceAdjustmentModal = () => {};
+        const priceAdjustmentState = {
+          items: [],
+          filters: {},
+          usarMarkup: false,
+          maintainMarkup: false,
+          costMode: 'add',
+          isOpen: false,
+          isProcessing: false,
+        };
         const statusBadge = document.querySelector('[data-nfe-status-badge]');
         const documentsTableBody = document.querySelector('[data-nfe-documents-body]');
         const documentsEmptyRow = document.querySelector('[data-nfe-documents-empty]');
@@ -6060,6 +6288,32 @@
           }
         };
 
+        const togglePriceButtonState = (enabled) => {
+          if (!priceAdjustmentButton) return;
+          priceAdjustmentButton.disabled = !enabled;
+          priceAdjustmentButton.classList.toggle('cursor-not-allowed', !enabled);
+          priceAdjustmentButton.classList.toggle('opacity-60', !enabled);
+          priceAdjustmentButton.classList.toggle('text-gray-400', !enabled);
+          priceAdjustmentButton.classList.toggle('text-gray-600', enabled);
+          priceAdjustmentButton.classList.toggle('hover:bg-gray-50', enabled);
+        };
+
+        const hasPriceAdjustableProducts = () =>
+          Array.isArray(mainProductTableState?.items) &&
+          mainProductTableState.items.some((item) => item?.matchedProduct);
+
+        updatePriceButtonAvailability = (status) => {
+          const normalized = determineDraftStatusKey(status ?? currentDraftStatus);
+          const hasDraft = Boolean(currentDraftId);
+          const shouldEnable = hasDraft && normalized === 'approved' && hasPriceAdjustableProducts();
+          togglePriceButtonState(shouldEnable);
+          if (!shouldEnable && priceAdjustmentState.isOpen) {
+            closePriceAdjustmentModal();
+          }
+        };
+
+        togglePriceButtonState(false);
+
         const lockStateRegistry = new WeakMap();
 
         const rememberLockState = (element) => {
@@ -6076,6 +6330,7 @@
         const shouldSkipFormControlLock = (element) => {
           if (!(element instanceof HTMLElement)) return true;
           if (element.hasAttribute('data-admin-screen-search-input')) return true;
+          if (element.closest('#price-adjust-modal')) return true;
           return false;
         };
 
@@ -6089,6 +6344,9 @@
           if (button.hasAttribute('data-admin-sidebar-trigger')) return true;
           if (button.hasAttribute('data-admin-sidebar-close')) return true;
           if (button.hasAttribute('data-delete-entry')) return true;
+          if (button.hasAttribute('data-open-price-modal')) return true;
+          if (button.hasAttribute('data-clear-import')) return true;
+          if (button.closest('#price-adjust-modal')) return true;
           return false;
         };
 
@@ -7097,6 +7355,815 @@
               !productIframeModal.classList.contains('hidden') &&
               productIframeModal.hasAttribute('data-modal-open')
           );
+
+        if (priceModal) {
+          const filterElements = priceModal.querySelectorAll('[data-price-filter]');
+          filterElements.forEach((element) => {
+            if (!(element instanceof HTMLInputElement)) return;
+            const key = element.dataset.priceFilter || '';
+            if (!key) return;
+            priceFilterInputs.set(key, element);
+          });
+        }
+
+        const toNumericValue = (value) => (Number.isFinite(value) ? value : parseNumber(value));
+        const sanitizeCurrencyValue = (value) => {
+          const numeric = toNumericValue(value);
+          if (!Number.isFinite(numeric)) return null;
+          return Math.round(numeric * 100) / 100;
+        };
+        const sanitizePercentValue = (value) => {
+          const numeric = toNumericValue(value);
+          if (!Number.isFinite(numeric)) return null;
+          return Math.round(numeric * 100) / 100;
+        };
+        const sanitizeQuantityValue = (value) => {
+          const numeric = toNumericValue(value);
+          if (!Number.isFinite(numeric)) return null;
+          return Math.round(numeric * 1000) / 1000;
+        };
+
+        const computeMarkupPercentage = (cost, sale) => {
+          const costValue = sanitizeCurrencyValue(cost);
+          const saleValue = sanitizeCurrencyValue(sale);
+          if (!Number.isFinite(costValue) || costValue <= 0 || !Number.isFinite(saleValue) || saleValue <= 0) {
+            return null;
+          }
+          const markup = ((saleValue - costValue) / costValue) * 100;
+          return Math.round(markup * 100) / 100;
+        };
+
+        const computeSaleFromMarkup = (cost, markup) => {
+          const costValue = sanitizeCurrencyValue(cost);
+          const markupValue = sanitizePercentValue(markup);
+          if (!Number.isFinite(costValue) || costValue < 0) return null;
+          if (!Number.isFinite(markupValue)) return costValue;
+          const factor = 1 + markupValue / 100;
+          if (factor < 0) return 0;
+          const result = costValue * factor;
+          return Math.round(result * 100) / 100;
+        };
+
+        const buildPriceAdjustmentItems = () => {
+          const sourceItems = Array.isArray(mainProductTableState?.items) && mainProductTableState.items.length
+            ? mainProductTableState.items
+            : Array.isArray(lastNfeData?.items)
+            ? lastNfeData.items
+            : [];
+
+          const items = [];
+          sourceItems.forEach((item, index) => {
+            if (!item || item.validationStatus !== 'matched' || !item.matchedProduct) return;
+            const productId = getProductIdFromRecord(item.matchedProduct);
+            if (!productId) return;
+
+            ensureItemCostWithTaxes(item);
+
+            const internalCode = normalizeInternalCode(getProductCodeFromRecord(item.matchedProduct)) || item.internalCode;
+            const supplierCode = item.supplierCode || '';
+            const code = internalCode || supplierCode || `ITEM-${index + 1}`;
+            const description =
+              getProductNameFromRecord(item.matchedProduct) ||
+              (typeof item.description === 'string' ? item.description : '') ||
+              'Produto sem descrição';
+
+            const costPrevious = sanitizeCurrencyValue(item.matchedProduct?.custo);
+            const salePrevious = sanitizeCurrencyValue(item.matchedProduct?.venda);
+            const costBase = sanitizeCurrencyValue(item.unitCostWithTaxes);
+            const entryStock = sanitizeQuantityValue(resolveMainProductEntryStockQuantity(
+              item,
+              resolveMainProductConversionFactor(item)
+            ));
+            const currentStock = sanitizeQuantityValue(item.matchedProduct?.stock);
+            const previousStock =
+              Number.isFinite(currentStock) && Number.isFinite(entryStock)
+                ? Math.max(sanitizeQuantityValue(currentStock - entryStock) || 0, 0)
+                : null;
+
+            const markupPrevious = computeMarkupPercentage(costPrevious, salePrevious);
+            const initialCost = Number.isFinite(costBase) ? costBase : costPrevious;
+
+            let markupCurrent = Number.isFinite(markupPrevious) ? markupPrevious : null;
+            let saleNew = Number.isFinite(salePrevious) ? salePrevious : null;
+
+            if (!Number.isFinite(saleNew) && Number.isFinite(initialCost) && Number.isFinite(markupCurrent)) {
+              saleNew = computeSaleFromMarkup(initialCost, markupCurrent);
+            }
+
+            if (!Number.isFinite(markupCurrent) && Number.isFinite(initialCost) && Number.isFinite(saleNew)) {
+              markupCurrent = computeMarkupPercentage(initialCost, saleNew);
+            }
+
+            const entryData = {
+              id: `${productId}-${index}`,
+              productId,
+              code,
+              description,
+              nfeItem: item,
+              matchedProduct: item.matchedProduct,
+              costPrevious,
+              salePrevious,
+              costBase: Number.isFinite(initialCost) ? initialCost : null,
+              costNew: Number.isFinite(initialCost) ? initialCost : null,
+              saleNew,
+              markupPrevious,
+              markupCurrent,
+              entryStock,
+              currentStock,
+              previousStock,
+              selected: false,
+              displays: {},
+              filterValues: {},
+            };
+
+            updateEntryDisplays(entryData);
+            items.push(entryData);
+          });
+
+          return items;
+        };
+
+        const updateEntryDisplays = (entry) => {
+          if (!entry || typeof entry !== 'object') return;
+
+          const formatCurrencyDisplay = (value) =>
+            Number.isFinite(value) ? formatMoneyValue(value) : '';
+          const formatQuantityDisplay = (value) =>
+            Number.isFinite(value) ? formatQuantity(value) : '—';
+          const formatMarkupDisplay = (value) =>
+            Number.isFinite(value) ? formatPercentValue(value) : '';
+
+          entry.displays = {
+            costPrevious: Number.isFinite(entry.costPrevious) ? formatMoneyValue(entry.costPrevious) : '—',
+            costNew: formatCurrencyDisplay(entry.costNew),
+            markup: formatMarkupDisplay(entry.markupCurrent),
+            saleNew: formatCurrencyDisplay(entry.saleNew),
+            salePrevious: Number.isFinite(entry.salePrevious) ? formatMoneyValue(entry.salePrevious) : '—',
+            entryStock: formatQuantityDisplay(entry.entryStock),
+            currentStock: formatQuantityDisplay(entry.currentStock),
+            previousStock: formatQuantityDisplay(entry.previousStock),
+          };
+
+          entry.filterValues = {
+            code: entry.code || '',
+            description: entry.description || '',
+            costPrevious: entry.displays.costPrevious,
+            costNew: entry.displays.costNew,
+            markup: entry.displays.markup,
+            saleNew: entry.displays.saleNew,
+            salePrevious: entry.displays.salePrevious,
+            entryStock: entry.displays.entryStock,
+            currentStock: entry.displays.currentStock,
+            previousStock: entry.displays.previousStock,
+          };
+        };
+
+        const recomputeEntryPricing = (entry, { source } = {}) => {
+          if (!entry || typeof entry !== 'object') return;
+
+          const costValue = sanitizeCurrencyValue(entry.costNew);
+          entry.costNew = costValue;
+
+          const previousMarkup = Number.isFinite(entry.markupPrevious)
+            ? entry.markupPrevious
+            : computeMarkupPercentage(entry.costPrevious, entry.salePrevious);
+
+          const resolveMarkup = (value) => {
+            if (Number.isFinite(value)) return value;
+            if (Number.isFinite(previousMarkup)) return previousMarkup;
+            const derived = computeMarkupPercentage(costValue, entry.saleNew);
+            return Number.isFinite(derived) ? derived : 0;
+          };
+
+          if (priceAdjustmentState.maintainMarkup) {
+            const markupToApply = Number.isFinite(previousMarkup)
+              ? previousMarkup
+              : resolveMarkup(entry.markupCurrent);
+            entry.markupCurrent = Number.isFinite(markupToApply) ? markupToApply : 0;
+            entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
+          } else if (priceAdjustmentState.usarMarkup) {
+            if (source === 'sale-update') {
+              entry.markupCurrent = resolveMarkup(computeMarkupPercentage(costValue, entry.saleNew));
+            } else if (source === 'markup-update') {
+              entry.markupCurrent = resolveMarkup(entry.markupCurrent);
+              entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
+            } else if (source === 'cost-update') {
+              entry.markupCurrent = resolveMarkup(entry.markupCurrent);
+              entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
+            } else if (source === 'toggle-use-markup' || source === 'maintain-toggle') {
+              const markupToApply = Number.isFinite(previousMarkup)
+                ? previousMarkup
+                : resolveMarkup(entry.markupCurrent);
+              entry.markupCurrent = Number.isFinite(markupToApply) ? markupToApply : 0;
+              entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
+            } else {
+              entry.markupCurrent = resolveMarkup(entry.markupCurrent);
+              if (!Number.isFinite(entry.saleNew)) {
+                entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
+              }
+            }
+          } else {
+            if (source === 'markup-update') {
+              entry.markupCurrent = resolveMarkup(entry.markupCurrent);
+              entry.saleNew = computeSaleFromMarkup(costValue, entry.markupCurrent);
+            } else if (source === 'sale-update') {
+              entry.markupCurrent = resolveMarkup(computeMarkupPercentage(costValue, entry.saleNew));
+            } else {
+              if (!Number.isFinite(entry.saleNew) || source === 'cost-update' || source === 'toggle-use-markup') {
+                if (!Number.isFinite(entry.saleNew)) {
+                  const fallbackSale = Number.isFinite(entry.salePrevious)
+                    ? entry.salePrevious
+                    : computeSaleFromMarkup(costValue, resolveMarkup(entry.markupCurrent));
+                  entry.saleNew = Number.isFinite(fallbackSale) ? fallbackSale : 0;
+                }
+              }
+              entry.markupCurrent = resolveMarkup(computeMarkupPercentage(costValue, entry.saleNew));
+            }
+          }
+
+          if (!Number.isFinite(entry.saleNew)) {
+            entry.saleNew = Number.isFinite(entry.salePrevious)
+              ? entry.salePrevious
+              : computeSaleFromMarkup(costValue, resolveMarkup(entry.markupCurrent));
+          }
+
+          if (!Number.isFinite(entry.markupCurrent)) {
+            entry.markupCurrent = resolveMarkup(entry.markupCurrent);
+          }
+
+          updateEntryDisplays(entry);
+        };
+
+        const recomputeAllEntries = ({ source } = {}) => {
+          if (!Array.isArray(priceAdjustmentState.items)) return;
+          priceAdjustmentState.items.forEach((entry) => {
+            recomputeEntryPricing(entry, { source });
+          });
+        };
+
+        const filterPriceItems = (items) => {
+          const activeFilters = Object.entries(priceAdjustmentState.filters || {}).filter(([, value]) =>
+            normalizeFilterText(value).length > 0
+          );
+          if (!activeFilters.length) {
+            return items.slice();
+          }
+          return items.filter((entry) =>
+            activeFilters.every(([key, value]) => {
+              const normalizedFilter = normalizeFilterText(value);
+              if (!normalizedFilter) return true;
+              const columnValue = entry.filterValues?.[key] ?? '';
+              const normalizedColumn = normalizeFilterText(columnValue);
+              return normalizedColumn.includes(normalizedFilter);
+            })
+          );
+        };
+
+        const syncPriceSelectAllState = () => {
+          if (!priceSelectAllCheckbox) return;
+          const items = Array.isArray(priceAdjustmentState.items) ? priceAdjustmentState.items : [];
+          if (!items.length) {
+            priceSelectAllCheckbox.checked = false;
+            priceSelectAllCheckbox.indeterminate = false;
+            return;
+          }
+          const selectedCount = items.filter((entry) => entry.selected).length;
+          priceSelectAllCheckbox.checked = selectedCount > 0 && selectedCount === items.length;
+          priceSelectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < items.length;
+        };
+
+        const createPriceTableRow = (entry) => {
+          const row = document.createElement('tr');
+          row.dataset.priceRow = entry.id;
+          row.className = 'text-[11px] text-gray-700';
+
+          const buildReadOnlyInputClasses = (readOnly) =>
+            readOnly
+              ? 'w-24 rounded border border-gray-200 bg-gray-50 px-2 py-1 text-right font-semibold text-gray-500 focus:outline-none cursor-not-allowed'
+              : 'w-24 rounded border border-gray-200 bg-white px-2 py-1 text-right font-semibold text-gray-700 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30';
+
+          const selectCell = document.createElement('td');
+          selectCell.className = 'px-3 py-2 text-center align-top';
+          const selectInput = document.createElement('input');
+          selectInput.type = 'checkbox';
+          selectInput.className = 'h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary';
+          selectInput.checked = Boolean(entry.selected);
+          selectInput.addEventListener('change', () => {
+            entry.selected = selectInput.checked;
+            syncPriceSelectAllState();
+          });
+          selectCell.appendChild(selectInput);
+
+          const codeCell = document.createElement('td');
+          codeCell.className = 'px-3 py-2 align-top text-gray-700 whitespace-nowrap';
+          codeCell.textContent = entry.code || '—';
+
+          const descriptionCell = document.createElement('td');
+          descriptionCell.className = 'px-3 py-2 align-top text-gray-600';
+          descriptionCell.textContent = entry.description || '—';
+
+          const costPreviousCell = document.createElement('td');
+          costPreviousCell.className = 'px-3 py-2 align-top text-right text-gray-500 whitespace-nowrap';
+          costPreviousCell.textContent = entry.displays.costPrevious;
+
+          const costNewCell = document.createElement('td');
+          costNewCell.className = 'px-3 py-2 align-top text-right';
+          const costInput = document.createElement('input');
+          costInput.type = 'text';
+          costInput.inputMode = 'decimal';
+          costInput.value = entry.displays.costNew;
+          costInput.className = buildReadOnlyInputClasses(false);
+          costInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              costInput.blur();
+            }
+          });
+          costInput.addEventListener('blur', () => {
+            const value = sanitizeCurrencyValue(costInput.value);
+            if (!Number.isFinite(value)) {
+              costInput.value = entry.displays.costNew;
+              return;
+            }
+            entry.costNew = value;
+            recomputeEntryPricing(entry, { source: 'cost-update' });
+            costInput.value = entry.displays.costNew;
+            renderPriceAdjustmentTable();
+          });
+          costNewCell.appendChild(costInput);
+
+          const markupCell = document.createElement('td');
+          markupCell.className = 'px-3 py-2 align-top text-right';
+          const markupInput = document.createElement('input');
+          markupInput.type = 'text';
+          markupInput.inputMode = 'decimal';
+          markupInput.value = entry.displays.markup;
+          const markupReadOnly = priceAdjustmentState.maintainMarkup;
+          markupInput.readOnly = markupReadOnly;
+          markupInput.className = buildReadOnlyInputClasses(markupReadOnly).replace('w-24', 'w-20');
+          markupInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              markupInput.blur();
+            }
+          });
+          markupInput.addEventListener('blur', () => {
+            if (markupReadOnly) return;
+            const value = sanitizePercentValue(markupInput.value);
+            if (!Number.isFinite(value)) {
+              markupInput.value = entry.displays.markup;
+              return;
+            }
+            entry.markupCurrent = value;
+            entry.saleNew = computeSaleFromMarkup(entry.costNew, entry.markupCurrent);
+            recomputeEntryPricing(entry, { source: 'markup-update' });
+            renderPriceAdjustmentTable();
+          });
+          markupCell.appendChild(markupInput);
+
+          const saleNewCell = document.createElement('td');
+          saleNewCell.className = 'px-3 py-2 align-top text-right';
+          const saleInput = document.createElement('input');
+          saleInput.type = 'text';
+          saleInput.inputMode = 'decimal';
+          saleInput.value = entry.displays.saleNew;
+          const saleReadOnly = priceAdjustmentState.maintainMarkup;
+          saleInput.readOnly = saleReadOnly;
+          saleInput.className = buildReadOnlyInputClasses(saleReadOnly);
+          saleInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              saleInput.blur();
+            }
+          });
+          saleInput.addEventListener('blur', () => {
+            if (saleReadOnly) return;
+            const value = sanitizeCurrencyValue(saleInput.value);
+            if (!Number.isFinite(value)) {
+              saleInput.value = entry.displays.saleNew;
+              return;
+            }
+            entry.saleNew = value;
+            recomputeEntryPricing(entry, { source: 'sale-update' });
+            renderPriceAdjustmentTable();
+          });
+          saleNewCell.appendChild(saleInput);
+
+          const salePreviousCell = document.createElement('td');
+          salePreviousCell.className = 'px-3 py-2 align-top text-right text-gray-500 whitespace-nowrap';
+          salePreviousCell.textContent = entry.displays.salePrevious;
+
+          const entryStockCell = document.createElement('td');
+          entryStockCell.className = 'px-3 py-2 align-top text-right text-gray-500 whitespace-nowrap';
+          entryStockCell.textContent = entry.displays.entryStock;
+
+          const currentStockCell = document.createElement('td');
+          currentStockCell.className = 'px-3 py-2 align-top text-right text-gray-500 whitespace-nowrap';
+          currentStockCell.textContent = entry.displays.currentStock;
+
+          const previousStockCell = document.createElement('td');
+          previousStockCell.className = 'px-3 py-2 align-top text-right text-gray-500 whitespace-nowrap';
+          previousStockCell.textContent = entry.displays.previousStock;
+
+          const taxCell = document.createElement('td');
+          taxCell.className = 'px-3 py-2 align-top text-center';
+          const taxButton = document.createElement('button');
+          taxButton.type = 'button';
+          taxButton.className =
+            'inline-flex items-center gap-1 rounded-full border border-primary/40 px-3 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/10';
+          taxButton.textContent = 'Regra';
+          taxButton.addEventListener('click', () => {
+            openExistingProduct(entry.nfeItem);
+          });
+          taxCell.appendChild(taxButton);
+
+          row.append(
+            selectCell,
+            codeCell,
+            descriptionCell,
+            costPreviousCell,
+            costNewCell,
+            markupCell,
+            saleNewCell,
+            salePreviousCell,
+            entryStockCell,
+            currentStockCell,
+            previousStockCell,
+            taxCell
+          );
+
+          return row;
+        };
+
+        const renderPriceAdjustmentTable = () => {
+          if (!priceTableBody) return;
+
+          const existingRows = priceTableBody.querySelectorAll('[data-price-row]');
+          existingRows.forEach((row) => row.remove());
+
+          const items = Array.isArray(priceAdjustmentState.items) ? priceAdjustmentState.items : [];
+          const filteredItems = filterPriceItems(items);
+
+          if (!filteredItems.length) {
+            if (priceEmptyRow) {
+              priceEmptyRow.classList.remove('hidden');
+            }
+            syncPriceSelectAllState();
+            return;
+          }
+
+          if (priceEmptyRow) {
+            priceEmptyRow.classList.add('hidden');
+          }
+
+          const fragment = document.createDocumentFragment();
+          filteredItems.forEach((entry) => {
+            const row = createPriceTableRow(entry);
+            fragment.appendChild(row);
+          });
+          priceTableBody.appendChild(fragment);
+          syncPriceSelectAllState();
+        };
+
+        const setUseMarkupState = (active, { silent } = {}) => {
+          const normalized = Boolean(active);
+          priceAdjustmentState.usarMarkup = normalized;
+          if (priceUseMarkupButton) {
+            priceUseMarkupButton.setAttribute('aria-pressed', normalized ? 'true' : 'false');
+            priceUseMarkupButton.classList.toggle('bg-primary/10', normalized);
+            priceUseMarkupButton.classList.toggle('border-primary/60', normalized);
+            priceUseMarkupButton.classList.toggle('text-primary', normalized);
+            priceUseMarkupButton.classList.toggle('text-gray-600', !normalized);
+          }
+          if (!silent) {
+            recomputeAllEntries({ source: 'toggle-use-markup' });
+            renderPriceAdjustmentTable();
+          }
+        };
+
+        const setMaintainMarkupState = (active) => {
+          const normalized = Boolean(active);
+          priceAdjustmentState.maintainMarkup = normalized;
+          if (priceMaintainMarkupToggle) {
+            priceMaintainMarkupToggle.checked = normalized;
+          }
+          if (priceUseMarkupButton) {
+            priceUseMarkupButton.disabled = normalized;
+            priceUseMarkupButton.classList.toggle('opacity-60', normalized);
+            priceUseMarkupButton.classList.toggle('cursor-not-allowed', normalized);
+          }
+          if (normalized) {
+            setUseMarkupState(true, { silent: true });
+          }
+          recomputeAllEntries({ source: 'maintain-toggle' });
+          renderPriceAdjustmentTable();
+        };
+
+        const setCostMode = (mode) => {
+          const normalized = mode === 'subtract' ? 'subtract' : 'add';
+          priceAdjustmentState.costMode = normalized;
+          priceCostModeButtons.forEach((button) => {
+            if (!(button instanceof HTMLButtonElement)) return;
+            const isActive = button.dataset.priceCostMode === normalized;
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+            button.classList.toggle('bg-primary/10', isActive);
+            button.classList.toggle('border-primary/60', isActive);
+            button.classList.toggle('text-primary', isActive);
+          });
+        };
+
+        const applyCostPercentToSelection = () => {
+          if (!Array.isArray(priceAdjustmentState.items) || !priceAdjustmentState.items.length) {
+            notify('Nenhum produto disponível para ajuste.', 'warning');
+            return;
+          }
+          const selectedItems = priceAdjustmentState.items.filter((entry) => entry.selected);
+          if (!selectedItems.length) {
+            notify('Selecione ao menos um produto para ajustar o custo.', 'warning');
+            return;
+          }
+          const percentValue = sanitizePercentValue(priceCostPercentInput?.value);
+          const hasPercent = Number.isFinite(percentValue) && percentValue !== 0;
+          selectedItems.forEach((entry) => {
+            const baseCost = Number.isFinite(entry.costBase) ? entry.costBase : entry.costNew;
+            if (!Number.isFinite(baseCost)) return;
+            if (!hasPercent) {
+              entry.costNew = baseCost;
+            } else {
+              const factor = priceAdjustmentState.costMode === 'subtract' ? 1 - percentValue / 100 : 1 + percentValue / 100;
+              const adjusted = Math.max(baseCost * factor, 0);
+              entry.costNew = Math.round(adjusted * 100) / 100;
+            }
+            recomputeEntryPricing(entry);
+          });
+          renderPriceAdjustmentTable();
+        };
+
+        const setPriceProcessingState = (processing) => {
+          priceAdjustmentState.isProcessing = Boolean(processing);
+          if (priceUpdateButton) {
+            priceUpdateButton.disabled = processing;
+            priceUpdateButton.classList.toggle('cursor-wait', processing);
+            priceUpdateButton.classList.toggle('opacity-60', processing);
+          }
+          if (priceUpdateButtonIcon) {
+            priceUpdateButtonIcon.className = processing ? 'fas fa-circle-notch fa-spin' : 'fas fa-rotate';
+          }
+          if (priceUpdateButtonText) {
+            priceUpdateButtonText.textContent = processing ? 'Atualizando...' : 'Atualizar';
+          }
+          if (priceGenerateButton) {
+            priceGenerateButton.disabled = processing;
+            priceGenerateButton.classList.toggle('opacity-60', processing);
+            priceGenerateButton.classList.toggle('cursor-not-allowed', processing);
+          }
+        };
+
+        closePriceAdjustmentModal = () => {
+          if (!priceModal) return;
+          if (priceAdjustmentState.isProcessing) return;
+          priceAdjustmentState.isOpen = false;
+          if (priceModalCard) {
+            priceModalCard.classList.add('opacity-0', 'scale-95');
+            setTimeout(() => {
+              priceModal?.classList.add('hidden');
+            }, 180);
+          } else {
+            priceModal.classList.add('hidden');
+          }
+          if (!isImportModalOpen() && !isProductIframeModalOpen()) {
+            document.body.classList.remove('overflow-hidden');
+          }
+        };
+
+        const openPriceAdjustmentModal = () => {
+          if (!priceModal || !priceAdjustmentButton || priceAdjustmentButton.disabled) return;
+          priceAdjustmentState.items = buildPriceAdjustmentItems();
+          priceAdjustmentState.filters = {};
+          priceFilterInputs.forEach((input) => {
+            if (!(input instanceof HTMLInputElement)) return;
+            input.value = '';
+          });
+          setCostMode(priceAdjustmentState.costMode || 'add');
+          if (priceMaintainMarkupToggle) {
+            setMaintainMarkupState(priceMaintainMarkupToggle.checked);
+          } else {
+            setMaintainMarkupState(false);
+          }
+          if (!priceAdjustmentState.maintainMarkup) {
+            const useMarkupActive = priceUseMarkupButton?.getAttribute('aria-pressed') === 'true';
+            setUseMarkupState(useMarkupActive, { silent: true });
+            recomputeAllEntries({ source: 'toggle-use-markup' });
+          }
+          renderPriceAdjustmentTable();
+          priceAdjustmentState.items.forEach((entry) => {
+            entry.selected = false;
+          });
+          syncPriceSelectAllState();
+
+          priceAdjustmentState.isOpen = true;
+          if (priceModalCard) {
+            priceModalCard.classList.add('opacity-0', 'scale-95');
+          }
+          priceModal.classList.remove('hidden');
+          requestAnimationFrame(() => {
+            if (priceModalCard) {
+              priceModalCard.classList.remove('opacity-0', 'scale-95');
+            }
+            const focusable = priceModal?.querySelector('input:not([readonly]):not([disabled])');
+            if (focusable instanceof HTMLElement) {
+              focusable.focus();
+            }
+          });
+          document.body.classList.add('overflow-hidden');
+        };
+
+        const handlePriceUpdate = async () => {
+          if (!Array.isArray(priceAdjustmentState.items) || !priceAdjustmentState.items.length) {
+            notify('Nenhum produto disponível para atualização.', 'warning');
+            return;
+          }
+          const selectedItems = priceAdjustmentState.items.filter((entry) => entry.selected);
+          if (!selectedItems.length) {
+            notify('Selecione os produtos que deseja atualizar.', 'warning');
+            return;
+          }
+          if (priceAdjustmentState.isProcessing) return;
+
+          setPriceProcessingState(true);
+
+          const failures = [];
+          let successCount = 0;
+
+          try {
+            for (const entry of selectedItems) {
+              const productId = entry.productId;
+              const costValue = sanitizeCurrencyValue(entry.costNew);
+              const saleValue = sanitizeCurrencyValue(entry.saleNew);
+
+              if (!productId || !Number.isFinite(costValue) || !Number.isFinite(saleValue)) {
+                failures.push({ entry, error: new Error('Valores inválidos para atualização.') });
+                continue;
+              }
+
+              const headers = buildAuthHeaders();
+              headers.set('Content-Type', 'application/json');
+
+              const response = await fetch(`${apiBaseUrl}/products/${productId}`, {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({ custo: costValue, venda: saleValue }),
+              });
+
+              const payload = await response.json().catch(() => ({}));
+
+              if (response.status === 401 || response.status === 403) {
+                handleAuthError();
+              }
+
+              if (!response.ok) {
+                const message = payload?.message || payload?.error || 'Falha ao atualizar o produto.';
+                failures.push({ entry, error: new Error(message) });
+                continue;
+              }
+
+              entry.costPrevious = costValue;
+              entry.costBase = Number.isFinite(entry.costBase) ? entry.costBase : costValue;
+              entry.salePrevious = saleValue;
+              entry.markupPrevious = computeMarkupPercentage(costValue, saleValue);
+              entry.markupCurrent = entry.markupPrevious;
+              entry.saleNew = saleValue;
+              entry.costNew = costValue;
+
+              if (entry.matchedProduct) {
+                entry.matchedProduct.custo = costValue;
+                entry.matchedProduct.venda = saleValue;
+              }
+
+              entry.selected = false;
+              updateEntryDisplays(entry);
+              successCount += 1;
+            }
+          } catch (error) {
+            failures.push({ entry: null, error });
+          } finally {
+            setPriceProcessingState(false);
+            renderPriceAdjustmentTable();
+            updateMainProductsTableDisplay();
+            updatePriceButtonAvailability(currentDraftStatus);
+          }
+
+          if (successCount > 0) {
+            notify(`${successCount} produto${successCount > 1 ? 's' : ''} atualizado${successCount > 1 ? 's' : ''} com sucesso.`, 'success');
+          }
+          if (failures.length) {
+            console.error('Falhas ao atualizar preços:', failures.map((failure) => failure.error));
+            notify(`${failures.length} produto${failures.length > 1 ? 's' : ''} não pôde ser atualizado. Verifique os dados e tente novamente.`, 'error');
+          }
+        };
+
+        if (priceAdjustmentButton) {
+          priceAdjustmentButton.addEventListener('click', openPriceAdjustmentModal);
+        }
+
+        priceModalCloseButtons.forEach((button) => {
+          if (!(button instanceof HTMLElement)) return;
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            closePriceAdjustmentModal();
+          });
+        });
+
+        if (priceCancelButton) {
+          priceCancelButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            closePriceAdjustmentModal();
+          });
+        }
+
+        if (priceUseMarkupButton) {
+          priceUseMarkupButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (priceAdjustmentState.maintainMarkup) return;
+            setUseMarkupState(!priceAdjustmentState.usarMarkup);
+          });
+        }
+
+        if (priceMaintainMarkupToggle) {
+          priceMaintainMarkupToggle.addEventListener('change', (event) => {
+            setMaintainMarkupState(event.target.checked);
+          });
+        }
+
+        priceCostModeButtons.forEach((button) => {
+          if (!(button instanceof HTMLButtonElement)) return;
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            setCostMode(button.dataset.priceCostMode);
+          });
+        });
+
+        if (priceGenerateButton) {
+          priceGenerateButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            applyCostPercentToSelection();
+          });
+        }
+
+        if (priceSelectAllCheckbox) {
+          priceSelectAllCheckbox.addEventListener('change', () => {
+            const checked = priceSelectAllCheckbox.checked;
+            if (!Array.isArray(priceAdjustmentState.items)) return;
+            priceAdjustmentState.items.forEach((entry) => {
+              entry.selected = checked;
+            });
+            renderPriceAdjustmentTable();
+          });
+        }
+
+        if (priceMarkAllButton) {
+          priceMarkAllButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (!Array.isArray(priceAdjustmentState.items)) return;
+            priceAdjustmentState.items.forEach((entry) => {
+              entry.selected = true;
+            });
+            renderPriceAdjustmentTable();
+          });
+        }
+
+        if (priceUnmarkAllButton) {
+          priceUnmarkAllButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (!Array.isArray(priceAdjustmentState.items)) return;
+            priceAdjustmentState.items.forEach((entry) => {
+              entry.selected = false;
+            });
+            renderPriceAdjustmentTable();
+          });
+        }
+
+        if (priceUpdateButton) {
+          priceUpdateButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            handlePriceUpdate();
+          });
+        }
+
+        priceFilterInputs.forEach((input, key) => {
+          if (!(input instanceof HTMLInputElement) || !key) return;
+          input.addEventListener('input', () => {
+            priceAdjustmentState.filters[key] = input.value || '';
+            renderPriceAdjustmentTable();
+          });
+        });
+
+        if (priceCostPercentInput) {
+          priceCostPercentInput.addEventListener('blur', () => {
+            const value = sanitizePercentValue(priceCostPercentInput.value);
+            priceCostPercentInput.value = Number.isFinite(value) ? formatPercentValue(value) : '';
+          });
+        }
 
         const hideProductLinkMessages = () => {
           if (productLinkError) {
@@ -10488,6 +11555,7 @@
           });
 
           mainProductsTableBody.appendChild(fragment);
+          updatePriceButtonAvailability(currentDraftStatus);
         };
 
         const setMainProductTableFilter = (key, value) => {
@@ -10517,6 +11585,7 @@
         const renderMainProductsFromNfe = (items = []) => {
           mainProductTableState.items = Array.isArray(items) ? items : [];
           updateMainProductsTableDisplay();
+          updatePriceButtonAvailability(currentDraftStatus);
 
           const bonificationTotal = computeBonificationTotal(mainProductTableState.items);
           setNumericInputValue(totalsBonificationInput, bonificationTotal);
@@ -10572,6 +11641,7 @@
           statusBadge.classList.remove(...ALL_CODE_STATUS_CLASSES);
           const classes = mapDraftStatusClasses(label);
           classes.forEach((className) => statusBadge.classList.add(className));
+          updatePriceButtonAvailability(status);
         };
 
         updateDeleteButtonState = (status) => {
