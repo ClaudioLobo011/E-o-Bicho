@@ -17,21 +17,18 @@
       </aside>
 
       <div class="md:col-span-4 space-y-6">
-        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div class="space-y-2">
-            <div class="flex items-center gap-2 text-sm text-gray-500">
-              <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
-                <i class="fas fa-shopping-basket"></i>
-                Compras
-              </span>
-              <i class="fas fa-angle-right text-xs"></i>
-              <span class="font-medium text-gray-600">Estoque</span>
-              <i class="fas fa-angle-right text-xs"></i>
-              <span class="font-semibold text-gray-800">Relação para alterar produtos</span>
-            </div>
+            <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-xs text-gray-500 uppercase tracking-wide font-semibold">
+              <span class="inline-flex items-center gap-1 text-primary"><i class="fas fa-shopping-basket"></i> Compras</span>
+              <i class="fas fa-angle-right text-gray-400"></i>
+              <span class="text-gray-600">Estoque</span>
+              <i class="fas fa-angle-right text-gray-400"></i>
+              <span class="text-gray-800">Relação para alterar produtos</span>
+            </nav>
             <div>
               <h1 class="text-2xl font-bold text-gray-800">Relação para alterar produtos</h1>
-              <p class="text-sm text-gray-600">Centralize ajustes de preço, disponibilidade e parâmetros fiscais dos produtos com segurança e rastreabilidade.</p>
+              <p class="text-sm text-gray-600">Localize itens e aplique ajustes simultâneos nos mesmos campos existentes na tela de edição do produto.</p>
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -49,365 +46,627 @@
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
           <div class="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Filtros avançados</h2>
-              <p class="text-sm text-gray-600">Combine filtros para localizar os produtos que precisam de atualização em massa.</p>
+              <h2 class="text-lg font-semibold text-gray-800">Filtros</h2>
+              <p class="text-sm text-gray-600">Utilize os mesmos campos do cadastro para refinar a lista de produtos que receberá alteração em lote.</p>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
+            <div class="flex flex-wrap items-center gap-2 text-xs font-medium">
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-gray-600 hover:bg-gray-50 transition">
                 <i class="fas fa-rotate"></i>
-                Limpar filtros
+                Limpar
               </button>
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-primary px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10 transition">
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-primary px-3 py-2 text-primary hover:bg-primary/10 transition">
                 <i class="fas fa-magnifying-glass"></i>
-                Buscar produtos
+                Buscar
               </button>
             </div>
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-6 gap-4">
             <div class="lg:col-span-2">
-              <label for="filter-deposito" class="block text-sm font-medium text-gray-700 mb-1">Depósito</label>
-              <select id="filter-deposito" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="">Todos</option>
-                <option>CD Fortaleza</option>
-                <option>Loja Aldeota</option>
-                <option>Clínica Vet Iguatemi</option>
-              </select>
+              <label for="filter-sku" class="block text-sm font-medium text-gray-700">Cod. Interno (SKU)</label>
+              <input type="text" id="filter-sku" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 12345">
             </div>
             <div class="lg:col-span-2">
-              <label for="filter-departamento" class="block text-sm font-medium text-gray-700 mb-1">Departamento</label>
-              <select id="filter-departamento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <option value="">Todos</option>
-                <option>Pet Shop</option>
-                <option>Veterinária</option>
-                <option>Serviços</option>
-              </select>
+              <label for="filter-name" class="block text-sm font-medium text-gray-700">Descrição</label>
+              <input type="text" id="filter-name" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe o nome do produto">
             </div>
             <div class="lg:col-span-2">
-              <label for="filter-categoria" class="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-              <select id="filter-categoria" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              <label for="filter-barcode" class="block text-sm font-medium text-gray-700">Código de Barras</label>
+              <input type="text" id="filter-barcode" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="EAN principal ou complementar">
+            </div>
+            <div>
+              <label for="filter-unidade" class="block text-sm font-medium text-gray-700">Unidade</label>
+              <select id="filter-unidade" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
                 <option value="">Todas</option>
-                <option>Rações</option>
-                <option>Brinquedos</option>
-                <option>Higiene e beleza</option>
+                <option value="UN">Unidade (UN)</option>
+                <option value="KG">Quilograma (KG)</option>
+                <option value="G">Grama (G)</option>
+                <option value="MG">Miligrama (MG)</option>
+                <option value="L">Litro (L)</option>
+                <option value="ML">Mililitro (ML)</option>
+                <option value="CX">Caixa (CX)</option>
+                <option value="PCT">Pacote (PCT)</option>
+                <option value="SC">Saco (SC)</option>
+                <option value="FD">Fardo (FD)</option>
+                <option value="DZ">Dúzia (DZ)</option>
               </select>
             </div>
-            <div class="lg:col-span-2">
-              <label for="filter-fornecedor" class="block text-sm font-medium text-gray-700 mb-1">Fornecedor</label>
-              <select id="filter-fornecedor" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+            <div>
+              <label for="filter-referencia" class="block text-sm font-medium text-gray-700">Referência do fabricante</label>
+              <input type="text" id="filter-referencia" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe a referência">
+            </div>
+            <div>
+              <label for="filter-tipo" class="block text-sm font-medium text-gray-700">Tipo de Produto</label>
+              <select id="filter-tipo" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
                 <option value="">Todos</option>
-                <option>Royal Canin</option>
-                <option>PremierPet</option>
-                <option>Purina</option>
+                <option value="Revenda">Revenda</option>
+                <option value="Consumo Interno">Consumo Interno</option>
+                <option value="Bonificação">Bonificação</option>
               </select>
             </div>
             <div>
-              <label for="filter-status" class="block text-sm font-medium text-gray-700 mb-1">Status comercial</label>
-              <select id="filter-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              <label for="filter-marca" class="block text-sm font-medium text-gray-700">Marca</label>
+              <input type="text" id="filter-marca" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: PremierPet">
+            </div>
+            <div>
+              <label for="filter-departamento" class="block text-sm font-medium text-gray-700">Departamento</label>
+              <select id="filter-departamento" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
                 <option value="">Todos</option>
-                <option>Disponível</option>
-                <option>Indisponível</option>
-                <option>Em pré-venda</option>
+                <option value="Pet Shop">Pet Shop</option>
+                <option value="Veterinária">Veterinária</option>
+                <option value="Serviços">Serviços</option>
               </select>
             </div>
             <div>
-              <label for="filter-preco" class="block text-sm font-medium text-gray-700 mb-1">Faixa de preço</label>
-              <div class="flex items-center gap-2">
-                <input type="number" id="filter-preco" placeholder="Mín." class="w-1/2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <input type="number" placeholder="Máx." class="w-1/2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-              </div>
+              <label for="filter-categoria" class="block text-sm font-medium text-gray-700">Categoria</label>
+              <input type="text" id="filter-categoria" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Buscar categoria">
             </div>
             <div>
-              <label for="filter-data" class="block text-sm font-medium text-gray-700 mb-1">Última alteração</label>
-              <input type="date" id="filter-data" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              <label for="filter-fornecedor" class="block text-sm font-medium text-gray-700">Fornecedor</label>
+              <input type="text" id="filter-fornecedor" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Comece a digitar para pesquisar">
             </div>
             <div>
-              <label for="filter-tags" class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
-              <input type="text" id="filter-tags" placeholder="Ex.: petiscos, premium" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              <label for="filter-situacao" class="block text-sm font-medium text-gray-700">Situação</label>
+              <select id="filter-situacao" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="">Todas</option>
+                <option value="ativo">Ativo</option>
+                <option value="inativo">Inativo</option>
+              </select>
             </div>
-            <div class="lg:col-span-2">
-              <label for="filter-curva" class="block text-sm font-medium text-gray-700 mb-1">Curva ABC</label>
-              <div class="flex items-center gap-3">
-                <label class="inline-flex items-center gap-2 text-sm text-gray-600">
-                  <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                  Curva A
-                </label>
-                <label class="inline-flex items-center gap-2 text-sm text-gray-600">
-                  <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                  Curva B
-                </label>
-                <label class="inline-flex items-center gap-2 text-sm text-gray-600">
-                  <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                  Curva C
-                </label>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Produtos localizados</h2>
-              <p class="text-sm text-gray-600">Selecione itens para aplicar alterações em lote. Informações críticas permanecem disponíveis para conferência.</p>
-            </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
-                <i class="fas fa-file-export"></i>
-                Exportar CSV
-              </button>
-              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
-                <i class="fas fa-bars-progress"></i>
-                Salvar seleção
-              </button>
-            </div>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-3 py-3 text-left">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                  </th>
-                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Produto</th>
-                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Categoria</th>
-                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Depósito</th>
-                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Preço venda</th>
-                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Estoque</th>
-                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Status</th>
-                  <th class="px-3 py-3 text-left font-semibold text-gray-700">Última atualização</th>
-                  <th class="px-3 py-3 text-right font-semibold text-gray-700">Ações</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr>
-                  <td class="px-3 py-3">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                  </td>
-                  <td class="px-3 py-3">
-                    <div class="font-medium text-gray-800">Ração Premium Cães Adultos 10kg</div>
-                    <div class="text-xs text-gray-500">EAN 7891234567890 · SKU RAC-001</div>
-                  </td>
-                  <td class="px-3 py-3 text-gray-600">Rações</td>
-                  <td class="px-3 py-3 text-gray-600">CD Fortaleza</td>
-                  <td class="px-3 py-3 text-gray-800 font-semibold">R$ 249,90</td>
-                  <td class="px-3 py-3 text-gray-600">82 un.</td>
-                  <td class="px-3 py-3">
-                    <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                      <i class="fas fa-circle-check"></i>
-                      Disponível
-                    </span>
-                  </td>
-                  <td class="px-3 py-3 text-gray-500">Atualizado há 2 dias</td>
-                  <td class="px-3 py-3 text-right">
-                    <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
-                      <i class="fas fa-pen"></i>
-                      Editar
-                    </button>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="px-3 py-3">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                  </td>
-                  <td class="px-3 py-3">
-                    <div class="font-medium text-gray-800">Areia Sanitária Super Absorvente 4kg</div>
-                    <div class="text-xs text-gray-500">EAN 7899876543210 · SKU ARE-214</div>
-                  </td>
-                  <td class="px-3 py-3 text-gray-600">Higiene e beleza</td>
-                  <td class="px-3 py-3 text-gray-600">Loja Aldeota</td>
-                  <td class="px-3 py-3 text-gray-800 font-semibold">R$ 46,90</td>
-                  <td class="px-3 py-3 text-gray-600">34 un.</td>
-                  <td class="px-3 py-3">
-                    <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                      <i class="fas fa-hourglass-half"></i>
-                      Em pré-venda
-                    </span>
-                  </td>
-                  <td class="px-3 py-3 text-gray-500">Atualizado há 5 dias</td>
-                  <td class="px-3 py-3 text-right">
-                    <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
-                      <i class="fas fa-pen"></i>
-                      Editar
-                    </button>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="px-3 py-3">
-                    <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
-                  </td>
-                  <td class="px-3 py-3">
-                    <div class="font-medium text-gray-800">Antipulgas Spot-On Gatos até 4kg</div>
-                    <div class="text-xs text-gray-500">EAN 7893216549870 · SKU MED-045</div>
-                  </td>
-                  <td class="px-3 py-3 text-gray-600">Medicamentos</td>
-                  <td class="px-3 py-3 text-gray-600">CD Fortaleza</td>
-                  <td class="px-3 py-3 text-gray-800 font-semibold">R$ 78,50</td>
-                  <td class="px-3 py-3 text-gray-600">12 un.</td>
-                  <td class="px-3 py-3">
-                    <span class="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">
-                      <i class="fas fa-circle-xmark"></i>
-                      Indisponível
-                    </span>
-                  </td>
-                  <td class="px-3 py-3 text-gray-500">Atualizado há 12 dias</td>
-                  <td class="px-3 py-3 text-right">
-                    <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
-                      <i class="fas fa-pen"></i>
-                      Editar
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600">
-            <span>3 produtos selecionados de um total de 128 resultados.</span>
-            <div class="flex items-center gap-2">
-              <button type="button" class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">Anterior</button>
-              <span class="font-medium text-gray-800">Página 1 de 13</span>
-              <button type="button" class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">Próxima</button>
-            </div>
-          </div>
-        </section>
-
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-          <div class="flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Painel de alterações em massa</h2>
-              <p class="text-sm text-gray-600">Defina os parâmetros que serão aplicados aos produtos selecionados. Campos não preenchidos permanecerão inalterados.</p>
-            </div>
-            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
-              <i class="fas fa-eye"></i>
-              Pré-visualizar mudanças
-            </button>
-          </div>
-
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div class="lg:col-span-1 space-y-4">
-              <div>
-                <label for="mass-price" class="block text-sm font-medium text-gray-700 mb-1">Ajuste percentual de preço (%)</label>
-                <input type="number" id="mass-price" placeholder="Ex.: 5 para aumentar, -5 para reduzir" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <p class="mt-1 text-xs text-gray-500">Aplica a variação sobre o preço de venda atual.</p>
-              </div>
-              <div>
-                <label for="mass-price-fixed" class="block text-sm font-medium text-gray-700 mb-1">Preço fixo</label>
-                <input type="number" id="mass-price-fixed" placeholder="Ex.: 199,90" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <p class="mt-1 text-xs text-gray-500">Sobrescreve o preço de venda com o valor informado.</p>
-              </div>
-              <div>
-                <label for="mass-status" class="block text-sm font-medium text-gray-700 mb-1">Status comercial</label>
-                <select id="mass-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Manter</option>
-                  <option>Disponível</option>
-                  <option>Indisponível</option>
-                  <option>Em pré-venda</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="lg:col-span-1 space-y-4">
-              <div>
-                <label for="mass-deposito" class="block text-sm font-medium text-gray-700 mb-1">Redistribuir para depósito</label>
-                <select id="mass-deposito" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Não alterar</option>
-                  <option>CD Fortaleza</option>
-                  <option>Loja Aldeota</option>
-                  <option>Clínica Vet Iguatemi</option>
-                </select>
-              </div>
-              <div>
-                <label for="mass-curva" class="block text-sm font-medium text-gray-700 mb-1">Curva ABC</label>
-                <select id="mass-curva" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Não alterar</option>
-                  <option>Curva A</option>
-                  <option>Curva B</option>
-                  <option>Curva C</option>
-                </select>
-              </div>
-              <div>
-                <label for="mass-tags" class="block text-sm font-medium text-gray-700 mb-1">Adicionar tags</label>
-                <input type="text" id="mass-tags" placeholder="Ex.: black friday, lançamento" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <p class="mt-1 text-xs text-gray-500">As tags informadas serão somadas às existentes.</p>
-              </div>
-            </div>
-
-            <div class="lg:col-span-1 space-y-4">
-              <div>
-                <label for="mass-fiscal" class="block text-sm font-medium text-gray-700 mb-1">Regime fiscal</label>
-                <select id="mass-fiscal" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Manter</option>
-                  <option>Tributado integral</option>
-                  <option>Isento</option>
-                  <option>Substituição tributária</option>
-                </select>
-              </div>
-              <div>
-                <label for="mass-validade" class="block text-sm font-medium text-gray-700 mb-1">Atualizar validade (dias)</label>
-                <input type="number" id="mass-validade" placeholder="Ex.: 180" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                <p class="mt-1 text-xs text-gray-500">Utilizado para medicamentos e perecíveis que exigem controle.</p>
-              </div>
-              <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                <div class="flex items-start gap-2">
-                  <i class="fas fa-triangle-exclamation mt-0.5"></i>
-                  <p>Revise atentamente antes de aplicar. Todas as alterações ficam registradas no log de auditoria com usuário, data e motivo.</p>
-                </div>
+              <label for="filter-estoque" class="block text-sm font-medium text-gray-700">Saldo de estoque</label>
+              <div class="mt-1 flex gap-2">
+                <input type="number" id="filter-estoque-min" class="w-1/2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Mín.">
+                <input type="number" id="filter-estoque-max" class="w-1/2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Máx.">
               </div>
             </div>
           </div>
         </section>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div class="flex items-center justify-between flex-wrap gap-3">
+          <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div class="xl:col-span-2 space-y-4">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 class="text-lg font-semibold text-gray-800">Produtos localizados</h2>
+                  <p class="text-sm text-gray-600">Selecione os itens que receberão as alterações abaixo.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs font-medium">
+                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-gray-600 hover:bg-gray-50 transition">
+                    <i class="fas fa-file-export"></i>
+                    Exportar CSV
+                  </button>
+                  <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-gray-600 hover:bg-gray-50 transition">
+                    <i class="fas fa-list-check"></i>
+                    Selecionar todos
+                  </button>
+                </div>
+              </div>
+
+              <div class="overflow-x-auto rounded-lg border border-gray-200">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th scope="col" class="px-4 py-3">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      </th>
+                      <th scope="col" class="px-4 py-3 text-left">SKU</th>
+                      <th scope="col" class="px-4 py-3 text-left">Descrição</th>
+                      <th scope="col" class="px-4 py-3 text-left">Unidade</th>
+                      <th scope="col" class="px-4 py-3 text-left">Preço venda</th>
+                      <th scope="col" class="px-4 py-3 text-left">Estoque</th>
+                      <th scope="col" class="px-4 py-3 text-left">Fornecedor</th>
+                      <th scope="col" class="px-4 py-3 text-left">Situação</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 bg-white">
+                    <tr class="hover:bg-gray-50">
+                      <td class="px-4 py-3">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      </td>
+                      <td class="px-4 py-3 font-semibold text-gray-700">000123</td>
+                      <td class="px-4 py-3 text-gray-600">Ração Premium Cães Adultos 15kg</td>
+                      <td class="px-4 py-3 text-gray-600">SC</td>
+                      <td class="px-4 py-3 text-gray-700">R$ 249,90</td>
+                      <td class="px-4 py-3 text-gray-600">38</td>
+                      <td class="px-4 py-3 text-gray-600">PremierPet</td>
+                      <td class="px-4 py-3">
+                        <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">Ativo</span>
+                      </td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                      <td class="px-4 py-3">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      </td>
+                      <td class="px-4 py-3 font-semibold text-gray-700">000587</td>
+                      <td class="px-4 py-3 text-gray-600">Coleira Antipulgas Gatos</td>
+                      <td class="px-4 py-3 text-gray-600">UN</td>
+                      <td class="px-4 py-3 text-gray-700">R$ 39,90</td>
+                      <td class="px-4 py-3 text-gray-600">120</td>
+                      <td class="px-4 py-3 text-gray-600">Bayer</td>
+                      <td class="px-4 py-3">
+                        <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">Ativo</span>
+                      </td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                      <td class="px-4 py-3">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      </td>
+                      <td class="px-4 py-3 font-semibold text-gray-700">001045</td>
+                      <td class="px-4 py-3 text-gray-600">Areia Sanitária Biodegradável 4kg</td>
+                      <td class="px-4 py-3 text-gray-600">KG</td>
+                      <td class="px-4 py-3 text-gray-700">R$ 21,50</td>
+                      <td class="px-4 py-3 text-gray-600">62</td>
+                      <td class="px-4 py-3 text-gray-600">BioPet</td>
+                      <td class="px-4 py-3">
+                        <span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700">Inativo</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+                <p>3 produtos selecionados de um total de 128 resultados.</p>
+                <div class="flex items-center gap-2">
+                  <button type="button" class="rounded-lg border border-gray-200 px-3 py-1.5 hover:bg-gray-50">Anterior</button>
+                  <button type="button" class="rounded-lg bg-primary px-3 py-1.5 text-white hover:bg-primary/90">Próxima</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <div class="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                <h2 class="text-lg font-semibold text-gray-800">Alterações em massa</h2>
+                <p class="text-sm text-gray-600">Defina os campos que serão atualizados exatamente como na tela de edição individual.</p>
+                <div class="mt-3 inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">
+                  <i class="fas fa-boxes-stacked"></i>
+                  Aplicar em 3 produtos
+                </div>
+              </div>
+
+              <div class="space-y-6">
+                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                  <div class="flex items-center gap-2">
+                    <i class="fas fa-tags text-primary"></i>
+                    <h3 class="text-sm font-semibold text-gray-800">Preços</h3>
+                  </div>
+                  <div class="space-y-3">
+                    <div>
+                      <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        Atualizar Preço de Custo (R$)
+                      </label>
+                      <input type="number" step="0.01" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe o novo custo">
+                    </div>
+                    <div>
+                      <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        Atualizar Markup (%)
+                      </label>
+                      <input type="number" step="0.01" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 45,00">
+                    </div>
+                    <div>
+                      <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        Atualizar Preço de Venda (R$)
+                      </label>
+                      <input type="number" step="0.01" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe o novo preço">
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          Preço Promocional
+                        </label>
+                        <input type="number" step="0.01" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Valor da promoção">
+                      </div>
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700">Validade da promoção</label>
+                        <div class="mt-1 grid grid-cols-2 gap-2">
+                          <input type="date" class="rounded-lg border border-gray-200 px-2 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                          <input type="date" class="rounded-lg border border-gray-200 px-2 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                  <div class="flex items-center gap-2">
+                    <i class="fas fa-sliders-h text-primary"></i>
+                    <h3 class="text-sm font-semibold text-gray-800">Configurações</h3>
+                  </div>
+                  <div class="space-y-3">
+                    <div>
+                      <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        Marca
+                      </label>
+                      <input type="text" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe a marca">
+                    </div>
+                    <div>
+                      <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        Apresentação
+                      </label>
+                      <input type="text" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 500g, unidade, kit">
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      <label class="text-sm font-medium text-gray-700">Marcar produtos como inativos</label>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                  <div class="flex items-center gap-2">
+                    <i class="fas fa-info-circle text-primary"></i>
+                    <h3 class="text-sm font-semibold text-gray-800">Informações gerais</h3>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        Peso (Kg)
+                      </label>
+                      <input type="number" step="0.001" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 0,450">
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700">IAT</label>
+                      <div class="mt-1 flex items-center gap-2">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        <select class="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                          <option value="">Selecione...</option>
+                          <option value="Arredondamento">Arredondamento</option>
+                          <option value="Truncamento">Truncamento</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="sm:col-span-2">
+                      <label class="block text-sm font-medium text-gray-700">Tipo de Produto</label>
+                      <div class="mt-1 flex items-center gap-2">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        <select class="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                          <option value="">Selecione...</option>
+                          <option value="Revenda">Revenda</option>
+                          <option value="Consumo Interno">Consumo Interno</option>
+                          <option value="Bonificação">Bonificação</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                  <div class="flex items-center gap-2">
+                    <i class="fas fa-layer-group text-primary"></i>
+                    <h3 class="text-sm font-semibold text-gray-800">Classificação e categorias</h3>
+                  </div>
+                  <div class="space-y-3 text-sm">
+                    <div class="space-y-2">
+                      <label class="flex items-center gap-2 font-medium text-gray-700">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        Categorias
+                      </label>
+                      <button type="button" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-left text-sm text-gray-600 hover:border-primary hover:text-primary transition">Selecionar categorias</button>
+                    </div>
+                    <div>
+                      <span class="block text-sm font-medium text-gray-700 mb-1">Idade</span>
+                      <div class="grid grid-cols-2 gap-2">
+                        <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Filhotes</label>
+                        <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Adulto</label>
+                        <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Sênior</label>
+                      </div>
+                    </div>
+                    <div>
+                      <span class="block text-sm font-medium text-gray-700 mb-1">Porte Raça</span>
+                      <div class="grid grid-cols-2 gap-2">
+                        <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Mini</label>
+                        <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Pequeno</label>
+                        <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Médio</label>
+                        <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Grande</label>
+                        <label class="inline-flex items-center gap-2 text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Gigante</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                  <div class="flex items-center gap-2">
+                    <i class="fas fa-file-invoice text-primary"></i>
+                    <h3 class="text-sm font-semibold text-gray-800">Informações fiscais</h3>
+                  </div>
+                  <div class="space-y-3 text-sm">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label class="block font-medium text-gray-700">NCM</label>
+                        <div class="mt-1 flex items-center gap-2">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          <input type="text" class="flex-1 rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 23091000">
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block font-medium text-gray-700">CEST</label>
+                        <div class="mt-1 flex items-center gap-2">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          <input type="text" class="flex-1 rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe o CEST">
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block font-medium text-gray-700">Origem</label>
+                        <div class="mt-1 flex items-center gap-2">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          <select class="flex-1 rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20">
+                            <option value="0">0 - Nacional</option>
+                            <option value="1">1 - Estrangeira - Importação direta</option>
+                            <option value="2">2 - Estrangeira - Adquirida no mercado interno</option>
+                            <option value="3">3 - Nacional com mais de 40% importado</option>
+                            <option value="4">4 - Nacional conforme processo básico</option>
+                            <option value="5">5 - Nacional com até 40% importado</option>
+                            <option value="6">6 - Estrangeira - Importação sem similar</option>
+                            <option value="7">7 - Estrangeira - Mercado interno sem similar</option>
+                            <option value="8">8 - Nacional com conteúdo importado &gt; 70%</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label class="block font-medium text-gray-700">CSOSN</label>
+                        <div class="mt-1 flex items-center gap-2">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          <input type="text" class="flex-1 rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 102">
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block font-medium text-gray-700">CST</label>
+                        <div class="mt-1 flex items-center gap-2">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          <input type="text" class="flex-1 rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 060">
+                        </div>
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label class="block font-medium text-gray-700">Status NF-e</label>
+                        <div class="mt-1 flex items-center gap-2">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          <select class="flex-1 rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20">
+                            <option value="pendente">Pendente</option>
+                            <option value="parcial">Parcial</option>
+                            <option value="aprovado">Aprovado</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block font-medium text-gray-700">Status NFC-e</label>
+                        <div class="mt-1 flex items-center gap-2">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          <select class="flex-1 rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20">
+                            <option value="pendente">Pendente</option>
+                            <option value="parcial">Parcial</option>
+                            <option value="aprovado">Aprovado</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <span class="block font-medium text-gray-700 mb-2">CFOP</span>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+                          <h4 class="text-xs font-semibold text-gray-600 uppercase">NF-e</h4>
+                          <label class="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Interno</label>
+                          <input type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 5102">
+                          <label class="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Interestadual</label>
+                          <input type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 6102">
+                          <label class="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Transferência</label>
+                          <input type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 5152">
+                        </div>
+                        <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+                          <h4 class="text-xs font-semibold text-gray-600 uppercase">NFC-e</h4>
+                          <label class="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Interno</label>
+                          <input type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 5102">
+                          <label class="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Interestadual</label>
+                          <input type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 6108">
+                          <label class="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20"> Transferência</label>
+                          <input type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 5656">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                  <div class="flex items-center gap-2">
+                    <i class="fas fa-handshake text-primary"></i>
+                    <h3 class="text-sm font-semibold text-gray-800">Fornecedor</h3>
+                  </div>
+                  <div class="space-y-3 text-sm">
+                    <div>
+                      <label class="flex items-center gap-2 font-medium text-gray-700">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        Fornecedor principal
+                      </label>
+                      <input type="text" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome do fornecedor">
+                    </div>
+                    <div>
+                      <label class="flex items-center gap-2 font-medium text-gray-700">
+                        <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                        Cod. produto do fornecedor
+                      </label>
+                      <input type="text" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe o código utilizado">
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label class="block font-medium text-gray-700">Unidade de entrada</label>
+                        <div class="mt-1 flex items-center gap-2">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          <select class="flex-1 rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20">
+                            <option value="">Selecionar...</option>
+                            <option value="UN">Unidade (UN)</option>
+                            <option value="KG">Quilograma (KG)</option>
+                            <option value="G">Grama (G)</option>
+                            <option value="MG">Miligrama (MG)</option>
+                            <option value="L">Litro (L)</option>
+                            <option value="ML">Mililitro (ML)</option>
+                            <option value="CX">Caixa (CX)</option>
+                            <option value="PCT">Pacote (PCT)</option>
+                            <option value="SC">Saco (SC)</option>
+                            <option value="FD">Fardo (FD)</option>
+                            <option value="DZ">Dúzia (DZ)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block font-medium text-gray-700">Fator de conversão</label>
+                        <div class="mt-1 flex items-center gap-2">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          <input type="number" step="0.0001" class="flex-1 rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 1,0000">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                  <div class="flex items-center gap-2">
+                    <i class="fas fa-warehouse text-primary"></i>
+                    <h3 class="text-sm font-semibold text-gray-800">Estoque</h3>
+                  </div>
+                  <div class="space-y-3 text-sm">
+                    <div class="flex items-center gap-2">
+                      <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      <label class="font-medium text-gray-700">Repor saldo em depósitos</label>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label class="block text-xs font-semibold uppercase text-gray-500">Depósito</label>
+                        <select class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20">
+                          <option value="">Selecionar depósito</option>
+                          <option value="cd-fortaleza">CD Fortaleza</option>
+                          <option value="loja-aldeota">Loja Aldeota</option>
+                          <option value="clinica-iguatemi">Clínica Vet Iguatemi</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="block text-xs font-semibold uppercase text-gray-500">Quantidade</label>
+                        <input type="number" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Saldo">
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label class="flex items-center gap-2 font-medium text-gray-700">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          Estoque mínimo
+                        </label>
+                        <input type="number" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 5">
+                      </div>
+                      <div>
+                        <label class="flex items-center gap-2 font-medium text-gray-700">
+                          <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                          Estoque ideal
+                        </label>
+                        <input type="number" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 20">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 space-y-4">
+                  <div class="flex items-center gap-2">
+                    <i class="fas fa-plug text-primary"></i>
+                    <h3 class="text-sm font-semibold text-gray-800">Integração e site</h3>
+                  </div>
+                  <div class="space-y-3 text-sm">
+                    <label class="flex items-center gap-3 text-gray-700">
+                      <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Não mostrar no Site
+                    </label>
+                    <label class="flex items-center gap-3 text-gray-700">
+                      <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary/20">
+                      Atualizar descrição detalhada
+                    </label>
+                    <textarea rows="3" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Cole aqui a nova descrição para os produtos selecionados."></textarea>
+                  </div>
+                </div>
+
+                <button type="button" class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                  <i class="fas fa-check"></i>
+                  Confirmar alterações
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 class="text-lg font-semibold text-gray-800">Histórico recente de alterações</h2>
-              <p class="text-sm text-gray-600">Acompanhe as últimas movimentações e valide se os ajustes foram concluídos corretamente.</p>
+              <h2 class="text-lg font-semibold text-gray-800">Histórico de alterações</h2>
+              <p class="text-sm text-gray-600">Acompanhe quando e por quem cada campo foi atualizado.</p>
             </div>
             <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition">
               <i class="fas fa-clock-rotate-left"></i>
-              Ver log completo
+              Ver histórico completo
             </button>
           </div>
 
-          <div class="mt-4 space-y-3">
-            <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
-              <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
-                <div class="flex items-center gap-2">
-                  <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary"><i class="fas fa-user"></i></span>
-                  <div>
-                    <p class="font-semibold text-gray-800">Amanda Ribeiro</p>
-                    <p>Aplicou reajuste de +5% para 42 produtos da Curva A.</p>
-                  </div>
-                </div>
-                <div class="text-xs text-gray-500">Hoje às 10h14 · Origem: CD Fortaleza</div>
-              </div>
-            </div>
-            <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
-              <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
-                <div class="flex items-center gap-2">
-                  <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary"><i class="fas fa-user"></i></span>
-                  <div>
-                    <p class="font-semibold text-gray-800">João Paulo</p>
-                    <p>Alterou status para indisponível em 12 produtos por falta de estoque.</p>
-                  </div>
-                </div>
-                <div class="text-xs text-gray-500">Ontem às 18h22 · Origem: Loja Aldeota</div>
-              </div>
-            </div>
-            <div class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
-              <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
-                <div class="flex items-center gap-2">
-                  <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary"><i class="fas fa-user"></i></span>
-                  <div>
-                    <p class="font-semibold text-gray-800">Sistema</p>
-                    <p>Atualizou validade de medicamentos conforme planilha importada.</p>
-                  </div>
-                </div>
-                <div class="text-xs text-gray-500">14/03/2024 às 09h05 · Importação automatizada</div>
-              </div>
-            </div>
+          <div class="overflow-x-auto rounded-lg border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th scope="col" class="px-4 py-3 text-left">Data</th>
+                  <th scope="col" class="px-4 py-3 text-left">Usuário</th>
+                  <th scope="col" class="px-4 py-3 text-left">Produtos afetados</th>
+                  <th scope="col" class="px-4 py-3 text-left">Campos alterados</th>
+                  <th scope="col" class="px-4 py-3 text-left">Observações</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 bg-white">
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-gray-600">20/05/2024 14:32</td>
+                  <td class="px-4 py-3 text-gray-700 font-medium">Ana Souza</td>
+                  <td class="px-4 py-3 text-gray-600">SKU 000123, 000587, 001045</td>
+                  <td class="px-4 py-3 text-gray-600">Preço de venda, Promoção</td>
+                  <td class="px-4 py-3 text-gray-500">Ajuste de campanha Dia do Cliente</td>
+                </tr>
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-gray-600">14/05/2024 09:18</td>
+                  <td class="px-4 py-3 text-gray-700 font-medium">Carlos Lima</td>
+                  <td class="px-4 py-3 text-gray-600">SKU 000321, 000322</td>
+                  <td class="px-4 py-3 text-gray-600">IAT, Tipo de produto</td>
+                  <td class="px-4 py-3 text-gray-500">Ajuste fiscal após revisão tributária</td>
+                </tr>
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-gray-600">02/05/2024 16:47</td>
+                  <td class="px-4 py-3 text-gray-700 font-medium">Juliana Ribeiro</td>
+                  <td class="px-4 py-3 text-gray-600">SKU 000950 a 000960</td>
+                  <td class="px-4 py-3 text-gray-600">Estoque mínimo, Estoque ideal</td>
+                  <td class="px-4 py-3 text-gray-500">Planejamento de sazonalidade inverno</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
       </div>
@@ -415,6 +674,7 @@
   </main>
 
   <div id="admin-footer-placeholder"></div>
+
   <div id="modal-placeholder"></div>
   <div id="confirm-modal-placeholder"></div>
 
@@ -423,5 +683,6 @@
   <script src="../../scripts/core/ui.js"></script>
   <script src="../../scripts/core/main.js"></script>
   <script src="../../scripts/admin/admin.js"></script>
+  <script src="/scripts/common/modal-bridge.js"></script>
 </body>
 </html>
