@@ -43,137 +43,132 @@
           </div>
         </header>
 
-        <div class="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
-          <details class="group bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden" open>
-            <summary class="flex cursor-pointer items-center justify-between gap-3 px-4 py-2 text-sm font-semibold text-gray-800">
-              <span class="inline-flex items-center gap-2"><i class="fas fa-filter text-primary"></i> Filtros</span>
-              <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
-            </summary>
-            <div class="space-y-3 border-t border-gray-100 px-4 pb-4 pt-3 text-xs text-gray-700">
-              <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div class="max-w-xs">
-                  <p class="text-[12px] font-medium text-gray-700">Use os mesmos campos do cadastro de produto para refinar o resultado antes de aplicar alterações.</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
-                  <button type="button" id="clear-filters" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 transition">
-                    <i class="fas fa-rotate"></i>
-                    Limpar filtros
-                  </button>
-                  <button type="submit" form="filters-form" class="inline-flex items-center gap-2 rounded-lg border border-primary px-2.5 py-1.5 text-primary hover:bg-primary/10 transition">
-                    <i class="fas fa-magnifying-glass"></i>
-                    Buscar produtos
-                  </button>
-                </div>
-              </div>
-
-              <div class="border border-dashed border-gray-200 rounded-lg bg-gray-50/60 p-3 space-y-2">
-                <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Filtros aplicados</p>
-                <div id="applied-filters" class="flex flex-wrap gap-2 text-xs text-gray-600"></div>
-              </div>
-
-              <form id="filters-form" class="space-y-5">
-                <div class="grid grid-cols-1 gap-3 lg:grid-cols-12">
-                  <div class="lg:col-span-3">
-                    <label for="filter-sku" class="block text-xs font-semibold text-gray-700">Cod. Interno (SKU)</label>
-                    <input type="text" id="filter-sku" name="sku" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 12345">
+        <details class="group bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden" open>
+          <summary class="flex cursor-pointer items-center justify-between gap-3 px-4 py-2 text-sm font-semibold text-gray-800">
+            <span class="inline-flex items-center gap-2"><i class="fas fa-layer-group text-primary"></i> Filtros e alterações em massa</span>
+            <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
+          </summary>
+          <div class="border-t border-gray-100 px-4 pb-4 pt-3">
+            <div class="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start text-xs text-gray-700">
+              <section class="space-y-3">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div class="max-w-xs">
+                    <p class="text-[12px] font-medium text-gray-700">Use os mesmos campos do cadastro de produto para refinar o resultado antes de aplicar alterações.</p>
                   </div>
-                <div class="lg:col-span-5">
-                  <label for="filter-name" class="block text-xs font-semibold text-gray-700">Descrição</label>
-                  <input type="text" id="filter-name" name="nome" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe o nome do produto">
-                </div>
-                <div class="lg:col-span-4">
-                  <label for="filter-barcode" class="block text-xs font-semibold text-gray-700">Código de Barras</label>
-                  <input type="text" id="filter-barcode" name="barcode" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="EAN principal ou complementar">
-                </div>
-                <div class="lg:col-span-3">
-                  <label for="filter-unidade" class="block text-xs font-semibold text-gray-700">Unidade</label>
-                  <select id="filter-unidade" name="unidade" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="">Todas</option>
-                    <option value="UN">Unidade (UN)</option>
-                    <option value="CX">Caixa (CX)</option>
-                    <option value="FD">Fardo (FD)</option>
-                    <option value="DZ">Dúzia (DZ)</option>
-                    <option value="KG">Quilograma (KG)</option>
-                    <option value="G">Grama (G)</option>
-                    <option value="MG">Miligrama (MG)</option>
-                    <option value="L">Litro (L)</option>
-                    <option value="ML">Mililitro (ML)</option>
-                    <option value="PCT">Pacote (PCT)</option>
-                    <option value="SC">Saco (SC)</option>
-                  </select>
-                </div>
-                <div class="lg:col-span-3">
-                  <label for="filter-referencia" class="block text-xs font-semibold text-gray-700">Referência do fabricante</label>
-                  <input type="text" id="filter-referencia" name="referencia" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe a referência">
-                </div>
-                <div class="lg:col-span-3">
-                  <label for="filter-tipo" class="block text-xs font-semibold text-gray-700">Tipo de Produto</label>
-                  <select id="filter-tipo" name="tipoProduto" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="">Todos</option>
-                    <option value="Revenda">Revenda</option>
-                    <option value="Consumo Interno">Consumo Interno</option>
-                    <option value="Bonificação">Bonificação</option>
-                  </select>
-                </div>
-                <div class="lg:col-span-3">
-                  <label for="filter-marca" class="block text-xs font-semibold text-gray-700">Marca</label>
-                  <input type="text" id="filter-marca" name="marca" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: PremierPet">
-                </div>
-                <div class="lg:col-span-3">
-                  <label for="filter-categoria" class="block text-xs font-semibold text-gray-700">Categoria</label>
-                  <select id="filter-categoria" name="categoria" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="">Todas</option>
-                  </select>
-                </div>
-                <div class="lg:col-span-3">
-                  <label for="filter-fornecedor" class="block text-xs font-semibold text-gray-700">Fornecedor</label>
-                  <select id="filter-fornecedor" name="fornecedor" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="">Todos</option>
-                  </select>
-                </div>
-                <div class="lg:col-span-3">
-                  <label for="filter-situacao" class="block text-xs font-semibold text-gray-700">Situação</label>
-                  <select id="filter-situacao" name="situacao" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                    <option value="">Todas</option>
-                    <option value="ativo">Ativo</option>
-                    <option value="inativo">Inativo</option>
-                  </select>
-                </div>
-                <div class="lg:col-span-3">
-                  <label class="block text-xs font-semibold text-gray-700">Saldo de estoque</label>
-                  <div class="mt-1 flex gap-2">
-                    <input type="number" name="estoqueMin" class="w-1/2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Mín.">
-                    <input type="number" name="estoqueMax" class="w-1/2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Máx.">
+                  <div class="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                    <button type="button" id="clear-filters" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 text-gray-600 hover:bg-gray-50 transition">
+                      <i class="fas fa-rotate"></i>
+                      Limpar filtros
+                    </button>
+                    <button type="submit" form="filters-form" class="inline-flex items-center gap-2 rounded-lg border border-primary px-2.5 py-1.5 text-primary hover:bg-primary/10 transition">
+                      <i class="fas fa-magnifying-glass"></i>
+                      Buscar produtos
+                    </button>
                   </div>
                 </div>
-                </div>
-              </form>
-            </div>
-          </details>
 
-          <details class="group bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col" open>
-            <summary class="flex cursor-pointer items-center justify-between gap-3 px-4 py-2 text-sm font-semibold text-gray-800">
-              <span class="inline-flex items-center gap-2"><i class="fas fa-sliders text-primary"></i> Alterações em massa</span>
-              <i class="fas fa-chevron-down text-xs text-gray-500 transition group-open:rotate-180"></i>
-            </summary>
-            <div class="space-y-4 border-t border-gray-100 px-4 pb-4 pt-3 text-xs text-gray-700">
-              <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div class="max-w-md">
-                  <p class="text-[12px] font-medium text-gray-700">Marque os campos que deseja alterar. Somente os itens selecionados serão enviados ao banco de dados.</p>
+                <div class="border border-dashed border-gray-200 rounded-lg bg-gray-50/60 p-3 space-y-2">
+                  <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Filtros aplicados</p>
+                  <div id="applied-filters" class="flex flex-wrap gap-2 text-xs text-gray-600"></div>
                 </div>
-                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                  <span id="selected-summary" class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
-                    <i class="fas fa-boxes-stacked"></i>
-                    Nenhum produto selecionado
-                  </span>
-                  <button type="button" id="confirm-bulk-update" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-60 disabled:cursor-not-allowed">
-                    <i class="fas fa-check"></i>
-                    Confirmar alterações
-                  </button>
-                </div>
-              </div>
 
-              <form id="bulk-form" class="grid grid-cols-1 gap-2.5 xl:grid-cols-2" autocomplete="off">
+                <form id="filters-form" class="space-y-5">
+                  <div class="grid grid-cols-1 gap-3 lg:grid-cols-12">
+                    <div class="lg:col-span-3">
+                      <label for="filter-sku" class="block text-xs font-semibold text-gray-700">Cod. Interno (SKU)</label>
+                      <input type="text" id="filter-sku" name="sku" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 12345">
+                    </div>
+                    <div class="lg:col-span-5">
+                      <label for="filter-name" class="block text-xs font-semibold text-gray-700">Descrição</label>
+                      <input type="text" id="filter-name" name="nome" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe o nome do produto">
+                    </div>
+                    <div class="lg:col-span-4">
+                      <label for="filter-barcode" class="block text-xs font-semibold text-gray-700">Código de Barras</label>
+                      <input type="text" id="filter-barcode" name="barcode" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="EAN principal ou complementar">
+                    </div>
+                    <div class="lg:col-span-3">
+                      <label for="filter-unidade" class="block text-xs font-semibold text-gray-700">Unidade</label>
+                      <select id="filter-unidade" name="unidade" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        <option value="">Todas</option>
+                        <option value="UN">Unidade (UN)</option>
+                        <option value="CX">Caixa (CX)</option>
+                        <option value="FD">Fardo (FD)</option>
+                        <option value="DZ">Dúzia (DZ)</option>
+                        <option value="KG">Quilograma (KG)</option>
+                        <option value="G">Grama (G)</option>
+                        <option value="MG">Miligrama (MG)</option>
+                        <option value="L">Litro (L)</option>
+                        <option value="ML">Mililitro (ML)</option>
+                        <option value="PCT">Pacote (PCT)</option>
+                        <option value="SC">Saco (SC)</option>
+                      </select>
+                    </div>
+                    <div class="lg:col-span-3">
+                      <label for="filter-referencia" class="block text-xs font-semibold text-gray-700">Referência do fabricante</label>
+                      <input type="text" id="filter-referencia" name="referencia" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informe a referência">
+                    </div>
+                    <div class="lg:col-span-3">
+                      <label for="filter-tipo" class="block text-xs font-semibold text-gray-700">Tipo de Produto</label>
+                      <select id="filter-tipo" name="tipoProduto" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        <option value="">Todos</option>
+                        <option value="Revenda">Revenda</option>
+                        <option value="Consumo Interno">Consumo Interno</option>
+                        <option value="Bonificação">Bonificação</option>
+                      </select>
+                    </div>
+                    <div class="lg:col-span-3">
+                      <label for="filter-marca" class="block text-xs font-semibold text-gray-700">Marca</label>
+                      <input type="text" id="filter-marca" name="marca" class="mt-1 block w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: PremierPet">
+                    </div>
+                    <div class="lg:col-span-3">
+                      <label for="filter-categoria" class="block text-xs font-semibold text-gray-700">Categoria</label>
+                      <select id="filter-categoria" name="categoria" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        <option value="">Todas</option>
+                      </select>
+                    </div>
+                    <div class="lg:col-span-3">
+                      <label for="filter-fornecedor" class="block text-xs font-semibold text-gray-700">Fornecedor</label>
+                      <select id="filter-fornecedor" name="fornecedor" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        <option value="">Todos</option>
+                      </select>
+                    </div>
+                    <div class="lg:col-span-3">
+                      <label for="filter-situacao" class="block text-xs font-semibold text-gray-700">Situação</label>
+                      <select id="filter-situacao" name="situacao" class="mt-1 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        <option value="">Todas</option>
+                        <option value="ativo">Ativo</option>
+                        <option value="inativo">Inativo</option>
+                      </select>
+                    </div>
+                    <div class="lg:col-span-3">
+                      <label class="block text-xs font-semibold text-gray-700">Saldo de estoque</label>
+                      <div class="mt-1 flex gap-2">
+                        <input type="number" name="estoqueMin" class="w-1/2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Mín.">
+                        <input type="number" name="estoqueMax" class="w-1/2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Máx.">
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              </section>
+
+              <section class="space-y-4">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div class="max-w-md">
+                    <p class="text-[12px] font-medium text-gray-700">Marque os campos que deseja alterar. Somente os itens selecionados serão enviados ao banco de dados.</p>
+                  </div>
+                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                    <span id="selected-summary" class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
+                      <i class="fas fa-boxes-stacked"></i>
+                      Nenhum produto selecionado
+                    </span>
+                    <button type="button" id="confirm-bulk-update" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-60 disabled:cursor-not-allowed">
+                      <i class="fas fa-check"></i>
+                      Confirmar alterações
+                    </button>
+                  </div>
+                </div>
+
+                <form id="bulk-form" class="grid grid-cols-1 gap-2.5 xl:grid-cols-2" autocomplete="off">
                 <details class="group rounded-lg border border-gray-200 p-2.5" open>
                   <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-gray-800">
                     <span class="inline-flex items-center gap-2"><i class="fas fa-tags text-primary"></i> Preços</span>
@@ -479,7 +474,8 @@
             </form>
           </section>
         </div>
-
+      </div>
+    </details>
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3.5" aria-labelledby="products-table-title">
           <div class="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
             <div>
