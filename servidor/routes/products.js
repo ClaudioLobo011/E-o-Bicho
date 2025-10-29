@@ -900,6 +900,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         if (payload.ncm !== undefined) updatePayload.ncm = normalizeString(payload.ncm);
         if (payload.custo !== undefined) updatePayload.custo = parseNumber(payload.custo);
         if (payload.venda !== undefined) updatePayload.venda = parseNumber(payload.venda);
+        if (payload.precoClube !== undefined) updatePayload.precoClube = parseNumber(payload.precoClube);
         if (payload.codigosComplementares !== undefined) {
             updatePayload.codigosComplementares = Array.isArray(payload.codigosComplementares)
                 ? payload.codigosComplementares.map((code) => normalizeString(code)).filter(Boolean)
@@ -951,7 +952,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
 
         registerPriceChange('custo', 'Preço de Custo', existingProduct.custo);
         registerPriceChange('venda', 'Preço de Venda', existingProduct.venda);
-        registerPriceChange('precoClube', 'Preço Clube', existingProduct.precoClube);
+        registerPriceChange('precoClube', 'Preço Promocional', existingProduct.precoClube);
 
         let priceHistoryAuthor = {
             autorId: null,

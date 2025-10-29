@@ -711,6 +711,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const iatValue = formData.get('iat');
         const tipoProdutoValue = formData.get('tipo-produto');
         const ncmValue = formData.get('ncm');
+        const promoPriceRawValue = formData.get('promo-preco');
+        const promoPriceValue = typeof promoPriceRawValue === 'string'
+            ? promoPriceRawValue.trim()
+            : promoPriceRawValue;
 
         const parsedPeso = pesoValue ? Number(pesoValue) : null;
 
@@ -724,6 +728,7 @@ document.addEventListener('DOMContentLoaded', () => {
             referencia: formData.get('referencia'),
             custo: formData.get('custo'),
             venda: formData.get('venda'),
+            precoClube: promoPriceValue === '' ? null : promoPriceValue,
             categorias: productCategories,
             fornecedores: supplierEntries.map((item) => ({
                 fornecedor: item.fornecedor,
@@ -2532,6 +2537,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (barcodeInput) barcodeInput.value = '';
         if (detailedDescriptionInput) detailedDescriptionInput.value = '';
         if (imageUploadInput) imageUploadInput.value = '';
+        const promoPriceInput = form?.querySelector('#promo-preco');
+        if (promoPriceInput) {
+            promoPriceInput.value = '';
+        }
 
         productCategories = [];
         renderCategoryTags([]);
@@ -2776,8 +2785,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const custoNumber = Number(product.custo);
         const vendaNumber = Number(product.venda);
+        const promoPriceInput = form.querySelector('#promo-preco');
+        const promoPriceNumber = Number(product.precoClube);
         form.querySelector('#custo').value = Number.isFinite(custoNumber) ? custoNumber.toFixed(2) : '';
         form.querySelector('#venda').value = Number.isFinite(vendaNumber) ? vendaNumber.toFixed(2) : '';
+        if (promoPriceInput) {
+            promoPriceInput.value = Number.isFinite(promoPriceNumber) ? promoPriceNumber.toFixed(2) : '';
+        }
         if (markupInput) {
             const cost = parseFloat(costInput?.value || '0');
             const sale = parseFloat(saleInput?.value || '0');
