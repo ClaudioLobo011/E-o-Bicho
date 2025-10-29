@@ -9,6 +9,7 @@
     categories: [],
     suppliers: [],
     loading: false,
+    exporting: false,
     tableFilters: {
       sku: '',
       nome: '',
@@ -56,6 +57,7 @@
     elements.selectedSummary = document.getElementById('selected-summary');
     elements.confirmBulkUpdateButton = document.getElementById('confirm-bulk-update');
     elements.applyMassFromHeaderButton = document.getElementById('apply-mass-from-header');
+    elements.exportExcelButton = document.getElementById('export-excel');
     elements.bulkForm = document.getElementById('bulk-form');
     elements.bulkFields = Array.from(elements.bulkForm?.querySelectorAll('[data-bulk-field]') || []);
     elements.filterCategoriaSelect = document.getElementById('filter-categoria');
@@ -130,9 +132,12 @@
       return String(value)
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[ç]/gi, 'c')
         .toLowerCase();
     } catch (error) {
-      return String(value).toLowerCase();
+      return String(value)
+        .toLowerCase()
+        .replace(/[ç]/g, 'c');
     }
   }
 
@@ -196,12 +201,41 @@
     }
   }
 
+  function escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function buildColumnFilterRegex(rawValue) {
+    const normalizedFilter = normalizeText(rawValue || '');
+    if (!normalizedFilter) {
+      return null;
+    }
+
+    const pattern = normalizedFilter
+      .split('*')
+      .map((segment) => escapeRegex(segment))
+      .join('.*');
+
+    if (!pattern) {
+      return null;
+    }
+
+    try {
+      return new RegExp(pattern, 'i');
+    } catch (error) {
+      console.warn('Filtro inválido ignorado na tabela de produtos.', error);
+      return null;
+    }
+  }
+
   function matchesColumnFilter(product, key, filterValue) {
     if (!key) return true;
-    const normalizedFilter = normalizeText(filterValue || '');
-    if (!normalizedFilter) return true;
+
+    const regex = buildColumnFilterRegex(filterValue);
+    if (!regex) return true;
+
     const candidates = getFilterCandidates(product, key);
-    return candidates.some((candidate) => normalizeText(candidate).includes(normalizedFilter));
+    return candidates.some((candidate) => regex.test(normalizeText(candidate)));
   }
 
   function applyColumnFilters(products) {
@@ -538,6 +572,14 @@
     });
   }
 
+  function updateExportButtonState() {
+    const button = elements.exportExcelButton;
+    if (!button) return;
+    const total = Number(state.pagination?.total || 0);
+    const hasResults = Number.isFinite(total) && total > 0;
+    button.disabled = state.loading || state.exporting || !hasResults;
+  }
+
   function clearFilters() {
     if (!elements.filtersForm) return;
     elements.filtersForm.reset();
@@ -691,6 +733,7 @@
     const start = (page - 1) * state.pagination.limit + 1;
     const end = Math.min(page * state.pagination.limit, total);
     elements.resultsSummary.textContent = `${formatNumber(start)}-${formatNumber(end)} de ${formatNumber(total)} produtos.`;
+    updateExportButtonState();
   }
 
   function handlePageSizeChange(event) {
@@ -710,6 +753,7 @@
   async function fetchProducts(page = 1) {
     state.loading = true;
     updateBulkButtonsState();
+    updateExportButtonState();
     if (elements.pageSizeSelect) {
       elements.pageSizeSelect.disabled = true;
     }
@@ -766,7 +810,75 @@
       renderPagination();
       updateResultsSummary();
       updateBulkButtonsState();
+      updateExportButtonState();
       tableFilterFetchTimeout = null;
+    }
+  }
+
+  async function exportProductsToExcel() {
+    if (!elements.exportExcelButton) return;
+    if (state.exporting) return;
+    const total = Number(state.pagination?.total || 0);
+    if (!Number.isFinite(total) || total <= 0) {
+      alert('Nenhum produto encontrado para exportar.');
+      return;
+    }
+
+    const button = elements.exportExcelButton;
+    const originalContent = button.innerHTML;
+
+    state.exporting = true;
+    updateExportButtonState();
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exportando...';
+
+    try {
+      const params = buildQueryParams(state.filters || {}, { includePagination: false });
+      const queryString = params.toString();
+      const endpoint = `${API_CONFIG.BASE_URL}/admin/products/bulk/export/excel${
+        queryString ? `?${queryString}` : ''
+      }`;
+
+      const response = await fetchWithAuth(endpoint);
+      if (!response) {
+        throw new Error('Não foi possível autenticar a exportação.');
+      }
+      if (!response.ok) {
+        let message = 'Não foi possível exportar a planilha de produtos.';
+        try {
+          const payload = await response.json();
+          if (payload?.message) {
+            message = payload.message;
+          }
+        } catch (parseError) {
+          console.warn('Falha ao interpretar o erro da exportação.', parseError);
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      if (!blob || blob.size === 0) {
+        alert('A exportação não retornou dados.');
+        return;
+      }
+
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      link.href = downloadUrl;
+      link.download = `relacao-produtos-${timestamp}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Erro ao exportar planilha de produtos:', error);
+      alert(error.message || 'Não foi possível exportar a planilha de produtos.');
+    } finally {
+      if (elements.exportExcelButton) {
+        elements.exportExcelButton.innerHTML = originalContent;
+      }
+      state.exporting = false;
+      updateExportButtonState();
     }
   }
 
@@ -868,6 +980,7 @@
 
     state.loading = true;
     updateBulkButtonsState();
+    updateExportButtonState();
 
     try {
       const response = await fetchWithAuth(`${API_CONFIG.BASE_URL}/admin/products/bulk`, {
@@ -900,6 +1013,7 @@
     } finally {
       state.loading = false;
       updateBulkButtonsState();
+      updateExportButtonState();
     }
   }
 
@@ -981,6 +1095,7 @@
       elements.selectAllCheckbox.checked = ids.length > 0;
       elements.selectAllCheckbox.indeterminate = false;
       updateSelectionSummary();
+      updateExportButtonState();
     } catch (error) {
       console.error('Erro ao selecionar todos os produtos:', error);
       alert(error.message || 'Não foi possível selecionar todos os produtos.');
@@ -1100,6 +1215,7 @@
     elements.confirmBulkUpdateButton.addEventListener('click', applyBulkUpdates);
     elements.applyMassFromHeaderButton.addEventListener('click', applyBulkUpdates);
     elements.pageSizeSelect?.addEventListener('change', handlePageSizeChange);
+    elements.exportExcelButton?.addEventListener('click', exportProductsToExcel);
 
     handleTableEvents();
   }
@@ -1155,6 +1271,7 @@
     state.filters = collectFilters();
     renderAppliedFilters(state.filters);
     updateSelectionSummary();
+    updateExportButtonState();
     fetchProducts(1);
   }
 
