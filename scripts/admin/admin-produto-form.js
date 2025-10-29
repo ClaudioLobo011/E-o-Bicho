@@ -40,6 +40,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const fiscalCompanySelect = document.getElementById('fiscal-company-select');
     const fiscalCompanySummary = document.getElementById('fiscal-company-summary');
     const deleteProductButton = document.getElementById('delete-product-button');
+    const priceHistoryButton = document.getElementById('open-price-history-btn');
+    const priceHistoryModal = document.getElementById('price-history-modal');
+    const priceHistorySearchInput = document.getElementById('price-history-search');
+    const priceHistorySortSelect = document.getElementById('price-history-sort');
+    const priceHistoryFieldFilter = document.getElementById('price-history-field-filter');
+    const priceHistoryScreenFilter = document.getElementById('price-history-screen-filter');
+    const priceHistoryAuthorFilter = document.getElementById('price-history-author-filter');
+    const priceHistoryTableBody = document.getElementById('price-history-table-body');
+    const priceHistoryLoadingState = document.getElementById('price-history-loading-state');
+    const priceHistoryEmptyState = document.getElementById('price-history-empty-state');
+    const priceHistoryErrorState = document.getElementById('price-history-error-state');
+    const priceHistoryModalCloseButtons = Array.from(document.querySelectorAll('[data-close-price-history-modal]'));
 
     const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
     const FISCAL_GENERAL_KEY = '__general__';
@@ -551,6 +563,23 @@ document.addEventListener('DOMContentLoaded', () => {
     let pendingImportedProductDraft = null;
     let currentImages = [];
     let imageOrderStatusTimeoutId = null;
+    let priceHistoryEntries = [];
+    let lastPriceHistoryProductId = null;
+    const priceHistoryFilters = {
+        search: '',
+        campo: 'all',
+        tela: 'all',
+        autor: 'all',
+        sort: 'recentes',
+    };
+    const priceHistoryCurrencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const priceHistoryDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+    });
+    const priceHistoryDefaultEmptyMessage = priceHistoryEmptyState?.textContent?.trim()
+        || 'Nenhuma alteração de preço registrada para este produto.';
+    let priceHistoryLoading = false;
 
     const storedProductId = isFromNfeImport ? null : getPersistedProductEditStateValue('productId');
     if (!productId && storedProductId) {
@@ -799,6 +828,329 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    };
+
+    const formatPriceHistoryCurrency = (value) => {
+        if (value === null || value === undefined || value === '') return '-';
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return '-';
+        return priceHistoryCurrencyFormatter.format(numeric);
+    };
+
+    const formatPriceHistoryDate = (value) => {
+        if (!value) return '-';
+        const parsed = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(parsed.getTime())) return '-';
+        return priceHistoryDateFormatter.format(parsed);
+    };
+
+    const getPriceHistoryAuthor = (entry) => {
+        if (!entry) return '';
+        const rawAuthor = typeof entry.autor === 'string' ? entry.autor.trim() : '';
+        if (rawAuthor) return rawAuthor;
+        const authorName = typeof entry.autorNome === 'string' ? entry.autorNome.trim() : '';
+        if (authorName) return authorName;
+        const authorEmail = typeof entry.autorEmail === 'string' ? entry.autorEmail.trim() : '';
+        return authorEmail;
+    };
+
+    const setPriceHistoryLoadingState = (loading) => {
+        priceHistoryLoading = Boolean(loading);
+        if (priceHistoryLoadingState) {
+            priceHistoryLoadingState.classList.toggle('hidden', !priceHistoryLoading);
+        }
+    };
+
+    const updatePriceHistoryEmptyState = (message = priceHistoryDefaultEmptyMessage, show = true) => {
+        if (!priceHistoryEmptyState) return;
+        priceHistoryEmptyState.textContent = message;
+        priceHistoryEmptyState.classList.toggle('hidden', !show);
+    };
+
+    const updatePriceHistoryErrorState = (message = '', show = false) => {
+        if (!priceHistoryErrorState) return;
+        if (message) {
+            priceHistoryErrorState.textContent = message;
+        } else {
+            priceHistoryErrorState.textContent = 'Não foi possível carregar o histórico de preços. Tente novamente.';
+        }
+        priceHistoryErrorState.classList.toggle('hidden', !show);
+    };
+
+    const resetPriceHistoryFilters = () => {
+        priceHistoryFilters.search = '';
+        priceHistoryFilters.campo = 'all';
+        priceHistoryFilters.tela = 'all';
+        priceHistoryFilters.autor = 'all';
+        priceHistoryFilters.sort = 'recentes';
+        if (priceHistorySearchInput) priceHistorySearchInput.value = '';
+        if (priceHistorySortSelect) priceHistorySortSelect.value = 'recentes';
+        if (priceHistoryFieldFilter) priceHistoryFieldFilter.value = 'all';
+        if (priceHistoryScreenFilter) priceHistoryScreenFilter.value = 'all';
+        if (priceHistoryAuthorFilter) priceHistoryAuthorFilter.value = 'all';
+    };
+
+    const resetPriceHistoryState = (productIdentifier = null) => {
+        priceHistoryEntries = [];
+        lastPriceHistoryProductId = productIdentifier ? String(productIdentifier) : null;
+        resetPriceHistoryFilters();
+        if (priceHistoryTableBody) {
+            priceHistoryTableBody.innerHTML = '';
+        }
+        setPriceHistoryLoadingState(false);
+        updatePriceHistoryErrorState('', false);
+        if (priceHistoryEmptyState) {
+            priceHistoryEmptyState.textContent = productIdentifier
+                ? priceHistoryDefaultEmptyMessage
+                : 'Salve o produto para visualizar o histórico de preços.';
+            priceHistoryEmptyState.classList.add('hidden');
+        }
+    };
+
+    const populatePriceHistoryFilterSelect = (selectElement, items, defaultLabel, filterKey) => {
+        if (!selectElement || !filterKey) return;
+        const previousValue = priceHistoryFilters[filterKey] || 'all';
+        selectElement.innerHTML = '';
+
+        const defaultOption = document.createElement('option');
+        defaultOption.value = 'all';
+        defaultOption.textContent = defaultLabel;
+        selectElement.appendChild(defaultOption);
+
+        items.forEach((item) => {
+            const option = document.createElement('option');
+            option.value = item.value;
+            option.textContent = item.label;
+            selectElement.appendChild(option);
+        });
+
+        const availableValues = items.map((item) => item.value);
+        const nextValue = availableValues.includes(previousValue) ? previousValue : 'all';
+        selectElement.value = nextValue;
+        priceHistoryFilters[filterKey] = nextValue;
+    };
+
+    const populatePriceHistoryFiltersFromEntries = () => {
+        if (!Array.isArray(priceHistoryEntries) || priceHistoryEntries.length === 0) {
+            populatePriceHistoryFilterSelect(priceHistoryFieldFilter, [], 'Todos', 'campo');
+            populatePriceHistoryFilterSelect(priceHistoryScreenFilter, [], 'Todas', 'tela');
+            populatePriceHistoryFilterSelect(priceHistoryAuthorFilter, [], 'Todos', 'autor');
+            return;
+        }
+
+        const uniqueFieldsMap = new Map();
+        priceHistoryEntries.forEach((entry) => {
+            const key = (entry?.campoChave || entry?.campo || '').trim();
+            if (!key) return;
+            const label = (entry?.campo || key).trim();
+            if (!uniqueFieldsMap.has(key)) {
+                uniqueFieldsMap.set(key, label);
+            }
+        });
+        const fieldOptions = Array.from(uniqueFieldsMap.entries())
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+        populatePriceHistoryFilterSelect(priceHistoryFieldFilter, fieldOptions, 'Todos', 'campo');
+
+        const screenOptions = Array.from(
+            new Set(
+                priceHistoryEntries
+                    .map((entry) => (typeof entry?.tela === 'string' ? entry.tela.trim() : ''))
+                    .filter(Boolean),
+            ),
+        )
+            .map((value) => ({ value, label: value }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+        populatePriceHistoryFilterSelect(priceHistoryScreenFilter, screenOptions, 'Todas', 'tela');
+
+        const authorOptions = Array.from(
+            new Set(
+                priceHistoryEntries
+                    .map((entry) => getPriceHistoryAuthor(entry))
+                    .filter(Boolean),
+            ),
+        )
+            .map((value) => ({ value, label: value }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+        populatePriceHistoryFilterSelect(priceHistoryAuthorFilter, authorOptions, 'Todos', 'autor');
+    };
+
+    const renderPriceHistoryTable = () => {
+        if (!priceHistoryTableBody) return;
+        if (priceHistoryLoading) {
+            priceHistoryTableBody.innerHTML = '';
+            return;
+        }
+
+        const searchTerm = normalizeSearchText(priceHistoryFilters.search);
+        const filteredEntries = priceHistoryEntries.filter((entry) => {
+            const fieldKey = (entry?.campoChave || entry?.campo || '').trim();
+            if (priceHistoryFilters.campo !== 'all' && fieldKey !== priceHistoryFilters.campo) {
+                return false;
+            }
+            const screenValue = typeof entry?.tela === 'string' ? entry.tela.trim() : '';
+            if (priceHistoryFilters.tela !== 'all' && screenValue !== priceHistoryFilters.tela) {
+                return false;
+            }
+            const authorValue = getPriceHistoryAuthor(entry);
+            if (priceHistoryFilters.autor !== 'all' && authorValue !== priceHistoryFilters.autor) {
+                return false;
+            }
+            if (searchTerm) {
+                const haystack = normalizeSearchText([
+                    entry?.cod || '',
+                    entry?.descricao || '',
+                    entry?.campo || '',
+                    screenValue,
+                    authorValue,
+                ].join(' '));
+                if (!haystack.includes(searchTerm)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        const sortedEntries = [...filteredEntries];
+        const compareDates = (a, b) => {
+            const dateA = new Date(a?.dataAlteracao || 0);
+            const dateB = new Date(b?.dataAlteracao || 0);
+            return dateA - dateB;
+        };
+        const compareStrings = (a = '', b = '') => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' });
+
+        switch (priceHistoryFilters.sort) {
+            case 'antigos':
+                sortedEntries.sort((a, b) => compareDates(a, b));
+                break;
+            case 'campo-az':
+                sortedEntries.sort((a, b) => compareStrings(a?.campo || '', b?.campo || ''));
+                break;
+            case 'campo-za':
+                sortedEntries.sort((a, b) => compareStrings(b?.campo || '', a?.campo || ''));
+                break;
+            case 'autor-az':
+                sortedEntries.sort((a, b) => compareStrings(getPriceHistoryAuthor(a), getPriceHistoryAuthor(b)));
+                break;
+            case 'autor-za':
+                sortedEntries.sort((a, b) => compareStrings(getPriceHistoryAuthor(b), getPriceHistoryAuthor(a)));
+                break;
+            case 'recentes':
+            default:
+                sortedEntries.sort((a, b) => compareDates(b, a));
+                break;
+        }
+
+        if (sortedEntries.length === 0) {
+            const hasEntries = priceHistoryEntries.length > 0;
+            const emptyMessage = hasEntries
+                ? 'Nenhum registro encontrado para os filtros selecionados.'
+                : priceHistoryDefaultEmptyMessage;
+            updatePriceHistoryEmptyState(emptyMessage, true);
+            priceHistoryTableBody.innerHTML = '';
+            return;
+        }
+
+        updatePriceHistoryEmptyState('', false);
+        updatePriceHistoryErrorState('', false);
+
+        const rowsHtml = sortedEntries.map((entry) => {
+            const authorLabel = getPriceHistoryAuthor(entry) || '-';
+            return `
+                <tr>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(entry?.cod || '-')}</td>
+                    <td class="px-3 py-2 align-top text-gray-700">${escapeHtml(entry?.descricao || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(formatPriceHistoryDate(entry?.dataAlteracao))}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(entry?.tela || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(authorLabel || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-right font-semibold text-gray-700">${escapeHtml(formatPriceHistoryCurrency(entry?.valorAnterior))}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-right font-semibold text-gray-700">${escapeHtml(formatPriceHistoryCurrency(entry?.valorNovo))}</td>
+                    <td class="px-3 py-2 align-top text-gray-700">${escapeHtml(entry?.campo || '-')}</td>
+                </tr>
+            `;
+        }).join('');
+
+        priceHistoryTableBody.innerHTML = rowsHtml;
+    };
+
+    const fetchPriceHistoryEntries = async () => {
+        if (!priceHistoryModal) return;
+        if (!isEditMode || !productId) {
+            setPriceHistoryLoadingState(false);
+            priceHistoryEntries = [];
+            if (priceHistoryTableBody) {
+                priceHistoryTableBody.innerHTML = '';
+            }
+            updatePriceHistoryErrorState('', false);
+            updatePriceHistoryEmptyState('Salve o produto para visualizar o histórico de preços.', true);
+            return;
+        }
+
+        updatePriceHistoryErrorState('', false);
+        updatePriceHistoryEmptyState('', false);
+        setPriceHistoryLoadingState(true);
+        if (priceHistoryTableBody) {
+            priceHistoryTableBody.innerHTML = '';
+        }
+
+        const token = getAuthToken();
+        if (!token) {
+            setPriceHistoryLoadingState(false);
+            updatePriceHistoryErrorState('Sessão expirada. Faça login novamente para consultar o histórico.', true);
+            updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, false);
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}/price-history`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Falha ao carregar o histórico de preços.');
+            }
+
+            const payload = await response.json();
+            const items = Array.isArray(payload?.items)
+                ? payload.items
+                : Array.isArray(payload)
+                    ? payload
+                    : [];
+
+            priceHistoryEntries = items.map((entry) => ({ ...entry }));
+            populatePriceHistoryFiltersFromEntries();
+            renderPriceHistoryTable();
+
+            if (priceHistoryEntries.length === 0) {
+                updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, true);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar histórico de preços do produto.', error);
+            priceHistoryEntries = [];
+            updatePriceHistoryErrorState(error?.message || 'Não foi possível carregar o histórico de preços. Tente novamente.', true);
+            updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, false);
+        } finally {
+            setPriceHistoryLoadingState(false);
+        }
+    };
+
+    const openPriceHistoryModal = async () => {
+        if (!priceHistoryModal) return;
+        priceHistoryModal.classList.remove('hidden');
+
+        const currentProductIdentifier = productId ? String(productId) : null;
+        if (currentProductIdentifier !== lastPriceHistoryProductId) {
+            resetPriceHistoryState(productId);
+        }
+
+        await fetchPriceHistoryEntries();
+    };
+
+    const closePriceHistoryModal = () => {
+        if (!priceHistoryModal) return;
+        priceHistoryModal.classList.add('hidden');
     };
 
     const formatDocument = (value) => {
@@ -1989,6 +2341,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateMarkupFromValues();
         setSubmitButtonIdleText();
+        resetPriceHistoryState(null);
     };
 
     const fetchProductSummaryByIdentifier = async (identifierType, identifierValue) => {
@@ -2098,6 +2451,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn('Não foi possível registrar o produto atual na URL.', error);
             }
         }
+        resetPriceHistoryState(productId);
         pageTitle.textContent = `Editar Produto: ${product.nome}`;
         if (pageDescription) {
             pageDescription.textContent = 'Altere os dados do produto abaixo.';
@@ -2467,6 +2821,51 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         hideSupplierSuggestions();
+    });
+
+    priceHistorySearchInput?.addEventListener('input', () => {
+        priceHistoryFilters.search = priceHistorySearchInput.value || '';
+        renderPriceHistoryTable();
+    });
+
+    priceHistorySortSelect?.addEventListener('change', () => {
+        priceHistoryFilters.sort = priceHistorySortSelect.value || 'recentes';
+        renderPriceHistoryTable();
+    });
+
+    priceHistoryFieldFilter?.addEventListener('change', () => {
+        priceHistoryFilters.campo = priceHistoryFieldFilter.value || 'all';
+        renderPriceHistoryTable();
+    });
+
+    priceHistoryScreenFilter?.addEventListener('change', () => {
+        priceHistoryFilters.tela = priceHistoryScreenFilter.value || 'all';
+        renderPriceHistoryTable();
+    });
+
+    priceHistoryAuthorFilter?.addEventListener('change', () => {
+        priceHistoryFilters.autor = priceHistoryAuthorFilter.value || 'all';
+        renderPriceHistoryTable();
+    });
+
+    priceHistoryButton?.addEventListener('click', () => {
+        openPriceHistoryModal();
+    });
+
+    priceHistoryModalCloseButtons.forEach((button) => {
+        button.addEventListener('click', () => closePriceHistoryModal());
+    });
+
+    priceHistoryModal?.addEventListener('click', (event) => {
+        if (event.target === priceHistoryModal) {
+            closePriceHistoryModal();
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && priceHistoryModal && !priceHistoryModal.classList.contains('hidden')) {
+            closePriceHistoryModal();
+        }
     });
 
     addSupplierBtn?.addEventListener('click', handleAddSupplier);

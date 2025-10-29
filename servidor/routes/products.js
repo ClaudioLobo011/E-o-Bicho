@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const Product = require('../models/Product');
+const ProductPriceHistory = require('../models/ProductPriceHistory');
 const Category = require('../models/Category');
 const multer = require('multer');
 const fs = require('fs');
@@ -194,6 +195,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
                     ? stockNumber
                     : 0,
             dataCadastro: parseDate(payload.dataCadastro),
+            dataVigencia: parseDate(payload.dataVigencia),
             peso: parseNumber(payload.peso),
             iat: normalizeString(payload.iat),
             tipoProduto: normalizeString(payload.tipoProduto),
@@ -659,6 +661,57 @@ async function getCategoryPath(categoryId) {
 }
 
 // GET /api/products/:id (pública)
+router.get(
+    '/:id/price-history',
+    requireAuth,
+    authorizeRoles('admin', 'admin_master'),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            if (!mongoose.Types.ObjectId.isValid(id)) {
+                return res.status(400).json({ message: 'Identificador inválido do produto.' });
+            }
+
+            const limitParam = Number.parseInt(req.query?.limit, 10);
+            const limit = Number.isNaN(limitParam)
+                ? 200
+                : Math.min(Math.max(limitParam, 1), 500);
+
+            const productExists = await Product.exists({ _id: id });
+            if (!productExists) {
+                return res.status(404).json({ message: 'Produto não encontrado.' });
+            }
+
+            const historyEntries = await ProductPriceHistory.find({ product: id })
+                .sort({ dataAlteracao: -1 })
+                .limit(limit)
+                .lean();
+
+            const responsePayload = historyEntries.map((entry) => ({
+                id: entry._id,
+                product: entry.product,
+                cod: entry.cod,
+                descricao: entry.descricao,
+                campo: entry.campo,
+                campoChave: entry.campoChave,
+                valorAnterior: entry.valorAnterior,
+                valorNovo: entry.valorNovo,
+                tela: entry.tela,
+                autorId: entry.autorId,
+                autorNome: entry.autorNome,
+                autorEmail: entry.autorEmail,
+                autor: entry.autorNome || entry.autorEmail || '',
+                dataAlteracao: entry.dataAlteracao,
+            }));
+
+            res.json({ items: responsePayload });
+        } catch (error) {
+            console.error('Erro ao buscar histórico de preços do produto:', error);
+            res.status(500).json({ message: 'Erro ao buscar o histórico de preços do produto.' });
+        }
+    }
+);
+
 router.get('/:id', async (req, res) => {
     try {
         const product = await Product.findById(req.params.id)
@@ -840,6 +893,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         if (payload.unidade !== undefined) updatePayload.unidade = normalizeString(payload.unidade);
         if (payload.referencia !== undefined) updatePayload.referencia = normalizeString(payload.referencia);
         if (payload.dataCadastro !== undefined) updatePayload.dataCadastro = parseDate(payload.dataCadastro);
+        if (payload.dataVigencia !== undefined) updatePayload.dataVigencia = parseDate(payload.dataVigencia);
         if (payload.peso !== undefined) updatePayload.peso = parseNumber(payload.peso);
         if (payload.iat !== undefined) updatePayload.iat = normalizeString(payload.iat);
         if (payload.tipoProduto !== undefined) updatePayload.tipoProduto = normalizeString(payload.tipoProduto);
@@ -870,11 +924,99 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             updatePayload.fiscal = sanitizeFiscalData(payload.fiscal, existingProduct?.fiscal || {}, req.user?.id || '');
         }
 
+        const normalizePriceValue = (value) => {
+            const parsed = parseNumber(value);
+            return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        const arePricesEqual = (a, b) => {
+            if (a === null && b === null) return true;
+            if (a === null || b === null) return false;
+            return Math.abs(a - b) < 0.000001;
+        };
+
+        const priceHistoryChanges = [];
+        const registerPriceChange = (key, label, existingValue) => {
+            if (!Object.prototype.hasOwnProperty.call(payload, key)) return;
+            const previousValue = normalizePriceValue(existingValue);
+            const newValue = normalizePriceValue(payload[key]);
+            if (arePricesEqual(previousValue, newValue)) return;
+            priceHistoryChanges.push({
+                campo: label,
+                campoChave: key,
+                valorAnterior: previousValue,
+                valorNovo: newValue,
+            });
+        };
+
+        registerPriceChange('custo', 'Preço de Custo', existingProduct.custo);
+        registerPriceChange('venda', 'Preço de Venda', existingProduct.venda);
+        registerPriceChange('precoClube', 'Preço Clube', existingProduct.precoClube);
+
+        let priceHistoryAuthor = {
+            autorId: null,
+            autorNome: '',
+            autorEmail: '',
+        };
+
+        if (priceHistoryChanges.length > 0 && req.user?.id) {
+            priceHistoryAuthor = {
+                autorId: req.user.id,
+                autorNome: '',
+                autorEmail: req.user.email || '',
+            };
+            try {
+                const authorDoc = await User.findById(req.user.id).select('nomeCompleto razaoSocial apelido email');
+                if (authorDoc) {
+                    const resolvedName = normalizeString(
+                        authorDoc.nomeCompleto
+                        || authorDoc.razaoSocial
+                        || authorDoc.apelido
+                    );
+                    priceHistoryAuthor.autorNome = resolvedName || '';
+                    priceHistoryAuthor.autorEmail = authorDoc.email || priceHistoryAuthor.autorEmail;
+                }
+            } catch (authorError) {
+                console.warn('Não foi possível identificar o autor da alteração de preço.', authorError);
+            }
+        }
+
+        const buildPriceHistoryEntries = (productSnapshot) => {
+            if (!priceHistoryChanges.length) return [];
+            const targetProduct = productSnapshot || existingProduct;
+            const resolvedCod = normalizeString(targetProduct?.cod || existingProduct?.cod || '');
+            const resolvedName = targetProduct?.nome || existingProduct?.nome || '';
+            return priceHistoryChanges.map((change) => ({
+                product: targetProduct?._id || existingProduct?._id,
+                cod: resolvedCod,
+                descricao: resolvedName,
+                campo: change.campo,
+                campoChave: change.campoChave,
+                valorAnterior: change.valorAnterior,
+                valorNovo: change.valorNovo,
+                tela: 'Cadastro de Produto',
+                autorId: priceHistoryAuthor.autorId,
+                autorNome: priceHistoryAuthor.autorNome,
+                autorEmail: priceHistoryAuthor.autorEmail,
+            }));
+        };
+
         const updatedProduct = await Product.findByIdAndUpdate(
             req.params.id,
             updatePayload,
             { new: true, runValidators: true }
         );
+
+        if (priceHistoryChanges.length > 0) {
+            try {
+                const historyEntries = buildPriceHistoryEntries(updatedProduct);
+                if (historyEntries.length > 0) {
+                    await ProductPriceHistory.insertMany(historyEntries);
+                }
+            } catch (historyError) {
+                console.error('Erro ao registrar histórico de preços do produto:', historyError);
+            }
+        }
 
         const populatedProduct = await Product.findById(req.params.id)
             .populate('categorias')
