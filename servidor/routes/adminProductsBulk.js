@@ -246,6 +246,7 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     const sortConfig = resolveSortConfig(sortKeyRaw);
     const sortDirection = sortDirectionRaw === 'desc' ? -1 : 1;
     const requiresComputedSort = Boolean(sortConfig?.requiresAggregation);
+    const hasExplicitSort = Boolean(sortConfig);
     const sortStage = buildSortStage(sortConfig, sortDirection);
 
     const filters = {};
@@ -360,13 +361,13 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     const imagemFilter = normalizeBooleanFilter(columnFilters.imagem);
     const requiresComputedFilters = Boolean(markupFilterRaw) || imagemFilter !== null;
 
-    if (idsOnly && !requiresComputedFilters && !requiresComputedSort) {
+    if (idsOnly && !requiresComputedFilters && !requiresComputedSort && !hasExplicitSort) {
       const idsDocs = await Product.find(query).select({ _id: 1 }).lean();
       const mappedIds = idsDocs.map((product) => extractId(product)).filter(Boolean);
       return res.json({ ids: mappedIds, total: mappedIds.length });
     }
 
-    if (!requiresComputedFilters && !requiresComputedSort && !idsOnly) {
+    if (!requiresComputedFilters && !requiresComputedSort && !idsOnly && !hasExplicitSort) {
       const [productsDocs, total] = await Promise.all([
         Product.find(query)
           .sort(sortStage)
@@ -391,150 +392,152 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
 
     const pipeline = [{ $match: query }];
 
-    pipeline.push({
-      $addFields: {
-        markup: {
-          $cond: [
-            {
-              $and: [
-                { $ne: ['$custo', null] },
-                { $ne: ['$venda', null] },
-                { $gt: ['$custo', 0] },
-              ],
-            },
-            {
-              $multiply: [
-                {
-                  $divide: [
-                    { $subtract: ['$venda', '$custo'] },
-                    '$custo',
-                  ],
-                },
-                100,
-              ],
-            },
-            null,
-          ],
-        },
-        temImagem: {
-          $let: {
-            vars: {
-              principal: { $ifNull: ['$imagemPrincipal', ''] },
-              imagens: { $ifNull: ['$imagens', []] },
-              driveImgs: { $ifNull: ['$driveImages', []] },
-            },
-            in: {
-              $or: [
-                {
-                  $and: [
-                    { $ne: ['$$principal', null] },
-                    { $ne: ['$$principal', ''] },
-                    {
-                      $not: [
-                        {
-                          $regexMatch: {
-                            input: { $toString: '$$principal' },
-                            regex: 'placeholder',
-                            options: 'i',
+    if (requiresComputedFilters || requiresComputedSort) {
+      pipeline.push({
+        $addFields: {
+          markup: {
+            $cond: [
+              {
+                $and: [
+                  { $ne: ['$custo', null] },
+                  { $ne: ['$venda', null] },
+                  { $gt: ['$custo', 0] },
+                ],
+              },
+              {
+                $multiply: [
+                  {
+                    $divide: [
+                      { $subtract: ['$venda', '$custo'] },
+                      '$custo',
+                    ],
+                  },
+                  100,
+                ],
+              },
+              null,
+            ],
+          },
+          temImagem: {
+            $let: {
+              vars: {
+                principal: { $ifNull: ['$imagemPrincipal', ''] },
+                imagens: { $ifNull: ['$imagens', []] },
+                driveImgs: { $ifNull: ['$driveImages', []] },
+              },
+              in: {
+                $or: [
+                  {
+                    $and: [
+                      { $ne: ['$$principal', null] },
+                      { $ne: ['$$principal', ''] },
+                      {
+                        $not: [
+                          {
+                            $regexMatch: {
+                              input: { $toString: '$$principal' },
+                              regex: 'placeholder',
+                              options: 'i',
+                            },
                           },
-                        },
-                      ],
-                    },
-                  ],
-                },
-                {
-                  $gt: [
-                    {
-                      $size: {
-                        $filter: {
-                          input: '$$imagens',
-                          as: 'img',
-                          cond: {
-                            $and: [
-                              { $ne: ['$$img', null] },
-                              { $ne: ['$$img', ''] },
-                              {
-                                $not: [
-                                  {
-                                    $regexMatch: {
-                                      input: { $toString: '$$img' },
-                                      regex: 'placeholder',
-                                      options: 'i',
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    $gt: [
+                      {
+                        $size: {
+                          $filter: {
+                            input: '$$imagens',
+                            as: 'img',
+                            cond: {
+                              $and: [
+                                { $ne: ['$$img', null] },
+                                { $ne: ['$$img', ''] },
+                                {
+                                  $not: [
+                                    {
+                                      $regexMatch: {
+                                        input: { $toString: '$$img' },
+                                        regex: 'placeholder',
+                                        options: 'i',
+                                      },
                                     },
-                                  },
-                                ],
-                              },
-                            ],
+                                  ],
+                                },
+                              ],
+                            },
                           },
                         },
                       },
-                    },
-                    0,
-                  ],
-                },
-                {
-                  $gt: [
-                    {
-                      $size: {
-                        $filter: {
-                          input: '$$driveImgs',
-                          as: 'drive',
-                          cond: {
-                            $or: [
-                              {
-                                $and: [
-                                  { $ne: ['$$drive.fileId', null] },
-                                  { $ne: ['$$drive.fileId', ''] },
-                                ],
-                              },
-                              {
-                                $and: [
-                                  { $ne: ['$$drive.path', null] },
-                                  { $ne: ['$$drive.path', ''] },
-                                  {
-                                    $not: [
-                                      {
-                                        $regexMatch: {
-                                          input: { $toString: '$$drive.path' },
-                                          regex: 'placeholder',
-                                          options: 'i',
+                      0,
+                    ],
+                  },
+                  {
+                    $gt: [
+                      {
+                        $size: {
+                          $filter: {
+                            input: '$$driveImgs',
+                            as: 'drive',
+                            cond: {
+                              $or: [
+                                {
+                                  $and: [
+                                    { $ne: ['$$drive.fileId', null] },
+                                    { $ne: ['$$drive.fileId', ''] },
+                                  ],
+                                },
+                                {
+                                  $and: [
+                                    { $ne: ['$$drive.path', null] },
+                                    { $ne: ['$$drive.path', ''] },
+                                    {
+                                      $not: [
+                                        {
+                                          $regexMatch: {
+                                            input: { $toString: '$$drive.path' },
+                                            regex: 'placeholder',
+                                            options: 'i',
+                                          },
                                         },
-                                      },
-                                    ],
-                                  },
-                                ],
-                              },
-                              {
-                                $and: [
-                                  { $ne: ['$$drive.url', null] },
-                                  { $ne: ['$$drive.url', ''] },
-                                  {
-                                    $not: [
-                                      {
-                                        $regexMatch: {
-                                          input: { $toString: '$$drive.url' },
-                                          regex: 'placeholder',
-                                          options: 'i',
+                                      ],
+                                    },
+                                  ],
+                                },
+                                {
+                                  $and: [
+                                    { $ne: ['$$drive.url', null] },
+                                    { $ne: ['$$drive.url', ''] },
+                                    {
+                                      $not: [
+                                        {
+                                          $regexMatch: {
+                                            input: { $toString: '$$drive.url' },
+                                            regex: 'placeholder',
+                                            options: 'i',
+                                          },
                                         },
-                                      },
-                                    ],
-                                  },
-                                ],
-                              },
-                            ],
+                                      ],
+                                    },
+                                  ],
+                                },
+                              ],
+                            },
                           },
                         },
                       },
-                    },
-                    0,
-                  ],
-                },
-              ],
+                      0,
+                    ],
+                  },
+                ],
+              },
             },
           },
         },
-      },
-    });
+      });
+    }
 
     if (markupFilterRaw) {
       const markupAsNumber = parseDecimalString(markupFilterRaw);
@@ -581,10 +584,8 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     }
 
     if (idsOnly) {
-      const idsAggregation = await Product.aggregate(
-        [...pipeline, { $project: { _id: 1 } }],
-        { allowDiskUse: true },
-      );
+      const idsAggregation = await Product.aggregate([...pipeline, { $project: { _id: 1 } }])
+        .option({ allowDiskUse: true });
       const mappedIds = idsAggregation.map((product) => extractId(product)).filter(Boolean);
       return res.json({ ids: mappedIds, total: mappedIds.length });
     }
@@ -603,7 +604,7 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       },
     ];
 
-    const aggregation = await Product.aggregate(paginationPipeline, { allowDiskUse: true });
+    const aggregation = await Product.aggregate(paginationPipeline).option({ allowDiskUse: true });
     const aggregationResult = Array.isArray(aggregation) && aggregation.length ? aggregation[0] : { data: [], totalCount: [] };
     const products = Array.isArray(aggregationResult.data) ? aggregationResult.data : [];
     const total = Array.isArray(aggregationResult.totalCount) && aggregationResult.totalCount.length
