@@ -75,6 +75,7 @@ const routes = [
   { path: '/api/admin/servicos/precos', file: './routes/adminServicosPrecos' },
   { path: '/api/admin/servicos', file: './routes/adminServicos' },
   { path: '/api/admin/produtos', file: './routes/adminProductImages' },
+  { path: '/api/admin/products/bulk', file: './routes/adminProductsBulk' },
   { path: '/api/fiscal/icms-simples', file: './routes/fiscalIcmsSimples' },
   { path: '/api/fiscal/rules', file: './routes/fiscalRules' },
   { path: '/api/profile', file: './routes/profile' },
