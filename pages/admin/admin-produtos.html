@@ -848,18 +848,7 @@
                             <label for="price-history-search" class="block text-xs font-semibold text-gray-700">Buscar</label>
                             <input type="text" id="price-history-search" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Filtrar por descrição, autor, campo ou tela">
                         </div>
-                        <div class="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                            <div>
-                                <label for="price-history-sort" class="block text-xs font-semibold text-gray-700">Ordenação</label>
-                                <select id="price-history-sort" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
-                                    <option value="recentes">Mais recentes</option>
-                                    <option value="antigos">Mais antigos</option>
-                                    <option value="campo-az">Campo (A-Z)</option>
-                                    <option value="campo-za">Campo (Z-A)</option>
-                                    <option value="autor-az">Autor (A-Z)</option>
-                                    <option value="autor-za">Autor (Z-A)</option>
-                                </select>
-                            </div>
+                        <div class="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                             <div>
                                 <label for="price-history-field-filter" class="block text-xs font-semibold text-gray-700">Campo</label>
                                 <select id="price-history-field-filter" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20">
@@ -884,14 +873,134 @@
                         <table class="min-w-full divide-y divide-gray-200 text-xs text-gray-600">
                             <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
                                 <tr>
-                                    <th scope="col" class="px-3 py-2 text-left font-semibold">Cod</th>
-                                    <th scope="col" class="px-3 py-2 text-left font-semibold">Descrição</th>
-                                    <th scope="col" class="px-3 py-2 text-left font-semibold">Data Alteração</th>
-                                    <th scope="col" class="px-3 py-2 text-left font-semibold">Tela</th>
-                                    <th scope="col" class="px-3 py-2 text-left font-semibold">Autor</th>
-                                    <th scope="col" class="px-3 py-2 text-right font-semibold">Valor Anterior</th>
-                                    <th scope="col" class="px-3 py-2 text-right font-semibold">Valor Novo</th>
-                                    <th scope="col" class="px-3 py-2 text-left font-semibold">Campo</th>
+                                    <th scope="col" class="px-3 py-2 text-left align-top font-semibold">
+                                        <div class="flex flex-col gap-1">
+                                            <div class="flex items-center justify-between gap-1">
+                                                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Cod</span>
+                                                <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="cod" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Cod">
+                                                        <i class="fas fa-sort-up text-[9px]"></i>
+                                                    </button>
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="cod" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Cod">
+                                                        <i class="fas fa-sort-down text-[9px]"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-price-history-filter="cod">
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-3 py-2 text-left align-top font-semibold">
+                                        <div class="flex flex-col gap-1">
+                                            <div class="flex items-center justify-between gap-1">
+                                                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Descrição</span>
+                                                <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="descricao" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Descrição">
+                                                        <i class="fas fa-sort-up text-[9px]"></i>
+                                                    </button>
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="descricao" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Descrição">
+                                                        <i class="fas fa-sort-down text-[9px]"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-price-history-filter="descricao">
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-3 py-2 text-left align-top font-semibold">
+                                        <div class="flex flex-col gap-1">
+                                            <div class="flex items-center justify-between gap-1">
+                                                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Data Alteração</span>
+                                                <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="dataAlteracao" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Data Alteração">
+                                                        <i class="fas fa-sort-up text-[9px]"></i>
+                                                    </button>
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="dataAlteracao" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Data Alteração">
+                                                        <i class="fas fa-sort-down text-[9px]"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-price-history-filter="dataAlteracao">
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-3 py-2 text-left align-top font-semibold">
+                                        <div class="flex flex-col gap-1">
+                                            <div class="flex items-center justify-between gap-1">
+                                                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Tela</span>
+                                                <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="tela" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Tela">
+                                                        <i class="fas fa-sort-up text-[9px]"></i>
+                                                    </button>
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="tela" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Tela">
+                                                        <i class="fas fa-sort-down text-[9px]"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-price-history-filter="tela">
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-3 py-2 text-left align-top font-semibold">
+                                        <div class="flex flex-col gap-1">
+                                            <div class="flex items-center justify-between gap-1">
+                                                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Autor</span>
+                                                <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="autor" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Autor">
+                                                        <i class="fas fa-sort-up text-[9px]"></i>
+                                                    </button>
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="autor" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Autor">
+                                                        <i class="fas fa-sort-down text-[9px]"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-price-history-filter="autor">
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-3 py-2 text-right align-top font-semibold">
+                                        <div class="flex flex-col items-end gap-1">
+                                            <div class="flex w-full items-center justify-end gap-1">
+                                                <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Valor Anterior</span>
+                                                <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="valorAnterior" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Valor Anterior">
+                                                        <i class="fas fa-sort-up text-[9px]"></i>
+                                                    </button>
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="valorAnterior" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Valor Anterior">
+                                                        <i class="fas fa-sort-down text-[9px]"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-price-history-filter="valorAnterior">
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-3 py-2 text-right align-top font-semibold">
+                                        <div class="flex flex-col items-end gap-1">
+                                            <div class="flex w-full items-center justify-end gap-1">
+                                                <span class="text-right text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Valor Novo</span>
+                                                <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="valorNovo" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Valor Novo">
+                                                        <i class="fas fa-sort-up text-[9px]"></i>
+                                                    </button>
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="valorNovo" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Valor Novo">
+                                                        <i class="fas fa-sort-down text-[9px]"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-price-history-filter="valorNovo">
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="px-3 py-2 text-left align-top font-semibold">
+                                        <div class="flex flex-col gap-1">
+                                            <div class="flex items-center justify-between gap-1">
+                                                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Campo</span>
+                                                <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="campo" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Campo">
+                                                        <i class="fas fa-sort-up text-[9px]"></i>
+                                                    </button>
+                                                    <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/40" data-price-history-sort="campo" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Campo">
+                                                        <i class="fas fa-sort-down text-[9px]"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-price-history-filter="campo">
+                                        </div>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody id="price-history-table-body" class="divide-y divide-gray-100 bg-white"></tbody>

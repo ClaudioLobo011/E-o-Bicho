@@ -43,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const priceHistoryButton = document.getElementById('open-price-history-btn');
     const priceHistoryModal = document.getElementById('price-history-modal');
     const priceHistorySearchInput = document.getElementById('price-history-search');
-    const priceHistorySortSelect = document.getElementById('price-history-sort');
     const priceHistoryFieldFilter = document.getElementById('price-history-field-filter');
     const priceHistoryScreenFilter = document.getElementById('price-history-screen-filter');
     const priceHistoryAuthorFilter = document.getElementById('price-history-author-filter');
@@ -52,6 +51,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const priceHistoryEmptyState = document.getElementById('price-history-empty-state');
     const priceHistoryErrorState = document.getElementById('price-history-error-state');
     const priceHistoryModalCloseButtons = Array.from(document.querySelectorAll('[data-close-price-history-modal]'));
+    const priceHistoryColumnFilterInputs = new Map();
+    const priceHistorySortButtonsMeta = new Map();
+    const priceHistorySortHeaders = new Map();
+    const PRICE_HISTORY_DEFAULT_SORT = { key: 'dataAlteracao', direction: 'desc' };
+    const priceHistoryTableState = {
+        columnFilters: {},
+        sort: { ...PRICE_HISTORY_DEFAULT_SORT },
+    };
 
     const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
     const FISCAL_GENERAL_KEY = '__general__';
@@ -570,7 +577,6 @@ document.addEventListener('DOMContentLoaded', () => {
         campo: 'all',
         tela: 'all',
         autor: 'all',
-        sort: 'recentes',
     };
     const priceHistoryCurrencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const priceHistoryDateFormatter = new Intl.DateTimeFormat('pt-BR', {
@@ -877,14 +883,255 @@ document.addEventListener('DOMContentLoaded', () => {
         priceHistoryErrorState.classList.toggle('hidden', !show);
     };
 
+    const normalizePriceHistoryFilterText = (value = '') => normalizeSearchText(value);
+
+    const parsePriceHistoryNumericValue = (value) => {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'number') {
+            return Number.isFinite(value) ? value : null;
+        }
+        const trimmed = String(value).trim();
+        if (!trimmed) return null;
+        const normalized = trimmed
+            .replace(/\s+/g, '')
+            .replace(/\./g, '')
+            .replace(/,/g, '.')
+            .replace(/[^0-9.+-]/g, '');
+        if (!normalized) return null;
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const buildPriceHistoryCurrencyFilterText = (displayValue, numericValue) => {
+        const parts = [];
+        if (displayValue) {
+            parts.push(String(displayValue));
+        }
+        if (Number.isFinite(numericValue)) {
+            parts.push(String(numericValue));
+            parts.push(numericValue.toFixed(2));
+            parts.push(numericValue.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }));
+        }
+        return parts.join(' ');
+    };
+
+    const buildPriceHistoryRowData = (entry, index) => {
+        const codRaw = entry?.cod ?? entry?.codigo ?? entry?.codigoProduto ?? entry?.sku ?? '';
+        const codDisplay = codRaw ? String(codRaw) : '-';
+        const descricaoDisplay = entry?.descricao ? String(entry.descricao) : '-';
+        const dataRaw = entry?.dataAlteracao ? String(entry.dataAlteracao) : '';
+        const dataDisplay = formatPriceHistoryDate(dataRaw);
+        const telaDisplay = entry?.tela ? String(entry.tela) : '-';
+        const autorDisplay = getPriceHistoryAuthor(entry) || '-';
+        const valorAnteriorNumeric = parsePriceHistoryNumericValue(entry?.valorAnterior);
+        const valorNovoNumeric = parsePriceHistoryNumericValue(entry?.valorNovo);
+        const valorAnteriorDisplay = formatPriceHistoryCurrency(entry?.valorAnterior);
+        const valorNovoDisplay = formatPriceHistoryCurrency(entry?.valorNovo);
+        const campoDisplay = entry?.campo ? String(entry.campo) : '-';
+
+        const dataTimestamp = (() => {
+            if (!dataRaw) return null;
+            const parsed = new Date(dataRaw);
+            const time = parsed.getTime();
+            return Number.isFinite(time) ? time : null;
+        })();
+        const dataIso = Number.isFinite(dataTimestamp) ? new Date(dataTimestamp).toISOString() : '';
+
+        return {
+            entry,
+            index,
+            originalIndex: index,
+            displays: {
+                cod: codDisplay,
+                descricao: descricaoDisplay,
+                dataAlteracao: dataDisplay,
+                tela: telaDisplay,
+                autor: autorDisplay,
+                valorAnterior: valorAnteriorDisplay,
+                valorNovo: valorNovoDisplay,
+                campo: campoDisplay,
+            },
+            filterTexts: {
+                cod: [codDisplay, codRaw].filter(Boolean).join(' '),
+                descricao: descricaoDisplay,
+                dataAlteracao: [dataRaw, dataDisplay, dataIso].filter(Boolean).join(' '),
+                tela: telaDisplay,
+                autor: autorDisplay,
+                valorAnterior: buildPriceHistoryCurrencyFilterText(valorAnteriorDisplay, valorAnteriorNumeric),
+                valorNovo: buildPriceHistoryCurrencyFilterText(valorNovoDisplay, valorNovoNumeric),
+                campo: campoDisplay,
+            },
+            sortValues: {
+                cod: codDisplay === '-' ? '' : codDisplay,
+                descricao: descricaoDisplay === '-' ? '' : descricaoDisplay,
+                dataAlteracao: dataTimestamp,
+                tela: telaDisplay === '-' ? '' : telaDisplay,
+                autor: autorDisplay === '-' ? '' : autorDisplay,
+                valorAnterior: Number.isFinite(valorAnteriorNumeric) ? valorAnteriorNumeric : null,
+                valorNovo: Number.isFinite(valorNovoNumeric) ? valorNovoNumeric : null,
+                campo: campoDisplay === '-' ? '' : campoDisplay,
+            },
+        };
+    };
+
+    const applyPriceHistoryColumnFilters = (rows) => {
+        if (!Array.isArray(rows) || !rows.length) {
+            return [];
+        }
+        const filters = priceHistoryTableState.columnFilters || {};
+        const activeFilters = Object.entries(filters).filter(([, value]) => normalizePriceHistoryFilterText(value));
+        if (!activeFilters.length) {
+            return rows;
+        }
+        return rows.filter((row) =>
+            activeFilters.every(([key, value]) => {
+                const normalizedFilter = normalizePriceHistoryFilterText(value);
+                if (!normalizedFilter) return true;
+                const columnValue = row?.filterTexts?.[key] ?? '';
+                const normalizedColumn = normalizePriceHistoryFilterText(columnValue);
+                return normalizedColumn.includes(normalizedFilter);
+            })
+        );
+    };
+
+    const applyPriceHistorySort = (rows) => {
+        if (!Array.isArray(rows) || !rows.length) {
+            return [];
+        }
+        const { sort } = priceHistoryTableState;
+        const sortKey = sort?.key || '';
+        if (!sortKey) {
+            return rows.slice();
+        }
+        const sortDirection = sort?.direction === 'desc' ? 'desc' : 'asc';
+        const multiplier = sortDirection === 'desc' ? -1 : 1;
+        return rows
+            .slice()
+            .sort((a, b) => {
+                const valueA = a?.sortValues?.[sortKey];
+                const valueB = b?.sortValues?.[sortKey];
+                if (Number.isFinite(valueA) || Number.isFinite(valueB)) {
+                    const safeA = Number.isFinite(valueA) ? valueA : Number.NEGATIVE_INFINITY;
+                    const safeB = Number.isFinite(valueB) ? valueB : Number.NEGATIVE_INFINITY;
+                    if (safeA === safeB) {
+                        const indexA = Number.isFinite(a?.originalIndex) ? a.originalIndex : 0;
+                        const indexB = Number.isFinite(b?.originalIndex) ? b.originalIndex : 0;
+                        return indexA - indexB;
+                    }
+                    return safeA > safeB ? multiplier : -multiplier;
+                }
+                const textA = String(valueA ?? '').trim();
+                const textB = String(valueB ?? '').trim();
+                const comparison = textA.localeCompare(textB, 'pt-BR', {
+                    sensitivity: 'base',
+                    numeric: true,
+                });
+                if (comparison === 0) {
+                    const indexA = Number.isFinite(a?.originalIndex) ? a.originalIndex : 0;
+                    const indexB = Number.isFinite(b?.originalIndex) ? b.originalIndex : 0;
+                    return indexA - indexB;
+                }
+                return comparison * multiplier;
+            });
+    };
+
+    const updatePriceHistorySortButtons = () => {
+        const activeKey = priceHistoryTableState.sort?.key || '';
+        const activeDirection = priceHistoryTableState.sort?.direction === 'desc' ? 'desc' : 'asc';
+
+        priceHistorySortHeaders.forEach((header, key) => {
+            if (!header) return;
+            if (key === activeKey && activeKey) {
+                header.setAttribute('aria-sort', activeDirection === 'desc' ? 'descending' : 'ascending');
+            } else {
+                header.removeAttribute('aria-sort');
+            }
+        });
+
+        priceHistorySortButtonsMeta.forEach((meta, button) => {
+            if (!button) return;
+            const isActive = activeKey && meta.key === activeKey && meta.direction === activeDirection;
+            button.classList.toggle('text-primary', isActive);
+            button.classList.toggle('border-primary/60', isActive);
+            button.classList.toggle('bg-primary/10', isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    };
+
+    const setPriceHistoryColumnFilterValue = (key, value, { updateInput = false } = {}) => {
+        if (!key) return;
+        const normalizedValue = value || '';
+        priceHistoryTableState.columnFilters[key] = normalizedValue;
+        if (updateInput) {
+            const input = priceHistoryColumnFilterInputs.get(key);
+            if (input && input.value !== normalizedValue) {
+                input.value = normalizedValue;
+            }
+        }
+        renderPriceHistoryTable();
+    };
+
+    const setPriceHistorySort = (key, direction, { silent = false } = {}) => {
+        if (key) {
+            priceHistoryTableState.sort = {
+                key,
+                direction: direction === 'desc' ? 'desc' : 'asc',
+            };
+        } else {
+            priceHistoryTableState.sort = { ...PRICE_HISTORY_DEFAULT_SORT };
+        }
+        updatePriceHistorySortButtons();
+        if (!silent) {
+            renderPriceHistoryTable();
+        }
+    };
+
+    const initializePriceHistoryTableInteractions = () => {
+        priceHistoryColumnFilterInputs.clear();
+        priceHistorySortButtonsMeta.clear();
+        priceHistorySortHeaders.clear();
+
+        document.querySelectorAll('[data-price-history-filter]').forEach((input) => {
+            const key = input?.dataset?.priceHistoryFilter;
+            if (!key) return;
+            priceHistoryColumnFilterInputs.set(key, input);
+            if (!(key in priceHistoryTableState.columnFilters)) {
+                priceHistoryTableState.columnFilters[key] = input.value || '';
+            }
+            input.addEventListener('input', (event) => {
+                setPriceHistoryColumnFilterValue(key, event.target.value || '');
+            });
+        });
+
+        document.querySelectorAll('[data-price-history-sort]').forEach((button) => {
+            const key = button?.dataset?.priceHistorySort;
+            if (!key) return;
+            const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+            const header = button.closest('th');
+            priceHistorySortButtonsMeta.set(button, { key, direction });
+            if (header && !priceHistorySortHeaders.has(key)) {
+                priceHistorySortHeaders.set(key, header);
+            }
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                setPriceHistorySort(key, direction);
+            });
+        });
+
+        updatePriceHistorySortButtons();
+    };
+
+    initializePriceHistoryTableInteractions();
+
     const resetPriceHistoryFilters = () => {
         priceHistoryFilters.search = '';
         priceHistoryFilters.campo = 'all';
         priceHistoryFilters.tela = 'all';
         priceHistoryFilters.autor = 'all';
-        priceHistoryFilters.sort = 'recentes';
         if (priceHistorySearchInput) priceHistorySearchInput.value = '';
-        if (priceHistorySortSelect) priceHistorySortSelect.value = 'recentes';
         if (priceHistoryFieldFilter) priceHistoryFieldFilter.value = 'all';
         if (priceHistoryScreenFilter) priceHistoryScreenFilter.value = 'all';
         if (priceHistoryAuthorFilter) priceHistoryAuthorFilter.value = 'all';
@@ -894,6 +1141,14 @@ document.addEventListener('DOMContentLoaded', () => {
         priceHistoryEntries = [];
         lastPriceHistoryProductId = productIdentifier ? String(productIdentifier) : null;
         resetPriceHistoryFilters();
+        priceHistoryColumnFilterInputs.forEach((input, key) => {
+            if (input) {
+                input.value = '';
+            }
+            priceHistoryTableState.columnFilters[key] = '';
+        });
+        priceHistoryTableState.sort = { ...PRICE_HISTORY_DEFAULT_SORT };
+        updatePriceHistorySortButtons();
         if (priceHistoryTableBody) {
             priceHistoryTableBody.innerHTML = '';
         }
@@ -983,12 +1238,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const searchTerm = normalizeSearchText(priceHistoryFilters.search);
-        const filteredEntries = priceHistoryEntries.filter((entry) => {
-            const fieldKey = (entry?.campoChave || entry?.campo || '').trim();
-            if (priceHistoryFilters.campo !== 'all' && fieldKey !== priceHistoryFilters.campo) {
-                return false;
-            }
-            const screenValue = typeof entry?.tela === 'string' ? entry.tela.trim() : '';
+        const filteredEntries = priceHistoryEntries
+            .map((entry, index) => ({ entry, index }))
+            .filter(({ entry }) => {
+                const fieldKey = (entry?.campoChave || entry?.campo || '').trim();
+                if (priceHistoryFilters.campo !== 'all' && fieldKey !== priceHistoryFilters.campo) {
+                    return false;
+                }
+                const screenValue = typeof entry?.tela === 'string' ? entry.tela.trim() : '';
             if (priceHistoryFilters.tela !== 'all' && screenValue !== priceHistoryFilters.tela) {
                 return false;
             }
@@ -1011,37 +1268,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         });
 
-        const sortedEntries = [...filteredEntries];
-        const compareDates = (a, b) => {
-            const dateA = new Date(a?.dataAlteracao || 0);
-            const dateB = new Date(b?.dataAlteracao || 0);
-            return dateA - dateB;
-        };
-        const compareStrings = (a = '', b = '') => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' });
+        const derivedRows = filteredEntries.map(({ entry, index }) => buildPriceHistoryRowData(entry, index));
+        const columnFilteredRows = applyPriceHistoryColumnFilters(derivedRows);
+        const sortedRows = applyPriceHistorySort(columnFilteredRows);
 
-        switch (priceHistoryFilters.sort) {
-            case 'antigos':
-                sortedEntries.sort((a, b) => compareDates(a, b));
-                break;
-            case 'campo-az':
-                sortedEntries.sort((a, b) => compareStrings(a?.campo || '', b?.campo || ''));
-                break;
-            case 'campo-za':
-                sortedEntries.sort((a, b) => compareStrings(b?.campo || '', a?.campo || ''));
-                break;
-            case 'autor-az':
-                sortedEntries.sort((a, b) => compareStrings(getPriceHistoryAuthor(a), getPriceHistoryAuthor(b)));
-                break;
-            case 'autor-za':
-                sortedEntries.sort((a, b) => compareStrings(getPriceHistoryAuthor(b), getPriceHistoryAuthor(a)));
-                break;
-            case 'recentes':
-            default:
-                sortedEntries.sort((a, b) => compareDates(b, a));
-                break;
-        }
+        updatePriceHistorySortButtons();
 
-        if (sortedEntries.length === 0) {
+        if (sortedRows.length === 0) {
             const hasEntries = priceHistoryEntries.length > 0;
             const emptyMessage = hasEntries
                 ? 'Nenhum registro encontrado para os filtros selecionados.'
@@ -1054,18 +1287,18 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePriceHistoryEmptyState('', false);
         updatePriceHistoryErrorState('', false);
 
-        const rowsHtml = sortedEntries.map((entry) => {
-            const authorLabel = getPriceHistoryAuthor(entry) || '-';
+        const rowsHtml = sortedRows.map((row) => {
+            const displays = row?.displays || {};
             return `
                 <tr>
-                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(entry?.cod || '-')}</td>
-                    <td class="px-3 py-2 align-top text-gray-700">${escapeHtml(entry?.descricao || '-')}</td>
-                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(formatPriceHistoryDate(entry?.dataAlteracao))}</td>
-                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(entry?.tela || '-')}</td>
-                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(authorLabel || '-')}</td>
-                    <td class="whitespace-nowrap px-3 py-2 align-top text-right font-semibold text-gray-700">${escapeHtml(formatPriceHistoryCurrency(entry?.valorAnterior))}</td>
-                    <td class="whitespace-nowrap px-3 py-2 align-top text-right font-semibold text-gray-700">${escapeHtml(formatPriceHistoryCurrency(entry?.valorNovo))}</td>
-                    <td class="px-3 py-2 align-top text-gray-700">${escapeHtml(entry?.campo || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(displays.cod || '-')}</td>
+                    <td class="px-3 py-2 align-top text-gray-700">${escapeHtml(displays.descricao || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(displays.dataAlteracao || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(displays.tela || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(displays.autor || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-right font-semibold text-gray-700">${escapeHtml(displays.valorAnterior || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-right font-semibold text-gray-700">${escapeHtml(displays.valorNovo || '-')}</td>
+                    <td class="px-3 py-2 align-top text-gray-700">${escapeHtml(displays.campo || '-')}</td>
                 </tr>
             `;
         }).join('');
@@ -2825,11 +3058,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     priceHistorySearchInput?.addEventListener('input', () => {
         priceHistoryFilters.search = priceHistorySearchInput.value || '';
-        renderPriceHistoryTable();
-    });
-
-    priceHistorySortSelect?.addEventListener('change', () => {
-        priceHistoryFilters.sort = priceHistorySortSelect.value || 'recentes';
         renderPriceHistoryTable();
     });
 
