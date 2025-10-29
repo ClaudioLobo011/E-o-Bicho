@@ -30,6 +30,15 @@ const normalizeString = (value) => {
   return String(value).trim();
 };
 
+const normalizeForSearch = (value = '') => {
+  if (typeof value !== 'string') return '';
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+};
+
 const normalizeDigits = (value) => normalizeString(value).replace(/\D+/g, '');
 
 const normalizeImagePath = (value) => {
@@ -303,7 +312,26 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
 
     if (nome) {
       const nomeRegex = buildWildcardRegex(nome) || new RegExp(escapeRegex(nome), 'i');
-      filters.nome = { $regex: nomeRegex };
+      const normalizedNome = normalizeForSearch(nome);
+      const normalizedNomeRegex = normalizedNome
+        ? buildWildcardRegex(normalizedNome) || new RegExp(escapeRegex(normalizedNome), 'i')
+        : null;
+
+      const nomeConditions = [];
+      if (nomeRegex) {
+        nomeConditions.push({ nome: { $regex: nomeRegex } });
+      }
+      if (normalizedNomeRegex) {
+        nomeConditions.push({ searchableString: { $regex: normalizedNomeRegex } });
+      }
+
+      if (nomeConditions.length === 1) {
+        const [singleCondition] = nomeConditions;
+        const [[field, matcher]] = Object.entries(singleCondition);
+        filters[field] = matcher;
+      } else if (nomeConditions.length > 1) {
+        andConditions.push({ $or: nomeConditions });
+      }
     }
 
     if (barcode) {
@@ -354,8 +382,26 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     }
 
     if (columnFilters.nome) {
-      const columnNomeRegex = buildWildcardRegex(columnFilters.nome) || new RegExp(escapeRegex(columnFilters.nome), 'i');
-      andConditions.push({ nome: { $regex: columnNomeRegex } });
+      const columnNomeRegex =
+        buildWildcardRegex(columnFilters.nome) || new RegExp(escapeRegex(columnFilters.nome), 'i');
+      const columnNormalizedNome = normalizeForSearch(columnFilters.nome);
+      const columnNormalizedRegex = columnNormalizedNome
+        ? buildWildcardRegex(columnNormalizedNome) || new RegExp(escapeRegex(columnNormalizedNome), 'i')
+        : null;
+
+      const columnConditions = [];
+      if (columnNomeRegex) {
+        columnConditions.push({ nome: { $regex: columnNomeRegex } });
+      }
+      if (columnNormalizedRegex) {
+        columnConditions.push({ searchableString: { $regex: columnNormalizedRegex } });
+      }
+
+      if (columnConditions.length === 1) {
+        andConditions.push(columnConditions[0]);
+      } else if (columnConditions.length > 1) {
+        andConditions.push({ $or: columnConditions });
+      }
     }
 
     if (columnFilters.unidade) {
@@ -747,7 +793,26 @@ router.get(
 
       if (nome) {
         const nomeRegex = buildWildcardRegex(nome) || new RegExp(escapeRegex(nome), 'i');
-        filters.nome = { $regex: nomeRegex };
+        const normalizedNome = normalizeForSearch(nome);
+        const normalizedNomeRegex = normalizedNome
+          ? buildWildcardRegex(normalizedNome) || new RegExp(escapeRegex(normalizedNome), 'i')
+          : null;
+
+        const nomeConditions = [];
+        if (nomeRegex) {
+          nomeConditions.push({ nome: { $regex: nomeRegex } });
+        }
+        if (normalizedNomeRegex) {
+          nomeConditions.push({ searchableString: { $regex: normalizedNomeRegex } });
+        }
+
+        if (nomeConditions.length === 1) {
+          const [singleCondition] = nomeConditions;
+          const [[field, matcher]] = Object.entries(singleCondition);
+          filters[field] = matcher;
+        } else if (nomeConditions.length > 1) {
+          andConditions.push({ $or: nomeConditions });
+        }
       }
 
       if (barcode) {
@@ -798,8 +863,26 @@ router.get(
       }
 
       if (columnFilters.nome) {
-        const columnNomeRegex = buildWildcardRegex(columnFilters.nome) || new RegExp(escapeRegex(columnFilters.nome), 'i');
-        andConditions.push({ nome: { $regex: columnNomeRegex } });
+        const columnNomeRegex =
+          buildWildcardRegex(columnFilters.nome) || new RegExp(escapeRegex(columnFilters.nome), 'i');
+        const columnNormalizedNome = normalizeForSearch(columnFilters.nome);
+        const columnNormalizedRegex = columnNormalizedNome
+          ? buildWildcardRegex(columnNormalizedNome) || new RegExp(escapeRegex(columnNormalizedNome), 'i')
+          : null;
+
+        const columnConditions = [];
+        if (columnNomeRegex) {
+          columnConditions.push({ nome: { $regex: columnNomeRegex } });
+        }
+        if (columnNormalizedRegex) {
+          columnConditions.push({ searchableString: { $regex: columnNormalizedRegex } });
+        }
+
+        if (columnConditions.length === 1) {
+          andConditions.push(columnConditions[0]);
+        } else if (columnConditions.length > 1) {
+          andConditions.push({ $or: columnConditions });
+        }
       }
 
       if (columnFilters.unidade) {
