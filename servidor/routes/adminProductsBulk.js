@@ -14,6 +14,17 @@ const escapeRegex = (value = '') => {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
+const buildWildcardRegex = (value = '') => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const pattern = trimmed
+    .split('*')
+    .map((segment) => escapeRegex(segment))
+    .join('.*');
+  return new RegExp(pattern, 'i');
+};
+
 const normalizeString = (value) => {
   if (value === null || value === undefined) return '';
   return String(value).trim();
@@ -291,7 +302,8 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     }
 
     if (nome) {
-      filters.nome = { $regex: new RegExp(escapeRegex(nome), 'i') };
+      const nomeRegex = buildWildcardRegex(nome) || new RegExp(escapeRegex(nome), 'i');
+      filters.nome = { $regex: nomeRegex };
     }
 
     if (barcode) {
@@ -342,7 +354,8 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     }
 
     if (columnFilters.nome) {
-      andConditions.push({ nome: { $regex: new RegExp(escapeRegex(columnFilters.nome), 'i') } });
+      const columnNomeRegex = buildWildcardRegex(columnFilters.nome) || new RegExp(escapeRegex(columnFilters.nome), 'i');
+      andConditions.push({ nome: { $regex: columnNomeRegex } });
     }
 
     if (columnFilters.unidade) {
@@ -733,7 +746,8 @@ router.get(
       }
 
       if (nome) {
-        filters.nome = { $regex: new RegExp(escapeRegex(nome), 'i') };
+        const nomeRegex = buildWildcardRegex(nome) || new RegExp(escapeRegex(nome), 'i');
+        filters.nome = { $regex: nomeRegex };
       }
 
       if (barcode) {
@@ -784,7 +798,8 @@ router.get(
       }
 
       if (columnFilters.nome) {
-        andConditions.push({ nome: { $regex: new RegExp(escapeRegex(columnFilters.nome), 'i') } });
+        const columnNomeRegex = buildWildcardRegex(columnFilters.nome) || new RegExp(escapeRegex(columnFilters.nome), 'i');
+        andConditions.push({ nome: { $regex: columnNomeRegex } });
       }
 
       if (columnFilters.unidade) {
