@@ -8313,6 +8313,31 @@
           productLinkResults.appendChild(fragment);
         };
 
+        const resolveProductLinkDefaultTerm = (item) => {
+          if (!item) return '';
+
+          const tributaryBarcode = normalizeGtin(item?.eanTrib);
+          if (tributaryBarcode) {
+            return tributaryBarcode;
+          }
+
+          const fallbackBarcode = normalizeGtin(item?.ean);
+          if (fallbackBarcode) {
+            return fallbackBarcode;
+          }
+
+          const supplierCode = normalizeSupplierProductCode(item?.supplierCode);
+          if (supplierCode) {
+            return supplierCode;
+          }
+
+          if (typeof item?.description === 'string') {
+            return item.description.trim();
+          }
+
+          return '';
+        };
+
         const openProductLinkModal = (item) => {
           if (!productLinkModal) {
             notify('Seleção de produto indisponível no momento.', 'error');
@@ -8350,7 +8375,7 @@
           }
 
           if (productLinkSearchInput) {
-            const defaultTerm = item?.supplierCode || item?.description || '';
+            const defaultTerm = resolveProductLinkDefaultTerm(item);
             productLinkSearchInput.value = defaultTerm;
           }
 
