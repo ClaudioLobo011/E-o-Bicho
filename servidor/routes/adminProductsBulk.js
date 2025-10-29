@@ -367,7 +367,9 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       return res.json({ ids: mappedIds, total: mappedIds.length });
     }
 
-    if (!requiresComputedFilters && !requiresComputedSort && !idsOnly && !hasExplicitSort) {
+    const canUseSimpleQuery = !requiresComputedFilters && !requiresComputedSort && !idsOnly;
+
+    if (canUseSimpleQuery) {
       const [productsDocs, total] = await Promise.all([
         Product.find(query)
           .sort(sortStage)
