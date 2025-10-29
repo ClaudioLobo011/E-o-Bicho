@@ -485,11 +485,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!tabId) return;
         Object.entries(productTabContents).forEach(([id, el]) => {
             if (!el) return;
-            if (id === tabId) {
+            const isTarget = id === tabId;
+            if (isTarget) {
                 el.classList.remove('hidden');
             } else {
                 el.classList.add('hidden');
             }
+            el.setAttribute('aria-hidden', isTarget ? 'false' : 'true');
         });
 
         productTabLinks.forEach((btn) => {
@@ -498,6 +500,11 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.toggle('text-gray-500', !isActive);
             btn.classList.toggle('border-primary', isActive);
             btn.classList.toggle('border-transparent', !isActive);
+            btn.classList.toggle('bg-primary/10', isActive);
+            btn.classList.toggle('bg-white', !isActive);
+            btn.classList.toggle('shadow-sm', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            btn.setAttribute('tabindex', isActive ? '0' : '-1');
         });
 
         updatePersistedProductEditState({ activeTab: tabId });
@@ -1237,9 +1244,11 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteProductButton.classList.remove('hidden');
     };
 
+    const getSubmitButtonIdleLabel = () => (isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto');
+
     const setSubmitButtonIdleText = () => {
         if (!submitButton) return;
-        submitButton.innerHTML = isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto';
+        submitButton.innerHTML = `<i class="fas fa-save"></i><span>${getSubmitButtonIdleLabel()}</span>`;
     };
 
     setSubmitButtonIdleText();
@@ -2414,7 +2423,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         submitButton.disabled = true;
         const loadingText = isEditMode ? 'Salvando...' : 'Cadastrando...';
-        submitButton.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>${loadingText}`;
+        submitButton.innerHTML = `<i class="fas fa-spinner fa-spin"></i><span>${loadingText}</span>`;
 
         const formData = new FormData(form);
         const productName = (formData.get('nome') || '').trim();
