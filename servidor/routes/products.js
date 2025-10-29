@@ -591,7 +591,9 @@ router.get(
             const codeRegex = new RegExp(`^${escapeRegExp(supplierCodeRaw)}$`, 'i');
 
             const candidates = await Product.find({ 'fornecedores.codigoProduto': { $regex: codeRegex } })
-                .select('cod codbarras nome imagemPrincipal imagens marca unidade fornecedores')
+                .select(
+                    'cod codbarras nome imagemPrincipal imagens marca unidade fornecedores custo venda stock naoMostrarNoSite inativo'
+                )
                 .lean();
 
             const match = candidates.find((product) => {

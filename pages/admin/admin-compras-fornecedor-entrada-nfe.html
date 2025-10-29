@@ -7383,6 +7383,57 @@
           return Math.round(numeric * 1000) / 1000;
         };
 
+        const resolveProductNumericField = (product, fields) => {
+          if (!product || typeof product !== 'object' || !Array.isArray(fields)) {
+            return null;
+          }
+          for (const field of fields) {
+            if (!field) continue;
+            const directValue = product[field];
+            if (Number.isFinite(directValue)) {
+              return directValue;
+            }
+            const numericValue = toNumericValue(directValue);
+            if (Number.isFinite(numericValue)) {
+              return numericValue;
+            }
+          }
+          return null;
+        };
+
+        const resolveProductCostValue = (product) =>
+          resolveProductNumericField(product, [
+            'custo',
+            'precoCompra',
+            'precoCusto',
+            'valorCompra',
+            'valorCusto',
+          ]);
+
+        const resolveProductSaleValue = (product) =>
+          resolveProductNumericField(product, [
+            'venda',
+            'precoVenda',
+            'valorVenda',
+            'preco',
+            'precoSugerido',
+          ]);
+
+        const normalizeProductPricing = (product) => {
+          if (!product || typeof product !== 'object') {
+            return { cost: null, sale: null };
+          }
+          const cost = resolveProductCostValue(product);
+          const sale = resolveProductSaleValue(product);
+          if (Number.isFinite(cost)) {
+            product.custo = cost;
+          }
+          if (Number.isFinite(sale)) {
+            product.venda = sale;
+          }
+          return { cost, sale };
+        };
+
         const computeMarkupPercentage = (cost, sale) => {
           const costValue = sanitizeCurrencyValue(cost);
           const saleValue = sanitizeCurrencyValue(sale);
@@ -7427,8 +7478,10 @@
               (typeof item.description === 'string' ? item.description : '') ||
               'Produto sem descrição';
 
-            const costPrevious = sanitizeCurrencyValue(item.matchedProduct?.custo);
-            const salePrevious = sanitizeCurrencyValue(item.matchedProduct?.venda);
+            normalizeProductPricing(item.matchedProduct);
+
+            const costPrevious = sanitizeCurrencyValue(resolveProductCostValue(item.matchedProduct));
+            const salePrevious = sanitizeCurrencyValue(resolveProductSaleValue(item.matchedProduct));
             const costBase = sanitizeCurrencyValue(item.unitCostWithTaxes);
             const entryStock = sanitizeQuantityValue(resolveMainProductEntryStockQuantity(
               item,
@@ -8268,6 +8321,7 @@
           hideProductLinkMessages();
           const fragment = document.createDocumentFragment();
           products.forEach((product) => {
+            normalizeProductPricing(product);
             const item = document.createElement('li');
             item.className = 'rounded-xl border border-gray-100 bg-white px-3 py-2 shadow-sm';
 
@@ -8302,9 +8356,8 @@
 
             const footer = document.createElement('p');
             footer.className = 'mt-1 text-[10px] text-gray-500';
-            const price = Number.isFinite(product?.precoVenda)
-              ? formatMoneyValue(product.precoVenda)
-              : '';
+            const salePrice = resolveProductSaleValue(product);
+            const price = Number.isFinite(salePrice) ? formatMoneyValue(salePrice) : '';
             footer.textContent = price ? `Preço de venda: R$ ${price}` : 'Sem preço informado';
             item.appendChild(footer);
 
@@ -8476,6 +8529,8 @@
             notify('Produto selecionado inválido.', 'error');
             return;
           }
+
+          normalizeProductPricing(product);
 
           if (productLinkIsLinking) {
             return;
@@ -10199,6 +10254,7 @@
             }
 
             if (matched && matchedProduct) {
+              normalizeProductPricing(matchedProduct);
               item.matchedProduct = matchedProduct;
               item.validationStatus = 'matched';
               applySupplierConversionFromProduct(item, matchedProduct, nfeData);
