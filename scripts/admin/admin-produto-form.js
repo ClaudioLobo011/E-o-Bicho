@@ -1377,6 +1377,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const openPriceHistoryModal = async () => {
         if (!priceHistoryModal) return;
         priceHistoryModal.classList.remove('hidden');
+        priceHistoryModal.dataset.modalOpen = 'true';
+        priceHistoryModal.setAttribute('aria-hidden', 'false');
 
         const currentProductIdentifier = productId ? String(productId) : null;
         if (currentProductIdentifier !== lastPriceHistoryProductId) {
@@ -1389,6 +1391,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const closePriceHistoryModal = () => {
         if (!priceHistoryModal) return;
         priceHistoryModal.classList.add('hidden');
+        priceHistoryModal.dataset.modalOpen = 'false';
+        priceHistoryModal.setAttribute('aria-hidden', 'true');
     };
 
     const formatDocument = (value) => {
