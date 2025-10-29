@@ -472,20 +472,26 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- LÓGICA DAS ABAS (Geral / Especificações) ---
+    const normalizeTabId = (tabId) => {
+        if (typeof tabId !== 'string') return '';
+        return tabId.startsWith('#') ? tabId.slice(1) : tabId;
+    };
+
     const productTabLinks = document.querySelectorAll('#product-tabs .tab-link');
     const productTabContents = {};
     productTabLinks.forEach((btn) => {
-        const tabId = btn.dataset.tab;
+        const tabId = normalizeTabId(btn.dataset.tab);
         if (tabId) {
             productTabContents[tabId] = document.getElementById(tabId);
         }
     });
 
     function activateProductTab(tabId) {
-        if (!tabId) return;
+        const normalizedTabId = normalizeTabId(tabId);
+        if (!normalizedTabId) return;
         Object.entries(productTabContents).forEach(([id, el]) => {
             if (!el) return;
-            const isTarget = id === tabId;
+            const isTarget = id === normalizedTabId;
             if (isTarget) {
                 el.classList.remove('hidden');
             } else {
@@ -495,7 +501,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         productTabLinks.forEach((btn) => {
-            const isActive = btn.dataset.tab === tabId;
+            const btnTabId = normalizeTabId(btn.dataset.tab);
+            const isActive = btnTabId === normalizedTabId;
             btn.classList.toggle('text-primary', isActive);
             btn.classList.toggle('text-gray-500', !isActive);
             btn.classList.toggle('border-primary', isActive);
@@ -507,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.setAttribute('tabindex', isActive ? '0' : '-1');
         });
 
-        updatePersistedProductEditState({ activeTab: tabId });
+        updatePersistedProductEditState({ activeTab: normalizedTabId });
     }
 
     if (productTabLinks.length) {
@@ -515,13 +522,14 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', () => activateProductTab(btn.dataset.tab));
         });
         const availableTabIds = Array.from(productTabLinks)
-            .map((btn) => btn.dataset.tab)
+            .map((btn) => normalizeTabId(btn.dataset.tab))
             .filter(Boolean);
-        let initialTab = storedActiveTab && availableTabIds.includes(storedActiveTab)
-            ? storedActiveTab
-            : document.querySelector('#product-tabs .tab-link.text-primary')?.dataset.tab;
+        const normalizedStoredTab = normalizeTabId(storedActiveTab);
+        let initialTab = normalizedStoredTab && availableTabIds.includes(normalizedStoredTab)
+            ? normalizedStoredTab
+            : normalizeTabId(document.querySelector('#product-tabs .tab-link.text-primary')?.dataset.tab);
         if (!initialTab) {
-            initialTab = productTabLinks[0]?.dataset.tab;
+            initialTab = normalizeTabId(productTabLinks[0]?.dataset.tab);
         }
         if (initialTab) activateProductTab(initialTab);
     }
