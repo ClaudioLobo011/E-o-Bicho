@@ -2857,7 +2857,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     priceHistoryModal?.addEventListener('click', (event) => {
-        if (event.target === priceHistoryModal) {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target === priceHistoryModal || target.hasAttribute('data-close-price-history-modal')) {
             closePriceHistoryModal();
         }
     });
