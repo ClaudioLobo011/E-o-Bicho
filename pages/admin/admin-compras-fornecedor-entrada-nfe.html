@@ -8397,8 +8397,13 @@
           }
 
           try {
+            const searchParams = new URLSearchParams({
+              search: term,
+              limit: '20',
+              includeHidden: 'true',
+            });
             const response = await fetch(
-              `${apiBaseUrl}/products?search=${encodeURIComponent(term)}&limit=10`,
+              `${apiBaseUrl}/products?${searchParams.toString()}`,
               { headers: buildAuthHeaders(), signal: abortController.signal }
             );
             const payload = await response.json().catch(() => ({}));
@@ -8413,7 +8418,15 @@
               : Array.isArray(payload)
               ? payload
               : [];
-            renderProductLinkResults(products);
+            const filteredProducts = products.filter((product) => !product?.inativo);
+            if (!filteredProducts.length) {
+              if (productLinkResults) {
+                productLinkResults.innerHTML = '';
+              }
+              showProductLinkEmpty('Nenhum produto ativo encontrado para os termos informados.');
+              return;
+            }
+            renderProductLinkResults(filteredProducts);
           } catch (error) {
             if (error?.name === 'AbortError') {
               return;
