@@ -618,6 +618,179 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const AUTO_SAVE_DEBOUNCE_MS = 1500;
+    let autoSaveTimeoutId = null;
+    let autoSaveInProgress = false;
+    let pendingAutoSave = false;
+
+    const getAuthToken = () => {
+        try {
+            return JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token || null;
+        } catch (error) {
+            console.error('Erro ao recuperar o token do usuário logado.', error);
+            return null;
+        }
+    };
+
+    const buildProductUpdatePayload = () => {
+        if (!form) {
+            return { productName: '', updateData: null };
+        }
+
+        const formData = new FormData(form);
+        const productName = (formData.get('nome') || '').trim();
+
+        const additionalBarcodesRaw = (formData.get('barcode-additional') || '')
+            .split('\n')
+            .map((code) => code.trim())
+            .filter(Boolean);
+
+        const depositPayload = [];
+        depositStockMap.forEach((entry, depositId) => {
+            if (!depositId) return;
+            const unidade = (entry?.unidade || '').trim();
+            const quantidadeValue = entry?.quantidade;
+            const hasQuantity = quantidadeValue !== null && quantidadeValue !== undefined && quantidadeValue !== '';
+            if (!hasQuantity && !unidade) return;
+            const parsedQuantity = Number(quantidadeValue);
+            depositPayload.push({
+                deposito: depositId,
+                quantidade: Number.isFinite(parsedQuantity) ? parsedQuantity : 0,
+                unidade,
+            });
+        });
+
+        const totalStock = depositPayload.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
+
+        persistActiveFiscalData();
+        const generalFiscal = cloneFiscalObject(fiscalByCompany.get(FISCAL_GENERAL_KEY) || collectFiscalData());
+        const fiscalPerCompanyPayload = {};
+        fiscalByCompany.forEach((value, key) => {
+            if (key === FISCAL_GENERAL_KEY) return;
+            fiscalPerCompanyPayload[key] = cloneFiscalObject(value);
+        });
+
+        const dataCadastroValue = formData.get('data-cadastro');
+        const dataVigenciaValue = formData.get('data-vigencia');
+        const pesoValue = formData.get('peso');
+        const iatValue = formData.get('iat');
+        const tipoProdutoValue = formData.get('tipo-produto');
+        const ncmValue = formData.get('ncm');
+
+        const parsedPeso = pesoValue ? Number(pesoValue) : null;
+
+        const updateData = {
+            nome: productName,
+            cod: (formData.get('cod') || '').trim(),
+            codbarras: (formData.get('codbarras') || '').trim(),
+            descricao: detailedDescriptionInput ? detailedDescriptionInput.value : formData.get('descricao'),
+            marca: formData.get('marca'),
+            unidade: formData.get('unidade'),
+            referencia: formData.get('referencia'),
+            custo: formData.get('custo'),
+            venda: formData.get('venda'),
+            categorias: productCategories,
+            fornecedores: supplierEntries.map((item) => ({
+                fornecedor: item.fornecedor,
+                documentoFornecedor: item.documentoFornecedor || null,
+                nomeProdutoFornecedor: item.nomeProdutoFornecedor || null,
+                codigoProduto: item.codigoProduto || null,
+                unidadeEntrada: item.unidadeEntrada || null,
+                tipoCalculo: item.tipoCalculo || null,
+                valorCalculo: item.valorCalculo,
+            })),
+            especificacoes: {
+                idade: Array.from(form.querySelectorAll('input[name="spec-idade"]:checked')).map(i => i.value),
+                pet: Array.from(form.querySelectorAll('input[name="spec-pet"]:checked')).map(i => i.value),
+                porteRaca: Array.from(form.querySelectorAll('input[name="spec-porte"]:checked')).map(i => i.value),
+                apresentacao: (document.getElementById('spec-apresentacao')?.value || '').trim()
+            },
+            codigosComplementares: additionalBarcodesRaw,
+            estoques: depositPayload,
+            stock: totalStock,
+            fiscal: generalFiscal,
+            fiscalPorEmpresa: fiscalPerCompanyPayload,
+            naoMostrarNoSite: Boolean(hideOnSiteCheckbox?.checked),
+            inativo: Boolean(inactiveCheckbox?.checked),
+            dataCadastro: dataCadastroValue ? dataCadastroValue : null,
+            dataVigencia: dataVigenciaValue ? dataVigenciaValue : null,
+            peso: Number.isFinite(parsedPeso) ? parsedPeso : null,
+            iat: iatValue || null,
+            tipoProduto: tipoProdutoValue || null,
+            ncm: ncmValue ? ncmValue.trim() : null,
+        };
+
+        return { productName, updateData };
+    };
+
+    const executeAutoSave = async () => {
+        if (!isEditMode || !productId) return;
+
+        const { productName, updateData } = buildProductUpdatePayload();
+        if (!updateData || !productName) return;
+
+        const token = getAuthToken();
+        if (!token) {
+            console.warn('Token de autenticação indisponível. Salvamento automático cancelado.');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(updateData),
+            });
+
+            if (!response.ok) {
+                const error = new Error('Falha ao salvar automaticamente as alterações do produto.');
+                if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+                    window.showToast(error.message, 'error', 4000);
+                }
+                throw error;
+            }
+        } catch (error) {
+            console.error('Erro durante o salvamento automático do produto.', error);
+        }
+    };
+
+    const flushAutoSave = async () => {
+        if (autoSaveInProgress) {
+            pendingAutoSave = true;
+            return;
+        }
+
+        autoSaveInProgress = true;
+        try {
+            await executeAutoSave();
+        } finally {
+            autoSaveInProgress = false;
+            if (pendingAutoSave) {
+                pendingAutoSave = false;
+                await flushAutoSave();
+            }
+        }
+    };
+
+    const scheduleAutoSave = () => {
+        if (!isEditMode || !productId) return;
+        if (autoSaveTimeoutId) {
+            clearTimeout(autoSaveTimeoutId);
+        }
+        autoSaveTimeoutId = window.setTimeout(() => {
+            autoSaveTimeoutId = null;
+            flushAutoSave();
+        }, AUTO_SAVE_DEBOUNCE_MS);
+    };
+
+    const markProductAsModified = () => {
+        updateVigenciaDateToToday();
+        scheduleAutoSave();
+    };
+
     const escapeHtml = (value) => {
         if (value === null || value === undefined) return '';
         return String(value)
@@ -1370,6 +1543,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         unidade: currentUnit,
                     });
                     updateDepositTotalDisplay();
+                    markProductAsModified();
                 });
             }
 
@@ -1381,6 +1555,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         quantidade: current.quantidade,
                         unidade: event.target.value.trim(),
                     });
+                    markProductAsModified();
                 });
             }
 
@@ -1479,6 +1654,7 @@ document.addEventListener('DOMContentLoaded', () => {
             removeBtn.addEventListener('click', () => {
                 supplierEntries.splice(index, 1);
                 renderSupplierEntries();
+                markProductAsModified();
             });
 
             title.appendChild(infoContainer);
@@ -2242,6 +2418,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         renderSupplierEntries();
         resetSupplierForm();
+        markProductAsModified();
     };
 
     supplierNameInput?.addEventListener('input', handleSupplierInputEvent);
@@ -2324,6 +2501,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         lastSelectedProductUnit = newUnit;
         renderDepositStockRows();
+        markProductAsModified();
     });
 
     const handleSaveCategories = () => {
@@ -2338,6 +2516,7 @@ document.addEventListener('DOMContentLoaded', () => {
             form.querySelector('#marca').value = brandName;
         }
 
+        markProductAsModified();
         categoryModal.classList.add('hidden');
     };
 
@@ -2477,7 +2656,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 || target instanceof HTMLSelectElement
                 || target instanceof HTMLTextAreaElement
             ) {
-                updateVigenciaDateToToday();
+                if (target instanceof HTMLInputElement && target.type === 'file') {
+                    updateVigenciaDateToToday();
+                    return;
+                }
+                markProductAsModified();
             }
         };
 
@@ -2489,12 +2672,17 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         if (!submitButton) return;
 
+        if (autoSaveTimeoutId) {
+            clearTimeout(autoSaveTimeoutId);
+            autoSaveTimeoutId = null;
+        }
+        pendingAutoSave = false;
+
         submitButton.disabled = true;
         const loadingText = isEditMode ? 'Salvando...' : 'Cadastrando...';
         submitButton.innerHTML = `<i class="fas fa-spinner fa-spin"></i><span>${loadingText}</span>`;
 
-        const formData = new FormData(form);
-        const productName = (formData.get('nome') || '').trim();
+        const { productName, updateData } = buildProductUpdatePayload();
         if (!productName) {
             showModal({
                 title: 'Dados obrigatórios',
@@ -2505,86 +2693,16 @@ document.addEventListener('DOMContentLoaded', () => {
             setSubmitButtonIdleText();
             return;
         }
-        const additionalBarcodesRaw = (formData.get('barcode-additional') || '')
-            .split('\n')
-            .map((code) => code.trim())
-            .filter(Boolean);
-
-        const depositPayload = [];
-        depositStockMap.forEach((entry, depositId) => {
-            if (!depositId) return;
-            const unidade = (entry?.unidade || '').trim();
-            const quantidadeValue = entry?.quantidade;
-            const hasQuantity = quantidadeValue !== null && quantidadeValue !== undefined && quantidadeValue !== '';
-            if (!hasQuantity && !unidade) return;
-            const parsedQuantity = Number(quantidadeValue);
-            depositPayload.push({
-                deposito: depositId,
-                quantidade: Number.isFinite(parsedQuantity) ? parsedQuantity : 0,
-                unidade,
+        if (!updateData) {
+            showModal({
+                title: 'Erro',
+                message: 'Não foi possível coletar os dados do produto para salvar. Tente novamente.',
+                confirmText: 'Ok'
             });
-        });
-
-        const totalStock = depositPayload.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
-
-        persistActiveFiscalData();
-        const generalFiscal = cloneFiscalObject(fiscalByCompany.get(FISCAL_GENERAL_KEY) || collectFiscalData());
-        const fiscalPerCompanyPayload = {};
-        fiscalByCompany.forEach((value, key) => {
-            if (key === FISCAL_GENERAL_KEY) return;
-            fiscalPerCompanyPayload[key] = cloneFiscalObject(value);
-        });
-
-        const updateData = {
-            nome: productName,
-            cod: (formData.get('cod') || '').trim(),
-            codbarras: (formData.get('codbarras') || '').trim(),
-            descricao: detailedDescriptionInput ? detailedDescriptionInput.value : formData.get('descricao'),
-            marca: formData.get('marca'),
-            unidade: formData.get('unidade'),
-            referencia: formData.get('referencia'),
-            custo: formData.get('custo'),
-            venda: formData.get('venda'),
-            categorias: productCategories,
-            fornecedores: supplierEntries.map((item) => ({
-                fornecedor: item.fornecedor,
-                documentoFornecedor: item.documentoFornecedor || null,
-                nomeProdutoFornecedor: item.nomeProdutoFornecedor || null,
-                codigoProduto: item.codigoProduto || null,
-                unidadeEntrada: item.unidadeEntrada || null,
-                tipoCalculo: item.tipoCalculo || null,
-                valorCalculo: item.valorCalculo,
-            })),
-            especificacoes: {
-                idade: Array.from(form.querySelectorAll('input[name="spec-idade"]:checked')).map(i => i.value),
-                pet: Array.from(form.querySelectorAll('input[name="spec-pet"]:checked')).map(i => i.value),
-                porteRaca: Array.from(form.querySelectorAll('input[name="spec-porte"]:checked')).map(i => i.value),
-                apresentacao: (document.getElementById('spec-apresentacao')?.value || '').trim()
-            },
-            codigosComplementares: additionalBarcodesRaw,
-            estoques: depositPayload,
-            stock: totalStock,
-            fiscal: generalFiscal,
-            fiscalPorEmpresa: fiscalPerCompanyPayload,
-            naoMostrarNoSite: Boolean(hideOnSiteCheckbox?.checked),
-            inativo: Boolean(inactiveCheckbox?.checked),
-        };
-
-        const dataCadastroValue = formData.get('data-cadastro');
-        const dataVigenciaValue = formData.get('data-vigencia');
-        const pesoValue = formData.get('peso');
-        const iatValue = formData.get('iat');
-        const tipoProdutoValue = formData.get('tipo-produto');
-        const ncmValue = formData.get('ncm');
-
-        updateData.dataCadastro = dataCadastroValue ? dataCadastroValue : null;
-        updateData.dataVigencia = dataVigenciaValue ? dataVigenciaValue : null;
-        const parsedPeso = pesoValue ? Number(pesoValue) : null;
-        updateData.peso = Number.isFinite(parsedPeso) ? parsedPeso : null;
-        updateData.iat = iatValue || null;
-        updateData.tipoProduto = tipoProdutoValue || null;
-        updateData.ncm = ncmValue ? ncmValue.trim() : null;
-
+            submitButton.disabled = false;
+            setSubmitButtonIdleText();
+            return;
+        }
         let responseJson = null;
         let createdProductId = null;
 
