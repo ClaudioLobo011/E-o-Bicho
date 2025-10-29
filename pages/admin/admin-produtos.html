@@ -7,8 +7,240 @@
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="../../src/output.css">
+
+    <style>
+        body[data-admin-product="compact"] {
+            font-size: 0.6875rem;
+            line-height: 1.35;
+        }
+
+        body[data-admin-product="compact"] main.container {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+            padding-bottom: 1.5rem;
+        }
+
+        body[data-admin-product="compact"] .lg\:gap-6 {
+            gap: 1rem !important;
+        }
+
+        body[data-admin-product="compact"] .space-y-5 > :not([hidden]) ~ :not([hidden]) {
+            margin-top: 1rem !important;
+        }
+
+        body[data-admin-product="compact"] .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+            margin-top: 0.75rem !important;
+        }
+
+        body[data-admin-product="compact"] .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+            margin-top: 1.1rem !important;
+        }
+
+        body[data-admin-product="compact"] .gap-3 {
+            gap: 0.75rem !important;
+        }
+
+        body[data-admin-product="compact"] .gap-4 {
+            gap: 0.9rem !important;
+        }
+
+        body[data-admin-product="compact"] .gap-5 {
+            gap: 1rem !important;
+        }
+
+        body[data-admin-product="compact"] .gap-2.5 {
+            gap: 0.6rem !important;
+        }
+
+        body[data-admin-product="compact"] .gap-2 {
+            gap: 0.5rem !important;
+        }
+
+        body[data-admin-product="compact"] .px-4 {
+            padding-left: 0.85rem !important;
+            padding-right: 0.85rem !important;
+        }
+
+        body[data-admin-product="compact"] .px-3.5 {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+
+        body[data-admin-product="compact"] .px-3 {
+            padding-left: 0.65rem !important;
+            padding-right: 0.65rem !important;
+        }
+
+        body[data-admin-product="compact"] .px-2.5 {
+            padding-left: 0.55rem !important;
+            padding-right: 0.55rem !important;
+        }
+
+        body[data-admin-product="compact"] .py-3 {
+            padding-top: 0.65rem !important;
+            padding-bottom: 0.65rem !important;
+        }
+
+        body[data-admin-product="compact"] .py-2.5 {
+            padding-top: 0.55rem !important;
+            padding-bottom: 0.55rem !important;
+        }
+
+        body[data-admin-product="compact"] .py-2 {
+            padding-top: 0.45rem !important;
+            padding-bottom: 0.45rem !important;
+        }
+
+        body[data-admin-product="compact"] .pb-5 {
+            padding-bottom: 1rem !important;
+        }
+
+        body[data-admin-product="compact"] .pt-4 {
+            padding-top: 0.9rem !important;
+        }
+
+        body[data-admin-product="compact"] .pb-4 {
+            padding-bottom: 0.9rem !important;
+        }
+
+        body[data-admin-product="compact"] .pt-3 {
+            padding-top: 0.65rem !important;
+        }
+
+        body[data-admin-product="compact"] .mt-3 {
+            margin-top: 0.6rem !important;
+        }
+
+        body[data-admin-product="compact"] .mt-4 {
+            margin-top: 0.85rem !important;
+        }
+
+        body[data-admin-product="compact"] .mt-6 {
+            margin-top: 1.1rem !important;
+        }
+
+        body[data-admin-product="compact"] .rounded-2xl {
+            border-radius: 0.85rem !important;
+        }
+
+        body[data-admin-product="compact"] .rounded-xl {
+            border-radius: 0.75rem !important;
+        }
+
+        body[data-admin-product="compact"] .rounded-lg {
+            border-radius: 0.55rem !important;
+        }
+
+        body[data-admin-product="compact"] .tab-link {
+            padding: 0.3rem 0.7rem !important;
+            font-size: 0.65rem !important;
+            gap: 0.4rem !important;
+        }
+
+        body[data-admin-product="compact"] .tab-link i {
+            font-size: 0.7rem !important;
+        }
+
+        body[data-admin-product="compact"] #edit-product-form label {
+            font-size: 0.7rem !important;
+        }
+
+        body[data-admin-product="compact"] #edit-product-form input:not([type="checkbox"]),
+        body[data-admin-product="compact"] #edit-product-form select,
+        body[data-admin-product="compact"] #edit-product-form textarea {
+            padding: 0.35rem 0.55rem !important;
+            font-size: 0.7rem !important;
+            border-radius: 0.5rem !important;
+        }
+
+        body[data-admin-product="compact"] #edit-product-form .mt-1.5 {
+            margin-top: 0.4rem !important;
+        }
+
+        body[data-admin-product="compact"] #edit-product-form .mt-1 {
+            margin-top: 0.3rem !important;
+        }
+
+        body[data-admin-product="compact"] #edit-product-form .text-xs,
+        body[data-admin-product="compact"] #edit-product-form .text-[11px] {
+            font-size: 0.7rem !important;
+        }
+
+        body[data-admin-product="compact"] #edit-product-form .text-sm {
+            font-size: 0.75rem !important;
+        }
+
+        body[data-admin-product="compact"] header.bg-white,
+        body[data-admin-product="compact"] #edit-product-form section {
+            padding: 0.75rem 1rem !important;
+        }
+
+        body[data-admin-product="compact"] header.bg-white > div {
+            gap: 0.5rem !important;
+        }
+
+        body[data-admin-product="compact"] .text-xl {
+            font-size: 1.15rem !important;
+        }
+
+        body[data-admin-product="compact"] .text-base {
+            font-size: 0.85rem !important;
+        }
+
+        body[data-admin-product="compact"] .text-[11px] {
+            line-height: 1.3 !important;
+        }
+
+        body[data-admin-product="compact"] .text-[10px] {
+            font-size: 0.62rem !important;
+        }
+
+        body[data-admin-product="compact"] .text-[13px] {
+            font-size: 0.78rem !important;
+        }
+
+        body[data-admin-product="compact"] #edit-product-form .grid {
+            gap: 0.75rem !important;
+        }
+
+        body[data-admin-product="compact"] #edit-product-form .rounded-2xl.border-dashed {
+            padding: 0.85rem !important;
+        }
+
+        body[data-admin-product="compact"] #edit-product-form textarea {
+            min-height: 2.5rem;
+        }
+
+        body[data-admin-product="compact"] .compact-highlight {
+            padding: 0.45rem 0.65rem !important;
+            font-size: 0.62rem !important;
+            gap: 0.3rem !important;
+        }
+
+        body[data-admin-product="compact"] .compact-highlight p {
+            font-size: 0.66rem !important;
+        }
+
+        body[data-admin-product="compact"] #category-modal .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+            margin-top: 0.8rem !important;
+        }
+
+        body[data-admin-product="compact"] #category-modal .px-4 {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+
+        body[data-admin-product="compact"] #category-modal .py-4 {
+            padding-top: 0.85rem !important;
+            padding-bottom: 0.85rem !important;
+        }
+
+        body[data-admin-product="compact"] #category-modal .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+            margin-top: 1.05rem !important;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 text-[12px] leading-relaxed">
+<body data-admin-product="compact" class="bg-gray-100 text-[12px] leading-relaxed">
 
     <div id="admin-header-placeholder"></div>
 
@@ -32,7 +264,7 @@
                                 <p id="product-page-description" class="text-xs text-gray-600">Altere os dados do produto abaixo.</p>
                             </div>
                         </div>
-                        <div class="flex flex-col items-start gap-1.5 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 py-2.5 text-[10px] text-primary">
+                        <div class="flex flex-col items-start gap-1.5 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 py-2.5 text-[10px] text-primary compact-highlight">
                             <span class="inline-flex items-center gap-2 font-semibold uppercase tracking-wide"><i class="fas fa-lightbulb"></i> Dica rápida</span>
                             <p class="text-left text-[11px] leading-snug text-primary/80">As informações são salvas automaticamente no rascunho local. Revise cada aba antes de concluir.</p>
                         </div>
