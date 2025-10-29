@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const nameInput = document.getElementById('nome');
     const barcodeInput = document.getElementById('codbarras');
     const detailedDescriptionInput = document.getElementById('descricao');
+    const vigenciaInput = document.getElementById('data-vigencia');
     const unitSelect = document.getElementById('unidade');
     const inactiveCheckbox = document.getElementById('inativo');
     const hideOnSiteCheckbox = document.getElementById('hide-on-site');
@@ -588,6 +589,33 @@ document.addEventListener('DOMContentLoaded', () => {
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .toLowerCase();
+    };
+
+    const getTodayDateString = () => {
+        const today = new Date();
+        today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+        return today.toISOString().split('T')[0];
+    };
+
+    const normalizeDateToInputValue = (rawDate) => {
+        if (!rawDate && rawDate !== 0) return '';
+        const rawString = String(rawDate).trim();
+        if (!rawString) return '';
+        const [datePart] = rawString.split('T');
+        if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            return datePart;
+        }
+        const parsed = new Date(rawString);
+        if (Number.isNaN(parsed.getTime())) return '';
+        return parsed.toISOString().split('T')[0];
+    };
+
+    const updateVigenciaDateToToday = () => {
+        if (!vigenciaInput) return;
+        const today = getTodayDateString();
+        if (vigenciaInput.value !== today) {
+            vigenciaInput.value = today;
+        }
     };
 
     const escapeHtml = (value) => {
@@ -1636,13 +1664,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const dataCadastroInput = form.querySelector('#data-cadastro');
         if (dataCadastroInput) {
-            const rawDate = draft.nfe?.emissionDate || '';
-            if (rawDate) {
-                const parsedDate = new Date(rawDate);
-                if (!Number.isNaN(parsedDate.getTime())) {
-                    dataCadastroInput.value = parsedDate.toISOString().split('T')[0];
-                }
+            const normalizedDate = normalizeDateToInputValue(draft.nfe?.emissionDate || '');
+            if (normalizedDate) {
+                dataCadastroInput.value = normalizedDate;
             }
+        }
+
+        const dataVigenciaInput = form.querySelector('#data-vigencia');
+        if (dataVigenciaInput) {
+            dataVigenciaInput.value = getTodayDateString();
         }
 
         if (fiscalInputs.cfop?.nfe?.interno) {
@@ -1775,6 +1805,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (hideOnSiteCheckbox) {
             hideOnSiteCheckbox.checked = true;
+        }
+
+        if (vigenciaInput) {
+            vigenciaInput.value = getTodayDateString();
         }
 
         updateMarkupFromValues();
@@ -1911,21 +1945,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const dataCadastroInput = form.querySelector('#data-cadastro');
         if (dataCadastroInput) {
-            const rawDate = product.dataCadastro || product.createdAt || '';
-            if (rawDate) {
-                const rawDateStr = String(rawDate);
-                const [datePart] = rawDateStr.split('T');
-                if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-                    dataCadastroInput.value = datePart;
-                } else {
-                    const parsedDate = new Date(rawDateStr);
-                    dataCadastroInput.value = Number.isNaN(parsedDate.getTime())
-                        ? ''
-                        : parsedDate.toISOString().split('T')[0];
-                }
-            } else {
-                dataCadastroInput.value = '';
-            }
+            const normalizedDate = normalizeDateToInputValue(product.dataCadastro || product.createdAt || '');
+            dataCadastroInput.value = normalizedDate;
+        }
+        const dataVigenciaInput = form.querySelector('#data-vigencia');
+        if (dataVigenciaInput) {
+            const normalizedVigencia = normalizeDateToInputValue(
+                product.dataVigencia
+                || product.vigencia
+                || product.dataAtualizacao
+                || product.updatedAt
+                || ''
+            );
+            dataVigenciaInput.value = normalizedVigencia || getTodayDateString();
         }
         const pesoInput = form.querySelector('#peso');
         if (pesoInput) {
@@ -2436,6 +2468,23 @@ document.addEventListener('DOMContentLoaded', () => {
     saveCategoryModalBtn.addEventListener('click', handleSaveCategories);
     deleteProductButton?.addEventListener('click', handleDeleteProduct);
 
+    if (form && vigenciaInput) {
+        const handleFormMutation = (event) => {
+            const target = event?.target;
+            if (!target) return;
+            if (
+                target instanceof HTMLInputElement
+                || target instanceof HTMLSelectElement
+                || target instanceof HTMLTextAreaElement
+            ) {
+                updateVigenciaDateToToday();
+            }
+        };
+
+        form.addEventListener('input', handleFormMutation, true);
+        form.addEventListener('change', handleFormMutation, true);
+    }
+
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (!submitButton) return;
@@ -2522,12 +2571,14 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const dataCadastroValue = formData.get('data-cadastro');
+        const dataVigenciaValue = formData.get('data-vigencia');
         const pesoValue = formData.get('peso');
         const iatValue = formData.get('iat');
         const tipoProdutoValue = formData.get('tipo-produto');
         const ncmValue = formData.get('ncm');
 
         updateData.dataCadastro = dataCadastroValue ? dataCadastroValue : null;
+        updateData.dataVigencia = dataVigenciaValue ? dataVigenciaValue : null;
         const parsedPeso = pesoValue ? Number(pesoValue) : null;
         updateData.peso = Number.isFinite(parsedPeso) ? parsedPeso : null;
         updateData.iat = iatValue || null;
