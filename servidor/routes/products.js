@@ -306,10 +306,9 @@ const generateSequentialCod = async () => {
         .lean();
 
     if (!existingProducts.length) {
-        return '000001';
+        return '1';
     }
 
-    let padding = 6;
     const numericCodes = [];
 
     existingProducts.forEach((product) => {
@@ -318,7 +317,6 @@ const generateSequentialCod = async () => {
             const digits = typeof product.cod === 'string' ? product.cod.replace(/\D+/g, '') : '';
             const parsed = Number.parseInt(digits || '0', 10);
             if (Number.isFinite(parsed) && parsed > 0) {
-                padding = Math.max(padding, digits.length || 0);
                 numericCodes.push(parsed);
             }
             return;
@@ -326,7 +324,6 @@ const generateSequentialCod = async () => {
 
         const parsed = Number.parseInt(components.numeric, 10);
         if (!Number.isFinite(parsed) || parsed <= 0) return;
-        padding = Math.max(padding, components.numeric.length || 0);
         if (!components.prefix && !components.suffix) {
             numericCodes.push(parsed);
             return;
@@ -336,7 +333,7 @@ const generateSequentialCod = async () => {
     });
 
     if (!numericCodes.length) {
-        return '000001';
+        return '1';
     }
 
     numericCodes.sort((a, b) => a - b);
@@ -351,7 +348,7 @@ const generateSequentialCod = async () => {
         break;
     }
 
-    return String(candidate).padStart(padding, '0');
+    return String(candidate);
 };
 
 // GET /api/products/by-category (pública)
@@ -591,7 +588,9 @@ router.get(
             const codeRegex = new RegExp(`^${escapeRegExp(supplierCodeRaw)}$`, 'i');
 
             const candidates = await Product.find({ 'fornecedores.codigoProduto': { $regex: codeRegex } })
-                .select('cod codbarras nome imagemPrincipal imagens marca unidade fornecedores')
+                .select(
+                    'cod codbarras nome imagemPrincipal imagens marca unidade fornecedores custo venda stock naoMostrarNoSite inativo'
+                )
                 .lean();
 
             const match = candidates.find((product) => {

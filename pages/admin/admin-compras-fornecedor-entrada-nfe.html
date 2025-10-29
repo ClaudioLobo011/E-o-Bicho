@@ -1460,6 +1460,52 @@
                 <i class="fas fa-calculator"></i>
                 Gerar
               </button>
+              <div class="flex flex-col gap-1" data-price-rounding>
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Arredondamento</span>
+                <div class="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-100"
+                    data-price-round="up"
+                    aria-pressed="false"
+                  >
+                    Para cima
+                  </button>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-100"
+                    data-price-round="down"
+                    aria-pressed="false"
+                  >
+                    Para baixo
+                  </button>
+                  <div class="flex items-center gap-2" data-price-round-custom-wrapper>
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-100"
+                      data-price-round="custom"
+                      aria-pressed="false"
+                    >
+                      Personalizado
+                    </button>
+                    <input
+                      type="text"
+                      inputmode="decimal"
+                      placeholder="0,80"
+                      class="h-7 w-16 rounded border border-gray-200 bg-white px-2 text-[10px] font-semibold text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                      data-price-round-custom-input
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold text-gray-400 transition hover:bg-gray-100"
+                    data-price-round="advanced"
+                    aria-pressed="false"
+                  >
+                    Avançado
+                  </button>
+                </div>
+              </div>
             </div>
             <p class="text-[10px] text-gray-500">
               Informe o percentual para atualizar o custo novo dos produtos selecionados. Percentual 0 restaura o valor calculado originalmente.
@@ -1467,9 +1513,9 @@
           </div>
         </div>
 
-        <div class="flex-1 overflow-hidden px-5 pb-4">
-          <div class="flex h-full flex-col overflow-hidden rounded-xl border border-gray-100">
-            <div class="overflow-auto">
+        <div class="flex flex-1 flex-col overflow-hidden px-5 pb-4 min-h-0">
+          <div class="flex flex-1 flex-col overflow-hidden rounded-xl border border-gray-100 min-h-0">
+            <div class="flex-1 overflow-auto overflow-x-auto overscroll-contain">
               <table class="min-w-full divide-y divide-gray-100 text-[11px]" data-price-table>
                 <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
                   <tr class="text-left">
@@ -2412,6 +2458,9 @@
         const priceMaintainMarkupToggle = priceModal?.querySelector('[data-price-maintain-markup]') || null;
         const priceCostPercentInput = priceModal?.querySelector('[data-price-cost-percent]') || null;
         const priceCostModeButtons = priceModal ? priceModal.querySelectorAll('[data-price-cost-mode]') : [];
+        const priceRoundingButtons = priceModal ? priceModal.querySelectorAll('[data-price-round]') : [];
+        const priceRoundingCustomWrapper = priceModal?.querySelector('[data-price-round-custom-wrapper]') || null;
+        const priceRoundingCustomInput = priceModal?.querySelector('[data-price-round-custom-input]') || null;
         const priceGenerateButton = priceModal?.querySelector('[data-price-generate]') || null;
         const priceSelectAllCheckbox = priceModal?.querySelector('[data-price-select-all]') || null;
         const priceTableBody = priceModal?.querySelector('[data-price-table-body]') || null;
@@ -2431,6 +2480,8 @@
           usarMarkup: false,
           maintainMarkup: false,
           costMode: 'add',
+          roundingMode: 'up',
+          roundingCustomSuffix: null,
           isOpen: false,
           isProcessing: false,
         };
@@ -2753,6 +2804,9 @@
         const formatMoneyValue = (value) => formatDecimal(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         const formatPercentValue = (value) => formatDecimal(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        const formatDecimalSuffixDisplay = (value) =>
+          formatDecimal(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         const toNumeric = (value) => (Number.isFinite(value) ? value : parseNumber(value));
 
@@ -7372,6 +7426,22 @@
           if (!Number.isFinite(numeric)) return null;
           return Math.round(numeric * 100) / 100;
         };
+        const sanitizeDecimalSuffix = (value) => {
+          const numeric = toNumericValue(value);
+          if (!Number.isFinite(numeric)) return null;
+          if (numeric < 0) return 0;
+          let normalized = numeric;
+          if (normalized >= 1) {
+            const fractional = normalized % 1;
+            if (fractional > 0) {
+              normalized = fractional;
+            } else {
+              normalized = (normalized % 100) / 100;
+            }
+          }
+          normalized = Math.min(Math.max(normalized, 0), 0.99);
+          return Math.round(normalized * 100) / 100;
+        };
         const sanitizePercentValue = (value) => {
           const numeric = toNumericValue(value);
           if (!Number.isFinite(numeric)) return null;
@@ -7381,6 +7451,57 @@
           const numeric = toNumericValue(value);
           if (!Number.isFinite(numeric)) return null;
           return Math.round(numeric * 1000) / 1000;
+        };
+
+        const resolveProductNumericField = (product, fields) => {
+          if (!product || typeof product !== 'object' || !Array.isArray(fields)) {
+            return null;
+          }
+          for (const field of fields) {
+            if (!field) continue;
+            const directValue = product[field];
+            if (Number.isFinite(directValue)) {
+              return directValue;
+            }
+            const numericValue = toNumericValue(directValue);
+            if (Number.isFinite(numericValue)) {
+              return numericValue;
+            }
+          }
+          return null;
+        };
+
+        const resolveProductCostValue = (product) =>
+          resolveProductNumericField(product, [
+            'custo',
+            'precoCompra',
+            'precoCusto',
+            'valorCompra',
+            'valorCusto',
+          ]);
+
+        const resolveProductSaleValue = (product) =>
+          resolveProductNumericField(product, [
+            'venda',
+            'precoVenda',
+            'valorVenda',
+            'preco',
+            'precoSugerido',
+          ]);
+
+        const normalizeProductPricing = (product) => {
+          if (!product || typeof product !== 'object') {
+            return { cost: null, sale: null };
+          }
+          const cost = resolveProductCostValue(product);
+          const sale = resolveProductSaleValue(product);
+          if (Number.isFinite(cost)) {
+            product.custo = cost;
+          }
+          if (Number.isFinite(sale)) {
+            product.venda = sale;
+          }
+          return { cost, sale };
         };
 
         const computeMarkupPercentage = (cost, sale) => {
@@ -7427,8 +7548,10 @@
               (typeof item.description === 'string' ? item.description : '') ||
               'Produto sem descrição';
 
-            const costPrevious = sanitizeCurrencyValue(item.matchedProduct?.custo);
-            const salePrevious = sanitizeCurrencyValue(item.matchedProduct?.venda);
+            normalizeProductPricing(item.matchedProduct);
+
+            const costPrevious = sanitizeCurrencyValue(resolveProductCostValue(item.matchedProduct));
+            const salePrevious = sanitizeCurrencyValue(resolveProductSaleValue(item.matchedProduct));
             const costBase = sanitizeCurrencyValue(item.unitCostWithTaxes);
             const entryStock = sanitizeQuantityValue(resolveMainProductEntryStockQuantity(
               item,
@@ -7569,14 +7692,18 @@
             } else if (source === 'sale-update') {
               entry.markupCurrent = resolveMarkup(computeMarkupPercentage(costValue, entry.saleNew));
             } else {
-              if (!Number.isFinite(entry.saleNew) || source === 'cost-update' || source === 'toggle-use-markup') {
-                if (!Number.isFinite(entry.saleNew)) {
-                  const fallbackSale = Number.isFinite(entry.salePrevious)
-                    ? entry.salePrevious
-                    : computeSaleFromMarkup(costValue, resolveMarkup(entry.markupCurrent));
-                  entry.saleNew = Number.isFinite(fallbackSale) ? fallbackSale : 0;
-                }
+              const shouldRestoreSalePrevious =
+                source === 'toggle-use-markup' && Number.isFinite(entry.salePrevious);
+
+              if (shouldRestoreSalePrevious) {
+                entry.saleNew = entry.salePrevious;
+              } else if (!Number.isFinite(entry.saleNew) || source === 'cost-update') {
+                const fallbackSale = Number.isFinite(entry.salePrevious)
+                  ? entry.salePrevious
+                  : computeSaleFromMarkup(costValue, resolveMarkup(entry.markupCurrent));
+                entry.saleNew = Number.isFinite(fallbackSale) ? fallbackSale : 0;
               }
+
               entry.markupCurrent = resolveMarkup(computeMarkupPercentage(costValue, entry.saleNew));
             }
           }
@@ -7872,6 +7999,90 @@
           });
         };
 
+        const roundPriceValue = (value, mode, { customSuffix } = {}) => {
+          const numericValue = sanitizeCurrencyValue(value);
+          if (!Number.isFinite(numericValue)) return null;
+          if (mode === 'up') {
+            const rounded = Math.ceil(numericValue / 0.5) * 0.5;
+            return Math.max(Math.round(rounded * 100) / 100, 0);
+          }
+          if (mode === 'down') {
+            const rounded = Math.floor(numericValue / 0.5) * 0.5;
+            return Math.max(Math.round(rounded * 100) / 100, 0);
+          }
+          if (mode === 'custom') {
+            const suffix = Number.isFinite(customSuffix) ? customSuffix : null;
+            if (suffix === null) return null;
+            const integerPart = Math.trunc(numericValue);
+            let candidate = integerPart + suffix;
+            if (candidate + 0.0001 < numericValue) {
+              candidate = integerPart + 1 + suffix;
+            }
+            return Math.max(Math.round(candidate * 100) / 100, 0);
+          }
+          return null;
+        };
+
+        const setRoundingMode = (mode) => {
+          const allowedModes = ['up', 'down', 'custom'];
+          const normalized = allowedModes.includes(mode) ? mode : 'up';
+          priceAdjustmentState.roundingMode = normalized;
+          priceRoundingButtons.forEach((button) => {
+            if (!(button instanceof HTMLButtonElement)) return;
+            const isActive = button.dataset.priceRound === normalized;
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+            button.classList.toggle('bg-primary/10', isActive);
+            button.classList.toggle('border-primary/60', isActive);
+            button.classList.toggle('text-primary', isActive);
+          });
+          if (priceRoundingCustomWrapper) {
+            priceRoundingCustomWrapper.classList.toggle('opacity-70', normalized !== 'custom');
+          }
+          if (priceRoundingCustomInput) {
+            priceRoundingCustomInput.classList.toggle('bg-gray-100', normalized !== 'custom');
+          }
+        };
+
+        const applyRoundingToSelection = (mode) => {
+          const allowedModes = ['up', 'down', 'custom'];
+          const normalized = allowedModes.includes(mode)
+            ? mode
+            : priceAdjustmentState.roundingMode || 'up';
+          if (normalized === 'custom') {
+            const suffix = Number.isFinite(priceAdjustmentState.roundingCustomSuffix)
+              ? priceAdjustmentState.roundingCustomSuffix
+              : null;
+            if (suffix === null) {
+              notify('Informe uma decimal válida para aplicar o arredondamento personalizado.', 'warning');
+              if (priceRoundingCustomInput instanceof HTMLInputElement) {
+                priceRoundingCustomInput.focus();
+              }
+              return;
+            }
+          }
+          if (!Array.isArray(priceAdjustmentState.items) || !priceAdjustmentState.items.length) {
+            notify('Nenhum produto disponível para ajuste.', 'warning');
+            return;
+          }
+          if (priceAdjustmentState.maintainMarkup) {
+            notify('Desative a opção Manter markup para arredondar os preços de venda.', 'warning');
+            return;
+          }
+          const selectedItems = priceAdjustmentState.items.filter((entry) => entry.selected);
+          if (!selectedItems.length) {
+            notify('Selecione ao menos um produto para arredondar os preços.', 'warning');
+            return;
+          }
+          selectedItems.forEach((entry) => {
+            const suffix = priceAdjustmentState.roundingCustomSuffix;
+            const rounded = roundPriceValue(entry.saleNew, normalized, { customSuffix: suffix });
+            if (!Number.isFinite(rounded)) return;
+            entry.saleNew = rounded;
+            recomputeEntryPricing(entry, { source: 'sale-update' });
+          });
+          renderPriceAdjustmentTable();
+        };
+
         const applyCostPercentToSelection = () => {
           if (!Array.isArray(priceAdjustmentState.items) || !priceAdjustmentState.items.length) {
             notify('Nenhum produto disponível para ajuste.', 'warning');
@@ -7945,6 +8156,14 @@
             input.value = '';
           });
           setCostMode(priceAdjustmentState.costMode || 'add');
+          priceAdjustmentState.roundingMode = priceAdjustmentState.roundingMode || 'up';
+          setRoundingMode(priceAdjustmentState.roundingMode);
+          if (priceRoundingCustomInput) {
+            const suffix = Number.isFinite(priceAdjustmentState.roundingCustomSuffix)
+              ? priceAdjustmentState.roundingCustomSuffix
+              : null;
+            priceRoundingCustomInput.value = suffix !== null ? formatDecimalSuffixDisplay(suffix) : '';
+          }
           if (priceMaintainMarkupToggle) {
             setMaintainMarkupState(priceMaintainMarkupToggle.checked);
           } else {
@@ -8165,6 +8384,44 @@
           });
         }
 
+        if (priceRoundingCustomInput) {
+          priceRoundingCustomInput.addEventListener('blur', () => {
+            const value = sanitizeDecimalSuffix(priceRoundingCustomInput.value);
+            priceAdjustmentState.roundingCustomSuffix = Number.isFinite(value) ? value : null;
+            priceRoundingCustomInput.value = Number.isFinite(value) ? formatDecimalSuffixDisplay(value) : '';
+          });
+        }
+
+        priceRoundingButtons.forEach((button) => {
+          if (!(button instanceof HTMLButtonElement)) return;
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            const mode = button.dataset.priceRound;
+            if (mode === 'advanced') {
+              notify('O modo avançado de arredondamento ainda está em desenvolvimento.', 'info');
+              return;
+            }
+            if (mode === 'custom') {
+              const suffix = sanitizeDecimalSuffix(
+                priceRoundingCustomInput ? priceRoundingCustomInput.value : priceAdjustmentState.roundingCustomSuffix
+              );
+              if (!Number.isFinite(suffix)) {
+                notify('Informe uma decimal válida (ex.: 0,80) para arredondamento personalizado.', 'warning');
+                if (priceRoundingCustomInput instanceof HTMLInputElement) {
+                  priceRoundingCustomInput.focus();
+                }
+                return;
+              }
+              priceAdjustmentState.roundingCustomSuffix = suffix;
+              if (priceRoundingCustomInput) {
+                priceRoundingCustomInput.value = formatDecimalSuffixDisplay(suffix);
+              }
+            }
+            setRoundingMode(mode);
+            applyRoundingToSelection(mode);
+          });
+        });
+
         const hideProductLinkMessages = () => {
           if (productLinkError) {
             productLinkError.classList.add('hidden');
@@ -8268,6 +8525,7 @@
           hideProductLinkMessages();
           const fragment = document.createDocumentFragment();
           products.forEach((product) => {
+            normalizeProductPricing(product);
             const item = document.createElement('li');
             item.className = 'rounded-xl border border-gray-100 bg-white px-3 py-2 shadow-sm';
 
@@ -8302,15 +8560,39 @@
 
             const footer = document.createElement('p');
             footer.className = 'mt-1 text-[10px] text-gray-500';
-            const price = Number.isFinite(product?.precoVenda)
-              ? formatMoneyValue(product.precoVenda)
-              : '';
+            const salePrice = resolveProductSaleValue(product);
+            const price = Number.isFinite(salePrice) ? formatMoneyValue(salePrice) : '';
             footer.textContent = price ? `Preço de venda: R$ ${price}` : 'Sem preço informado';
             item.appendChild(footer);
 
             fragment.appendChild(item);
           });
           productLinkResults.appendChild(fragment);
+        };
+
+        const resolveProductLinkDefaultTerm = (item) => {
+          if (!item) return '';
+
+          const tributaryBarcode = normalizeGtin(item?.eanTrib);
+          if (tributaryBarcode) {
+            return tributaryBarcode;
+          }
+
+          const fallbackBarcode = normalizeGtin(item?.ean);
+          if (fallbackBarcode) {
+            return fallbackBarcode;
+          }
+
+          const supplierCode = normalizeSupplierProductCode(item?.supplierCode);
+          if (supplierCode) {
+            return supplierCode;
+          }
+
+          if (typeof item?.description === 'string') {
+            return item.description.trim();
+          }
+
+          return '';
         };
 
         const openProductLinkModal = (item) => {
@@ -8350,7 +8632,7 @@
           }
 
           if (productLinkSearchInput) {
-            const defaultTerm = item?.supplierCode || item?.description || '';
+            const defaultTerm = resolveProductLinkDefaultTerm(item);
             productLinkSearchInput.value = defaultTerm;
           }
 
@@ -8397,8 +8679,13 @@
           }
 
           try {
+            const searchParams = new URLSearchParams({
+              search: term,
+              limit: '20',
+              includeHidden: 'true',
+            });
             const response = await fetch(
-              `${apiBaseUrl}/products?search=${encodeURIComponent(term)}&limit=10`,
+              `${apiBaseUrl}/products?${searchParams.toString()}`,
               { headers: buildAuthHeaders(), signal: abortController.signal }
             );
             const payload = await response.json().catch(() => ({}));
@@ -8413,7 +8700,15 @@
               : Array.isArray(payload)
               ? payload
               : [];
-            renderProductLinkResults(products);
+            const filteredProducts = products.filter((product) => !product?.inativo);
+            if (!filteredProducts.length) {
+              if (productLinkResults) {
+                productLinkResults.innerHTML = '';
+              }
+              showProductLinkEmpty('Nenhum produto ativo encontrado para os termos informados.');
+              return;
+            }
+            renderProductLinkResults(filteredProducts);
           } catch (error) {
             if (error?.name === 'AbortError') {
               return;
@@ -8438,6 +8733,8 @@
             notify('Produto selecionado inválido.', 'error');
             return;
           }
+
+          normalizeProductPricing(product);
 
           if (productLinkIsLinking) {
             return;
@@ -10161,6 +10458,7 @@
             }
 
             if (matched && matchedProduct) {
+              normalizeProductPricing(matchedProduct);
               item.matchedProduct = matchedProduct;
               item.validationStatus = 'matched';
               applySupplierConversionFromProduct(item, matchedProduct, nfeData);

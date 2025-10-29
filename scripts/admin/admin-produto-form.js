@@ -472,35 +472,49 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- LÓGICA DAS ABAS (Geral / Especificações) ---
+    const normalizeTabId = (tabId) => {
+        if (typeof tabId !== 'string') return '';
+        return tabId.startsWith('#') ? tabId.slice(1) : tabId;
+    };
+
     const productTabLinks = document.querySelectorAll('#product-tabs .tab-link');
     const productTabContents = {};
     productTabLinks.forEach((btn) => {
-        const tabId = btn.dataset.tab;
+        const tabId = normalizeTabId(btn.dataset.tab);
         if (tabId) {
             productTabContents[tabId] = document.getElementById(tabId);
         }
     });
 
     function activateProductTab(tabId) {
-        if (!tabId) return;
+        const normalizedTabId = normalizeTabId(tabId);
+        if (!normalizedTabId) return;
         Object.entries(productTabContents).forEach(([id, el]) => {
             if (!el) return;
-            if (id === tabId) {
+            const isTarget = id === normalizedTabId;
+            if (isTarget) {
                 el.classList.remove('hidden');
             } else {
                 el.classList.add('hidden');
             }
+            el.setAttribute('aria-hidden', isTarget ? 'false' : 'true');
         });
 
         productTabLinks.forEach((btn) => {
-            const isActive = btn.dataset.tab === tabId;
+            const btnTabId = normalizeTabId(btn.dataset.tab);
+            const isActive = btnTabId === normalizedTabId;
             btn.classList.toggle('text-primary', isActive);
             btn.classList.toggle('text-gray-500', !isActive);
             btn.classList.toggle('border-primary', isActive);
             btn.classList.toggle('border-transparent', !isActive);
+            btn.classList.toggle('bg-primary/10', isActive);
+            btn.classList.toggle('bg-white', !isActive);
+            btn.classList.toggle('shadow-sm', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            btn.setAttribute('tabindex', isActive ? '0' : '-1');
         });
 
-        updatePersistedProductEditState({ activeTab: tabId });
+        updatePersistedProductEditState({ activeTab: normalizedTabId });
     }
 
     if (productTabLinks.length) {
@@ -508,19 +522,21 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', () => activateProductTab(btn.dataset.tab));
         });
         const availableTabIds = Array.from(productTabLinks)
-            .map((btn) => btn.dataset.tab)
+            .map((btn) => normalizeTabId(btn.dataset.tab))
             .filter(Boolean);
-        let initialTab = storedActiveTab && availableTabIds.includes(storedActiveTab)
-            ? storedActiveTab
-            : document.querySelector('#product-tabs .tab-link.text-primary')?.dataset.tab;
+        const normalizedStoredTab = normalizeTabId(storedActiveTab);
+        let initialTab = normalizedStoredTab && availableTabIds.includes(normalizedStoredTab)
+            ? normalizedStoredTab
+            : normalizeTabId(document.querySelector('#product-tabs .tab-link.text-primary')?.dataset.tab);
         if (!initialTab) {
-            initialTab = productTabLinks[0]?.dataset.tab;
+            initialTab = normalizeTabId(productTabLinks[0]?.dataset.tab);
         }
         if (initialTab) activateProductTab(initialTab);
     }
 
     // --- ESTADO DA PÁGINA ---
     const urlParams = new URLSearchParams(window.location.search);
+    const isFromNfeImport = urlParams.get('from') === 'nfe-import';
     let productId = urlParams.get('id');
     let isEditMode = Boolean(productId);
     let productCategories = []; // Array de IDs das categorias selecionadas
@@ -535,7 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentImages = [];
     let imageOrderStatusTimeoutId = null;
 
-    const storedProductId = getPersistedProductEditStateValue('productId');
+    const storedProductId = isFromNfeImport ? null : getPersistedProductEditStateValue('productId');
     if (!productId && storedProductId) {
         productId = storedProductId;
         isEditMode = true;
@@ -549,6 +565,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (productId) {
         updatePersistedProductEditState({ productId });
+    } else if (isFromNfeImport) {
+        updatePersistedProductEditState({ productId: null });
     }
 
     const supplierDirectoryState = {
@@ -1237,9 +1255,11 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteProductButton.classList.remove('hidden');
     };
 
+    const getSubmitButtonIdleLabel = () => (isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto');
+
     const setSubmitButtonIdleText = () => {
         if (!submitButton) return;
-        submitButton.innerHTML = isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto';
+        submitButton.innerHTML = `<i class="fas fa-save"></i><span>${getSubmitButtonIdleLabel()}</span>`;
     };
 
     setSubmitButtonIdleText();
@@ -1463,8 +1483,9 @@ document.addEventListener('DOMContentLoaded', () => {
         isUpdatingFromPrice = false;
     };
 
-    const updateSaleFromMarkup = () => {
+    const updateSaleFromMarkup = (options = {}) => {
         if (!costInput || !saleInput || !markupInput || isUpdatingFromPrice) return;
+        const { shouldNormalizeMarkup = true } = options;
         const cost = parseFloat(costInput.value);
         const markup = parseFloat(markupInput.value);
 
@@ -1474,12 +1495,19 @@ document.addEventListener('DOMContentLoaded', () => {
         isUpdatingFromMarkup = true;
         saleInput.value = Number.isFinite(sale) ? sale.toFixed(2) : '';
         isUpdatingFromMarkup = false;
-        updateMarkupFromValues();
+        if (shouldNormalizeMarkup) {
+            updateMarkupFromValues();
+        }
     };
 
     costInput?.addEventListener('input', updateMarkupFromValues);
     saleInput?.addEventListener('input', updateMarkupFromValues);
-    markupInput?.addEventListener('input', updateSaleFromMarkup);
+    markupInput?.addEventListener('input', () => {
+        updateSaleFromMarkup({ shouldNormalizeMarkup: false });
+    });
+    markupInput?.addEventListener('change', () => {
+        updateSaleFromMarkup();
+    });
 
     const loadImportedProductDraft = () => {
         if (typeof sessionStorage === 'undefined') return null;
@@ -2414,7 +2442,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         submitButton.disabled = true;
         const loadingText = isEditMode ? 'Salvando...' : 'Cadastrando...';
-        submitButton.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>${loadingText}`;
+        submitButton.innerHTML = `<i class="fas fa-spinner fa-spin"></i><span>${loadingText}</span>`;
 
         const formData = new FormData(form);
         const productName = (formData.get('nome') || '').trim();
