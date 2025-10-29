@@ -251,35 +251,38 @@
             </aside>
 
             <div class="lg:col-span-9 space-y-5">
-                <header class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                    <div class="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
-                        <div class="space-y-2.5">
-                            <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                                <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-store"></i> Produtos</span>
-                                <i class="fas fa-angle-right text-gray-400"></i>
-                                <span class="text-gray-600">Cadastro</span>
-                            </nav>
-                            <div class="space-y-1">
-                                <h1 id="product-page-title" class="text-xl font-semibold text-gray-800">Editar Produto</h1>
-                                <p id="product-page-description" class="text-xs text-gray-600">Altere os dados do produto abaixo.</p>
-                            </div>
-                        </div>
-                        <div class="flex flex-col items-start gap-1.5 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 py-2.5 text-[10px] text-primary compact-highlight">
-                            <span class="inline-flex items-center gap-2 font-semibold uppercase tracking-wide"><i class="fas fa-lightbulb"></i> Dica rápida</span>
-                            <p class="text-left text-[11px] leading-snug text-primary/80">As informações são salvas automaticamente no rascunho local. Revise cada aba antes de concluir.</p>
-                        </div>
-                    </div>
-                </header>
-
                 <form id="edit-product-form" class="space-y-5">
                     <section class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
-                        <div class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <h2 class="text-base font-semibold text-gray-800">Identificação e resumo</h2>
-                                <p class="text-[11px] text-gray-500">Comece preenchendo os campos principais que serão usados em todas as telas.</p>
+                        <div class="px-4 pb-3 pt-4">
+                            <div class="flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
+                                <div class="space-y-2.5">
+                                    <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                        <span class="inline-flex items-center gap-2 text-primary"><i class="fas fa-store"></i> Produtos</span>
+                                        <i class="fas fa-angle-right text-gray-400"></i>
+                                        <span class="text-gray-600">Cadastro</span>
+                                    </nav>
+                                    <div class="space-y-1">
+                                        <h1 id="product-page-title" class="text-xl font-semibold text-gray-800">Editar Produto</h1>
+                                        <p id="product-page-description" class="text-xs text-gray-600">Altere os dados do produto abaixo.</p>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-start gap-1.5 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 py-2.5 text-[10px] text-primary compact-highlight">
+                                    <span class="inline-flex items-center gap-2 font-semibold uppercase tracking-wide"><i class="fas fa-lightbulb"></i> Dica rápida</span>
+                                    <p class="text-left text-[11px] leading-snug text-primary/80">As informações são salvas automaticamente no rascunho local. Revise cada aba antes de concluir.</p>
+                                </div>
                             </div>
-                            <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary"><i class="fas fa-id-card"></i> Dados básicos</span>
                         </div>
+
+                        <div class="border-t border-gray-100 px-4 py-3">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <h2 class="text-base font-semibold text-gray-800">Identificação e resumo</h2>
+                                    <p class="text-[11px] text-gray-500">Comece preenchendo os campos principais que serão usados em todas as telas.</p>
+                                </div>
+                                <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary"><i class="fas fa-id-card"></i> Dados básicos</span>
+                            </div>
+                        </div>
+
                         <div class="px-4 pb-4 pt-3 space-y-4">
                             <div class="grid grid-cols-1 gap-3 lg:grid-cols-12">
                                 <div class="lg:col-span-3">
@@ -317,10 +320,8 @@
                                 </div>
                             </div>
                         </div>
-                    </section>
 
-                    <section class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
-                        <div class="border-b border-gray-100 px-4 py-3">
+                        <div class="border-t border-gray-100 px-4 pb-4 pt-3">
                             <div class="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                                 <div>
                                     <h2 class="text-base font-semibold text-gray-800">Detalhes do produto</h2>
