@@ -7,6 +7,8 @@ const authorizeRoles = require('../middlewares/authorizeRoles');
 
 const router = express.Router();
 
+const DEFAULT_COLLATION = { locale: 'pt', strength: 1 };
+
 const FISCAL_STATUS_VALUES = new Set(['pendente', 'parcial', 'aprovado']);
 
 const escapeRegex = (value = '') => {
@@ -35,6 +37,7 @@ const normalizeForSearch = (value = '') => {
   return value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[ç]/gi, 'c')
     .toLowerCase()
     .trim();
 };
@@ -455,7 +458,10 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     const requiresComputedFilters = Boolean(markupFilterRaw) || imagemFilter !== null;
 
     if (idsOnly && !requiresComputedFilters && !requiresComputedSort && !hasExplicitSort) {
-      const idsDocs = await Product.find(query).select({ _id: 1 }).lean();
+      const idsDocs = await Product.find(query)
+        .collation(DEFAULT_COLLATION)
+        .select({ _id: 1 })
+        .lean();
       const mappedIds = idsDocs.map((product) => extractId(product)).filter(Boolean);
       return res.json({ ids: mappedIds, total: mappedIds.length });
     }
@@ -465,12 +471,13 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     if (canUseSimpleQuery) {
       const [productsDocs, total] = await Promise.all([
         Product.find(query)
+          .collation(DEFAULT_COLLATION)
           .sort(sortStage)
           .skip((page - 1) * limit)
           .limit(limit)
           .allowDiskUse(true)
           .lean(),
-        Product.countDocuments(query),
+        Product.countDocuments(query).collation(DEFAULT_COLLATION),
       ]);
 
       const mappedProducts = productsDocs.map((product) => mapProductForResponse(product));
@@ -686,7 +693,9 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
         ...pipeline,
         { $sort: { ...sortStage } },
         { $project: { _id: 1 } },
-      ]).allowDiskUse(true);
+      ])
+        .collation(DEFAULT_COLLATION)
+        .allowDiskUse(true);
       const idsAggregationResult = await idsAggregation.exec();
       const mappedIds = idsAggregationResult.map((product) => extractId(product)).filter(Boolean);
       return res.json({ ids: mappedIds, total: mappedIds.length });
@@ -708,6 +717,7 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     ];
 
     const aggregationCursor = Product.aggregate(paginationPipeline)
+      .collation(DEFAULT_COLLATION)
       .allowDiskUse(true);
     const aggregation = await aggregationCursor.exec();
     const aggregationResult =
@@ -718,7 +728,9 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       .map((id) => (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id))
       .filter(Boolean);
     const productsDocs = ids.length
-      ? await Product.find({ _id: { $in: idsForQuery } }).lean()
+      ? await Product.find({ _id: { $in: idsForQuery } })
+          .collation(DEFAULT_COLLATION)
+          .lean()
       : [];
     const docsById = new Map(productsDocs.map((doc) => [extractId(doc), doc]));
     const orderedProducts = ids.map((id) => docsById.get(id)).filter(Boolean);
@@ -941,7 +953,11 @@ router.get(
       let orderedProducts = [];
 
       if (canUseSimpleQuery) {
-        orderedProducts = await Product.find(query).sort(sortStage).allowDiskUse(true).lean();
+        orderedProducts = await Product.find(query)
+          .collation(DEFAULT_COLLATION)
+          .sort(sortStage)
+          .allowDiskUse(true)
+          .lean();
       } else {
         const pipeline = [{ $match: query }];
 
@@ -1143,6 +1159,7 @@ router.get(
           { $sort: { ...sortStage } },
           { $project: { _id: 1 } },
         ])
+          .collation(DEFAULT_COLLATION)
           .allowDiskUse(true)
           .exec();
 
@@ -1154,7 +1171,9 @@ router.get(
           const idsForQuery = ids
             .map((id) => (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id))
             .filter(Boolean);
-          const productsDocs = await Product.find({ _id: { $in: idsForQuery } }).lean();
+          const productsDocs = await Product.find({ _id: { $in: idsForQuery } })
+            .collation(DEFAULT_COLLATION)
+            .lean();
           const docsById = new Map(productsDocs.map((doc) => [extractId(doc), doc]));
           orderedProducts = ids.map((id) => docsById.get(id)).filter(Boolean);
         } else {
@@ -1478,7 +1497,7 @@ router.put('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req
   const result = { updated: 0, errors: [] };
 
   try {
-    const products = await Product.find({ _id: { $in: validIds } });
+    const products = await Product.find({ _id: { $in: validIds } }).collation(DEFAULT_COLLATION);
     const foundIds = new Set(products.map((product) => product._id.toString()));
 
     validIds.forEach((objectId) => {

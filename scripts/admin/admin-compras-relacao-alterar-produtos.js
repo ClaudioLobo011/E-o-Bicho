@@ -132,9 +132,12 @@
       return String(value)
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[ç]/gi, 'c')
         .toLowerCase();
     } catch (error) {
-      return String(value).toLowerCase();
+      return String(value)
+        .toLowerCase()
+        .replace(/[ç]/g, 'c');
     }
   }
 
