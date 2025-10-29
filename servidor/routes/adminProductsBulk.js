@@ -197,6 +197,39 @@ const buildSortStage = (config, direction) => {
   return stage;
 };
 
+const buildAggregationProjection = () => ({
+  _id: 1,
+  nome: 1,
+  cod: 1,
+  unidade: 1,
+  inativo: 1,
+  custo: 1,
+  markup: 1,
+  venda: 1,
+  stock: 1,
+  temImagem: 1,
+  fornecedores: {
+    $map: {
+      input: {
+        $slice: [
+          {
+            $cond: [
+              { $isArray: '$fornecedores' },
+              '$fornecedores',
+              [],
+            ],
+          },
+          1,
+        ],
+      },
+      as: 'supplier',
+      in: {
+        fornecedor: '$$supplier.fornecedor',
+      },
+    },
+  },
+});
+
 const hasEnabledField = (updates = {}, key) => {
   const entry = updates[key];
   return entry && typeof entry === 'object' && entry.enabled === true;
@@ -586,12 +619,14 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       pipeline.push({ $match: { temImagem: { $ne: true } } });
     }
 
+    pipeline.push({ $project: buildAggregationProjection() });
+
     if (idsOnly) {
       const idsAggregation = Product.aggregate([
         ...pipeline,
+        { $sort: { ...sortStage } },
         { $project: { _id: 1 } },
-      ])
-        .allowDiskUse(true);
+      ]).allowDiskUse(true);
       const idsAggregationResult = await idsAggregation.exec();
       const mappedIds = idsAggregationResult.map((product) => extractId(product)).filter(Boolean);
       return res.json({ ids: mappedIds, total: mappedIds.length });
@@ -602,9 +637,10 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       { $sort: { ...sortStage } },
       {
         $facet: {
-          data: [
+          ids: [
             { $skip: (page - 1) * limit },
             { $limit: limit },
+            { $project: { _id: 1 } },
           ],
           totalCount: [{ $count: 'count' }],
         },
@@ -614,13 +650,23 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     const aggregationCursor = Product.aggregate(paginationPipeline)
       .allowDiskUse(true);
     const aggregation = await aggregationCursor.exec();
-    const aggregationResult = Array.isArray(aggregation) && aggregation.length ? aggregation[0] : { data: [], totalCount: [] };
-    const products = Array.isArray(aggregationResult.data) ? aggregationResult.data : [];
+    const aggregationResult =
+      Array.isArray(aggregation) && aggregation.length ? aggregation[0] : { ids: [], totalCount: [] };
+    const idEntries = Array.isArray(aggregationResult.ids) ? aggregationResult.ids : [];
+    const ids = idEntries.map((entry) => extractId(entry)).filter(Boolean);
+    const idsForQuery = ids
+      .map((id) => (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id))
+      .filter(Boolean);
+    const productsDocs = ids.length
+      ? await Product.find({ _id: { $in: idsForQuery } }).lean()
+      : [];
+    const docsById = new Map(productsDocs.map((doc) => [extractId(doc), doc]));
+    const orderedProducts = ids.map((id) => docsById.get(id)).filter(Boolean);
     const total = Array.isArray(aggregationResult.totalCount) && aggregationResult.totalCount.length
       ? aggregationResult.totalCount[0].count || 0
       : 0;
 
-    const mapped = products.map((product) => mapProductForResponse(product));
+    const mapped = orderedProducts.map((product) => mapProductForResponse(product));
 
     res.json({
       products: mapped,
