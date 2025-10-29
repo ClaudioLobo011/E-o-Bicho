@@ -586,10 +586,11 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     }
 
     if (idsOnly) {
-      const idsAggregation = await Product.aggregate(
-        [...pipeline, { $project: { _id: 1 } }],
-        { allowDiskUse: true }
-      );
+      const idsAggregation = await Product.aggregate([
+        ...pipeline,
+        { $project: { _id: 1 } },
+      ])
+        .option({ allowDiskUse: true });
       const mappedIds = idsAggregation.map((product) => extractId(product)).filter(Boolean);
       return res.json({ ids: mappedIds, total: mappedIds.length });
     }
@@ -608,7 +609,8 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       },
     ];
 
-    const aggregation = await Product.aggregate(paginationPipeline, { allowDiskUse: true });
+    const aggregation = await Product.aggregate(paginationPipeline)
+      .option({ allowDiskUse: true });
     const aggregationResult = Array.isArray(aggregation) && aggregation.length ? aggregation[0] : { data: [], totalCount: [] };
     const products = Array.isArray(aggregationResult.data) ? aggregationResult.data : [];
     const total = Array.isArray(aggregationResult.totalCount) && aggregationResult.totalCount.length
