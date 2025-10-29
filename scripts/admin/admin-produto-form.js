@@ -1483,8 +1483,9 @@ document.addEventListener('DOMContentLoaded', () => {
         isUpdatingFromPrice = false;
     };
 
-    const updateSaleFromMarkup = () => {
+    const updateSaleFromMarkup = (options = {}) => {
         if (!costInput || !saleInput || !markupInput || isUpdatingFromPrice) return;
+        const { shouldNormalizeMarkup = true } = options;
         const cost = parseFloat(costInput.value);
         const markup = parseFloat(markupInput.value);
 
@@ -1494,12 +1495,19 @@ document.addEventListener('DOMContentLoaded', () => {
         isUpdatingFromMarkup = true;
         saleInput.value = Number.isFinite(sale) ? sale.toFixed(2) : '';
         isUpdatingFromMarkup = false;
-        updateMarkupFromValues();
+        if (shouldNormalizeMarkup) {
+            updateMarkupFromValues();
+        }
     };
 
     costInput?.addEventListener('input', updateMarkupFromValues);
     saleInput?.addEventListener('input', updateMarkupFromValues);
-    markupInput?.addEventListener('input', updateSaleFromMarkup);
+    markupInput?.addEventListener('input', () => {
+        updateSaleFromMarkup({ shouldNormalizeMarkup: false });
+    });
+    markupInput?.addEventListener('change', () => {
+        updateSaleFromMarkup();
+    });
 
     const loadImportedProductDraft = () => {
         if (typeof sessionStorage === 'undefined') return null;
