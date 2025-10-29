@@ -7622,14 +7622,18 @@
             } else if (source === 'sale-update') {
               entry.markupCurrent = resolveMarkup(computeMarkupPercentage(costValue, entry.saleNew));
             } else {
-              if (!Number.isFinite(entry.saleNew) || source === 'cost-update' || source === 'toggle-use-markup') {
-                if (!Number.isFinite(entry.saleNew)) {
-                  const fallbackSale = Number.isFinite(entry.salePrevious)
-                    ? entry.salePrevious
-                    : computeSaleFromMarkup(costValue, resolveMarkup(entry.markupCurrent));
-                  entry.saleNew = Number.isFinite(fallbackSale) ? fallbackSale : 0;
-                }
+              const shouldRestoreSalePrevious =
+                source === 'toggle-use-markup' && Number.isFinite(entry.salePrevious);
+
+              if (shouldRestoreSalePrevious) {
+                entry.saleNew = entry.salePrevious;
+              } else if (!Number.isFinite(entry.saleNew) || source === 'cost-update') {
+                const fallbackSale = Number.isFinite(entry.salePrevious)
+                  ? entry.salePrevious
+                  : computeSaleFromMarkup(costValue, resolveMarkup(entry.markupCurrent));
+                entry.saleNew = Number.isFinite(fallbackSale) ? fallbackSale : 0;
               }
+
               entry.markupCurrent = resolveMarkup(computeMarkupPercentage(costValue, entry.saleNew));
             }
           }
