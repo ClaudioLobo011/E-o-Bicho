@@ -318,7 +318,9 @@
     } else {
       state.tableSort = { key, direction: nextDirection };
     }
+    state.pagination.page = 1;
     renderProductsTable();
+    fetchProducts(1);
   }
 
   function updateTableSortButtons() {
@@ -488,6 +490,11 @@
     }
     if (includePagination) {
       params.set('limit', state.pagination.limit);
+    }
+    const { key: sortKey, direction: sortDirectionRaw } = state.tableSort || {};
+    if (sortKey) {
+      params.set('sortKey', sortKey);
+      params.set('sortDirection', sortDirectionRaw === 'desc' ? 'desc' : 'asc');
     }
     return params;
   }

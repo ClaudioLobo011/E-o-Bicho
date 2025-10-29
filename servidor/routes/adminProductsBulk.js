@@ -156,6 +156,47 @@ const mapProductForResponse = (productDoc) => {
   };
 };
 
+const SORTABLE_COLUMNS = {
+  sku: { sortField: 'cod' },
+  nome: { sortField: 'nome' },
+  unidade: { sortField: 'unidade' },
+  fornecedor: { sortField: 'fornecedores.0.fornecedor' },
+  situacao: { sortField: 'inativo' },
+  custo: { sortField: 'custo' },
+  markup: { sortField: 'markup', requiresAggregation: true },
+  venda: { sortField: 'venda' },
+  stock: { sortField: 'stock' },
+  imagem: { sortField: 'temImagem', requiresAggregation: true },
+};
+
+const resolveSortConfig = (key = '') => {
+  if (!key) return null;
+  const normalized = key.trim().toLowerCase();
+  if (!normalized) return null;
+  const config = SORTABLE_COLUMNS[normalized];
+  if (!config) return null;
+  return { key: normalized, ...config };
+};
+
+const buildSortStage = (config, direction) => {
+  const sortDirection = direction === -1 ? -1 : 1;
+  const stage = {};
+
+  if (config && config.sortField) {
+    stage[config.sortField] = sortDirection;
+  } else {
+    stage.nome = 1;
+  }
+
+  if (!stage.nome && (!config || config.sortField !== 'nome')) {
+    stage.nome = 1;
+  }
+
+  stage._id = 1;
+
+  return stage;
+};
+
 const hasEnabledField = (updates = {}, key) => {
   const entry = updates[key];
   return entry && typeof entry === 'object' && entry.enabled === true;
@@ -199,6 +240,13 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
       stock: normalizeString(req.query.col_stock),
       imagem: normalizeString(req.query.col_imagem),
     };
+
+    const sortKeyRaw = normalizeString(req.query.sortKey);
+    const sortDirectionRaw = normalizeString(req.query.sortDirection).toLowerCase();
+    const sortConfig = resolveSortConfig(sortKeyRaw);
+    const sortDirection = sortDirectionRaw === 'desc' ? -1 : 1;
+    const requiresComputedSort = Boolean(sortConfig?.requiresAggregation);
+    const sortStage = buildSortStage(sortConfig, sortDirection);
 
     const filters = {};
     const andConditions = [];
@@ -312,16 +360,16 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     const imagemFilter = normalizeBooleanFilter(columnFilters.imagem);
     const requiresComputedFilters = Boolean(markupFilterRaw) || imagemFilter !== null;
 
-    if (idsOnly && !requiresComputedFilters) {
+    if (idsOnly && !requiresComputedFilters && !requiresComputedSort) {
       const idsDocs = await Product.find(query).select({ _id: 1 }).lean();
       const mappedIds = idsDocs.map((product) => extractId(product)).filter(Boolean);
       return res.json({ ids: mappedIds, total: mappedIds.length });
     }
 
-    if (!requiresComputedFilters && !idsOnly) {
+    if (!requiresComputedFilters && !requiresComputedSort && !idsOnly) {
       const [productsDocs, total] = await Promise.all([
         Product.find(query)
-          .sort({ nome: 1, _id: 1 })
+          .sort(sortStage)
           .skip((page - 1) * limit)
           .limit(limit)
           .lean(),
@@ -543,7 +591,7 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
 
     const paginationPipeline = [
       ...pipeline,
-      { $sort: { nome: 1, _id: 1 } },
+      { $sort: { ...sortStage } },
       {
         $facet: {
           data: [
