@@ -536,6 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ESTADO DA PÁGINA ---
     const urlParams = new URLSearchParams(window.location.search);
+    const isFromNfeImport = urlParams.get('from') === 'nfe-import';
     let productId = urlParams.get('id');
     let isEditMode = Boolean(productId);
     let productCategories = []; // Array de IDs das categorias selecionadas
@@ -550,7 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentImages = [];
     let imageOrderStatusTimeoutId = null;
 
-    const storedProductId = getPersistedProductEditStateValue('productId');
+    const storedProductId = isFromNfeImport ? null : getPersistedProductEditStateValue('productId');
     if (!productId && storedProductId) {
         productId = storedProductId;
         isEditMode = true;
@@ -564,6 +565,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (productId) {
         updatePersistedProductEditState({ productId });
+    } else if (isFromNfeImport) {
+        updatePersistedProductEditState({ productId: null });
     }
 
     const supplierDirectoryState = {
