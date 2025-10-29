@@ -198,12 +198,41 @@
     }
   }
 
+  function escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function buildColumnFilterRegex(rawValue) {
+    const normalizedFilter = normalizeText(rawValue || '');
+    if (!normalizedFilter) {
+      return null;
+    }
+
+    const pattern = normalizedFilter
+      .split('*')
+      .map((segment) => escapeRegex(segment))
+      .join('.*');
+
+    if (!pattern) {
+      return null;
+    }
+
+    try {
+      return new RegExp(pattern, 'i');
+    } catch (error) {
+      console.warn('Filtro inválido ignorado na tabela de produtos.', error);
+      return null;
+    }
+  }
+
   function matchesColumnFilter(product, key, filterValue) {
     if (!key) return true;
-    const normalizedFilter = normalizeText(filterValue || '');
-    if (!normalizedFilter) return true;
+
+    const regex = buildColumnFilterRegex(filterValue);
+    if (!regex) return true;
+
     const candidates = getFilterCandidates(product, key);
-    return candidates.some((candidate) => normalizeText(candidate).includes(normalizedFilter));
+    return candidates.some((candidate) => regex.test(normalizeText(candidate)));
   }
 
   function applyColumnFilters(products) {
