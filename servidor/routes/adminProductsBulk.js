@@ -1,5 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const XLSX = require('xlsx');
 const Product = require('../models/Product');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
@@ -682,6 +683,467 @@ router.get('/', requireAuth, authorizeRoles('funcionario', 'admin', 'admin_maste
     res.status(500).json({ message: 'Erro ao buscar produtos.' });
   }
 });
+
+router.get(
+  '/export/excel',
+  requireAuth,
+  authorizeRoles('funcionario', 'admin', 'admin_master'),
+  async (req, res) => {
+    try {
+      const {
+        sku,
+        nome,
+        barcode,
+        unidade,
+        referencia,
+        tipoProduto,
+        marca,
+        categoria,
+        fornecedor,
+        situacao,
+        estoqueMin,
+        estoqueMax,
+      } = req.query;
+
+      const columnFilters = {
+        sku: normalizeString(req.query.col_sku),
+        nome: normalizeString(req.query.col_nome),
+        unidade: normalizeString(req.query.col_unidade),
+        fornecedor: normalizeString(req.query.col_fornecedor),
+        situacao: normalizeString(req.query.col_situacao),
+        custo: normalizeString(req.query.col_custo),
+        markup: normalizeString(req.query.col_markup),
+        venda: normalizeString(req.query.col_venda),
+        stock: normalizeString(req.query.col_stock),
+        imagem: normalizeString(req.query.col_imagem),
+      };
+
+      const sortKeyRaw = normalizeString(req.query.sortKey);
+      const sortDirectionRaw = normalizeString(req.query.sortDirection).toLowerCase();
+      const sortConfig = resolveSortConfig(sortKeyRaw);
+      const sortDirection = sortDirectionRaw === 'desc' ? -1 : 1;
+      const requiresComputedSort = Boolean(sortConfig?.requiresAggregation);
+      const sortStage = buildSortStage(sortConfig, sortDirection);
+
+      const filters = {};
+      const andConditions = [];
+
+      if (sku) {
+        filters.cod = { $regex: new RegExp(escapeRegex(sku), 'i') };
+      }
+
+      if (nome) {
+        filters.nome = { $regex: new RegExp(escapeRegex(nome), 'i') };
+      }
+
+      if (barcode) {
+        const safeBarcode = escapeRegex(barcode);
+        andConditions.push({
+          $or: [
+            { codbarras: { $regex: new RegExp(safeBarcode, 'i') } },
+            { codigosComplementares: { $regex: new RegExp(safeBarcode, 'i') } },
+          ],
+        });
+      }
+
+      if (unidade) {
+        filters.unidade = unidade;
+      }
+
+      if (referencia) {
+        filters.referencia = { $regex: new RegExp(escapeRegex(referencia), 'i') };
+      }
+
+      if (tipoProduto) {
+        filters.tipoProduto = tipoProduto;
+      }
+
+      if (marca) {
+        filters.marca = { $regex: new RegExp(escapeRegex(marca), 'i') };
+      }
+
+      if (categoria) {
+        const categoryId = ensureObjectId(categoria);
+        if (categoryId) {
+          filters.categorias = { $in: [categoryId] };
+        }
+      }
+
+      if (fornecedor) {
+        andConditions.push({ 'fornecedores.fornecedor': { $regex: new RegExp(escapeRegex(fornecedor), 'i') } });
+      }
+
+      if (situacao === 'ativo') {
+        filters.inativo = { $ne: true };
+      } else if (situacao === 'inativo') {
+        filters.inativo = true;
+      }
+
+      if (columnFilters.sku) {
+        andConditions.push({ cod: { $regex: new RegExp(escapeRegex(columnFilters.sku), 'i') } });
+      }
+
+      if (columnFilters.nome) {
+        andConditions.push({ nome: { $regex: new RegExp(escapeRegex(columnFilters.nome), 'i') } });
+      }
+
+      if (columnFilters.unidade) {
+        andConditions.push({ unidade: { $regex: new RegExp(escapeRegex(columnFilters.unidade), 'i') } });
+      }
+
+      if (columnFilters.fornecedor) {
+        andConditions.push({ 'fornecedores.fornecedor': { $regex: new RegExp(escapeRegex(columnFilters.fornecedor), 'i') } });
+      }
+
+      if (columnFilters.situacao) {
+        const normalizedSituacao = columnFilters.situacao.toLowerCase();
+        if (normalizedSituacao === 'ativo') {
+          filters.inativo = { $ne: true };
+        } else if (normalizedSituacao === 'inativo') {
+          filters.inativo = true;
+        }
+      }
+
+      const columnCost = parseDecimalString(columnFilters.custo);
+      if (columnCost !== null) {
+        andConditions.push({ custo: columnCost });
+      }
+
+      const columnSale = parseDecimalString(columnFilters.venda);
+      if (columnSale !== null) {
+        andConditions.push({ venda: columnSale });
+      }
+
+      const columnStock = parseDecimalString(columnFilters.stock);
+      if (columnStock !== null) {
+        andConditions.push({ stock: columnStock });
+      }
+
+      const minStock = parseNumber(estoqueMin);
+      const maxStock = parseNumber(estoqueMax);
+      if (minStock !== null) {
+        filters.stock = { ...(filters.stock || {}), $gte: minStock };
+      }
+      if (maxStock !== null) {
+        filters.stock = { ...(filters.stock || {}), $lte: maxStock };
+      }
+
+      const query = { ...filters };
+      if (andConditions.length) {
+        query.$and = andConditions;
+      }
+
+      const markupFilterRaw = columnFilters.markup;
+      const imagemFilter = normalizeBooleanFilter(columnFilters.imagem);
+      const requiresComputedFilters = Boolean(markupFilterRaw) || imagemFilter !== null;
+      const idsOnly = false;
+
+      const canUseSimpleQuery = !requiresComputedFilters && !requiresComputedSort && !idsOnly;
+
+      let orderedProducts = [];
+
+      if (canUseSimpleQuery) {
+        orderedProducts = await Product.find(query).sort(sortStage).allowDiskUse(true).lean();
+      } else {
+        const pipeline = [{ $match: query }];
+
+        if (requiresComputedFilters || requiresComputedSort) {
+          pipeline.push({
+            $addFields: {
+              markup: {
+                $cond: [
+                  {
+                    $and: [
+                      { $ne: ['$custo', null] },
+                      { $ne: ['$venda', null] },
+                      { $gt: ['$custo', 0] },
+                    ],
+                  },
+                  {
+                    $multiply: [
+                      {
+                        $divide: [
+                          { $subtract: ['$venda', '$custo'] },
+                          '$custo',
+                        ],
+                      },
+                      100,
+                    ],
+                  },
+                  null,
+                ],
+              },
+              temImagem: {
+                $let: {
+                  vars: {
+                    principal: { $ifNull: ['$imagemPrincipal', ''] },
+                    imagens: { $ifNull: ['$imagens', []] },
+                    driveImgs: { $ifNull: ['$driveImages', []] },
+                  },
+                  in: {
+                    $or: [
+                      {
+                        $and: [
+                          { $ne: ['$$principal', null] },
+                          { $ne: ['$$principal', ''] },
+                          {
+                            $not: [
+                              {
+                                $regexMatch: {
+                                  input: { $toString: '$$principal' },
+                                  regex: 'placeholder',
+                                  options: 'i',
+                                },
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        $gt: [
+                          {
+                            $size: {
+                              $filter: {
+                                input: '$$imagens',
+                                as: 'img',
+                                cond: {
+                                  $and: [
+                                    { $ne: ['$$img', null] },
+                                    { $ne: ['$$img', ''] },
+                                    {
+                                      $not: [
+                                        {
+                                          $regexMatch: {
+                                            input: { $toString: '$$img' },
+                                            regex: 'placeholder',
+                                            options: 'i',
+                                          },
+                                        },
+                                      ],
+                                    },
+                                  ],
+                                },
+                              },
+                            },
+                          },
+                          0,
+                        ],
+                      },
+                      {
+                        $gt: [
+                          {
+                            $size: {
+                              $filter: {
+                                input: '$$driveImgs',
+                                as: 'drive',
+                                cond: {
+                                  $or: [
+                                    {
+                                      $and: [
+                                        { $ne: ['$$drive.fileId', null] },
+                                        { $ne: ['$$drive.fileId', ''] },
+                                      ],
+                                    },
+                                    {
+                                      $and: [
+                                        { $ne: ['$$drive.path', null] },
+                                        { $ne: ['$$drive.path', ''] },
+                                        {
+                                          $not: [
+                                            {
+                                              $regexMatch: {
+                                                input: { $toString: '$$drive.path' },
+                                                regex: 'placeholder',
+                                                options: 'i',
+                                              },
+                                            },
+                                          ],
+                                        },
+                                      ],
+                                    },
+                                    {
+                                      $and: [
+                                        { $ne: ['$$drive.url', null] },
+                                        { $ne: ['$$drive.url', ''] },
+                                        {
+                                          $not: [
+                                            {
+                                              $regexMatch: {
+                                                input: { $toString: '$$drive.url' },
+                                                regex: 'placeholder',
+                                                options: 'i',
+                                              },
+                                            },
+                                          ],
+                                        },
+                                      ],
+                                    },
+                                  ],
+                                },
+                              },
+                            },
+                          },
+                          0,
+                        ],
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          });
+        }
+
+        if (markupFilterRaw) {
+          const markupAsNumber = parseDecimalString(markupFilterRaw);
+          if (markupAsNumber !== null) {
+            const roundedTarget = Number(markupAsNumber.toFixed(2));
+            pipeline.push({
+              $match: {
+                $expr: {
+                  $eq: [
+                    { $round: ['$markup', 2] },
+                    roundedTarget,
+                  ],
+                },
+              },
+            });
+          } else {
+            const markupRegex = escapeRegex(markupFilterRaw);
+            pipeline.push({
+              $match: {
+                $expr: {
+                  $regexMatch: {
+                    input: {
+                      $toString: {
+                        $cond: [
+                          { $ne: ['$markup', null] },
+                          { $round: ['$markup', 2] },
+                          '',
+                        ],
+                      },
+                    },
+                    regex: markupRegex,
+                    options: 'i',
+                  },
+                },
+              },
+            });
+          }
+        }
+
+        if (imagemFilter === true) {
+          pipeline.push({ $match: { temImagem: true } });
+        } else if (imagemFilter === false) {
+          pipeline.push({ $match: { temImagem: { $ne: true } } });
+        }
+
+        pipeline.push({ $project: buildAggregationProjection() });
+
+        const aggregation = await Product.aggregate([
+          ...pipeline,
+          { $sort: { ...sortStage } },
+          { $project: { _id: 1 } },
+        ])
+          .allowDiskUse(true)
+          .exec();
+
+        const ids = Array.isArray(aggregation)
+          ? aggregation.map((entry) => extractId(entry)).filter(Boolean)
+          : [];
+
+        if (ids.length) {
+          const idsForQuery = ids
+            .map((id) => (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id))
+            .filter(Boolean);
+          const productsDocs = await Product.find({ _id: { $in: idsForQuery } }).lean();
+          const docsById = new Map(productsDocs.map((doc) => [extractId(doc), doc]));
+          orderedProducts = ids.map((id) => docsById.get(id)).filter(Boolean);
+        } else {
+          orderedProducts = [];
+        }
+      }
+
+      const mappedProducts = orderedProducts.map((product) => mapProductForResponse(product));
+
+      const worksheetHeader = [
+        'ID',
+        'SKU',
+        'Descrição',
+        'Unidade',
+        'Tem imagem',
+        'Preço de custo (R$)',
+        'Markup (%)',
+        'Preço de venda (R$)',
+        'Estoque',
+        'Fornecedor principal',
+        'Situação',
+      ];
+
+      const toNumber = (value) => {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : null;
+      };
+
+      const rows = mappedProducts.map((product) => ({
+        ID: product.id,
+        SKU: product.cod || '',
+        Descrição: product.nome || '',
+        Unidade: product.unidade || '',
+        'Tem imagem': product.temImagem ? 'Sim' : 'Não',
+        'Preço de custo (R$)': toNumber(product.custo),
+        'Markup (%)': product.markup === null || product.markup === undefined ? null : toNumber(product.markup),
+        'Preço de venda (R$)': toNumber(product.venda),
+        Estoque: toNumber(product.stock),
+        'Fornecedor principal': product.fornecedor || '',
+        Situação: product.inativo ? 'Inativo' : 'Ativo',
+      }));
+
+      const worksheet = XLSX.utils.aoa_to_sheet([worksheetHeader]);
+      if (rows.length) {
+        XLSX.utils.sheet_add_json(worksheet, rows, {
+          origin: 'A2',
+          skipHeader: true,
+          header: worksheetHeader,
+        });
+      }
+
+      worksheet['!cols'] = [
+        { wch: 24 },
+        { wch: 18 },
+        { wch: 45 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 20 },
+        { wch: 15 },
+        { wch: 20 },
+        { wch: 12 },
+        { wch: 32 },
+        { wch: 14 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Produtos');
+
+      const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="produtos-relacao-${timestamp}.xlsx"`,
+      );
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+
+      res.send(buffer);
+    } catch (error) {
+      console.error('Erro ao exportar produtos em massa:', error);
+      res.status(500).json({ message: 'Erro ao exportar a planilha de produtos.' });
+    }
+  },
+);
 
 function applySupplierUpdate(product, payload = {}) {
   const supplierName = normalizeString(payload['supplier-name']);
