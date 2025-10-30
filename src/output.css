@@ -5751,6 +5751,17 @@
     max-height: none;
     overflow: visible;
   }
+  .price-history-modal-shell {
+    height: 80vh;
+    max-height: 80vh;
+    overflow: hidden;
+  }
+  @media (max-width: 640px) {
+    .price-history-modal-shell {
+      height: calc(100vh - 2rem);
+      max-height: calc(100vh - 2rem);
+    }
+  }
   @media (width >= 48rem) {
     .md\:col-span-5 {
       grid-column: span 5 / span 5;
