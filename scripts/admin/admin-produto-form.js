@@ -2588,6 +2588,9 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMarkupFromValues();
         setSubmitButtonIdleText();
         resetPriceHistoryState(null);
+        if (priceHistoryModal?.dataset?.modalOpen === 'true') {
+            fetchPriceHistoryEntries();
+        }
     };
 
     const fetchProductSummaryByIdentifier = async (identifierType, identifierValue) => {
@@ -2698,6 +2701,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         resetPriceHistoryState(productId);
+        if (priceHistoryModal?.dataset?.modalOpen === 'true') {
+            fetchPriceHistoryEntries();
+        }
         pageTitle.textContent = `Editar Produto: ${product.nome}`;
         if (pageDescription) {
             pageDescription.textContent = 'Altere os dados do produto abaixo.';
