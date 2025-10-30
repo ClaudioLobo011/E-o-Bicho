@@ -109,6 +109,7 @@ const productSchema = new mongoose.Schema({
         default: []
     },
     dataCadastro: { type: Date, default: null },
+    dataVigencia: { type: Date, default: null },
     peso: { type: Number, default: null },
     iat: { type: String, trim: true, default: '' },
     tipoProduto: { type: String, trim: true, default: '' },

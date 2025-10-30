@@ -33,12 +33,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const nameInput = document.getElementById('nome');
     const barcodeInput = document.getElementById('codbarras');
     const detailedDescriptionInput = document.getElementById('descricao');
+    const vigenciaInput = document.getElementById('data-vigencia');
     const unitSelect = document.getElementById('unidade');
     const inactiveCheckbox = document.getElementById('inativo');
     const hideOnSiteCheckbox = document.getElementById('hide-on-site');
     const fiscalCompanySelect = document.getElementById('fiscal-company-select');
     const fiscalCompanySummary = document.getElementById('fiscal-company-summary');
     const deleteProductButton = document.getElementById('delete-product-button');
+    const priceHistoryButton = document.getElementById('open-price-history-btn');
+    const priceHistoryModal = document.getElementById('price-history-modal');
+    const priceHistorySearchInput = document.getElementById('price-history-search');
+    const priceHistoryFieldFilter = document.getElementById('price-history-field-filter');
+    const priceHistoryScreenFilter = document.getElementById('price-history-screen-filter');
+    const priceHistoryAuthorFilter = document.getElementById('price-history-author-filter');
+    const priceHistoryTableBody = document.getElementById('price-history-table-body');
+    const priceHistoryLoadingState = document.getElementById('price-history-loading-state');
+    const priceHistoryEmptyState = document.getElementById('price-history-empty-state');
+    const priceHistoryErrorState = document.getElementById('price-history-error-state');
+    const priceHistoryModalCloseButtons = Array.from(document.querySelectorAll('[data-close-price-history-modal]'));
+    const priceHistoryColumnFilterInputs = new Map();
+    const priceHistorySortButtonsMeta = new Map();
+    const priceHistorySortHeaders = new Map();
+    const PRICE_HISTORY_DEFAULT_SORT = { key: 'dataAlteracao', direction: 'desc' };
+    const priceHistoryTableState = {
+        columnFilters: {},
+        sort: { ...PRICE_HISTORY_DEFAULT_SORT },
+    };
 
     const PRODUCT_DRAFT_STORAGE_KEY = 'nfeImportProductDraft';
     const FISCAL_GENERAL_KEY = '__general__';
@@ -550,6 +570,22 @@ document.addEventListener('DOMContentLoaded', () => {
     let pendingImportedProductDraft = null;
     let currentImages = [];
     let imageOrderStatusTimeoutId = null;
+    let priceHistoryEntries = [];
+    let lastPriceHistoryProductId = null;
+    const priceHistoryFilters = {
+        search: '',
+        campo: 'all',
+        tela: 'all',
+        autor: 'all',
+    };
+    const priceHistoryCurrencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const priceHistoryDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+    });
+    const priceHistoryDefaultEmptyMessage = priceHistoryEmptyState?.textContent?.trim()
+        || 'Nenhuma alteração de preço registrada para este produto.';
+    let priceHistoryLoading = false;
 
     const storedProductId = isFromNfeImport ? null : getPersistedProductEditStateValue('productId');
     if (!productId && storedProductId) {
@@ -590,6 +626,211 @@ document.addEventListener('DOMContentLoaded', () => {
             .toLowerCase();
     };
 
+    const getTodayDateString = () => {
+        const today = new Date();
+        today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+        return today.toISOString().split('T')[0];
+    };
+
+    const normalizeDateToInputValue = (rawDate) => {
+        if (!rawDate && rawDate !== 0) return '';
+        const rawString = String(rawDate).trim();
+        if (!rawString) return '';
+        const [datePart] = rawString.split('T');
+        if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            return datePart;
+        }
+        const parsed = new Date(rawString);
+        if (Number.isNaN(parsed.getTime())) return '';
+        return parsed.toISOString().split('T')[0];
+    };
+
+    const updateVigenciaDateToToday = () => {
+        if (!vigenciaInput) return;
+        const today = getTodayDateString();
+        if (vigenciaInput.value !== today) {
+            vigenciaInput.value = today;
+        }
+    };
+
+    const AUTO_SAVE_DEBOUNCE_MS = 1500;
+    let autoSaveTimeoutId = null;
+    let autoSaveInProgress = false;
+    let pendingAutoSave = false;
+
+    const getAuthToken = () => {
+        try {
+            return JSON.parse(localStorage.getItem('loggedInUser') || 'null')?.token || null;
+        } catch (error) {
+            console.error('Erro ao recuperar o token do usuário logado.', error);
+            return null;
+        }
+    };
+
+    const buildProductUpdatePayload = () => {
+        if (!form) {
+            return { productName: '', updateData: null };
+        }
+
+        const formData = new FormData(form);
+        const productName = (formData.get('nome') || '').trim();
+
+        const additionalBarcodesRaw = (formData.get('barcode-additional') || '')
+            .split('\n')
+            .map((code) => code.trim())
+            .filter(Boolean);
+
+        const depositPayload = [];
+        depositStockMap.forEach((entry, depositId) => {
+            if (!depositId) return;
+            const unidade = (entry?.unidade || '').trim();
+            const quantidadeValue = entry?.quantidade;
+            const hasQuantity = quantidadeValue !== null && quantidadeValue !== undefined && quantidadeValue !== '';
+            if (!hasQuantity && !unidade) return;
+            const parsedQuantity = Number(quantidadeValue);
+            depositPayload.push({
+                deposito: depositId,
+                quantidade: Number.isFinite(parsedQuantity) ? parsedQuantity : 0,
+                unidade,
+            });
+        });
+
+        const totalStock = depositPayload.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
+
+        persistActiveFiscalData();
+        const generalFiscal = cloneFiscalObject(fiscalByCompany.get(FISCAL_GENERAL_KEY) || collectFiscalData());
+        const fiscalPerCompanyPayload = {};
+        fiscalByCompany.forEach((value, key) => {
+            if (key === FISCAL_GENERAL_KEY) return;
+            fiscalPerCompanyPayload[key] = cloneFiscalObject(value);
+        });
+
+        const dataCadastroValue = formData.get('data-cadastro');
+        const dataVigenciaValue = formData.get('data-vigencia');
+        const pesoValue = formData.get('peso');
+        const iatValue = formData.get('iat');
+        const tipoProdutoValue = formData.get('tipo-produto');
+        const ncmValue = formData.get('ncm');
+        const promoPriceRawValue = formData.get('promo-preco');
+        const promoPriceValue = typeof promoPriceRawValue === 'string'
+            ? promoPriceRawValue.trim()
+            : promoPriceRawValue;
+
+        const parsedPeso = pesoValue ? Number(pesoValue) : null;
+
+        const updateData = {
+            nome: productName,
+            cod: (formData.get('cod') || '').trim(),
+            codbarras: (formData.get('codbarras') || '').trim(),
+            descricao: detailedDescriptionInput ? detailedDescriptionInput.value : formData.get('descricao'),
+            marca: formData.get('marca'),
+            unidade: formData.get('unidade'),
+            referencia: formData.get('referencia'),
+            custo: formData.get('custo'),
+            venda: formData.get('venda'),
+            precoClube: promoPriceValue === '' ? null : promoPriceValue,
+            categorias: productCategories,
+            fornecedores: supplierEntries.map((item) => ({
+                fornecedor: item.fornecedor,
+                documentoFornecedor: item.documentoFornecedor || null,
+                nomeProdutoFornecedor: item.nomeProdutoFornecedor || null,
+                codigoProduto: item.codigoProduto || null,
+                unidadeEntrada: item.unidadeEntrada || null,
+                tipoCalculo: item.tipoCalculo || null,
+                valorCalculo: item.valorCalculo,
+            })),
+            especificacoes: {
+                idade: Array.from(form.querySelectorAll('input[name="spec-idade"]:checked')).map(i => i.value),
+                pet: Array.from(form.querySelectorAll('input[name="spec-pet"]:checked')).map(i => i.value),
+                porteRaca: Array.from(form.querySelectorAll('input[name="spec-porte"]:checked')).map(i => i.value),
+                apresentacao: (document.getElementById('spec-apresentacao')?.value || '').trim()
+            },
+            codigosComplementares: additionalBarcodesRaw,
+            estoques: depositPayload,
+            stock: totalStock,
+            fiscal: generalFiscal,
+            fiscalPorEmpresa: fiscalPerCompanyPayload,
+            naoMostrarNoSite: Boolean(hideOnSiteCheckbox?.checked),
+            inativo: Boolean(inactiveCheckbox?.checked),
+            dataCadastro: dataCadastroValue ? dataCadastroValue : null,
+            dataVigencia: dataVigenciaValue ? dataVigenciaValue : null,
+            peso: Number.isFinite(parsedPeso) ? parsedPeso : null,
+            iat: iatValue || null,
+            tipoProduto: tipoProdutoValue || null,
+            ncm: ncmValue ? ncmValue.trim() : null,
+        };
+
+        return { productName, updateData };
+    };
+
+    const executeAutoSave = async () => {
+        if (!isEditMode || !productId) return;
+
+        const { productName, updateData } = buildProductUpdatePayload();
+        if (!updateData || !productName) return;
+
+        const token = getAuthToken();
+        if (!token) {
+            console.warn('Token de autenticação indisponível. Salvamento automático cancelado.');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(updateData),
+            });
+
+            if (!response.ok) {
+                const error = new Error('Falha ao salvar automaticamente as alterações do produto.');
+                if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+                    window.showToast(error.message, 'error', 4000);
+                }
+                throw error;
+            }
+        } catch (error) {
+            console.error('Erro durante o salvamento automático do produto.', error);
+        }
+    };
+
+    const flushAutoSave = async () => {
+        if (autoSaveInProgress) {
+            pendingAutoSave = true;
+            return;
+        }
+
+        autoSaveInProgress = true;
+        try {
+            await executeAutoSave();
+        } finally {
+            autoSaveInProgress = false;
+            if (pendingAutoSave) {
+                pendingAutoSave = false;
+                await flushAutoSave();
+            }
+        }
+    };
+
+    const scheduleAutoSave = () => {
+        if (!isEditMode || !productId) return;
+        if (autoSaveTimeoutId) {
+            clearTimeout(autoSaveTimeoutId);
+        }
+        autoSaveTimeoutId = window.setTimeout(() => {
+            autoSaveTimeoutId = null;
+            flushAutoSave();
+        }, AUTO_SAVE_DEBOUNCE_MS);
+    };
+
+    const markProductAsModified = () => {
+        updateVigenciaDateToToday();
+        scheduleAutoSave();
+    };
+
     const escapeHtml = (value) => {
         if (value === null || value === undefined) return '';
         return String(value)
@@ -598,6 +839,560 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    };
+
+    const formatPriceHistoryCurrency = (value) => {
+        if (value === null || value === undefined || value === '') return '-';
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return '-';
+        return priceHistoryCurrencyFormatter.format(numeric);
+    };
+
+    const formatPriceHistoryDate = (value) => {
+        if (!value) return '-';
+        const parsed = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(parsed.getTime())) return '-';
+        return priceHistoryDateFormatter.format(parsed);
+    };
+
+    const getPriceHistoryAuthor = (entry) => {
+        if (!entry) return '';
+        const rawAuthor = typeof entry.autor === 'string' ? entry.autor.trim() : '';
+        if (rawAuthor) return rawAuthor;
+        const authorName = typeof entry.autorNome === 'string' ? entry.autorNome.trim() : '';
+        if (authorName) return authorName;
+        const authorEmail = typeof entry.autorEmail === 'string' ? entry.autorEmail.trim() : '';
+        return authorEmail;
+    };
+
+    const setPriceHistoryLoadingState = (loading) => {
+        priceHistoryLoading = Boolean(loading);
+        if (priceHistoryLoadingState) {
+            priceHistoryLoadingState.classList.toggle('hidden', !priceHistoryLoading);
+        }
+    };
+
+    const updatePriceHistoryEmptyState = (message = priceHistoryDefaultEmptyMessage, show = true) => {
+        if (!priceHistoryEmptyState) return;
+        priceHistoryEmptyState.textContent = message;
+        priceHistoryEmptyState.classList.toggle('hidden', !show);
+    };
+
+    const updatePriceHistoryErrorState = (message = '', show = false) => {
+        if (!priceHistoryErrorState) return;
+        if (message) {
+            priceHistoryErrorState.textContent = message;
+        } else {
+            priceHistoryErrorState.textContent = 'Não foi possível carregar o histórico de preços. Tente novamente.';
+        }
+        priceHistoryErrorState.classList.toggle('hidden', !show);
+    };
+
+    const normalizePriceHistoryFilterText = (value = '') => normalizeSearchText(value);
+
+    const parsePriceHistoryNumericValue = (value) => {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'number') {
+            return Number.isFinite(value) ? value : null;
+        }
+        const trimmed = String(value).trim();
+        if (!trimmed) return null;
+        const normalized = trimmed
+            .replace(/\s+/g, '')
+            .replace(/\./g, '')
+            .replace(/,/g, '.')
+            .replace(/[^0-9.+-]/g, '');
+        if (!normalized) return null;
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const buildPriceHistoryCurrencyFilterText = (displayValue, numericValue) => {
+        const parts = [];
+        if (displayValue) {
+            parts.push(String(displayValue));
+        }
+        if (Number.isFinite(numericValue)) {
+            parts.push(String(numericValue));
+            parts.push(numericValue.toFixed(2));
+            parts.push(numericValue.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }));
+        }
+        return parts.join(' ');
+    };
+
+    const buildPriceHistoryRowData = (entry, index) => {
+        const codRaw = entry?.cod ?? entry?.codigo ?? entry?.codigoProduto ?? entry?.sku ?? '';
+        const codDisplay = codRaw ? String(codRaw) : '-';
+        const descricaoDisplay = entry?.descricao ? String(entry.descricao) : '-';
+        const dataRaw = entry?.dataAlteracao ? String(entry.dataAlteracao) : '';
+        const dataDisplay = formatPriceHistoryDate(dataRaw);
+        const telaDisplay = entry?.tela ? String(entry.tela) : '-';
+        const autorDisplay = getPriceHistoryAuthor(entry) || '-';
+        const valorAnteriorNumeric = parsePriceHistoryNumericValue(entry?.valorAnterior);
+        const valorNovoNumeric = parsePriceHistoryNumericValue(entry?.valorNovo);
+        const valorAnteriorDisplay = formatPriceHistoryCurrency(entry?.valorAnterior);
+        const valorNovoDisplay = formatPriceHistoryCurrency(entry?.valorNovo);
+        const campoDisplay = entry?.campo ? String(entry.campo) : '-';
+
+        const dataTimestamp = (() => {
+            if (!dataRaw) return null;
+            const parsed = new Date(dataRaw);
+            const time = parsed.getTime();
+            return Number.isFinite(time) ? time : null;
+        })();
+        const dataIso = Number.isFinite(dataTimestamp) ? new Date(dataTimestamp).toISOString() : '';
+
+        return {
+            entry,
+            index,
+            originalIndex: index,
+            displays: {
+                cod: codDisplay,
+                descricao: descricaoDisplay,
+                dataAlteracao: dataDisplay,
+                tela: telaDisplay,
+                autor: autorDisplay,
+                valorAnterior: valorAnteriorDisplay,
+                valorNovo: valorNovoDisplay,
+                campo: campoDisplay,
+            },
+            filterTexts: {
+                cod: [codDisplay, codRaw].filter(Boolean).join(' '),
+                descricao: descricaoDisplay,
+                dataAlteracao: [dataRaw, dataDisplay, dataIso].filter(Boolean).join(' '),
+                tela: telaDisplay,
+                autor: autorDisplay,
+                valorAnterior: buildPriceHistoryCurrencyFilterText(valorAnteriorDisplay, valorAnteriorNumeric),
+                valorNovo: buildPriceHistoryCurrencyFilterText(valorNovoDisplay, valorNovoNumeric),
+                campo: campoDisplay,
+            },
+            sortValues: {
+                cod: codDisplay === '-' ? '' : codDisplay,
+                descricao: descricaoDisplay === '-' ? '' : descricaoDisplay,
+                dataAlteracao: dataTimestamp,
+                tela: telaDisplay === '-' ? '' : telaDisplay,
+                autor: autorDisplay === '-' ? '' : autorDisplay,
+                valorAnterior: Number.isFinite(valorAnteriorNumeric) ? valorAnteriorNumeric : null,
+                valorNovo: Number.isFinite(valorNovoNumeric) ? valorNovoNumeric : null,
+                campo: campoDisplay === '-' ? '' : campoDisplay,
+            },
+        };
+    };
+
+    const applyPriceHistoryColumnFilters = (rows) => {
+        if (!Array.isArray(rows) || !rows.length) {
+            return [];
+        }
+        const filters = priceHistoryTableState.columnFilters || {};
+        const activeFilters = Object.entries(filters).filter(([, value]) => normalizePriceHistoryFilterText(value));
+        if (!activeFilters.length) {
+            return rows;
+        }
+        return rows.filter((row) =>
+            activeFilters.every(([key, value]) => {
+                const normalizedFilter = normalizePriceHistoryFilterText(value);
+                if (!normalizedFilter) return true;
+                const columnValue = row?.filterTexts?.[key] ?? '';
+                const normalizedColumn = normalizePriceHistoryFilterText(columnValue);
+                return normalizedColumn.includes(normalizedFilter);
+            })
+        );
+    };
+
+    const applyPriceHistorySort = (rows) => {
+        if (!Array.isArray(rows) || !rows.length) {
+            return [];
+        }
+        const { sort } = priceHistoryTableState;
+        const sortKey = sort?.key || '';
+        if (!sortKey) {
+            return rows.slice();
+        }
+        const sortDirection = sort?.direction === 'desc' ? 'desc' : 'asc';
+        const multiplier = sortDirection === 'desc' ? -1 : 1;
+        return rows
+            .slice()
+            .sort((a, b) => {
+                const valueA = a?.sortValues?.[sortKey];
+                const valueB = b?.sortValues?.[sortKey];
+                if (Number.isFinite(valueA) || Number.isFinite(valueB)) {
+                    const safeA = Number.isFinite(valueA) ? valueA : Number.NEGATIVE_INFINITY;
+                    const safeB = Number.isFinite(valueB) ? valueB : Number.NEGATIVE_INFINITY;
+                    if (safeA === safeB) {
+                        const indexA = Number.isFinite(a?.originalIndex) ? a.originalIndex : 0;
+                        const indexB = Number.isFinite(b?.originalIndex) ? b.originalIndex : 0;
+                        return indexA - indexB;
+                    }
+                    return safeA > safeB ? multiplier : -multiplier;
+                }
+                const textA = String(valueA ?? '').trim();
+                const textB = String(valueB ?? '').trim();
+                const comparison = textA.localeCompare(textB, 'pt-BR', {
+                    sensitivity: 'base',
+                    numeric: true,
+                });
+                if (comparison === 0) {
+                    const indexA = Number.isFinite(a?.originalIndex) ? a.originalIndex : 0;
+                    const indexB = Number.isFinite(b?.originalIndex) ? b.originalIndex : 0;
+                    return indexA - indexB;
+                }
+                return comparison * multiplier;
+            });
+    };
+
+    const updatePriceHistorySortButtons = () => {
+        const activeKey = priceHistoryTableState.sort?.key || '';
+        const activeDirection = priceHistoryTableState.sort?.direction === 'desc' ? 'desc' : 'asc';
+
+        priceHistorySortHeaders.forEach((header, key) => {
+            if (!header) return;
+            if (key === activeKey && activeKey) {
+                header.setAttribute('aria-sort', activeDirection === 'desc' ? 'descending' : 'ascending');
+            } else {
+                header.removeAttribute('aria-sort');
+            }
+        });
+
+        priceHistorySortButtonsMeta.forEach((meta, button) => {
+            if (!button) return;
+            const isActive = activeKey && meta.key === activeKey && meta.direction === activeDirection;
+            button.classList.toggle('text-primary', isActive);
+            button.classList.toggle('border-primary/60', isActive);
+            button.classList.toggle('bg-primary/10', isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    };
+
+    const setPriceHistoryColumnFilterValue = (key, value, { updateInput = false } = {}) => {
+        if (!key) return;
+        const normalizedValue = value || '';
+        priceHistoryTableState.columnFilters[key] = normalizedValue;
+        if (updateInput) {
+            const input = priceHistoryColumnFilterInputs.get(key);
+            if (input && input.value !== normalizedValue) {
+                input.value = normalizedValue;
+            }
+        }
+        renderPriceHistoryTable();
+    };
+
+    const setPriceHistorySort = (key, direction, { silent = false } = {}) => {
+        if (key) {
+            priceHistoryTableState.sort = {
+                key,
+                direction: direction === 'desc' ? 'desc' : 'asc',
+            };
+        } else {
+            priceHistoryTableState.sort = { ...PRICE_HISTORY_DEFAULT_SORT };
+        }
+        updatePriceHistorySortButtons();
+        if (!silent) {
+            renderPriceHistoryTable();
+        }
+    };
+
+    const initializePriceHistoryTableInteractions = () => {
+        priceHistoryColumnFilterInputs.clear();
+        priceHistorySortButtonsMeta.clear();
+        priceHistorySortHeaders.clear();
+
+        document.querySelectorAll('[data-price-history-filter]').forEach((input) => {
+            const key = input?.dataset?.priceHistoryFilter;
+            if (!key) return;
+            priceHistoryColumnFilterInputs.set(key, input);
+            if (!(key in priceHistoryTableState.columnFilters)) {
+                priceHistoryTableState.columnFilters[key] = input.value || '';
+            }
+            input.addEventListener('input', (event) => {
+                setPriceHistoryColumnFilterValue(key, event.target.value || '');
+            });
+        });
+
+        document.querySelectorAll('[data-price-history-sort]').forEach((button) => {
+            const key = button?.dataset?.priceHistorySort;
+            if (!key) return;
+            const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+            const header = button.closest('th');
+            priceHistorySortButtonsMeta.set(button, { key, direction });
+            if (header && !priceHistorySortHeaders.has(key)) {
+                priceHistorySortHeaders.set(key, header);
+            }
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                setPriceHistorySort(key, direction);
+            });
+        });
+
+        updatePriceHistorySortButtons();
+    };
+
+    initializePriceHistoryTableInteractions();
+
+    const resetPriceHistoryFilters = () => {
+        priceHistoryFilters.search = '';
+        priceHistoryFilters.campo = 'all';
+        priceHistoryFilters.tela = 'all';
+        priceHistoryFilters.autor = 'all';
+        if (priceHistorySearchInput) priceHistorySearchInput.value = '';
+        if (priceHistoryFieldFilter) priceHistoryFieldFilter.value = 'all';
+        if (priceHistoryScreenFilter) priceHistoryScreenFilter.value = 'all';
+        if (priceHistoryAuthorFilter) priceHistoryAuthorFilter.value = 'all';
+    };
+
+    const resetPriceHistoryState = (productIdentifier = null) => {
+        priceHistoryEntries = [];
+        lastPriceHistoryProductId = productIdentifier ? String(productIdentifier) : null;
+        resetPriceHistoryFilters();
+        priceHistoryColumnFilterInputs.forEach((input, key) => {
+            if (input) {
+                input.value = '';
+            }
+            priceHistoryTableState.columnFilters[key] = '';
+        });
+        priceHistoryTableState.sort = { ...PRICE_HISTORY_DEFAULT_SORT };
+        updatePriceHistorySortButtons();
+        if (priceHistoryTableBody) {
+            priceHistoryTableBody.innerHTML = '';
+        }
+        setPriceHistoryLoadingState(false);
+        updatePriceHistoryErrorState('', false);
+        if (priceHistoryEmptyState) {
+            priceHistoryEmptyState.textContent = productIdentifier
+                ? priceHistoryDefaultEmptyMessage
+                : 'Salve o produto para visualizar o histórico de preços.';
+            priceHistoryEmptyState.classList.add('hidden');
+        }
+    };
+
+    const populatePriceHistoryFilterSelect = (selectElement, items, defaultLabel, filterKey) => {
+        if (!selectElement || !filterKey) return;
+        const previousValue = priceHistoryFilters[filterKey] || 'all';
+        selectElement.innerHTML = '';
+
+        const defaultOption = document.createElement('option');
+        defaultOption.value = 'all';
+        defaultOption.textContent = defaultLabel;
+        selectElement.appendChild(defaultOption);
+
+        items.forEach((item) => {
+            const option = document.createElement('option');
+            option.value = item.value;
+            option.textContent = item.label;
+            selectElement.appendChild(option);
+        });
+
+        const availableValues = items.map((item) => item.value);
+        const nextValue = availableValues.includes(previousValue) ? previousValue : 'all';
+        selectElement.value = nextValue;
+        priceHistoryFilters[filterKey] = nextValue;
+    };
+
+    const populatePriceHistoryFiltersFromEntries = () => {
+        if (!Array.isArray(priceHistoryEntries) || priceHistoryEntries.length === 0) {
+            populatePriceHistoryFilterSelect(priceHistoryFieldFilter, [], 'Todos', 'campo');
+            populatePriceHistoryFilterSelect(priceHistoryScreenFilter, [], 'Todas', 'tela');
+            populatePriceHistoryFilterSelect(priceHistoryAuthorFilter, [], 'Todos', 'autor');
+            return;
+        }
+
+        const uniqueFieldsMap = new Map();
+        priceHistoryEntries.forEach((entry) => {
+            const key = (entry?.campoChave || entry?.campo || '').trim();
+            if (!key) return;
+            const label = (entry?.campo || key).trim();
+            if (!uniqueFieldsMap.has(key)) {
+                uniqueFieldsMap.set(key, label);
+            }
+        });
+        const fieldOptions = Array.from(uniqueFieldsMap.entries())
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+        populatePriceHistoryFilterSelect(priceHistoryFieldFilter, fieldOptions, 'Todos', 'campo');
+
+        const screenOptions = Array.from(
+            new Set(
+                priceHistoryEntries
+                    .map((entry) => (typeof entry?.tela === 'string' ? entry.tela.trim() : ''))
+                    .filter(Boolean),
+            ),
+        )
+            .map((value) => ({ value, label: value }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+        populatePriceHistoryFilterSelect(priceHistoryScreenFilter, screenOptions, 'Todas', 'tela');
+
+        const authorOptions = Array.from(
+            new Set(
+                priceHistoryEntries
+                    .map((entry) => getPriceHistoryAuthor(entry))
+                    .filter(Boolean),
+            ),
+        )
+            .map((value) => ({ value, label: value }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+        populatePriceHistoryFilterSelect(priceHistoryAuthorFilter, authorOptions, 'Todos', 'autor');
+    };
+
+    const renderPriceHistoryTable = () => {
+        if (!priceHistoryTableBody) return;
+        if (priceHistoryLoading) {
+            priceHistoryTableBody.innerHTML = '';
+            return;
+        }
+
+        const searchTerm = normalizeSearchText(priceHistoryFilters.search);
+        const filteredEntries = priceHistoryEntries
+            .map((entry, index) => ({ entry, index }))
+            .filter(({ entry }) => {
+                const fieldKey = (entry?.campoChave || entry?.campo || '').trim();
+                if (priceHistoryFilters.campo !== 'all' && fieldKey !== priceHistoryFilters.campo) {
+                    return false;
+                }
+                const screenValue = typeof entry?.tela === 'string' ? entry.tela.trim() : '';
+            if (priceHistoryFilters.tela !== 'all' && screenValue !== priceHistoryFilters.tela) {
+                return false;
+            }
+            const authorValue = getPriceHistoryAuthor(entry);
+            if (priceHistoryFilters.autor !== 'all' && authorValue !== priceHistoryFilters.autor) {
+                return false;
+            }
+            if (searchTerm) {
+                const haystack = normalizeSearchText([
+                    entry?.cod || '',
+                    entry?.descricao || '',
+                    entry?.campo || '',
+                    screenValue,
+                    authorValue,
+                ].join(' '));
+                if (!haystack.includes(searchTerm)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        const derivedRows = filteredEntries.map(({ entry, index }) => buildPriceHistoryRowData(entry, index));
+        const columnFilteredRows = applyPriceHistoryColumnFilters(derivedRows);
+        const sortedRows = applyPriceHistorySort(columnFilteredRows);
+
+        updatePriceHistorySortButtons();
+
+        if (sortedRows.length === 0) {
+            const hasEntries = priceHistoryEntries.length > 0;
+            const emptyMessage = hasEntries
+                ? 'Nenhum registro encontrado para os filtros selecionados.'
+                : priceHistoryDefaultEmptyMessage;
+            updatePriceHistoryEmptyState(emptyMessage, true);
+            priceHistoryTableBody.innerHTML = '';
+            return;
+        }
+
+        updatePriceHistoryEmptyState('', false);
+        updatePriceHistoryErrorState('', false);
+
+        const rowsHtml = sortedRows.map((row) => {
+            const displays = row?.displays || {};
+            return `
+                <tr>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(displays.cod || '-')}</td>
+                    <td class="px-3 py-2 align-top text-gray-700">${escapeHtml(displays.descricao || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(displays.dataAlteracao || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(displays.tela || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-gray-700">${escapeHtml(displays.autor || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-right font-semibold text-gray-700">${escapeHtml(displays.valorAnterior || '-')}</td>
+                    <td class="whitespace-nowrap px-3 py-2 align-top text-right font-semibold text-gray-700">${escapeHtml(displays.valorNovo || '-')}</td>
+                    <td class="px-3 py-2 align-top text-gray-700">${escapeHtml(displays.campo || '-')}</td>
+                </tr>
+            `;
+        }).join('');
+
+        priceHistoryTableBody.innerHTML = rowsHtml;
+    };
+
+    const fetchPriceHistoryEntries = async () => {
+        if (!priceHistoryModal) return;
+        if (!isEditMode || !productId) {
+            setPriceHistoryLoadingState(false);
+            priceHistoryEntries = [];
+            if (priceHistoryTableBody) {
+                priceHistoryTableBody.innerHTML = '';
+            }
+            updatePriceHistoryErrorState('', false);
+            updatePriceHistoryEmptyState('Salve o produto para visualizar o histórico de preços.', true);
+            return;
+        }
+
+        updatePriceHistoryErrorState('', false);
+        updatePriceHistoryEmptyState('', false);
+        setPriceHistoryLoadingState(true);
+        if (priceHistoryTableBody) {
+            priceHistoryTableBody.innerHTML = '';
+        }
+
+        const token = getAuthToken();
+        if (!token) {
+            setPriceHistoryLoadingState(false);
+            updatePriceHistoryErrorState('Sessão expirada. Faça login novamente para consultar o histórico.', true);
+            updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, false);
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}/price-history`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Falha ao carregar o histórico de preços.');
+            }
+
+            const payload = await response.json();
+            const items = Array.isArray(payload?.items)
+                ? payload.items
+                : Array.isArray(payload)
+                    ? payload
+                    : [];
+
+            priceHistoryEntries = items.map((entry) => ({ ...entry }));
+            populatePriceHistoryFiltersFromEntries();
+            renderPriceHistoryTable();
+
+            if (priceHistoryEntries.length === 0) {
+                updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, true);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar histórico de preços do produto.', error);
+            priceHistoryEntries = [];
+            updatePriceHistoryErrorState(error?.message || 'Não foi possível carregar o histórico de preços. Tente novamente.', true);
+            updatePriceHistoryEmptyState(priceHistoryDefaultEmptyMessage, false);
+        } finally {
+            setPriceHistoryLoadingState(false);
+        }
+    };
+
+    const openPriceHistoryModal = async () => {
+        if (!priceHistoryModal) return;
+        priceHistoryModal.classList.remove('hidden');
+        priceHistoryModal.dataset.modalOpen = 'true';
+        priceHistoryModal.setAttribute('aria-hidden', 'false');
+
+        const currentProductIdentifier = productId ? String(productId) : null;
+        if (currentProductIdentifier !== lastPriceHistoryProductId) {
+            resetPriceHistoryState(productId);
+        }
+
+        await fetchPriceHistoryEntries();
+    };
+
+    const closePriceHistoryModal = () => {
+        if (!priceHistoryModal) return;
+        priceHistoryModal.classList.add('hidden');
+        priceHistoryModal.dataset.modalOpen = 'false';
+        priceHistoryModal.setAttribute('aria-hidden', 'true');
     };
 
     const formatDocument = (value) => {
@@ -1342,6 +2137,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         unidade: currentUnit,
                     });
                     updateDepositTotalDisplay();
+                    markProductAsModified();
                 });
             }
 
@@ -1353,6 +2149,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         quantidade: current.quantidade,
                         unidade: event.target.value.trim(),
                     });
+                    markProductAsModified();
                 });
             }
 
@@ -1451,6 +2248,7 @@ document.addEventListener('DOMContentLoaded', () => {
             removeBtn.addEventListener('click', () => {
                 supplierEntries.splice(index, 1);
                 renderSupplierEntries();
+                markProductAsModified();
             });
 
             title.appendChild(infoContainer);
@@ -1636,13 +2434,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const dataCadastroInput = form.querySelector('#data-cadastro');
         if (dataCadastroInput) {
-            const rawDate = draft.nfe?.emissionDate || '';
-            if (rawDate) {
-                const parsedDate = new Date(rawDate);
-                if (!Number.isNaN(parsedDate.getTime())) {
-                    dataCadastroInput.value = parsedDate.toISOString().split('T')[0];
-                }
+            const normalizedDate = normalizeDateToInputValue(draft.nfe?.emissionDate || '');
+            if (normalizedDate) {
+                dataCadastroInput.value = normalizedDate;
             }
+        }
+
+        const dataVigenciaInput = form.querySelector('#data-vigencia');
+        if (dataVigenciaInput) {
+            dataVigenciaInput.value = getTodayDateString();
         }
 
         if (fiscalInputs.cfop?.nfe?.interno) {
@@ -1741,6 +2541,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (barcodeInput) barcodeInput.value = '';
         if (detailedDescriptionInput) detailedDescriptionInput.value = '';
         if (imageUploadInput) imageUploadInput.value = '';
+        const promoPriceInput = form?.querySelector('#promo-preco');
+        if (promoPriceInput) {
+            promoPriceInput.value = '';
+        }
 
         productCategories = [];
         renderCategoryTags([]);
@@ -1777,8 +2581,13 @@ document.addEventListener('DOMContentLoaded', () => {
             hideOnSiteCheckbox.checked = true;
         }
 
+        if (vigenciaInput) {
+            vigenciaInput.value = getTodayDateString();
+        }
+
         updateMarkupFromValues();
         setSubmitButtonIdleText();
+        resetPriceHistoryState(null);
     };
 
     const fetchProductSummaryByIdentifier = async (identifierType, identifierValue) => {
@@ -1888,6 +2697,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn('Não foi possível registrar o produto atual na URL.', error);
             }
         }
+        resetPriceHistoryState(productId);
         pageTitle.textContent = `Editar Produto: ${product.nome}`;
         if (pageDescription) {
             pageDescription.textContent = 'Altere os dados do produto abaixo.';
@@ -1911,21 +2721,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const dataCadastroInput = form.querySelector('#data-cadastro');
         if (dataCadastroInput) {
-            const rawDate = product.dataCadastro || product.createdAt || '';
-            if (rawDate) {
-                const rawDateStr = String(rawDate);
-                const [datePart] = rawDateStr.split('T');
-                if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-                    dataCadastroInput.value = datePart;
-                } else {
-                    const parsedDate = new Date(rawDateStr);
-                    dataCadastroInput.value = Number.isNaN(parsedDate.getTime())
-                        ? ''
-                        : parsedDate.toISOString().split('T')[0];
-                }
-            } else {
-                dataCadastroInput.value = '';
-            }
+            const normalizedDate = normalizeDateToInputValue(product.dataCadastro || product.createdAt || '');
+            dataCadastroInput.value = normalizedDate;
+        }
+        const dataVigenciaInput = form.querySelector('#data-vigencia');
+        if (dataVigenciaInput) {
+            const normalizedVigencia = normalizeDateToInputValue(
+                product.dataVigencia
+                || product.vigencia
+                || product.dataAtualizacao
+                || product.updatedAt
+                || ''
+            );
+            dataVigenciaInput.value = normalizedVigencia || getTodayDateString();
         }
         const pesoInput = form.querySelector('#peso');
         if (pesoInput) {
@@ -1981,8 +2789,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const custoNumber = Number(product.custo);
         const vendaNumber = Number(product.venda);
+        const promoPriceInput = form.querySelector('#promo-preco');
+        const promoPriceNumber = Number(product.precoClube);
         form.querySelector('#custo').value = Number.isFinite(custoNumber) ? custoNumber.toFixed(2) : '';
         form.querySelector('#venda').value = Number.isFinite(vendaNumber) ? vendaNumber.toFixed(2) : '';
+        if (promoPriceInput) {
+            promoPriceInput.value = Number.isFinite(promoPriceNumber) ? promoPriceNumber.toFixed(2) : '';
+        }
         if (markupInput) {
             const cost = parseFloat(costInput?.value || '0');
             const sale = parseFloat(saleInput?.value || '0');
@@ -2210,6 +3023,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         renderSupplierEntries();
         resetSupplierForm();
+        markProductAsModified();
     };
 
     supplierNameInput?.addEventListener('input', handleSupplierInputEvent);
@@ -2260,6 +3074,48 @@ document.addEventListener('DOMContentLoaded', () => {
         hideSupplierSuggestions();
     });
 
+    priceHistorySearchInput?.addEventListener('input', () => {
+        priceHistoryFilters.search = priceHistorySearchInput.value || '';
+        renderPriceHistoryTable();
+    });
+
+    priceHistoryFieldFilter?.addEventListener('change', () => {
+        priceHistoryFilters.campo = priceHistoryFieldFilter.value || 'all';
+        renderPriceHistoryTable();
+    });
+
+    priceHistoryScreenFilter?.addEventListener('change', () => {
+        priceHistoryFilters.tela = priceHistoryScreenFilter.value || 'all';
+        renderPriceHistoryTable();
+    });
+
+    priceHistoryAuthorFilter?.addEventListener('change', () => {
+        priceHistoryFilters.autor = priceHistoryAuthorFilter.value || 'all';
+        renderPriceHistoryTable();
+    });
+
+    priceHistoryButton?.addEventListener('click', () => {
+        openPriceHistoryModal();
+    });
+
+    priceHistoryModalCloseButtons.forEach((button) => {
+        button.addEventListener('click', () => closePriceHistoryModal());
+    });
+
+    priceHistoryModal?.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target === priceHistoryModal || target.hasAttribute('data-close-price-history-modal')) {
+            closePriceHistoryModal();
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && priceHistoryModal && !priceHistoryModal.classList.contains('hidden')) {
+            closePriceHistoryModal();
+        }
+    });
+
     addSupplierBtn?.addEventListener('click', handleAddSupplier);
 
     skuInput?.addEventListener('blur', handleDuplicateIdentifier('cod'));
@@ -2292,6 +3148,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         lastSelectedProductUnit = newUnit;
         renderDepositStockRows();
+        markProductAsModified();
     });
 
     const handleSaveCategories = () => {
@@ -2306,6 +3163,7 @@ document.addEventListener('DOMContentLoaded', () => {
             form.querySelector('#marca').value = brandName;
         }
 
+        markProductAsModified();
         categoryModal.classList.add('hidden');
     };
 
@@ -2436,16 +3294,42 @@ document.addEventListener('DOMContentLoaded', () => {
     saveCategoryModalBtn.addEventListener('click', handleSaveCategories);
     deleteProductButton?.addEventListener('click', handleDeleteProduct);
 
+    if (form && vigenciaInput) {
+        const handleFormMutation = (event) => {
+            const target = event?.target;
+            if (!target) return;
+            if (
+                target instanceof HTMLInputElement
+                || target instanceof HTMLSelectElement
+                || target instanceof HTMLTextAreaElement
+            ) {
+                if (target instanceof HTMLInputElement && target.type === 'file') {
+                    updateVigenciaDateToToday();
+                    return;
+                }
+                markProductAsModified();
+            }
+        };
+
+        form.addEventListener('input', handleFormMutation, true);
+        form.addEventListener('change', handleFormMutation, true);
+    }
+
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (!submitButton) return;
+
+        if (autoSaveTimeoutId) {
+            clearTimeout(autoSaveTimeoutId);
+            autoSaveTimeoutId = null;
+        }
+        pendingAutoSave = false;
 
         submitButton.disabled = true;
         const loadingText = isEditMode ? 'Salvando...' : 'Cadastrando...';
         submitButton.innerHTML = `<i class="fas fa-spinner fa-spin"></i><span>${loadingText}</span>`;
 
-        const formData = new FormData(form);
-        const productName = (formData.get('nome') || '').trim();
+        const { productName, updateData } = buildProductUpdatePayload();
         if (!productName) {
             showModal({
                 title: 'Dados obrigatórios',
@@ -2456,84 +3340,16 @@ document.addEventListener('DOMContentLoaded', () => {
             setSubmitButtonIdleText();
             return;
         }
-        const additionalBarcodesRaw = (formData.get('barcode-additional') || '')
-            .split('\n')
-            .map((code) => code.trim())
-            .filter(Boolean);
-
-        const depositPayload = [];
-        depositStockMap.forEach((entry, depositId) => {
-            if (!depositId) return;
-            const unidade = (entry?.unidade || '').trim();
-            const quantidadeValue = entry?.quantidade;
-            const hasQuantity = quantidadeValue !== null && quantidadeValue !== undefined && quantidadeValue !== '';
-            if (!hasQuantity && !unidade) return;
-            const parsedQuantity = Number(quantidadeValue);
-            depositPayload.push({
-                deposito: depositId,
-                quantidade: Number.isFinite(parsedQuantity) ? parsedQuantity : 0,
-                unidade,
+        if (!updateData) {
+            showModal({
+                title: 'Erro',
+                message: 'Não foi possível coletar os dados do produto para salvar. Tente novamente.',
+                confirmText: 'Ok'
             });
-        });
-
-        const totalStock = depositPayload.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
-
-        persistActiveFiscalData();
-        const generalFiscal = cloneFiscalObject(fiscalByCompany.get(FISCAL_GENERAL_KEY) || collectFiscalData());
-        const fiscalPerCompanyPayload = {};
-        fiscalByCompany.forEach((value, key) => {
-            if (key === FISCAL_GENERAL_KEY) return;
-            fiscalPerCompanyPayload[key] = cloneFiscalObject(value);
-        });
-
-        const updateData = {
-            nome: productName,
-            cod: (formData.get('cod') || '').trim(),
-            codbarras: (formData.get('codbarras') || '').trim(),
-            descricao: detailedDescriptionInput ? detailedDescriptionInput.value : formData.get('descricao'),
-            marca: formData.get('marca'),
-            unidade: formData.get('unidade'),
-            referencia: formData.get('referencia'),
-            custo: formData.get('custo'),
-            venda: formData.get('venda'),
-            categorias: productCategories,
-            fornecedores: supplierEntries.map((item) => ({
-                fornecedor: item.fornecedor,
-                documentoFornecedor: item.documentoFornecedor || null,
-                nomeProdutoFornecedor: item.nomeProdutoFornecedor || null,
-                codigoProduto: item.codigoProduto || null,
-                unidadeEntrada: item.unidadeEntrada || null,
-                tipoCalculo: item.tipoCalculo || null,
-                valorCalculo: item.valorCalculo,
-            })),
-            especificacoes: {
-                idade: Array.from(form.querySelectorAll('input[name="spec-idade"]:checked')).map(i => i.value),
-                pet: Array.from(form.querySelectorAll('input[name="spec-pet"]:checked')).map(i => i.value),
-                porteRaca: Array.from(form.querySelectorAll('input[name="spec-porte"]:checked')).map(i => i.value),
-                apresentacao: (document.getElementById('spec-apresentacao')?.value || '').trim()
-            },
-            codigosComplementares: additionalBarcodesRaw,
-            estoques: depositPayload,
-            stock: totalStock,
-            fiscal: generalFiscal,
-            fiscalPorEmpresa: fiscalPerCompanyPayload,
-            naoMostrarNoSite: Boolean(hideOnSiteCheckbox?.checked),
-            inativo: Boolean(inactiveCheckbox?.checked),
-        };
-
-        const dataCadastroValue = formData.get('data-cadastro');
-        const pesoValue = formData.get('peso');
-        const iatValue = formData.get('iat');
-        const tipoProdutoValue = formData.get('tipo-produto');
-        const ncmValue = formData.get('ncm');
-
-        updateData.dataCadastro = dataCadastroValue ? dataCadastroValue : null;
-        const parsedPeso = pesoValue ? Number(pesoValue) : null;
-        updateData.peso = Number.isFinite(parsedPeso) ? parsedPeso : null;
-        updateData.iat = iatValue || null;
-        updateData.tipoProduto = tipoProdutoValue || null;
-        updateData.ncm = ncmValue ? ncmValue.trim() : null;
-
+            submitButton.disabled = false;
+            setSubmitButtonIdleText();
+            return;
+        }
         let responseJson = null;
         let createdProductId = null;
 
