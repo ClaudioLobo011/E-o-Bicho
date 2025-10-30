@@ -1142,10 +1142,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (priceHistoryAuthorFilter) priceHistoryAuthorFilter.value = 'all';
     };
 
-    const resetPriceHistoryState = (productIdentifier = null, { preserveUserState = false } = {}) => {
+    const resetPriceHistoryState = (
+        productIdentifier = null,
+        { preserveUserState = false, forceResetFilters = false } = {},
+    ) => {
         const previousProductId = lastPriceHistoryProductId;
         const nextProductId = productIdentifier ? String(productIdentifier) : null;
-        const shouldPreserveUserState = preserveUserState && previousProductId === nextProductId;
+        const isSameProduct = previousProductId === nextProductId;
+        const shouldPreserveUserState = preserveUserState && isSameProduct && !forceResetFilters;
 
         priceHistoryEntries = [];
         lastPriceHistoryProductId = nextProductId;
@@ -1389,10 +1393,7 @@ document.addEventListener('DOMContentLoaded', () => {
         priceHistoryModal.dataset.modalOpen = 'true';
         priceHistoryModal.setAttribute('aria-hidden', 'false');
 
-        const currentProductIdentifier = productId ? String(productId) : null;
-        if (currentProductIdentifier !== lastPriceHistoryProductId) {
-            resetPriceHistoryState(productId);
-        }
+        resetPriceHistoryState(productId, { forceResetFilters: true });
 
         await fetchPriceHistoryEntries();
     };
