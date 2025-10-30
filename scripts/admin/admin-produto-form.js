@@ -1142,25 +1142,38 @@ document.addEventListener('DOMContentLoaded', () => {
         if (priceHistoryAuthorFilter) priceHistoryAuthorFilter.value = 'all';
     };
 
-    const resetPriceHistoryState = (productIdentifier = null) => {
+    const resetPriceHistoryState = (
+        productIdentifier = null,
+        { preserveUserState = false, forceResetFilters = false } = {},
+    ) => {
+        const previousProductId = lastPriceHistoryProductId;
+        const nextProductId = productIdentifier ? String(productIdentifier) : null;
+        const isSameProduct = previousProductId === nextProductId;
+        const shouldPreserveUserState = preserveUserState && isSameProduct && !forceResetFilters;
+
         priceHistoryEntries = [];
-        lastPriceHistoryProductId = productIdentifier ? String(productIdentifier) : null;
-        resetPriceHistoryFilters();
-        priceHistoryColumnFilterInputs.forEach((input, key) => {
-            if (input) {
-                input.value = '';
-            }
-            priceHistoryTableState.columnFilters[key] = '';
-        });
-        priceHistoryTableState.sort = { ...PRICE_HISTORY_DEFAULT_SORT };
+        lastPriceHistoryProductId = nextProductId;
+
+        if (!shouldPreserveUserState) {
+            resetPriceHistoryFilters();
+            priceHistoryColumnFilterInputs.forEach((input, key) => {
+                if (input) {
+                    input.value = '';
+                }
+                priceHistoryTableState.columnFilters[key] = '';
+            });
+            priceHistoryTableState.sort = { ...PRICE_HISTORY_DEFAULT_SORT };
+        }
+
         updatePriceHistorySortButtons();
+
         if (priceHistoryTableBody) {
             priceHistoryTableBody.innerHTML = '';
         }
         setPriceHistoryLoadingState(false);
         updatePriceHistoryErrorState('', false);
         if (priceHistoryEmptyState) {
-            priceHistoryEmptyState.textContent = productIdentifier
+            priceHistoryEmptyState.textContent = nextProductId
                 ? priceHistoryDefaultEmptyMessage
                 : 'Salve o produto para visualizar o histórico de preços.';
             priceHistoryEmptyState.classList.add('hidden');
@@ -1380,10 +1393,7 @@ document.addEventListener('DOMContentLoaded', () => {
         priceHistoryModal.dataset.modalOpen = 'true';
         priceHistoryModal.setAttribute('aria-hidden', 'false');
 
-        const currentProductIdentifier = productId ? String(productId) : null;
-        if (currentProductIdentifier !== lastPriceHistoryProductId) {
-            resetPriceHistoryState(productId);
-        }
+        resetPriceHistoryState(productId, { forceResetFilters: true });
 
         await fetchPriceHistoryEntries();
     };
@@ -2588,6 +2598,9 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMarkupFromValues();
         setSubmitButtonIdleText();
         resetPriceHistoryState(null);
+        if (priceHistoryModal?.dataset?.modalOpen === 'true') {
+            fetchPriceHistoryEntries();
+        }
     };
 
     const fetchProductSummaryByIdentifier = async (identifierType, identifierValue) => {
@@ -2697,7 +2710,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn('Não foi possível registrar o produto atual na URL.', error);
             }
         }
-        resetPriceHistoryState(productId);
+        resetPriceHistoryState(productId, { preserveUserState: true });
+        if (priceHistoryModal?.dataset?.modalOpen === 'true') {
+            fetchPriceHistoryEntries();
+        }
         pageTitle.textContent = `Editar Produto: ${product.nome}`;
         if (pageDescription) {
             pageDescription.textContent = 'Altere os dados do produto abaixo.';
