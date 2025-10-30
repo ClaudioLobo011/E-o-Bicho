@@ -1142,25 +1142,34 @@ document.addEventListener('DOMContentLoaded', () => {
         if (priceHistoryAuthorFilter) priceHistoryAuthorFilter.value = 'all';
     };
 
-    const resetPriceHistoryState = (productIdentifier = null) => {
+    const resetPriceHistoryState = (productIdentifier = null, { preserveUserState = false } = {}) => {
+        const previousProductId = lastPriceHistoryProductId;
+        const nextProductId = productIdentifier ? String(productIdentifier) : null;
+        const shouldPreserveUserState = preserveUserState && previousProductId === nextProductId;
+
         priceHistoryEntries = [];
-        lastPriceHistoryProductId = productIdentifier ? String(productIdentifier) : null;
-        resetPriceHistoryFilters();
-        priceHistoryColumnFilterInputs.forEach((input, key) => {
-            if (input) {
-                input.value = '';
-            }
-            priceHistoryTableState.columnFilters[key] = '';
-        });
-        priceHistoryTableState.sort = { ...PRICE_HISTORY_DEFAULT_SORT };
+        lastPriceHistoryProductId = nextProductId;
+
+        if (!shouldPreserveUserState) {
+            resetPriceHistoryFilters();
+            priceHistoryColumnFilterInputs.forEach((input, key) => {
+                if (input) {
+                    input.value = '';
+                }
+                priceHistoryTableState.columnFilters[key] = '';
+            });
+            priceHistoryTableState.sort = { ...PRICE_HISTORY_DEFAULT_SORT };
+        }
+
         updatePriceHistorySortButtons();
+
         if (priceHistoryTableBody) {
             priceHistoryTableBody.innerHTML = '';
         }
         setPriceHistoryLoadingState(false);
         updatePriceHistoryErrorState('', false);
         if (priceHistoryEmptyState) {
-            priceHistoryEmptyState.textContent = productIdentifier
+            priceHistoryEmptyState.textContent = nextProductId
                 ? priceHistoryDefaultEmptyMessage
                 : 'Salve o produto para visualizar o histórico de preços.';
             priceHistoryEmptyState.classList.add('hidden');
@@ -2700,7 +2709,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn('Não foi possível registrar o produto atual na URL.', error);
             }
         }
-        resetPriceHistoryState(productId);
+        resetPriceHistoryState(productId, { preserveUserState: true });
         if (priceHistoryModal?.dataset?.modalOpen === 'true') {
             fetchPriceHistoryEntries();
         }
