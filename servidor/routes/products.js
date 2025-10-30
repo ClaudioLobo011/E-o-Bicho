@@ -169,6 +169,42 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
                 .filter(Boolean)
             : [];
 
+        const parseFractionEntries = (rawList) => {
+            if (!Array.isArray(rawList)) return [];
+            return rawList
+                .map((item) => {
+                    if (!item || typeof item !== 'object') return null;
+                    const cod = normalizeString(item?.cod);
+                    const codbarras = normalizeString(item?.codbarras);
+                    const descricao = normalizeString(item?.descricao);
+                    const unidade = normalizeString(item?.unidade);
+                    const quantidade = parseNumber(item?.quantidade);
+                    const custo = parseNumber(item?.custo);
+                    const markup = parseNumber(item?.markup);
+                    const venda = parseNumber(item?.venda);
+                    const estoque = parseNumber(item?.estoque);
+                    const produto = item?.produto || item?.produtoId || item?.productId || null;
+                    if (!produto && !cod && !codbarras && !descricao) {
+                        return null;
+                    }
+                    return {
+                        produto,
+                        cod,
+                        codbarras,
+                        descricao,
+                        quantidade,
+                        unidade,
+                        custo,
+                        markup,
+                        venda,
+                        estoque,
+                    };
+                })
+                .filter(Boolean);
+        };
+
+        const fracionamentos = parseFractionEntries(payload.fracionamentos);
+
         const costNumber = parseNumber(payload.custo);
         const saleNumber = parseNumber(payload.venda);
         const stockNumber = parseNumber(payload.stock);
@@ -189,6 +225,7 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
                 : {},
             fornecedores,
             estoques,
+            fracionamentos,
             stock: estoques.length > 0
                 ? estoques.reduce((sum, entry) => sum + (Number(entry.quantidade) || 0), 0)
                 : Number.isFinite(stockNumber) && stockNumber >= 0
@@ -740,6 +777,58 @@ router.get('/:id', async (req, res) => {
 // PUT /api/products/:id (restrito)
 const fiscalStatusAllowed = new Set(['pendente', 'parcial', 'aprovado']);
 
+const DEFAULT_PRICE_HISTORY_SCREEN = 'Cadastro de Produto';
+const PRICE_HISTORY_SCREEN_MAPPINGS = [
+    { pattern: /admin-compras-fornecedor-entrada-nfe/i, label: 'Entrada de NF-e' },
+    { pattern: /admin-produtos/i, label: 'Cadastro de Produto' },
+];
+
+const sanitizeScreenLabelValue = (value) => {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const normalizedWhitespace = trimmed.replace(/\s+/g, ' ');
+    const withoutTags = normalizedWhitespace.replace(/[<>]/g, '');
+    const withoutControlChars = withoutTags.replace(/[\r\n\t]/g, '');
+    return withoutControlChars.slice(0, 120);
+};
+
+const resolvePriceHistoryScreen = (req, explicitScreen) => {
+    const explicit = sanitizeScreenLabelValue(explicitScreen);
+    if (explicit) return explicit;
+
+    const headerCandidate = sanitizeScreenLabelValue(
+        req.get('x-price-history-screen')
+        || req.get('x-app-screen-name')
+        || ''
+    );
+    if (headerCandidate) return headerCandidate;
+
+    const refererRaw = req.get('referer') || req.get('referrer') || '';
+    if (typeof refererRaw === 'string' && refererRaw.trim()) {
+        const refererCandidates = [refererRaw.trim()];
+        try {
+            const parsed = new URL(refererRaw);
+            if (parsed.pathname) {
+                refererCandidates.push(parsed.pathname);
+            }
+        } catch (error) {
+            // Ignora erros de parsing do referer
+        }
+
+        for (const candidate of refererCandidates) {
+            const normalized = candidate.toLowerCase();
+            for (const mapping of PRICE_HISTORY_SCREEN_MAPPINGS) {
+                if (mapping.pattern.test(normalized)) {
+                    return mapping.label;
+                }
+            }
+        }
+    }
+
+    return DEFAULT_PRICE_HISTORY_SCREEN;
+};
+
 const sanitizeFiscalString = (value, fallback = '') => {
     if (typeof value === 'string') return value.trim();
     if (typeof value === 'number') return String(value);
@@ -807,6 +896,7 @@ const sanitizeFiscalData = (rawFiscal = {}, existingFiscal = {}, updatedBy = '')
 router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
         const payload = req.body || {};
+        const priceHistoryScreen = resolvePriceHistoryScreen(req, payload?.priceHistoryScreen);
 
         const existingProduct = await Product.findById(req.params.id);
         if (!existingProduct) {
@@ -876,6 +966,42 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
                 .filter(Boolean)
             : [];
 
+        const parseFractionEntries = (rawList) => {
+            if (!Array.isArray(rawList)) return [];
+            return rawList
+                .map((item) => {
+                    if (!item || typeof item !== 'object') return null;
+                    const cod = normalizeString(item?.cod);
+                    const codbarras = normalizeString(item?.codbarras);
+                    const descricao = normalizeString(item?.descricao);
+                    const unidade = normalizeString(item?.unidade);
+                    const quantidade = parseNumber(item?.quantidade);
+                    const custo = parseNumber(item?.custo);
+                    const markup = parseNumber(item?.markup);
+                    const venda = parseNumber(item?.venda);
+                    const estoque = parseNumber(item?.estoque);
+                    const produto = item?.produto || item?.produtoId || item?.productId || null;
+                    if (!produto && !cod && !codbarras && !descricao) {
+                        return null;
+                    }
+                    return {
+                        produto,
+                        cod,
+                        codbarras,
+                        descricao,
+                        quantidade,
+                        unidade,
+                        custo,
+                        markup,
+                        venda,
+                        estoque,
+                    };
+                })
+                .filter(Boolean);
+        };
+
+        const fracionamentos = parseFractionEntries(payload.fracionamentos);
+
         const updatePayload = {};
 
         if (payload.nome !== undefined) {
@@ -912,6 +1038,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
 
         updatePayload.fornecedores = fornecedores;
         updatePayload.estoques = estoques;
+        updatePayload.fracionamentos = fracionamentos;
 
         if (estoques.length > 0) {
             const totalStock = estoques.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
@@ -995,7 +1122,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
                 campoChave: change.campoChave,
                 valorAnterior: change.valorAnterior,
                 valorNovo: change.valorNovo,
-                tela: 'Cadastro de Produto',
+                tela: priceHistoryScreen || DEFAULT_PRICE_HISTORY_SCREEN,
                 autorId: priceHistoryAuthor.autorId,
                 autorNome: priceHistoryAuthor.autorNome,
                 autorEmail: priceHistoryAuthor.autorEmail,

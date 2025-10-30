@@ -57,6 +57,19 @@ const fiscalSchema = new mongoose.Schema({
     atualizadoPor: { type: String, trim: true, default: '' },
 }, { _id: false });
 
+const fractionItemSchema = new mongoose.Schema({
+    produto: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', default: null },
+    cod: { type: String, trim: true, default: '' },
+    codbarras: { type: String, trim: true, default: '' },
+    descricao: { type: String, trim: true, default: '' },
+    quantidade: { type: Number, default: null },
+    unidade: { type: String, trim: true, default: '' },
+    custo: { type: Number, default: null },
+    markup: { type: Number, default: null },
+    venda: { type: Number, default: null },
+    estoque: { type: Number, default: null },
+}, { _id: false });
+
 const productSchema = new mongoose.Schema({
     cod: { type: String, required: true, unique: true },
     codbarras: { type: String, required: true, unique: true },
@@ -107,6 +120,10 @@ const productSchema = new mongoose.Schema({
             valorCalculo: { type: Number, default: null }
         }],
         default: []
+    },
+    fracionamentos: {
+        type: [fractionItemSchema],
+        default: [],
     },
     dataCadastro: { type: Date, default: null },
     dataVigencia: { type: Date, default: null },

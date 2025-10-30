@@ -54,6 +54,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const priceHistoryColumnFilterInputs = new Map();
     const priceHistorySortButtonsMeta = new Map();
     const priceHistorySortHeaders = new Map();
+    const fractionProductCodeInput = document.getElementById('fraction-product-code');
+    const fractionSearchButton = document.getElementById('fraction-search-button');
+    const fractionDescriptionInput = document.getElementById('fraction-description');
+    const fractionBarcodeInput = document.getElementById('fraction-barcode');
+    const fractionQuantityInput = document.getElementById('fraction-quantity');
+    const fractionUnitInput = document.getElementById('fraction-unit');
+    const fractionCostInput = document.getElementById('fraction-cost');
+    const fractionMarkupInput = document.getElementById('fraction-markup');
+    const fractionSaleInput = document.getElementById('fraction-sale');
+    const fractionAddButton = document.getElementById('fraction-add-button');
+    const fractionTableBody = document.getElementById('fraction-table-body');
+    const fractionEmptyState = document.getElementById('fraction-empty-state');
+    const fractionSearchModal = document.getElementById('fraction-search-modal');
+    const fractionSearchCloseButtons = Array.from(document.querySelectorAll('[data-close-fraction-search]'));
+    const fractionSearchInput = document.getElementById('fraction-search-input');
+    const fractionSearchResults = document.getElementById('fraction-search-results');
+    const fractionSearchLoading = document.getElementById('fraction-search-loading');
+    const fractionSearchEmpty = document.getElementById('fraction-search-empty');
+    const PRICE_HISTORY_SCREEN_HEADER = 'X-Price-History-Screen';
+    const PRICE_HISTORY_SCREEN_NAME = 'Cadastro de Produto';
     const PRICE_HISTORY_DEFAULT_SORT = { key: 'dataAlteracao', direction: 'desc' };
     const priceHistoryTableState = {
         columnFilters: {},
@@ -572,6 +592,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let imageOrderStatusTimeoutId = null;
     let priceHistoryEntries = [];
     let lastPriceHistoryProductId = null;
+    let fractionEntries = [];
+    let fractionCandidateProduct = null;
+    let lastFractionLookupValue = '';
+    let fractionSearchDebounceId = null;
+    const fractionSearchResultsMap = new Map();
+    let isUpdatingFractionFromMarkup = false;
+    let isUpdatingFractionFromSale = false;
     const priceHistoryFilters = {
         search: '',
         campo: 'all',
@@ -739,6 +766,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 tipoCalculo: item.tipoCalculo || null,
                 valorCalculo: item.valorCalculo,
             })),
+            fracionamentos: fractionEntries.map((item) => ({
+                produto: item.produto || null,
+                cod: item.cod || '',
+                codbarras: item.codbarras || '',
+                descricao: item.descricao || '',
+                quantidade: Number.isFinite(Number(item.quantidade)) ? Number(item.quantidade) : null,
+                unidade: item.unidade || '',
+                custo: Number.isFinite(Number(item.custo)) ? Number(item.custo) : null,
+                markup: Number.isFinite(Number(item.markup)) ? Number(item.markup) : null,
+                venda: Number.isFinite(Number(item.venda)) ? Number(item.venda) : null,
+                estoque: Number.isFinite(Number(item.estoque)) ? Number(item.estoque) : null,
+            })),
             especificacoes: {
                 idade: Array.from(form.querySelectorAll('input[name="spec-idade"]:checked')).map(i => i.value),
                 pet: Array.from(form.querySelectorAll('input[name="spec-pet"]:checked')).map(i => i.value),
@@ -780,7 +819,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    [PRICE_HISTORY_SCREEN_HEADER]: PRICE_HISTORY_SCREEN_NAME,
                 },
                 body: JSON.stringify(updateData),
             });
@@ -839,6 +879,353 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    };
+
+    const calculateMarkupPercentage = (cost, sale) => {
+        if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(sale)) return null;
+        const markup = ((sale - cost) / cost) * 100;
+        return Number.isFinite(markup) ? markup : null;
+    };
+
+    const formatFractionPrice = (value) => {
+        if (value === null || value === undefined || value === '') return '—';
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return '—';
+        return numeric.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    };
+
+    const formatFractionQuantityDisplay = (quantity, unit) => {
+        if (!Number.isFinite(quantity)) {
+            return unit ? `${escapeHtml(unit)}` : '—';
+        }
+        const formattedQuantity = quantity.toLocaleString('pt-BR', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 3,
+        });
+        const unitDisplay = unit ? escapeHtml(unit) : '';
+        return unitDisplay ? `${formattedQuantity} ${unitDisplay}` : formattedQuantity;
+    };
+
+    const resetFractionForm = ({ preserveProductCode = false } = {}) => {
+        if (fractionDescriptionInput) fractionDescriptionInput.value = '';
+        if (fractionBarcodeInput) fractionBarcodeInput.value = '';
+        if (fractionQuantityInput) fractionQuantityInput.value = '';
+        if (fractionUnitInput) fractionUnitInput.value = '';
+        if (fractionCostInput) fractionCostInput.value = '';
+        if (fractionMarkupInput) fractionMarkupInput.value = '';
+        if (fractionSaleInput) fractionSaleInput.value = '';
+        if (!preserveProductCode && fractionProductCodeInput) fractionProductCodeInput.value = '';
+        fractionCandidateProduct = null;
+        if (!preserveProductCode) {
+            lastFractionLookupValue = '';
+        }
+    };
+
+    const renderFractionEntries = () => {
+        if (!fractionTableBody) return;
+        fractionTableBody.innerHTML = '';
+
+        if (!Array.isArray(fractionEntries) || fractionEntries.length === 0) {
+            if (fractionEmptyState) fractionEmptyState.classList.remove('hidden');
+            return;
+        }
+
+        if (fractionEmptyState) fractionEmptyState.classList.add('hidden');
+
+        fractionEntries.forEach((entry, index) => {
+            const tr = document.createElement('tr');
+            tr.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+
+            const codCell = document.createElement('td');
+            codCell.className = 'whitespace-nowrap px-4 py-2 text-xs text-gray-700';
+            codCell.innerHTML = escapeHtml(entry.cod || '—');
+
+            const barcodeCell = document.createElement('td');
+            barcodeCell.className = 'whitespace-nowrap px-4 py-2 text-xs text-gray-700';
+            barcodeCell.innerHTML = escapeHtml(entry.codbarras || '—');
+
+            const descriptionCell = document.createElement('td');
+            descriptionCell.className = 'px-4 py-2 text-xs text-gray-700';
+            descriptionCell.innerHTML = escapeHtml(entry.descricao || '—');
+
+            const costCell = document.createElement('td');
+            costCell.className = 'whitespace-nowrap px-4 py-2 text-xs text-gray-700';
+            costCell.textContent = formatFractionPrice(entry.custo);
+
+            const markupCell = document.createElement('td');
+            markupCell.className = 'whitespace-nowrap px-4 py-2 text-xs text-gray-700';
+            markupCell.textContent = formatFractionPrice(entry.markup);
+
+            const saleCell = document.createElement('td');
+            saleCell.className = 'whitespace-nowrap px-4 py-2 text-xs text-gray-700';
+            saleCell.textContent = formatFractionPrice(entry.venda);
+
+            const fractionCell = document.createElement('td');
+            fractionCell.className = 'whitespace-nowrap px-4 py-2 text-xs text-gray-700';
+            fractionCell.innerHTML = formatFractionQuantityDisplay(entry.quantidade, entry.unidade);
+
+            const stockCell = document.createElement('td');
+            stockCell.className = 'whitespace-nowrap px-4 py-2 text-xs text-gray-700';
+            stockCell.textContent = formatFractionPrice(entry.estoque);
+
+            const actionsCell = document.createElement('td');
+            actionsCell.className = 'whitespace-nowrap px-4 py-2 text-right text-xs';
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-[11px] font-semibold text-red-600 transition hover:bg-red-50';
+            removeButton.innerHTML = '<i class="fas fa-trash"></i> Remover';
+            removeButton.addEventListener('click', () => {
+                fractionEntries.splice(index, 1);
+                renderFractionEntries();
+                markProductAsModified();
+            });
+            actionsCell.appendChild(removeButton);
+
+            tr.appendChild(codCell);
+            tr.appendChild(barcodeCell);
+            tr.appendChild(descriptionCell);
+            tr.appendChild(costCell);
+            tr.appendChild(markupCell);
+            tr.appendChild(saleCell);
+            tr.appendChild(fractionCell);
+            tr.appendChild(stockCell);
+            tr.appendChild(actionsCell);
+
+            fractionTableBody.appendChild(tr);
+        });
+    };
+
+    const updateFractionMarkupFromInputs = () => {
+        if (!fractionCostInput || !fractionSaleInput || !fractionMarkupInput || isUpdatingFractionFromMarkup) return;
+        const cost = Number.parseFloat(fractionCostInput.value);
+        const sale = Number.parseFloat(fractionSaleInput.value);
+        const markup = calculateMarkupPercentage(cost, sale);
+        isUpdatingFractionFromSale = true;
+        fractionMarkupInput.value = Number.isFinite(markup) ? markup.toFixed(2) : '';
+        isUpdatingFractionFromSale = false;
+    };
+
+    const updateFractionSaleFromInputs = ({ shouldNormalizeMarkup = true } = {}) => {
+        if (!fractionCostInput || !fractionSaleInput || !fractionMarkupInput || isUpdatingFractionFromSale) return;
+        const cost = Number.parseFloat(fractionCostInput.value);
+        const markup = Number.parseFloat(fractionMarkupInput.value);
+        if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(markup)) {
+            if (shouldNormalizeMarkup) {
+                isUpdatingFractionFromMarkup = true;
+                fractionSaleInput.value = '';
+                isUpdatingFractionFromMarkup = false;
+            }
+            return;
+        }
+        const sale = cost * (1 + (markup / 100));
+        isUpdatingFractionFromMarkup = true;
+        fractionSaleInput.value = Number.isFinite(sale) ? sale.toFixed(2) : '';
+        if (shouldNormalizeMarkup) {
+            fractionMarkupInput.value = Number.isFinite(markup) ? markup.toFixed(2) : '';
+        }
+        isUpdatingFractionFromMarkup = false;
+        updateFractionMarkupFromInputs();
+    };
+
+    const applyFractionCandidate = (product, { focusQuantity = true, overrideLookupValue = null } = {}) => {
+        if (!product) return;
+        fractionCandidateProduct = product;
+
+        const lookupValue = overrideLookupValue
+            || (fractionProductCodeInput?.value?.trim() || '')
+            || product.cod
+            || '';
+        lastFractionLookupValue = lookupValue;
+
+        if (fractionProductCodeInput && product.cod) {
+            fractionProductCodeInput.value = product.cod;
+        }
+        if (fractionDescriptionInput) {
+            fractionDescriptionInput.value = product.nome || '';
+        }
+        if (fractionBarcodeInput) {
+            fractionBarcodeInput.value = product.codbarras || '';
+        }
+        if (fractionUnitInput && !fractionUnitInput.value.trim()) {
+            fractionUnitInput.value = product.unidade || '';
+        }
+        if (fractionCostInput) {
+            const costNumeric = Number(product.custo);
+            fractionCostInput.value = Number.isFinite(costNumeric) ? costNumeric.toFixed(2) : '';
+        }
+        if (fractionSaleInput) {
+            const saleNumeric = Number(product.venda);
+            fractionSaleInput.value = Number.isFinite(saleNumeric) ? saleNumeric.toFixed(2) : '';
+        }
+        updateFractionMarkupFromInputs();
+
+        if (focusQuantity && fractionQuantityInput) {
+            window.setTimeout(() => {
+                fractionQuantityInput.focus();
+                if (typeof fractionQuantityInput.select === 'function') {
+                    fractionQuantityInput.select();
+                }
+            }, 0);
+        }
+    };
+
+    const clearFractionSearchResults = () => {
+        if (fractionSearchResults) {
+            fractionSearchResults.innerHTML = '';
+        }
+        if (fractionSearchEmpty) {
+            fractionSearchEmpty.textContent = 'Digite ao menos três caracteres para iniciar a pesquisa.';
+            fractionSearchEmpty.classList.remove('hidden');
+        }
+        if (fractionSearchLoading) {
+            fractionSearchLoading.classList.add('hidden');
+        }
+        fractionSearchResultsMap.clear();
+    };
+
+    const closeFractionSearchModal = () => {
+        if (!fractionSearchModal) return;
+        fractionSearchModal.classList.add('hidden');
+        fractionSearchModal.dataset.modalOpen = 'false';
+        clearFractionSearchResults();
+        if (fractionSearchInput) {
+            fractionSearchInput.value = '';
+        }
+        window.setTimeout(() => {
+            fractionProductCodeInput?.focus();
+        }, 0);
+    };
+
+    const openFractionSearchModal = () => {
+        if (!fractionSearchModal) return;
+        fractionSearchModal.classList.remove('hidden');
+        fractionSearchModal.dataset.modalOpen = 'true';
+        clearFractionSearchResults();
+        if (fractionSearchInput) {
+            const presetValue = fractionDescriptionInput?.value?.trim() || '';
+            fractionSearchInput.value = presetValue;
+            window.setTimeout(() => {
+                fractionSearchInput.focus();
+                if (presetValue.length >= 3) {
+                    scheduleFractionSearch(presetValue);
+                }
+            }, 0);
+        }
+    };
+
+    const renderFractionSearchItems = (products) => {
+        if (!fractionSearchResults) return;
+        fractionSearchResults.innerHTML = '';
+        fractionSearchResultsMap.clear();
+
+        products.forEach((product, index) => {
+            const productId = product?._id || product?.id;
+            if (!productId) return;
+            fractionSearchResultsMap.set(String(productId), product);
+
+            const item = document.createElement('li');
+            item.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'flex w-full items-start gap-3 px-4 py-3 text-left text-sm transition hover:bg-primary/10';
+            button.dataset.productId = String(productId);
+
+            const infoWrapper = document.createElement('div');
+            infoWrapper.className = 'flex flex-1 flex-col gap-1';
+
+            const title = document.createElement('p');
+            title.className = 'text-sm font-semibold text-gray-800';
+            title.innerHTML = escapeHtml(product.nome || 'Produto sem nome');
+
+            const details = document.createElement('p');
+            details.className = 'text-[11px] text-gray-500';
+            const codDisplay = escapeHtml(product.cod || '—');
+            const barcodeDisplay = escapeHtml(product.codbarras || '—');
+            details.innerHTML = `Cod: <span class="font-semibold">${codDisplay}</span> · CodBarras: <span class="font-semibold">${barcodeDisplay}</span>`;
+
+            infoWrapper.appendChild(title);
+            infoWrapper.appendChild(details);
+            button.appendChild(infoWrapper);
+
+            button.addEventListener('click', () => handleFractionSearchResultSelection(String(productId)));
+
+            item.appendChild(button);
+            fractionSearchResults.appendChild(item);
+        });
+    };
+
+    const handleFractionSearchResultSelection = (productId) => {
+        if (!productId) return;
+        const product = fractionSearchResultsMap.get(String(productId));
+        if (!product) return;
+        applyFractionCandidate(product, { focusQuantity: true, overrideLookupValue: product.cod || '' });
+        closeFractionSearchModal();
+    };
+
+    const performFractionSearch = async (term) => {
+        if (!fractionSearchInput || !fractionSearchResults || !fractionSearchLoading || !fractionSearchEmpty) {
+            return;
+        }
+
+        const normalizedTerm = typeof term === 'string' ? term.trim() : '';
+        fractionSearchResults.innerHTML = '';
+        fractionSearchResultsMap.clear();
+
+        if (normalizedTerm.length < 3) {
+            fractionSearchLoading.classList.add('hidden');
+            fractionSearchEmpty.textContent = 'Digite ao menos três caracteres para iniciar a pesquisa.';
+            fractionSearchEmpty.classList.remove('hidden');
+            return;
+        }
+
+        fractionSearchLoading.classList.remove('hidden');
+        fractionSearchEmpty.classList.add('hidden');
+
+        try {
+            const params = new URLSearchParams({
+                search: normalizedTerm,
+                limit: '20',
+                includeHidden: 'true',
+            });
+            const headers = {};
+            const token = getAuthToken();
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products?${params.toString()}`, { headers });
+            if (!response.ok) {
+                throw new Error('Não foi possível buscar os produtos.');
+            }
+            const payload = await response.json();
+            const products = Array.isArray(payload?.products) ? payload.products : [];
+            if (!products.length) {
+                fractionSearchEmpty.textContent = 'Nenhum produto encontrado para o termo informado.';
+                fractionSearchEmpty.classList.remove('hidden');
+                return;
+            }
+            fractionSearchEmpty.classList.add('hidden');
+            renderFractionSearchItems(products);
+        } catch (error) {
+            console.error('Erro ao pesquisar produtos para fracionamento:', error);
+            fractionSearchEmpty.textContent = error.message || 'Não foi possível buscar os produtos.';
+            fractionSearchEmpty.classList.remove('hidden');
+        } finally {
+            fractionSearchLoading.classList.add('hidden');
+        }
+    };
+
+    const scheduleFractionSearch = (term) => {
+        if (fractionSearchDebounceId) {
+            window.clearTimeout(fractionSearchDebounceId);
+        }
+        fractionSearchDebounceId = window.setTimeout(() => {
+            fractionSearchDebounceId = null;
+            performFractionSearch(term);
+        }, 220);
     };
 
     const formatPriceHistoryCurrency = (value) => {
@@ -1372,6 +1759,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             priceHistoryEntries = items.map((entry) => ({ ...entry }));
             populatePriceHistoryFiltersFromEntries();
+            setPriceHistoryLoadingState(false);
             renderPriceHistoryTable();
 
             if (priceHistoryEntries.length === 0) {
@@ -2563,6 +2951,10 @@ document.addEventListener('DOMContentLoaded', () => {
         renderSupplierEntries();
         resetSupplierForm();
 
+        fractionEntries = [];
+        renderFractionEntries();
+        resetFractionForm();
+
         fiscalByCompany = new Map();
         fiscalByCompany.set(FISCAL_GENERAL_KEY, getDefaultFiscalSnapshot());
         activeFiscalCompanyKey = FISCAL_GENERAL_KEY;
@@ -2615,6 +3007,158 @@ document.addEventListener('DOMContentLoaded', () => {
             return null;
         }
         return payload.product;
+    };
+
+    const fetchFractionProductByCodeOrBarcode = async (rawValue) => {
+        const trimmedValue = typeof rawValue === 'string' ? rawValue.trim() : '';
+        if (!trimmedValue) return null;
+
+        let productSummary = null;
+        try {
+            productSummary = await fetchProductSummaryByIdentifier('cod', trimmedValue);
+        } catch (error) {
+            console.warn('Erro ao localizar produto por código interno para fracionamento:', error);
+        }
+
+        if (!productSummary) {
+            try {
+                productSummary = await fetchProductSummaryByIdentifier('codbarras', trimmedValue);
+            } catch (error) {
+                console.warn('Erro ao localizar produto por código de barras para fracionamento:', error);
+            }
+        }
+
+        if (!productSummary) {
+            return null;
+        }
+
+        const productId = productSummary?._id || productSummary?.id;
+        if (!productId) {
+            return null;
+        }
+
+        const headers = {};
+        const token = getAuthToken();
+        if (token) {
+            headers.Authorization = `Bearer ${token}`;
+        }
+
+        const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}`, { headers });
+        if (!response.ok) {
+            throw new Error('Não foi possível carregar os dados do produto selecionado.');
+        }
+        return response.json();
+    };
+
+    const ensureFractionCandidateLoaded = async () => {
+        if (!fractionProductCodeInput) return null;
+        const rawValue = fractionProductCodeInput.value || '';
+        const trimmedValue = rawValue.trim();
+
+        if (!trimmedValue) {
+            return fractionCandidateProduct;
+        }
+
+        const candidateCod = fractionCandidateProduct?.cod ? String(fractionCandidateProduct.cod).trim() : '';
+        const candidateBarcode = fractionCandidateProduct?.codbarras ? String(fractionCandidateProduct.codbarras).trim() : '';
+        if (
+            fractionCandidateProduct
+            && (trimmedValue === candidateCod
+                || trimmedValue === candidateBarcode
+                || trimmedValue === lastFractionLookupValue)
+        ) {
+            return fractionCandidateProduct;
+        }
+
+        const product = await fetchFractionProductByCodeOrBarcode(trimmedValue);
+        if (product) {
+            applyFractionCandidate(product, { focusQuantity: false, overrideLookupValue: trimmedValue });
+        }
+        return product;
+    };
+
+    const handleAddFractionEntry = async () => {
+        try {
+            const product = await ensureFractionCandidateLoaded();
+            if (!product) {
+                await showModal({
+                    title: 'Atenção',
+                    message: 'Selecione um produto válido antes de adicionar ao fracionamento.',
+                    confirmText: 'Entendi',
+                });
+                return;
+            }
+
+            const quantityValue = parseNullableNumber(fractionQuantityInput?.value);
+            if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+                await showModal({
+                    title: 'Atenção',
+                    message: 'Informe uma quantidade válida para o fracionamento.',
+                    confirmText: 'Entendi',
+                });
+                return;
+            }
+
+            let unitValue = fractionUnitInput?.value?.trim() || '';
+            if (!unitValue) {
+                unitValue = product.unidade ? String(product.unidade).trim() : '';
+            }
+            if (!unitValue) {
+                await showModal({
+                    title: 'Atenção',
+                    message: 'Informe a unidade do produto fracionado.',
+                    confirmText: 'Entendi',
+                });
+                return;
+            }
+
+            const costValue = parseNullableNumber(fractionCostInput?.value);
+            const saleValue = parseNullableNumber(fractionSaleInput?.value);
+            let markupValue = parseNullableNumber(fractionMarkupInput?.value);
+            if (markupValue === null && Number.isFinite(costValue) && Number.isFinite(saleValue) && costValue > 0) {
+                const computedMarkup = calculateMarkupPercentage(costValue, saleValue);
+                markupValue = Number.isFinite(computedMarkup) ? Number(computedMarkup.toFixed(2)) : null;
+            }
+
+            const entry = {
+                produto: product._id || product.id || null,
+                cod: product.cod || '',
+                codbarras: product.codbarras || '',
+                descricao: product.nome || '',
+                quantidade: Number.isFinite(quantityValue) ? quantityValue : null,
+                unidade: unitValue,
+                custo: Number.isFinite(costValue) ? costValue : null,
+                markup: Number.isFinite(markupValue) ? markupValue : null,
+                venda: Number.isFinite(saleValue) ? saleValue : null,
+                estoque: parseNullableNumber(product?.stock),
+            };
+
+            const entryKey = entry.produto ? String(entry.produto) : entry.cod;
+            const existingIndex = fractionEntries.findIndex((item) => {
+                if (!item) return false;
+                if (entry.produto && item.produto) {
+                    return String(item.produto) === entryKey;
+                }
+                return item.cod === entry.cod;
+            });
+
+            if (existingIndex >= 0) {
+                fractionEntries.splice(existingIndex, 1, entry);
+            } else {
+                fractionEntries.push(entry);
+            }
+
+            renderFractionEntries();
+            resetFractionForm();
+            markProductAsModified();
+        } catch (error) {
+            console.error('Erro ao adicionar fracionado:', error);
+            await showModal({
+                title: 'Erro',
+                message: error.message || 'Não foi possível adicionar o fracionado.',
+                confirmText: 'Entendi',
+            });
+        }
     };
 
     const loadProductForEditing = async (targetProductId) => {
@@ -2799,6 +3343,22 @@ document.addEventListener('DOMContentLoaded', () => {
             : [];
         renderSupplierEntries();
         resetSupplierForm();
+        fractionEntries = Array.isArray(product.fracionamentos)
+            ? product.fracionamentos.map((item) => ({
+                produto: item?.produto || item?.produtoId || item?.productId || null,
+                cod: item?.cod || '',
+                codbarras: item?.codbarras || '',
+                descricao: item?.descricao || '',
+                quantidade: Number.isFinite(Number(item?.quantidade)) ? Number(item.quantidade) : null,
+                unidade: item?.unidade || '',
+                custo: Number.isFinite(Number(item?.custo)) ? Number(item.custo) : null,
+                markup: Number.isFinite(Number(item?.markup)) ? Number(item.markup) : null,
+                venda: Number.isFinite(Number(item?.venda)) ? Number(item.venda) : null,
+                estoque: Number.isFinite(Number(item?.estoque)) ? Number(item.estoque) : null,
+            }))
+            : [];
+        renderFractionEntries();
+        resetFractionForm();
         applyDepositsFromProduct(product);
         if (form.querySelector('#barcode-additional')) {
             form.querySelector('#barcode-additional').value = Array.isArray(product.codigosComplementares) ? product.codigosComplementares.join('\n') : '';
@@ -3090,6 +3650,87 @@ document.addEventListener('DOMContentLoaded', () => {
         hideSupplierSuggestions();
     });
 
+    fractionAddButton?.addEventListener('click', () => {
+        handleAddFractionEntry();
+    });
+
+    fractionProductCodeInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'F2') {
+            event.preventDefault();
+            openFractionSearchModal();
+            return;
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            ensureFractionCandidateLoaded().catch((error) => {
+                if (error) {
+                    console.warn('Erro ao carregar produto fracionado:', error);
+                }
+            });
+        }
+    });
+
+    fractionProductCodeInput?.addEventListener('input', () => {
+        fractionCandidateProduct = null;
+        lastFractionLookupValue = '';
+        if (fractionDescriptionInput) fractionDescriptionInput.value = '';
+        if (fractionBarcodeInput) fractionBarcodeInput.value = '';
+        if (fractionQuantityInput) fractionQuantityInput.value = '';
+        if (fractionUnitInput) fractionUnitInput.value = '';
+        if (fractionCostInput) fractionCostInput.value = '';
+        if (fractionMarkupInput) fractionMarkupInput.value = '';
+        if (fractionSaleInput) fractionSaleInput.value = '';
+    });
+
+    fractionProductCodeInput?.addEventListener('blur', () => {
+        if (!fractionProductCodeInput.value?.trim()) return;
+        ensureFractionCandidateLoaded().catch((error) => {
+            if (error) {
+                console.warn('Erro ao carregar produto fracionado após sair do campo:', error);
+            }
+        });
+    });
+
+    fractionSearchButton?.addEventListener('click', () => {
+        openFractionSearchModal();
+    });
+
+    fractionSearchCloseButtons.forEach((button) => {
+        button.addEventListener('click', () => closeFractionSearchModal());
+    });
+
+    fractionSearchInput?.addEventListener('input', (event) => {
+        scheduleFractionSearch(event.target.value || '');
+    });
+
+    fractionSearchInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeFractionSearchModal();
+            return;
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const firstResult = fractionSearchResults?.querySelector('button[data-product-id]');
+            if (firstResult instanceof HTMLButtonElement) {
+                firstResult.click();
+            }
+        }
+    });
+
+    fractionCostInput?.addEventListener('input', () => {
+        updateFractionSaleFromInputs({ shouldNormalizeMarkup: false });
+        updateFractionMarkupFromInputs();
+    });
+
+    fractionSaleInput?.addEventListener('input', () => {
+        updateFractionMarkupFromInputs();
+    });
+
+    fractionMarkupInput?.addEventListener('input', () => {
+        updateFractionSaleFromInputs({ shouldNormalizeMarkup: true });
+    });
+
     priceHistorySearchInput?.addEventListener('input', () => {
         priceHistoryFilters.search = priceHistorySearchInput.value || '';
         renderPriceHistoryTable();
@@ -3127,8 +3768,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && priceHistoryModal && !priceHistoryModal.classList.contains('hidden')) {
-            closePriceHistoryModal();
+        if (event.key === 'Escape') {
+            if (priceHistoryModal && !priceHistoryModal.classList.contains('hidden')) {
+                closePriceHistoryModal();
+            }
+            if (fractionSearchModal?.dataset?.modalOpen === 'true') {
+                closeFractionSearchModal();
+            }
         }
     });
 
@@ -3377,12 +4023,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `${API_CONFIG.BASE_URL}/products/${productId}`
                 : `${API_CONFIG.BASE_URL}/products`;
             const method = isEditMode ? 'PUT' : 'POST';
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            };
+            if (isEditMode) {
+                headers[PRICE_HISTORY_SCREEN_HEADER] = PRICE_HISTORY_SCREEN_NAME;
+            }
+
             const textResponse = await fetch(endpoint, {
                 method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers,
                 body: JSON.stringify(updateData),
             });
 
