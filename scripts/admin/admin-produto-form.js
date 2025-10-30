@@ -1372,6 +1372,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             priceHistoryEntries = items.map((entry) => ({ ...entry }));
             populatePriceHistoryFiltersFromEntries();
+            setPriceHistoryLoadingState(false);
             renderPriceHistoryTable();
 
             if (priceHistoryEntries.length === 0) {
