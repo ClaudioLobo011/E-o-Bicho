@@ -54,6 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const priceHistoryColumnFilterInputs = new Map();
     const priceHistorySortButtonsMeta = new Map();
     const priceHistorySortHeaders = new Map();
+    const PRICE_HISTORY_SCREEN_HEADER = 'X-Price-History-Screen';
+    const PRICE_HISTORY_SCREEN_NAME = 'Cadastro de Produto';
     const PRICE_HISTORY_DEFAULT_SORT = { key: 'dataAlteracao', direction: 'desc' };
     const priceHistoryTableState = {
         columnFilters: {},
@@ -780,7 +782,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    [PRICE_HISTORY_SCREEN_HEADER]: PRICE_HISTORY_SCREEN_NAME,
                 },
                 body: JSON.stringify(updateData),
             });
@@ -3378,12 +3381,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `${API_CONFIG.BASE_URL}/products/${productId}`
                 : `${API_CONFIG.BASE_URL}/products`;
             const method = isEditMode ? 'PUT' : 'POST';
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            };
+            if (isEditMode) {
+                headers[PRICE_HISTORY_SCREEN_HEADER] = PRICE_HISTORY_SCREEN_NAME;
+            }
+
             const textResponse = await fetch(endpoint, {
                 method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers,
                 body: JSON.stringify(updateData),
             });
 

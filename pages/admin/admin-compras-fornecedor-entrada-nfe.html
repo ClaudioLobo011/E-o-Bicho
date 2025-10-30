@@ -8227,6 +8227,7 @@
 
               const headers = buildAuthHeaders();
               headers.set('Content-Type', 'application/json');
+              headers.set('X-Price-History-Screen', 'Entrada de NF-e');
 
               const response = await fetch(`${apiBaseUrl}/products/${productId}`, {
                 method: 'PUT',
