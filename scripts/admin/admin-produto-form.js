@@ -818,15 +818,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const summary = calculateFractionalSummary();
+            const normalizedStock = normalizeFractionalStockValue(summary.stock);
             updateData.fracionado = {
                 ativo: true,
                 itens: fractionalItemsPayload,
                 custoCalculado: Number.isFinite(summary.cost) ? summary.cost : null,
-                estoqueEquivalente: Number.isFinite(summary.stock) ? summary.stock : null,
+                estoqueEquivalente: Number.isFinite(summary.stock) ? normalizedStock : null,
             };
             updateData.custo = Number.isFinite(summary.cost) ? summary.cost : 0;
             updateData.estoques = [];
-            updateData.stock = Number.isFinite(summary.stock) ? summary.stock : 0;
+            updateData.stock = Number.isFinite(summary.stock) ? normalizedStock : 0;
         } else {
             updateData.fracionado = {
                 ativo: false,
@@ -2481,6 +2482,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return fractionalNumberFormatter.format(value);
     };
 
+    const normalizeFractionalStockValue = (value) => {
+        if (!Number.isFinite(value) || value <= 0) return 0;
+        return Math.floor(value);
+    };
+
     const computeFractionChildMetrics = (child = {}) => {
         const rawBase = Number(child?.quantidadeOrigem);
         const rawFraction = Number(child?.quantidadeFracionada);
@@ -2499,6 +2505,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fractionQuantity: normalizedFraction,
             costPerFraction: Number.isFinite(costPerFraction) ? costPerFraction : 0,
             equivalentStock: Number.isFinite(equivalentStock) ? equivalentStock : 0,
+            equivalentStockFloor: normalizeFractionalStockValue(equivalentStock),
             childStock: Number.isFinite(childStock) ? childStock : 0,
         };
     };
@@ -2512,11 +2519,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const updateFractionalSummary = () => {
         const summary = calculateFractionalSummary();
+        const normalizedStock = normalizeFractionalStockValue(summary.stock);
         if (fractionSummaryCost) {
             fractionSummaryCost.textContent = formatFractionCurrency(Number.isFinite(summary.cost) ? summary.cost : 0);
         }
         if (fractionSummaryStock) {
-            fractionSummaryStock.textContent = formatFractionNumber(Number.isFinite(summary.stock) ? summary.stock : 0);
+            fractionSummaryStock.textContent = formatFractionNumber(Number.isFinite(normalizedStock) ? normalizedStock : 0);
         }
         if (isFractionalFeatureEnabled() && costInput) {
             const normalizedCost = Number.isFinite(summary.cost) ? summary.cost : 0;
@@ -2524,9 +2532,9 @@ document.addEventListener('DOMContentLoaded', () => {
             updateMarkupFromValues();
         }
         if (isFractionalFeatureEnabled() && depositTotalDisplay) {
-            depositTotalDisplay.textContent = formatFractionNumber(Number.isFinite(summary.stock) ? summary.stock : 0);
+            depositTotalDisplay.textContent = formatFractionNumber(Number.isFinite(normalizedStock) ? normalizedStock : 0);
         }
-        return summary;
+        return { ...summary, normalizedStock };
     };
 
     const showFractionalSuggestionMessage = (message) => {
@@ -2569,7 +2577,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <input type="number" min="0" step="0.0001" class="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-1 focus:ring-primary/20" data-fraction-index="${index}" data-fraction-field="fraction" value="${metrics.fractionQuantity > 0 ? metrics.fractionQuantity : ''}">
                 </td>
                 <td class="px-3 py-2 text-center align-middle text-[11px] text-gray-600">${formatFractionNumber(metrics.childStock)}</td>
-                <td class="px-3 py-2 text-center align-middle text-[11px] font-semibold text-gray-700">${formatFractionNumber(metrics.equivalentStock)}</td>
+                <td class="px-3 py-2 text-center align-middle text-[11px] font-semibold text-gray-700">${formatFractionNumber(metrics.equivalentStockFloor)}</td>
                 <td class="px-3 py-2 text-center align-middle text-[11px] font-semibold text-gray-700">${formatFractionCurrency(metrics.costPerFraction)}</td>
                 <td class="px-3 py-2 text-right align-middle">
                     <button type="button" class="inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-[11px] font-semibold text-red-600 transition hover:bg-red-50" data-fraction-remove="${index}"><i class="fas fa-times"></i> Remover</button>

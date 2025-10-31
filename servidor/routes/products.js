@@ -201,6 +201,7 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = 
 
     const totalCost = itemsWithDetails.reduce((sum, entry) => sum + (Number(entry.custoCalculado) || 0), 0);
     const totalStock = itemsWithDetails.reduce((sum, entry) => sum + (Number(entry.estoqueEquivalente) || 0), 0);
+    const normalizedStock = Number.isFinite(totalStock) && totalStock > 0 ? Math.floor(totalStock) : 0;
 
     result.config = {
         ativo: true,
@@ -210,11 +211,11 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = 
             quantidadeFracionada: entry.quantidadeFracionada,
         })),
         custoCalculado: Number.isFinite(totalCost) ? totalCost : null,
-        estoqueEquivalente: Number.isFinite(totalStock) ? totalStock : null,
+        estoqueEquivalente: Number.isFinite(totalStock) ? normalizedStock : null,
         atualizadoEm: new Date(),
     };
     result.summaryCost = Number.isFinite(totalCost) ? totalCost : null;
-    result.summaryStock = Number.isFinite(totalStock) ? totalStock : null;
+    result.summaryStock = Number.isFinite(totalStock) ? normalizedStock : null;
     return result;
 };
 
@@ -431,28 +432,79 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
             });
         });
 
+        const normalizedTotalStock = Number.isFinite(totalStock) && totalStock > 0 ? Math.floor(totalStock) : 0;
+
         const updateDocument = {
             'fracionado.custoCalculado': Number.isFinite(totalCost) ? totalCost : null,
-            'fracionado.estoqueEquivalente': Number.isFinite(totalStock) ? totalStock : null,
+            'fracionado.estoqueEquivalente': Number.isFinite(totalStock) ? normalizedTotalStock : null,
             'fracionado.atualizadoEm': now,
+            stock: normalizedTotalStock,
         };
 
         if (Number.isFinite(totalCost)) {
             updateDocument.custo = totalCost;
         }
 
-        if (Number.isFinite(totalStock)) {
-            updateDocument.stock = totalStock;
+        const depositEntries = Array.from(depositTotals.entries()).map(([depositId, info]) => {
+            const rawQuantity = Number.isFinite(info?.quantidade) && info.quantidade > 0 ? info.quantidade : 0;
+            const flooredQuantity = Math.floor(rawQuantity);
+            const fractionalPart = rawQuantity - flooredQuantity;
+            const unitLabel = typeof info?.unidade === 'string' && info.unidade.trim()
+                ? info.unidade.trim()
+                : parentUnit;
+
+            return {
+                depositId,
+                rawQuantity,
+                assignedQuantity: flooredQuantity,
+                fractionalPart: fractionalPart > 0 ? fractionalPart : 0,
+                unidade: unitLabel,
+            };
+        });
+
+        let assignedTotal = depositEntries.reduce((sum, entry) => sum + entry.assignedQuantity, 0);
+        let remaining = Math.max(0, normalizedTotalStock - assignedTotal);
+
+        if (remaining > 0) {
+            const fractionalCandidates = depositEntries
+                .filter((entry) => entry.fractionalPart > 0)
+                .sort((a, b) => b.fractionalPart - a.fractionalPart);
+
+            for (const entry of fractionalCandidates) {
+                if (remaining <= 0) break;
+                const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
+                if (maxExtra <= 0) continue;
+                const addition = Math.min(maxExtra, remaining);
+                entry.assignedQuantity += addition;
+                assignedTotal += addition;
+                remaining -= addition;
+            }
         }
 
-        if (depositTotals.size > 0) {
-            updateDocument.estoques = Array.from(depositTotals.entries()).map(([depositId, info]) => ({
-                deposito: new mongoose.Types.ObjectId(depositId),
-                quantidade: Number.isFinite(info?.quantidade) ? info.quantidade : 0,
-                unidade: typeof info?.unidade === 'string' && info.unidade.trim()
-                    ? info.unidade.trim()
-                    : parentUnit,
-            }));
+        if (remaining > 0) {
+            const fallbackCandidates = depositEntries
+                .filter((entry) => entry.rawQuantity > entry.assignedQuantity)
+                .sort((a, b) => b.rawQuantity - a.rawQuantity);
+
+            for (const entry of fallbackCandidates) {
+                if (remaining <= 0) break;
+                const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
+                if (maxExtra <= 0) continue;
+                const addition = Math.min(maxExtra, remaining);
+                entry.assignedQuantity += addition;
+                assignedTotal += addition;
+                remaining -= addition;
+            }
+        }
+
+        if (depositEntries.length > 0) {
+            updateDocument.estoques = depositEntries
+                .filter((entry) => entry.assignedQuantity > 0)
+                .map((entry) => ({
+                    deposito: new mongoose.Types.ObjectId(entry.depositId),
+                    quantidade: entry.assignedQuantity,
+                    unidade: entry.unidade || parentUnit,
+                }));
         } else {
             updateDocument.estoques = [];
         }
