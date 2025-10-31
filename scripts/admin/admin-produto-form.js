@@ -2814,10 +2814,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="text-[11px] text-gray-500">${codeLabel}</div>
                 </td>
                 <td class="px-3 py-2 text-center align-middle">
-                    <input type="number" min="0" step="0.0001" class="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-1 focus:ring-primary/20" data-fraction-index="${index}" data-fraction-field="base" value="${baseQuantity}">
+                    <input type="number" min="0" step="0.0001" class="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-1 focus:ring-primary/20" data-fraction-index="${index}" data-fraction-field="fraction" value="${metrics.fractionQuantity > 0 ? metrics.fractionQuantity : ''}">
                 </td>
                 <td class="px-3 py-2 text-center align-middle">
-                    <input type="number" min="0" step="0.0001" class="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-1 focus:ring-primary/20" data-fraction-index="${index}" data-fraction-field="fraction" value="${metrics.fractionQuantity > 0 ? metrics.fractionQuantity : ''}">
+                    <input type="number" min="0" step="0.0001" class="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-1 focus:ring-primary/20" data-fraction-index="${index}" data-fraction-field="base" value="${baseQuantity}">
                 </td>
                 <td class="px-3 py-2 text-center align-middle text-[11px] text-gray-600">${formatFractionNumber(metrics.childStock)}</td>
                 <td class="px-3 py-2 text-center align-middle text-[11px] font-semibold text-gray-700">${formatFractionNumber(Number.isFinite(normalizedStock) ? normalizedStock : metrics.equivalentStockFloor)}</td>
