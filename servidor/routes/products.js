@@ -183,8 +183,11 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = 
         const costPerFraction = item.quantidadeFracionada > 0 && Number.isFinite(childCost)
             ? childCost / item.quantidadeFracionada
             : 0;
-        const equivalentStock = item.quantidadeOrigem > 0 && Number.isFinite(childStock)
-            ? childStock * (item.quantidadeFracionada / item.quantidadeOrigem)
+        const ratio = item.quantidadeFracionada > 0 && item.quantidadeOrigem > 0
+            ? (item.quantidadeOrigem / item.quantidadeFracionada)
+            : 0;
+        const equivalentStock = ratio > 0 && Number.isFinite(childStock)
+            ? childStock * ratio
             : 0;
 
         return {
@@ -199,8 +202,11 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = 
     }
 
     const totalCost = itemsWithDetails.reduce((sum, entry) => sum + (Number(entry.custoCalculado) || 0), 0);
-    const totalStock = itemsWithDetails.reduce((sum, entry) => sum + (Number(entry.estoqueEquivalente) || 0), 0);
-    const normalizedStock = Number.isFinite(totalStock) && totalStock > 0 ? Math.floor(totalStock) : 0;
+    const stockCandidates = itemsWithDetails
+        .map((entry) => Number(entry.estoqueEquivalente))
+        .filter((value) => Number.isFinite(value) && value >= 0);
+    const rawStock = stockCandidates.length ? Math.min(...stockCandidates) : 0;
+    const normalizedStock = Number.isFinite(rawStock) && rawStock > 0 ? Math.floor(rawStock) : 0;
 
     result.config = {
         ativo: true,
@@ -210,11 +216,11 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = 
             quantidadeFracionada: entry.quantidadeFracionada,
         })),
         custoCalculado: Number.isFinite(totalCost) ? totalCost : null,
-        estoqueEquivalente: Number.isFinite(totalStock) ? normalizedStock : null,
+        estoqueEquivalente: Number.isFinite(normalizedStock) ? normalizedStock : null,
         atualizadoEm: new Date(),
     };
     result.summaryCost = Number.isFinite(totalCost) ? totalCost : null;
-    result.summaryStock = Number.isFinite(totalStock) ? normalizedStock : null;
+    result.summaryStock = Number.isFinite(normalizedStock) ? normalizedStock : null;
     return result;
 };
 
@@ -264,13 +270,14 @@ const applyFractionalSnapshot = (product) => {
         const costPerFraction = normalizedFraction > 0 && Number.isFinite(childCost)
             ? childCost / normalizedFraction
             : 0;
-        const equivalentStock = normalizedBase > 0 && Number.isFinite(childStock)
-            ? childStock * (normalizedFraction / normalizedBase)
+        const ratio = normalizedFraction > 0 && normalizedBase > 0
+            ? (normalizedBase / normalizedFraction)
+            : 0;
+        const equivalentStock = ratio > 0 && Number.isFinite(childStock)
+            ? childStock * ratio
             : 0;
 
-        const multiplier = normalizedBase > 0 && normalizedFraction > 0
-            ? (normalizedFraction / normalizedBase)
-            : 0;
+        const multiplier = ratio;
 
         if (multiplier > 0 && child && Array.isArray(child.estoques)) {
             child.estoques.forEach((depositEntry) => {
@@ -331,7 +338,10 @@ const applyFractionalSnapshot = (product) => {
     });
 
     const totalCost = mappedItems.reduce((sum, entry) => sum + (Number(entry.custoCalculado) || 0), 0);
-    const totalStock = mappedItems.reduce((sum, entry) => sum + (Number(entry.estoqueEquivalente) || 0), 0);
+    const stockCandidates = mappedItems
+        .map((entry) => Number(entry.estoqueEquivalente))
+        .filter((value) => Number.isFinite(value) && value >= 0);
+    const totalStock = stockCandidates.length ? Math.min(...stockCandidates) : 0;
     const normalizedTotalStock = Number.isFinite(totalStock) && totalStock > 0 ? Math.floor(totalStock) : 0;
 
     const depositEntries = Array.from(depositTotals.entries()).map(([depositId, info]) => {
@@ -353,37 +363,60 @@ const applyFractionalSnapshot = (product) => {
     });
 
     let assignedTotal = depositEntries.reduce((sum, entry) => sum + entry.assignedQuantity, 0);
-    let remaining = Math.max(0, normalizedTotalStock - assignedTotal);
 
-    if (remaining > 0) {
-        const fractionalCandidates = depositEntries
-            .filter((entry) => entry.fractionalPart > 0)
-            .sort((a, b) => b.fractionalPart - a.fractionalPart);
+    if (normalizedTotalStock < assignedTotal) {
+        let excess = assignedTotal - normalizedTotalStock;
+        const reductionCandidates = depositEntries
+            .filter((entry) => entry.assignedQuantity > 0)
+            .sort((a, b) => {
+                const fractionalDiff = (a.fractionalPart || 0) - (b.fractionalPart || 0);
+                if (fractionalDiff !== 0) {
+                    return fractionalDiff;
+                }
+                return b.assignedQuantity - a.assignedQuantity;
+            });
 
-        for (const entry of fractionalCandidates) {
-            if (remaining <= 0) break;
-            const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
-            if (maxExtra <= 0) continue;
-            const addition = Math.min(maxExtra, remaining);
-            entry.assignedQuantity += addition;
-            assignedTotal += addition;
-            remaining -= addition;
+        for (const entry of reductionCandidates) {
+            if (excess <= 0) break;
+            const reducible = Math.min(entry.assignedQuantity, excess);
+            if (reducible <= 0) continue;
+            entry.assignedQuantity -= reducible;
+            assignedTotal -= reducible;
+            excess -= reducible;
         }
-    }
+    } else {
+        let remaining = normalizedTotalStock - assignedTotal;
 
-    if (remaining > 0) {
-        const fallbackCandidates = depositEntries
-            .filter((entry) => entry.rawQuantity > entry.assignedQuantity)
-            .sort((a, b) => b.rawQuantity - a.rawQuantity);
+        if (remaining > 0) {
+            const fractionalCandidates = depositEntries
+                .filter((entry) => entry.fractionalPart > 0)
+                .sort((a, b) => b.fractionalPart - a.fractionalPart);
 
-        for (const entry of fallbackCandidates) {
-            if (remaining <= 0) break;
-            const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
-            if (maxExtra <= 0) continue;
-            const addition = Math.min(maxExtra, remaining);
-            entry.assignedQuantity += addition;
-            assignedTotal += addition;
-            remaining -= addition;
+            for (const entry of fractionalCandidates) {
+                if (remaining <= 0) break;
+                const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
+                if (maxExtra <= 0) continue;
+                const addition = Math.min(maxExtra, remaining);
+                entry.assignedQuantity += addition;
+                assignedTotal += addition;
+                remaining -= addition;
+            }
+        }
+
+        if (remaining > 0) {
+            const fallbackCandidates = depositEntries
+                .filter((entry) => entry.rawQuantity > entry.assignedQuantity)
+                .sort((a, b) => b.rawQuantity - a.rawQuantity);
+
+            for (const entry of fallbackCandidates) {
+                if (remaining <= 0) break;
+                const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
+                if (maxExtra <= 0) continue;
+                const addition = Math.min(maxExtra, remaining);
+                entry.assignedQuantity += addition;
+                assignedTotal += addition;
+                remaining -= addition;
+            }
         }
     }
 
@@ -484,7 +517,7 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
         const childMap = new Map(childProducts.map((child) => [String(child._id), child]));
 
         let totalCost = 0;
-        let totalStock = 0;
+        let minEquivalentStock = null;
         const missingChildren = [];
         const depositTotals = new Map();
 
@@ -557,16 +590,22 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
                 ? childCost / fractionQuantity
                 : 0;
 
-            const equivalentStock = baseQuantity > 0 && Number.isFinite(childStock)
-                ? childStock * (fractionQuantity / baseQuantity)
+            const ratio = fractionQuantity > 0 && baseQuantity > 0
+                ? (baseQuantity / fractionQuantity)
+                : 0;
+            const equivalentStock = ratio > 0 && Number.isFinite(childStock)
+                ? childStock * ratio
                 : 0;
 
             totalCost += Number.isFinite(costPerFraction) ? costPerFraction : 0;
-            totalStock += Number.isFinite(equivalentStock) ? equivalentStock : 0;
+            const resolvedEquivalent = Number.isFinite(equivalentStock) ? equivalentStock : 0;
+            if (minEquivalentStock === null) {
+                minEquivalentStock = resolvedEquivalent;
+            } else {
+                minEquivalentStock = Math.min(minEquivalentStock, resolvedEquivalent);
+            }
 
-            const multiplier = baseQuantity > 0 && fractionQuantity > 0
-                ? (fractionQuantity / baseQuantity)
-                : 0;
+            const multiplier = ratio;
 
             if (!Number.isFinite(multiplier) || multiplier <= 0) {
                 return;
@@ -583,11 +622,14 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
             });
         });
 
-        const normalizedTotalStock = Number.isFinite(totalStock) && totalStock > 0 ? Math.floor(totalStock) : 0;
+        const resolvedTotalStock = Number.isFinite(minEquivalentStock) ? minEquivalentStock : 0;
+        const normalizedTotalStock = Number.isFinite(resolvedTotalStock) && resolvedTotalStock > 0
+            ? Math.floor(resolvedTotalStock)
+            : 0;
 
         const updateDocument = {
             'fracionado.custoCalculado': Number.isFinite(totalCost) ? totalCost : null,
-            'fracionado.estoqueEquivalente': Number.isFinite(totalStock) ? normalizedTotalStock : null,
+            'fracionado.estoqueEquivalente': Number.isFinite(resolvedTotalStock) ? normalizedTotalStock : null,
             'fracionado.atualizadoEm': now,
             stock: normalizedTotalStock,
         };
@@ -614,37 +656,60 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
         });
 
         let assignedTotal = depositEntries.reduce((sum, entry) => sum + entry.assignedQuantity, 0);
-        let remaining = Math.max(0, normalizedTotalStock - assignedTotal);
 
-        if (remaining > 0) {
-            const fractionalCandidates = depositEntries
-                .filter((entry) => entry.fractionalPart > 0)
-                .sort((a, b) => b.fractionalPart - a.fractionalPart);
+        if (normalizedTotalStock < assignedTotal) {
+            let excess = assignedTotal - normalizedTotalStock;
+            const reductionCandidates = depositEntries
+                .filter((entry) => entry.assignedQuantity > 0)
+                .sort((a, b) => {
+                    const fractionalDiff = (a.fractionalPart || 0) - (b.fractionalPart || 0);
+                    if (fractionalDiff !== 0) {
+                        return fractionalDiff;
+                    }
+                    return b.assignedQuantity - a.assignedQuantity;
+                });
 
-            for (const entry of fractionalCandidates) {
-                if (remaining <= 0) break;
-                const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
-                if (maxExtra <= 0) continue;
-                const addition = Math.min(maxExtra, remaining);
-                entry.assignedQuantity += addition;
-                assignedTotal += addition;
-                remaining -= addition;
+            for (const entry of reductionCandidates) {
+                if (excess <= 0) break;
+                const reducible = Math.min(entry.assignedQuantity, excess);
+                if (reducible <= 0) continue;
+                entry.assignedQuantity -= reducible;
+                assignedTotal -= reducible;
+                excess -= reducible;
             }
-        }
+        } else {
+            let remaining = normalizedTotalStock - assignedTotal;
 
-        if (remaining > 0) {
-            const fallbackCandidates = depositEntries
-                .filter((entry) => entry.rawQuantity > entry.assignedQuantity)
-                .sort((a, b) => b.rawQuantity - a.rawQuantity);
+            if (remaining > 0) {
+                const fractionalCandidates = depositEntries
+                    .filter((entry) => entry.fractionalPart > 0)
+                    .sort((a, b) => b.fractionalPart - a.fractionalPart);
 
-            for (const entry of fallbackCandidates) {
-                if (remaining <= 0) break;
-                const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
-                if (maxExtra <= 0) continue;
-                const addition = Math.min(maxExtra, remaining);
-                entry.assignedQuantity += addition;
-                assignedTotal += addition;
-                remaining -= addition;
+                for (const entry of fractionalCandidates) {
+                    if (remaining <= 0) break;
+                    const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
+                    if (maxExtra <= 0) continue;
+                    const addition = Math.min(maxExtra, remaining);
+                    entry.assignedQuantity += addition;
+                    assignedTotal += addition;
+                    remaining -= addition;
+                }
+            }
+
+            if (remaining > 0) {
+                const fallbackCandidates = depositEntries
+                    .filter((entry) => entry.rawQuantity > entry.assignedQuantity)
+                    .sort((a, b) => b.rawQuantity - a.rawQuantity);
+
+                for (const entry of fallbackCandidates) {
+                    if (remaining <= 0) break;
+                    const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
+                    if (maxExtra <= 0) continue;
+                    const addition = Math.min(maxExtra, remaining);
+                    entry.assignedQuantity += addition;
+                    assignedTotal += addition;
+                    remaining -= addition;
+                }
             }
         }
 

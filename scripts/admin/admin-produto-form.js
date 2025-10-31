@@ -857,16 +857,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateData.estoques = [];
             } else {
                 const summary = calculateFractionalSummary();
-                const normalizedStock = normalizeFractionalStockValue(summary.stock);
+                const normalizedStock = Number.isFinite(summary.normalizedStock)
+                    ? summary.normalizedStock
+                    : normalizeFractionalStockValue(summary.stock);
                 updateData.fracionado = {
                     ativo: true,
                     itens: fractionalItemsPayload,
                     custoCalculado: Number.isFinite(summary.cost) ? summary.cost : null,
-                    estoqueEquivalente: Number.isFinite(summary.stock) ? normalizedStock : null,
+                    estoqueEquivalente: Number.isFinite(normalizedStock) ? normalizedStock : null,
                 };
                 updateData.custo = Number.isFinite(summary.cost) ? summary.cost : 0;
                 updateData.estoques = [];
-                updateData.stock = Number.isFinite(summary.stock) ? normalizedStock : 0;
+                updateData.stock = Number.isFinite(normalizedStock) ? normalizedStock : 0;
             }
         } else {
             updateData.fracionado = {
@@ -2527,6 +2529,30 @@ document.addEventListener('DOMContentLoaded', () => {
         return Math.floor(value);
     };
 
+    const ensureUniformFractionalBaseQuantity = () => {
+        if (!Array.isArray(fractionalChildren) || fractionalChildren.length === 0) {
+            return 1;
+        }
+
+        let reference = null;
+        fractionalChildren.forEach((child) => {
+            const baseValue = Number(child?.quantidadeOrigem);
+            if (Number.isFinite(baseValue) && baseValue > 0 && reference === null) {
+                reference = baseValue;
+            }
+        });
+
+        if (!Number.isFinite(reference) || reference <= 0) {
+            reference = 1;
+        }
+
+        fractionalChildren.forEach((child) => {
+            child.quantidadeOrigem = reference;
+        });
+
+        return reference;
+    };
+
     const computeFractionChildMetrics = (child = {}) => {
         const rawBase = Number(child?.quantidadeOrigem);
         const rawFraction = Number(child?.quantidadeFracionada);
@@ -2537,8 +2563,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const costPerFraction = normalizedFraction > 0 && Number.isFinite(childCost)
             ? childCost / normalizedFraction
             : 0;
-        const equivalentStock = normalizedBase > 0 && Number.isFinite(childStock)
-            ? childStock * (normalizedFraction / normalizedBase)
+        const ratio = normalizedFraction > 0 && normalizedBase > 0
+            ? (normalizedBase / normalizedFraction)
+            : 0;
+        const equivalentStock = ratio > 0 && Number.isFinite(childStock)
+            ? childStock * ratio
             : 0;
 
         return {
@@ -2548,15 +2577,44 @@ document.addEventListener('DOMContentLoaded', () => {
             equivalentStock: Number.isFinite(equivalentStock) ? equivalentStock : 0,
             equivalentStockFloor: normalizeFractionalStockValue(equivalentStock),
             childStock: Number.isFinite(childStock) ? childStock : 0,
+            ratio: Number.isFinite(ratio) && ratio > 0 ? ratio : 0,
         };
     };
+    const calculateFractionalSummary = () => {
+        const baseQuantity = ensureUniformFractionalBaseQuantity();
+        if (!Array.isArray(fractionalChildren) || fractionalChildren.length === 0) {
+            return {
+                cost: 0,
+                stock: 0,
+                normalizedStock: 0,
+                baseQuantity,
+                metricsList: [],
+            };
+        }
 
-    const calculateFractionalSummary = () => fractionalChildren.reduce((acc, child) => {
-        const metrics = computeFractionChildMetrics(child);
-        acc.cost += metrics.costPerFraction;
-        acc.stock += metrics.equivalentStock;
-        return acc;
-    }, { cost: 0, stock: 0 });
+        const metricsList = fractionalChildren.map((child, index) => ({
+            index,
+            childId: child?.productId ? String(child.productId) : null,
+            metrics: computeFractionChildMetrics(child),
+        }));
+
+        const totalCost = metricsList.reduce((sum, entry) => sum + (Number(entry.metrics.costPerFraction) || 0), 0);
+        const stockCandidates = metricsList
+            .map((entry) => Number(entry.metrics.equivalentStock))
+            .filter((value) => Number.isFinite(value) && value >= 0);
+        const rawStock = stockCandidates.length
+            ? Math.min(...stockCandidates)
+            : 0;
+        const normalizedStock = normalizeFractionalStockValue(rawStock);
+
+        return {
+            cost: Number.isFinite(totalCost) ? totalCost : 0,
+            stock: Number.isFinite(rawStock) ? rawStock : 0,
+            normalizedStock,
+            baseQuantity,
+            metricsList,
+        };
+    };
 
     const normalizeFiscalSnapshot = (value) => {
         if (!value || typeof value !== 'object') return {};
@@ -2689,9 +2747,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const updateFractionalSummary = () => {
-        const summary = calculateFractionalSummary();
-        const normalizedStock = normalizeFractionalStockValue(summary.stock);
+    const updateFractionalSummary = (precomputedSummary = null) => {
+        const summary = precomputedSummary && typeof precomputedSummary === 'object'
+            ? precomputedSummary
+            : calculateFractionalSummary();
+        const normalizedStock = Number.isFinite(summary?.normalizedStock)
+            ? summary.normalizedStock
+            : normalizeFractionalStockValue(summary?.stock);
         if (fractionSummaryCost) {
             fractionSummaryCost.textContent = formatFractionCurrency(Number.isFinite(summary.cost) ? summary.cost : 0);
         }
@@ -2717,17 +2779,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderFractionChildren = () => {
         if (!fractionChildTableBody) return;
+
+        const summary = calculateFractionalSummary();
+        const normalizedStock = Number.isFinite(summary.normalizedStock)
+            ? summary.normalizedStock
+            : normalizeFractionalStockValue(summary.stock);
+        const baseQuantity = Number.isFinite(summary.baseQuantity) && summary.baseQuantity > 0
+            ? summary.baseQuantity
+            : 1;
+
         fractionChildTableBody.innerHTML = '';
         if (!Array.isArray(fractionalChildren) || fractionalChildren.length === 0) {
             fractionChildEmptyState?.classList.remove('hidden');
-            updateFractionalSummary();
+            updateFractionalSummary(summary);
             return;
         }
         fractionChildEmptyState?.classList.add('hidden');
 
         fractionalChildren.forEach((child, index) => {
-            const metrics = computeFractionChildMetrics(child);
-            child.quantidadeOrigem = metrics.baseQuantity;
+            const metrics = summary.metricsList[index]?.metrics || computeFractionChildMetrics(child);
+            child.quantidadeOrigem = baseQuantity;
             child.quantidadeFracionada = metrics.fractionQuantity > 0 ? metrics.fractionQuantity : 1;
             const nameLabel = child?.nome ? escapeHtml(child.nome) : 'Produto sem nome';
             const codeParts = [];
@@ -2743,13 +2814,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="text-[11px] text-gray-500">${codeLabel}</div>
                 </td>
                 <td class="px-3 py-2 text-center align-middle">
-                    <input type="number" min="0" step="0.0001" class="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-1 focus:ring-primary/20" data-fraction-index="${index}" data-fraction-field="base" value="${metrics.baseQuantity}">
+                    <input type="number" min="0" step="0.0001" class="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-1 focus:ring-primary/20" data-fraction-index="${index}" data-fraction-field="base" value="${baseQuantity}">
                 </td>
                 <td class="px-3 py-2 text-center align-middle">
                     <input type="number" min="0" step="0.0001" class="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-1 focus:ring-primary/20" data-fraction-index="${index}" data-fraction-field="fraction" value="${metrics.fractionQuantity > 0 ? metrics.fractionQuantity : ''}">
                 </td>
                 <td class="px-3 py-2 text-center align-middle text-[11px] text-gray-600">${formatFractionNumber(metrics.childStock)}</td>
-                <td class="px-3 py-2 text-center align-middle text-[11px] font-semibold text-gray-700">${formatFractionNumber(metrics.equivalentStockFloor)}</td>
+                <td class="px-3 py-2 text-center align-middle text-[11px] font-semibold text-gray-700">${formatFractionNumber(Number.isFinite(normalizedStock) ? normalizedStock : metrics.equivalentStockFloor)}</td>
                 <td class="px-3 py-2 text-center align-middle text-[11px] font-semibold text-gray-700">${formatFractionCurrency(metrics.costPerFraction)}</td>
                 <td class="px-3 py-2 text-right align-middle">
                     <button type="button" class="inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-[11px] font-semibold text-red-600 transition hover:bg-red-50" data-fraction-remove="${index}"><i class="fas fa-times"></i> Remover</button>
@@ -2766,10 +2837,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const parsedValue = Number(event.target.value);
                 if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
                     showToastMessage('Informe uma quantidade utilizada maior que zero.', 'warning');
-                    event.target.value = metrics.baseQuantity;
+                    event.target.value = baseQuantity;
                     return;
                 }
-                fractionalChildren[index].quantidadeOrigem = parsedValue;
+                fractionalChildren.forEach((entry) => {
+                    entry.quantidadeOrigem = parsedValue;
+                });
                 renderFractionChildren();
                 markProductAsModified();
             });
@@ -2793,7 +2866,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        updateFractionalSummary();
+        updateFractionalSummary(summary);
     };
 
     const addFractionChild = (product) => {
