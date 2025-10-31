@@ -304,25 +304,55 @@ const collectSaleProductQuantities = (sale) => {
   return quantities;
 };
 
-const updateProductStockForDeposit = async ({ productId, depositId, quantity }) => {
+const resolveProductObjectId = (value) => {
+  if (!value) return null;
+  if (value instanceof mongoose.Types.ObjectId) {
+    return value;
+  }
+  if (typeof value === 'object' && value._id) {
+    return resolveProductObjectId(value._id);
+  }
+  return toObjectIdOrNull(value);
+};
+
+const updateProductStockForDeposit = async ({
+  productId,
+  depositId,
+  quantity,
+  cascadeFractional = true,
+  visited,
+}) => {
   const numericQuantity = Number(quantity);
-  if (!productId || !depositId || !Number.isFinite(numericQuantity) || numericQuantity === 0) {
-    return false;
+  if (!Number.isFinite(numericQuantity) || numericQuantity === 0) {
+    return { updated: false, operations: [] };
   }
 
-  const product = await Product.findById(productId);
+  const productObjectId = resolveProductObjectId(productId);
+  const depositObjectId = toObjectIdOrNull(depositId);
+  if (!productObjectId || !depositObjectId) {
+    return { updated: false, operations: [] };
+  }
+
+  const product = await Product.findById(productObjectId);
   if (!product) {
-    console.warn('Produto não encontrado para baixa de estoque no PDV.', {
-      productId: productId.toString(),
+    console.warn('Produto não encontrado para movimentação de estoque no PDV.', {
+      productId: productObjectId.toString(),
     });
-    return false;
+    return { updated: false, operations: [] };
   }
 
-  const depositKey = depositId.toString();
+  const visitSet = visited instanceof Set ? visited : new Set();
+  const visitKey = product._id.toString();
+  const alreadyVisited = visitSet.has(visitKey);
+  if (!alreadyVisited) {
+    visitSet.add(visitKey);
+  }
+
   if (!Array.isArray(product.estoques)) {
     product.estoques = [];
   }
 
+  const depositKey = depositObjectId.toString();
   let entry = product.estoques.find(
     (stockEntry) => stockEntry?.deposito && stockEntry.deposito.toString() === depositKey
   );
@@ -338,7 +368,7 @@ const updateProductStockForDeposit = async ({ productId, depositId, quantity }) 
     entry.quantidade = current - numericQuantity;
   } else {
     entry = {
-      deposito: depositId,
+      deposito: depositObjectId,
       quantidade: -numericQuantity,
       unidade: product.unidade || 'UN',
     };
@@ -346,8 +376,74 @@ const updateProductStockForDeposit = async ({ productId, depositId, quantity }) 
   }
 
   product.markModified('estoques');
-  await product.save();
-  return true;
+
+  try {
+    await product.save();
+  } catch (error) {
+    console.error('Erro ao salvar movimentação de estoque do produto no PDV.', {
+      productId: product._id.toString(),
+      depositId: depositObjectId.toString(),
+    }, error);
+    throw error;
+  }
+
+  const operations = [{ product: product._id, quantity: numericQuantity }];
+
+  const shouldCascade = cascadeFractional && !alreadyVisited;
+  const fractionalConfig = product.fracionado || {};
+  const fractionalItems = Array.isArray(fractionalConfig.itens) ? fractionalConfig.itens : [];
+
+  if (shouldCascade && fractionalConfig.ativo && fractionalItems.length) {
+    for (const item of fractionalItems) {
+      const baseQuantity = Number(item?.quantidadeOrigem);
+      const fractionQuantity = Number(item?.quantidadeFracionada);
+      if (!Number.isFinite(baseQuantity) || baseQuantity <= 0) continue;
+      if (!Number.isFinite(fractionQuantity) || fractionQuantity <= 0) continue;
+
+      const childObjectId = resolveProductObjectId(item?.produto);
+      if (!childObjectId) continue;
+
+      const ratio = baseQuantity / fractionQuantity;
+      const childQuantity = numericQuantity * ratio;
+      if (!Number.isFinite(childQuantity) || childQuantity === 0) continue;
+
+      try {
+        const childResult = await updateProductStockForDeposit({
+          productId: childObjectId,
+          depositId: depositObjectId,
+          quantity: childQuantity,
+          cascadeFractional: true,
+          visited: visitSet,
+        });
+        if (childResult?.operations?.length) {
+          operations.push(...childResult.operations);
+        }
+      } catch (error) {
+        console.error('Erro ao ajustar estoque de produto filho fracionado no PDV.', {
+          parentProductId: product._id.toString(),
+          childProductId: childObjectId.toString(),
+        }, error);
+      }
+    }
+
+    try {
+      await recalculateFractionalStockForProduct(product._id);
+    } catch (error) {
+      console.error('Erro ao recalcular estoque fracionado do produto pai no PDV.', {
+        productId: product._id.toString(),
+      }, error);
+    }
+  }
+
+  try {
+    await refreshParentFractionalStocks(product._id);
+  } catch (error) {
+    console.error('Erro ao atualizar produtos pais fracionados vinculados no PDV.', {
+      productId: product._id.toString(),
+    }, error);
+  }
+
+  return { updated: true, operations };
 };
 
 const applyInventoryMovementsToSales = async ({ sales, depositId, existingMovements = [] }) => {
@@ -395,6 +491,7 @@ const applyInventoryMovementsToSales = async ({ sales, depositId, existingMoveme
               productId,
               depositId: movementDeposit,
               quantity: -quantity,
+              cascadeFractional: false,
             });
           }
         }
@@ -421,13 +518,20 @@ const applyInventoryMovementsToSales = async ({ sales, depositId, existingMoveme
       const productObjectId = toObjectIdOrNull(productKey);
       const numericQuantity = Number(quantity) || 0;
       if (!productObjectId || numericQuantity <= 0) continue;
-      const updated = await updateProductStockForDeposit({
+      const adjustment = await updateProductStockForDeposit({
         productId: productObjectId,
         depositId: depositObjectId,
         quantity: numericQuantity,
+        cascadeFractional: true,
       });
-      if (updated) {
-        movementItems.push({ product: productObjectId, quantity: numericQuantity });
+      const appliedOperations = Array.isArray(adjustment?.operations)
+        ? adjustment.operations
+        : [];
+      for (const operation of appliedOperations) {
+        const opProductId = operation?.product ? toObjectIdOrNull(operation.product) : null;
+        const opQuantity = Number(operation?.quantity) || 0;
+        if (!opProductId || opQuantity === 0) continue;
+        movementItems.push({ product: opProductId, quantity: opQuantity });
       }
     }
 
