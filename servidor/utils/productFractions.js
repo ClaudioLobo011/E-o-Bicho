@@ -17,6 +17,17 @@ const toObjectIdOrNull = (value) => {
     if (value instanceof mongoose.Types.ObjectId) {
         return value;
     }
+    if (value && typeof value === 'object') {
+        if (value._id) {
+            return toObjectIdOrNull(value._id);
+        }
+        if (value.id) {
+            return toObjectIdOrNull(value.id);
+        }
+        if (typeof value.valueOf === 'function' && value.valueOf() !== value) {
+            return toObjectIdOrNull(value.valueOf());
+        }
+    }
     if (typeof value === 'string' && isValidObjectId(value)) {
         return new mongoose.Types.ObjectId(value);
     }
@@ -68,9 +79,10 @@ const ensureDepositEntry = (product, depositId) => {
         product.estoques = [];
     }
     const depositKey = depositObjectId.toString();
-    let entry = product.estoques.find(
-        (item) => item?.deposito && item.deposito.toString() === depositKey,
-    );
+    let entry = product.estoques.find((item) => {
+        const entryDepositId = toObjectIdOrNull(item?.deposito);
+        return entryDepositId && entryDepositId.toString() === depositKey;
+    });
     if (!entry) {
         entry = {
             deposito: depositObjectId,
@@ -78,8 +90,13 @@ const ensureDepositEntry = (product, depositId) => {
             unidade: product.unidade || '',
         };
         product.estoques.push(entry);
-    } else if (!entry.unidade) {
-        entry.unidade = product.unidade || '';
+    } else {
+        if (!entry.unidade) {
+            entry.unidade = product.unidade || '';
+        }
+        if (!entry.deposito || toObjectIdOrNull(entry.deposito)?.toString() !== depositKey) {
+            entry.deposito = depositObjectId;
+        }
     }
     return entry;
 };
@@ -273,7 +290,10 @@ const getDepositQuantity = (product, depositId) => {
     if (!depositObjectId) return 0;
     const depositKey = depositObjectId.toString();
     const entry = Array.isArray(product.estoques)
-        ? product.estoques.find((item) => item?.deposito && item.deposito.toString() === depositKey)
+        ? product.estoques.find((item) => {
+              const entryDepositId = toObjectIdOrNull(item?.deposito);
+              return entryDepositId && entryDepositId.toString() === depositKey;
+          })
         : null;
     return toNullableNumber(entry?.quantidade) || 0;
 };
