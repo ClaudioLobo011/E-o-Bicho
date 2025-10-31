@@ -224,7 +224,36 @@ const applyFractionalSnapshot = (product) => {
         return product;
     }
 
-    const mappedItems = product.fracionado.itens.map((item) => {
+    const plainProduct = typeof product.toObject === 'function'
+        ? product.toObject()
+        : { ...product };
+
+    const fractionalConfig = plainProduct.fracionado || {};
+    const fractionalItems = Array.isArray(fractionalConfig.itens) ? fractionalConfig.itens : [];
+    if (fractionalItems.length === 0) {
+        return plainProduct;
+    }
+
+    const parentUnit = typeof plainProduct.unidade === 'string' ? plainProduct.unidade.trim() : '';
+    const existingDeposits = Array.isArray(plainProduct.estoques) ? plainProduct.estoques : [];
+    const existingDepositMap = new Map();
+
+    existingDeposits.forEach((entry) => {
+        const rawDeposit = entry?.deposito;
+        let depositId = null;
+        if (rawDeposit && typeof rawDeposit === 'object' && rawDeposit._id) {
+            depositId = String(rawDeposit._id);
+        } else if (mongoose.Types.ObjectId.isValid(rawDeposit)) {
+            depositId = String(rawDeposit);
+        }
+        if (depositId) {
+            existingDepositMap.set(depositId, entry);
+        }
+    });
+
+    const depositTotals = new Map();
+
+    const mappedItems = fractionalItems.map((item) => {
         const rawProduct = item?.produto;
         const child = rawProduct && typeof rawProduct === 'object' ? rawProduct : null;
         const childCost = Number(child?.custo);
@@ -238,6 +267,56 @@ const applyFractionalSnapshot = (product) => {
         const equivalentStock = normalizedBase > 0 && Number.isFinite(childStock)
             ? childStock * (normalizedFraction / normalizedBase)
             : 0;
+
+        const multiplier = normalizedBase > 0 && normalizedFraction > 0
+            ? (normalizedFraction / normalizedBase)
+            : 0;
+
+        if (multiplier > 0 && child && Array.isArray(child.estoques)) {
+            child.estoques.forEach((depositEntry) => {
+                const rawDeposit = depositEntry?.deposito;
+                let depositId = null;
+                let depositReference = null;
+                if (rawDeposit && typeof rawDeposit === 'object' && rawDeposit._id) {
+                    depositId = String(rawDeposit._id);
+                    depositReference = rawDeposit;
+                } else if (mongoose.Types.ObjectId.isValid(rawDeposit)) {
+                    depositId = String(rawDeposit);
+                    depositReference = rawDeposit;
+                }
+                if (!depositId) {
+                    return;
+                }
+                const childQuantity = Number(depositEntry?.quantidade);
+                if (!Number.isFinite(childQuantity) || childQuantity <= 0) {
+                    return;
+                }
+                const equivalentQuantity = childQuantity * multiplier;
+                if (!Number.isFinite(equivalentQuantity) || equivalentQuantity <= 0) {
+                    return;
+                }
+
+                const depositUnit = typeof depositEntry?.unidade === 'string'
+                    ? depositEntry.unidade.trim()
+                    : '';
+                const current = depositTotals.get(depositId) || {
+                    quantidade: 0,
+                    unidade: '',
+                    deposito: depositReference,
+                };
+                const resolvedUnit = current.unidade
+                    || depositUnit
+                    || (typeof child?.unidade === 'string' ? child.unidade.trim() : '')
+                    || parentUnit
+                    || '';
+
+                depositTotals.set(depositId, {
+                    quantidade: current.quantidade + equivalentQuantity,
+                    unidade: resolvedUnit,
+                    deposito: current.deposito || depositReference,
+                });
+            });
+        }
 
         return {
             ...item,
@@ -253,25 +332,97 @@ const applyFractionalSnapshot = (product) => {
 
     const totalCost = mappedItems.reduce((sum, entry) => sum + (Number(entry.custoCalculado) || 0), 0);
     const totalStock = mappedItems.reduce((sum, entry) => sum + (Number(entry.estoqueEquivalente) || 0), 0);
+    const normalizedTotalStock = Number.isFinite(totalStock) && totalStock > 0 ? Math.floor(totalStock) : 0;
 
-    if (typeof product.toObject === 'function') {
-        const plain = product.toObject();
-        plain.fracionado = {
-            ...plain.fracionado,
-            itens: mappedItems,
-            custoCalculado: Number.isFinite(totalCost) ? totalCost : null,
-            estoqueEquivalente: Number.isFinite(totalStock) ? totalStock : null,
+    const depositEntries = Array.from(depositTotals.entries()).map(([depositId, info]) => {
+        const rawQuantity = Number.isFinite(info?.quantidade) && info.quantidade > 0 ? info.quantidade : 0;
+        const flooredQuantity = Math.floor(rawQuantity);
+        const fractionalPart = rawQuantity - flooredQuantity;
+        const unitLabel = typeof info?.unidade === 'string' && info.unidade.trim()
+            ? info.unidade.trim()
+            : parentUnit;
+
+        return {
+            depositId,
+            rawQuantity,
+            assignedQuantity: flooredQuantity,
+            fractionalPart: fractionalPart > 0 ? fractionalPart : 0,
+            unidade: unitLabel,
+            deposito: info?.deposito || null,
         };
-        return plain;
+    });
+
+    let assignedTotal = depositEntries.reduce((sum, entry) => sum + entry.assignedQuantity, 0);
+    let remaining = Math.max(0, normalizedTotalStock - assignedTotal);
+
+    if (remaining > 0) {
+        const fractionalCandidates = depositEntries
+            .filter((entry) => entry.fractionalPart > 0)
+            .sort((a, b) => b.fractionalPart - a.fractionalPart);
+
+        for (const entry of fractionalCandidates) {
+            if (remaining <= 0) break;
+            const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
+            if (maxExtra <= 0) continue;
+            const addition = Math.min(maxExtra, remaining);
+            entry.assignedQuantity += addition;
+            assignedTotal += addition;
+            remaining -= addition;
+        }
     }
 
-    product.fracionado = {
-        ...product.fracionado,
+    if (remaining > 0) {
+        const fallbackCandidates = depositEntries
+            .filter((entry) => entry.rawQuantity > entry.assignedQuantity)
+            .sort((a, b) => b.rawQuantity - a.rawQuantity);
+
+        for (const entry of fallbackCandidates) {
+            if (remaining <= 0) break;
+            const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
+            if (maxExtra <= 0) continue;
+            const addition = Math.min(maxExtra, remaining);
+            entry.assignedQuantity += addition;
+            assignedTotal += addition;
+            remaining -= addition;
+        }
+    }
+
+    const sanitizedDeposits = depositEntries
+        .filter((entry) => entry.assignedQuantity > 0)
+        .map((entry) => {
+            const existing = existingDepositMap.get(entry.depositId);
+            const depositValue = existing?.deposito || entry.deposito || entry.depositId;
+            const unitValue = typeof existing?.unidade === 'string' && existing.unidade.trim()
+                ? existing.unidade.trim()
+                : entry.unidade || parentUnit || '';
+
+            if (existing && typeof existing === 'object') {
+                return {
+                    ...existing,
+                    deposito: depositValue,
+                    quantidade: entry.assignedQuantity,
+                    unidade: unitValue,
+                };
+            }
+
+            return {
+                deposito: depositValue,
+                quantidade: entry.assignedQuantity,
+                unidade: unitValue,
+            };
+        });
+
+    plainProduct.estoques = sanitizedDeposits;
+    plainProduct.stock = normalizedTotalStock;
+    plainProduct.fracionado = {
+        ...plainProduct.fracionado,
         itens: mappedItems,
         custoCalculado: Number.isFinite(totalCost) ? totalCost : null,
-        estoqueEquivalente: Number.isFinite(totalStock) ? totalStock : null,
+        estoqueEquivalente: Number.isFinite(totalStock) ? normalizedTotalStock : null,
+        estoqueCalculadoDetalhado: Number.isFinite(totalStock) ? totalStock : null,
     };
-    return product;
+
+    return plainProduct;
 };
 
 
