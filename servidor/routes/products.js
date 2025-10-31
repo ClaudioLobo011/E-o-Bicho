@@ -77,7 +77,7 @@ const resolveAuthenticatedUser = async (req) => {
 };
 
 
-const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = {}) => {
+const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null, parentCost = null } = {}) => {
     const defaultConfig = {
         ativo: false,
         itens: [],
@@ -167,8 +167,35 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = 
         return result;
     }
 
+    const totalFractionQuantity = sanitizedItems.reduce((sum, item) => sum + (Number(item.quantidadeFracionada) || 0), 0);
+
+    let resolvedParentCost = Number(parentCost);
+    if (!Number.isFinite(resolvedParentCost) || resolvedParentCost <= 0) {
+        if (parentProductId) {
+            try {
+                const parentDoc = await Product.findById(parentProductId).select('custo').lean();
+                if (parentDoc) {
+                    const parentCostValue = Number(parentDoc.custo);
+                    if (Number.isFinite(parentCostValue) && parentCostValue > 0) {
+                        resolvedParentCost = parentCostValue;
+                    }
+                }
+            } catch (error) {
+                console.warn('Não foi possível carregar o custo do produto pai para o fracionamento.', { parentProductId }, error);
+            }
+        }
+    }
+
+    if (!Number.isFinite(resolvedParentCost) || resolvedParentCost <= 0) {
+        resolvedParentCost = 0;
+    }
+
+    const costPerFraction = resolvedParentCost > 0 && Number.isFinite(totalFractionQuantity) && totalFractionQuantity > 0
+        ? resolvedParentCost / totalFractionQuantity
+        : 0;
+
     const childProducts = await Product.find({ _id: { $in: childIds } })
-        .select('custo stock')
+        .select('stock unidade estoques')
         .lean();
     const childMap = new Map(childProducts.map((child) => [String(child._id), child]));
 
@@ -178,11 +205,7 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = 
             result.errors.push('Alguns produtos filhos informados não foram encontrados.');
             return null;
         }
-        const childCost = Number(child.custo);
         const childStock = Number(child.stock);
-        const costPerFraction = item.quantidadeFracionada > 0 && Number.isFinite(childCost)
-            ? childCost / item.quantidadeFracionada
-            : 0;
         const ratio = item.quantidadeFracionada > 0 && item.quantidadeOrigem > 0
             ? (item.quantidadeOrigem / item.quantidadeFracionada)
             : 0;
@@ -201,7 +224,6 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = 
         return result;
     }
 
-    const totalCost = itemsWithDetails.reduce((sum, entry) => sum + (Number(entry.custoCalculado) || 0), 0);
     const stockCandidates = itemsWithDetails
         .map((entry) => Number(entry.estoqueEquivalente))
         .filter((value) => Number.isFinite(value) && value >= 0);
@@ -215,11 +237,11 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = 
             quantidadeOrigem: entry.quantidadeOrigem,
             quantidadeFracionada: entry.quantidadeFracionada,
         })),
-        custoCalculado: Number.isFinite(totalCost) ? totalCost : null,
+        custoCalculado: Number.isFinite(costPerFraction) ? costPerFraction : null,
         estoqueEquivalente: Number.isFinite(normalizedStock) ? normalizedStock : null,
         atualizadoEm: new Date(),
     };
-    result.summaryCost = Number.isFinite(totalCost) ? totalCost : null;
+    result.summaryCost = Number.isFinite(costPerFraction) ? costPerFraction : null;
     result.summaryStock = Number.isFinite(normalizedStock) ? normalizedStock : null;
     return result;
 };
@@ -258,18 +280,26 @@ const applyFractionalSnapshot = (product) => {
 
     const depositTotals = new Map();
 
+    const parentCostValue = Number(plainProduct.custo);
+    const totalFractionQuantity = fractionalItems.reduce((sum, entry) => {
+        const fractionQuantity = Number(entry?.quantidadeFracionada);
+        const normalizedFraction = Number.isFinite(fractionQuantity) && fractionQuantity > 0 ? fractionQuantity : 0;
+        return sum + normalizedFraction;
+    }, 0);
+
+    const costPerFraction = Number.isFinite(parentCostValue) && parentCostValue > 0
+        && Number.isFinite(totalFractionQuantity) && totalFractionQuantity > 0
+        ? parentCostValue / totalFractionQuantity
+        : 0;
+
     const mappedItems = fractionalItems.map((item) => {
         const rawProduct = item?.produto;
         const child = rawProduct && typeof rawProduct === 'object' ? rawProduct : null;
-        const childCost = Number(child?.custo);
         const childStock = Number(child?.stock);
         const baseQuantity = Number(item?.quantidadeOrigem);
         const fractionQuantity = Number(item?.quantidadeFracionada);
         const normalizedBase = Number.isFinite(baseQuantity) && baseQuantity > 0 ? baseQuantity : 1;
         const normalizedFraction = Number.isFinite(fractionQuantity) && fractionQuantity > 0 ? fractionQuantity : 0;
-        const costPerFraction = normalizedFraction > 0 && Number.isFinite(childCost)
-            ? childCost / normalizedFraction
-            : 0;
         const ratio = normalizedFraction > 0 && normalizedBase > 0
             ? (normalizedBase / normalizedFraction)
             : 0;
@@ -332,12 +362,11 @@ const applyFractionalSnapshot = (product) => {
             produto: child || item.produto,
             custoCalculado: Number.isFinite(costPerFraction) ? costPerFraction : 0,
             estoqueEquivalente: Number.isFinite(equivalentStock) ? equivalentStock : 0,
-            custoReferencia: Number.isFinite(childCost) ? childCost : null,
+            custoReferencia: Number.isFinite(parentCostValue) ? parentCostValue : null,
             estoqueAtualFilho: Number.isFinite(childStock) ? childStock : null,
         };
     });
 
-    const totalCost = mappedItems.reduce((sum, entry) => sum + (Number(entry.custoCalculado) || 0), 0);
     const stockCandidates = mappedItems
         .map((entry) => Number(entry.estoqueEquivalente))
         .filter((value) => Number.isFinite(value) && value >= 0);
@@ -450,7 +479,7 @@ const applyFractionalSnapshot = (product) => {
     plainProduct.fracionado = {
         ...plainProduct.fracionado,
         itens: mappedItems,
-        custoCalculado: Number.isFinite(totalCost) ? totalCost : null,
+        custoCalculado: Number.isFinite(costPerFraction) ? costPerFraction : null,
         estoqueEquivalente: Number.isFinite(totalStock) ? normalizedTotalStock : null,
         estoqueCalculadoDetalhado: Number.isFinite(totalStock) ? totalStock : null,
     };
@@ -466,7 +495,7 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
 
     try {
         const product = await Product.findById(productId)
-            .select('fracionado unidade')
+            .select('fracionado unidade custo')
             .populate('fracionado.itens.produto')
             .lean();
 
@@ -510,13 +539,22 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
 
         const childProducts = childIds.length
             ? await Product.find({ _id: { $in: childIds } })
-                .select('custo stock estoques unidade')
+                .select('stock estoques unidade')
                 .lean()
             : [];
 
         const childMap = new Map(childProducts.map((child) => [String(child._id), child]));
+        const parentCostValue = Number(product?.custo);
+        const totalFractionQuantity = fractionalItems.reduce((sum, entry) => {
+            const fractionQuantityRaw = Number(entry?.quantidadeFracionada);
+            const normalizedFraction = Number.isFinite(fractionQuantityRaw) && fractionQuantityRaw > 0 ? fractionQuantityRaw : 0;
+            return sum + normalizedFraction;
+        }, 0);
+        const costPerFraction = Number.isFinite(parentCostValue) && parentCostValue > 0
+            && Number.isFinite(totalFractionQuantity) && totalFractionQuantity > 0
+            ? parentCostValue / totalFractionQuantity
+            : 0;
 
-        let totalCost = 0;
         let minEquivalentStock = null;
         const missingChildren = [];
         const depositTotals = new Map();
@@ -583,12 +621,7 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
             const baseQuantity = Number.isFinite(baseQuantityRaw) && baseQuantityRaw > 0 ? baseQuantityRaw : 1;
             const fractionQuantity = Number.isFinite(fractionQuantityRaw) && fractionQuantityRaw > 0 ? fractionQuantityRaw : 0;
 
-            const childCost = Number(child?.custo);
             const childStock = Number(child?.stock);
-
-            const costPerFraction = fractionQuantity > 0 && Number.isFinite(childCost)
-                ? childCost / fractionQuantity
-                : 0;
 
             const ratio = fractionQuantity > 0 && baseQuantity > 0
                 ? (baseQuantity / fractionQuantity)
@@ -597,7 +630,6 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
                 ? childStock * ratio
                 : 0;
 
-            totalCost += Number.isFinite(costPerFraction) ? costPerFraction : 0;
             const resolvedEquivalent = Number.isFinite(equivalentStock) ? equivalentStock : 0;
             if (minEquivalentStock === null) {
                 minEquivalentStock = resolvedEquivalent;
@@ -628,15 +660,11 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
             : 0;
 
         const updateDocument = {
-            'fracionado.custoCalculado': Number.isFinite(totalCost) ? totalCost : null,
+            'fracionado.custoCalculado': Number.isFinite(costPerFraction) ? costPerFraction : null,
             'fracionado.estoqueEquivalente': Number.isFinite(resolvedTotalStock) ? normalizedTotalStock : null,
             'fracionado.atualizadoEm': now,
             stock: normalizedTotalStock,
         };
-
-        if (Number.isFinite(totalCost)) {
-            updateDocument.custo = totalCost;
-        }
 
         const depositEntries = Array.from(depositTotals.entries()).map(([depositId, info]) => {
             const rawQuantity = Number.isFinite(info?.quantidade) && info.quantidade > 0 ? info.quantidade : 0;
@@ -920,15 +948,14 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
             fiscalPorEmpresa: {},
         };
 
-        const fractionalResult = await sanitizeFractionalConfig(payload.fracionado, {});
+        const fractionalResult = await sanitizeFractionalConfig(payload.fracionado, {
+            parentCost: Number.isFinite(costNumber) && costNumber > 0 ? costNumber : 0,
+        });
         if (fractionalResult.errors.length) {
             return res.status(400).json({ message: fractionalResult.errors[0], errors: fractionalResult.errors });
         }
         productData.fracionado = fractionalResult.config;
         if (fractionalResult.config.ativo) {
-            if (Number.isFinite(fractionalResult.summaryCost)) {
-                productData.custo = fractionalResult.summaryCost;
-            }
             if (Number.isFinite(fractionalResult.summaryStock)) {
                 productData.stock = fractionalResult.summaryStock;
             }
@@ -1712,8 +1739,17 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
 
         updatePayload.fornecedores = fornecedores;
 
+        const existingCostNumber = Number(existingProduct?.custo);
+        const requestedCostNumber = Object.prototype.hasOwnProperty.call(payload, 'custo')
+            ? parseNumber(payload.custo)
+            : null;
+        const parentCostForFraction = Number.isFinite(requestedCostNumber) && requestedCostNumber > 0
+            ? requestedCostNumber
+            : (Number.isFinite(existingCostNumber) && existingCostNumber > 0 ? existingCostNumber : 0);
+
         const fractionalResult = await sanitizeFractionalConfig(payload.fracionado, {
             parentProductId: existingProduct._id,
+            parentCost: parentCostForFraction,
         });
         if (fractionalResult.errors.length) {
             return res.status(400).json({ message: fractionalResult.errors[0], errors: fractionalResult.errors });
@@ -1738,10 +1774,6 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
 
         if (payload.fracionado !== undefined) {
             updatePayload.fracionado = fractionalResult.config;
-            if (fractionalResult.config.ativo && Number.isFinite(fractionalResult.summaryCost)) {
-                updatePayload.custo = fractionalResult.summaryCost;
-                payload.custo = fractionalResult.summaryCost;
-            }
             if (fractionalResult.config.ativo && Number.isFinite(fractionalResult.summaryStock)) {
                 updatePayload.stock = fractionalResult.summaryStock;
                 payload.stock = fractionalResult.summaryStock;

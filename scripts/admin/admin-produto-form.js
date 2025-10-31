@@ -866,7 +866,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     custoCalculado: Number.isFinite(summary.cost) ? summary.cost : null,
                     estoqueEquivalente: Number.isFinite(normalizedStock) ? normalizedStock : null,
                 };
-                updateData.custo = Number.isFinite(summary.cost) ? summary.cost : 0;
                 updateData.estoques = [];
                 updateData.stock = Number.isFinite(normalizedStock) ? normalizedStock : 0;
             }
@@ -2501,17 +2500,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const toggleFractionalCostLock = () => {
         if (!costInput) return;
-        const locked = isFractionalFeatureEnabled();
-        costInput.readOnly = locked;
-        costInput.classList.toggle('bg-gray-50', locked);
-        costInput.classList.toggle('cursor-not-allowed', locked);
-        if (locked) {
-            costInput.setAttribute('aria-readonly', 'true');
-            costInput.setAttribute('title', 'O custo é calculado automaticamente para produtos fracionados.');
-        } else {
-            costInput.removeAttribute('aria-readonly');
-            costInput.removeAttribute('title');
-        }
+        costInput.readOnly = false;
+        costInput.classList.remove('bg-gray-50');
+        costInput.classList.remove('cursor-not-allowed');
+        costInput.removeAttribute('aria-readonly');
+        costInput.removeAttribute('title');
     };
 
     const formatFractionCurrency = (value) => {
@@ -2553,16 +2546,28 @@ document.addEventListener('DOMContentLoaded', () => {
         return reference;
     };
 
+    const getParentCostForFraction = () => {
+        if (costInput) {
+            const parsed = Number(costInput.value);
+            if (Number.isFinite(parsed) && parsed > 0) {
+                return parsed;
+            }
+        }
+
+        const snapshotCost = Number(currentProductSnapshot?.custo);
+        if (Number.isFinite(snapshotCost) && snapshotCost > 0) {
+            return snapshotCost;
+        }
+
+        return 0;
+    };
+
     const computeFractionChildMetrics = (child = {}) => {
         const rawBase = Number(child?.quantidadeOrigem);
         const rawFraction = Number(child?.quantidadeFracionada);
         const normalizedBase = Number.isFinite(rawBase) && rawBase > 0 ? rawBase : 1;
         const normalizedFraction = Number.isFinite(rawFraction) && rawFraction > 0 ? rawFraction : 0;
-        const childCost = Number(child?.custo);
         const childStock = Number(child?.stock);
-        const costPerFraction = normalizedFraction > 0 && Number.isFinite(childCost)
-            ? childCost / normalizedFraction
-            : 0;
         const ratio = normalizedFraction > 0 && normalizedBase > 0
             ? (normalizedBase / normalizedFraction)
             : 0;
@@ -2573,7 +2578,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return {
             baseQuantity: normalizedBase,
             fractionQuantity: normalizedFraction,
-            costPerFraction: Number.isFinite(costPerFraction) ? costPerFraction : 0,
+            costPerFraction: 0,
             equivalentStock: Number.isFinite(equivalentStock) ? equivalentStock : 0,
             equivalentStockFloor: normalizeFractionalStockValue(equivalentStock),
             childStock: Number.isFinite(childStock) ? childStock : 0,
@@ -2592,13 +2597,28 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         }
 
+        const parentCost = getParentCostForFraction();
         const metricsList = fractionalChildren.map((child, index) => ({
             index,
             childId: child?.productId ? String(child.productId) : null,
             metrics: computeFractionChildMetrics(child),
         }));
 
-        const totalCost = metricsList.reduce((sum, entry) => sum + (Number(entry.metrics.costPerFraction) || 0), 0);
+        const totalFractionQuantity = metricsList
+            .map((entry) => Number(entry.metrics.fractionQuantity))
+            .filter((value) => Number.isFinite(value) && value > 0)
+            .reduce((sum, value) => sum + value, 0);
+
+        const costPerFraction = Number.isFinite(parentCost) && parentCost > 0 && Number.isFinite(totalFractionQuantity)
+            && totalFractionQuantity > 0
+            ? parentCost / totalFractionQuantity
+            : 0;
+
+        metricsList.forEach((entry, index) => {
+            const resolvedCost = Number.isFinite(costPerFraction) ? costPerFraction : 0;
+            metricsList[index].metrics.costPerFraction = resolvedCost;
+        });
+
         const stockCandidates = metricsList
             .map((entry) => Number(entry.metrics.equivalentStock))
             .filter((value) => Number.isFinite(value) && value >= 0);
@@ -2608,10 +2628,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const normalizedStock = normalizeFractionalStockValue(rawStock);
 
         return {
-            cost: Number.isFinite(totalCost) ? totalCost : 0,
+            cost: Number.isFinite(costPerFraction) ? costPerFraction : 0,
             stock: Number.isFinite(rawStock) ? rawStock : 0,
             normalizedStock,
             baseQuantity,
+            totalFractionQuantity: Number.isFinite(totalFractionQuantity) ? totalFractionQuantity : 0,
+            parentCost: Number.isFinite(parentCost) ? parentCost : 0,
             metricsList,
         };
     };
@@ -2800,6 +2822,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const metrics = summary.metricsList[index]?.metrics || computeFractionChildMetrics(child);
             child.quantidadeOrigem = baseQuantity;
             child.quantidadeFracionada = metrics.fractionQuantity > 0 ? metrics.fractionQuantity : 1;
+            child.custoCalculado = Number.isFinite(metrics.costPerFraction) ? metrics.costPerFraction : 0;
             const nameLabel = child?.nome ? escapeHtml(child.nome) : 'Produto sem nome';
             const codeParts = [];
             if (child?.cod) codeParts.push(escapeHtml(child.cod));
