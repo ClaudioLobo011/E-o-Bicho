@@ -388,7 +388,35 @@ const applyFractionalStockChange = async ({
     const targetProductId = baseProduct._id.toString();
 
     let parent = baseProduct;
-    const isChildChange = Boolean(baseProduct.fracionadoDe);
+    let isChildChange = Boolean(baseProduct.fracionadoDe);
+
+    if (!isChildChange) {
+        const parentLookupQuery = Product.findOne({
+            _id: { $ne: baseProduct._id },
+            'fracionamentos.produto': baseProduct._id,
+        });
+        if (session) parentLookupQuery.session(session);
+        const parentCandidate = await parentLookupQuery;
+        if (parentCandidate) {
+            parent = parentCandidate;
+            isChildChange = true;
+            if (typeof baseProduct.set === 'function') {
+                baseProduct.set('fracionadoDe', parentCandidate._id);
+            } else {
+                baseProduct.fracionadoDe = parentCandidate._id;
+            }
+            try {
+                const linkQuery = Product.updateOne(
+                    { _id: baseProduct._id },
+                    { $set: { fracionadoDe: parentCandidate._id } },
+                );
+                if (session) linkQuery.session(session);
+                await linkQuery;
+            } catch (linkError) {
+                console.error('Erro ao atualizar vínculo de fracionamento do produto filho:', linkError);
+            }
+        }
+    }
 
     if (isChildChange) {
         const parentQuery = Product.findById(baseProduct.fracionadoDe);
