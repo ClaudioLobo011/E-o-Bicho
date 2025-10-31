@@ -850,6 +850,25 @@
                                         <div id="deposit-empty-state" class="hidden bg-gray-50 px-4 py-6 text-center text-xs text-gray-500">Nenhum depósito vinculado até o momento.</div>
                                     </div>
                                 </div>
+                                <div id="fraction-stock-section" class="hidden rounded-2xl border border-dashed border-gray-300 bg-white p-4 space-y-4">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <h3 class="text-[13px] font-semibold text-gray-800">Produtos filho</h3>
+                                            <p class="text-[11px] text-gray-500">Visualize e ajuste os estoques fracionados em cada depósito.</p>
+                                        </div>
+                                        <button type="button" id="fraction-stock-save-button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60">
+                                            <i class="fas fa-save"></i>
+                                            Gravar estoques
+                                        </button>
+                                    </div>
+                                    <div class="overflow-x-auto rounded-xl border border-gray-200" id="fraction-stock-table-container">
+                                        <table class="min-w-full divide-y divide-gray-200">
+                                            <thead id="fraction-stock-thead" class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500"></thead>
+                                            <tbody id="fraction-stock-tbody" class="divide-y divide-gray-100 bg-white text-xs text-gray-700"></tbody>
+                                        </table>
+                                        <div id="fraction-stock-empty" class="hidden bg-gray-50 px-4 py-6 text-center text-xs text-gray-500">Nenhum produto fracionado vinculado.</div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div id="tab-images" class="hidden space-y-5 px-4 pb-5 pt-4" role="tabpanel" aria-labelledby="tab-images-trigger" aria-hidden="true">

@@ -29,6 +29,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const depositEmptyState = document.getElementById('deposit-empty-state');
     const depositTableWrapper = document.getElementById('deposit-table-wrapper');
     const depositTotalDisplay = document.getElementById('deposit-total-display');
+    const fractionStockSection = document.getElementById('fraction-stock-section');
+    const fractionStockTableHead = document.getElementById('fraction-stock-thead');
+    const fractionStockTableBody = document.getElementById('fraction-stock-tbody');
+    const fractionStockEmptyState = document.getElementById('fraction-stock-empty');
+    const fractionStockSaveButton = document.getElementById('fraction-stock-save-button');
+    const fractionStockSaveIdleContent = fractionStockSaveButton?.innerHTML || '';
     const skuInput = document.getElementById('cod');
     const nameInput = document.getElementById('nome');
     const barcodeInput = document.getElementById('codbarras');
@@ -585,6 +591,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let supplierEntries = [];
     let allDeposits = [];
     const depositStockMap = new Map();
+    const FRACTION_STOCK_EPSILON = 0.000001;
+    const fractionStockState = new Map();
+    const fractionStockOriginal = new Map();
+    let isFractionStockSaving = false;
     let lastSelectedProductUnit = getSelectedProductUnit();
     let duplicateCheckInProgress = false;
     let pendingImportedProductDraft = null;
@@ -2581,6 +2591,347 @@ document.addEventListener('DOMContentLoaded', () => {
         renderDepositStockRows();
     };
 
+    const normalizeFractionQuantity = (value) => {
+        if (value === null || value === undefined || value === '') return 0;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const isFractionStockDirty = () => {
+        if (!fractionStockState.size) return false;
+        const deposits = Array.isArray(allDeposits) ? allDeposits : [];
+        if (!deposits.length) return false;
+        for (const [childId, childState] of fractionStockState.entries()) {
+            const originalMap = fractionStockOriginal.get(childId) || new Map();
+            for (const deposit of deposits) {
+                const depositId = String(deposit._id || deposit.id || deposit);
+                const currentValue = normalizeFractionQuantity(childState.deposits.get(depositId));
+                const originalValue = normalizeFractionQuantity(originalMap.get(depositId));
+                if (Math.abs(currentValue - originalValue) > FRACTION_STOCK_EPSILON) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    const updateFractionStockSaveState = () => {
+        const hasChildren = fractionStockState.size > 0;
+        const hasDeposits = Array.isArray(allDeposits) && allDeposits.length > 0;
+        if (fractionStockSaveButton) {
+            const shouldEnable = hasChildren && hasDeposits && isFractionStockDirty() && !isFractionStockSaving;
+            fractionStockSaveButton.disabled = !shouldEnable;
+        }
+    };
+
+    const handleFractionStockInputChange = (event) => {
+        const input = event?.target;
+        if (!(input instanceof HTMLInputElement)) return;
+        const childId = input.dataset.childId;
+        const depositId = input.dataset.depositId;
+        if (!childId || !depositId) return;
+        const childState = fractionStockState.get(childId);
+        if (!childState) return;
+        if (input.value === '') {
+            childState.deposits.set(depositId, null);
+        } else {
+            const parsed = Number.parseFloat(input.value);
+            if (Number.isFinite(parsed)) {
+                childState.deposits.set(depositId, parsed);
+            }
+        }
+        updateFractionStockSaveState();
+    };
+
+    const renderFractionStockTable = () => {
+        if (!fractionStockSection) return;
+
+        const childEntries = Array.from(fractionStockState.values());
+        const depositList = Array.isArray(allDeposits) ? allDeposits : [];
+
+        if (!childEntries.length) {
+            fractionStockSection.classList.add('hidden');
+            if (fractionStockTableHead) fractionStockTableHead.innerHTML = '';
+            if (fractionStockTableBody) fractionStockTableBody.innerHTML = '';
+            if (fractionStockEmptyState) {
+                fractionStockEmptyState.textContent = 'Nenhum produto fracionado vinculado.';
+                fractionStockEmptyState.classList.add('hidden');
+            }
+            updateFractionStockSaveState();
+            return;
+        }
+
+        fractionStockSection.classList.remove('hidden');
+
+        if (fractionStockTableHead) {
+            const headerCells = [
+                '<th class="px-4 py-2 text-left font-semibold">Cod</th>',
+                '<th class="px-4 py-2 text-left font-semibold">Descrição</th>',
+            ];
+
+            if (depositList.length) {
+                depositList.forEach((deposit) => {
+                    const depositName = deposit?.nome || 'Depósito';
+                    const companyName = deposit?.empresa?.nome ? ` • ${deposit.empresa.nome}` : '';
+                    headerCells.push(`<th class="px-4 py-2 text-left font-semibold">${escapeHtml(`${depositName}${companyName}`)}</th>`);
+                });
+            } else {
+                headerCells.push('<th class="px-4 py-2 text-left font-semibold">Depósitos</th>');
+            }
+
+            fractionStockTableHead.innerHTML = `<tr>${headerCells.join('')}</tr>`;
+        }
+
+        if (fractionStockTableBody) {
+            fractionStockTableBody.innerHTML = '';
+        }
+
+        if (!depositList.length) {
+            if (fractionStockEmptyState) {
+                fractionStockEmptyState.textContent = 'Cadastre depósitos para controlar o estoque dos produtos fracionados.';
+                fractionStockEmptyState.classList.remove('hidden');
+            }
+            updateFractionStockSaveState();
+            return;
+        }
+
+        if (fractionStockEmptyState) {
+            fractionStockEmptyState.classList.add('hidden');
+        }
+
+        childEntries.forEach((child) => {
+            if (!fractionStockTableBody) return;
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-gray-50';
+
+            const codCell = document.createElement('td');
+            codCell.className = 'whitespace-nowrap px-4 py-2 font-semibold text-gray-700';
+            codCell.innerHTML = escapeHtml(child.cod || '—');
+            row.appendChild(codCell);
+
+            const descriptionCell = document.createElement('td');
+            descriptionCell.className = 'px-4 py-2 text-gray-700';
+            descriptionCell.innerHTML = escapeHtml(child.descricao || '—');
+            row.appendChild(descriptionCell);
+
+            depositList.forEach((deposit) => {
+                const depositId = String(deposit._id || deposit.id || deposit);
+                const cell = document.createElement('td');
+                cell.className = 'px-4 py-2';
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.step = '0.001';
+                input.className = 'block w-full rounded-md border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20';
+                const currentValue = child.deposits.has(depositId)
+                    ? child.deposits.get(depositId)
+                    : null;
+                input.value = currentValue === null || currentValue === undefined ? '' : String(currentValue);
+                input.dataset.childId = child.id;
+                input.dataset.depositId = depositId;
+                input.addEventListener('input', handleFractionStockInputChange);
+                cell.appendChild(input);
+                row.appendChild(cell);
+            });
+
+            fractionStockTableBody?.appendChild(row);
+        });
+
+        updateFractionStockSaveState();
+    };
+
+    const applyFractionStockFromProduct = (product) => {
+        fractionStockState.clear();
+        fractionStockOriginal.clear();
+
+        const depositList = Array.isArray(allDeposits) ? allDeposits : [];
+        const depositIds = depositList.map((deposit) => String(deposit._id || deposit.id || deposit));
+
+        const childDataMap = new Map();
+        const rawChildren = Array.isArray(product?.fractionChildren) ? product.fractionChildren : [];
+        rawChildren.forEach((child) => {
+            const childId = child?._id || child?.id || child?.produto;
+            if (!childId) return;
+            childDataMap.set(String(childId), child);
+        });
+
+        const orderedChildIds = [];
+        const fractionSource = Array.isArray(product?.fracionamentos) ? product.fracionamentos : [];
+        fractionSource.forEach((entry) => {
+            const childId = entry?.produto ? String(entry.produto) : null;
+            if (childId && !orderedChildIds.includes(childId)) {
+                orderedChildIds.push(childId);
+            }
+        });
+        childDataMap.forEach((_, childId) => {
+            if (!orderedChildIds.includes(childId)) {
+                orderedChildIds.push(childId);
+            }
+        });
+
+        orderedChildIds.forEach((childId) => {
+            const childData = childDataMap.get(childId);
+            if (!childData) return;
+            const referenceEntry = fractionSource.find(
+                (entry) => entry?.produto && String(entry.produto) === childId,
+            );
+
+            const depositMap = new Map();
+            const originalMap = new Map();
+
+            depositIds.forEach((depositId) => {
+                depositMap.set(depositId, 0);
+                originalMap.set(depositId, 0);
+            });
+
+            if (Array.isArray(childData.estoques)) {
+                childData.estoques.forEach((stockEntry) => {
+                    const depositId = stockEntry?.deposito?._id
+                        || stockEntry?.deposito?.id
+                        || stockEntry?.deposito;
+                    if (!depositId) return;
+                    const normalizedQuantity = normalizeFractionQuantity(stockEntry?.quantidade);
+                    const depositKey = String(depositId);
+                    depositMap.set(depositKey, normalizedQuantity);
+                    originalMap.set(depositKey, normalizedQuantity);
+                });
+            }
+
+            fractionStockState.set(childId, {
+                id: childId,
+                cod: childData.cod || referenceEntry?.cod || '',
+                descricao: childData.nome || childData.descricao || referenceEntry?.descricao || '',
+                deposits: depositMap,
+            });
+            fractionStockOriginal.set(childId, originalMap);
+        });
+
+        renderFractionStockTable();
+    };
+
+    const buildFractionStockUpdatesPayload = () => {
+        const depositList = Array.isArray(allDeposits) ? allDeposits : [];
+        if (!depositList.length) return [];
+
+        const updates = [];
+        fractionStockState.forEach((childState, childId) => {
+            const originalMap = fractionStockOriginal.get(childId) || new Map();
+            const depositUpdates = [];
+
+            depositList.forEach((deposit) => {
+                const depositId = String(deposit._id || deposit.id || deposit);
+                const currentValue = normalizeFractionQuantity(childState.deposits.get(depositId));
+                const originalValue = normalizeFractionQuantity(originalMap.get(depositId));
+                if (Math.abs(currentValue - originalValue) > FRACTION_STOCK_EPSILON) {
+                    depositUpdates.push({ deposito: depositId, quantidade: currentValue });
+                }
+            });
+
+            if (depositUpdates.length) {
+                updates.push({ produto: childId, depositos: depositUpdates });
+            }
+        });
+
+        return updates;
+    };
+
+    const handleFractionStockSave = async () => {
+        if (!fractionStockSaveButton) return;
+        if (!isEditMode || !productId) {
+            await showModal({
+                title: 'Atenção',
+                message: 'Salve o produto antes de ajustar os estoques fracionados.',
+                confirmText: 'Entendi',
+            });
+            return;
+        }
+
+        if (!Array.isArray(allDeposits) || !allDeposits.length) {
+            await showModal({
+                title: 'Depósitos obrigatórios',
+                message: 'Cadastre depósitos para atualizar o estoque dos produtos fracionados.',
+                confirmText: 'Ok',
+            });
+            return;
+        }
+
+        const updates = buildFractionStockUpdatesPayload();
+        if (!updates.length) {
+            if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+                window.showToast('Nenhuma alteração de estoque fracionado para salvar.', 'info', 3000);
+            }
+            return;
+        }
+
+        const token = getAuthToken();
+        if (!token) {
+            await showModal({
+                title: 'Sessão expirada',
+                message: 'Faça login novamente para continuar.',
+                confirmText: 'Entendi',
+            });
+            return;
+        }
+
+        isFractionStockSaving = true;
+        fractionStockSaveButton.disabled = true;
+        fractionStockSaveButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Gravando...</span>';
+
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products/${productId}/fraction-stocks`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ updates }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Falha ao atualizar os estoques fracionados.');
+            }
+
+            const payload = await response.json().catch(() => null);
+
+            if (payload?.parent) {
+                applyDepositsFromProduct(payload.parent);
+            }
+
+            if (Array.isArray(payload?.fractionChildren)) {
+                applyFractionStockFromProduct({
+                    fracionamentos: fractionEntries,
+                    fractionChildren: payload.fractionChildren,
+                });
+            } else {
+                fractionStockOriginal.clear();
+                fractionStockState.forEach((childState, childId) => {
+                    const originalMap = new Map();
+                    childState.deposits.forEach((value, depositId) => {
+                        originalMap.set(depositId, normalizeFractionQuantity(value));
+                    });
+                    fractionStockOriginal.set(childId, originalMap);
+                });
+                updateFractionStockSaveState();
+            }
+
+            if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+                window.showToast('Estoques fracionados atualizados com sucesso!', 'success', 3000);
+            }
+        } catch (error) {
+            console.error('Erro ao atualizar estoques fracionados:', error);
+            await showModal({
+                title: 'Erro ao salvar',
+                message: error.message || 'Não foi possível atualizar os estoques fracionados.',
+                confirmText: 'Entendi',
+            });
+        } finally {
+            isFractionStockSaving = false;
+            if (fractionStockSaveButton) {
+                fractionStockSaveButton.innerHTML = fractionStockSaveIdleContent;
+            }
+            updateFractionStockSaveState();
+        }
+    };
+
     const resetSupplierForm = () => {
         if (supplierNameInput) {
             supplierNameInput.value = '';
@@ -2966,6 +3317,10 @@ document.addEventListener('DOMContentLoaded', () => {
         renderDepositStockRows();
         updateDepositTotalDisplay();
         lastSelectedProductUnit = getSelectedProductUnit();
+
+        fractionStockState.clear();
+        fractionStockOriginal.clear();
+        renderFractionStockTable();
 
         currentImages = [];
         hideImageOrderStatus();
@@ -3360,6 +3715,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderFractionEntries();
         resetFractionForm();
         applyDepositsFromProduct(product);
+        applyFractionStockFromProduct(product);
         if (form.querySelector('#barcode-additional')) {
             form.querySelector('#barcode-additional').value = Array.isArray(product.codigosComplementares) ? product.codigosComplementares.join('\n') : '';
         }
@@ -3536,6 +3892,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     cancelCategoryModalBtn.addEventListener('click', () => categoryModal.classList.add('hidden'));
     closeCategoryModalBtn.addEventListener('click', () => categoryModal.classList.add('hidden'));
+
+    fractionStockSaveButton?.addEventListener('click', handleFractionStockSave);
 
     const debounceSupplierSuggestions = (value, allowEmpty) => {
         if (supplierSearchDebounce) {

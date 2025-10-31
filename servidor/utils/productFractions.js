@@ -504,4 +504,6 @@ module.exports = {
     ensureFractionRelations,
     applyFractionalStockChange,
     syncFractionGroupForParent,
+    setProductDepositQuantity,
+    toObjectIdOrNull,
 };

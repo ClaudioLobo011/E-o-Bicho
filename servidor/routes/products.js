@@ -30,9 +30,13 @@ const {
     uploadBufferToDrive,
 } = require('../utils/googleDrive');
 const {
+    FRACTION_EPSILON,
     sanitizeFractionEntries,
     ensureFractionRelations,
     syncFractionGroupForParent,
+    applyFractionalStockChange,
+    setProductDepositQuantity,
+    toObjectIdOrNull,
 } = require('../utils/productFractions');
 
 const tempUploadDir = path.join(__dirname, '..', 'tmp', 'uploads', 'products');
@@ -770,12 +774,249 @@ router.get('/:id', async (req, res) => {
             product.breadcrumbPath = [];
         }
 
+        const fractionChildIds = Array.isArray(product.fracionamentos)
+            ? product.fracionamentos
+                .map((entry) => (entry?.produto ? entry.produto.toString() : null))
+                .filter(Boolean)
+            : [];
+
+        if (fractionChildIds.length) {
+            const uniqueChildIds = [...new Set(fractionChildIds)]
+                .map((id) => toObjectIdOrNull(id))
+                .filter(Boolean);
+
+            if (uniqueChildIds.length) {
+                const children = await Product.find({ _id: { $in: uniqueChildIds } })
+                    .populate({ path: 'estoques.deposito', populate: { path: 'empresa' } })
+                    .lean();
+
+                product.fractionChildren = Array.isArray(children)
+                    ? children.map((child) => ({
+                        _id: child._id,
+                        cod: child.cod,
+                        nome: child.nome,
+                        descricao: child.descricao,
+                        codbarras: child.codbarras,
+                        estoqueTotal: child.stock,
+                        estoques: Array.isArray(child.estoques)
+                            ? child.estoques.map((entry) => ({
+                                deposito: entry.deposito,
+                                quantidade: entry.quantidade,
+                                unidade: entry.unidade,
+                            }))
+                            : [],
+                    }))
+                    : [];
+            } else {
+                product.fractionChildren = [];
+            }
+        } else {
+            product.fractionChildren = [];
+        }
+
         res.json(product);
     } catch (error) {
         console.error("Erro ao buscar produto por ID:", error);
         res.status(500).json({ message: 'Erro no servidor.' });
     }
 });
+
+router.put(
+    '/:id/fraction-stocks',
+    requireAuth,
+    authorizeRoles('admin', 'admin_master'),
+    async (req, res) => {
+        try {
+            const parentId = toObjectIdOrNull(req.params.id);
+            if (!parentId) {
+                return res.status(400).json({ message: 'Produto inválido informado.' });
+            }
+
+            const parent = await Product.findById(parentId);
+            if (!parent) {
+                return res.status(404).json({ message: 'Produto não encontrado.' });
+            }
+
+            const fractions = Array.isArray(parent.fracionamentos)
+                ? parent.fracionamentos.filter((entry) => entry?.produto)
+                : [];
+
+            if (!fractions.length) {
+                return res.status(400).json({ message: 'Produto não possui fracionados vinculados.' });
+            }
+
+            const fractionMap = new Map();
+            fractions.forEach((entry) => {
+                const childId = entry?.produto ? entry.produto.toString() : null;
+                if (childId) {
+                    fractionMap.set(childId, entry);
+                }
+            });
+
+            const updatesPayload = Array.isArray(req.body?.updates) ? req.body.updates : [];
+            if (!updatesPayload.length) {
+                return res.status(400).json({ message: 'Nenhuma alteração de estoque foi informada.' });
+            }
+
+            const sanitizedUpdates = [];
+
+            for (const rawUpdate of updatesPayload) {
+                const childObjectId = toObjectIdOrNull(
+                    rawUpdate?.produto
+                    || rawUpdate?.productId
+                    || rawUpdate?.id
+                );
+
+                if (!childObjectId) {
+                    return res.status(400).json({ message: 'Produto fracionado inválido informado.' });
+                }
+
+                const childKey = childObjectId.toString();
+                if (!fractionMap.has(childKey)) {
+                    return res.status(400).json({ message: 'O produto informado não está vinculado como fracionado deste item.' });
+                }
+
+                const depositEntries = Array.isArray(rawUpdate?.depositos)
+                    ? rawUpdate.depositos
+                    : Array.isArray(rawUpdate?.deposits)
+                        ? rawUpdate.deposits
+                        : [];
+
+                if (!depositEntries.length) {
+                    continue;
+                }
+
+                const sanitizedDeposits = [];
+
+                for (const depositUpdate of depositEntries) {
+                    const depositId = toObjectIdOrNull(
+                        depositUpdate?.deposito
+                        || depositUpdate?.depositId
+                        || depositUpdate?.id
+                    );
+
+                    if (!depositId) {
+                        return res.status(400).json({ message: 'Depósito inválido informado.' });
+                    }
+
+                    const quantityRaw = depositUpdate?.quantidade
+                        ?? depositUpdate?.quantity
+                        ?? depositUpdate?.valor;
+                    const quantity = Number(quantityRaw);
+
+                    if (!Number.isFinite(quantity)) {
+                        return res.status(400).json({ message: 'Informe um valor numérico válido para o estoque.' });
+                    }
+
+                    sanitizedDeposits.push({ depositId, quantity });
+                }
+
+                if (sanitizedDeposits.length) {
+                    sanitizedUpdates.push({ childId: childObjectId, deposits: sanitizedDeposits });
+                }
+            }
+
+            if (!sanitizedUpdates.length) {
+                return res.status(400).json({ message: 'Nenhuma alteração válida de estoque foi informada.' });
+            }
+
+            const childDocs = new Map();
+
+            for (const update of sanitizedUpdates) {
+                const childKey = update.childId.toString();
+                let childDoc = childDocs.get(childKey);
+
+                if (!childDoc) {
+                    childDoc = await Product.findById(update.childId);
+                    if (!childDoc) {
+                        return res.status(404).json({ message: 'Produto fracionado não encontrado.' });
+                    }
+                    if (!childDoc.fracionadoDe || childDoc.fracionadoDe.toString() !== parentId.toString()) {
+                        return res.status(409).json({ message: 'O produto informado não pertence a este fracionamento.' });
+                    }
+                    childDocs.set(childKey, childDoc);
+                }
+
+                for (const depositUpdate of update.deposits) {
+                    const setResult = await setProductDepositQuantity({
+                        product: childDoc,
+                        productId: childDoc._id,
+                        depositId: depositUpdate.depositId,
+                        quantity: depositUpdate.quantity,
+                    });
+
+                    if (!setResult) {
+                        continue;
+                    }
+
+                    childDoc = setResult.product;
+                    childDocs.set(childKey, childDoc);
+
+                    const delta = setResult.nextQuantity - setResult.previousQuantity;
+                    if (Math.abs(delta) > FRACTION_EPSILON) {
+                        await applyFractionalStockChange({
+                            product: childDoc,
+                            productId: childDoc._id,
+                            depositId: depositUpdate.depositId,
+                            delta,
+                        });
+                    }
+                }
+            }
+
+            const refreshedParent = await Product.findById(parentId)
+                .populate({ path: 'estoques.deposito', populate: { path: 'empresa' } })
+                .lean();
+
+            const childIds = Array.from(fractionMap.keys())
+                .map((id) => toObjectIdOrNull(id))
+                .filter(Boolean);
+
+            const children = childIds.length
+                ? await Product.find({ _id: { $in: childIds } })
+                    .populate({ path: 'estoques.deposito', populate: { path: 'empresa' } })
+                    .lean()
+                : [];
+
+            const fractionChildren = Array.isArray(children)
+                ? children.map((child) => ({
+                    _id: child._id,
+                    cod: child.cod,
+                    nome: child.nome,
+                    descricao: child.descricao,
+                    codbarras: child.codbarras,
+                    estoqueTotal: child.stock,
+                    estoques: Array.isArray(child.estoques)
+                        ? child.estoques.map((entry) => ({
+                            deposito: entry.deposito,
+                            quantidade: entry.quantidade,
+                            unidade: entry.unidade,
+                        }))
+                        : [],
+                }))
+                : [];
+
+            res.json({
+                message: 'Estoques fracionados atualizados com sucesso.',
+                parent: refreshedParent
+                    ? {
+                        _id: refreshedParent._id,
+                        cod: refreshedParent.cod,
+                        nome: refreshedParent.nome,
+                        estoqueTotal: refreshedParent.stock,
+                        estoques: Array.isArray(refreshedParent.estoques)
+                            ? refreshedParent.estoques
+                            : [],
+                    }
+                    : null,
+                fractionChildren,
+            });
+        } catch (error) {
+            console.error('Erro ao atualizar estoques fracionados do produto:', error);
+            res.status(500).json({ message: 'Erro ao atualizar os estoques dos produtos fracionados.' });
+        }
+    },
+);
 
 // PUT /api/products/:id (restrito)
 const fiscalStatusAllowed = new Set(['pendente', 'parcial', 'aprovado']);
