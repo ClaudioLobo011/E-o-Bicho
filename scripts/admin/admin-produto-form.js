@@ -2494,8 +2494,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const normalizedFraction = Number.isFinite(rawFraction) && rawFraction > 0 ? rawFraction : 0;
         const childCost = Number(child?.custo);
         const childStock = Number(child?.stock);
-        const costPerLot = Number.isFinite(childCost) ? childCost * normalizedBase : 0;
-        const costPerFraction = normalizedFraction > 0 ? costPerLot / normalizedFraction : 0;
+        const costPerFraction = normalizedFraction > 0 && Number.isFinite(childCost)
+            ? childCost / normalizedFraction
+            : 0;
         const equivalentStock = normalizedBase > 0 && Number.isFinite(childStock)
             ? childStock * (normalizedFraction / normalizedBase)
             : 0;

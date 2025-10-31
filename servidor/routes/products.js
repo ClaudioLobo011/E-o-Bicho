@@ -180,9 +180,8 @@ const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = 
         }
         const childCost = Number(child.custo);
         const childStock = Number(child.stock);
-        const costPerLot = Number.isFinite(childCost) ? childCost * item.quantidadeOrigem : 0;
-        const costPerFraction = item.quantidadeFracionada > 0
-            ? costPerLot / item.quantidadeFracionada
+        const costPerFraction = item.quantidadeFracionada > 0 && Number.isFinite(childCost)
+            ? childCost / item.quantidadeFracionada
             : 0;
         const equivalentStock = item.quantidadeOrigem > 0 && Number.isFinite(childStock)
             ? childStock * (item.quantidadeFracionada / item.quantidadeOrigem)
@@ -262,8 +261,9 @@ const applyFractionalSnapshot = (product) => {
         const fractionQuantity = Number(item?.quantidadeFracionada);
         const normalizedBase = Number.isFinite(baseQuantity) && baseQuantity > 0 ? baseQuantity : 1;
         const normalizedFraction = Number.isFinite(fractionQuantity) && fractionQuantity > 0 ? fractionQuantity : 0;
-        const costPerLot = Number.isFinite(childCost) ? childCost * normalizedBase : 0;
-        const costPerFraction = normalizedFraction > 0 ? costPerLot / normalizedFraction : 0;
+        const costPerFraction = normalizedFraction > 0 && Number.isFinite(childCost)
+            ? childCost / normalizedFraction
+            : 0;
         const equivalentStock = normalizedBase > 0 && Number.isFinite(childStock)
             ? childStock * (normalizedFraction / normalizedBase)
             : 0;
@@ -554,7 +554,7 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
             const childStock = Number(child?.stock);
 
             const costPerFraction = fractionQuantity > 0 && Number.isFinite(childCost)
-                ? (childCost * baseQuantity) / fractionQuantity
+                ? childCost / fractionQuantity
                 : 0;
 
             const equivalentStock = baseQuantity > 0 && Number.isFinite(childStock)
