@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const Deposit = require('../models/Deposit');
 const Product = require('../models/Product');
+const { applyFractionalStockChange } = require('../utils/productFractions');
 const Store = require('../models/Store');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
@@ -269,87 +270,66 @@ router.post('/:id/zero-stock', requireAuth, authorizeRoles('admin', 'admin_maste
         const products = await Product.find({
             _id: { $in: uniqueProductIds },
             'estoques.deposito': depositId,
-        }).lean();
+        });
 
-        if (!products.length) {
-            return res.json({ updated: 0, affectedProducts: [] });
-        }
-
-        const bulkOperations = [];
         const affectedProducts = [];
+        const productsToSync = [];
 
         products.forEach((product) => {
             if (!Array.isArray(product?.estoques)) {
                 return;
             }
 
-            let targetEntryFound = false;
-            let quantityChanged = false;
-
-            const updatedStocks = product.estoques.map((entry) => {
-                const current = entry && typeof entry === 'object' ? { ...entry } : {};
-                const isTarget = current?.deposito && current.deposito.toString() === id;
-                const currentQuantity = Number(current?.quantidade) || 0;
-                const baseEntry = {
-                    deposito: current?.deposito,
-                    quantidade: currentQuantity,
-                    unidade: current?.unidade || '',
-                };
-                if (current?._id) {
-                    baseEntry._id = current._id;
-                }
-                if (isTarget) {
-                    targetEntryFound = true;
-                    if (currentQuantity !== 0) {
-                        quantityChanged = true;
-                    }
-                    return { ...baseEntry, quantidade: 0 };
-                }
-                return baseEntry;
-            });
-
-            if (!targetEntryFound) {
+            const stockEntry = product.estoques.find((entry) => entry?.deposito && entry.deposito.toString() === id);
+            if (!stockEntry) {
                 return;
             }
 
-            const totalStock = updatedStocks.reduce((sum, entry) => {
-                const quantity = Number(entry?.quantidade) || 0;
-                return sum + quantity;
-            }, 0);
-
-            const shouldUpdate = quantityChanged || Number(product?.stock) !== totalStock;
-
-            if (!shouldUpdate) {
+            const currentQuantity = Number(stockEntry?.quantidade) || 0;
+            if (Math.abs(currentQuantity) <= 0.000001) {
                 return;
             }
 
-            bulkOperations.push({
-                updateOne: {
-                    filter: { _id: product._id },
-                    update: {
-                        $set: {
-                            estoques: updatedStocks,
-                            stock: totalStock,
-                        },
-                    },
-                },
-            });
+            stockEntry.quantidade = 0;
+            product.markModified('estoques');
+            const totalStock = product.estoques.reduce((sum, entry) => sum + (Number(entry?.quantidade) || 0), 0);
+            product.stock = totalStock;
 
             affectedProducts.push({
                 _id: product._id,
                 nome: product.nome,
                 codbarras: product.codbarras,
             });
+
+            productsToSync.push({ product, previousQuantity: currentQuantity });
         });
 
-        if (!bulkOperations.length) {
+        if (!affectedProducts.length) {
             return res.json({ updated: 0, affectedProducts: [] });
         }
 
-        await Product.bulkWrite(bulkOperations, { ordered: false });
+        for (const { product, previousQuantity } of productsToSync) {
+            try {
+                await product.save();
+            } catch (saveError) {
+                console.error('Erro ao salvar produto durante zeragem de depósito:', saveError);
+                continue;
+            }
+
+            try {
+                await applyFractionalStockChange({
+                    productId: product._id,
+                    product,
+                    depositId,
+                    delta: -previousQuantity,
+                });
+            } catch (fractionError) {
+                console.error('Erro ao sincronizar fracionados na zeragem de estoque:', fractionError);
+            }
+        }
 
         res.json({
-            updated: bulkOperations.length,
+            updated: affectedProducts.length,
             affectedProducts,
         });
     } catch (error) {

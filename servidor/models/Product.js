@@ -125,6 +125,12 @@ const productSchema = new mongoose.Schema({
         type: [fractionItemSchema],
         default: [],
     },
+    fracionadoDe: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product',
+        default: null,
+        index: true,
+    },
     dataCadastro: { type: Date, default: null },
     dataVigencia: { type: Date, default: null },
     peso: { type: Number, default: null },

@@ -6,6 +6,7 @@ const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
 const PdvState = require('../models/PdvState');
 const Product = require('../models/Product');
+const { applyFractionalStockChange } = require('../utils/productFractions');
 const BankAccount = require('../models/BankAccount');
 const AccountingAccount = require('../models/AccountingAccount');
 const requireAuth = require('../middlewares/requireAuth');
@@ -347,6 +348,17 @@ const updateProductStockForDeposit = async ({ productId, depositId, quantity }) 
 
   product.markModified('estoques');
   await product.save();
+
+  try {
+    await applyFractionalStockChange({
+      productId,
+      product,
+      depositId,
+      delta: -numericQuantity,
+    });
+  } catch (fractionError) {
+    console.error('Erro ao sincronizar estoque fracionado após baixa no PDV:', fractionError);
+  }
   return true;
 };
 

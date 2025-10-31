@@ -29,6 +29,11 @@ const {
     isDriveConfigured,
     uploadBufferToDrive,
 } = require('../utils/googleDrive');
+const {
+    sanitizeFractionEntries,
+    ensureFractionRelations,
+    syncFractionGroupForParent,
+} = require('../utils/productFractions');
 
 const tempUploadDir = path.join(__dirname, '..', 'tmp', 'uploads', 'products');
 
@@ -169,41 +174,22 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
                 .filter(Boolean)
             : [];
 
-        const parseFractionEntries = (rawList) => {
-            if (!Array.isArray(rawList)) return [];
-            return rawList
-                .map((item) => {
-                    if (!item || typeof item !== 'object') return null;
-                    const cod = normalizeString(item?.cod);
-                    const codbarras = normalizeString(item?.codbarras);
-                    const descricao = normalizeString(item?.descricao);
-                    const unidade = normalizeString(item?.unidade);
-                    const quantidade = parseNumber(item?.quantidade);
-                    const custo = parseNumber(item?.custo);
-                    const markup = parseNumber(item?.markup);
-                    const venda = parseNumber(item?.venda);
-                    const estoque = parseNumber(item?.estoque);
-                    const produto = item?.produto || item?.produtoId || item?.productId || null;
-                    if (!produto && !cod && !codbarras && !descricao) {
-                        return null;
-                    }
-                    return {
-                        produto,
-                        cod,
-                        codbarras,
-                        descricao,
-                        quantidade,
-                        unidade,
-                        custo,
-                        markup,
-                        venda,
-                        estoque,
-                    };
-                })
-                .filter(Boolean);
-        };
+        const previousFractionSnapshot = Array.isArray(existingProduct?.fracionamentos)
+            ? existingProduct.fracionamentos.map((item) => (typeof item?.toObject === 'function' ? item.toObject() : { ...item }))
+            : [];
 
-        const fracionamentos = parseFractionEntries(payload.fracionamentos);
+        const fracionamentos = sanitizeFractionEntries(payload.fracionamentos);
+
+        try {
+            await ensureFractionRelations({
+                parentId: existingProduct._id,
+                fractions: fracionamentos,
+                validateOnly: true,
+            });
+        } catch (relationError) {
+            const statusCode = relationError?.status || 500;
+            return res.status(statusCode).json({ message: relationError.message || 'Não foi possível validar os produtos fracionados informados.' });
+        }
 
         const costNumber = parseNumber(payload.custo);
         const saleNumber = parseNumber(payload.venda);
@@ -285,6 +271,23 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
 
         if (!createdProduct) {
             return res.status(500).json({ message: 'Não foi possível gerar um código interno único para o produto.' });
+        }
+
+        const shouldLinkFractions = fracionamentos.some((entry) => entry?.produto);
+        if (shouldLinkFractions) {
+            try {
+                await ensureFractionRelations({ parentId: createdProduct._id, fractions: fracionamentos });
+                await syncFractionGroupForParent({ parentId: createdProduct._id });
+            } catch (relationError) {
+                console.error('Erro ao vincular produtos fracionados durante o cadastro:', relationError);
+                try {
+                    await Product.findByIdAndDelete(createdProduct._id);
+                } catch (cleanupError) {
+                    console.error('Falha ao remover produto após erro de fracionamento:', cleanupError);
+                }
+                const statusCode = relationError?.status || 500;
+                return res.status(statusCode).json({ message: relationError.message || 'Não foi possível vincular os produtos fracionados.' });
+            }
         }
 
         const populatedProduct = await Product.findById(createdProduct._id)
@@ -966,41 +969,7 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
                 .filter(Boolean)
             : [];
 
-        const parseFractionEntries = (rawList) => {
-            if (!Array.isArray(rawList)) return [];
-            return rawList
-                .map((item) => {
-                    if (!item || typeof item !== 'object') return null;
-                    const cod = normalizeString(item?.cod);
-                    const codbarras = normalizeString(item?.codbarras);
-                    const descricao = normalizeString(item?.descricao);
-                    const unidade = normalizeString(item?.unidade);
-                    const quantidade = parseNumber(item?.quantidade);
-                    const custo = parseNumber(item?.custo);
-                    const markup = parseNumber(item?.markup);
-                    const venda = parseNumber(item?.venda);
-                    const estoque = parseNumber(item?.estoque);
-                    const produto = item?.produto || item?.produtoId || item?.productId || null;
-                    if (!produto && !cod && !codbarras && !descricao) {
-                        return null;
-                    }
-                    return {
-                        produto,
-                        cod,
-                        codbarras,
-                        descricao,
-                        quantidade,
-                        unidade,
-                        custo,
-                        markup,
-                        venda,
-                        estoque,
-                    };
-                })
-                .filter(Boolean);
-        };
-
-        const fracionamentos = parseFractionEntries(payload.fracionamentos);
+        const fracionamentos = sanitizeFractionEntries(payload.fracionamentos);
 
         const updatePayload = {};
 
@@ -1134,6 +1103,26 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             updatePayload,
             { new: true, runValidators: true }
         );
+
+        const shouldLinkFractions = fracionamentos.some((entry) => entry?.produto);
+
+        try {
+            await ensureFractionRelations({ parentId: updatedProduct._id, fractions: fracionamentos });
+            if (shouldLinkFractions) {
+                await syncFractionGroupForParent({ parentId: updatedProduct._id });
+            }
+        } catch (relationError) {
+            console.error('Erro ao atualizar vínculos de fracionamento do produto:', relationError);
+            try {
+                await Product.findByIdAndUpdate(updatedProduct._id, { fracionamentos: previousFractionSnapshot }, { new: false, runValidators: false });
+                const restoredFractions = sanitizeFractionEntries(previousFractionSnapshot);
+                await ensureFractionRelations({ parentId: updatedProduct._id, fractions: restoredFractions });
+            } catch (restoreError) {
+                console.error('Falha ao restaurar vínculos de fracionamento originais:', restoreError);
+            }
+            const statusCode = relationError?.status || 500;
+            return res.status(statusCode).json({ message: relationError.message || 'Não foi possível atualizar os produtos fracionados vinculados.' });
+        }
 
         if (priceHistoryChanges.length > 0) {
             try {

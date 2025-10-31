@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const NfeDraft = require('../models/NfeDraft');
 const Product = require('../models/Product');
+const { applyFractionalStockChange } = require('../utils/productFractions');
 const Deposit = require('../models/Deposit');
 const Store = require('../models/Store');
 const Supplier = require('../models/Supplier');
@@ -985,6 +986,18 @@ router.post('/:id/approve', async (req, res) => {
         stockEntry.quantidade = nextQuantity;
         product.markModified('estoques');
         await product.save({ session });
+
+        try {
+          await applyFractionalStockChange({
+            productId,
+            product,
+            depositId: deposit._id,
+            delta: quantity,
+            session,
+          });
+        } catch (fractionError) {
+          console.error('Erro ao sincronizar estoque fracionado na aprovação de NF-e:', fractionError);
+        }
       }
 
       const payableInstallments = installmentsData.map((installment) => {
@@ -1164,6 +1177,18 @@ router.delete('/:id', async (req, res) => {
           stockEntry.quantidade = nextQuantity;
           product.markModified('estoques');
           await product.save({ session });
+
+          try {
+            await applyFractionalStockChange({
+              productId,
+              product,
+              depositId: deposit._id,
+              delta: -quantity,
+              session,
+            });
+          } catch (fractionError) {
+            console.error('Erro ao sincronizar estoque fracionado ao estornar NF-e:', fractionError);
+          }
         }
 
         const accountPayableId = draft.metadata?.accountPayableId;
