@@ -748,14 +748,13 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
             return res.status(400).json({ message: 'Informe a descrição do produto.' });
         }
 
-        const codbarras = normalizeString(payload.codbarras);
-        if (!codbarras) {
-            return res.status(400).json({ message: 'Informe o código de barras do produto.' });
-        }
-
-        const existingBarcode = await Product.findOne({ codbarras }).lean();
-        if (existingBarcode) {
-            return res.status(409).json({ message: 'Já existe um produto com este código de barras.' });
+        let codbarras = normalizeString(payload.codbarras);
+        const barcodeProvided = Boolean(codbarras);
+        if (barcodeProvided) {
+            const existingBarcode = await Product.findOne({ codbarras }).lean();
+            if (existingBarcode) {
+                return res.status(409).json({ message: 'Já existe um produto com este código de barras.' });
+            }
         }
 
         let cod = normalizeString(payload.cod);
@@ -767,6 +766,10 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
             }
         } else {
             cod = await generateSequentialCod();
+        }
+
+        if (!barcodeProvided) {
+            codbarras = cod;
         }
 
         const fornecedores = Array.isArray(payload.fornecedores)
@@ -889,6 +892,18 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
                 if (!codProvided && error?.code === 11000 && error?.keyPattern?.cod) {
                     cod = await generateSequentialCod();
                     productData.cod = cod;
+                    if (!barcodeProvided) {
+                        codbarras = cod;
+                        productData.codbarras = codbarras;
+                    }
+                    attempts += 1;
+                    continue;
+                }
+                if (!barcodeProvided && error?.code === 11000 && error?.keyPattern?.codbarras) {
+                    cod = await generateSequentialCod();
+                    productData.cod = cod;
+                    codbarras = cod;
+                    productData.codbarras = codbarras;
                     attempts += 1;
                     continue;
                 }

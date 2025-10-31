@@ -46,6 +46,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const fractionChildEmptyState = document.getElementById('fraction-child-empty');
     const fractionSummaryCost = document.getElementById('fraction-summary-cost');
     const fractionSummaryStock = document.getElementById('fraction-summary-stock');
+    const fractionChildCreateDescriptionInput = document.getElementById('fraction-new-description');
+    const fractionChildCreateUnitSelect = document.getElementById('fraction-new-unit');
+    const fractionChildCreateBarcodeInput = document.getElementById('fraction-new-barcode');
+    const fractionChildCreateButton = document.getElementById('fraction-create-child-btn');
+    const fractionChildCreateButtonDefaultHtml = fractionChildCreateButton?.innerHTML || '';
     const fiscalCompanySelect = document.getElementById('fiscal-company-select');
     const fiscalCompanySummary = document.getElementById('fiscal-company-summary');
     const deleteProductButton = document.getElementById('delete-product-button');
@@ -600,6 +605,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let fractionalChildren = [];
     let fractionalSearchTimeoutId = null;
     let fractionalSearchAbortController = null;
+    let currentProductSnapshot = null;
 
     const storedProductId = isFromNfeImport ? null : getPersistedProductEditStateValue('productId');
     if (!productId && storedProductId) {
@@ -630,6 +636,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const digitsOnly = (value = '') => {
         if (value === null || value === undefined) return '';
         return String(value).replace(/\D+/g, '');
+    };
+
+    const cloneDeep = (value) => {
+        if (value === null || value === undefined) return value;
+        if (typeof structuredClone === 'function') {
+            try {
+                return structuredClone(value);
+            } catch (error) {
+                console.warn('Falha ao clonar estrutura com structuredClone.', error);
+            }
+        }
+        try {
+            return JSON.parse(JSON.stringify(value));
+        } catch (error) {
+            console.warn('Falha ao clonar estrutura com JSON.', error);
+            return null;
+        }
+    };
+
+    const preventAutoSaveForElement = (element) => {
+        if (!element) return;
+        ['input', 'change'].forEach((eventName) => {
+            element.addEventListener(eventName, (event) => {
+                event.stopPropagation();
+            }, true);
+        });
     };
 
     const normalizeSearchText = (value = '') => {
@@ -681,7 +713,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const buildProductUpdatePayload = () => {
+    const buildProductUpdatePayload = (options = {}) => {
+        const { ignoreFractionalErrors = false } = options;
         if (!form) {
             return { productName: '', updateData: null };
         }
@@ -814,20 +847,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (fractionalErrors.length) {
-                return { productName, updateData: null, fractionalErrors };
+                if (!ignoreFractionalErrors) {
+                    return { productName, updateData: null, fractionalErrors };
+                }
+                updateData.fracionado = {
+                    ativo: true,
+                    itens: fractionalItemsPayload,
+                };
+                updateData.estoques = [];
+            } else {
+                const summary = calculateFractionalSummary();
+                const normalizedStock = normalizeFractionalStockValue(summary.stock);
+                updateData.fracionado = {
+                    ativo: true,
+                    itens: fractionalItemsPayload,
+                    custoCalculado: Number.isFinite(summary.cost) ? summary.cost : null,
+                    estoqueEquivalente: Number.isFinite(summary.stock) ? normalizedStock : null,
+                };
+                updateData.custo = Number.isFinite(summary.cost) ? summary.cost : 0;
+                updateData.estoques = [];
+                updateData.stock = Number.isFinite(summary.stock) ? normalizedStock : 0;
             }
-
-            const summary = calculateFractionalSummary();
-            const normalizedStock = normalizeFractionalStockValue(summary.stock);
-            updateData.fracionado = {
-                ativo: true,
-                itens: fractionalItemsPayload,
-                custoCalculado: Number.isFinite(summary.cost) ? summary.cost : null,
-                estoqueEquivalente: Number.isFinite(summary.stock) ? normalizedStock : null,
-            };
-            updateData.custo = Number.isFinite(summary.cost) ? summary.cost : 0;
-            updateData.estoques = [];
-            updateData.stock = Number.isFinite(summary.stock) ? normalizedStock : 0;
         } else {
             updateData.fracionado = {
                 ativo: false,
@@ -2518,6 +2558,137 @@ document.addEventListener('DOMContentLoaded', () => {
         return acc;
     }, { cost: 0, stock: 0 });
 
+    const normalizeFiscalSnapshot = (value) => {
+        if (!value || typeof value !== 'object') return {};
+        const clone = cloneDeep(value);
+        return clone && typeof clone === 'object' ? clone : {};
+    };
+
+    const collectBaseProductPayloadForFractionChild = () => {
+        const baseResult = buildProductUpdatePayload({ ignoreFractionalErrors: true });
+        if (baseResult?.updateData) {
+            const payload = cloneDeep(baseResult.updateData);
+            if (!payload || typeof payload !== 'object') {
+                return null;
+            }
+            payload.fornecedores = [];
+            payload.fracionado = { ativo: false, itens: [] };
+            if (!Array.isArray(payload.estoques)) {
+                payload.estoques = [];
+            }
+            if (!Array.isArray(payload.codigosComplementares)) {
+                payload.codigosComplementares = [];
+            }
+            if (payload.fiscalPorEmpresa instanceof Map) {
+                payload.fiscalPorEmpresa = Object.fromEntries(payload.fiscalPorEmpresa.entries());
+            }
+            payload.fiscalPorEmpresa = normalizeFiscalSnapshot(payload.fiscalPorEmpresa);
+            payload.fiscal = normalizeFiscalSnapshot(payload.fiscal);
+            payload.stock = Number(payload.stock) || 0;
+            return payload;
+        }
+
+        if (!currentProductSnapshot) {
+            return null;
+        }
+
+        const snapshot = cloneDeep(currentProductSnapshot);
+        if (!snapshot || typeof snapshot !== 'object') {
+            return null;
+        }
+
+        const categorias = Array.isArray(snapshot.categorias)
+            ? snapshot.categorias
+                .map((cat) => {
+                    if (!cat) return null;
+                    if (typeof cat === 'string') return cat;
+                    if (typeof cat === 'object' && cat !== null) {
+                        return cat._id || cat.id || null;
+                    }
+                    return null;
+                })
+                .filter(Boolean)
+            : [];
+
+        const estoques = Array.isArray(snapshot.estoques)
+            ? snapshot.estoques
+                .map((entry) => {
+                    if (!entry) return null;
+                    const deposito = entry?.deposito?.toString
+                        ? entry.deposito.toString()
+                        : entry?.deposito?._id
+                            || entry?.depositoId
+                            || entry?.depositId
+                            || entry?.deposito;
+                    if (!deposito) return null;
+                    const quantidade = Number(entry?.quantidade);
+                    const unidade = entry?.unidade || snapshot.unidade || '';
+                    return {
+                        deposito,
+                        quantidade: Number.isFinite(quantidade) ? quantidade : 0,
+                        unidade,
+                    };
+                })
+                .filter(Boolean)
+            : [];
+
+        const codigosComplementares = Array.isArray(snapshot.codigosComplementares)
+            ? snapshot.codigosComplementares.filter(Boolean)
+            : [];
+
+        const fiscalPorEmpresa = {};
+        if (snapshot.fiscalPorEmpresa && typeof snapshot.fiscalPorEmpresa === 'object') {
+            Object.entries(snapshot.fiscalPorEmpresa).forEach(([key, value]) => {
+                if (!key) return;
+                fiscalPorEmpresa[key] = normalizeFiscalSnapshot(value);
+            });
+        }
+
+        return {
+            nome: snapshot.nome || '',
+            cod: '',
+            codbarras: '',
+            descricao: snapshot.descricao || '',
+            marca: snapshot.marca || '',
+            unidade: snapshot.unidade || '',
+            referencia: snapshot.referencia || '',
+            custo: snapshot.custo ?? 0,
+            venda: snapshot.venda ?? 0,
+            precoClube: snapshot.precoClube ?? null,
+            categorias,
+            fornecedores: [],
+            especificacoes: snapshot.especificacoes || {},
+            codigosComplementares,
+            fiscal: normalizeFiscalSnapshot(snapshot.fiscal),
+            fiscalPorEmpresa,
+            naoMostrarNoSite: snapshot.naoMostrarNoSite !== undefined
+                ? Boolean(snapshot.naoMostrarNoSite)
+                : true,
+            inativo: Boolean(snapshot.inativo),
+            dataCadastro: snapshot.dataCadastro || snapshot.createdAt || null,
+            dataVigencia: snapshot.dataVigencia || snapshot.vigencia || snapshot.updatedAt || null,
+            peso: snapshot.peso ?? null,
+            iat: snapshot.iat || '',
+            tipoProduto: snapshot.tipoProduto || '',
+            ncm: snapshot.ncm || '',
+            estoques,
+            stock: Number(snapshot.stock) || (estoques.length
+                ? estoques.reduce((sum, entry) => sum + (Number(entry.quantidade) || 0), 0)
+                : 0),
+            fracionado: { ativo: false, itens: [] },
+        };
+    };
+
+    const setFractionChildCreateButtonLoading = (isLoading) => {
+        if (!fractionChildCreateButton) return;
+        fractionChildCreateButton.disabled = isLoading;
+        if (isLoading) {
+            fractionChildCreateButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span> Adicionando...</span>';
+        } else {
+            fractionChildCreateButton.innerHTML = fractionChildCreateButtonDefaultHtml;
+        }
+    };
+
     const updateFractionalSummary = () => {
         const summary = calculateFractionalSummary();
         const normalizedStock = normalizeFractionalStockValue(summary.stock);
@@ -2652,6 +2823,108 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const handleFractionChildCreation = async () => {
+        if (!fractionChildCreateButton) return;
+        if (!isEditMode || !productId) {
+            showToastMessage('Salve o produto pai antes de criar produtos filhos automaticamente.', 'warning');
+            return;
+        }
+
+        const description = (fractionChildCreateDescriptionInput?.value || '').trim();
+        if (!description) {
+            showToastMessage('Informe a descrição do produto filho.', 'warning');
+            fractionChildCreateDescriptionInput?.focus();
+            return;
+        }
+
+        const unit = (fractionChildCreateUnitSelect?.value || '').trim();
+        if (!unit) {
+            showToastMessage('Selecione a unidade do produto filho.', 'warning');
+            fractionChildCreateUnitSelect?.focus();
+            return;
+        }
+
+        const barcode = (fractionChildCreateBarcodeInput?.value || '').trim();
+
+        const basePayload = collectBaseProductPayloadForFractionChild();
+        if (!basePayload) {
+            showToastMessage('Não foi possível preparar os dados para criar o produto filho.', 'error');
+            return;
+        }
+
+        basePayload.nome = description;
+        basePayload.cod = '';
+        basePayload.unidade = unit;
+        basePayload.codbarras = barcode;
+        basePayload.fornecedores = [];
+        basePayload.fracionado = { ativo: false, itens: [] };
+        basePayload.stock = Number(basePayload.stock) || 0;
+        if (!Array.isArray(basePayload.estoques)) {
+            basePayload.estoques = [];
+        }
+
+        const token = getAuthToken();
+        if (!token) {
+            showToastMessage('Faça login novamente para criar produtos filhos.', 'warning');
+            return;
+        }
+
+        setFractionChildCreateButtonLoading(true);
+        hideFractionalSuggestions();
+
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify(basePayload),
+            });
+
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (_) {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                const errorMessage = payload?.message || 'Não foi possível criar o produto filho.';
+                throw new Error(errorMessage);
+            }
+
+            const createdProduct = payload?.product || payload;
+            const createdId = createdProduct?._id || createdProduct?.id;
+            if (!createdId) {
+                throw new Error('Produto criado, mas não foi possível identificar o identificador retornado.');
+            }
+
+            addFractionChild({
+                productId: createdId,
+                nome: createdProduct?.nome || description,
+                cod: createdProduct?.cod || '',
+                unidade: createdProduct?.unidade || unit,
+                custo: Number(createdProduct?.custo) || Number(basePayload.custo) || 0,
+                stock: Number(createdProduct?.stock) || 0,
+            });
+
+            showToastMessage('Produto filho criado e vinculado com sucesso!', 'success');
+            if (fractionChildCreateDescriptionInput) {
+                fractionChildCreateDescriptionInput.value = '';
+                fractionChildCreateDescriptionInput.focus();
+            }
+            if (fractionChildCreateBarcodeInput) {
+                fractionChildCreateBarcodeInput.value = '';
+            }
+        } catch (error) {
+            console.error('Erro ao criar produto filho automaticamente:', error);
+            showToastMessage(error?.message || 'Não foi possível criar o produto filho.', 'error');
+        } finally {
+            setFractionChildCreateButtonLoading(false);
+        }
+    };
+
     const renderFractionalSuggestions = (items = [], { term = '' } = {}) => {
         if (!fractionChildSuggestions) return;
         if (!items.length) {
@@ -2764,6 +3037,12 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchFractionalSuggestions(term);
         }, 300);
     };
+
+    preventAutoSaveForElement(fractionChildCreateDescriptionInput);
+    preventAutoSaveForElement(fractionChildCreateUnitSelect);
+    preventAutoSaveForElement(fractionChildCreateBarcodeInput);
+
+    fractionChildCreateButton?.addEventListener('click', handleFractionChildCreation);
 
     fractionChildSearchInput?.addEventListener('input', handleFractionSearchInput);
     fractionChildSearchInput?.addEventListener('focus', () => {
@@ -3027,6 +3306,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const prepareFormForCreation = () => {
         duplicateCheckInProgress = false;
+        currentProductSnapshot = null;
         form?.reset();
         pageTitle.textContent = 'Cadastrar Produto';
         if (pageDescription) {
@@ -3073,6 +3353,16 @@ document.addEventListener('DOMContentLoaded', () => {
         hideImageOrderStatus();
         if (existingImagesGrid) {
             existingImagesGrid.innerHTML = '<p class="text-sm text-gray-500">Nenhuma imagem cadastrada até o momento.</p>';
+        }
+
+        if (fractionChildCreateUnitSelect) {
+            fractionChildCreateUnitSelect.value = '';
+        }
+        if (fractionChildCreateDescriptionInput) {
+            fractionChildCreateDescriptionInput.value = '';
+        }
+        if (fractionChildCreateBarcodeInput) {
+            fractionChildCreateBarcodeInput.value = '';
         }
 
         document.querySelectorAll('input[name="spec-idade"], input[name="spec-pet"], input[name="spec-porte"]').forEach((input) => {
@@ -3191,6 +3481,7 @@ document.addEventListener('DOMContentLoaded', () => {
         makeFieldEditable(barcodeInput);
         setSubmitButtonIdleText();
         showDeleteButton();
+        currentProductSnapshot = cloneDeep(product);
         const resolvedProductId = product?._id || product?.id;
         if (resolvedProductId) {
             productId = String(resolvedProductId);
@@ -3225,6 +3516,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (unitSelect) {
             unitSelect.value = product.unidade || '';
             lastSelectedProductUnit = getSelectedProductUnit();
+        }
+        if (fractionChildCreateUnitSelect) {
+            fractionChildCreateUnitSelect.value = product.unidade || '';
         }
         if (form.querySelector('#referencia')) {
             form.querySelector('#referencia').value = product.referencia || '';
