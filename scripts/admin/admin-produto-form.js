@@ -37,6 +37,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const unitSelect = document.getElementById('unidade');
     const inactiveCheckbox = document.getElementById('inativo');
     const hideOnSiteCheckbox = document.getElementById('hide-on-site');
+    const fractionedCheckbox = document.getElementById('fractioned-toggle');
+    const fractionTabTrigger = document.getElementById('tab-fraction-trigger');
+    const fractionTabPanel = document.getElementById('tab-fraction');
+    const fractionChildSearchInput = document.getElementById('fraction-child-search');
+    const fractionChildSuggestions = document.getElementById('fraction-child-suggestions');
+    const fractionChildTableBody = document.getElementById('fraction-child-tbody');
+    const fractionChildEmptyState = document.getElementById('fraction-child-empty');
+    const fractionSummaryCost = document.getElementById('fraction-summary-cost');
+    const fractionSummaryStock = document.getElementById('fraction-summary-stock');
     const fiscalCompanySelect = document.getElementById('fiscal-company-select');
     const fiscalCompanySummary = document.getElementById('fiscal-company-summary');
     const deleteProductButton = document.getElementById('delete-product-button');
@@ -588,6 +597,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const priceHistoryDefaultEmptyMessage = priceHistoryEmptyState?.textContent?.trim()
         || 'Nenhuma alteração de preço registrada para este produto.';
     let priceHistoryLoading = false;
+    let fractionalChildren = [];
+    let fractionalSearchTimeoutId = null;
+    let fractionalSearchAbortController = null;
 
     const storedProductId = isFromNfeImport ? null : getPersistedProductEditStateValue('productId');
     if (!productId && storedProductId) {
@@ -762,7 +774,67 @@ document.addEventListener('DOMContentLoaded', () => {
             ncm: ncmValue ? ncmValue.trim() : null,
         };
 
-        return { productName, updateData };
+        const fractionalEnabled = Boolean(fractionedCheckbox?.checked);
+        const fractionalErrors = [];
+
+        if (fractionalEnabled) {
+            const seenChildren = new Set();
+            const fractionalItemsPayload = [];
+            fractionalChildren.forEach((child, index) => {
+                const productKey = child?.productId ? String(child.productId) : '';
+                if (!productKey) {
+                    fractionalErrors.push(`Produto filho inválido na posição ${index + 1}.`);
+                    return;
+                }
+                if (productId && productKey === String(productId)) {
+                    fractionalErrors.push('O produto não pode ser configurado como filho de si mesmo.');
+                    return;
+                }
+                if (seenChildren.has(productKey)) {
+                    fractionalErrors.push('Existem produtos filhos duplicados na configuração de fracionamento.');
+                    return;
+                }
+                const metrics = computeFractionChildMetrics(child);
+                if (!metrics.baseQuantity || metrics.baseQuantity <= 0) {
+                    fractionalErrors.push(`Informe a quantidade utilizada do produto filho ${child?.nome || productKey}.`);
+                    return;
+                }
+                if (!metrics.fractionQuantity || metrics.fractionQuantity <= 0) {
+                    fractionalErrors.push(`Informe a quantidade após fracionamento do produto filho ${child?.nome || productKey}.`);
+                    return;
+                }
+                seenChildren.add(productKey);
+                fractionalItemsPayload.push({
+                    produto: productKey,
+                    quantidadeOrigem: metrics.baseQuantity,
+                    quantidadeFracionada: metrics.fractionQuantity,
+                });
+            });
+
+            if (!fractionalChildren.length) {
+                fractionalErrors.push('Adicione ao menos um produto filho para configurar o fracionamento.');
+            }
+
+            if (fractionalErrors.length) {
+                return { productName, updateData: null, fractionalErrors };
+            }
+
+            const summary = calculateFractionalSummary();
+            updateData.fracionado = {
+                ativo: true,
+                itens: fractionalItemsPayload,
+                custoCalculado: Number.isFinite(summary.cost) ? summary.cost : null,
+                estoqueEquivalente: Number.isFinite(summary.stock) ? summary.stock : null,
+            };
+            updateData.custo = Number.isFinite(summary.cost) ? summary.cost : 0;
+        } else {
+            updateData.fracionado = {
+                ativo: false,
+                itens: [],
+            };
+        }
+
+        return { productName, updateData, fractionalErrors };
     };
 
     const executeAutoSave = async () => {
@@ -842,6 +914,15 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    };
+
+    const showToastMessage = (message, type = 'info', duration = 4000) => {
+        if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+            window.showToast(message, type, duration);
+            return;
+        }
+        const normalizedType = type ? String(type).toUpperCase() : 'INFO';
+        console.log(`[${normalizedType}] ${message}`);
     };
 
     const formatPriceHistoryCurrency = (value) => {
@@ -2321,6 +2402,375 @@ document.addEventListener('DOMContentLoaded', () => {
         updateSaleFromMarkup();
     });
 
+    const fractionalCurrencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const fractionalNumberFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+
+    const isFractionalFeatureEnabled = () => Boolean(fractionedCheckbox?.checked);
+
+    const hideFractionalSuggestions = () => {
+        if (!fractionChildSuggestions) return;
+        fractionChildSuggestions.innerHTML = '';
+        fractionChildSuggestions.classList.add('hidden');
+    };
+
+    const ensureFractionalTabVisibility = () => {
+        if (!fractionTabTrigger || !fractionTabPanel) return;
+        const shouldShow = isFractionalFeatureEnabled();
+        fractionTabTrigger.classList.toggle('hidden', !shouldShow);
+        if (shouldShow) {
+            fractionTabTrigger.removeAttribute('aria-hidden');
+        } else {
+            fractionTabTrigger.setAttribute('aria-hidden', 'true');
+            fractionTabTrigger.setAttribute('tabindex', '-1');
+            const isActive = fractionTabTrigger.classList.contains('text-primary');
+            fractionTabPanel.classList.add('hidden');
+            fractionTabPanel.setAttribute('aria-hidden', 'true');
+            if (isActive) {
+                activateProductTab('#tab-config');
+            }
+            hideFractionalSuggestions();
+        }
+    };
+
+    const toggleFractionalCostLock = () => {
+        if (!costInput) return;
+        const locked = isFractionalFeatureEnabled();
+        costInput.readOnly = locked;
+        costInput.classList.toggle('bg-gray-50', locked);
+        costInput.classList.toggle('cursor-not-allowed', locked);
+        if (locked) {
+            costInput.setAttribute('aria-readonly', 'true');
+            costInput.setAttribute('title', 'O custo é calculado automaticamente para produtos fracionados.');
+        } else {
+            costInput.removeAttribute('aria-readonly');
+            costInput.removeAttribute('title');
+        }
+    };
+
+    const formatFractionCurrency = (value) => {
+        if (!Number.isFinite(value)) return fractionalCurrencyFormatter.format(0);
+        return fractionalCurrencyFormatter.format(value);
+    };
+
+    const formatFractionNumber = (value) => {
+        if (!Number.isFinite(value)) return '0';
+        return fractionalNumberFormatter.format(value);
+    };
+
+    const computeFractionChildMetrics = (child = {}) => {
+        const rawBase = Number(child?.quantidadeOrigem);
+        const rawFraction = Number(child?.quantidadeFracionada);
+        const normalizedBase = Number.isFinite(rawBase) && rawBase > 0 ? rawBase : 1;
+        const normalizedFraction = Number.isFinite(rawFraction) && rawFraction > 0 ? rawFraction : 0;
+        const childCost = Number(child?.custo);
+        const childStock = Number(child?.stock);
+        const costPerLot = Number.isFinite(childCost) ? childCost * normalizedBase : 0;
+        const costPerFraction = normalizedFraction > 0 ? costPerLot / normalizedFraction : 0;
+        const equivalentStock = normalizedBase > 0 && Number.isFinite(childStock)
+            ? childStock * (normalizedFraction / normalizedBase)
+            : 0;
+
+        return {
+            baseQuantity: normalizedBase,
+            fractionQuantity: normalizedFraction,
+            costPerFraction: Number.isFinite(costPerFraction) ? costPerFraction : 0,
+            equivalentStock: Number.isFinite(equivalentStock) ? equivalentStock : 0,
+            childStock: Number.isFinite(childStock) ? childStock : 0,
+        };
+    };
+
+    const calculateFractionalSummary = () => fractionalChildren.reduce((acc, child) => {
+        const metrics = computeFractionChildMetrics(child);
+        acc.cost += metrics.costPerFraction;
+        acc.stock += metrics.equivalentStock;
+        return acc;
+    }, { cost: 0, stock: 0 });
+
+    const updateFractionalSummary = () => {
+        const summary = calculateFractionalSummary();
+        if (fractionSummaryCost) {
+            fractionSummaryCost.textContent = formatFractionCurrency(Number.isFinite(summary.cost) ? summary.cost : 0);
+        }
+        if (fractionSummaryStock) {
+            fractionSummaryStock.textContent = formatFractionNumber(Number.isFinite(summary.stock) ? summary.stock : 0);
+        }
+        if (isFractionalFeatureEnabled() && costInput) {
+            const normalizedCost = Number.isFinite(summary.cost) ? summary.cost : 0;
+            costInput.value = normalizedCost.toFixed(2);
+            updateMarkupFromValues();
+        }
+        return summary;
+    };
+
+    const showFractionalSuggestionMessage = (message) => {
+        if (!fractionChildSuggestions) return;
+        fractionChildSuggestions.innerHTML = `<p class="px-3 py-2 text-[11px] text-gray-500">${escapeHtml(message)}</p>`;
+        fractionChildSuggestions.classList.remove('hidden');
+    };
+
+    const renderFractionChildren = () => {
+        if (!fractionChildTableBody) return;
+        fractionChildTableBody.innerHTML = '';
+        if (!Array.isArray(fractionalChildren) || fractionalChildren.length === 0) {
+            fractionChildEmptyState?.classList.remove('hidden');
+            updateFractionalSummary();
+            return;
+        }
+        fractionChildEmptyState?.classList.add('hidden');
+
+        fractionalChildren.forEach((child, index) => {
+            const metrics = computeFractionChildMetrics(child);
+            child.quantidadeOrigem = metrics.baseQuantity;
+            child.quantidadeFracionada = metrics.fractionQuantity > 0 ? metrics.fractionQuantity : 1;
+            const nameLabel = child?.nome ? escapeHtml(child.nome) : 'Produto sem nome';
+            const codeParts = [];
+            if (child?.cod) codeParts.push(escapeHtml(child.cod));
+            if (child?.unidade) codeParts.push(escapeHtml(child.unidade));
+            const codeLabel = codeParts.length ? codeParts.join(' · ') : '&nbsp;';
+
+            const row = document.createElement('tr');
+            row.className = 'bg-white';
+            row.innerHTML = `
+                <td class="whitespace-nowrap px-3 py-2 align-top">
+                    <div class="text-xs font-semibold text-gray-800">${nameLabel}</div>
+                    <div class="text-[11px] text-gray-500">${codeLabel}</div>
+                </td>
+                <td class="px-3 py-2 text-center align-middle">
+                    <input type="number" min="0" step="0.0001" class="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-1 focus:ring-primary/20" data-fraction-index="${index}" data-fraction-field="base" value="${metrics.baseQuantity}">
+                </td>
+                <td class="px-3 py-2 text-center align-middle">
+                    <input type="number" min="0" step="0.0001" class="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-primary focus:ring-1 focus:ring-primary/20" data-fraction-index="${index}" data-fraction-field="fraction" value="${metrics.fractionQuantity > 0 ? metrics.fractionQuantity : ''}">
+                </td>
+                <td class="px-3 py-2 text-center align-middle text-[11px] text-gray-600">${formatFractionNumber(metrics.childStock)}</td>
+                <td class="px-3 py-2 text-center align-middle text-[11px] font-semibold text-gray-700">${formatFractionNumber(metrics.equivalentStock)}</td>
+                <td class="px-3 py-2 text-center align-middle text-[11px] font-semibold text-gray-700">${formatFractionCurrency(metrics.costPerFraction)}</td>
+                <td class="px-3 py-2 text-right align-middle">
+                    <button type="button" class="inline-flex items-center gap-1 rounded-full border border-red-200 px-3 py-1 text-[11px] font-semibold text-red-600 transition hover:bg-red-50" data-fraction-remove="${index}"><i class="fas fa-times"></i> Remover</button>
+                </td>
+            `;
+
+            fractionChildTableBody.appendChild(row);
+
+            const baseInput = row.querySelector('input[data-fraction-field="base"]');
+            const fractionInput = row.querySelector('input[data-fraction-field="fraction"]');
+            const removeBtn = row.querySelector('[data-fraction-remove]');
+
+            baseInput?.addEventListener('change', (event) => {
+                const parsedValue = Number(event.target.value);
+                if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+                    showToastMessage('Informe uma quantidade utilizada maior que zero.', 'warning');
+                    event.target.value = metrics.baseQuantity;
+                    return;
+                }
+                fractionalChildren[index].quantidadeOrigem = parsedValue;
+                renderFractionChildren();
+                markProductAsModified();
+            });
+
+            fractionInput?.addEventListener('change', (event) => {
+                const parsedValue = Number(event.target.value);
+                if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+                    showToastMessage('Informe a quantidade após fracionamento maior que zero.', 'warning');
+                    event.target.value = metrics.fractionQuantity > 0 ? metrics.fractionQuantity : '';
+                    return;
+                }
+                fractionalChildren[index].quantidadeFracionada = parsedValue;
+                renderFractionChildren();
+                markProductAsModified();
+            });
+
+            removeBtn?.addEventListener('click', () => {
+                fractionalChildren.splice(index, 1);
+                renderFractionChildren();
+                markProductAsModified();
+            });
+        });
+
+        updateFractionalSummary();
+    };
+
+    const addFractionChild = (product) => {
+        if (!product || !product.productId) return;
+        if (productId && String(product.productId) === String(productId)) {
+            showToastMessage('Não é possível vincular o próprio produto como filho.', 'warning');
+            return;
+        }
+        if (fractionalChildren.some((child) => String(child.productId) === String(product.productId))) {
+            showToastMessage('Este produto já está vinculado como filho.', 'warning');
+            return;
+        }
+        fractionalChildren.push({
+            productId: String(product.productId),
+            nome: product.nome || '',
+            cod: product.cod || '',
+            unidade: product.unidade || '',
+            custo: Number(product.custo) || 0,
+            stock: Number(product.stock) || 0,
+            quantidadeOrigem: 1,
+            quantidadeFracionada: 1,
+        });
+        renderFractionChildren();
+        markProductAsModified();
+        if (isFractionalFeatureEnabled()) {
+            activateProductTab('#tab-fraction');
+        }
+    };
+
+    const renderFractionalSuggestions = (items = [], { term = '' } = {}) => {
+        if (!fractionChildSuggestions) return;
+        if (!items.length) {
+            showFractionalSuggestionMessage(term
+                ? `Nenhum produto encontrado para "${escapeHtml(term)}".`
+                : 'Nenhum produto disponível para seleção.');
+            return;
+        }
+        const fragment = document.createDocumentFragment();
+        items.forEach((item) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs text-gray-700 transition hover:bg-primary/10';
+            button.dataset.fractionSuggestion = item.productId;
+            const codeParts = [];
+            if (item.cod) codeParts.push(escapeHtml(item.cod));
+            if (item.unidade) codeParts.push(escapeHtml(item.unidade));
+            button.innerHTML = `
+                <span class="flex flex-col">
+                    <span class="font-semibold text-gray-800">${escapeHtml(item.nome || 'Produto sem nome')}</span>
+                    <span class="text-[11px] text-gray-500">${codeParts.length ? codeParts.join(' · ') : '&nbsp;'}</span>
+                </span>
+                <span class="text-[11px] font-semibold text-gray-700">${formatFractionCurrency(Number(item.custo) || 0)}</span>
+            `;
+            button.addEventListener('click', () => {
+                addFractionChild(item);
+                hideFractionalSuggestions();
+                if (fractionChildSearchInput) {
+                    fractionChildSearchInput.value = '';
+                    fractionChildSearchInput.focus();
+                }
+            });
+            fragment.appendChild(button);
+        });
+        fractionChildSuggestions.innerHTML = '';
+        fractionChildSuggestions.appendChild(fragment);
+        fractionChildSuggestions.classList.remove('hidden');
+    };
+
+    const fetchFractionalSuggestions = async (term) => {
+        const normalizedTerm = typeof term === 'string' ? term.trim() : '';
+        if (!fractionChildSuggestions) return;
+        if (!normalizedTerm || normalizedTerm.length < 2) {
+            hideFractionalSuggestions();
+            return;
+        }
+
+        const token = getAuthToken();
+        if (!token) {
+            showFractionalSuggestionMessage('Faça login para buscar produtos.');
+            return;
+        }
+
+        if (fractionalSearchAbortController) {
+            fractionalSearchAbortController.abort();
+        }
+        fractionalSearchAbortController = new AbortController();
+
+        try {
+            showFractionalSuggestionMessage('Buscando produtos...');
+            const params = new URLSearchParams({
+                search: normalizedTerm,
+                limit: '10',
+                includeHidden: 'true',
+            });
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products?${params.toString()}`, {
+                headers: { Authorization: `Bearer ${token}` },
+                signal: fractionalSearchAbortController.signal,
+            });
+            if (!response.ok) {
+                throw new Error('Não foi possível buscar os produtos informados.');
+            }
+            const payload = await response.json();
+            const products = Array.isArray(payload?.products) ? payload.products : [];
+            const filtered = products
+                .map((item) => ({
+                    productId: item?._id || item?.id || '',
+                    nome: item?.nome || '',
+                    cod: item?.cod || '',
+                    unidade: item?.unidade || '',
+                    custo: Number(item?.custo) || 0,
+                    stock: Number(item?.stock) || 0,
+                }))
+                .filter((entry) => entry.productId
+                    && (!productId || String(entry.productId) !== String(productId))
+                    && !fractionalChildren.some((child) => String(child.productId) === String(entry.productId)));
+
+            renderFractionalSuggestions(filtered, { term: normalizedTerm });
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            console.error('Erro ao buscar produtos fracionados:', error);
+            showFractionalSuggestionMessage(error.message || 'Não foi possível buscar os produtos informados.');
+        } finally {
+            fractionalSearchAbortController = null;
+        }
+    };
+
+    const handleFractionSearchInput = (event) => {
+        const term = (event?.target?.value ?? fractionChildSearchInput?.value ?? '').trim();
+        if (fractionalSearchTimeoutId) {
+            clearTimeout(fractionalSearchTimeoutId);
+            fractionalSearchTimeoutId = null;
+        }
+        if (!term || term.length < 2) {
+            hideFractionalSuggestions();
+            return;
+        }
+        fractionalSearchTimeoutId = window.setTimeout(() => {
+            fractionalSearchTimeoutId = null;
+            fetchFractionalSuggestions(term);
+        }, 300);
+    };
+
+    fractionChildSearchInput?.addEventListener('input', handleFractionSearchInput);
+    fractionChildSearchInput?.addEventListener('focus', () => {
+        const term = fractionChildSearchInput.value.trim();
+        if (term.length >= 2) {
+            fetchFractionalSuggestions(term);
+        }
+    });
+    fractionChildSearchInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const firstSuggestion = fractionChildSuggestions?.querySelector('button[data-fraction-suggestion]');
+            if (firstSuggestion) {
+                firstSuggestion.click();
+            }
+        } else if (event.key === 'Escape') {
+            hideFractionalSuggestions();
+        }
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!fractionChildSuggestions || fractionChildSuggestions.classList.contains('hidden')) return;
+        if (fractionChildSuggestions.contains(event.target) || fractionChildSearchInput?.contains(event.target)) return;
+        hideFractionalSuggestions();
+    });
+
+    fractionedCheckbox?.addEventListener('change', () => {
+        ensureFractionalTabVisibility();
+        toggleFractionalCostLock();
+        updateFractionalSummary();
+        if (fractionedCheckbox.checked) {
+            activateProductTab('#tab-fraction');
+            if (!fractionalChildren.length) {
+                showToastMessage('Adicione ao menos um produto filho para completar o fracionamento.', 'info');
+            }
+        }
+        markProductAsModified();
+    });
+
+    renderFractionChildren();
+    ensureFractionalTabVisibility();
+    toggleFractionalCostLock();
+
     const loadImportedProductDraft = () => {
         if (typeof sessionStorage === 'undefined') return null;
         try {
@@ -2839,6 +3289,36 @@ document.addEventListener('DOMContentLoaded', () => {
         currentImages = imagens;
         renderExistingImages();
 
+        if (fractionedCheckbox) {
+            const fractionalConfig = product?.fracionado || {};
+            fractionedCheckbox.checked = Boolean(fractionalConfig.ativo);
+            const items = Array.isArray(fractionalConfig.itens) ? fractionalConfig.itens : [];
+            fractionalChildren = items
+                .map((entry) => {
+                    const rawProduct = entry?.produto;
+                    const productKey = rawProduct?._id || rawProduct?.id || entry?.produto || entry?.productId || '';
+                    if (!productKey) return null;
+                    const costReference = Number(rawProduct?.custo ?? entry?.custoCalculado ?? entry?.custoReferencia);
+                    const stockReference = Number(rawProduct?.stock ?? entry?.estoqueAtualFilho ?? entry?.estoqueGerado);
+                    return {
+                        productId: String(productKey),
+                        nome: rawProduct?.nome || entry?.nome || '',
+                        cod: rawProduct?.cod || '',
+                        unidade: rawProduct?.unidade || '',
+                        custo: Number.isFinite(costReference) ? costReference : 0,
+                        stock: Number.isFinite(stockReference) ? stockReference : 0,
+                        quantidadeOrigem: Number(entry?.quantidadeOrigem) > 0 ? Number(entry.quantidadeOrigem) : 1,
+                        quantidadeFracionada: Number(entry?.quantidadeFracionada) > 0 ? Number(entry.quantidadeFracionada) : 1,
+                    };
+                })
+                .filter(Boolean);
+        } else {
+            fractionalChildren = [];
+        }
+        renderFractionChildren();
+        ensureFractionalTabVisibility();
+        toggleFractionalCostLock();
+
         // --- Especificações ---
         const espec = product.especificacoes || {};
         // Idade
@@ -3349,11 +3829,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const loadingText = isEditMode ? 'Salvando...' : 'Cadastrando...';
         submitButton.innerHTML = `<i class="fas fa-spinner fa-spin"></i><span>${loadingText}</span>`;
 
-        const { productName, updateData } = buildProductUpdatePayload();
+        const { productName, updateData, fractionalErrors } = buildProductUpdatePayload();
         if (!productName) {
             showModal({
                 title: 'Dados obrigatórios',
                 message: 'Informe o nome do produto antes de salvar.',
+                confirmText: 'Entendi',
+            });
+            submitButton.disabled = false;
+            setSubmitButtonIdleText();
+            return;
+        }
+        if (Array.isArray(fractionalErrors) && fractionalErrors.length) {
+            showModal({
+                title: 'Fracionamento incompleto',
+                message: fractionalErrors[0],
                 confirmText: 'Entendi',
             });
             submitButton.disabled = false;

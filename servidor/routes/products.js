@@ -77,6 +77,203 @@ const resolveAuthenticatedUser = async (req) => {
 };
 
 
+const sanitizeFractionalConfig = async (rawConfig, { parentProductId = null } = {}) => {
+    const defaultConfig = {
+        ativo: false,
+        itens: [],
+        custoCalculado: null,
+        estoqueEquivalente: null,
+        atualizadoEm: null,
+    };
+    const result = {
+        config: { ...defaultConfig },
+        summaryCost: null,
+        summaryStock: null,
+        errors: [],
+    };
+
+    if (!rawConfig || typeof rawConfig !== 'object') {
+        return result;
+    }
+
+    const isActive = rawConfig.ativo === true
+        || rawConfig.ativo === 'true'
+        || rawConfig.ativo === 1
+        || rawConfig.ativo === '1';
+    if (!isActive) {
+        return result;
+    }
+
+    const rawItems = Array.isArray(rawConfig.itens) ? rawConfig.itens : [];
+    if (rawItems.length === 0) {
+        result.errors.push('Adicione ao menos um produto filho para configurar o fracionamento.');
+        return result;
+    }
+
+    const parsePositiveNumber = (value) => {
+        if (value === null || value === undefined || value === '') return null;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const parentIdString = parentProductId ? String(parentProductId) : null;
+    const seenChildren = new Set();
+    const sanitizedItems = [];
+    const childIds = [];
+
+    rawItems.forEach((item, index) => {
+        const rawId = item?.produto || item?.productId || item?._id || item?.id;
+        const baseQuantity = parsePositiveNumber(item?.quantidadeOrigem);
+        const fractionQuantity = parsePositiveNumber(item?.quantidadeFracionada);
+        const positionLabel = index + 1;
+
+        if (!rawId || !mongoose.Types.ObjectId.isValid(rawId)) {
+            result.errors.push(`Produto filho inválido na posição ${positionLabel}.`);
+            return;
+        }
+        const childId = String(rawId);
+        if (parentIdString && childId === parentIdString) {
+            result.errors.push('O produto não pode ser configurado como filho de si mesmo.');
+            return;
+        }
+        if (seenChildren.has(childId)) {
+            result.errors.push('Existem produtos filhos duplicados na configuração de fracionamento.');
+            return;
+        }
+        if (!baseQuantity || baseQuantity <= 0) {
+            result.errors.push('Informe a quantidade utilizada para cada produto filho.');
+            return;
+        }
+        if (!fractionQuantity || fractionQuantity <= 0) {
+            result.errors.push('Informe a quantidade após o fracionamento para cada produto filho.');
+            return;
+        }
+
+        seenChildren.add(childId);
+        sanitizedItems.push({
+            produto: childId,
+            quantidadeOrigem: baseQuantity,
+            quantidadeFracionada: fractionQuantity,
+        });
+        childIds.push(childId);
+    });
+
+    if (result.errors.length) {
+        return result;
+    }
+
+    if (!sanitizedItems.length) {
+        result.errors.push('Adicione ao menos um produto filho para configurar o fracionamento.');
+        return result;
+    }
+
+    const childProducts = await Product.find({ _id: { $in: childIds } })
+        .select('custo stock')
+        .lean();
+    const childMap = new Map(childProducts.map((child) => [String(child._id), child]));
+
+    const itemsWithDetails = sanitizedItems.map((item) => {
+        const child = childMap.get(item.produto);
+        if (!child) {
+            result.errors.push('Alguns produtos filhos informados não foram encontrados.');
+            return null;
+        }
+        const childCost = Number(child.custo);
+        const childStock = Number(child.stock);
+        const costPerLot = Number.isFinite(childCost) ? childCost * item.quantidadeOrigem : 0;
+        const costPerFraction = item.quantidadeFracionada > 0
+            ? costPerLot / item.quantidadeFracionada
+            : 0;
+        const equivalentStock = item.quantidadeOrigem > 0 && Number.isFinite(childStock)
+            ? childStock * (item.quantidadeFracionada / item.quantidadeOrigem)
+            : 0;
+
+        return {
+            ...item,
+            custoCalculado: Number.isFinite(costPerFraction) ? costPerFraction : 0,
+            estoqueEquivalente: Number.isFinite(equivalentStock) ? equivalentStock : 0,
+        };
+    }).filter(Boolean);
+
+    if (result.errors.length) {
+        return result;
+    }
+
+    const totalCost = itemsWithDetails.reduce((sum, entry) => sum + (Number(entry.custoCalculado) || 0), 0);
+    const totalStock = itemsWithDetails.reduce((sum, entry) => sum + (Number(entry.estoqueEquivalente) || 0), 0);
+
+    result.config = {
+        ativo: true,
+        itens: itemsWithDetails.map((entry) => ({
+            produto: new mongoose.Types.ObjectId(entry.produto),
+            quantidadeOrigem: entry.quantidadeOrigem,
+            quantidadeFracionada: entry.quantidadeFracionada,
+        })),
+        custoCalculado: Number.isFinite(totalCost) ? totalCost : null,
+        estoqueEquivalente: Number.isFinite(totalStock) ? totalStock : null,
+        atualizadoEm: new Date(),
+    };
+    result.summaryCost = Number.isFinite(totalCost) ? totalCost : null;
+    result.summaryStock = Number.isFinite(totalStock) ? totalStock : null;
+    return result;
+};
+
+const applyFractionalSnapshot = (product) => {
+    if (!product || !product.fracionado || !product.fracionado.ativo || !Array.isArray(product.fracionado.itens)) {
+        return product;
+    }
+
+    const mappedItems = product.fracionado.itens.map((item) => {
+        const rawProduct = item?.produto;
+        const child = rawProduct && typeof rawProduct === 'object' ? rawProduct : null;
+        const childCost = Number(child?.custo);
+        const childStock = Number(child?.stock);
+        const baseQuantity = Number(item?.quantidadeOrigem);
+        const fractionQuantity = Number(item?.quantidadeFracionada);
+        const normalizedBase = Number.isFinite(baseQuantity) && baseQuantity > 0 ? baseQuantity : 1;
+        const normalizedFraction = Number.isFinite(fractionQuantity) && fractionQuantity > 0 ? fractionQuantity : 0;
+        const costPerLot = Number.isFinite(childCost) ? childCost * normalizedBase : 0;
+        const costPerFraction = normalizedFraction > 0 ? costPerLot / normalizedFraction : 0;
+        const equivalentStock = normalizedBase > 0 && Number.isFinite(childStock)
+            ? childStock * (normalizedFraction / normalizedBase)
+            : 0;
+
+        return {
+            ...item,
+            quantidadeOrigem: normalizedBase,
+            quantidadeFracionada: normalizedFraction,
+            produto: child || item.produto,
+            custoCalculado: Number.isFinite(costPerFraction) ? costPerFraction : 0,
+            estoqueEquivalente: Number.isFinite(equivalentStock) ? equivalentStock : 0,
+            custoReferencia: Number.isFinite(childCost) ? childCost : null,
+            estoqueAtualFilho: Number.isFinite(childStock) ? childStock : null,
+        };
+    });
+
+    const totalCost = mappedItems.reduce((sum, entry) => sum + (Number(entry.custoCalculado) || 0), 0);
+    const totalStock = mappedItems.reduce((sum, entry) => sum + (Number(entry.estoqueEquivalente) || 0), 0);
+
+    if (typeof product.toObject === 'function') {
+        const plain = product.toObject();
+        plain.fracionado = {
+            ...plain.fracionado,
+            itens: mappedItems,
+            custoCalculado: Number.isFinite(totalCost) ? totalCost : null,
+            estoqueEquivalente: Number.isFinite(totalStock) ? totalStock : null,
+        };
+        return plain;
+    }
+
+    product.fracionado = {
+        ...product.fracionado,
+        itens: mappedItems,
+        custoCalculado: Number.isFinite(totalCost) ? totalCost : null,
+        estoqueEquivalente: Number.isFinite(totalStock) ? totalStock : null,
+    };
+    return product;
+};
+
+
 router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
         const payload = req.body || {};
@@ -211,6 +408,15 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
             fiscalPorEmpresa: {},
         };
 
+        const fractionalResult = await sanitizeFractionalConfig(payload.fracionado, {});
+        if (fractionalResult.errors.length) {
+            return res.status(400).json({ message: fractionalResult.errors[0], errors: fractionalResult.errors });
+        }
+        productData.fracionado = fractionalResult.config;
+        if (fractionalResult.config.ativo && Number.isFinite(fractionalResult.summaryCost)) {
+            productData.custo = fractionalResult.summaryCost;
+        }
+
         if (payload.fiscalPorEmpresa && typeof payload.fiscalPorEmpresa === 'object') {
             Object.entries(payload.fiscalPorEmpresa).forEach(([companyId, fiscalData]) => {
                 if (!companyId) return;
@@ -256,9 +462,10 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
                 path: 'estoques.deposito',
                 populate: { path: 'empresa' }
             })
+            .populate('fracionado.itens.produto')
             .lean();
 
-        res.status(201).json({ product: populatedProduct });
+        res.status(201).json({ product: applyFractionalSnapshot(populatedProduct) });
     } catch (error) {
         console.error('Erro ao cadastrar produto:', error);
         res.status(500).json({ message: 'Erro no servidor.' });
@@ -714,14 +921,17 @@ router.get(
 
 router.get('/:id', async (req, res) => {
     try {
-        const product = await Product.findById(req.params.id)
+        const productDocument = await Product.findById(req.params.id)
             .populate('categorias')
             .populate({
                 path: 'estoques.deposito',
                 populate: { path: 'empresa' }
             })
+            .populate('fracionado.itens.produto')
             .lean();
-        if (!product) return res.status(404).json({ message: 'Produto não encontrado.' });
+        if (!productDocument) return res.status(404).json({ message: 'Produto não encontrado.' });
+
+        const product = applyFractionalSnapshot(productDocument);
 
         if (product.categorias && product.categorias.length > 0) {
             const primaryCategory = product.categorias[0];
@@ -974,6 +1184,21 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             updatePayload.stock = parsedStock === null ? 0 : parsedStock;
         }
 
+        const fractionalResult = await sanitizeFractionalConfig(payload.fracionado, {
+            parentProductId: existingProduct._id,
+        });
+        if (fractionalResult.errors.length) {
+            return res.status(400).json({ message: fractionalResult.errors[0], errors: fractionalResult.errors });
+        }
+
+        if (payload.fracionado !== undefined) {
+            updatePayload.fracionado = fractionalResult.config;
+            if (fractionalResult.config.ativo && Number.isFinite(fractionalResult.summaryCost)) {
+                updatePayload.custo = fractionalResult.summaryCost;
+                payload.custo = fractionalResult.summaryCost;
+            }
+        }
+
         if (payload.fiscal !== undefined) {
             updatePayload.fiscal = sanitizeFiscalData(payload.fiscal, existingProduct?.fiscal || {}, req.user?.id || '');
         }
@@ -1078,9 +1303,10 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
                 path: 'estoques.deposito',
                 populate: { path: 'empresa' }
             })
+            .populate('fracionado.itens.produto')
             .lean();
 
-        res.json(populatedProduct);
+        res.json(applyFractionalSnapshot(populatedProduct));
     } catch (error) {
         console.error("Erro ao atualizar produto:", error);
         res.status(500).json({ message: 'Erro no servidor.' });
