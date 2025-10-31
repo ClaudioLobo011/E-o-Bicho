@@ -281,7 +281,7 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
 
     try {
         const product = await Product.findById(productId)
-            .select('fracionado')
+            .select('fracionado unidade')
             .populate('fracionado.itens.produto')
             .lean();
 
@@ -325,7 +325,7 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
 
         const childProducts = childIds.length
             ? await Product.find({ _id: { $in: childIds } })
-                .select('custo stock')
+                .select('custo stock estoques unidade')
                 .lean()
             : [];
 
@@ -334,6 +334,45 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
         let totalCost = 0;
         let totalStock = 0;
         const missingChildren = [];
+        const depositTotals = new Map();
+
+        const parentUnit = typeof product.unidade === 'string' ? product.unidade.trim() : '';
+
+        const registerDepositEquivalent = (depositEntry, equivalentQuantity, childUnit) => {
+            if (!depositEntry) {
+                return;
+            }
+
+            const rawDeposit = depositEntry?.deposito;
+            let depositId = null;
+            if (rawDeposit && typeof rawDeposit === 'object' && rawDeposit._id) {
+                depositId = String(rawDeposit._id);
+            } else if (mongoose.Types.ObjectId.isValid(rawDeposit)) {
+                depositId = String(rawDeposit);
+            }
+
+            if (!depositId) {
+                return;
+            }
+
+            const quantityNumber = Number(equivalentQuantity);
+            if (!Number.isFinite(quantityNumber) || quantityNumber <= 0) {
+                return;
+            }
+
+            const current = depositTotals.get(depositId) || { quantidade: 0, unidade: '' };
+            const depositUnit = typeof depositEntry?.unidade === 'string' ? depositEntry.unidade.trim() : '';
+            const resolvedUnit = current.unidade
+                || depositUnit
+                || (typeof childUnit === 'string' ? childUnit.trim() : '')
+                || parentUnit
+                || '';
+
+            depositTotals.set(depositId, {
+                quantidade: current.quantidade + quantityNumber,
+                unidade: resolvedUnit,
+            });
+        };
 
         fractionalItems.forEach((item) => {
             const rawId = item?.produto;
@@ -372,6 +411,24 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
 
             totalCost += Number.isFinite(costPerFraction) ? costPerFraction : 0;
             totalStock += Number.isFinite(equivalentStock) ? equivalentStock : 0;
+
+            const multiplier = baseQuantity > 0 && fractionQuantity > 0
+                ? (fractionQuantity / baseQuantity)
+                : 0;
+
+            if (!Number.isFinite(multiplier) || multiplier <= 0) {
+                return;
+            }
+
+            const childDeposits = Array.isArray(child?.estoques) ? child.estoques : [];
+            childDeposits.forEach((depositEntry) => {
+                const childQuantity = Number(depositEntry?.quantidade);
+                if (!Number.isFinite(childQuantity) || childQuantity <= 0) {
+                    return;
+                }
+                const equivalentQuantity = childQuantity * multiplier;
+                registerDepositEquivalent(depositEntry, equivalentQuantity, child?.unidade);
+            });
         });
 
         const updateDocument = {
@@ -386,6 +443,18 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
 
         if (Number.isFinite(totalStock)) {
             updateDocument.stock = totalStock;
+        }
+
+        if (depositTotals.size > 0) {
+            updateDocument.estoques = Array.from(depositTotals.entries()).map(([depositId, info]) => ({
+                deposito: new mongoose.Types.ObjectId(depositId),
+                quantidade: Number.isFinite(info?.quantidade) ? info.quantidade : 0,
+                unidade: typeof info?.unidade === 'string' && info.unidade.trim()
+                    ? info.unidade.trim()
+                    : parentUnit,
+            }));
+        } else {
+            updateDocument.estoques = [];
         }
 
         await Product.updateOne(
