@@ -368,7 +368,9 @@ const applyFractionalStockChange = async ({
     const targetProductId = baseProduct._id.toString();
 
     let parent = baseProduct;
-    if (baseProduct.fracionadoDe) {
+    const isChildChange = Boolean(baseProduct.fracionadoDe);
+
+    if (isChildChange) {
         const parentQuery = Product.findById(baseProduct.fracionadoDe);
         if (session) parentQuery.session(session);
         parent = await parentQuery;
@@ -390,7 +392,7 @@ const applyFractionalStockChange = async ({
         return;
     }
 
-    if (baseProduct.fracionadoDe) {
+    if (isChildChange) {
         const fraction = fractions.find(
             (entry) => entry?.produto && entry.produto.toString() === targetProductId,
         );
@@ -401,16 +403,59 @@ const applyFractionalStockChange = async ({
         if (!Number.isFinite(factor) || factor <= 0) {
             return;
         }
-        if (Number.isFinite(delta) && Math.abs(delta) > FRACTION_EPSILON) {
-            const result = await adjustProductDepositQuantity({
-                product: parent,
-                productId: parent._id,
-                depositId: depositObjectId,
-                delta: delta / factor,
-                session,
-            });
-            if (result?.product) {
-                parent = result.product;
+        const parentQuantityBefore = getDepositQuantity(parent, depositObjectId);
+        const numericDelta = Number.isFinite(delta) ? delta : 0;
+        const childQuantityAfter = getDepositQuantity(baseProduct, depositObjectId);
+        const previousChildQuantity = roundQuantity(childQuantityAfter - numericDelta);
+        if (Number.isFinite(numericDelta) && Math.abs(numericDelta) > FRACTION_EPSILON) {
+            if (numericDelta < -FRACTION_EPSILON) {
+                if (parentQuantityBefore > 0) {
+                    const consumption = Math.abs(numericDelta);
+                    const parentUnitsToConsume = Math.min(
+                        parentQuantityBefore,
+                        Math.ceil(consumption / factor),
+                    );
+                    if (parentUnitsToConsume > 0) {
+                        const parentAdjustment = await adjustProductDepositQuantity({
+                            product: parent,
+                            productId: parent._id,
+                            depositId: depositObjectId,
+                            delta: -parentUnitsToConsume,
+                            session,
+                        });
+                        if (parentAdjustment?.product) {
+                            parent = parentAdjustment.product;
+                        }
+
+                        const needsReplenish = previousChildQuantity < consumption;
+                        if (needsReplenish) {
+                            const replenishedQuantity = roundQuantity(
+                                childQuantityAfter + parentUnitsToConsume * factor,
+                            );
+                            const childResult = await setProductDepositQuantity({
+                                product: baseProduct,
+                                productId: baseProduct._id,
+                                depositId: depositObjectId,
+                                quantity: replenishedQuantity,
+                                session,
+                            });
+                            if (childResult?.product) {
+                                baseProduct = childResult.product;
+                            }
+                        }
+                    }
+                }
+            } else {
+                const result = await adjustProductDepositQuantity({
+                    product: parent,
+                    productId: parent._id,
+                    depositId: depositObjectId,
+                    delta: numericDelta / factor,
+                    session,
+                });
+                if (result?.product) {
+                    parent = result.product;
+                }
             }
         } else {
             const refreshQuery = Product.findById(parent._id);
@@ -430,13 +475,17 @@ const applyFractionalStockChange = async ({
             const factor = toNullableNumber(fraction?.quantidade);
             if (!Number.isFinite(factor) || factor <= 0) return;
             const desiredQuantity = roundQuantity(parentQuantity * factor);
-            let childDoc = childId === targetProductId ? baseProduct : null;
+            const isTargetChild = childId === targetProductId;
+            let childDoc = isTargetChild ? baseProduct : null;
             if (!childDoc) {
                 const childQuery = Product.findById(childId);
                 if (session) childQuery.session(session);
                 childDoc = await childQuery;
             }
             if (!childDoc) return;
+            if (isChildChange && isTargetChild) {
+                return;
+            }
             await setProductDepositQuantity({
                 product: childDoc,
                 productId: childId,
