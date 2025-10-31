@@ -2776,21 +2776,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const normalizedStock = Number.isFinite(summary?.normalizedStock)
             ? summary.normalizedStock
             : normalizeFractionalStockValue(summary?.stock);
+        const firstChildCost = summary?.metricsList?.length
+            ? summary.metricsList[0]?.metrics?.costPerFraction
+            : null;
+        const resolvedSummaryCost = Number.isFinite(firstChildCost)
+            ? firstChildCost
+            : Number.isFinite(summary?.cost)
+                ? summary.cost
+                : 0;
+
         if (fractionSummaryCost) {
-            fractionSummaryCost.textContent = formatFractionCurrency(Number.isFinite(summary.cost) ? summary.cost : 0);
+            fractionSummaryCost.textContent = formatFractionCurrency(resolvedSummaryCost);
         }
         if (fractionSummaryStock) {
             fractionSummaryStock.textContent = formatFractionNumber(Number.isFinite(normalizedStock) ? normalizedStock : 0);
         }
-        if (isFractionalFeatureEnabled() && costInput) {
-            const normalizedCost = Number.isFinite(summary.cost) ? summary.cost : 0;
-            costInput.value = normalizedCost.toFixed(2);
-            updateMarkupFromValues();
-        }
         if (isFractionalFeatureEnabled() && depositTotalDisplay) {
             depositTotalDisplay.textContent = formatFractionNumber(Number.isFinite(normalizedStock) ? normalizedStock : 0);
         }
-        return { ...summary, normalizedStock };
+        return {
+            ...summary,
+            normalizedStock,
+            resolvedSummaryCost,
+        };
     };
 
     const showFractionalSuggestionMessage = (message) => {
