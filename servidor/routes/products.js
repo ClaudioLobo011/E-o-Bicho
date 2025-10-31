@@ -274,6 +274,178 @@ const applyFractionalSnapshot = (product) => {
 };
 
 
+const recalculateFractionalStockForProduct = async (productId, { session } = {}) => {
+    if (!productId) {
+        return null;
+    }
+
+    try {
+        const product = await Product.findById(productId)
+            .select('fracionado')
+            .populate('fracionado.itens.produto')
+            .lean();
+
+        if (!product) {
+            return null;
+        }
+
+        const fractionalConfig = product.fracionado || {};
+        const fractionalItems = Array.isArray(fractionalConfig.itens) ? fractionalConfig.itens : [];
+        const isActive = Boolean(fractionalConfig.ativo) && fractionalItems.length > 0;
+
+        const now = new Date();
+
+        if (!isActive) {
+            await Product.updateOne(
+                { _id: productId },
+                {
+                    $set: {
+                        'fracionado.custoCalculado': null,
+                        'fracionado.estoqueEquivalente': null,
+                        'fracionado.atualizadoEm': now,
+                    },
+                },
+                { session }
+            );
+            return { productId, updated: false, missingChildren: [] };
+        }
+
+        const childIds = fractionalItems
+            .map((item) => {
+                const raw = item?.produto;
+                if (raw && typeof raw === 'object' && raw._id) {
+                    return String(raw._id);
+                }
+                if (mongoose.Types.ObjectId.isValid(raw)) {
+                    return String(raw);
+                }
+                return null;
+            })
+            .filter(Boolean);
+
+        const childProducts = childIds.length
+            ? await Product.find({ _id: { $in: childIds } })
+                .select('custo stock')
+                .lean()
+            : [];
+
+        const childMap = new Map(childProducts.map((child) => [String(child._id), child]));
+
+        let totalCost = 0;
+        let totalStock = 0;
+        const missingChildren = [];
+
+        fractionalItems.forEach((item) => {
+            const rawId = item?.produto;
+            const childId = rawId && typeof rawId === 'object' && rawId._id
+                ? String(rawId._id)
+                : mongoose.Types.ObjectId.isValid(rawId)
+                    ? String(rawId)
+                    : null;
+
+            if (!childId) {
+                return;
+            }
+
+            const child = childMap.get(childId);
+            if (!child) {
+                missingChildren.push(childId);
+                return;
+            }
+
+            const baseQuantityRaw = Number(item?.quantidadeOrigem);
+            const fractionQuantityRaw = Number(item?.quantidadeFracionada);
+
+            const baseQuantity = Number.isFinite(baseQuantityRaw) && baseQuantityRaw > 0 ? baseQuantityRaw : 1;
+            const fractionQuantity = Number.isFinite(fractionQuantityRaw) && fractionQuantityRaw > 0 ? fractionQuantityRaw : 0;
+
+            const childCost = Number(child?.custo);
+            const childStock = Number(child?.stock);
+
+            const costPerFraction = fractionQuantity > 0 && Number.isFinite(childCost)
+                ? (childCost * baseQuantity) / fractionQuantity
+                : 0;
+
+            const equivalentStock = baseQuantity > 0 && Number.isFinite(childStock)
+                ? childStock * (fractionQuantity / baseQuantity)
+                : 0;
+
+            totalCost += Number.isFinite(costPerFraction) ? costPerFraction : 0;
+            totalStock += Number.isFinite(equivalentStock) ? equivalentStock : 0;
+        });
+
+        const updateDocument = {
+            'fracionado.custoCalculado': Number.isFinite(totalCost) ? totalCost : null,
+            'fracionado.estoqueEquivalente': Number.isFinite(totalStock) ? totalStock : null,
+            'fracionado.atualizadoEm': now,
+        };
+
+        if (Number.isFinite(totalCost)) {
+            updateDocument.custo = totalCost;
+        }
+
+        if (Number.isFinite(totalStock)) {
+            updateDocument.stock = totalStock;
+        }
+
+        await Product.updateOne(
+            { _id: productId },
+            { $set: updateDocument },
+            { session }
+        );
+
+        if (missingChildren.length) {
+            console.warn(
+                'Alguns produtos filhos não foram encontrados ao recalcular o estoque fracionado do produto pai.',
+                { productId, missingChildren }
+            );
+        }
+
+        return { productId, updated: true, missingChildren };
+    } catch (error) {
+        console.error('Erro ao recalcular o estoque fracionado do produto.', { productId }, error);
+        throw error;
+    }
+};
+
+const refreshParentFractionalStocks = async (childProductId, { session } = {}) => {
+    if (!childProductId) {
+        return [];
+    }
+
+    try {
+        const parents = await Product.find({
+            'fracionado.ativo': true,
+            'fracionado.itens.produto': childProductId,
+        })
+            .select('_id')
+            .lean();
+
+        const updates = [];
+        for (const parent of parents) {
+            const parentId = parent?._id ? String(parent._id) : null;
+            if (!parentId) continue;
+            try {
+                const result = await recalculateFractionalStockForProduct(parentId, { session });
+                if (result) {
+                    updates.push(result);
+                }
+            } catch (recalcError) {
+                console.error(
+                    'Erro ao atualizar o estoque fracionado do produto pai vinculado.',
+                    { parentId, childProductId },
+                    recalcError
+                );
+            }
+        }
+        return updates;
+    } catch (error) {
+        console.error('Erro ao localizar produtos pais para recalcular estoques fracionados.', { childProductId }, error);
+        return [];
+    }
+};
+
+
 router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (req, res) => {
     try {
         const payload = req.body || {};
@@ -413,8 +585,14 @@ router.post('/', requireAuth, authorizeRoles('admin', 'admin_master'), async (re
             return res.status(400).json({ message: fractionalResult.errors[0], errors: fractionalResult.errors });
         }
         productData.fracionado = fractionalResult.config;
-        if (fractionalResult.config.ativo && Number.isFinite(fractionalResult.summaryCost)) {
-            productData.custo = fractionalResult.summaryCost;
+        if (fractionalResult.config.ativo) {
+            if (Number.isFinite(fractionalResult.summaryCost)) {
+                productData.custo = fractionalResult.summaryCost;
+            }
+            if (Number.isFinite(fractionalResult.summaryStock)) {
+                productData.stock = fractionalResult.summaryStock;
+            }
+            productData.estoques = [];
         }
 
         if (payload.fiscalPorEmpresa && typeof payload.fiscalPorEmpresa === 'object') {
@@ -632,7 +810,14 @@ router.get('/', async (req, res) => {
             if (!p.imagemPrincipal) {
                 p.imagemPrincipal = '/image/placeholder.png';
             }
-            if (Array.isArray(p.estoques) && p.estoques.length > 0) {
+
+            const fractionalStock = p?.fracionado?.ativo
+                ? Number(p?.fracionado?.estoqueEquivalente)
+                : null;
+
+            if (Number.isFinite(fractionalStock)) {
+                p.stock = fractionalStock;
+            } else if (Array.isArray(p.estoques) && p.estoques.length > 0) {
                 const total = p.estoques.reduce((sum, entry) => {
                     const quantity = Number(entry?.quantidade);
                     return sum + (Number.isFinite(quantity) ? quantity : 0);
@@ -1174,15 +1359,6 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
         }
 
         updatePayload.fornecedores = fornecedores;
-        updatePayload.estoques = estoques;
-
-        if (estoques.length > 0) {
-            const totalStock = estoques.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
-            updatePayload.stock = totalStock;
-        } else if (payload.stock !== undefined) {
-            const parsedStock = parseNumber(payload.stock);
-            updatePayload.stock = parsedStock === null ? 0 : parsedStock;
-        }
 
         const fractionalResult = await sanitizeFractionalConfig(payload.fracionado, {
             parentProductId: existingProduct._id,
@@ -1191,11 +1367,35 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
             return res.status(400).json({ message: fractionalResult.errors[0], errors: fractionalResult.errors });
         }
 
+        const fractionalWillBeActive = payload.fracionado !== undefined
+            ? Boolean(fractionalResult.config.ativo)
+            : Boolean(existingProduct?.fracionado?.ativo);
+
+        if (fractionalWillBeActive) {
+            updatePayload.estoques = [];
+        } else {
+            updatePayload.estoques = estoques;
+            if (estoques.length > 0) {
+                const totalStock = estoques.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
+                updatePayload.stock = totalStock;
+            } else if (payload.stock !== undefined) {
+                const parsedStock = parseNumber(payload.stock);
+                updatePayload.stock = parsedStock === null ? 0 : parsedStock;
+            }
+        }
+
         if (payload.fracionado !== undefined) {
             updatePayload.fracionado = fractionalResult.config;
             if (fractionalResult.config.ativo && Number.isFinite(fractionalResult.summaryCost)) {
                 updatePayload.custo = fractionalResult.summaryCost;
                 payload.custo = fractionalResult.summaryCost;
+            }
+            if (fractionalResult.config.ativo && Number.isFinite(fractionalResult.summaryStock)) {
+                updatePayload.stock = fractionalResult.summaryStock;
+                payload.stock = fractionalResult.summaryStock;
+            }
+            if (fractionalResult.config.ativo) {
+                updatePayload.estoques = [];
             }
         }
 
@@ -1294,6 +1494,19 @@ router.put('/:id', requireAuth, authorizeRoles('admin', 'admin_master'), async (
                 }
             } catch (historyError) {
                 console.error('Erro ao registrar histórico de preços do produto:', historyError);
+            }
+        }
+
+        if (updatedProduct?._id) {
+            try {
+                await recalculateFractionalStockForProduct(updatedProduct._id);
+            } catch (recalculateError) {
+                console.error('Erro ao sincronizar o estoque fracionado do produto atualizado.', recalculateError);
+            }
+            try {
+                await refreshParentFractionalStocks(updatedProduct._id);
+            } catch (cascadeError) {
+                console.error('Erro ao sincronizar o estoque fracionado dos produtos pai vinculados.', cascadeError);
             }
         }
 

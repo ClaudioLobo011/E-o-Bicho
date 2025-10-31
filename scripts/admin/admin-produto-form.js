@@ -760,8 +760,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 apresentacao: (document.getElementById('spec-apresentacao')?.value || '').trim()
             },
             codigosComplementares: additionalBarcodesRaw,
-            estoques: depositPayload,
-            stock: totalStock,
             fiscal: generalFiscal,
             fiscalPorEmpresa: fiscalPerCompanyPayload,
             naoMostrarNoSite: Boolean(hideOnSiteCheckbox?.checked),
@@ -827,11 +825,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 estoqueEquivalente: Number.isFinite(summary.stock) ? summary.stock : null,
             };
             updateData.custo = Number.isFinite(summary.cost) ? summary.cost : 0;
+            updateData.estoques = [];
+            updateData.stock = Number.isFinite(summary.stock) ? summary.stock : 0;
         } else {
             updateData.fracionado = {
                 ativo: false,
                 itens: [],
             };
+            updateData.estoques = depositPayload;
+            updateData.stock = totalStock;
         }
 
         return { productName, updateData, fractionalErrors };
@@ -2248,6 +2250,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
+            const fractionalLocked = isFractionalFeatureEnabled();
+            if (qtyInput) {
+                qtyInput.disabled = fractionalLocked;
+                qtyInput.classList.toggle('bg-gray-100', fractionalLocked);
+                qtyInput.classList.toggle('cursor-not-allowed', fractionalLocked);
+                if (fractionalLocked) {
+                    qtyInput.setAttribute('title', 'O estoque do produto pai é calculado automaticamente pelos produtos filhos fracionados.');
+                } else {
+                    qtyInput.removeAttribute('title');
+                }
+            }
+            if (unitInput) {
+                unitInput.disabled = fractionalLocked;
+                unitInput.classList.toggle('bg-gray-100', fractionalLocked);
+                unitInput.classList.toggle('cursor-not-allowed', fractionalLocked);
+                if (fractionalLocked) {
+                    unitInput.setAttribute('title', 'O estoque do produto pai é calculado automaticamente pelos produtos filhos fracionados.');
+                } else {
+                    unitInput.removeAttribute('title');
+                }
+            }
+
             depositTableBody.appendChild(tr);
         });
 
@@ -2498,6 +2522,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const normalizedCost = Number.isFinite(summary.cost) ? summary.cost : 0;
             costInput.value = normalizedCost.toFixed(2);
             updateMarkupFromValues();
+        }
+        if (isFractionalFeatureEnabled() && depositTotalDisplay) {
+            depositTotalDisplay.textContent = formatFractionNumber(Number.isFinite(summary.stock) ? summary.stock : 0);
         }
         return summary;
     };
@@ -2757,7 +2784,11 @@ document.addEventListener('DOMContentLoaded', () => {
     fractionedCheckbox?.addEventListener('change', () => {
         ensureFractionalTabVisibility();
         toggleFractionalCostLock();
+        renderDepositStockRows();
         updateFractionalSummary();
+        if (!fractionedCheckbox.checked) {
+            updateDepositTotalDisplay();
+        }
         if (fractionedCheckbox.checked) {
             activateProductTab('#tab-fraction');
             if (!fractionalChildren.length) {
@@ -3318,6 +3349,8 @@ document.addEventListener('DOMContentLoaded', () => {
         renderFractionChildren();
         ensureFractionalTabVisibility();
         toggleFractionalCostLock();
+        renderDepositStockRows();
+        updateFractionalSummary();
 
         // --- Especificações ---
         const espec = product.especificacoes || {};
