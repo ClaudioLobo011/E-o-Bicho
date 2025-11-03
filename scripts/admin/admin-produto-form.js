@@ -605,6 +605,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const productSearchCurrencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const PRODUCT_SEARCH_COST_KEYS = ['custo', 'precoCusto', 'custoMedio', 'precoCompra', 'valorCusto'];
     const PRODUCT_SEARCH_SALE_KEYS = ['precoVenda', 'venda', 'preco', 'valorVenda', 'valor'];
+    const PRODUCT_SEARCH_ID_KEYS = ['_id', 'id', 'productId', 'produtoId'];
     const productSearchTableState = {
         results: [],
         filters: {},
@@ -1618,6 +1619,24 @@ document.addEventListener('DOMContentLoaded', () => {
         return parsed === null ? '—' : productSearchCurrencyFormatter.format(parsed);
     };
 
+    const getProductSearchId = (product = {}) => {
+        if (!product || typeof product !== 'object') {
+            return '';
+        }
+        for (const key of PRODUCT_SEARCH_ID_KEYS) {
+            if (!key) continue;
+            const value = product?.[key];
+            if (value === null || value === undefined) continue;
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (trimmed) return trimmed;
+            } else if (typeof value === 'number' && Number.isFinite(value)) {
+                return String(value);
+            }
+        }
+        return '';
+    };
+
     const getProductSearchCode = (product = {}) => pickFirstNonEmptyValue(
         product?.cod,
         product?.codigoInterno,
@@ -1853,6 +1872,20 @@ document.addEventListener('DOMContentLoaded', () => {
         sorted.forEach((product) => {
             const row = document.createElement('tr');
             row.className = 'border-b border-gray-100 last:border-0 hover:bg-primary/10 transition-colors';
+            const productIdValue = getProductSearchId(product);
+            if (productIdValue) {
+                row.dataset.productId = productIdValue;
+                row.dataset.productSelectable = 'true';
+                row.tabIndex = 0;
+                row.setAttribute('role', 'button');
+                row.classList.add(
+                    'cursor-pointer',
+                    'focus-visible:outline-none',
+                    'focus-visible:ring-2',
+                    'focus-visible:ring-primary/40',
+                    'focus-visible:ring-offset-1',
+                );
+            }
 
             const codeCell = document.createElement('td');
             codeCell.className = 'px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap';
@@ -1915,6 +1948,52 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         productSearchTableState.results = list.slice();
         renderProductSearchTable();
+    };
+
+    const selectProductFromSearchRow = async (row) => {
+        if (!row || !(row instanceof HTMLElement)) return;
+        if (row.dataset.loading === 'true') return;
+        const isSelectable = row.dataset.productSelectable === 'true';
+        if (!isSelectable) return;
+
+        const productIdValue = typeof row.dataset.productId === 'string'
+            ? row.dataset.productId.trim()
+            : '';
+        if (!productIdValue) {
+            if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+                window.showToast('Não foi possível identificar o produto selecionado.', 'warning', 3500);
+            }
+            return;
+        }
+
+        row.dataset.loading = 'true';
+        row.setAttribute('aria-busy', 'true');
+        row.classList.add('pointer-events-none', 'opacity-60');
+
+        try {
+            await loadProductForEditing(productIdValue);
+            lastSkuInputValue = skuInput?.value || '';
+            closeProductSearchModal();
+            if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+                window.showToast('Produto carregado para edição.', 'success', 3200);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar produto selecionado na busca:', error);
+            showModal({
+                title: 'Erro',
+                message: error?.message || 'Não foi possível carregar o produto selecionado.',
+                confirmText: 'Entendi',
+            });
+            window.setTimeout(() => {
+                if (row && row.isConnected) {
+                    row.focus();
+                }
+            }, 120);
+        } finally {
+            row.dataset.loading = 'false';
+            row.removeAttribute('aria-busy');
+            row.classList.remove('pointer-events-none', 'opacity-60');
+        }
     };
 
     const setProductSearchFilter = (key, value) => {
@@ -4689,6 +4768,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (target.hasAttribute('data-close-product-search-modal')) {
             closeProductSearchModal();
         }
+    });
+
+    productSearchResultsBody?.addEventListener('click', async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const row = target.closest('tr[data-product-selectable="true"]');
+        if (!row) return;
+        event.preventDefault();
+        await selectProductFromSearchRow(row);
+    });
+
+    productSearchResultsBody?.addEventListener('keydown', async (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const row = target.closest('tr[data-product-selectable="true"]');
+        if (!row) return;
+        event.preventDefault();
+        await selectProductFromSearchRow(row);
     });
 
     setupProductSearchTableControls();
