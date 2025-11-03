@@ -66,6 +66,13 @@ const transferSchema = new mongoose.Schema({
         type: Date,
         required: true,
     },
+    status: {
+        type: String,
+        enum: ['solicitada', 'em_separacao', 'aprovada'],
+        default: 'solicitada',
+        lowercase: true,
+        trim: true,
+    },
     originCompany: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Store',

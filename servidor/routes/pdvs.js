@@ -6,6 +6,10 @@ const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
 const PdvState = require('../models/PdvState');
 const Product = require('../models/Product');
+const {
+  recalculateFractionalStockForProduct,
+  refreshParentFractionalStocks,
+} = require('../utils/fractionalInventory');
 const BankAccount = require('../models/BankAccount');
 const AccountingAccount = require('../models/AccountingAccount');
 const requireAuth = require('../middlewares/requireAuth');
@@ -403,7 +407,7 @@ const updateProductStockForDeposit = async ({
       const childObjectId = resolveProductObjectId(item?.produto);
       if (!childObjectId) continue;
 
-      const ratio = baseQuantity / fractionQuantity;
+      const ratio = fractionQuantity / baseQuantity;
       const childQuantity = numericQuantity * ratio;
       if (!Number.isFinite(childQuantity) || childQuantity === 0) continue;
 
