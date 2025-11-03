@@ -407,7 +407,7 @@ const updateProductStockForDeposit = async ({
       const childObjectId = resolveProductObjectId(item?.produto);
       if (!childObjectId) continue;
 
-      const ratio = baseQuantity / fractionQuantity;
+      const ratio = fractionQuantity / baseQuantity;
       const childQuantity = numericQuantity * ratio;
       if (!Number.isFinite(childQuantity) || childQuantity === 0) continue;
 

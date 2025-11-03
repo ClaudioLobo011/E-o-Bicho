@@ -202,7 +202,7 @@ const adjustProductStockForDeposit = async ({
             const childObjectId = resolveProductObjectId(item?.produto);
             if (!childObjectId) continue;
 
-            const ratio = baseQuantity / fractionQuantity;
+            const ratio = fractionQuantity / baseQuantity;
             const childDelta = delta * ratio;
             if (!Number.isFinite(childDelta) || childDelta === 0) continue;
 
