@@ -934,6 +934,57 @@
     <div id="admin-footer-placeholder"></div>
 
     <div
+        id="product-search-modal"
+        class="hidden fixed inset-0 z-[998]"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-labelledby="product-search-modal-title"
+        data-modal-open="false"
+    >
+        <div class="absolute inset-0 z-0 bg-gray-900/60 backdrop-blur-sm" data-close-product-search-modal></div>
+        <div class="relative z-10 mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+            <div class="product-search-modal-shell relative flex w-full max-w-5xl transform-gpu flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl text-[12px] leading-[1.35]">
+                <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+                    <h3 id="product-search-modal-title" class="text-base font-semibold text-gray-800">Buscar produtos</h3>
+                    <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" data-close-product-search-modal>&times;</button>
+                </div>
+                <div class="flex flex-1 flex-col gap-4 overflow-hidden px-5 py-4">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                        <div class="flex-1">
+                            <label for="product-search-input" class="block text-xs font-semibold text-gray-700">Buscar</label>
+                            <input type="text" id="product-search-input" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Busque por nome, código ou código de barras" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="flex-1 overflow-hidden">
+                        <div class="h-full overflow-x-auto overflow-y-auto rounded-xl border border-gray-100">
+                            <table class="min-w-full divide-y divide-gray-200 text-xs text-gray-600">
+                                <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                                    <tr>
+                                        <th scope="col" class="px-4 py-2 text-left font-semibold">Cod</th>
+                                        <th scope="col" class="px-4 py-2 text-left font-semibold">Descrição</th>
+                                        <th scope="col" class="px-4 py-2 text-left font-semibold">Cód. Barras</th>
+                                        <th scope="col" class="px-4 py-2 text-right font-semibold">Custo</th>
+                                        <th scope="col" class="px-4 py-2 text-right font-semibold">Venda</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="product-search-results">
+                                    <tr>
+                                        <td colspan="5" class="px-4 py-6 text-center text-[11px] text-gray-500">Digite para buscar produtos pelo código ou descrição.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-100" data-close-product-search-modal>Fechar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div
         id="price-history-modal"
         class="hidden fixed inset-0 z-[999]"
         role="dialog"

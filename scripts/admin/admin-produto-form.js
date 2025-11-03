@@ -65,6 +65,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const priceHistoryEmptyState = document.getElementById('price-history-empty-state');
     const priceHistoryErrorState = document.getElementById('price-history-error-state');
     const priceHistoryModalCloseButtons = Array.from(document.querySelectorAll('[data-close-price-history-modal]'));
+    const productSearchModal = document.getElementById('product-search-modal');
+    const productSearchInput = document.getElementById('product-search-input');
+    const productSearchResultsBody = document.getElementById('product-search-results');
+    const productSearchCloseButtons = Array.from(document.querySelectorAll('[data-close-product-search-modal]'));
     const priceHistoryColumnFilterInputs = new Map();
     const priceHistorySortButtonsMeta = new Map();
     const priceHistorySortHeaders = new Map();
@@ -595,6 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
         autor: 'all',
     };
     const priceHistoryCurrencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const productSearchCurrencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const priceHistoryDateFormatter = new Intl.DateTimeFormat('pt-BR', {
         dateStyle: 'short',
         timeStyle: 'short',
@@ -606,6 +611,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let fractionalSearchTimeoutId = null;
     let fractionalSearchAbortController = null;
     let currentProductSnapshot = null;
+    const PRODUCT_SEARCH_RESULTS_COLUMNS = 5;
+    const PRODUCT_SEARCH_DEFAULT_MESSAGE = 'Digite para buscar produtos pelo código ou descrição.';
+    let productSearchAbortController = null;
+    let productSearchDebounceId = null;
+    let lastProductSearchTerm = '';
+    const letterInputPattern = /[A-Za-zÀ-ÖØ-öø-ÿ]/;
+    const letterGlobalPattern = /[A-Za-zÀ-ÖØ-öø-ÿ]+/g;
+    let lastSkuInputValue = skuInput?.value || '';
 
     const storedProductId = isFromNfeImport ? null : getPersistedProductEditStateValue('productId');
     if (!productId && storedProductId) {
@@ -1532,6 +1545,327 @@ document.addEventListener('DOMContentLoaded', () => {
         priceHistoryModal.classList.add('hidden');
         priceHistoryModal.dataset.modalOpen = 'false';
         priceHistoryModal.setAttribute('aria-hidden', 'true');
+    };
+
+    const pickFirstNonEmptyValue = (...values) => {
+        for (const value of values) {
+            if (value === null || value === undefined) continue;
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (trimmed) return trimmed;
+            } else if (typeof value === 'number' && Number.isFinite(value)) {
+                return String(value);
+            }
+        }
+        return '';
+    };
+
+    const isProductSearchModalOpen = () => productSearchModal?.dataset?.modalOpen === 'true';
+
+    const showProductSearchFeedback = (message = PRODUCT_SEARCH_DEFAULT_MESSAGE, tone = 'muted') => {
+        if (!productSearchResultsBody) return;
+        const toneClasses = {
+            error: 'text-red-500',
+            info: 'text-gray-600',
+            loading: 'text-primary',
+            muted: 'text-gray-500',
+        };
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = PRODUCT_SEARCH_RESULTS_COLUMNS;
+        cell.className = `px-4 py-6 text-center text-[11px] ${toneClasses[tone] || toneClasses.muted}`;
+        cell.textContent = message || '';
+        row.appendChild(cell);
+        productSearchResultsBody.innerHTML = '';
+        productSearchResultsBody.appendChild(row);
+    };
+
+    const resetProductSearchResults = () => {
+        showProductSearchFeedback(PRODUCT_SEARCH_DEFAULT_MESSAGE, 'muted');
+    };
+
+    const parseProductSearchNumber = (rawValue) => {
+        if (rawValue === null || rawValue === undefined || rawValue === '') {
+            return null;
+        }
+        if (typeof rawValue === 'number') {
+            return Number.isFinite(rawValue) ? rawValue : null;
+        }
+        if (typeof rawValue === 'string') {
+            const normalized = rawValue.replace(/\./g, '').replace(',', '.');
+            const parsed = Number(normalized);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
+        return null;
+    };
+
+    const formatProductSearchCurrency = (value) => {
+        const parsed = parseProductSearchNumber(value);
+        return parsed === null ? '—' : productSearchCurrencyFormatter.format(parsed);
+    };
+
+    const getProductSearchCode = (product = {}) => pickFirstNonEmptyValue(
+        product?.cod,
+        product?.codigoInterno,
+        product?.codigo,
+        product?.sku,
+        product?.codigoProduto,
+        product?.codigoReferencia,
+    );
+
+    const getProductSearchBarcode = (product = {}) => pickFirstNonEmptyValue(
+        product?.codbarras,
+        product?.codigoBarras,
+        product?.barcode,
+        product?.ean,
+        product?.gtin,
+        product?.codigoDeBarras,
+    );
+
+    const getProductSearchDescription = (product = {}) => pickFirstNonEmptyValue(
+        product?.nome,
+        product?.descricao,
+        product?.description,
+    ) || 'Produto sem nome';
+
+    const renderProductSearchResults = (products = []) => {
+        if (!productSearchResultsBody) return;
+        if (!Array.isArray(products) || products.length === 0) {
+            showProductSearchFeedback('Nenhum produto encontrado para a pesquisa informada.', 'info');
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        products.forEach((product) => {
+            const row = document.createElement('tr');
+            row.className = 'border-b border-gray-100 last:border-0 hover:bg-primary/10 transition-colors';
+
+            const codeCell = document.createElement('td');
+            codeCell.className = 'px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap';
+            codeCell.textContent = getProductSearchCode(product) || '—';
+
+            const descriptionCell = document.createElement('td');
+            descriptionCell.className = 'px-4 py-3 text-xs text-gray-700';
+            descriptionCell.textContent = getProductSearchDescription(product);
+
+            const barcodeCell = document.createElement('td');
+            barcodeCell.className = 'px-4 py-3 text-xs text-gray-600 whitespace-nowrap';
+            barcodeCell.textContent = getProductSearchBarcode(product) || '—';
+
+            const costCell = document.createElement('td');
+            costCell.className = 'px-4 py-3 text-xs text-right text-gray-700 whitespace-nowrap';
+            const costValue = formatProductSearchCurrency(
+                product?.custo
+                ?? product?.precoCusto
+                ?? product?.custoMedio
+                ?? product?.precoCompra
+                ?? product?.valorCusto,
+            );
+            costCell.textContent = costValue;
+
+            const saleCell = document.createElement('td');
+            saleCell.className = 'px-4 py-3 text-xs text-right font-semibold text-gray-800 whitespace-nowrap';
+            const saleValue = formatProductSearchCurrency(
+                product?.precoVenda
+                ?? product?.venda
+                ?? product?.preco
+                ?? product?.valorVenda
+                ?? product?.valor,
+            );
+            saleCell.textContent = saleValue;
+
+            row.append(codeCell, descriptionCell, barcodeCell, costCell, saleCell);
+            fragment.appendChild(row);
+        });
+
+        productSearchResultsBody.innerHTML = '';
+        productSearchResultsBody.appendChild(fragment);
+    };
+
+    const fetchProductSearchResults = async (term) => {
+        const normalizedTerm = typeof term === 'string' ? term.trim() : '';
+        lastProductSearchTerm = normalizedTerm;
+        if (!productSearchResultsBody) return;
+
+        if (!normalizedTerm) {
+            resetProductSearchResults();
+            return;
+        }
+
+        if (productSearchAbortController) {
+            productSearchAbortController.abort();
+        }
+        productSearchAbortController = new AbortController();
+        showProductSearchFeedback('Buscando produtos...', 'loading');
+
+        const token = getAuthToken();
+        const headers = {};
+        if (token) {
+            headers.Authorization = `Bearer ${token}`;
+        }
+
+        try {
+            const params = new URLSearchParams({
+                search: normalizedTerm,
+                limit: '20',
+                includeHidden: 'true',
+                audience: 'admin',
+            });
+            const response = await fetch(`${API_CONFIG.BASE_URL}/products?${params.toString()}`, {
+                headers,
+                signal: productSearchAbortController.signal,
+            });
+
+            if (!response.ok) {
+                const errorMessage = response.status === 401
+                    ? 'Sessão expirada. Faça login novamente para buscar produtos.'
+                    : 'Não foi possível buscar os produtos informados.';
+                throw new Error(errorMessage);
+            }
+
+            const payload = await response.json();
+            const products = Array.isArray(payload?.products)
+                ? payload.products
+                : Array.isArray(payload)
+                    ? payload
+                    : [];
+
+            renderProductSearchResults(products);
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return;
+            }
+            console.error('Erro ao buscar produtos para o modal de pesquisa:', error);
+            showProductSearchFeedback(error?.message || 'Não foi possível buscar os produtos informados.', 'error');
+        } finally {
+            if (productSearchAbortController) {
+                productSearchAbortController = null;
+            }
+        }
+    };
+
+    const requestProductSearchResults = (term) => {
+        const normalizedTerm = typeof term === 'string' ? term.trim() : '';
+        if (normalizedTerm === lastProductSearchTerm) {
+            return;
+        }
+        if (productSearchDebounceId) {
+            clearTimeout(productSearchDebounceId);
+            productSearchDebounceId = null;
+        }
+        productSearchDebounceId = window.setTimeout(() => {
+            productSearchDebounceId = null;
+            fetchProductSearchResults(normalizedTerm);
+        }, 250);
+    };
+
+    const openProductSearchModal = ({ initialTerm = '' } = {}) => {
+        if (!productSearchModal) return;
+
+        if (productSearchAbortController) {
+            productSearchAbortController.abort();
+            productSearchAbortController = null;
+        }
+        if (productSearchDebounceId) {
+            clearTimeout(productSearchDebounceId);
+            productSearchDebounceId = null;
+        }
+
+        const normalizedInitial = typeof initialTerm === 'string' ? initialTerm.trim() : '';
+        productSearchModal.classList.remove('hidden');
+        productSearchModal.dataset.modalOpen = 'true';
+        productSearchModal.setAttribute('aria-hidden', 'false');
+
+        if (productSearchInput) {
+            productSearchInput.value = normalizedInitial;
+        }
+
+        if (normalizedInitial) {
+            fetchProductSearchResults(normalizedInitial);
+        } else {
+            resetProductSearchResults();
+        }
+
+        window.setTimeout(() => {
+            if (productSearchInput) {
+                productSearchInput.focus();
+                const cursorPosition = productSearchInput.value.length;
+                productSearchInput.setSelectionRange(cursorPosition, cursorPosition);
+            }
+        }, 50);
+    };
+
+    const closeProductSearchModal = () => {
+        if (!productSearchModal) return;
+
+        if (productSearchAbortController) {
+            productSearchAbortController.abort();
+            productSearchAbortController = null;
+        }
+        if (productSearchDebounceId) {
+            clearTimeout(productSearchDebounceId);
+            productSearchDebounceId = null;
+        }
+
+        productSearchModal.classList.add('hidden');
+        productSearchModal.dataset.modalOpen = 'false';
+        productSearchModal.setAttribute('aria-hidden', 'true');
+
+        if (productSearchInput) {
+            productSearchInput.value = '';
+        }
+        resetProductSearchResults();
+        lastProductSearchTerm = '';
+
+        window.setTimeout(() => {
+            if (skuInput) {
+                skuInput.focus();
+                const cursorPosition = skuInput.value.length;
+                skuInput.setSelectionRange(cursorPosition, cursorPosition);
+            }
+        }, 50);
+    };
+
+    const handleSkuKeydownForProductSearch = (event) => {
+        if (!skuInput || !productSearchModal) return;
+        if (isProductSearchModalOpen()) return;
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        if (event.key.length !== 1) return;
+        if (!letterInputPattern.test(event.key)) return;
+
+        lastSkuInputValue = skuInput.value || '';
+        event.preventDefault();
+        const initialTerm = event.key || '';
+        window.setTimeout(() => {
+            openProductSearchModal({ initialTerm });
+        }, 0);
+    };
+
+    const handleSkuInputForProductSearch = () => {
+        if (!skuInput || !productSearchModal) return;
+        const currentValue = skuInput.value || '';
+        if (isProductSearchModalOpen()) {
+            lastSkuInputValue = currentValue;
+            return;
+        }
+
+        if (!currentValue) {
+            lastSkuInputValue = '';
+            return;
+        }
+
+        if (letterInputPattern.test(currentValue)) {
+            const letters = (currentValue.match(letterGlobalPattern) || []).join('');
+            const sanitizedValue = currentValue.replace(letterGlobalPattern, '');
+            skuInput.value = sanitizedValue;
+            lastSkuInputValue = skuInput.value || '';
+            window.setTimeout(() => {
+                openProductSearchModal({ initialTerm: letters });
+            }, 0);
+            return;
+        }
+
+        lastSkuInputValue = currentValue;
     };
 
     const formatDocument = (value) => {
@@ -3142,6 +3476,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 300);
     };
 
+    preventAutoSaveForElement(productSearchInput);
     preventAutoSaveForElement(fractionChildCreateDescriptionInput);
     preventAutoSaveForElement(fractionChildCreateUnitSelect);
     preventAutoSaveForElement(fractionChildCreateBarcodeInput);
@@ -4050,9 +4385,49 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    productSearchCloseButtons.forEach((button) => {
+        button.addEventListener('click', () => closeProductSearchModal());
+    });
+
+    productSearchModal?.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.hasAttribute('data-close-product-search-modal')) {
+            closeProductSearchModal();
+        }
+    });
+
+    if (productSearchResultsBody) {
+        resetProductSearchResults();
+    }
+
+    productSearchInput?.addEventListener('input', () => {
+        requestProductSearchResults(productSearchInput.value || '');
+    });
+
+    productSearchInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            fetchProductSearchResults(productSearchInput.value || '');
+        }
+    });
+
+    skuInput?.addEventListener('keydown', handleSkuKeydownForProductSearch);
+    skuInput?.addEventListener('input', handleSkuInputForProductSearch);
+
     document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && priceHistoryModal && !priceHistoryModal.classList.contains('hidden')) {
+        if (event.key !== 'Escape') return;
+        let handled = false;
+        if (priceHistoryModal && !priceHistoryModal.classList.contains('hidden')) {
             closePriceHistoryModal();
+            handled = true;
+        }
+        if (isProductSearchModalOpen()) {
+            closeProductSearchModal();
+            handled = true;
+        }
+        if (handled) {
+            event.preventDefault();
         }
     });
 
