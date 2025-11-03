@@ -49,6 +49,7 @@
     summaryTotalTransfers: document.getElementById('summary-total-transfers'),
     summaryTotalVolume: document.getElementById('summary-total-volume'),
     summaryPendingNfe: document.getElementById('summary-pending-nfe'),
+    reloadLink: document.getElementById('reload-transfers'),
     exportButton: document.querySelector('button i.fa-file-export')?.parentElement,
     approveSelectedButton: document.querySelector('button i.fa-check-circle')?.parentElement,
   };
@@ -196,6 +197,21 @@
 
   function setLoading(isLoading) {
     state.loading = isLoading;
+    if (elements.reloadLink) {
+      if (!elements.reloadLink.dataset.defaultLabel) {
+        elements.reloadLink.dataset.defaultLabel = elements.reloadLink.innerHTML;
+      }
+      if (isLoading) {
+        elements.reloadLink.setAttribute('aria-disabled', 'true');
+        elements.reloadLink.classList.add('pointer-events-none', 'opacity-60');
+        elements.reloadLink.innerHTML = '<i class="fas fa-rotate-right fa-spin"></i> Atualizando...';
+      } else {
+        elements.reloadLink.removeAttribute('aria-disabled');
+        elements.reloadLink.classList.remove('pointer-events-none', 'opacity-60');
+        elements.reloadLink.innerHTML = elements.reloadLink.dataset.defaultLabel;
+      }
+    }
+
     if (!elements.tableBody) return;
     if (isLoading) {
       elements.tableBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500">Carregando transferências...</td></tr>';
@@ -386,7 +402,7 @@
         window.showToast(error.message || 'Não foi possível carregar as transferências.', 'error', 4000);
       }
     } finally {
-      state.loading = false;
+      setLoading(false);
     }
   }
 
@@ -765,6 +781,12 @@
       handleDateChange('endDate', event.target);
     });
     elements.tableBody?.addEventListener('click', handleTableClick);
+
+    elements.reloadLink?.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (state.loading) return;
+      fetchTransfers();
+    });
 
     if (elements.exportButton) {
       elements.exportButton.addEventListener('click', () => {
