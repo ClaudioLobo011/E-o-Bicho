@@ -6,6 +6,10 @@ const Store = require('../models/Store');
 const Deposit = require('../models/Deposit');
 const PdvState = require('../models/PdvState');
 const Product = require('../models/Product');
+const {
+  recalculateFractionalStockForProduct,
+  refreshParentFractionalStocks,
+} = require('../utils/fractionalInventory');
 const BankAccount = require('../models/BankAccount');
 const AccountingAccount = require('../models/AccountingAccount');
 const requireAuth = require('../middlewares/requireAuth');

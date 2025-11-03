@@ -7,6 +7,10 @@ const User = require('../models/User');
 const Product = require('../models/Product');
 const requireAuth = require('../middlewares/requireAuth');
 const authorizeRoles = require('../middlewares/authorizeRoles');
+const {
+    recalculateFractionalStockForProduct,
+    refreshParentFractionalStocks,
+} = require('../utils/fractionalInventory');
 
 const router = express.Router();
 
@@ -71,6 +75,174 @@ const getNextTransferNumber = async () => {
         .lean();
     const lastNumber = Number(lastTransfer?.number) || 0;
     return lastNumber + 1;
+};
+
+const toObjectIdOrNull = (value) => {
+    if (!value) return null;
+    if (value instanceof mongoose.Types.ObjectId) {
+        return value;
+    }
+    if (typeof value === 'object' && value._id) {
+        return toObjectIdOrNull(value._id);
+    }
+    const normalized = String(value).trim();
+    if (!mongoose.Types.ObjectId.isValid(normalized)) {
+        return null;
+    }
+    return new mongoose.Types.ObjectId(normalized);
+};
+
+const resolveProductObjectId = (value) => {
+    if (!value) return null;
+    if (value instanceof mongoose.Types.ObjectId) {
+        return value;
+    }
+    if (typeof value === 'object' && value._id) {
+        return resolveProductObjectId(value._id);
+    }
+    if (mongoose.Types.ObjectId.isValid(String(value))) {
+        return new mongoose.Types.ObjectId(String(value));
+    }
+    return null;
+};
+
+const adjustProductStockForDeposit = async ({
+    productId,
+    depositId,
+    quantity,
+    session,
+    cascadeFractional = true,
+    visited,
+}) => {
+    const delta = Number(quantity);
+    if (!Number.isFinite(delta) || delta === 0) {
+        return { updated: false };
+    }
+
+    const productObjectId = resolveProductObjectId(productId);
+    const depositObjectId = toObjectIdOrNull(depositId);
+    if (!productObjectId || !depositObjectId) {
+        return { updated: false };
+    }
+
+    const product = await Product.findById(productObjectId).session(session);
+    if (!product) {
+        const error = new Error('Produto vinculado à transferência não foi encontrado.');
+        error.statusCode = 400;
+        error.details = { productId: String(productId) };
+        throw error;
+    }
+
+    if (!Array.isArray(product.estoques)) {
+        product.estoques = [];
+    }
+
+    const visitSet = visited instanceof Set ? visited : new Set();
+    const visitKey = product._id.toString();
+    const alreadyVisited = visitSet.has(visitKey);
+    if (!alreadyVisited) {
+        visitSet.add(visitKey);
+    }
+
+    const depositKey = depositObjectId.toString();
+    let entry = product.estoques.find(
+        (stockEntry) => stockEntry?.deposito && stockEntry.deposito.toString() === depositKey
+    );
+
+    if (!entry) {
+        entry = {
+            deposito: depositObjectId,
+            quantidade: 0,
+            unidade: product.unidade || 'UN',
+        };
+        product.estoques.push(entry);
+    }
+
+    const currentQuantity = Number(entry.quantidade) || 0;
+    const nextQuantityRaw = currentQuantity + delta;
+    const nextQuantity = Math.round(nextQuantityRaw * 1_000_000) / 1_000_000;
+
+    if (nextQuantity < -0.000001) {
+        const error = new Error('Estoque insuficiente para concluir a transferência.');
+        error.statusCode = 400;
+        error.details = {
+            productId: product._id.toString(),
+            depositId: depositKey,
+            available: currentQuantity,
+            requested: delta,
+        };
+        throw error;
+    }
+
+    entry.quantidade = nextQuantity > 0 ? nextQuantity : 0;
+    if (!entry.unidade) {
+        entry.unidade = product.unidade || 'UN';
+    }
+
+    const totalStock = product.estoques.reduce((sum, stockEntry) => {
+        const qty = Number(stockEntry?.quantidade);
+        return sum + (Number.isFinite(qty) ? qty : 0);
+    }, 0);
+
+    product.stock = Math.max(0, Math.round(totalStock * 1_000_000) / 1_000_000);
+    product.markModified('estoques');
+
+    await product.save({ session });
+
+    if (cascadeFractional && !alreadyVisited) {
+        const fractionalConfig = product.fracionado || {};
+        const fractionalItems = Array.isArray(fractionalConfig.itens) ? fractionalConfig.itens : [];
+
+        for (const item of fractionalItems) {
+            const baseQuantity = Number(item?.quantidadeOrigem);
+            const fractionQuantity = Number(item?.quantidadeFracionada);
+            if (!Number.isFinite(baseQuantity) || baseQuantity <= 0) continue;
+            if (!Number.isFinite(fractionQuantity) || fractionQuantity <= 0) continue;
+
+            const childObjectId = resolveProductObjectId(item?.produto);
+            if (!childObjectId) continue;
+
+            const ratio = baseQuantity / fractionQuantity;
+            const childDelta = delta * ratio;
+            if (!Number.isFinite(childDelta) || childDelta === 0) continue;
+
+            try {
+                await adjustProductStockForDeposit({
+                    productId: childObjectId,
+                    depositId: depositObjectId,
+                    quantity: childDelta,
+                    session,
+                    cascadeFractional: true,
+                    visited: visitSet,
+                });
+            } catch (error) {
+                console.error('Erro ao ajustar estoque de produto fracionado vinculado durante transferência.', {
+                    parentProductId: product._id.toString(),
+                    childProductId: String(childObjectId),
+                    depositId: depositKey,
+                }, error);
+                throw error;
+            }
+        }
+
+        try {
+            await recalculateFractionalStockForProduct(product._id, { session });
+        } catch (error) {
+            console.error('Erro ao recalcular estoque fracionado do produto durante transferência.', {
+                productId: product._id.toString(),
+            }, error);
+        }
+    }
+
+    try {
+        await refreshParentFractionalStocks(product._id, { session });
+    } catch (error) {
+        console.error('Erro ao atualizar produtos pais fracionados durante transferência.', {
+            productId: product._id.toString(),
+        }, error);
+    }
+
+    return { updated: true };
 };
 
 router.get('/form-data', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
@@ -604,6 +776,8 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
 });
 
 router.patch('/:id/status', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
+    let session = null;
+
     try {
         const { id } = req.params;
         const { status } = req.body || {};
@@ -617,34 +791,98 @@ router.patch('/:id/status', requireAuth, authorizeRoles(...allowedRoles), async 
             return res.status(400).json({ message: 'Status informado é inválido.' });
         }
 
-        const updated = await Transfer.findByIdAndUpdate(
-            id,
-            { status: normalizedStatus },
-            { new: true, runValidators: true }
-        )
-            .populate('originDeposit', { nome: 1, codigo: 1 })
-            .populate('destinationDeposit', { nome: 1, codigo: 1 })
-            .populate('originCompany', { nome: 1, nomeFantasia: 1 })
-            .populate('destinationCompany', { nome: 1, nomeFantasia: 1 })
-            .populate('responsible', { nomeCompleto: 1, apelido: 1, email: 1 })
-            .lean();
+        session = await mongoose.startSession();
 
-        if (!updated) {
-            return res.status(404).json({ message: 'Transferência não encontrada.' });
-        }
+        let responseTransfer = null;
+        await session.withTransaction(async () => {
+            const transfer = await Transfer.findById(id).session(session);
+            if (!transfer) {
+                const error = new Error('Transferência não encontrada.');
+                error.statusCode = 404;
+                throw error;
+            }
 
+            const currentStatus = normalizeStatus(transfer.status) || 'solicitada';
+
+            if (normalizedStatus === 'aprovada' && currentStatus !== 'aprovada') {
+                if (!Array.isArray(transfer.items) || transfer.items.length === 0) {
+                    const error = new Error('A transferência não possui itens para movimentação.');
+                    error.statusCode = 400;
+                    throw error;
+                }
+
+                const originDepositId = toObjectIdOrNull(transfer.originDeposit);
+                const destinationDepositId = toObjectIdOrNull(transfer.destinationDeposit);
+                if (!originDepositId || !destinationDepositId) {
+                    const error = new Error('Depósitos de origem ou destino inválidos para movimentação.');
+                    error.statusCode = 400;
+                    throw error;
+                }
+
+                for (const item of transfer.items) {
+                    const productId = resolveProductObjectId(item?.product);
+                    const quantity = Number(item?.quantity);
+                    if (!productId || !Number.isFinite(quantity) || quantity <= 0) {
+                        const error = new Error('Itens da transferência possuem dados inválidos.');
+                        error.statusCode = 400;
+                        throw error;
+                    }
+
+                    await adjustProductStockForDeposit({
+                        productId,
+                        depositId: originDepositId,
+                        quantity: -quantity,
+                        session,
+                        cascadeFractional: true,
+                    });
+                }
+
+                for (const item of transfer.items) {
+                    const productId = resolveProductObjectId(item?.product);
+                    const quantity = Number(item?.quantity);
+                    await adjustProductStockForDeposit({
+                        productId,
+                        depositId: destinationDepositId,
+                        quantity,
+                        session,
+                        cascadeFractional: true,
+                    });
+                }
+            }
+
+            transfer.status = normalizedStatus;
+            await transfer.save({ session });
+
+            responseTransfer = {
+                id: String(transfer._id),
+                number: Number(transfer.number) || 0,
+                status: transfer.status,
+            };
+        });
+
+        const transferStatus = responseTransfer?.status || normalizedStatus;
         res.json({
             message: 'Status da transferência atualizado com sucesso.',
             transfer: {
-                id: String(updated._id),
-                number: Number(updated.number) || 0,
-                status: updated.status,
-                statusLabel: statusLabels[updated.status] || updated.status,
+                id: responseTransfer?.id || id,
+                number: responseTransfer?.number || 0,
+                status: transferStatus,
+                statusLabel: statusLabels[transferStatus] || transferStatus,
             },
         });
     } catch (error) {
+        if (error?.statusCode === 404) {
+            return res.status(404).json({ message: error.message });
+        }
+        if (error?.statusCode === 400) {
+            return res.status(400).json({ message: error.message, details: error.details });
+        }
         console.error('Erro ao atualizar status da transferência:', error);
         res.status(500).json({ message: 'Não foi possível atualizar o status da transferência.' });
+    } finally {
+        if (session) {
+            await session.endSession();
+        }
     }
 });
 
