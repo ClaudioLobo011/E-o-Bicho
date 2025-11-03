@@ -11,6 +11,12 @@ const authorizeRoles = require('../middlewares/authorizeRoles');
 const router = express.Router();
 
 const allowedRoles = ['admin', 'admin_master', 'funcionario'];
+const allowedStatuses = new Set(['solicitada', 'em_separacao', 'aprovada']);
+const statusLabels = {
+    solicitada: 'Solicitada',
+    em_separacao: 'Em separação',
+    aprovada: 'Aprovada',
+};
 
 const sanitizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 
@@ -26,6 +32,37 @@ const parseDateInput = (value) => {
 const escapeRegExp = (value) => {
     if (typeof value !== 'string') return '';
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+const normalizeStatus = (value) => {
+    if (!value) return null;
+    try {
+        const normalized = String(value)
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_/, '')
+            .replace(/_$/, '');
+        return allowedStatuses.has(normalized) ? normalized : null;
+    } catch (error) {
+        return null;
+    }
+};
+
+const getStartOfDay = (date) => {
+    if (!date) return null;
+    const copy = new Date(date.getTime());
+    copy.setHours(0, 0, 0, 0);
+    return copy;
+};
+
+const getEndOfDay = (date) => {
+    if (!date) return null;
+    const copy = new Date(date.getTime());
+    copy.setHours(23, 59, 59, 999);
+    return copy;
 };
 
 const getNextTransferNumber = async () => {
@@ -54,6 +91,161 @@ router.get('/form-data', requireAuth, authorizeRoles(...allowedRoles), async (re
     } catch (error) {
         console.error('Erro ao carregar dados do formulário de transferência:', error);
         res.status(500).json({ message: 'Não foi possível carregar os dados necessários para a transferência.' });
+    }
+});
+
+router.get('/filters', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
+    try {
+        const deposits = await Deposit.find({}, { nome: 1, codigo: 1, empresa: 1 })
+            .sort({ nome: 1 })
+            .populate('empresa', { nome: 1, nomeFantasia: 1 })
+            .lean();
+
+        const preparedDeposits = deposits.map((deposit) => ({
+            id: String(deposit._id),
+            name: deposit.nome || '',
+            code: deposit.codigo || '',
+            companyId: deposit.empresa ? String(deposit.empresa._id) : null,
+            companyName: deposit.empresa?.nomeFantasia || deposit.empresa?.nome || '',
+        }));
+
+        res.json({
+            deposits: preparedDeposits,
+            statuses: Array.from(allowedStatuses).map((status) => ({
+                value: status,
+                label: statusLabels[status] || status,
+            })),
+        });
+    } catch (error) {
+        console.error('Erro ao carregar filtros de transferências:', error);
+        res.status(500).json({ message: 'Não foi possível carregar os filtros de transferências.' });
+    }
+});
+
+router.get('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
+    try {
+        const {
+            originDeposit,
+            destinationDeposit,
+            status: statusQuery,
+            startDate: startDateQuery,
+            endDate: endDateQuery,
+        } = req.query || {};
+
+        const filters = {};
+
+        if (originDeposit && mongoose.Types.ObjectId.isValid(originDeposit)) {
+            filters.originDeposit = originDeposit;
+        }
+
+        if (destinationDeposit && mongoose.Types.ObjectId.isValid(destinationDeposit)) {
+            filters.destinationDeposit = destinationDeposit;
+        }
+
+        const normalizedStatus = normalizeStatus(statusQuery);
+        if (normalizedStatus) {
+            filters.status = normalizedStatus;
+        }
+
+        const startDate = parseDateInput(startDateQuery);
+        const endDate = parseDateInput(endDateQuery);
+
+        if (startDate || endDate) {
+            const dateFilter = {};
+            if (startDate) {
+                dateFilter.$gte = getStartOfDay(startDate);
+            }
+            if (endDate) {
+                dateFilter.$lte = getEndOfDay(endDate);
+            }
+            if (Object.keys(dateFilter).length > 0) {
+                filters.requestDate = dateFilter;
+            }
+        }
+
+        const transfers = await Transfer.find(filters)
+            .populate('originDeposit', { nome: 1, codigo: 1 })
+            .populate('destinationDeposit', { nome: 1, codigo: 1 })
+            .populate('originCompany', { nome: 1, nomeFantasia: 1 })
+            .populate('destinationCompany', { nome: 1, nomeFantasia: 1 })
+            .populate('responsible', { nomeCompleto: 1, apelido: 1, email: 1 })
+            .sort({ requestDate: -1, number: -1 })
+            .lean();
+
+        let totalVolume = 0;
+        const statusCount = {};
+
+        const formattedTransfers = transfers.map((transfer) => {
+            const safeStatus = normalizeStatus(transfer.status) || 'solicitada';
+            statusCount[safeStatus] = (statusCount[safeStatus] || 0) + 1;
+
+            const volumes = Array.isArray(transfer.items)
+                ? transfer.items.reduce((acc, item) => acc + (Number(item?.quantity) || 0), 0)
+                : 0;
+            totalVolume += volumes;
+
+            return {
+                id: String(transfer._id),
+                number: Number(transfer.number) || 0,
+                requestDate: transfer.requestDate || null,
+                status: safeStatus,
+                statusLabel: statusLabels[safeStatus] || safeStatus,
+                originDeposit: transfer.originDeposit
+                    ? {
+                          id: String(transfer.originDeposit._id),
+                          name: transfer.originDeposit.nome || '',
+                          code: transfer.originDeposit.codigo || '',
+                      }
+                    : null,
+                destinationDeposit: transfer.destinationDeposit
+                    ? {
+                          id: String(transfer.destinationDeposit._id),
+                          name: transfer.destinationDeposit.nome || '',
+                          code: transfer.destinationDeposit.codigo || '',
+                      }
+                    : null,
+                originCompany: transfer.originCompany
+                    ? {
+                          id: String(transfer.originCompany._id),
+                          name: transfer.originCompany.nomeFantasia || transfer.originCompany.nome || '',
+                      }
+                    : null,
+                destinationCompany: transfer.destinationCompany
+                    ? {
+                          id: String(transfer.destinationCompany._id),
+                          name: transfer.destinationCompany.nomeFantasia || transfer.destinationCompany.nome || '',
+                      }
+                    : null,
+                responsible: transfer.responsible
+                    ? {
+                          id: String(transfer.responsible._id),
+                          name: transfer.responsible.nomeCompleto || transfer.responsible.apelido || '',
+                          email: transfer.responsible.email || '',
+                      }
+                    : null,
+                totalVolume: volumes,
+                itemsCount: Array.isArray(transfer.items) ? transfer.items.length : 0,
+            };
+        });
+
+        const pendingNfe = formattedTransfers.filter((transfer) => transfer.status !== 'aprovada').length;
+
+        res.json({
+            transfers: formattedTransfers,
+            summary: {
+                totalTransfers: formattedTransfers.length,
+                totalVolume,
+                pendingNfe,
+                statusCount,
+                period: {
+                    start: startDate ? getStartOfDay(startDate) : null,
+                    end: endDate ? getEndOfDay(endDate) : null,
+                },
+            },
+        });
+    } catch (error) {
+        console.error('Erro ao listar transferências:', error);
+        res.status(500).json({ message: 'Não foi possível carregar as transferências solicitadas.' });
     }
 });
 
@@ -144,6 +336,126 @@ router.get('/products/:id', requireAuth, authorizeRoles(...allowedRoles), async 
     } catch (error) {
         console.error('Erro ao carregar detalhes do produto para transferência:', error);
         res.status(500).json({ message: 'Não foi possível carregar os detalhes do produto.' });
+    }
+});
+
+router.get('/:id', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Transferência inválida informada.' });
+        }
+
+        const transfer = await Transfer.findById(id)
+            .populate('originDeposit', { nome: 1, codigo: 1 })
+            .populate('destinationDeposit', { nome: 1, codigo: 1 })
+            .populate('originCompany', { nome: 1, nomeFantasia: 1, cnpj: 1 })
+            .populate('destinationCompany', { nome: 1, nomeFantasia: 1, cnpj: 1 })
+            .populate('responsible', { nomeCompleto: 1, apelido: 1, email: 1, role: 1 })
+            .populate('items.product', { nome: 1, cod: 1, codbarras: 1, unidade: 1 })
+            .lean();
+
+        if (!transfer) {
+            return res.status(404).json({ message: 'Transferência não encontrada.' });
+        }
+
+        const safeStatus = normalizeStatus(transfer.status) || 'solicitada';
+
+        const items = Array.isArray(transfer.items)
+            ? transfer.items.map((item) => {
+                  const quantity = Number(item?.quantity) || 0;
+                  const unitCost = Number(item?.unitCost) || 0;
+                  const unitWeight = Number(item?.unitWeight) || 0;
+                  return {
+                      productId: item.product ? String(item.product._id) : null,
+                      productName: item.product?.nome || item.description || '',
+                      sku: item.sku || item.product?.cod || '',
+                      barcode: item.barcode || item.product?.codbarras || '',
+                      description: item.description || item.product?.nome || '',
+                      quantity,
+                      unit: item.unit || item.product?.unidade || '',
+                      lot: item.lot || '',
+                      validity: item.validity || null,
+                      unitWeight,
+                      unitCost,
+                      totalWeight: unitWeight * quantity,
+                      totalCost: unitCost * quantity,
+                  };
+              })
+            : [];
+
+        const totals = items.reduce(
+            (acc, item) => {
+                acc.totalVolume += item.quantity;
+                acc.totalWeight += Number.isFinite(item.totalWeight) ? item.totalWeight : 0;
+                acc.totalCost += Number.isFinite(item.totalCost) ? item.totalCost : 0;
+                return acc;
+            },
+            { totalVolume: 0, totalWeight: 0, totalCost: 0 }
+        );
+
+        res.json({
+            transfer: {
+                id: String(transfer._id),
+                number: Number(transfer.number) || 0,
+                requestDate: transfer.requestDate || null,
+                status: safeStatus,
+                statusLabel: statusLabels[safeStatus] || safeStatus,
+                originDeposit: transfer.originDeposit
+                    ? {
+                          id: String(transfer.originDeposit._id),
+                          name: transfer.originDeposit.nome || '',
+                          code: transfer.originDeposit.codigo || '',
+                      }
+                    : null,
+                destinationDeposit: transfer.destinationDeposit
+                    ? {
+                          id: String(transfer.destinationDeposit._id),
+                          name: transfer.destinationDeposit.nome || '',
+                          code: transfer.destinationDeposit.codigo || '',
+                      }
+                    : null,
+                originCompany: transfer.originCompany
+                    ? {
+                          id: String(transfer.originCompany._id),
+                          name: transfer.originCompany.nomeFantasia || transfer.originCompany.nome || '',
+                          cnpj: transfer.originCompany.cnpj || '',
+                      }
+                    : null,
+                destinationCompany: transfer.destinationCompany
+                    ? {
+                          id: String(transfer.destinationCompany._id),
+                          name:
+                              transfer.destinationCompany.nomeFantasia || transfer.destinationCompany.nome || '',
+                          cnpj: transfer.destinationCompany.cnpj || '',
+                      }
+                    : null,
+                responsible: transfer.responsible
+                    ? {
+                          id: String(transfer.responsible._id),
+                          name:
+                              transfer.responsible.nomeCompleto ||
+                              transfer.responsible.apelido ||
+                              transfer.responsible.email ||
+                              '',
+                          email: transfer.responsible.email || '',
+                          role: transfer.responsible.role || '',
+                      }
+                    : null,
+                referenceDocument: transfer.referenceDocument || '',
+                observations: transfer.observations || '',
+                transport: {
+                    mode: transfer.transport?.mode || '',
+                    vehicle: transfer.transport?.vehicle || '',
+                    driver: transfer.transport?.driver || '',
+                },
+                items,
+                totals,
+            },
+        });
+    } catch (error) {
+        console.error('Erro ao carregar detalhes da transferência:', error);
+        res.status(500).json({ message: 'Não foi possível carregar os detalhes da transferência.' });
     }
 });
 
@@ -288,6 +600,51 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
     } catch (error) {
         console.error('Erro ao salvar transferência:', error);
         res.status(500).json({ message: 'Não foi possível salvar a transferência no momento.' });
+    }
+});
+
+router.patch('/:id/status', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body || {};
+
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Transferência inválida informada.' });
+        }
+
+        const normalizedStatus = normalizeStatus(status);
+        if (!normalizedStatus) {
+            return res.status(400).json({ message: 'Status informado é inválido.' });
+        }
+
+        const updated = await Transfer.findByIdAndUpdate(
+            id,
+            { status: normalizedStatus },
+            { new: true, runValidators: true }
+        )
+            .populate('originDeposit', { nome: 1, codigo: 1 })
+            .populate('destinationDeposit', { nome: 1, codigo: 1 })
+            .populate('originCompany', { nome: 1, nomeFantasia: 1 })
+            .populate('destinationCompany', { nome: 1, nomeFantasia: 1 })
+            .populate('responsible', { nomeCompleto: 1, apelido: 1, email: 1 })
+            .lean();
+
+        if (!updated) {
+            return res.status(404).json({ message: 'Transferência não encontrada.' });
+        }
+
+        res.json({
+            message: 'Status da transferência atualizado com sucesso.',
+            transfer: {
+                id: String(updated._id),
+                number: Number(updated.number) || 0,
+                status: updated.status,
+                statusLabel: statusLabels[updated.status] || updated.status,
+            },
+        });
+    } catch (error) {
+        console.error('Erro ao atualizar status da transferência:', error);
+        res.status(500).json({ message: 'Não foi possível atualizar o status da transferência.' });
     }
 });
 
