@@ -199,6 +199,20 @@
             font-size: 0.78rem !important;
         }
 
+        #product-search-modal .product-search-results-wrapper {
+            min-height: 0;
+        }
+
+        #product-search-modal .product-search-results-scroll {
+            max-height: min(360px, calc(100vh - 220px));
+        }
+
+        @media (min-width: 640px) {
+            #product-search-modal .product-search-results-scroll {
+                max-height: min(440px, calc(85vh - 220px));
+            }
+        }
+
         body[data-admin-product="compact"] #edit-product-form .grid {
             gap: 0.75rem !important;
         }
@@ -956,8 +970,8 @@
                             <input type="text" id="product-search-input" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Busque por nome, código ou código de barras" autocomplete="off">
                         </div>
                     </div>
-                    <div class="flex-1 overflow-hidden min-h-0">
-                        <div class="h-full overflow-x-auto overflow-y-auto rounded-xl border border-gray-100">
+                    <div class="product-search-results-wrapper flex-1 overflow-hidden min-h-0">
+                        <div class="product-search-results-scroll w-full overflow-x-auto overflow-y-auto rounded-xl border border-gray-100">
                             <table class="min-w-full divide-y divide-gray-200 text-xs text-gray-600">
                                 <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
                                     <tr>
