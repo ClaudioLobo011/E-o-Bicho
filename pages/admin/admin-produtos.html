@@ -973,13 +973,88 @@
                     <div class="product-search-results-wrapper flex-1 overflow-hidden min-h-0">
                         <div class="product-search-results-scroll w-full overflow-x-auto overflow-y-auto rounded-xl border border-gray-100">
                             <table class="min-w-full divide-y divide-gray-200 text-xs text-gray-600">
-                                <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
-                                    <tr>
-                                        <th scope="col" class="px-4 py-2 text-left font-semibold">Cod</th>
-                                        <th scope="col" class="px-4 py-2 text-left font-semibold">Descrição</th>
-                                        <th scope="col" class="px-4 py-2 text-left font-semibold">Cód. Barras</th>
-                                        <th scope="col" class="px-4 py-2 text-right font-semibold">Custo</th>
-                                        <th scope="col" class="px-4 py-2 text-right font-semibold">Venda</th>
+                                <thead class="bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                    <tr class="align-top">
+                                        <th scope="col" class="px-4 py-2 text-left" data-product-search-sort-header="cod">
+                                            <div class="flex flex-col gap-1">
+                                                <div class="flex items-center justify-between gap-1">
+                                                    <span class="whitespace-nowrap">Cod</span>
+                                                    <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-product-search-sort="cod" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Cod">
+                                                            <i class="fas fa-sort-up text-[9px]"></i>
+                                                        </button>
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-product-search-sort="cod" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Cod">
+                                                            <i class="fas fa-sort-down text-[9px]"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-product-search-filter="cod">
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-4 py-2 text-left" data-product-search-sort-header="descricao">
+                                            <div class="flex flex-col gap-1">
+                                                <div class="flex items-center justify-between gap-1">
+                                                    <span class="whitespace-nowrap">Descrição</span>
+                                                    <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-product-search-sort="descricao" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Descrição">
+                                                            <i class="fas fa-sort-up text-[9px]"></i>
+                                                        </button>
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-product-search-sort="descricao" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Descrição">
+                                                            <i class="fas fa-sort-down text-[9px]"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-product-search-filter="descricao">
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-4 py-2 text-left" data-product-search-sort-header="codbarras">
+                                            <div class="flex flex-col gap-1">
+                                                <div class="flex items-center justify-between gap-1">
+                                                    <span class="whitespace-nowrap">Cód. Barras</span>
+                                                    <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-product-search-sort="codbarras" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Cód. Barras">
+                                                            <i class="fas fa-sort-up text-[9px]"></i>
+                                                        </button>
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-product-search-sort="codbarras" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Cód. Barras">
+                                                            <i class="fas fa-sort-down text-[9px]"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-product-search-filter="codbarras">
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-4 py-2 text-right" data-product-search-sort-header="custo">
+                                            <div class="flex flex-col items-end gap-1">
+                                                <div class="flex w-full items-center justify-end gap-1">
+                                                    <span class="whitespace-nowrap">Custo</span>
+                                                    <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-product-search-sort="custo" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Custo">
+                                                            <i class="fas fa-sort-up text-[9px]"></i>
+                                                        </button>
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-product-search-sort="custo" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Custo">
+                                                            <i class="fas fa-sort-down text-[9px]"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-product-search-filter="custo">
+                                            </div>
+                                        </th>
+                                        <th scope="col" class="px-4 py-2 text-right" data-product-search-sort-header="venda">
+                                            <div class="flex flex-col items-end gap-1">
+                                                <div class="flex w-full items-center justify-end gap-1">
+                                                    <span class="whitespace-nowrap">Venda</span>
+                                                    <div class="flex flex-col items-center justify-center gap-px text-gray-400">
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-product-search-sort="venda" data-sort-direction="asc" aria-label="Ordenar crescente pela coluna Venda">
+                                                            <i class="fas fa-sort-up text-[9px]"></i>
+                                                        </button>
+                                                        <button type="button" class="flex h-3.5 w-3.5 items-center justify-center rounded border border-transparent text-gray-400 transition hover:text-primary focus:outline-none focus:ring-1 focus:ring-primary/30" data-product-search-sort="venda" data-sort-direction="desc" aria-label="Ordenar decrescente pela coluna Venda">
+                                                            <i class="fas fa-sort-down text-[9px]"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <input type="text" placeholder="Filtrar" class="w-full rounded border border-gray-200 bg-white px-2 py-1 text-right text-[10px] font-medium normal-case text-gray-600 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-product-search-filter="venda">
+                                            </div>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody id="product-search-results">
