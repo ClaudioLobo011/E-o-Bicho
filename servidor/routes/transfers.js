@@ -956,7 +956,11 @@ router.patch('/:id/status', requireAuth, authorizeRoles(...allowedRoles), async 
                         depositId: originDepositId,
                         quantity: -quantity,
                         session,
-                        cascadeFractional: true,
+                        // Para transferências apenas movimentamos o item solicitado
+                        // entre depósitos, sem propagar alterações automáticas para
+                        // composições fracionadas. Isso evita bloqueios indevidos
+                        // quando o produto possui vinculações fracionadas.
+                        cascadeFractional: false,
                     });
                 }
 
@@ -968,7 +972,7 @@ router.patch('/:id/status', requireAuth, authorizeRoles(...allowedRoles), async 
                         depositId: destinationDepositId,
                         quantity,
                         session,
-                        cascadeFractional: true,
+                        cascadeFractional: false,
                     });
                 }
             }
