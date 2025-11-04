@@ -146,7 +146,8 @@
   }
 
   function formatCurrency(value) {
-    const number = Number(value);
+    const normalized = normalizeDecimal(value);
+    const number = normalized !== null ? normalized : Number(value);
     if (!Number.isFinite(number)) return 'R$ 0,00';
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -242,12 +243,68 @@
         throw new Error(payload?.message || 'Não foi possível carregar o histórico de transferências.');
       }
       const data = await response.json();
-    state.transfers = Array.isArray(data?.transfers) ? data.transfers : [];
-    state.summary = {
+      const rawTransfers = Array.isArray(data?.transfers) ? data.transfers : [];
+      state.transfers = rawTransfers.map((transfer) => {
+        if (!transfer || typeof transfer !== 'object') {
+          return transfer;
+        }
+
+        const totals = transfer.totals && typeof transfer.totals === 'object' ? transfer.totals : {};
+        const normalizedTotals = { ...totals };
+
+        const totalCost = normalizeDecimal(totals.totalCost);
+        if (totalCost !== null && Number.isFinite(totalCost)) {
+          normalizedTotals.totalCost = Math.round(totalCost * 100) / 100;
+        }
+
+        const totalSale = normalizeDecimal(totals.totalSale);
+        if (totalSale !== null && Number.isFinite(totalSale)) {
+          normalizedTotals.totalSale = Math.round(totalSale * 100) / 100;
+        }
+
+        const totalVolumeSource =
+          totals.totalVolume ?? totals.totalQuantity ?? totals.quantity ?? totals.volume;
+        const totalVolume = normalizeDecimal(totalVolumeSource);
+        if (totalVolume !== null && Number.isFinite(totalVolume)) {
+          normalizedTotals.totalVolume = Math.round(totalVolume * 1000) / 1000;
+        }
+
+        return {
+          ...transfer,
+          totals: normalizedTotals,
+        };
+      });
+
+      const aggregatedTotals = state.transfers.reduce(
+        (acc, transfer) => {
+          const totals = transfer?.totals || {};
+          const cost = normalizeDecimal(totals.totalCost);
+          const sale = normalizeDecimal(totals.totalSale);
+
+          if (cost !== null && Number.isFinite(cost)) {
+            acc.totalCost += cost;
+          }
+
+          if (sale !== null && Number.isFinite(sale)) {
+            acc.totalSale += sale;
+          }
+
+          return acc;
+        },
+        { totalCost: 0, totalSale: 0 }
+      );
+
+      aggregatedTotals.totalCost = Math.round(aggregatedTotals.totalCost * 100) / 100;
+      aggregatedTotals.totalSale = Math.round(aggregatedTotals.totalSale * 100) / 100;
+
+      const summaryTotalCost = normalizeDecimal(data?.summary?.totalCost);
+      const summaryTotalSale = normalizeDecimal(data?.summary?.totalSale);
+
+      state.summary = {
         totalTransfers: Number(data?.summary?.totalTransfers) || state.transfers.length,
         pendingTransfers: Number(data?.summary?.pendingTransfers ?? data?.summary?.pendingNfe) || 0,
-        totalCost: Number(data?.summary?.totalCost) || 0,
-        totalSale: Number(data?.summary?.totalSale) || 0,
+        totalCost: summaryTotalCost !== null ? summaryTotalCost : aggregatedTotals.totalCost,
+        totalSale: summaryTotalSale !== null ? summaryTotalSale : aggregatedTotals.totalSale,
         withInvoice: Number(data?.summary?.withInvoice) || 0,
         period: data?.summary?.period || { start: null, end: null },
       };
