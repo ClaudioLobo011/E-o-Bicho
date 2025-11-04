@@ -319,6 +319,26 @@ const resolveProductObjectId = (value) => {
   return toObjectIdOrNull(value);
 };
 
+const resolveFractionalChildRatio = (baseQuantity, fractionQuantity) => {
+  const normalizedBase = Number(baseQuantity);
+  const normalizedFraction = Number(fractionQuantity);
+
+  if (!Number.isFinite(normalizedBase) || normalizedBase <= 0) return 0;
+  if (!Number.isFinite(normalizedFraction) || normalizedFraction <= 0) return 0;
+
+  const directRatio = normalizedFraction / normalizedBase;
+  if (Number.isFinite(directRatio) && directRatio >= 1) {
+    return directRatio;
+  }
+
+  const invertedRatio = normalizedBase / normalizedFraction;
+  if (Number.isFinite(invertedRatio) && invertedRatio >= 1) {
+    return invertedRatio;
+  }
+
+  return 0;
+};
+
 const updateProductStockForDeposit = async ({
   productId,
   depositId,
@@ -357,6 +377,7 @@ const updateProductStockForDeposit = async ({
   }
 
   const depositKey = depositObjectId.toString();
+
   let entry = product.estoques.find(
     (stockEntry) => stockEntry?.deposito && stockEntry.deposito.toString() === depositKey
   );
@@ -407,7 +428,7 @@ const updateProductStockForDeposit = async ({
       const childObjectId = resolveProductObjectId(item?.produto);
       if (!childObjectId) continue;
 
-      const ratio = fractionQuantity / baseQuantity;
+      const ratio = resolveFractionalChildRatio(baseQuantity, fractionQuantity);
       const childQuantity = numericQuantity * ratio;
       if (!Number.isFinite(childQuantity) || childQuantity === 0) continue;
 

@@ -106,6 +106,26 @@ const resolveProductObjectId = (value) => {
     return null;
 };
 
+const resolveFractionalChildRatio = (baseQuantity, fractionQuantity) => {
+    const normalizedBase = Number(baseQuantity);
+    const normalizedFraction = Number(fractionQuantity);
+
+    if (!Number.isFinite(normalizedBase) || normalizedBase <= 0) return 0;
+    if (!Number.isFinite(normalizedFraction) || normalizedFraction <= 0) return 0;
+
+    const directRatio = normalizedFraction / normalizedBase;
+    if (Number.isFinite(directRatio) && directRatio >= 1) {
+        return directRatio;
+    }
+
+    const invertedRatio = normalizedBase / normalizedFraction;
+    if (Number.isFinite(invertedRatio) && invertedRatio >= 1) {
+        return invertedRatio;
+    }
+
+    return 0;
+};
+
 const adjustProductStockForDeposit = async ({
     productId,
     depositId,
@@ -202,7 +222,7 @@ const adjustProductStockForDeposit = async ({
             const childObjectId = resolveProductObjectId(item?.produto);
             if (!childObjectId) continue;
 
-            const ratio = fractionQuantity / baseQuantity;
+            const ratio = resolveFractionalChildRatio(baseQuantity, fractionQuantity);
             const childDelta = delta * ratio;
             if (!Number.isFinite(childDelta) || childDelta === 0) continue;
 
@@ -336,25 +356,63 @@ router.get('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) =
         }
 
         const transfers = await Transfer.find(filters)
+            .select({
+                number: 1,
+                requestDate: 1,
+                status: 1,
+                originDeposit: 1,
+                destinationDeposit: 1,
+                originCompany: 1,
+                destinationCompany: 1,
+                responsible: 1,
+                referenceDocument: 1,
+                items: 1,
+            })
             .populate('originDeposit', { nome: 1, codigo: 1 })
             .populate('destinationDeposit', { nome: 1, codigo: 1 })
             .populate('originCompany', { nome: 1, nomeFantasia: 1 })
             .populate('destinationCompany', { nome: 1, nomeFantasia: 1 })
             .populate('responsible', { nomeCompleto: 1, apelido: 1, email: 1 })
+            .populate('items.product', { venda: 1 })
             .sort({ requestDate: -1, number: -1 })
             .lean();
 
         let totalVolume = 0;
+        let totalCost = 0;
+        let totalSale = 0;
+        let withInvoice = 0;
         const statusCount = {};
 
         const formattedTransfers = transfers.map((transfer) => {
             const safeStatus = normalizeStatus(transfer.status) || 'solicitada';
             statusCount[safeStatus] = (statusCount[safeStatus] || 0) + 1;
 
-            const volumes = Array.isArray(transfer.items)
-                ? transfer.items.reduce((acc, item) => acc + (Number(item?.quantity) || 0), 0)
-                : 0;
-            totalVolume += volumes;
+            const items = Array.isArray(transfer.items) ? transfer.items : [];
+            const totals = items.reduce(
+                (acc, item) => {
+                    const quantity = Number(item?.quantity) || 0;
+                    const unitCost = Number(item?.unitCost) || 0;
+                    const unitSale = Number(item?.unitSale ?? item?.product?.venda) || 0;
+                    acc.totalVolume += quantity;
+                    acc.totalCost += quantity * unitCost;
+                    acc.totalSale += quantity * unitSale;
+                    return acc;
+                },
+                { totalVolume: 0, totalCost: 0, totalSale: 0 }
+            );
+
+            totals.totalVolume = Math.round(totals.totalVolume * 1_000_000) / 1_000_000;
+            totals.totalCost = Math.round(totals.totalCost * 100) / 100;
+            totals.totalSale = Math.round(totals.totalSale * 100) / 100;
+
+            totalVolume += totals.totalVolume;
+            totalCost += totals.totalCost;
+            totalSale += totals.totalSale;
+
+            const hasInvoice = Boolean(sanitizeString(transfer.referenceDocument));
+            if (hasInvoice) {
+                withInvoice += 1;
+            }
 
             return {
                 id: String(transfer._id),
@@ -362,6 +420,7 @@ router.get('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) =
                 requestDate: transfer.requestDate || null,
                 status: safeStatus,
                 statusLabel: statusLabels[safeStatus] || safeStatus,
+                referenceDocument: transfer.referenceDocument || '',
                 originDeposit: transfer.originDeposit
                     ? {
                           id: String(transfer.originDeposit._id),
@@ -395,19 +454,32 @@ router.get('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) =
                           email: transfer.responsible.email || '',
                       }
                     : null,
-                totalVolume: volumes,
-                itemsCount: Array.isArray(transfer.items) ? transfer.items.length : 0,
+                totalVolume: totals.totalVolume,
+                itemsCount: items.length,
+                totals: {
+                    totalVolume: totals.totalVolume,
+                    totalCost: totals.totalCost,
+                    totalSale: totals.totalSale,
+                },
+                hasInvoice,
             };
         });
 
-        const pendingNfe = formattedTransfers.filter((transfer) => transfer.status !== 'aprovada').length;
+        const pendingTransfers = formattedTransfers.filter((transfer) => transfer.status !== 'aprovada').length;
+        totalVolume = Math.round(totalVolume * 1_000_000) / 1_000_000;
+        totalCost = Math.round(totalCost * 100) / 100;
+        totalSale = Math.round(totalSale * 100) / 100;
 
         res.json({
             transfers: formattedTransfers,
             summary: {
                 totalTransfers: formattedTransfers.length,
                 totalVolume,
-                pendingNfe,
+                totalCost,
+                totalSale,
+                withInvoice,
+                pendingTransfers,
+                pendingNfe: pendingTransfers,
                 statusCount,
                 period: {
                     start: startDate ? getStartOfDay(startDate) : null,
@@ -524,7 +596,7 @@ router.get('/:id', requireAuth, authorizeRoles(...allowedRoles), async (req, res
             .populate('originCompany', { nome: 1, nomeFantasia: 1, cnpj: 1 })
             .populate('destinationCompany', { nome: 1, nomeFantasia: 1, cnpj: 1 })
             .populate('responsible', { nomeCompleto: 1, apelido: 1, email: 1, role: 1 })
-            .populate('items.product', { nome: 1, cod: 1, codbarras: 1, unidade: 1 })
+            .populate('items.product', { nome: 1, cod: 1, codbarras: 1, unidade: 1, venda: 1 })
             .lean();
 
         if (!transfer) {
@@ -538,6 +610,7 @@ router.get('/:id', requireAuth, authorizeRoles(...allowedRoles), async (req, res
                   const quantity = Number(item?.quantity) || 0;
                   const unitCost = Number(item?.unitCost) || 0;
                   const unitWeight = Number(item?.unitWeight) || 0;
+                  const unitSale = Number(item?.unitSale ?? item?.product?.venda) || 0;
                   return {
                       productId: item.product ? String(item.product._id) : null,
                       productName: item.product?.nome || item.description || '',
@@ -550,8 +623,10 @@ router.get('/:id', requireAuth, authorizeRoles(...allowedRoles), async (req, res
                       validity: item.validity || null,
                       unitWeight,
                       unitCost,
+                      unitSale,
                       totalWeight: unitWeight * quantity,
                       totalCost: unitCost * quantity,
+                      totalSale: unitSale * quantity,
                   };
               })
             : [];
@@ -561,10 +636,16 @@ router.get('/:id', requireAuth, authorizeRoles(...allowedRoles), async (req, res
                 acc.totalVolume += item.quantity;
                 acc.totalWeight += Number.isFinite(item.totalWeight) ? item.totalWeight : 0;
                 acc.totalCost += Number.isFinite(item.totalCost) ? item.totalCost : 0;
+                acc.totalSale += Number.isFinite(item.totalSale) ? item.totalSale : 0;
                 return acc;
             },
-            { totalVolume: 0, totalWeight: 0, totalCost: 0 }
+            { totalVolume: 0, totalWeight: 0, totalCost: 0, totalSale: 0 }
         );
+
+        totals.totalVolume = Math.round(totals.totalVolume * 1_000_000) / 1_000_000;
+        totals.totalWeight = Math.round(totals.totalWeight * 1_000_000) / 1_000_000;
+        totals.totalCost = Math.round(totals.totalCost * 100) / 100;
+        totals.totalSale = Math.round(totals.totalSale * 100) / 100;
 
         res.json({
             transfer: {
@@ -703,6 +784,7 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
             unidade: 1,
             peso: 1,
             custo: 1,
+            venda: 1,
         }).lean();
 
         const productMap = new Map(products.map((product) => [String(product._id), product]));
@@ -740,6 +822,7 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
                 validity: validityDate,
                 unitWeight: Number.isFinite(product?.peso) ? product.peso : null,
                 unitCost: Number.isFinite(product?.custo) ? product.custo : null,
+                unitSale: Number.isFinite(product?.venda) ? product.venda : null,
             });
         }
 
