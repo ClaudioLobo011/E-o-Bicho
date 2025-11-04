@@ -7,7 +7,7 @@
     "dev": "npx @tailwindcss/cli -i ./src/input.css -o ./src/output.css --watch",
     "prebuild": "node scripts/check-tailwind.js",
     "build": "npx @tailwindcss/cli -i ./src/input.css -o ./src/output.css",
-    "test": "node --test servidor/services/__tests__/*.test.js"
+    "test": "node --test servidor/services/__tests__/*.test.js servidor/routes/__tests__/*.test.js"
   },
   "dependencies": {
     "tailwindcss": "^4.1.12",

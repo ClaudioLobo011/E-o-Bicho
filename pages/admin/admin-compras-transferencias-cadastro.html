@@ -6,265 +6,352 @@
   <title>Admin: Cadastro de Transferência - E o Bicho</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="../../src/output.css">
+  <style>
+    .transfer-items-table thead th {
+      position: sticky;
+      top: 0;
+      background-color: #f9fafb;
+    }
+
+    .transfer-items-table th,
+    .transfer-items-table td {
+      padding: 0.5rem 0.75rem;
+      white-space: nowrap;
+    }
+
+    .transfer-items-table th:nth-child(2),
+    .transfer-items-table td:nth-child(2) {
+      white-space: normal;
+    }
+
+    .transfer-items-table td:nth-child(3),
+    .transfer-items-table td:nth-child(7),
+    .transfer-items-table td:nth-child(8),
+    .transfer-items-table td:nth-child(9),
+    .transfer-items-table td:nth-child(10) {
+      text-align: right;
+    }
+
+    .transfer-items-table th:nth-child(7),
+    .transfer-items-table th:nth-child(8),
+    .transfer-items-table td:nth-child(7),
+    .transfer-items-table td:nth-child(8) {
+      display: none;
+    }
+  </style>
 </head>
 <body class="bg-gray-100">
   <div id="admin-header-placeholder"></div>
 
-  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-      <aside class="md:col-span-4">
-        <div id="admin-sidebar-placeholder"></div>
-      </aside>
+  <main class="min-h-screen bg-gray-100">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-10">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+        <aside class="md:col-span-4">
+          <div id="admin-sidebar-placeholder"></div>
+        </aside>
 
-      <form id="transfer-form" class="md:col-span-4 space-y-6">
-        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div class="space-y-2">
-            <div class="flex items-center gap-2 text-sm text-gray-500">
-              <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
-                <i class="fas fa-shopping-basket"></i>
-                Compras
-              </span>
-              <i class="fas fa-angle-right text-xs"></i>
-              <span class="font-medium text-gray-600">Transferências</span>
-              <i class="fas fa-angle-right text-xs"></i>
-              <span class="font-semibold text-gray-800">Cadastro de transferência</span>
+        <form id="transfer-form" class="md:col-span-4 space-y-6">
+          <header class="sticky top-0 z-30 space-y-4 bg-white/95 backdrop-blur border border-gray-100 shadow-sm rounded-xl p-5">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="space-y-2">
+              <div class="flex items-center gap-2 text-sm text-gray-500">
+                <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                  <i class="fas fa-shopping-basket"></i>
+                  Compras
+                </span>
+                <i class="fas fa-angle-right text-xs"></i>
+                <span class="font-medium text-gray-600">Transferências</span>
+                <i class="fas fa-angle-right text-xs"></i>
+                <span class="font-semibold text-gray-800">Cadastro de transferência</span>
+              </div>
+              <div>
+                <h1 class="text-2xl font-bold text-gray-800">Cadastro de transferência</h1>
+                <p class="text-sm text-gray-600">Informe depósitos, itens e documentos fiscais relacionados para emissão de NF-e ou NF3-e quando aplicável.</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
+                <i class="fas fa-file-import"></i>
+                Importar via planilha</button>
+              <button type="submit" id="transfer-save-button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                <i class="fas fa-save"></i>
+                Salvar transferência</button>
+            </div>
+          </div>
+          <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label for="transfer-number" class="block text-sm font-medium text-gray-700 mb-1">Número</label>
+              <input type="text" id="transfer-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Gerado automaticamente" autocomplete="off" inputmode="numeric">
             </div>
             <div>
-              <h1 class="text-2xl font-bold text-gray-800">Cadastro de transferência</h1>
-              <p class="text-sm text-gray-600">Informe depósitos, itens e documentos fiscais relacionados para emissão de NF-e ou NF3-e quando aplicável.</p>
-            </div>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">
-              <i class="fas fa-file-import"></i>
-              Importar via planilha</button>
-            <button type="submit" id="transfer-save-button" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition">
-              <i class="fas fa-save"></i>
-              Salvar transferência</button>
-          </div>
-        </header>
-
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-8">
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div class="xl:col-span-1">
-              <label for="transfer-number" class="block text-sm font-medium text-gray-700 mb-1">Número</label>
-              <input type="text" id="transfer-number" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-gray-50 text-gray-600" value="Gerado automaticamente" readonly>
-            </div>
-            <div class="xl:col-span-1">
               <label for="transfer-date" class="block text-sm font-medium text-gray-700 mb-1">Data da solicitação <span class="text-red-500">*</span></label>
               <input type="date" id="transfer-date" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
             </div>
-            <div class="xl:col-span-2">
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label for="origin-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de origem <span class="text-red-500">*</span></label>
-                  <select id="origin-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                    <option value="">Selecione</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="transfer-origin" class="block text-sm font-medium text-gray-700 mb-1">Depósito de origem <span class="text-red-500">*</span></label>
-                  <select id="transfer-origin" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                    <option value="">Selecione</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div class="xl:col-span-2">
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label for="destination-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de destino <span class="text-red-500">*</span></label>
-                  <select id="destination-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                    <option value="">Selecione</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="transfer-destination" class="block text-sm font-medium text-gray-700 mb-1">Depósito de destino <span class="text-red-500">*</span></label>
-                  <select id="transfer-destination" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
-                    <option value="">Selecione</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div class="xl:col-span-2">
-              <label for="transfer-responsible-search" class="block text-sm font-medium text-gray-700 mb-1">Responsável <span class="text-red-500">*</span></label>
-              <div class="relative">
-                <input type="hidden" id="transfer-responsible">
-                <input type="search" id="transfer-responsible-search" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" list="responsible-list" placeholder="Digite o nome do colaborador" autocomplete="off" required>
-                <datalist id="responsible-list"></datalist>
-              </div>
-              <p class="mt-1 text-xs text-gray-500">Digite para localizar colaboradores com acesso administrativo e confirme a seleção pelo nome exibido.</p>
-            </div>
-            <div class="xl:col-span-2">
-              <label for="transfer-reference" class="block text-sm font-medium text-gray-700 mb-1">Documento de referência</label>
-              <input type="text" id="transfer-reference" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Pedido interno 12045">
-            </div>
           </div>
+        </header>
 
-          <div class="space-y-5">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Itens da transferência</h2>
-              <p class="mt-1 text-sm text-gray-500">Pesquise o produto pelo código interno, código de barras ou nome e adicione à tabela.</p>
-            </div>
-            <div class="space-y-3 rounded-2xl border border-gray-200 bg-slate-50/60 p-4">
-              <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                <label for="transfer-item-search" class="text-sm font-medium text-gray-700">Buscar produto para adicionar</label>
-                <span class="hidden text-xs font-semibold uppercase tracking-wide text-primary lg:block">Busca dinâmica</span>
-              </div>
-              <div class="relative">
-                <div class="relative w-full md:w-1/2">
-                  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400"><i class="fas fa-search"></i></span>
-                  <input type="search" id="transfer-item-search" class="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite código interno, código de barras ou nome" autocomplete="off">
-                  <div id="transfer-item-results" class="absolute left-0 top-full z-30 mt-2 hidden w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
-                    <div class="max-h-80 overflow-y-auto px-4 py-3 text-sm text-gray-500">
-                      Digite ao menos três caracteres para localizar produtos cadastrados.
-                    </div>
+        <div class="grid gap-5 lg:gap-6 grid-cols-1 lg:[grid-template-columns:minmax(0,2fr)_minmax(320px,1fr)]" id="transfer-layout">
+          <section class="order-1 space-y-5" aria-labelledby="transfer-flow">
+            <div class="grid gap-5 lg:grid-cols-2" id="transfer-flow">
+              <article class="rounded-xl border border-gray-200 bg-white p-5 space-y-4 h-full">
+                <h2 class="text-sm font-semibold text-gray-800">Origem</h2>
+                <div class="space-y-3">
+                  <div>
+                    <label for="origin-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de origem <span class="text-red-500">*</span></label>
+                    <select id="origin-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                      <option value="">Selecione</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="transfer-origin" class="block text-sm font-medium text-gray-700 mb-1">Depósito de origem <span class="text-red-500">*</span></label>
+                    <select id="transfer-origin" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                      <option value="">Selecione</option>
+                    </select>
                   </div>
                 </div>
-              </div>
-              <p class="text-xs text-gray-500">A busca é realizada automaticamente após digitar três caracteres ou ao pressionar Enter.</p>
-            </div>
-            <div id="transfer-selected-product" class="hidden space-y-5 rounded-2xl border border-primary/20 bg-white p-5 shadow-sm">
-              <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="space-y-1">
-                  <h3 id="transfer-selected-product-name" class="text-lg font-semibold text-gray-800"></h3>
-                  <p class="text-xs text-gray-500">
-                    SKU <span id="transfer-selected-product-sku" class="font-medium text-gray-700">—</span>
-                    • EAN <span id="transfer-selected-product-barcode" class="font-medium text-gray-700">—</span>
-                    • Unidade <span id="transfer-selected-product-unit" class="font-medium text-gray-700">—</span>
-                  </p>
-                </div>
-                <button type="button" id="transfer-selected-product-clear" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-50">
-                  <i class="fas fa-xmark"></i>
-                  Cancelar seleção
-                </button>
-              </div>
-              <div class="grid gap-4 md:grid-cols-2">
-                <article class="rounded-xl border border-gray-200 bg-slate-50/80 p-4">
-                  <div class="flex items-start justify-between gap-3">
-                    <h4 class="text-sm font-semibold text-gray-800">Depósito de origem</h4>
-                    <span id="transfer-selected-product-origin-deposit" class="text-xs font-medium text-primary-700">—</span>
+              </article>
+              <article class="rounded-xl border border-gray-200 bg-white p-5 space-y-4 h-full">
+                <h2 class="text-sm font-semibold text-gray-800">Destino</h2>
+                <div class="space-y-3">
+                  <div>
+                    <label for="destination-company" class="block text-sm font-medium text-gray-700 mb-1">Empresa de destino <span class="text-red-500">*</span></label>
+                    <select id="destination-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                      <option value="">Selecione</option>
+                    </select>
                   </div>
-                  <dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-gray-600">
-                    <div>
-                      <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Estoque</dt>
-                      <dd id="transfer-selected-product-origin-stock" class="text-base font-semibold text-gray-800">0</dd>
-                    </div>
-                    <div>
-                      <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Custo</dt>
-                      <dd id="transfer-selected-product-origin-cost" class="text-base font-semibold text-gray-800">R$ 0,00</dd>
-                    </div>
-                    <div>
-                      <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Venda</dt>
-                      <dd id="transfer-selected-product-origin-sale" class="text-base font-semibold text-gray-800">R$ 0,00</dd>
-                    </div>
-                    <div>
-                      <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Qtd. unidade</dt>
-                      <dd id="transfer-selected-product-origin-unit" class="text-base font-semibold text-gray-800">—</dd>
-                    </div>
-                  </dl>
-                </article>
-                <article class="rounded-xl border border-gray-200 bg-slate-50/80 p-4">
-                  <div class="flex items-start justify-between gap-3">
-                    <h4 class="text-sm font-semibold text-gray-800">Depósito de destino</h4>
-                    <span id="transfer-selected-product-destination-deposit" class="text-xs font-medium text-primary-700">—</span>
+                  <div>
+                    <label for="transfer-destination" class="block text-sm font-medium text-gray-700 mb-1">Depósito de destino <span class="text-red-500">*</span></label>
+                    <select id="transfer-destination" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
+                      <option value="">Selecione</option>
+                    </select>
                   </div>
-                  <dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-gray-600">
-                    <div>
-                      <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Estoque</dt>
-                      <dd id="transfer-selected-product-destination-stock" class="text-base font-semibold text-gray-800">0</dd>
-                    </div>
-                    <div>
-                      <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Custo</dt>
-                      <dd id="transfer-selected-product-destination-cost" class="text-base font-semibold text-gray-800">R$ 0,00</dd>
-                    </div>
-                    <div>
-                      <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Venda</dt>
-                      <dd id="transfer-selected-product-destination-sale" class="text-base font-semibold text-gray-800">R$ 0,00</dd>
-                    </div>
-                    <div>
-                      <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Qtd. unidade</dt>
-                      <dd id="transfer-selected-product-destination-unit" class="text-base font-semibold text-gray-800">—</dd>
-                    </div>
-                  </dl>
-                </article>
-              </div>
-              <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <div class="w-full md:max-w-xs">
-                  <label for="transfer-selected-product-quantity" class="block text-sm font-medium text-gray-700 mb-1">Quantidade para transferir</label>
-                  <input type="number" id="transfer-selected-product-quantity" min="1" step="1" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="1">
-                  <p id="transfer-selected-product-warning" class="mt-1 hidden text-xs text-amber-600">Selecione os depósitos de origem e destino para visualizar os saldos.</p>
                 </div>
-                <button type="button" id="transfer-selected-product-add" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
-                  <i class="fas fa-plus-circle"></i>
-                  Adicionar item à transferência
-                </button>
-              </div>
+              </article>
             </div>
-            <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50">
-                  <tr>
-                    <th class="px-4 py-3 text-left font-semibold text-gray-700">SKU</th>
-                    <th class="px-4 py-3 text-left font-semibold text-gray-700">Descrição</th>
-                    <th class="px-4 py-3 text-left font-semibold text-gray-700">Quantidade</th>
-                    <th class="px-4 py-3 text-left font-semibold text-gray-700">Unidade</th>
-                    <th class="px-4 py-3 text-left font-semibold text-gray-700">Lote</th>
-                    <th class="px-4 py-3 text-left font-semibold text-gray-700">Validade</th>
-                    <th class="px-4 py-3 text-right font-semibold text-gray-700">Custo</th>
-                    <th class="px-4 py-3 text-right font-semibold text-gray-700">Venda unit</th>
-                    <th class="px-4 py-3 text-right font-semibold text-gray-700">Venda total</th>
-                    <th class="px-4 py-3 text-right font-semibold text-gray-700">Ações</th>
-                  </tr>
-                </thead>
-                <tbody id="transfer-items-body" class="divide-y divide-gray-100">
-                  <tr>
-                    <td colspan="10" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum item adicionado até o momento.</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between text-sm text-gray-600">
-              <span>Volume total: <strong id="transfer-total-volume" class="text-gray-800">0 unidades</strong></span>
-              <span>Peso estimado: <strong id="transfer-total-weight" class="text-gray-800">0 kg</strong></span>
-              <span>Valor contábil: <strong id="transfer-total-value" class="text-gray-800">R$ 0,00</strong></span>
-              <span>Venda total: <strong id="transfer-total-sale" class="text-gray-800">R$ 0,00</strong></span>
-            </div>
-          </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="space-y-4">
-              <h2 class="text-lg font-semibold text-gray-800">Transporte</h2>
-              <div>
-                <label for="transfer-transport" class="block text-sm font-medium text-gray-700 mb-1">Modalidade</label>
-                <select id="transfer-transport" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-gray-50 text-gray-600" disabled>
-                  <option value="teste">Teste</option>
-                </select>
-                <p class="mt-1 text-xs text-gray-500">Integrações logísticas serão configuradas após definição oficial.</p>
+            <article class="rounded-xl border border-gray-100 bg-white p-5 space-y-4">
+              <div class="grid gap-4 lg:grid-cols-3 lg:items-end">
+                <div class="lg:col-span-2">
+                  <label for="transfer-responsible-search" class="block text-sm font-medium text-gray-700 mb-1">Responsável <span class="text-red-500">*</span></label>
+                  <div class="relative">
+                    <input type="hidden" id="transfer-responsible">
+                    <input type="search" id="transfer-responsible-search" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" list="responsible-list" placeholder="Digite o nome do colaborador" autocomplete="off" required>
+                    <datalist id="responsible-list"></datalist>
+                  </div>
+                  <p class="mt-1 text-xs text-gray-500">Digite para localizar colaboradores com acesso administrativo e confirme a seleção pelo nome exibido.</p>
+                </div>
               </div>
-              <div>
-                <label for="transfer-vehicle" class="block text-sm font-medium text-gray-700 mb-1">Placa / veículo</label>
-                <input type="text" id="transfer-vehicle" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: RSD4B23">
+            </article>
+
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-5" aria-labelledby="transfer-items">
+              <div id="transfer-items" class="space-y-1">
+                <h2 class="text-lg font-semibold text-gray-800">Itens da transferência</h2>
+                <p class="text-sm text-gray-500">Pesquise o produto pelo código interno, código de barras ou nome e adicione à tabela.</p>
               </div>
-              <div>
-                <label for="transfer-driver" class="block text-sm font-medium text-gray-700 mb-1">Motorista</label>
-                <input type="text" id="transfer-driver" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome completo">
+              <div class="space-y-3 rounded-2xl border border-gray-200 bg-slate-50/60 p-4">
+                <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                  <label for="transfer-item-search" class="text-sm font-medium text-gray-700">Buscar produto para adicionar</label>
+                  <span class="hidden text-xs font-semibold uppercase tracking-wide text-primary lg:block">Busca dinâmica</span>
+                </div>
+                <div class="relative">
+                  <div class="relative w-full">
+                    <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400"><i class="fas fa-search"></i></span>
+                    <input type="search" id="transfer-item-search" class="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite código interno, código de barras ou nome" autocomplete="off">
+                    <div id="transfer-item-results" class="absolute left-0 top-full z-30 mt-2 hidden w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+                      <div class="max-h-80 overflow-y-auto px-4 py-3 text-sm text-gray-500">
+                        Digite ao menos três caracteres para localizar produtos cadastrados.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p class="text-xs text-gray-500">A busca é realizada automaticamente após digitar três caracteres ou ao pressionar Enter.</p>
               </div>
+              <div id="transfer-selected-product" class="hidden space-y-5 rounded-2xl border border-primary/20 bg-white p-5 shadow-sm">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="space-y-1">
+                    <h3 id="transfer-selected-product-name" class="text-lg font-semibold text-gray-800"></h3>
+                    <p class="text-xs text-gray-500">
+                      SKU <span id="transfer-selected-product-sku" class="font-medium text-gray-700">—</span>
+                      • EAN <span id="transfer-selected-product-barcode" class="font-medium text-gray-700">—</span>
+                      • Unidade <span id="transfer-selected-product-unit" class="font-medium text-gray-700">—</span>
+                    </p>
+                  </div>
+                  <button type="button" id="transfer-selected-product-clear" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-50">
+                    <i class="fas fa-xmark"></i>
+                    Cancelar seleção
+                  </button>
+                </div>
+                <div class="grid gap-4 md:grid-cols-2">
+                  <article class="rounded-xl border border-gray-200 bg-slate-50/80 p-4">
+                    <div class="flex items-start justify-between gap-3">
+                      <h4 class="text-sm font-semibold text-gray-800">Depósito de origem</h4>
+                      <span id="transfer-selected-product-origin-deposit" class="text-xs font-medium text-primary-700">—</span>
+                    </div>
+                    <dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-gray-600">
+                      <div>
+                        <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Estoque</dt>
+                        <dd id="transfer-selected-product-origin-stock" class="text-base font-semibold text-gray-800">0</dd>
+                      </div>
+                      <div>
+                        <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Custo</dt>
+                        <dd id="transfer-selected-product-origin-cost" class="text-base font-semibold text-gray-800">R$ 0,00</dd>
+                      </div>
+                      <div>
+                        <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Venda</dt>
+                        <dd id="transfer-selected-product-origin-sale" class="text-base font-semibold text-gray-800">R$ 0,00</dd>
+                      </div>
+                      <div>
+                        <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Qtd. unidade</dt>
+                        <dd id="transfer-selected-product-origin-unit" class="text-base font-semibold text-gray-800">—</dd>
+                      </div>
+                    </dl>
+                  </article>
+                  <article class="rounded-xl border border-gray-200 bg-slate-50/80 p-4">
+                    <div class="flex items-start justify-between gap-3">
+                      <h4 class="text-sm font-semibold text-gray-800">Depósito de destino</h4>
+                      <span id="transfer-selected-product-destination-deposit" class="text-xs font-medium text-primary-700">—</span>
+                    </div>
+                    <dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-gray-600">
+                      <div>
+                        <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Estoque</dt>
+                        <dd id="transfer-selected-product-destination-stock" class="text-base font-semibold text-gray-800">0</dd>
+                      </div>
+                      <div>
+                        <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Custo</dt>
+                        <dd id="transfer-selected-product-destination-cost" class="text-base font-semibold text-gray-800">R$ 0,00</dd>
+                      </div>
+                      <div>
+                        <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Venda</dt>
+                        <dd id="transfer-selected-product-destination-sale" class="text-base font-semibold text-gray-800">R$ 0,00</dd>
+                      </div>
+                      <div>
+                        <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Qtd. unidade</dt>
+                        <dd id="transfer-selected-product-destination-unit" class="text-base font-semibold text-gray-800">—</dd>
+                      </div>
+                    </dl>
+                  </article>
+                </div>
+                <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div class="w-full md:max-w-xs">
+                    <label for="transfer-selected-product-quantity" class="block text-sm font-medium text-gray-700 mb-1">Quantidade para transferir</label>
+                    <input type="number" id="transfer-selected-product-quantity" min="1" step="1" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" value="1">
+                    <p id="transfer-selected-product-warning" class="mt-1 hidden text-xs text-amber-600">Selecione os depósitos de origem e destino para visualizar os saldos.</p>
+                  </div>
+                  <button type="button" id="transfer-selected-product-add" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
+                    <i class="fas fa-plus-circle"></i>
+                    Adicionar item à transferência
+                  </button>
+                </div>
+              </div>
+              <div class="rounded-xl border border-gray-200 bg-white">
+                <div class="max-h-80 overflow-y-auto overflow-x-auto">
+                  <table class="transfer-items-table min-w-full text-sm">
+                    <thead class="sticky top-0 z-10 bg-gray-50 shadow-sm">
+                      <tr class="text-xs uppercase tracking-wide text-gray-600">
+                        <th class="px-3 py-2 text-left font-semibold">SKU</th>
+                        <th class="px-3 py-2 text-left font-semibold">Descrição</th>
+                        <th class="px-3 py-2 text-right font-semibold">Quantidade</th>
+                        <th class="px-3 py-2 text-left font-semibold">Unidade</th>
+                        <th class="px-3 py-2 text-left font-semibold">Lote</th>
+                        <th class="px-3 py-2 text-left font-semibold">Validade</th>
+                        <th class="px-3 py-2 text-right font-semibold">Custo</th>
+                        <th class="px-3 py-2 text-right font-semibold">Venda unit</th>
+                        <th class="px-3 py-2 text-right font-semibold">Venda total</th>
+                        <th class="px-3 py-2 text-right font-semibold">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="transfer-items-body" class="divide-y divide-gray-100">
+                      <tr>
+                        <td colspan="10" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum item adicionado até o momento.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4" aria-labelledby="transfer-documents">
+              <h2 id="transfer-documents" class="text-lg font-semibold text-gray-800">Documentos e observações</h2>
+              <div class="space-y-4">
+                <div>
+                  <label for="transfer-reference" class="block text-sm font-medium text-gray-700 mb-1">Documento de referência</label>
+                  <input type="text" id="transfer-reference" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Pedido interno 12045">
+                </div>
+                <div>
+                  <label for="transfer-notes" class="block text-sm font-medium text-gray-700 mb-1">Observações internas</label>
+                  <textarea id="transfer-notes" rows="4" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Detalhe exigências de NF-e ou laudos necessários."></textarea>
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <aside class="order-2 space-y-5" aria-labelledby="transfer-summary">
+            <div class="sticky top-24 space-y-5">
+              <section id="transfer-summary" class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                  <h2 class="text-lg font-semibold text-gray-800">Resumo</h2>
+                </div>
+                <div class="grid gap-3">
+                  <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-slate-50 px-4 py-3 text-sm font-medium text-gray-700">
+                    <span>Volume total</span>
+                    <span id="transfer-total-volume" class="text-right font-semibold text-gray-900">0 unidades</span>
+                  </div>
+                  <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-slate-50 px-4 py-3 text-sm font-medium text-gray-700">
+                    <span>Peso estimado</span>
+                    <span id="transfer-total-weight" class="text-right font-semibold text-gray-900">0 kg</span>
+                  </div>
+                  <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-slate-50 px-4 py-3 text-sm font-medium text-gray-700">
+                    <span>Valor contábil</span>
+                    <span id="transfer-total-value" class="text-right font-semibold text-gray-900">R$ 0,00</span>
+                  </div>
+                  <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-slate-50 px-4 py-3 text-sm font-medium text-gray-700">
+                    <span>Venda total</span>
+                    <span id="transfer-total-sale" class="text-right font-semibold text-gray-900">R$ 0,00</span>
+                  </div>
+                </div>
+              </section>
+
+              <details class="group rounded-xl border border-gray-100 bg-white shadow-sm">
+                <summary class="flex cursor-pointer items-center justify-between gap-2 px-5 py-4 text-base font-semibold text-gray-800">
+                  Transporte
+                  <i class="fas fa-chevron-down text-sm transition-transform duration-200 group-open:rotate-180"></i>
+                </summary>
+                <div class="px-5 pb-5 space-y-4 text-sm text-gray-700">
+                  <div>
+                    <label for="transfer-transport" class="block text-sm font-medium text-gray-700 mb-1">Modalidade</label>
+                    <select id="transfer-transport" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-gray-50 text-gray-600" disabled>
+                      <option value="teste">Teste</option>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">Integrações logísticas serão configuradas após definição oficial.</p>
+                  </div>
+                  <div>
+                    <label for="transfer-vehicle" class="block text-sm font-medium text-gray-700 mb-1">Placa / veículo</label>
+                    <input type="text" id="transfer-vehicle" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: RSD4B23">
+                  </div>
+                  <div>
+                    <label for="transfer-driver" class="block text-sm font-medium text-gray-700 mb-1">Motorista</label>
+                    <input type="text" id="transfer-driver" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Nome completo">
+                  </div>
+                </div>
+              </details>
+
+              <details class="group rounded-xl border border-gray-100 bg-white shadow-sm">
+                <summary class="flex cursor-pointer items-center justify-between gap-2 px-5 py-4 text-base font-semibold text-gray-800">
+                  Observações fiscais
+                  <i class="fas fa-chevron-down text-sm transition-transform duration-200 group-open:rotate-180"></i>
+                </summary>
+                <div class="px-5 pb-5 space-y-3 text-sm text-gray-700">
+                  <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 shadow-sm">
+                    <i class="fas fa-circle-info mr-2"></i>
+                    Em transferências interestaduais é obrigatório informar IE do destinatário e marcar o indicador de movimentação física conforme Guia Prático da EFD ICMS/IPI.
+                  </div>
+                </div>
+              </details>
             </div>
-            <div class="space-y-4">
-              <h2 class="text-lg font-semibold text-gray-800">Observações fiscais</h2>
-              <div>
-                <label for="transfer-notes" class="block text-sm font-medium text-gray-700 mb-1">Observações internas</label>
-                <textarea id="transfer-notes" rows="4" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Detalhe exigências de NF-e ou laudos necessários."></textarea>
-              </div>
-              <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                <i class="fas fa-circle-info mr-2"></i>
-                Em transferências interestaduais é obrigatório informar IE do destinatário e marcar o indicador de movimentação física conforme Guia Prático da EFD ICMS/IPI.
-              </div>
-            </div>
-          </div>
-        </section>
-      </form>
+          </aside>
+        </div>
+        </form>
+      </div>
     </div>
   </main>
 
