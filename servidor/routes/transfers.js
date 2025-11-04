@@ -145,7 +145,11 @@ const adjustProductStockForDeposit = async ({
         return { updated: false };
     }
 
-    const product = await Product.findById(productObjectId).session(session);
+    const tolerance = 0.000001;
+
+    const loadProduct = async () => Product.findById(productObjectId).session(session);
+
+    let product = await loadProduct();
     if (!product) {
         const error = new Error('Produto vinculado à transferência não foi encontrado.');
         error.statusCode = 400;
@@ -165,9 +169,51 @@ const adjustProductStockForDeposit = async ({
     }
 
     const depositKey = depositObjectId.toString();
-    let entry = product.estoques.find(
-        (stockEntry) => stockEntry?.deposito && stockEntry.deposito.toString() === depositKey
-    );
+
+    const findEntry = () =>
+        product.estoques.find(
+            (stockEntry) => stockEntry?.deposito && stockEntry.deposito.toString() === depositKey
+        );
+
+    const refreshFractionalSnapshot = async (context) => {
+        const fractionalConfig = product?.fracionado;
+        if (!fractionalConfig || !fractionalConfig.ativo) {
+            return false;
+        }
+
+        try {
+            await recalculateFractionalStockForProduct(product._id, { session });
+            const reloaded = await loadProduct();
+            if (!reloaded) {
+                return false;
+            }
+
+            product.estoques = Array.isArray(reloaded.estoques) ? reloaded.estoques : [];
+            product.fracionado = reloaded.fracionado;
+            product.stock = reloaded.stock;
+            return Boolean(findEntry());
+        } catch (error) {
+            console.error(
+                'Erro ao sincronizar estoque fracionado antes da movimentação de transferência.',
+                {
+                    productId: product._id.toString(),
+                    depositId: depositKey,
+                    context,
+                },
+                error
+            );
+            return false;
+        }
+    };
+
+    let entry = findEntry();
+
+    if (!entry && delta < 0) {
+        const refreshed = await refreshFractionalSnapshot('missing_entry');
+        if (refreshed) {
+            entry = findEntry();
+        }
+    }
 
     if (!entry) {
         entry = {
@@ -178,11 +224,24 @@ const adjustProductStockForDeposit = async ({
         product.estoques.push(entry);
     }
 
-    const currentQuantity = Number(entry.quantidade) || 0;
-    const nextQuantityRaw = currentQuantity + delta;
-    const nextQuantity = Math.round(nextQuantityRaw * 1_000_000) / 1_000_000;
+    const computeNextQuantity = () => {
+        const currentQuantity = Number(entry?.quantidade) || 0;
+        const nextQuantityRaw = currentQuantity + delta;
+        const nextQuantity = Math.round(nextQuantityRaw * 1_000_000) / 1_000_000;
+        return { currentQuantity, nextQuantity };
+    };
 
-    if (nextQuantity < -0.000001) {
+    let { currentQuantity, nextQuantity } = computeNextQuantity();
+
+    if (delta < 0 && nextQuantity < -tolerance) {
+        const refreshed = await refreshFractionalSnapshot('insufficient_stock');
+        if (refreshed) {
+            entry = findEntry() || entry;
+            ({ currentQuantity, nextQuantity } = computeNextQuantity());
+        }
+    }
+
+    if (delta < 0 && nextQuantity < -tolerance) {
         const error = new Error('Estoque insuficiente para concluir a transferência.');
         error.statusCode = 400;
         error.details = {
