@@ -270,6 +270,8 @@ const applyFractionalSnapshot = (product) => {
     const existingDepositMap = new Map();
 
     existingDeposits.forEach((entry) => {
+        if (!entry) return;
+
         const rawDeposit = entry?.deposito;
         let depositId = null;
         if (rawDeposit && typeof rawDeposit === 'object' && rawDeposit._id) {
@@ -277,9 +279,23 @@ const applyFractionalSnapshot = (product) => {
         } else if (mongoose.Types.ObjectId.isValid(rawDeposit)) {
             depositId = String(rawDeposit);
         }
-        if (depositId) {
-            existingDepositMap.set(depositId, entry);
+        if (!depositId) {
+            return;
         }
+
+        const quantityNumber = Number(entry?.quantidade);
+        const normalizedQuantity = Number.isFinite(quantityNumber) && quantityNumber > 0 ? quantityNumber : 0;
+        const normalizedUnit = typeof entry?.unidade === 'string' && entry.unidade.trim()
+            ? entry.unidade.trim()
+            : parentUnit;
+
+        const sanitizedEntry = {
+            ...entry,
+            quantidade: normalizedQuantity,
+            unidade: normalizedUnit,
+        };
+
+        existingDepositMap.set(depositId, sanitizedEntry);
     });
 
     const depositTotals = new Map();
@@ -453,33 +469,48 @@ const applyFractionalSnapshot = (product) => {
         }
     }
 
-    const sanitizedDeposits = depositEntries
-        .filter((entry) => entry.assignedQuantity > 0)
-        .map((entry) => {
-            const existing = existingDepositMap.get(entry.depositId);
-            const depositValue = existing?.deposito || entry.deposito || entry.depositId;
-            const unitValue = typeof existing?.unidade === 'string' && existing.unidade.trim()
-                ? existing.unidade.trim()
-                : entry.unidade || parentUnit || '';
+    const mergedDepositMap = new Map(existingDepositMap.entries());
 
-            if (existing && typeof existing === 'object') {
-                return {
-                    ...existing,
-                    deposito: depositValue,
-                    quantidade: entry.assignedQuantity,
-                    unidade: unitValue,
-                };
+    depositEntries
+        .filter((entry) => entry.assignedQuantity > 0)
+        .forEach((entry) => {
+            const existing = mergedDepositMap.get(entry.depositId);
+            const unitValue = entry.unidade || parentUnit || '';
+            if (existing) {
+                const existingQuantity = Number(existing?.quantidade);
+                if (!Number.isFinite(existingQuantity) || existingQuantity <= 0) {
+                    mergedDepositMap.set(entry.depositId, {
+                        ...existing,
+                        quantidade: entry.assignedQuantity,
+                        unidade: existing?.unidade || unitValue,
+                        deposito: existing?.deposito || entry.deposito || entry.depositId,
+                    });
+                } else if (!existing?.unidade && unitValue) {
+                    mergedDepositMap.set(entry.depositId, {
+                        ...existing,
+                        unidade: unitValue,
+                        deposito: existing?.deposito || entry.deposito || entry.depositId,
+                    });
+                }
+                return;
             }
 
-            return {
-                deposito: depositValue,
+            mergedDepositMap.set(entry.depositId, {
+                deposito: entry.deposito || entry.depositId,
                 quantidade: entry.assignedQuantity,
                 unidade: unitValue,
-            };
+            });
         });
 
-    plainProduct.estoques = sanitizedDeposits;
-    plainProduct.stock = normalizedTotalStock;
+    plainProduct.estoques = Array.from(mergedDepositMap.values()).filter((entry) => {
+        const quantity = Number(entry?.quantidade);
+        return Number.isFinite(quantity) && quantity > 0;
+    });
+
+    const storedStockValue = Number(plainProduct.stock);
+    plainProduct.stock = Number.isFinite(storedStockValue) && storedStockValue >= 0
+        ? storedStockValue
+        : normalizedTotalStock;
     plainProduct.fracionado = {
         ...plainProduct.fracionado,
         itens: mappedItems,
