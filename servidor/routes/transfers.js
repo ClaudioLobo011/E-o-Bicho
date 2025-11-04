@@ -106,6 +106,26 @@ const resolveProductObjectId = (value) => {
     return null;
 };
 
+const resolveFractionalChildRatio = (baseQuantity, fractionQuantity) => {
+    const normalizedBase = Number(baseQuantity);
+    const normalizedFraction = Number(fractionQuantity);
+
+    if (!Number.isFinite(normalizedBase) || normalizedBase <= 0) return 0;
+    if (!Number.isFinite(normalizedFraction) || normalizedFraction <= 0) return 0;
+
+    const directRatio = normalizedFraction / normalizedBase;
+    if (Number.isFinite(directRatio) && directRatio >= 1) {
+        return directRatio;
+    }
+
+    const invertedRatio = normalizedBase / normalizedFraction;
+    if (Number.isFinite(invertedRatio) && invertedRatio >= 1) {
+        return invertedRatio;
+    }
+
+    return 0;
+};
+
 const adjustProductStockForDeposit = async ({
     productId,
     depositId,
@@ -202,7 +222,7 @@ const adjustProductStockForDeposit = async ({
             const childObjectId = resolveProductObjectId(item?.produto);
             if (!childObjectId) continue;
 
-            const ratio = fractionQuantity / baseQuantity;
+            const ratio = resolveFractionalChildRatio(baseQuantity, fractionQuantity);
             const childDelta = delta * ratio;
             if (!Number.isFinite(childDelta) || childDelta === 0) continue;
 
