@@ -26,6 +26,7 @@
     totalVolume: document.getElementById('transfer-total-volume'),
     totalWeight: document.getElementById('transfer-total-weight'),
     totalValue: document.getElementById('transfer-total-value'),
+    totalSale: document.getElementById('transfer-total-sale'),
     saveButton: document.getElementById('transfer-save-button'),
     selectedProductContainer: document.getElementById('transfer-selected-product'),
     selectedProductName: document.getElementById('transfer-selected-product-name'),
@@ -136,6 +137,27 @@
       return 'R$ 0,00';
     }
     return number.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  function normalizeFiniteNumber(value) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return null;
+      }
+      const normalizedString = trimmed.includes(',')
+        ? trimmed.replace(/\./g, '').replace(',', '.')
+        : trimmed;
+      const normalized = Number(normalizedString);
+      return Number.isFinite(normalized) ? normalized : null;
+    }
+
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
   }
 
   function formatWeight(value) {
@@ -370,11 +392,6 @@
   }
 
   function updateSummary() {
-    const volumeTotal = state.items.reduce((sum, item) => {
-      const quantity = Number(item.quantity);
-      return sum + (Number.isFinite(quantity) ? quantity : 0);
-    }, 0);
-
     const weightTotal = state.items.reduce((sum, item) => {
       const quantity = Number(item.quantity);
       const unitWeight = Number(item.unitWeight);
@@ -384,23 +401,40 @@
       return sum + quantity * unitWeight;
     }, 0);
 
-    const valueTotal = state.items.reduce((sum, item) => {
-      const quantity = Number(item.quantity);
-      const unitCost = Number(item.unitCost);
-      if (!Number.isFinite(quantity) || !Number.isFinite(unitCost)) {
-        return sum;
-      }
-      return sum + quantity * unitCost;
-    }, 0);
+    const totals = state.items.reduce(
+      (acc, item) => {
+        const quantity = Number(item.quantity);
+        const unitCost = Number(item.unitCost);
+        const unitSale = Number(item.unitSale);
+
+        if (Number.isFinite(quantity)) {
+          acc.volume += quantity;
+
+          if (Number.isFinite(unitCost)) {
+            acc.cost += quantity * unitCost;
+          }
+
+          if (Number.isFinite(unitSale)) {
+            acc.sale += quantity * unitSale;
+          }
+        }
+
+        return acc;
+      },
+      { volume: 0, cost: 0, sale: 0 }
+    );
 
     if (selectors.totalVolume) {
-      selectors.totalVolume.textContent = `${volumeTotal.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} unidades`;
+      selectors.totalVolume.textContent = `${totals.volume.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} unidades`;
     }
     if (selectors.totalWeight) {
       selectors.totalWeight.textContent = formatWeight(weightTotal);
     }
     if (selectors.totalValue) {
-      selectors.totalValue.textContent = formatCurrency(valueTotal);
+      selectors.totalValue.textContent = formatCurrency(totals.cost);
+    }
+    if (selectors.totalSale) {
+      selectors.totalSale.textContent = formatCurrency(totals.sale);
     }
   }
 
@@ -409,7 +443,7 @@
     if (!tbody) return;
 
     if (!state.items.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum item adicionado até o momento.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-6 text-center text-sm text-gray-500">Nenhum item adicionado até o momento.</td></tr>';
       updateSummary();
       return;
     }
@@ -423,6 +457,14 @@
       const sku = escapeHtml(item.sku || '—');
       const barcode = escapeHtml(item.barcode || '—');
       const validity = item.validity ? escapeHtml(item.validity) : '';
+      const unitCost = Number(item.unitCost);
+      const unitSale = Number(item.unitSale);
+      const totalSale = Number.isFinite(unitSale) && Number.isFinite(quantity)
+        ? unitSale * quantity
+        : 0;
+      const costText = Number.isFinite(unitCost) ? formatCurrency(unitCost) : 'R$ 0,00';
+      const saleText = Number.isFinite(unitSale) ? formatCurrency(unitSale) : 'R$ 0,00';
+      const totalSaleText = formatCurrency(totalSale);
 
       return `
         <tr class="bg-white">
@@ -446,6 +488,15 @@
           </td>
           <td class="px-4 py-3 align-top">
             <input type="date" class="rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-field="validity" data-index="${index}" value="${validity}">
+          </td>
+          <td class="px-4 py-3 align-top text-right text-gray-700">
+            <span>${costText}</span>
+          </td>
+          <td class="px-4 py-3 align-top text-right text-gray-700">
+            <span>${saleText}</span>
+          </td>
+          <td class="px-4 py-3 align-top text-right text-gray-800" data-role="sale-total" data-index="${index}">
+            ${totalSaleText}
           </td>
           <td class="px-4 py-3 align-top text-right">
             <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition" data-action="remove-item" data-index="${index}">
@@ -478,6 +529,12 @@
         const value = Number(target.value);
         if (Number.isFinite(value) && value > 0) {
           item.quantity = value;
+          const saleCell = tbody.querySelector(`[data-role="sale-total"][data-index="${index}"]`);
+          if (saleCell) {
+            const unitSale = Number(item.unitSale);
+            const saleTotal = Number.isFinite(unitSale) ? unitSale * item.quantity : 0;
+            saleCell.textContent = formatCurrency(saleTotal);
+          }
         }
         updateSummary();
       } else if (field === 'unit') {
@@ -666,9 +723,9 @@
       barcode: product?.codbarras || '',
       description: product?.nome || '',
       unit: product?.unidade || '',
-      unitWeight: Number(product?.peso),
-      unitCost: Number(product?.custo),
-      unitSale: Number(product?.venda),
+      unitWeight: normalizeFiniteNumber(product?.peso),
+      unitCost: normalizeFiniteNumber(product?.custo),
+      unitSale: normalizeFiniteNumber(product?.venda),
       stocks,
     };
   }
@@ -847,6 +904,17 @@
     const existing = state.items.find((item) => item.productId === selected.productId);
     if (existing) {
       existing.quantity = Number(existing.quantity || 0) + quantityValue;
+      const normalizedUnitCost = normalizeFiniteNumber(selected.unitCost);
+      const existingUnitCost = normalizeFiniteNumber(existing.unitCost);
+      if (normalizedUnitCost !== null && (existingUnitCost === null || existingUnitCost === 0)) {
+        existing.unitCost = normalizedUnitCost;
+      }
+
+      const normalizedUnitSale = normalizeFiniteNumber(selected.unitSale);
+      const existingUnitSale = normalizeFiniteNumber(existing.unitSale);
+      if (normalizedUnitSale !== null && (existingUnitSale === null || existingUnitSale === 0)) {
+        existing.unitSale = normalizedUnitSale;
+      }
       renderItemsTable();
       showToast('Quantidade do item atualizada.', 'info');
     } else {
@@ -860,7 +928,8 @@
         lot: '',
         validity: '',
         unitWeight: selected.unitWeight,
-        unitCost: selected.unitCost,
+        unitCost: normalizeFiniteNumber(selected.unitCost),
+        unitSale: normalizeFiniteNumber(selected.unitSale),
       });
       renderItemsTable();
       showToast('Item adicionado à transferência.', 'success');
@@ -967,13 +1036,26 @@
         vehicle: selectors.vehicleInput?.value || '',
         driver: selectors.driverInput?.value || '',
       },
-      items: state.items.map((item) => ({
-        productId: item.productId,
-        quantity: Number(item.quantity),
-        unit: item.unit || '',
-        lot: item.lot || '',
-        validity: item.validity || '',
-      })),
+      items: state.items.map((item) => {
+        const unitCost = normalizeFiniteNumber(item.unitCost);
+        const unitSale = normalizeFiniteNumber(item.unitSale);
+        const quantity = Number(item.quantity);
+        const normalizedQuantity = Number.isFinite(quantity) ? quantity : 0;
+        const totalSale = unitSale !== null && Number.isFinite(quantity)
+          ? Math.round(unitSale * normalizedQuantity * 100) / 100
+          : null;
+
+        return {
+          productId: item.productId,
+          quantity: normalizedQuantity,
+          unit: item.unit || '',
+          lot: item.lot || '',
+          validity: item.validity || '',
+          unitCost,
+          unitSale,
+          totalSale,
+        };
+      }),
     };
 
     const requiredFields = [

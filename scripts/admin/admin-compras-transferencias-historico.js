@@ -146,7 +146,8 @@
   }
 
   function formatCurrency(value) {
-    const number = Number(value);
+    const normalized = normalizeDecimal(value);
+    const number = normalized !== null ? normalized : Number(value);
     if (!Number.isFinite(number)) return 'R$ 0,00';
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -154,6 +155,37 @@
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(number);
+  }
+
+  function normalizeDecimal(value) {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+
+      const direct = Number(trimmed);
+      if (Number.isFinite(direct)) {
+        return direct;
+      }
+
+      let sanitized = trimmed.replace(/\u00a0/g, ' ').replace(/\s+/g, '');
+      sanitized = sanitized.replace(/[A-Za-z$€£¥R\u20ac\u00a3\u00a5]/g, '');
+      sanitized = sanitized.replace(/[^0-9,\-.]+/g, '');
+
+      if (sanitized.includes(',') && sanitized.includes('.')) {
+        sanitized = sanitized.replace(/\.(?=.*\.)/g, '');
+      }
+
+      sanitized = sanitized.replace(/,/g, '.');
+
+      const fallback = Number(sanitized);
+      return Number.isFinite(fallback) ? fallback : null;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
   }
 
   function renderStatusBadge(status) {
@@ -211,12 +243,68 @@
         throw new Error(payload?.message || 'Não foi possível carregar o histórico de transferências.');
       }
       const data = await response.json();
-    state.transfers = Array.isArray(data?.transfers) ? data.transfers : [];
-    state.summary = {
+      const rawTransfers = Array.isArray(data?.transfers) ? data.transfers : [];
+      state.transfers = rawTransfers.map((transfer) => {
+        if (!transfer || typeof transfer !== 'object') {
+          return transfer;
+        }
+
+        const totals = transfer.totals && typeof transfer.totals === 'object' ? transfer.totals : {};
+        const normalizedTotals = { ...totals };
+
+        const totalCost = normalizeDecimal(totals.totalCost);
+        if (totalCost !== null && Number.isFinite(totalCost)) {
+          normalizedTotals.totalCost = Math.round(totalCost * 100) / 100;
+        }
+
+        const totalSale = normalizeDecimal(totals.totalSale);
+        if (totalSale !== null && Number.isFinite(totalSale)) {
+          normalizedTotals.totalSale = Math.round(totalSale * 100) / 100;
+        }
+
+        const totalVolumeSource =
+          totals.totalVolume ?? totals.totalQuantity ?? totals.quantity ?? totals.volume;
+        const totalVolume = normalizeDecimal(totalVolumeSource);
+        if (totalVolume !== null && Number.isFinite(totalVolume)) {
+          normalizedTotals.totalVolume = Math.round(totalVolume * 1000) / 1000;
+        }
+
+        return {
+          ...transfer,
+          totals: normalizedTotals,
+        };
+      });
+
+      const aggregatedTotals = state.transfers.reduce(
+        (acc, transfer) => {
+          const totals = transfer?.totals || {};
+          const cost = normalizeDecimal(totals.totalCost);
+          const sale = normalizeDecimal(totals.totalSale);
+
+          if (cost !== null && Number.isFinite(cost)) {
+            acc.totalCost += cost;
+          }
+
+          if (sale !== null && Number.isFinite(sale)) {
+            acc.totalSale += sale;
+          }
+
+          return acc;
+        },
+        { totalCost: 0, totalSale: 0 }
+      );
+
+      aggregatedTotals.totalCost = Math.round(aggregatedTotals.totalCost * 100) / 100;
+      aggregatedTotals.totalSale = Math.round(aggregatedTotals.totalSale * 100) / 100;
+
+      const summaryTotalCost = normalizeDecimal(data?.summary?.totalCost);
+      const summaryTotalSale = normalizeDecimal(data?.summary?.totalSale);
+
+      state.summary = {
         totalTransfers: Number(data?.summary?.totalTransfers) || state.transfers.length,
         pendingTransfers: Number(data?.summary?.pendingTransfers ?? data?.summary?.pendingNfe) || 0,
-        totalCost: Number(data?.summary?.totalCost) || 0,
-        totalSale: Number(data?.summary?.totalSale) || 0,
+        totalCost: summaryTotalCost !== null ? summaryTotalCost : aggregatedTotals.totalCost,
+        totalSale: summaryTotalSale !== null ? summaryTotalSale : aggregatedTotals.totalSale,
         withInvoice: Number(data?.summary?.withInvoice) || 0,
         period: data?.summary?.period || { start: null, end: null },
       };
@@ -438,103 +526,270 @@
     const origin = formatDepositDisplay(transfer.originDeposit, transfer.originCompany);
     const destination = formatDepositDisplay(transfer.destinationDeposit, transfer.destinationCompany);
     const responsible = escapeHtml(transfer.responsible?.name || transfer.responsible?.email || '—');
-    const observations = escapeHtml(transfer.observations || '—');
+    const observationsHtml = escapeHtml(transfer.observations || '—').replace(/\n/g, '<br>');
+    const emissionDate = formatLongDate(new Date()) || formatDateDisplay(new Date());
 
-    const itemsRows = Array.isArray(transfer.items) && transfer.items.length
-      ? transfer.items.map((item, index) => `
+    const normalizedItems = Array.isArray(transfer.items)
+      ? transfer.items.map((item) => {
+          const quantityValue = normalizeDecimal(item.quantity);
+          const quantity = Number.isFinite(quantityValue) ? quantityValue : 0;
+
+          const unitCostValue = normalizeDecimal(item.unitCost);
+          let totalCostValue = normalizeDecimal(item.totalCost);
+
+          let unitSaleValue = normalizeDecimal(item.unitSale);
+          let totalSaleValue = normalizeDecimal(item.totalSale);
+
+          if ((unitSaleValue === null || unitSaleValue === 0) && item.product && item.product.venda !== undefined) {
+            const productSale = normalizeDecimal(item.product.venda);
+            if (Number.isFinite(productSale)) {
+              unitSaleValue = productSale;
+            }
+          }
+
+          if ((unitSaleValue === null || unitSaleValue === 0) && totalSaleValue !== null && quantity) {
+            const computedUnit = totalSaleValue / quantity;
+            if (Number.isFinite(computedUnit)) {
+              unitSaleValue = computedUnit;
+            }
+          }
+
+          if ((totalSaleValue === null || totalSaleValue === 0) && unitSaleValue !== null) {
+            const computedTotal = unitSaleValue * quantity;
+            if (Number.isFinite(computedTotal)) {
+              totalSaleValue = computedTotal;
+            }
+          }
+
+          if (totalCostValue === null && unitCostValue !== null) {
+            const computedCost = unitCostValue * quantity;
+            if (Number.isFinite(computedCost)) {
+              totalCostValue = computedCost;
+            }
+          }
+
+          const unitCost = unitCostValue !== null ? Math.round(unitCostValue * 100) / 100 : null;
+          const totalCost = totalCostValue !== null ? Math.round(totalCostValue * 100) / 100 : null;
+          const unitSale = unitSaleValue !== null ? Math.round(unitSaleValue * 100) / 100 : null;
+          const totalSale = totalSaleValue !== null ? Math.round(totalSaleValue * 100) / 100 : null;
+
+          return {
+            sku: item.sku || item.barcode || '—',
+            description: item.description || item.productName || '—',
+            quantity,
+            unit: item.unit || '—',
+            unitCost,
+            totalCost,
+            unitSale,
+            totalSale,
+          };
+        })
+      : [];
+
+    const computedTotals = normalizedItems.reduce(
+      (acc, item) => {
+        if (Number.isFinite(item.quantity)) {
+          acc.totalVolume += item.quantity;
+        }
+        if (Number.isFinite(item.totalCost)) {
+          acc.totalCost += item.totalCost;
+        }
+        if (Number.isFinite(item.totalSale)) {
+          acc.totalSale += item.totalSale;
+        }
+        return acc;
+      },
+      { totalVolume: 0, totalCost: 0, totalSale: 0 }
+    );
+
+    computedTotals.totalVolume = Math.round(computedTotals.totalVolume * 1000) / 1000;
+    computedTotals.totalCost = Math.round(computedTotals.totalCost * 100) / 100;
+    computedTotals.totalSale = Math.round(computedTotals.totalSale * 100) / 100;
+
+    const fallbackTotals = transfer.totals || {};
+    const fallbackVolume = normalizeDecimal(fallbackTotals.totalVolume);
+    const fallbackCost = normalizeDecimal(fallbackTotals.totalCost);
+    const fallbackSale = normalizeDecimal(fallbackTotals.totalSale);
+
+    const totals = {
+      totalVolume: computedTotals.totalVolume || fallbackVolume || 0,
+      totalCost: computedTotals.totalCost || fallbackCost || 0,
+      totalSale: computedTotals.totalSale || fallbackSale || 0,
+    };
+
+    const totalItems = normalizedItems.length;
+
+    const formatCurrencyCell = (value) => {
+      if (value === null) {
+        return '—';
+      }
+      return escapeHtml(formatCurrency(value));
+    };
+
+    const formatQuantityCell = (value) => {
+      const numeric = Number.isFinite(value) ? value : 0;
+      const options = Number.isInteger(numeric)
+        ? { maximumFractionDigits: 0 }
+        : { minimumFractionDigits: 0, maximumFractionDigits: 3 };
+      return escapeHtml(formatNumber(numeric, options));
+    };
+
+    const itemsRows = normalizedItems.length
+      ? normalizedItems
+          .map(
+            (item, index) => `
           <tr>
             <td>${index + 1}</td>
-            <td>${escapeHtml(item.sku || item.barcode || '—')}</td>
-            <td>${escapeHtml(item.description || item.productName || '—')}</td>
-            <td class="text-right">${escapeHtml(formatNumber(item.quantity, { maximumFractionDigits: 3 }))}</td>
-            <td>${escapeHtml(item.unit || '—')}</td>
-            <td class="text-right">${escapeHtml(formatCurrency(item.unitCost))}</td>
-            <td class="text-right">${escapeHtml(formatCurrency(item.totalCost))}</td>
-            <td class="text-right">${escapeHtml(formatCurrency(item.unitSale))}</td>
-            <td class="text-right">${escapeHtml(formatCurrency(item.totalSale))}</td>
-          </tr>
-        `).join('')
-      : '<tr><td colspan="9" class="text-center">Nenhum item registrado.</td></tr>';
-
-    const totals = transfer.totals || {};
-    const totalItems = Array.isArray(transfer.items) ? transfer.items.length : 0;
+            <td>${escapeHtml(item.sku)}</td>
+            <td>${escapeHtml(item.description)}</td>
+            <td class="numeric">${formatQuantityCell(item.quantity)}</td>
+            <td>${escapeHtml(item.unit)}</td>
+            <td class="numeric">${formatCurrencyCell(item.unitCost)}</td>
+            <td class="numeric">${formatCurrencyCell(item.totalCost)}</td>
+            <td class="numeric">${formatCurrencyCell(item.unitSale)}</td>
+            <td class="numeric">${formatCurrencyCell(item.totalSale)}</td>
+          </tr>`
+          )
+          .join('')
+      : '<tr><td class="empty" colspan="9">Nenhum item registrado.</td></tr>';
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>Transferência ${number}</title>
+  <title>Transferência ${escapeHtml(number)}</title>
   <style>
-    body { font-family: 'Inter', Arial, sans-serif; margin: 24px; color: #111827; }
-    h1 { font-size: 20px; margin-bottom: 4px; }
-    h2 { font-size: 16px; margin: 24px 0 8px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { border: 1px solid #e5e7eb; padding: 8px; font-size: 12px; }
-    th { background: #f3f4f6; text-align: left; }
-    td.text-right { text-align: right; }
-    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 16px; font-size: 12px; }
-    .meta div { padding: 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; }
-    .meta span { display: block; font-size: 10px; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
-    .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 16px; }
-    .totals div { padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f3f4f6; }
-    .totals span { display: block; font-size: 10px; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
-    .status-badge { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 8px; }
-    .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; font-weight: 600; }
+    @page { size: A4 landscape; margin: 16mm; }
+    body { font-family: 'Inter', Arial, sans-serif; margin: 0; padding: 24px 32px; color: #111827; background: #f3f4f6; }
+    .document { padding: 24px 28px; max-width: 1040px; margin: 0 auto; background: #ffffff; border-radius: 16px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); }
+    .header { display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 24px; }
+    .title { margin: 0; font-size: 22px; font-weight: 700; color: #0f172a; }
+    .subtitle { margin: 2px 0 0; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #6b7280; }
+    .status-badge { margin-top: 6px; }
+    .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 9999px; font-weight: 600; font-size: 11px; }
     .status-symbol { font-size: 11px; }
     .status-solicitada { background: #e0f2fe; color: #0369a1; }
     .status-em_separacao { background: #fef3c7; color: #b45309; }
     .status-aprovada { background: #d1fae5; color: #047857; }
+    .header-card { min-width: 188px; border: 1px solid #d1d5db; border-radius: 12px; padding: 12px 16px; background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%); display: flex; flex-direction: column; gap: 4px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6); }
+    .header-card span { font-size: 10px; text-transform: uppercase; color: #64748b; letter-spacing: 0.07em; }
+    .header-card strong { font-size: 13px; color: #0f172a; }
+    .meta { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+    .meta-item { padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; display: flex; flex-direction: column; gap: 4px; min-height: 64px; }
+    .meta-item span { font-size: 9px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.06em; }
+    .meta-item strong { font-size: 12px; color: #111827; font-weight: 600; }
+    .meta-item p { margin: 0; font-size: 11px; color: #374151; line-height: 1.4; }
+    .meta-item--wide { grid-column: span 2; }
+    h2 { font-size: 15px; margin: 20px 0 8px; color: #0f172a; }
+    table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+    thead th { background: #f3f4f6; border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; font-size: 9px; color: #374151; }
+    tbody td { border: 1px solid #e5e7eb; padding: 5px 8px; color: #111827; }
+    tbody tr:nth-child(even) { background: #f9fafb; }
+    td.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+    td.empty { text-align: center; padding: 12px; font-size: 11px; color: #6b7280; }
+    .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 16px; }
+    .totals div { border: 1px solid #d1d5db; border-radius: 10px; padding: 12px 14px; background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%); }
+    .totals span { display: block; font-size: 9px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .totals strong { font-size: 14px; color: #0f172a; }
+    .signature-area { margin-top: 28px; display: flex; justify-content: center; }
+    .signature { width: 240px; text-align: center; }
+    .signature-line { border-top: 1px dashed #9ca3af; margin: 34px 0 6px; }
+    .signature-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; }
     @media print {
-      body { margin: 12mm; }
-      button { display: none; }
+      body { background: #ffffff; padding: 0; }
+      .document { box-shadow: none; border-radius: 0; padding: 8mm 10mm; }
+      button { display: none !important; }
     }
   </style>
 </head>
 <body>
-  <h1>Transferência ${escapeHtml(number)}</h1>
-  <div class="status-badge">
-    <span class="status-pill status-${escapeHtml(transfer.status || 'solicitada')}">
-      ${statusIconHtml}
-      ${statusLabel}
-    </span>
+  <div class="document">
+    <div class="header">
+      <div>
+        <h1 class="title">Transferência ${escapeHtml(number)}</h1>
+        <p class="subtitle">Emitido em ${escapeHtml(emissionDate)}</p>
+        <div class="status-badge">
+          <span class="status-pill status-${escapeHtml(transfer.status || 'solicitada')}">
+            ${statusIconHtml}
+            ${statusLabel}
+          </span>
+        </div>
+      </div>
+      <div class="header-card">
+        <span>Documento fiscal</span>
+        <strong>${documentRef}</strong>
+      </div>
+    </div>
+
+    <div class="meta">
+      <div class="meta-item">
+        <span>Data da solicitação</span>
+        <strong>${escapeHtml(requestDate)}</strong>
+      </div>
+      <div class="meta-item">
+        <span>Origem</span>
+        <strong>${origin}</strong>
+      </div>
+      <div class="meta-item">
+        <span>Destino</span>
+        <strong>${destination}</strong>
+      </div>
+      <div class="meta-item">
+        <span>Responsável</span>
+        <strong>${responsible}</strong>
+      </div>
+      <div class="meta-item meta-item--wide">
+        <span>Observações</span>
+        <p>${observationsHtml}</p>
+      </div>
+    </div>
+
+    <h2>Itens transferidos</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Código</th>
+          <th>Descrição</th>
+          <th class="numeric">Quantidade</th>
+          <th>Unidade</th>
+          <th class="numeric">Custo unit.</th>
+          <th class="numeric">Custo total</th>
+          <th class="numeric">Venda unit.</th>
+          <th class="numeric">Venda total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsRows}
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <div>
+        <span>Total de itens</span>
+        <strong>${escapeHtml(formatNumber(totalItems, { maximumFractionDigits: 0 }))}</strong>
+      </div>
+      <div>
+        <span>Volume total</span>
+        <strong>${escapeHtml(formatNumber(totals.totalVolume, { maximumFractionDigits: 3 }))}</strong>
+      </div>
+      <div>
+        <span>Valor de custo total</span>
+        <strong>${escapeHtml(formatCurrency(totals.totalCost))}</strong>
+      </div>
+      <div>
+        <span>Valor de venda total</span>
+        <strong>${escapeHtml(formatCurrency(totals.totalSale))}</strong>
+      </div>
+    </div>
+
+    <div class="signature-area">
+      <div class="signature">
+        <div class="signature-line"></div>
+        <span class="signature-label">Assinatura do responsável</span>
+      </div>
+    </div>
   </div>
-
-  <div class="meta">
-    <div><span>Data da solicitação</span>${escapeHtml(requestDate)}</div>
-    <div><span>Documento fiscal</span>${documentRef}</div>
-    <div><span>Origem</span>${origin}</div>
-    <div><span>Destino</span>${destination}</div>
-    <div><span>Responsável</span>${responsible}</div>
-    <div><span>Observações</span>${observations}</div>
-  </div>
-
-  <h2>Itens transferidos</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Código</th>
-        <th>Descrição</th>
-        <th class="text-right">Quantidade</th>
-        <th>Unidade</th>
-        <th class="text-right">Custo unit.</th>
-        <th class="text-right">Custo total</th>
-        <th class="text-right">Venda unit.</th>
-        <th class="text-right">Venda total</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${itemsRows}
-    </tbody>
-  </table>
-
-  <div class="totals">
-    <div><span>Total de itens</span>${escapeHtml(formatNumber(totalItems, { maximumFractionDigits: 0 }))}</div>
-    <div><span>Volume total</span>${escapeHtml(formatNumber(totals.totalVolume || 0))}</div>
-    <div><span>Valor de custo total</span>${escapeHtml(formatCurrency(totals.totalCost || 0))}</div>
-    <div><span>Valor de venda total</span>${escapeHtml(formatCurrency(totals.totalSale || 0))}</div>
-  </div>
-
   <script>
     window.addEventListener('load', function () {
       setTimeout(function () {
@@ -547,6 +802,7 @@
   </script>
 </body>
 </html>`;
+
   }
 
   async function handleGeneratePdf(id) {
