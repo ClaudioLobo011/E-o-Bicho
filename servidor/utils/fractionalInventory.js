@@ -156,82 +156,34 @@ const recalculateFractionalStockForProduct = async (productId, { session } = {})
             return {
                 depositId,
                 rawQuantity,
-                assignedQuantity: flooredQuantity,
+                assignedQuantity: flooredQuantity > 0 ? flooredQuantity : 0,
                 fractionalPart: fractionalPart > 0 ? fractionalPart : 0,
                 unidade: unitLabel,
                 deposito: info?.deposito || null,
             };
         });
 
-        const stockCandidates = depositEntries
-            .map((entry) => Number(entry.rawQuantity))
-            .filter((value) => Number.isFinite(value) && value >= 0);
-
-        const totalStock = stockCandidates.length ? Math.min(...stockCandidates) : 0;
-        const normalizedTotalStock = Number.isFinite(totalStock) && totalStock > 0 ? Math.floor(totalStock) : 0;
-
-        let assignedTotal = depositEntries.reduce((sum, entry) => sum + entry.assignedQuantity, 0);
-
-        if (normalizedTotalStock < assignedTotal) {
-            let excess = assignedTotal - normalizedTotalStock;
-            const reductionCandidates = depositEntries
-                .filter((entry) => entry.assignedQuantity > 0)
-                .sort((a, b) => {
-                    const fractionalDiff = (a.fractionalPart || 0) - (b.fractionalPart || 0);
-                    if (fractionalDiff !== 0) {
-                        return fractionalDiff;
-                    }
-                    return b.assignedQuantity - a.assignedQuantity;
-                });
-
-            for (const entry of reductionCandidates) {
-                if (excess <= 0) break;
-                const reducible = Math.min(entry.assignedQuantity, excess);
-                if (reducible <= 0) continue;
-                entry.assignedQuantity -= reducible;
-                assignedTotal -= reducible;
-                excess -= reducible;
+        const totalRawStock = depositEntries.reduce((sum, entry) => {
+            const value = Number(entry.rawQuantity);
+            if (!Number.isFinite(value) || value <= 0) {
+                return sum;
             }
-        } else {
-            let remaining = normalizedTotalStock - assignedTotal;
+            return sum + value;
+        }, 0);
 
-            if (remaining > 0) {
-                const fractionalCandidates = depositEntries
-                    .filter((entry) => entry.fractionalPart > 0)
-                    .sort((a, b) => b.fractionalPart - a.fractionalPart);
+        const roundedTotalRawStock = Number.isFinite(totalRawStock) && totalRawStock > 0
+            ? Math.round(totalRawStock * 1_000_000) / 1_000_000
+            : 0;
 
-                for (const entry of fractionalCandidates) {
-                    if (remaining <= 0) break;
-                    const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
-                    if (maxExtra <= 0) continue;
-                    const addition = Math.min(maxExtra, remaining);
-                    entry.assignedQuantity += addition;
-                    assignedTotal += addition;
-                    remaining -= addition;
-                }
-            }
-
-            if (remaining > 0) {
-                const fallbackCandidates = depositEntries
-                    .filter((entry) => entry.rawQuantity > entry.assignedQuantity)
-                    .sort((a, b) => b.rawQuantity - a.rawQuantity);
-
-                for (const entry of fallbackCandidates) {
-                    if (remaining <= 0) break;
-                    const maxExtra = Math.max(0, Math.ceil(entry.rawQuantity) - entry.assignedQuantity);
-                    if (maxExtra <= 0) continue;
-                    const addition = Math.min(maxExtra, remaining);
-                    entry.assignedQuantity += addition;
-                    assignedTotal += addition;
-                    remaining -= addition;
-                }
-            }
-        }
+        const normalizedTotalStock = Number.isFinite(totalRawStock) && totalRawStock > 0
+            ? Math.floor(totalRawStock)
+            : 0;
 
         const updateDocument = {
             'fracionado.custoCalculado': Number.isFinite(costPerFraction) ? costPerFraction : null,
-            'fracionado.estoqueEquivalente': Number.isFinite(totalStock) ? normalizedTotalStock : null,
-            'fracionado.estoqueCalculadoDetalhado': Number.isFinite(totalStock) ? totalStock : null,
+            'fracionado.estoqueEquivalente': Number.isFinite(totalRawStock) ? normalizedTotalStock : null,
+            'fracionado.estoqueCalculadoDetalhado': Number.isFinite(totalRawStock) ? roundedTotalRawStock : null,
+            stock: normalizedTotalStock,
             'fracionado.atualizadoEm': now,
         };
 
