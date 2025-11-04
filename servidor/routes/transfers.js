@@ -393,9 +393,15 @@ router.get('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) =
                     const quantity = Number(item?.quantity) || 0;
                     const unitCost = Number(item?.unitCost) || 0;
                     const unitSale = Number(item?.unitSale ?? item?.product?.venda) || 0;
+                    const storedTotalSaleRaw = item?.totalSale;
+                    const storedTotalSale = Number(storedTotalSaleRaw);
+                    const hasStoredTotalSale =
+                        storedTotalSaleRaw !== null &&
+                        storedTotalSaleRaw !== undefined &&
+                        Number.isFinite(storedTotalSale);
                     acc.totalVolume += quantity;
                     acc.totalCost += quantity * unitCost;
-                    acc.totalSale += quantity * unitSale;
+                    acc.totalSale += hasStoredTotalSale ? storedTotalSale : quantity * unitSale;
                     return acc;
                 },
                 { totalVolume: 0, totalCost: 0, totalSale: 0 }
@@ -611,6 +617,14 @@ router.get('/:id', requireAuth, authorizeRoles(...allowedRoles), async (req, res
                   const unitCost = Number(item?.unitCost) || 0;
                   const unitWeight = Number(item?.unitWeight) || 0;
                   const unitSale = Number(item?.unitSale ?? item?.product?.venda) || 0;
+                  const storedTotalSaleRaw = item?.totalSale;
+                  const storedTotalSale = Number(storedTotalSaleRaw);
+                  const totalSale =
+                      storedTotalSaleRaw !== null &&
+                      storedTotalSaleRaw !== undefined &&
+                      Number.isFinite(storedTotalSale)
+                          ? storedTotalSale
+                          : unitSale * quantity;
                   return {
                       productId: item.product ? String(item.product._id) : null,
                       productName: item.product?.nome || item.description || '',
@@ -626,7 +640,7 @@ router.get('/:id', requireAuth, authorizeRoles(...allowedRoles), async (req, res
                       unitSale,
                       totalWeight: unitWeight * quantity,
                       totalCost: unitCost * quantity,
-                      totalSale: unitSale * quantity,
+                      totalSale,
                   };
               })
             : [];
@@ -811,6 +825,31 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
                 validityDate = parsedValidity;
             }
 
+            const rawUnitCost = Number(rawItem.unitCost);
+            const productUnitCost = Number(product?.custo);
+            const normalizedUnitCost = Number.isFinite(rawUnitCost)
+                ? Math.round(rawUnitCost * 100) / 100
+                : Number.isFinite(productUnitCost)
+                ? Math.round(productUnitCost * 100) / 100
+                : null;
+
+            const rawUnitSale = Number(rawItem.unitSale);
+            const productUnitSale = Number(product?.venda);
+            const normalizedUnitSale = Number.isFinite(rawUnitSale)
+                ? Math.round(rawUnitSale * 100) / 100
+                : Number.isFinite(productUnitSale)
+                ? Math.round(productUnitSale * 100) / 100
+                : null;
+
+            const rawTotalSale = Number(rawItem.totalSale);
+            let normalizedTotalSale = Number.isFinite(rawTotalSale)
+                ? Math.round(rawTotalSale * 100) / 100
+                : null;
+
+            if (normalizedTotalSale === null && normalizedUnitSale !== null) {
+                normalizedTotalSale = Math.round(normalizedUnitSale * quantity * 100) / 100;
+            }
+
             preparedItems.push({
                 product: product._id,
                 sku: sanitizeString(product.cod),
@@ -821,8 +860,9 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
                 lot: sanitizeString(rawItem.lot),
                 validity: validityDate,
                 unitWeight: Number.isFinite(product?.peso) ? product.peso : null,
-                unitCost: Number.isFinite(product?.custo) ? product.custo : null,
-                unitSale: Number.isFinite(product?.venda) ? product.venda : null,
+                unitCost: normalizedUnitCost,
+                unitSale: normalizedUnitSale,
+                totalSale: normalizedTotalSale,
             });
         }
 

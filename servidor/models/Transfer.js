@@ -52,6 +52,10 @@ const transferItemSchema = new mongoose.Schema({
         type: Number,
         default: null,
     },
+    totalSale: {
+        type: Number,
+        default: null,
+    },
 }, { _id: false });
 
 const transportSchema = new mongoose.Schema({
