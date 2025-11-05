@@ -266,13 +266,30 @@
       if (counts[key] !== undefined) counts[key] += 1;
     }
 
-    // contadores por profissional
+    // contadores por profissional (considera servi��os vinculados)
     const byProf = new Map();
     for (const a of (state.agendamentos || [])) {
-      const id = a.profissionalId || (a.profissional && a.profissional._id) || null;
-      if (!id) continue;
-      const key = String(id);
-      byProf.set(key, (byProf.get(key) || 0) + 1);
+      const profMap = resolveAppointmentProfessionalMap(a);
+      if (profMap.size) {
+        const counted = new Set();
+        profMap.forEach((info, key) => {
+          const id = key ? String(key) : '';
+          if (!id || counted.has(id)) return;
+          const hasServices = Array.isArray(info?.services) ? info.services.length > 0 : false;
+          if (!hasServices && profMap.size > 1) return;
+          byProf.set(id, (byProf.get(id) || 0) + 1);
+          counted.add(id);
+        });
+        continue;
+      }
+      const fallbackId =
+        a.profissionalId ||
+        (a.profissional && a.profissional._id) ||
+        null;
+      if (fallbackId) {
+        const key = String(fallbackId);
+        byProf.set(key, (byProf.get(key) || 0) + 1);
+      }
     }
 
     const statuses = [
@@ -348,6 +365,266 @@
       .trim().toLowerCase().replace(/[-\s]+/g,'_');
   }
 
+  function getProfessionalName(raw) {
+    if (!raw) return '';
+    if (typeof raw === 'string') return raw;
+    if (typeof raw === 'object') {
+      return (
+        raw.nomeCompleto ||
+        raw.nomeContato ||
+        raw.razaoSocial ||
+        raw.nomeFantasia ||
+        raw.nome ||
+        raw.fantasia ||
+        raw.displayName ||
+        raw.label ||
+        raw.alias ||
+        ''
+      );
+    }
+    return '';
+  }
+
+  function collectServiceProfessionals(service) {
+    const entries = new Map();
+    if (!service || typeof service !== 'object') return [];
+
+    const register = (id, name) => {
+      if (!id && id !== 0) return;
+      const key = String(id).trim();
+      if (!key) return;
+      if (!entries.has(key)) {
+        entries.set(key, { id: key, nome: name ? String(name) : '' });
+      } else if (name && !entries.get(key).nome) {
+        entries.get(key).nome = String(name);
+      }
+    };
+
+    const inspectValue = (value) => {
+      if (!value && value !== 0) return;
+      if (Array.isArray(value)) {
+        value.forEach(inspectValue);
+        return;
+      }
+      if (typeof value === 'object') {
+        const nestedId =
+          value._id ||
+          value.id ||
+          value.profissionalId ||
+          value.responsavelId ||
+          value.codigo ||
+          value.code ||
+          null;
+        if (nestedId) {
+          register(nestedId, getProfessionalName(value));
+        }
+        inspectValue(value.profissional);
+        inspectValue(value.profissionais);
+        inspectValue(value.profissionalIds);
+        inspectValue(value.responsaveis);
+        inspectValue(value.responsavel);
+        return;
+      }
+      register(value, '');
+    };
+
+    if (service.profissionalId) {
+      register(
+        service.profissionalId,
+        service.profissionalNome || getProfessionalName(service.profissional)
+      );
+    }
+    inspectValue(service.profissionalId);
+    inspectValue(service.profissional);
+    inspectValue(service.profissionais);
+    inspectValue(service.profissionalIds);
+    inspectValue(service.responsavelId);
+    inspectValue(service.responsavel);
+
+    return Array.from(entries.values());
+  }
+
+  function resolveAppointmentProfessionalMap(appointment) {
+    const map = new Map();
+    if (!appointment || typeof appointment !== 'object') return map;
+
+    const baseId = appointment.profissionalId
+      ? String(appointment.profissionalId)
+      : appointment.profissional && appointment.profissional._id
+      ? String(appointment.profissional._id)
+      : '';
+    const baseName = getProfessionalName(appointment.profissional);
+
+    if (baseId) {
+      map.set(baseId, {
+        id: baseId,
+        nome: baseName || '',
+        services: [],
+        total: 0,
+      });
+    }
+
+    const services = Array.isArray(appointment.servicos) ? appointment.servicos : [];
+    const unassigned = [];
+
+    services.forEach((service) => {
+      const info = {
+        nome: service?.nome || '',
+        valor: Number(service?.valor || 0) || 0,
+      };
+      const professionals = collectServiceProfessionals(service);
+      if (!professionals.length) {
+        unassigned.push(info);
+        return;
+      }
+      professionals.forEach(({ id, nome }) => {
+        const key = String(id);
+        if (!map.has(key)) {
+          map.set(key, { id: key, nome: nome || '', services: [], total: 0 });
+        }
+        const entry = map.get(key);
+        if (!entry.nome && nome) entry.nome = nome;
+        entry.services.push({ ...info });
+        entry.total += info.valor;
+      });
+    });
+
+    if (!services.length && baseId && !map.has(baseId)) {
+      map.set(baseId, {
+        id: baseId,
+        nome: baseName || '',
+        services: [],
+        total: Number(appointment.valor || 0) || 0,
+      });
+    }
+
+    if (unassigned.length) {
+      const fallbackId =
+        baseId ||
+        (map.size === 1
+          ? Array.from(map.keys())[0]
+          : '');
+      if (fallbackId) {
+        const entry =
+          map.get(fallbackId) || {
+            id: fallbackId,
+            nome: baseName || '',
+            services: [],
+            total: 0,
+          };
+        unassigned.forEach((svc) => {
+          entry.services.push({ ...svc });
+          entry.total += svc.valor;
+        });
+        if (!entry.nome) entry.nome = baseName || '';
+        map.set(fallbackId, entry);
+      } else if (map.size === 1) {
+        const [entry] = map.values();
+        unassigned.forEach((svc) => {
+          entry.services.push({ ...svc });
+          entry.total += svc.valor;
+        });
+      }
+    }
+
+    return map;
+  }
+
+  function expandAgendamentosForDisplay(list) {
+    const expanded = [];
+    (list || []).forEach((appointment) => {
+      const profMap = resolveAppointmentProfessionalMap(appointment);
+      const candidates = Array.from(profMap.entries()).filter(([key, entry]) => {
+        if (!key) return false;
+        if (profMap.size === 1) return true;
+        return Array.isArray(entry?.services) ? entry.services.length > 0 : false;
+      });
+      const uniqueIds = Array.from(new Set(candidates.map(([key]) => key)));
+      if (uniqueIds.length <= 1) {
+        expanded.push(appointment);
+        return;
+      }
+      uniqueIds.forEach((id) => {
+        const entry = profMap.get(id);
+        const clone = { ...appointment };
+        clone.__displayProfId = id;
+        clone.__displayProfName = entry?.nome || '';
+        clone.__displayServices = Array.isArray(entry?.services)
+          ? entry.services.map((svc) => ({ ...svc }))
+          : [];
+        clone.__displayValor =
+          typeof entry?.total === 'number' ? entry.total : Number(appointment.valor || 0) || 0;
+        clone.servico = clone.__displayServices.length
+          ? clone.__displayServices.map((svc) => svc.nome).filter(Boolean).join(', ')
+          : appointment.servico;
+        clone.valor = clone.__displayValor;
+        expanded.push(clone);
+      });
+    });
+    return expanded;
+  }
+
+  function resolveDisplayProfissionalId(appointment, byNameAll) {
+    if (appointment && appointment.__displayProfId) {
+      return String(appointment.__displayProfId);
+    }
+    if (appointment && appointment.profissionalId) {
+      return String(appointment.profissionalId);
+    }
+    if (appointment && appointment.profissional && appointment.profissional._id) {
+      return String(appointment.profissional._id);
+    }
+    if (appointment && byNameAll instanceof Map) {
+      const candidateName = getProfessionalName(appointment.profissional);
+      if (candidateName) {
+        const normalized = candidateName.trim().toLowerCase();
+        if (byNameAll.has(normalized)) {
+          return String(byNameAll.get(normalized));
+        }
+      }
+    }
+    return null;
+  }
+
+  function getDisplayServiceNames(appointment) {
+    if (appointment && Array.isArray(appointment.__displayServices) && appointment.__displayServices.length) {
+      return appointment.__displayServices.map((svc) => svc.nome).filter(Boolean).join(', ');
+    }
+    return appointment?.servico || '';
+  }
+
+  function getDisplayValor(appointment) {
+    if (appointment && typeof appointment.__displayValor === 'number') {
+      return appointment.__displayValor;
+    }
+    return Number(appointment?.valor || 0) || 0;
+  }
+
+  function resolveProfessionalLabel(profId, professionals = [], fallback = '') {
+    if (fallback) return String(fallback);
+    const normalized = String(profId || '').trim();
+    if (!normalized) return '—';
+    const match = (professionals || []).find((prof) => String(prof._id) === normalized);
+    if (!match) return '—';
+    const label =
+      match.nome ||
+      match.nomeCompleto ||
+      match.nomeContato ||
+      match.razaoSocial ||
+      match.nomeFantasia ||
+      '';
+    return String(label || '—');
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function getFilteredAgendamentos() {
     const hasStatus = state.filters.statuses.size > 0;
     const hasProf   = state.filters.profIds.size   > 0;
@@ -362,17 +639,29 @@
       let ok = true;
       if (hasStatus) ok = ok && state.filters.statuses.has(normalizeStatus(a.status));
       if (hasProf) {
-        let pid = a.profissionalId ? String(a.profissionalId) : null;
-        if (!pid) {
-          let nc = '';
-          if (typeof a.profissional === 'string') nc = a.profissional;
-          else if (a.profissional && typeof a.profissional === 'object') {
-            nc = a.profissional.nomeCompleto || a.profissional.nomeContato ||
-                a.profissional.razaoSocial || a.profissional.nome || '';
+        const profMap = resolveAppointmentProfessionalMap(a);
+        const ids = new Set(
+          Array.from(profMap.keys())
+            .filter(Boolean)
+            .map((id) => String(id))
+        );
+
+        if (!ids.size) {
+          let pid = a.profissionalId ? String(a.profissionalId) : null;
+          if (!pid) {
+            const nameCandidate = getProfessionalName(a.profissional);
+            if (nameCandidate) {
+              pid = byNameAll.get(String(nameCandidate).trim().toLowerCase()) || null;
+            }
           }
-          pid = byNameAll.get(String(nc).trim().toLowerCase()) || null;
+          if (pid) ids.add(String(pid));
         }
-        ok = ok && pid && state.filters.profIds.has(String(pid));
+
+        let matches = false;
+        ids.forEach((id) => {
+          if (!matches && state.filters.profIds.has(id)) matches = true;
+        });
+        ok = ok && matches;
       }
       return ok;
     });
@@ -577,7 +866,9 @@
 
       const profsAll  = state.profissionais || [];
       const profs     = getVisibleProfissionais();
-      const byNameAll = new Map((profsAll || []).map(p => [String(p.nome || '').trim().toLowerCase(), p._id]));
+      const byNameAll = new Map(
+        (profsAll || []).map((p) => [String(p.nome || '').trim().toLowerCase(), String(p._id)])
+      );
 
       const colCount = 1 + (profs?.length || 0);
 
@@ -631,8 +922,11 @@
       const counter = document.createElement('div');
       counter.className = 'col-span-full text-right px-3 py-1 text-xs text-slate-500';
       const itemsAll = state.agendamentos || [];
-      const items    = getFilteredAgendamentos(itemsAll);
-      const filtered = (state.filters.statuses.size || state.filters.profIds.size) ? ` (filtrados: ${items.length})` : '';
+      const filteredList = getFilteredAgendamentos(itemsAll);
+      const displayItems = expandAgendamentosForDisplay(filteredList);
+      const filtered = (state.filters.statuses.size || state.filters.profIds.size)
+        ? ` (filtrados: ${filteredList.length})`
+        : '';
       counter.textContent = `Agendamentos: ${itemsAll.length}${filtered}`;
       header.appendChild(counter);
 
@@ -674,25 +968,18 @@
 
       // posiciona cartões
       let placed = 0;
-      for (const a of items) {
+      for (const a of displayItems) {
         const when = a.h || a.scheduledAt;
         if (!when) continue;
 
         const d  = new Date(when);
         const hh = `${pad(d.getHours())}:00`;
 
-        let profId = a.profissionalId ? String(a.profissionalId) : null;
-        if (!profId) {
-          let nameCandidate = '';
-          if (typeof a.profissional === 'string') nameCandidate = a.profissional;
-          else if (a.profissional && typeof a.profissional === 'object') nameCandidate = a.profissional.nome || '';
-          const normalized = String(nameCandidate || '').trim().toLowerCase();
-          if (normalized && byNameAll.has(normalized)) profId = String(byNameAll.get(normalized));
-        }
+        let profId = resolveDisplayProfissionalId(a, byNameAll);
         if (!profId) continue;
 
         let col = body.querySelector(`div[data-profissional-id="${profId}"][data-hh="${hh}"]`);
-        if (!col && profs[0]) {
+        if (!col && profs[0] && !a.__displayProfId) {
           col = body.querySelector(`div[data-profissional-id="${profs[0]._id}"][data-hh="${hh}"]`);
         }
         if (!col) continue;
@@ -720,10 +1007,11 @@
 
         const bodyEl = document.createElement('div');
         bodyEl.classList.add('agenda-card__body');
+        const serviceLabel = getDisplayServiceNames(a);
         if (a.observacoes && String(a.observacoes).trim()) {
           const svc = document.createElement('div');
           svc.className = 'agenda-card__service text-gray-600 clamp-2';
-          svc.textContent = a.servico || '';
+          svc.textContent = serviceLabel || '';
           const obs = document.createElement('div');
           obs.className = 'agenda-card__note mt-1 text-gray-700 italic clamp-2';
           obs.textContent = String(a.observacoes).trim();
@@ -731,14 +1019,14 @@
           bodyEl.appendChild(obs);
         } else {
           bodyEl.classList.add('text-gray-600', 'clamp-2');
-          bodyEl.textContent = a.servico || '';
+          bodyEl.textContent = serviceLabel || '';
         }
 
         const footerEl = document.createElement('div');
         footerEl.className = 'agenda-card__footer flex items-center justify-end';
         const price = document.createElement('div');
         price.className = 'agenda-card__price text-gray-800 font-medium';
-        price.textContent = money(a.valor);
+        price.textContent = money(getDisplayValor(a));
 
         footerEl.appendChild(price);
 
@@ -811,7 +1099,8 @@
     });
 
     // Posiciona cartões (compactos)
-    const items = getFilteredAgendamentos(state.agendamentos || []);
+    const baseWeekItems = getFilteredAgendamentos(state.agendamentos || []);
+    const items = expandAgendamentosForDisplay(baseWeekItems);
     let placed = 0;
 
     for (const a of items) {
@@ -924,7 +1213,10 @@
     agendaList.appendChild(grid);
 
     // usar FILTRO + AGRUPAR por data local
-    const items = getFilteredAgendamentos((state.agendamentos||[]).slice().sort((a,b)=>(new Date(a.h||a.scheduledAt))-(new Date(b.h||b.scheduledAt))));
+    const monthSource = (state.agendamentos || []).slice().sort(
+      (a, b) => (new Date(a.h || a.scheduledAt)) - (new Date(b.h || b.scheduledAt))
+    );
+    const items = expandAgendamentosForDisplay(getFilteredAgendamentos(monthSource));
     const byDay = new Map();
     for (const a of items) {
       const d = localDateStr(new Date(a.h || a.scheduledAt));
@@ -1235,9 +1527,37 @@
     if (!modal || !state.editing) return;
 
     // Preenche lista de serviços no modo edição (somente leitura)
+    const defaultProfId = a.profissionalId ? String(a.profissionalId) : '';
+    const defaultProfNome = typeof a.profissional === 'string' ? a.profissional : '';
     state.tempServicos = Array.isArray(a.servicos)
-      ? a.servicos.map(x => ({ _id: x._id, nome: x.nome, valor: Number(x.valor || 0) }))
-      : (a.servico ? [{ _id: null, nome: a.servico, valor: Number(a.valor || 0) }] : []);
+      ? a.servicos.map((x) => {
+          const inferredId =
+            x?.profissionalId ||
+            (x?.profissional && x.profissional._id) ||
+            defaultProfId ||
+            '';
+          const inferredNome =
+            x?.profissionalNome ||
+            getProfessionalName(x?.profissional) ||
+            (inferredId === defaultProfId ? defaultProfNome : '') ||
+            '';
+          return {
+            _id: x._id,
+            nome: x.nome,
+            valor: Number(x.valor || 0),
+            profissionalId: inferredId ? String(inferredId) : '',
+            profissionalNome: inferredNome,
+          };
+        })
+      : (a.servico
+          ? [{
+              _id: null,
+              nome: a.servico,
+              valor: Number(a.valor || 0),
+              profissionalId: defaultProfId || '',
+              profissionalNome: defaultProfNome || '',
+            }]
+          : []);
     renderServicosLista();
 
     // habilita campo de busca/valor para adicionar novos serviços
@@ -1487,15 +1807,32 @@
   function renderServicosLista() {
     if (!servListUL || !servTotalEl) return;
     const items = state.tempServicos || [];
-    servListUL.innerHTML = items.map((it, idx) => `
-      <li class="flex items-center justify-between px-3 py-2 text-sm">
-        <div class="flex items-center gap-3">
-          <span class="w-20 text-right tabular-nums">${money(Number(it.valor || 0))}</span>
-          <span class="text-gray-700">${it.nome || ''}</span>
+    const resolveLabel = (it) => {
+      const fallback = it.profissionalNome || '';
+      const label =
+        fallback ||
+        resolveProfessionalLabel(it.profissionalId || '', state.profissionais || []) ||
+        '—';
+      return label;
+    };
+    servListUL.innerHTML = items
+      .map(
+        (it, idx) => `
+      <li class="flex flex-col gap-2 border-b border-gray-100 px-3 py-2 text-sm last:border-b-0">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <span class="w-20 tabular-nums text-right text-gray-900 font-medium">${money(Number(it.valor || 0))}</span>
+            <span class="text-gray-700" title="${escapeHtml(it.nome || '')}">${escapeHtml(it.nome || '')}</span>
+          </div>
+          <button data-idx="${idx}" class="px-2 py-1 rounded-md border text-gray-600 transition hover:bg-gray-50">Remover</button>
         </div>
-        <button data-idx="${idx}" class="remove-serv px-2 py-1 rounded-md border text-gray-600 hover:bg-gray-50">Remover</button>
-      </li>
-    `).join('');
+        <div class="flex items-center gap-2 text-xs text-gray-500">
+          <span class="font-semibold uppercase tracking-wide text-gray-400">Profissional:</span>
+          <span class="text-gray-600" title="${escapeHtml(resolveLabel(it))}">${escapeHtml(resolveLabel(it))}</span>
+        </div>
+      </li>`
+      )
+      .join('');
     const total = items.reduce((s, x) => s + Number(x.valor || 0), 0);
     servTotalEl.textContent = money(total);
 
@@ -1532,13 +1869,23 @@
           const items = Array.isArray(state.tempServicos) ? state.tempServicos : [];
           if (!items.length) { alert('Adicione pelo menos 1 serviço ao agendamento.'); return; }
 
+          const mapServicoToPayload = (item) => {
+            const payload = {
+              servicoId: item._id,
+              valor: Number(item.valor || 0),
+            };
+            const perItemProf = item.profissionalId || profissionalId;
+            if (perItemProf) payload.profissionalId = perItemProf;
+            return payload;
+          };
+
           const body = {
             storeId: storeIdSelected,
             profissionalId,
             scheduledAt,
             status,
             observacoes: (obsInput?.value || '').trim(),
-            servicos: items.map(x => ({ servicoId: x._id, valor: Number(x.valor || 0) })),
+            servicos: items.map(mapServicoToPayload),
             ...(state.editing.clienteId ? { clienteId: state.editing.clienteId } : {}),
             ...(petSelect?.value ? { petId: petSelect.value } : (state.editing.petId ? { petId: state.editing.petId } : {})),
             ...(typeof state.editing.pago !== 'undefined' ? { pago: state.editing.pago } : {})
@@ -1567,10 +1914,20 @@
 
         if (!(clienteId && petId && items.length)) { alert('Preencha cliente, pet e adicione pelo menos 1 serviço.'); return; }
 
+        const mapServicoToPayload = (item) => {
+          const payload = {
+            servicoId: item._id,
+            valor: Number(item.valor || 0),
+          };
+          const perItemProf = item.profissionalId || profissionalId;
+          if (perItemProf) payload.profissionalId = perItemProf;
+          return payload;
+        };
+
         const body = {
           storeId: storeIdSelected,
           clienteId, petId,
-          servicos: items.map(x => ({ servicoId: x._id, valor: Number(x.valor || 0) })),
+          servicos: items.map(mapServicoToPayload),
           profissionalId, scheduledAt,
           status,
           observacoes: (obsInput?.value || '').trim(),
@@ -2041,7 +2398,7 @@
 
   function handlePrintCupom() {
     try {
-      const items = getFilteredAgendamentos();
+      const items = expandAgendamentosForDisplay(getFilteredAgendamentos());
 
       // Ordena por horário (se houver)
       items.sort((a, b) => {
@@ -2108,7 +2465,23 @@
     const v = Number(valorInput?.value || 0);
     if (!s || !s._id) { alert('Escolha um serviço na busca.'); return; }
     if (!(v >= 0)) { alert('Valor inválido.'); return; }
-    state.tempServicos.push({ _id: s._id, nome: s.nome, valor: v });
+    const profIdSelected = profSelect?.value || '';
+    const profLabel =
+      (profSelect &&
+        typeof profSelect.selectedIndex === 'number' &&
+        profSelect.selectedIndex >= 0 &&
+        profSelect.options?.[profSelect.selectedIndex]
+        ? profSelect.options[profSelect.selectedIndex].text?.trim()
+        : '') ||
+      resolveProfessionalLabel(profIdSelected, state.profissionais || []) ||
+      '';
+    state.tempServicos.push({
+      _id: s._id,
+      nome: s.nome,
+      valor: v,
+      profissionalId: profIdSelected || '',
+      profissionalNome: profLabel || '',
+    });
     // limpa seleção
     state.selectedServico = null;
     if (servInput)  servInput.value = '';

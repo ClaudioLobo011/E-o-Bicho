@@ -412,7 +412,12 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
           const s = await Service.findById(sid).select('valor').lean();
           v = s?.valor || 0;
         }
-        itens.push({ servico: sid, valor: Number(v || 0) });
+        const item = { servico: sid, valor: Number(v || 0) };
+        const pid = it?.profissionalId;
+        if (pid && mongoose.Types.ObjectId.isValid(pid)) {
+          item.profissional = pid;
+        }
+        itens.push(item);
       }
       set.itens = itens;
       if (itens.length) {
@@ -453,6 +458,7 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         select: 'nome categorias grupo',
         populate: { path: 'grupo', select: 'nome tiposPermitidos' }
       })
+      .populate('itens.profissional', 'nomeCompleto nomeContato razaoSocial nome nomeFantasia')
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .lean();
 
@@ -460,24 +466,37 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       return res.status(404).json({ message: 'Agendamento não encontrado.' });
     }
 
-    const servicosList = (full.itens || []).map(it => ({
-      _id: it.servico?._id || it.servico,
-      nome: it.servico?.nome || '—',
-      valor: Number(it.valor || 0),
-      categorias: Array.isArray(it.servico?.categorias)
-        ? it.servico.categorias.filter(Boolean)
-        : [],
-      tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
-    }));
+    const servicosList = (full.itens || []).map((it) => {
+      const profDoc = it.profissional && typeof it.profissional === 'object' ? it.profissional : null;
+      const profId = profDoc?._id || it.profissional || null;
+      const profNome = profDoc
+        ? (profDoc.nomeCompleto || profDoc.nomeContato || profDoc.razaoSocial || profDoc.nomeFantasia || profDoc.nome || '')
+        : null;
+      return {
+        _id: it.servico?._id || it.servico,
+        nome: it.servico?.nome || '-',
+        valor: Number(it.valor || 0),
+        categorias: Array.isArray(it.servico?.categorias)
+          ? it.servico.categorias.filter(Boolean)
+          : [],
+        tiposPermitidos: extractAllowedStaffTypes(it.servico || {}),
+        profissionalId: profId,
+        profissionalNome: profNome,
+      };
+    });
     if (!servicosList.length && full.servico) {
       servicosList.push({
         _id: full.servico?._id || full.servico,
-        nome: full.servico?.nome || '—',
+        nome: full.servico?.nome || '-',
         valor: Number(full.valor || 0),
         categorias: Array.isArray(full.servico?.categorias)
           ? full.servico.categorias.filter(Boolean)
           : [],
-        tiposPermitidos: extractAllowedStaffTypes(full.servico || {})
+        tiposPermitidos: extractAllowedStaffTypes(full.servico || {}),
+        profissionalId: full.profissional?._id || null,
+        profissionalNome: full.profissional
+          ? (full.profissional.nomeCompleto || full.profissional.nomeContato || full.profissional.razaoSocial || '')
+          : null,
       });
     }
     const servicosStr = servicosList.map(s => s.nome).join(', ');
@@ -1192,6 +1211,7 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         select: 'nome categorias grupo',
         populate: { path: 'grupo', select: 'nome tiposPermitidos' }
       })
+      .populate('itens.profissional', 'nomeCompleto nomeContato razaoSocial nome nomeFantasia')
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .sort({ scheduledAt: 1 })
       .lean();
@@ -1206,26 +1226,42 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
 
       const itens = Array.isArray(a.itens) ? a.itens : [];
       const servicosList = itens.length
-        ? itens.map(it => ({
-          _id: it.servico?._id || it.servico || null,
-          nome: it.servico?.nome || '—',
-          valor: Number(it.valor || 0),
-          categorias: Array.isArray(it.servico?.categorias)
-            ? it.servico.categorias.filter(Boolean)
-            : [],
-          tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
-        }))
-        : (a.servico ? [{
-          _id: a.servico?._id || a.servico,
-          nome: a.servico?.nome || '—',
-          valor: Number(a.valor || 0),
-          categorias: Array.isArray(a.servico?.categorias)
-            ? a.servico.categorias.filter(Boolean)
-            : [],
-          tiposPermitidos: extractAllowedStaffTypes(a.servico || {})
-        }] : []);
-      const servicosStr = servicosList.map(s => s.nome).join(', ');
-      const valorTotal = (servicosList.reduce((s, x) => s + Number(x.valor || 0), 0)) || Number(a.valor || 0) || 0;
+        ? itens.map((it) => {
+            const profDoc = it.profissional && typeof it.profissional === 'object' ? it.profissional : null;
+            const profId = profDoc?._id || it.profissional || null;
+            const profNome = profDoc
+              ? (profDoc.nomeCompleto || profDoc.nomeContato || profDoc.razaoSocial || profDoc.nomeFantasia || profDoc.nome || '')
+              : null;
+            return {
+              _id: it.servico?._id || it.servico || null,
+              nome: it.servico?.nome || '-',
+              valor: Number(it.valor || 0),
+              categorias: Array.isArray(it.servico?.categorias)
+                ? it.servico.categorias.filter(Boolean)
+                : [],
+              tiposPermitidos: extractAllowedStaffTypes(it.servico || {}),
+              profissionalId: profId,
+              profissionalNome: profNome,
+            };
+          })
+        : (a.servico
+            ? [{
+                _id: a.servico?._id || a.servico,
+                nome: a.servico?.nome || '-',
+                valor: Number(a.valor || 0),
+                categorias: Array.isArray(a.servico?.categorias)
+                  ? a.servico.categorias.filter(Boolean)
+                  : [],
+                tiposPermitidos: extractAllowedStaffTypes(a.servico || {}),
+                profissionalId: a.profissional?._id || a.profissionalId || null,
+                profissionalNome: a.profissional || null,
+            }]
+            : []);
+      const servicosStr = servicosList.map((s) => s.nome).filter(Boolean).join(', ');
+      const valorTotal =
+        servicosList.reduce((soma, item) => soma + Number(item.valor || 0), 0) ||
+        Number(a.valor || 0) ||
+        0;
 
       return {
         _id: a._id,
@@ -1238,18 +1274,20 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         clienteCelular: clienteInfo?.celular || null,
         clienteContatos: clienteInfo?.contatos || [],
         cliente: clienteInfo,
-        pet: a.pet ? a.pet.nome : '—',
+        pet: a.pet ? a.pet.nome : '-',
         petId: a.pet?._id || null,
-        servico: servicosStr,             // compat: texto p/ exibição
-        servicos: servicosList,           // novo: array de serviços do agendamento
+        servico: servicosStr,
+        servicos: servicosList,
         profissionalId: a.profissional?._id || null,
-        profissional: a.profissional ? (a.profissional.nomeCompleto || a.profissional.nomeContato || a.profissional.razaoSocial) : null,
+        profissional: a.profissional
+          ? (a.profissional.nomeCompleto || a.profissional.nomeContato || a.profissional.razaoSocial)
+          : null,
         h: new Date(a.scheduledAt).toISOString(),
-        valor: valorTotal,                // total do agendamento
+        valor: valorTotal,
         pago: !!a.pago,
         codigoVenda: a.codigoVenda || null,
         observacoes: a.observacoes || '',
-        status: a.status || 'agendado'
+        status: a.status || 'agendado',
       };
     });
 
@@ -1260,130 +1298,31 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
   }
 });
 
-// GET /api/func/agendamentos/range?start=YYYY-MM-DD&end=YYYY-MM-DD&storeId=<id>
-router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res) => {
-  try {
-    const { start: startStr, end: endStr, storeId } = req.query;
-    if (!startStr || !endStr) {
-      return res.status(400).json({ message: 'Parâmetros "start" e "end" são obrigatórios (YYYY-MM-DD).' });
-    }
-    const [ys, ms, ds] = startStr.split('-').map(n => parseInt(n, 10));
-    const [ye, me, de] = endStr.split('-').map(n => parseInt(n, 10));
-    const start = new Date(ys, ms - 1, ds, 0, 0, 0, 0);
-    const end   = new Date(ye, me - 1, de, 0, 0, 0, 0); // exclusivo
-
-    const filter = { scheduledAt: { $gte: start, $lt: end } };
-    if (storeId && mongoose.Types.ObjectId.isValid(storeId)) filter.store = storeId;
-
-    const list = await Appointment.find(filter)
-      .select('_id store cliente pet servico itens profissional scheduledAt valor pago codigoVenda status observacoes')
-      .populate(
-        'cliente',
-        [
-          'nomeCompleto',
-          'nomeContato',
-          'razaoSocial',
-          'nomeFantasia',
-          'email',
-          'cpf',
-          'cnpj',
-          'documento',
-          'documentos',
-          'telefone',
-          'celular',
-          'telefoneSecundario',
-          'celularSecundario',
-          'telefones',
-          'contatos',
-          'contatosPrincipais',
-          'meiosContato',
-        ].join(' ')
-      )
-      .populate('pet', 'nome')
-      .populate({
-        path: 'servico',
-        select: 'nome categorias grupo',
-        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
-      })
-      .populate({
-        path: 'itens.servico',
-        select: 'nome categorias grupo',
-        populate: { path: 'grupo', select: 'nome tiposPermitidos' }
-      })
-      .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
-      .sort({ scheduledAt: 1 })
-      .lean();
-
-    const map = (list || []).map(a => {
-      const servicosList = (a.itens || []).map(it => ({
-        _id: it.servico?._id,
-        nome: it.servico?.nome || '—',
-        valor: Number(it.valor || 0),
-        categorias: Array.isArray(it.servico?.categorias)
-          ? it.servico.categorias.filter(Boolean)
-          : [],
-        tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
-      }));
-      if (!servicosList.length && a.servico) {
-        servicosList.push({
-          _id: a.servico?._id || a.servico,
-          nome: a.servico?.nome || '—',
-          valor: Number(a.valor || 0),
-          categorias: Array.isArray(a.servico?.categorias)
-            ? a.servico.categorias.filter(Boolean)
-            : [],
-          tiposPermitidos: extractAllowedStaffTypes(a.servico || {})
-        });
-      }
-      const valorTotal = servicosList.reduce((acc, s) => acc + Number(s.valor || 0), 0) || Number(a.valor || 0) || 0;
-      const clienteInfo = mapAppointmentCustomer(a.cliente);
-      const tutorNome = clienteInfo?.nomeCompleto
-        || clienteInfo?.nomeContato
-        || clienteInfo?.razaoSocial
-        || '';
-      return {
-        _id: a._id,
-        pet: a.pet ? a.pet.nome : null,
-        servico: servicosList.map(s => s.nome).join(', '),
-        servicos: servicosList,
-        profissionalId: a.profissional?._id || null,
-        profissional: a.profissional ? (a.profissional.nomeCompleto || a.profissional.nomeContato || a.profissional.razaoSocial) : null,
-        tutor: tutorNome,
-        cliente: clienteInfo,
-        clienteId: clienteInfo?._id || a.cliente?._id || null,
-        clienteDocumento: clienteInfo?.documento || null,
-        clienteEmail: clienteInfo?.email || null,
-        clienteTelefone: clienteInfo?.telefone || null,
-        clienteCelular: clienteInfo?.celular || null,
-        clienteContatos: clienteInfo?.contatos || [],
-        h: new Date(a.scheduledAt).toISOString(),
-        valor: valorTotal,
-        pago: !!a.pago,
-        codigoVenda: a.codigoVenda || null,
-        observacoes: a.observacoes || '',
-        status: a.status || 'agendado'
-      };
-    });
-
-    res.json(map);
-  } catch (e) {
-    console.error('GET /func/agendamentos/range', e);
-    res.status(500).json({ message: 'Erro ao listar agendamentos por intervalo' });
-  }
-});
-
-// Criar agendamento
-// body: { storeId, clienteId, petId, servicoId, profissionalId, scheduledAt, valor, pago }
 router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
   try {
-    const { storeId, clienteId, petId, servicoId, profissionalId, scheduledAt, valor, pago, status, servicos, observacoes } = req.body || {};
+    const {
+      storeId,
+      clienteId,
+      petId,
+      servicoId,
+      profissionalId,
+      scheduledAt,
+      valor,
+      pago,
+      status,
+      servicos,
+      observacoes,
+    } = req.body || {};
+
     if (!storeId || !clienteId || !petId || !profissionalId || !scheduledAt) {
       return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
     }
-    if (!mongoose.Types.ObjectId.isValid(storeId)
-      || !mongoose.Types.ObjectId.isValid(clienteId)
-      || !mongoose.Types.ObjectId.isValid(petId)
-      || !mongoose.Types.ObjectId.isValid(profissionalId)) {
+    if (
+      !mongoose.Types.ObjectId.isValid(storeId) ||
+      !mongoose.Types.ObjectId.isValid(clienteId) ||
+      !mongoose.Types.ObjectId.isValid(petId) ||
+      !mongoose.Types.ObjectId.isValid(profissionalId)
+    ) {
       return res.status(400).json({ message: 'IDs inválidos.' });
     }
 
@@ -1397,12 +1336,19 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         if (!sid || !mongoose.Types.ObjectId.isValid(sid)) continue;
         let v = typeof it?.valor === 'number' ? it.valor : null;
         if (v == null) {
-          const s = await Service.findById(sid).select('valor').lean();
-          v = s?.valor || 0;
+          const serviceDoc = await Service.findById(sid).select('valor').lean();
+          v = serviceDoc?.valor || 0;
         }
-        itens.push({ servico: sid, valor: Number(v || 0) });
+        const item = { servico: sid, valor: Number(v || 0) };
+        const pid = it?.profissionalId;
+        if (pid && mongoose.Types.ObjectId.isValid(pid)) {
+          item.profissional = pid;
+        }
+        itens.push(item);
       }
-      if (!itens.length) return res.status(400).json({ message: 'Lista de serviços inválida.' });
+      if (!itens.length) {
+        return res.status(400).json({ message: 'Lista de serviços inválida.' });
+      }
     } else {
       if (!servicoId || !mongoose.Types.ObjectId.isValid(servicoId)) {
         return res.status(400).json({ message: 'servicoId inválido.' });
@@ -1412,36 +1358,57 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         const serv = await Service.findById(servicoId).select('valor').lean();
         valorFinal = serv?.valor || 0;
       }
-      itens = [{ servico: servicoId, valor: Number(valorFinal || 0) }];
+      const baseItem = {
+        servico: servicoId,
+        valor: Number(valorFinal || 0),
+      };
+      if (mongoose.Types.ObjectId.isValid(profissionalId)) {
+        baseItem.profissional = profissionalId;
+      }
+      itens = [baseItem];
     }
 
-    const total = itens.reduce((s, x) => s + Number(x.valor || 0), 0);
+    const total = itens.reduce((soma, item) => soma + Number(item.valor || 0), 0);
 
     const appt = await Appointment.create({
       store: storeId,
       cliente: clienteId,
       pet: petId,
-      servico: itens[0]?.servico || null, // compat
+      servico: itens[0]?.servico || null,
       itens,
       profissional: profissionalId,
       scheduledAt: new Date(scheduledAt),
       valor: total,
       pago: !!pago,
       status: statusFinal,
-      observacoes: (typeof observacoes === 'string' ? observacoes : ''),
-      createdBy: req.user?._id
+      observacoes: typeof observacoes === 'string' ? observacoes : '',
+      createdBy: req.user?._id,
     });
 
     const full = await Appointment.findById(appt._id)
-      .select('_id store cliente pet servico itens profissional scheduledAt valor pago status observacoes')
+      .select('_id store cliente pet servico itens profissional scheduledAt valor pago status observacoes codigoVenda')
       .populate('pet', 'nome')
       .populate('servico', 'nome')
       .populate('itens.servico', 'nome')
+      .populate('itens.profissional', 'nomeCompleto nomeContato razaoSocial nome nomeFantasia')
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .lean();
 
-    const servicosList = (full.itens || []).map(it => ({ _id: it.servico?._id || it.servico, nome: it.servico?.nome || '—', valor: Number(it.valor || 0) }));
-    const servicosStr = servicosList.map(s => s.nome).join(', ');
+    const servicosList = (full.itens || []).map((it) => {
+      const profDoc = it.profissional && typeof it.profissional === 'object' ? it.profissional : null;
+      const profId = profDoc?._id || it.profissional || null;
+      const profNome = profDoc
+        ? (profDoc.nomeCompleto || profDoc.nomeContato || profDoc.razaoSocial || profDoc.nomeFantasia || profDoc.nome || '')
+        : null;
+      return {
+        _id: it.servico?._id || it.servico,
+        nome: it.servico?.nome || '-',
+        valor: Number(it.valor || 0),
+        profissionalId: profId,
+        profissionalNome: profNome,
+      };
+    });
+    const servicosStr = servicosList.map((s) => s.nome).filter(Boolean).join(', ');
 
     res.status(201).json({
       _id: full._id,
@@ -1449,14 +1416,15 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       valor: Number(full.valor || 0),
       pago: !!full.pago,
       status: full.status || 'agendado',
-      pet: full.pet ? full.pet.nome : '—',
+      pet: full.pet ? full.pet.nome : '-',
       servico: servicosStr,
       servicos: servicosList,
       observacoes: full.observacoes || '',
       profissional: full.profissional
         ? (full.profissional.nomeCompleto || full.profissional.nomeContato || full.profissional.razaoSocial)
-        : '—',
-      profissionalId: full.profissional?._id || null
+        : null,
+      profissionalId: full.profissional?._id || null,
+      codigoVenda: full.codigoVenda || null,
     });
   } catch (e) {
     console.error('POST /func/agendamentos', e);
@@ -1592,3 +1560,6 @@ router.delete('/agendamentos/:id', authMiddleware, requireStaff, async (req, res
 });
 
 module.exports = router;
+
+
+

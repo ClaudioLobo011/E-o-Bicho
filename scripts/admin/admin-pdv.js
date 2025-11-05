@@ -154,6 +154,7 @@
     deliveryFinalizingOrderId: '',
     finalizeProcessing: false,
     completedSales: [],
+    salesFilters: { start: '', end: '', customer: '', code: '' },
     budgets: [],
     selectedBudgetId: '',
     activeBudgetId: '',
@@ -1222,6 +1223,59 @@
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+  const normalizeSearchValue = (value) => {
+    if (!value) return '';
+    try {
+      return String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+    } catch (error) {
+      return String(value || '').toLowerCase().trim();
+    }
+  };
+  const containsNormalizedTerm = (haystack, normalizedTerm) => {
+    if (!normalizedTerm) return true;
+    if (!haystack) return false;
+    return normalizeSearchValue(haystack).includes(normalizedTerm);
+  };
+  const createDefaultSalesFilters = () => {
+    const today = formatDateParam(new Date());
+    return { start: today, end: today, customer: '', code: '' };
+  };
+  if (
+    !state.salesFilters ||
+    typeof state.salesFilters !== 'object' ||
+    (state.salesFilters.start === '' &&
+      state.salesFilters.end === '' &&
+      state.salesFilters.customer === '' &&
+      state.salesFilters.code === '')
+  ) {
+    state.salesFilters = createDefaultSalesFilters();
+  }
+  const applySalesFiltersToInputs = () => {
+    const filters = state.salesFilters || createDefaultSalesFilters();
+    state.salesFilters = filters;
+    if (elements.salesFilterStart && elements.salesFilterStart.value !== (filters.start || '')) {
+      elements.salesFilterStart.value = filters.start || '';
+    }
+    if (elements.salesFilterEnd && elements.salesFilterEnd.value !== (filters.end || '')) {
+      elements.salesFilterEnd.value = filters.end || '';
+    }
+    if (
+      elements.salesFilterCustomer &&
+      elements.salesFilterCustomer.value !== (filters.customer || '')
+    ) {
+      elements.salesFilterCustomer.value = filters.customer || '';
+    }
+    if (
+      elements.salesFilterCode &&
+      elements.salesFilterCode.value !== (filters.code || '')
+    ) {
+      elements.salesFilterCode.value = filters.code || '';
+    }
   };
   const formatHourMinute = (value) => {
     if (!value) return '';
@@ -2428,6 +2482,12 @@
 
     elements.salesList = document.getElementById('pdv-sales-list');
     elements.salesEmpty = document.getElementById('pdv-sales-empty');
+    elements.salesFilters = document.getElementById('pdv-sales-filters');
+    elements.salesFilterStart = document.getElementById('pdv-sales-start');
+    elements.salesFilterEnd = document.getElementById('pdv-sales-end');
+    elements.salesFilterCustomer = document.getElementById('pdv-sales-customer');
+    elements.salesFilterCode = document.getElementById('pdv-sales-code');
+    applySalesFiltersToInputs();
 
     elements.budgetPresets = document.getElementById('pdv-budget-presets');
     elements.budgetStart = document.getElementById('pdv-budget-start');
@@ -10502,17 +10562,89 @@
     };
   };
 
+  const resolveSaleDate = (sale) => {
+    if (!sale || typeof sale !== 'object') return null;
+    const candidates = [
+      sale.createdAt,
+      sale.finalizedAt,
+      sale.finalizedAtIso,
+      sale.fiscalEmittedAt,
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      const date =
+        candidate instanceof Date ? new Date(candidate.getTime()) : new Date(candidate);
+      if (!Number.isNaN(date.getTime())) {
+        return date;
+      }
+    }
+    return null;
+  };
+  const getFilteredCompletedSales = () => {
+    const filters = state.salesFilters || createDefaultSalesFilters();
+    let startDate = filters.start ? toStartOfDay(parseDateInputValue(filters.start)) : null;
+    let endDate = filters.end ? toEndOfDay(parseDateInputValue(filters.end)) : null;
+    if (
+      startDate &&
+      endDate &&
+      startDate instanceof Date &&
+      endDate instanceof Date &&
+      startDate.getTime() > endDate.getTime()
+    ) {
+      const temp = startDate;
+      startDate = endDate;
+      endDate = temp;
+    }
+    const customerTerm = normalizeSearchValue(filters.customer);
+    const codeTerm = normalizeSearchValue(filters.code);
+    return state.completedSales.filter((sale) => {
+      if (startDate || endDate) {
+        const saleDate = resolveSaleDate(sale);
+        if (!saleDate || !isDateWithinRange(saleDate, startDate, endDate)) {
+          return false;
+        }
+      }
+      if (customerTerm) {
+        const customerMatches = [
+          sale?.customerName,
+          sale?.customerDocument,
+          sale?.customerEmail,
+          sale?.customerPhone,
+        ].some((value) => containsNormalizedTerm(value, customerTerm));
+        if (!customerMatches) {
+          return false;
+        }
+      }
+      if (codeTerm) {
+        const codeMatches = [sale?.saleCode, sale?.saleCodeLabel, sale?.id].some((value) =>
+          containsNormalizedTerm(value, codeTerm)
+        );
+        if (!codeMatches) {
+          return false;
+        }
+      }
+      return true;
+    });
+  };
   const renderSalesList = () => {
     if (!elements.salesList || !elements.salesEmpty) return;
     elements.salesList.innerHTML = '';
-    const hasSales = state.completedSales.length > 0;
+    const totalSales = state.completedSales.length;
+    const filteredSales = getFilteredCompletedSales();
+    const hasSales = filteredSales.length > 0;
     elements.salesEmpty.classList.toggle('hidden', hasSales);
     elements.salesList.classList.toggle('hidden', !hasSales);
     if (!hasSales) {
+      if (elements.salesEmpty) {
+        elements.salesEmpty.textContent =
+          totalSales > 0
+            ? 'Nenhuma venda encontrada para os filtros selecionados.'
+            : 'Nenhuma venda finalizada até o momento.';
+      }
       return;
     }
     const fragment = document.createDocumentFragment();
-    state.completedSales.forEach((sale) => {
+    filteredSales.forEach((sale) => {
       const saleId = sale.id;
       const chevronIcon = sale.expanded ? 'fa-chevron-up' : 'fa-chevron-down';
       const paymentTagsHtml = sale.paymentTags
@@ -10664,6 +10796,44 @@
       fragment.appendChild(li);
     });
     elements.salesList.appendChild(fragment);
+  };
+  const commitSalesFiltersFromInputs = () => {
+    if (
+      !elements.salesFilterStart &&
+      !elements.salesFilterEnd &&
+      !elements.salesFilterCustomer &&
+      !elements.salesFilterCode
+    ) {
+      return;
+    }
+    const current = state.salesFilters || createDefaultSalesFilters();
+    const next = {
+      start: elements.salesFilterStart?.value || '',
+      end: elements.salesFilterEnd?.value || '',
+      customer: (elements.salesFilterCustomer?.value || '').trim(),
+      code: (elements.salesFilterCode?.value || '').trim(),
+    };
+    if (
+      current.start === next.start &&
+      current.end === next.end &&
+      current.customer === next.customer &&
+      current.code === next.code
+    ) {
+      return;
+    }
+    state.salesFilters = next;
+    applySalesFiltersToInputs();
+    renderSalesList();
+  };
+  const handleSalesFilterChange = () => {
+    commitSalesFiltersFromInputs();
+  };
+  const handleSalesFilterInput = () => {
+    commitSalesFiltersFromInputs();
+  };
+  const resetSalesFilters = () => {
+    state.salesFilters = createDefaultSalesFilters();
+    applySalesFiltersToInputs();
   };
 
   const findBudgetById = (budgetId) => {
@@ -12884,6 +13054,7 @@
     state.printPreferences = { fechamento: 'PM', venda: 'PM' };
     state.deliveryOrders = [];
     state.completedSales = [];
+    resetSalesFilters();
     state.budgets = [];
     state.selectedBudgetId = '';
     state.activeBudgetId = '';
@@ -14187,6 +14358,10 @@
     elements.deliveryAddressForm?.addEventListener('submit', handleDeliveryAddressFormSubmit);
     elements.deliveryList?.addEventListener('click', handleDeliveryListClick);
     elements.salesList?.addEventListener('click', handleSalesListClick);
+    elements.salesFilterStart?.addEventListener('change', handleSalesFilterChange);
+    elements.salesFilterEnd?.addEventListener('change', handleSalesFilterChange);
+    elements.salesFilterCustomer?.addEventListener('input', handleSalesFilterInput);
+    elements.salesFilterCode?.addEventListener('input', handleSalesFilterInput);
     elements.saleCancelConfirm?.addEventListener('click', handleSaleCancelConfirm);
     elements.saleCancelCancel?.addEventListener('click', closeSaleCancelModal);
     elements.saleCancelClose?.addEventListener('click', closeSaleCancelModal);

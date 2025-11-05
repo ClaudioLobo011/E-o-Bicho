@@ -425,6 +425,24 @@
                                             <p class="text-xs text-gray-500">Consulte as vendas encerradas e seus detalhes.</p>
                                         </div>
                                     </div>
+                                    <div id="pdv-sales-filters" class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                        <div class="space-y-1">
+                                            <label for="pdv-sales-start" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data inicial</label>
+                                            <input id="pdv-sales-start" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                        </div>
+                                        <div class="space-y-1">
+                                            <label for="pdv-sales-end" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data final</label>
+                                            <input id="pdv-sales-end" type="date" class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                        </div>
+                                        <div class="space-y-1">
+                                            <label for="pdv-sales-customer" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Cliente</label>
+                                            <input id="pdv-sales-customer" type="search" placeholder="Nome ou documento" class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
+                                        </div>
+                                        <div class="space-y-1">
+                                            <label for="pdv-sales-code" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Código da venda</label>
+                                            <input id="pdv-sales-code" type="search" placeholder="Ex.: 000123" class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-primary focus:ring-2 focus:ring-primary/20" autocomplete="off">
+                                        </div>
+                                    </div>
                                     <div id="pdv-sales-empty" class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
                                         Nenhuma venda finalizada até o momento.
                                     </div>

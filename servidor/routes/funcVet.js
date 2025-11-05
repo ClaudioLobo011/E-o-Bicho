@@ -252,12 +252,27 @@ function formatWaitingAppointment(doc) {
     const categorias = Array.isArray(serviceDoc?.categorias)
       ? serviceDoc.categorias.filter(Boolean)
       : [];
+    const profissionalDoc =
+      item && typeof item.profissional === 'object' ? item.profissional : null;
+    const profissionalId = normalizeObjectId(
+      profissionalDoc?._id || item?.profissional || item?.profissionalId,
+    );
+    const profissionalNome = profissionalDoc
+      ? (profissionalDoc.nomeCompleto ||
+          profissionalDoc.nomeContato ||
+          profissionalDoc.razaoSocial ||
+          profissionalDoc.nomeFantasia ||
+          profissionalDoc.nome ||
+          '')
+      : null;
     return {
       _id: serviceId || null,
-      nome: serviceDoc && serviceDoc.nome ? String(serviceDoc.nome) : '—',
+      nome: serviceDoc && serviceDoc.nome ? String(serviceDoc.nome) : '-',
       valor,
       categorias,
       tiposPermitidos: extractAllowedStaffTypes(serviceDoc || {}),
+      profissionalId,
+      profissionalNome,
     };
   });
 
@@ -2563,6 +2578,7 @@ router.get('/vet/agendamentos/em-espera', authMiddleware, requireStaff, async (r
         select: 'nome categorias grupo tiposPermitidos valor',
         populate: { path: 'grupo', select: 'tiposPermitidos' },
       })
+      .populate('itens.profissional', 'nomeCompleto nomeContato razaoSocial nome nomeFantasia')
       .populate({
         path: 'itens.servico',
         select: 'nome categorias grupo tiposPermitidos valor',

@@ -8,7 +8,8 @@ const AppointmentSchema = new Schema({
     servico: { type: Schema.Types.ObjectId, ref: 'Service', required: false },
     itens: [{
     servico: { type: Schema.Types.ObjectId, ref: 'Service', required: true },
-    valor:   { type: Number, required: true, min: 0 }
+    valor:   { type: Number, required: true, min: 0 },
+    profissional: { type: Schema.Types.ObjectId, ref: 'User', required: false },
     }],
   profissional: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   scheduledAt: { type: Date, required: true },
