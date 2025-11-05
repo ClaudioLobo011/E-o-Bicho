@@ -217,6 +217,40 @@ function extractAllowedStaffTypes(serviceDoc) {
   return [...new Set(raw.map(v => String(v || '').trim()).filter(Boolean))];
 }
 
+function formatProfessionalName(profDoc) {
+  if (!profDoc) return null;
+  if (typeof profDoc === 'string') return profDoc;
+  if (typeof profDoc !== 'object') return null;
+  return (
+    profDoc.nomeCompleto
+    || profDoc.nomeContato
+    || profDoc.razaoSocial
+    || null
+  );
+}
+
+function mapServiceItemResponse(item) {
+  if (!item) return null;
+  const serviceId = item.servico?._id || item.servico || null;
+  const valor = Number(item.valor || 0);
+  const categorias = Array.isArray(item.servico?.categorias)
+    ? item.servico.categorias.filter(Boolean)
+    : [];
+  const tiposPermitidos = extractAllowedStaffTypes(item.servico || {});
+  const profDoc = item.profissional || null;
+  const profissionalId = profDoc?._id || (typeof profDoc === 'string' ? profDoc : null);
+  return {
+    itemId: item._id || null,
+    _id: serviceId,
+    nome: item.servico?.nome || item.nome || '—',
+    valor,
+    categorias,
+    tiposPermitidos,
+    profissionalId,
+    profissionalNome: formatProfessionalName(profDoc) || null,
+  };
+}
+
 function mapAppointmentCustomer(userDoc) {
   if (!userDoc || typeof userDoc !== 'object') {
     return null;
@@ -348,7 +382,8 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 
     const {
       storeId, clienteId, petId, servicoId,
-      profissionalId, scheduledAt, valor, pago, status, servicos, observacoes, codigoVenda
+      profissionalId, scheduledAt, valor, pago, status, servicos, observacoes, codigoVenda,
+      serviceItemIds,
     } = req.body || {};
 
     const set = {};
@@ -401,6 +436,8 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       set.pet = petId;
     }
 
+    let itensPayload = null;
+
     // Atualiza lista de serviços (se enviada)
     if (Array.isArray(servicos)) {
       const itens = [];
@@ -412,14 +449,55 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
           const s = await Service.findById(sid).select('valor').lean();
           v = s?.valor || 0;
         }
-        itens.push({ servico: sid, valor: Number(v || 0) });
+        const payload = { servico: sid, valor: Number(v || 0) };
+        const pid = it?.profissionalId;
+        if (pid && mongoose.Types.ObjectId.isValid(pid)) {
+          payload.profissional = pid;
+        }
+        itens.push(payload);
       }
-      set.itens = itens;
-      if (itens.length) {
-        set.servico = itens[0].servico; // compat
-        set.valor = itens.reduce((s, x) => s + Number(x.valor || 0), 0);
+      itensPayload = itens;
+    }
+
+    const normalizedServiceItemIds = Array.isArray(serviceItemIds)
+      ? serviceItemIds
+          .map(id => {
+            try { return mongoose.Types.ObjectId.isValid(id) ? String(id) : null; } catch (_) { return null; }
+          })
+          .filter(Boolean)
+      : [];
+
+    if (!itensPayload && normalizedServiceItemIds.length && profissionalId && mongoose.Types.ObjectId.isValid(profissionalId)) {
+      const currentItensDoc = await Appointment.findById(id).select('itens').lean();
+      if (!currentItensDoc) {
+        return res.status(404).json({ message: 'Agendamento não encontrado.' });
+      }
+      const itens = (currentItensDoc.itens || []).map(it => {
+        const payload = {
+          servico: it.servico,
+          valor: Number(it.valor || 0),
+        };
+        const currentProf = it.profissional ? String(it.profissional) : null;
+        if (normalizedServiceItemIds.includes(String(it._id))) {
+          payload.profissional = profissionalId;
+        } else if (currentProf && mongoose.Types.ObjectId.isValid(currentProf)) {
+          payload.profissional = currentProf;
+        }
+        return payload;
+      });
+      itensPayload = itens;
+    }
+
+    if (itensPayload) {
+      set.itens = itensPayload;
+      if (set.itens.length) {
+        set.servico = set.itens[0].servico; // compat
+        set.valor = set.itens.reduce((sum, entry) => sum + Number(entry.valor || 0), 0);
+        if (!set.profissional) {
+          const firstProf = set.itens.find(entry => entry.profissional)?.profissional;
+          if (firstProf) set.profissional = firstProf;
+        }
       } else {
-        set.itens = [];
         set.valor = 0;
       }
     }
@@ -453,6 +531,10 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         select: 'nome categorias grupo',
         populate: { path: 'grupo', select: 'nome tiposPermitidos' }
       })
+      .populate({
+        path: 'itens.profissional',
+        select: 'nomeCompleto nomeContato razaoSocial'
+      })
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .lean();
 
@@ -460,32 +542,28 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       return res.status(404).json({ message: 'Agendamento não encontrado.' });
     }
 
-    const servicosList = (full.itens || []).map(it => ({
-      _id: it.servico?._id || it.servico,
-      nome: it.servico?.nome || '—',
-      valor: Number(it.valor || 0),
-      categorias: Array.isArray(it.servico?.categorias)
-        ? it.servico.categorias.filter(Boolean)
-        : [],
-      tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
-    }));
+    let servicosList = (full.itens || []).map(mapServiceItemResponse).filter(Boolean);
     if (!servicosList.length && full.servico) {
-      servicosList.push({
+      servicosList = [{
+        itemId: null,
         _id: full.servico?._id || full.servico,
         nome: full.servico?.nome || '—',
         valor: Number(full.valor || 0),
         categorias: Array.isArray(full.servico?.categorias)
           ? full.servico.categorias.filter(Boolean)
           : [],
-        tiposPermitidos: extractAllowedStaffTypes(full.servico || {})
-      });
+        tiposPermitidos: extractAllowedStaffTypes(full.servico || {}),
+        profissionalId: full.profissional?._id || null,
+        profissionalNome: formatProfessionalName(full.profissional) || null,
+      }];
     }
     const servicosStr = servicosList.map(s => s.nome).join(', ');
+    const valorTotal = servicosList.reduce((sum, svc) => sum + Number(svc.valor || 0), 0) || Number(full.valor || 0) || 0;
 
     return res.json({
       _id: full._id,
       h: new Date(full.scheduledAt).toISOString(),
-      valor: Number(full.valor || 0),
+      valor: valorTotal,
       pago: !!full.pago,
       status: full.status || 'agendado',
       pet: full.pet ? full.pet.nome : '—',
@@ -1192,6 +1270,10 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         select: 'nome categorias grupo',
         populate: { path: 'grupo', select: 'nome tiposPermitidos' }
       })
+      .populate({
+        path: 'itens.profissional',
+        select: 'nomeCompleto nomeContato razaoSocial'
+      })
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .sort({ scheduledAt: 1 })
       .lean();
@@ -1204,28 +1286,30 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         || clienteInfo?.email
         || null;
 
-      const itens = Array.isArray(a.itens) ? a.itens : [];
-      const servicosList = itens.length
-        ? itens.map(it => ({
-          _id: it.servico?._id || it.servico || null,
-          nome: it.servico?.nome || '—',
-          valor: Number(it.valor || 0),
-          categorias: Array.isArray(it.servico?.categorias)
-            ? it.servico.categorias.filter(Boolean)
-            : [],
-          tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
-        }))
-        : (a.servico ? [{
+      let servicosList = Array.isArray(a.itens)
+        ? a.itens.map(mapServiceItemResponse).filter(Boolean)
+        : [];
+      if (!servicosList.length && a.servico) {
+        servicosList = [{
+          itemId: null,
           _id: a.servico?._id || a.servico,
           nome: a.servico?.nome || '—',
           valor: Number(a.valor || 0),
           categorias: Array.isArray(a.servico?.categorias)
             ? a.servico.categorias.filter(Boolean)
             : [],
-          tiposPermitidos: extractAllowedStaffTypes(a.servico || {})
-        }] : []);
+          tiposPermitidos: extractAllowedStaffTypes(a.servico || {}),
+          profissionalId: a.profissional?._id || null,
+          profissionalNome: formatProfessionalName(a.profissional) || null,
+        }];
+      }
       const servicosStr = servicosList.map(s => s.nome).join(', ');
       const valorTotal = (servicosList.reduce((s, x) => s + Number(x.valor || 0), 0)) || Number(a.valor || 0) || 0;
+      const profFromServices = servicosList.map(s => s.profissionalId).filter(Boolean);
+      const primaryProfId = profFromServices[0] || (a.profissional?._id || null);
+      const primaryProfName = profFromServices.length
+        ? (servicosList.find(s => s.profissionalId === profFromServices[0])?.profissionalNome || null)
+        : formatProfessionalName(a.profissional) || null;
 
       return {
         _id: a._id,
@@ -1242,8 +1326,11 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         petId: a.pet?._id || null,
         servico: servicosStr,             // compat: texto p/ exibição
         servicos: servicosList,           // novo: array de serviços do agendamento
-        profissionalId: a.profissional?._id || null,
-        profissional: a.profissional ? (a.profissional.nomeCompleto || a.profissional.nomeContato || a.profissional.razaoSocial) : null,
+        profissionalId: primaryProfId,
+        profissional: primaryProfName,
+        profissionaisServicos: servicosList
+          .map(s => ({ profissionalId: s.profissionalId, profissionalNome: s.profissionalNome }))
+          .filter(entry => entry.profissionalId),
         h: new Date(a.scheduledAt).toISOString(),
         valor: valorTotal,                // total do agendamento
         pago: !!a.pago,
@@ -1310,29 +1397,28 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
         select: 'nome categorias grupo',
         populate: { path: 'grupo', select: 'nome tiposPermitidos' }
       })
+      .populate({
+        path: 'itens.profissional',
+        select: 'nomeCompleto nomeContato razaoSocial'
+      })
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .sort({ scheduledAt: 1 })
       .lean();
 
     const map = (list || []).map(a => {
-      const servicosList = (a.itens || []).map(it => ({
-        _id: it.servico?._id,
-        nome: it.servico?.nome || '—',
-        valor: Number(it.valor || 0),
-        categorias: Array.isArray(it.servico?.categorias)
-          ? it.servico.categorias.filter(Boolean)
-          : [],
-        tiposPermitidos: extractAllowedStaffTypes(it.servico || {})
-      }));
+      let servicosList = (a.itens || []).map(mapServiceItemResponse).filter(Boolean);
       if (!servicosList.length && a.servico) {
         servicosList.push({
+          itemId: null,
           _id: a.servico?._id || a.servico,
           nome: a.servico?.nome || '—',
           valor: Number(a.valor || 0),
           categorias: Array.isArray(a.servico?.categorias)
             ? a.servico.categorias.filter(Boolean)
             : [],
-          tiposPermitidos: extractAllowedStaffTypes(a.servico || {})
+          tiposPermitidos: extractAllowedStaffTypes(a.servico || {}),
+          profissionalId: a.profissional?._id || null,
+          profissionalNome: formatProfessionalName(a.profissional) || null,
         });
       }
       const valorTotal = servicosList.reduce((acc, s) => acc + Number(s.valor || 0), 0) || Number(a.valor || 0) || 0;
@@ -1341,13 +1427,18 @@ router.get('/agendamentos/range', authMiddleware, requireStaff, async (req, res)
         || clienteInfo?.nomeContato
         || clienteInfo?.razaoSocial
         || '';
+      const profFromServices = servicosList.map(s => s.profissionalId).filter(Boolean);
+      const primaryProfId = profFromServices[0] || (a.profissional?._id || null);
+      const primaryProfName = profFromServices.length
+        ? (servicosList.find(s => s.profissionalId === profFromServices[0])?.profissionalNome || null)
+        : formatProfessionalName(a.profissional) || null;
       return {
         _id: a._id,
         pet: a.pet ? a.pet.nome : null,
         servico: servicosList.map(s => s.nome).join(', '),
         servicos: servicosList,
-        profissionalId: a.profissional?._id || null,
-        profissional: a.profissional ? (a.profissional.nomeCompleto || a.profissional.nomeContato || a.profissional.razaoSocial) : null,
+        profissionalId: primaryProfId,
+        profissional: primaryProfName,
         tutor: tutorNome,
         cliente: clienteInfo,
         clienteId: clienteInfo?._id || a.cliente?._id || null,
@@ -1400,7 +1491,10 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
           const s = await Service.findById(sid).select('valor').lean();
           v = s?.valor || 0;
         }
-        itens.push({ servico: sid, valor: Number(v || 0) });
+        const entry = { servico: sid, valor: Number(v || 0) };
+        const pid = it?.profissionalId;
+        if (pid && mongoose.Types.ObjectId.isValid(pid)) entry.profissional = pid;
+        itens.push(entry);
       }
       if (!itens.length) return res.status(400).json({ message: 'Lista de serviços inválida.' });
     } else {
@@ -1412,10 +1506,13 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         const serv = await Service.findById(servicoId).select('valor').lean();
         valorFinal = serv?.valor || 0;
       }
-      itens = [{ servico: servicoId, valor: Number(valorFinal || 0) }];
+      const entry = { servico: servicoId, valor: Number(valorFinal || 0) };
+      if (profissionalId && mongoose.Types.ObjectId.isValid(profissionalId)) entry.profissional = profissionalId;
+      itens = [entry];
     }
 
     const total = itens.reduce((s, x) => s + Number(x.valor || 0), 0);
+    const primaryProfessional = itens.find(x => x.profissional)?.profissional || (profissionalId && mongoose.Types.ObjectId.isValid(profissionalId) ? profissionalId : null);
 
     const appt = await Appointment.create({
       store: storeId,
@@ -1423,7 +1520,7 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       pet: petId,
       servico: itens[0]?.servico || null, // compat
       itens,
-      profissional: profissionalId,
+      profissional: primaryProfessional,
       scheduledAt: new Date(scheduledAt),
       valor: total,
       pago: !!pago,
@@ -1436,27 +1533,41 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       .select('_id store cliente pet servico itens profissional scheduledAt valor pago status observacoes')
       .populate('pet', 'nome')
       .populate('servico', 'nome')
-      .populate('itens.servico', 'nome')
+      .populate('itens.servico', 'nome categorias grupo')
+      .populate({ path: 'itens.servico.grupo', select: 'nome tiposPermitidos' })
+      .populate({ path: 'itens.profissional', select: 'nomeCompleto nomeContato razaoSocial' })
       .populate('profissional', 'nomeCompleto nomeContato razaoSocial')
       .lean();
 
-    const servicosList = (full.itens || []).map(it => ({ _id: it.servico?._id || it.servico, nome: it.servico?.nome || '—', valor: Number(it.valor || 0) }));
+    let servicosList = (full.itens || []).map(mapServiceItemResponse).filter(Boolean);
+    if (!servicosList.length && full.servico) {
+      servicosList = [{
+        itemId: null,
+        _id: full.servico?._id || full.servico,
+        nome: full.servico?.nome || '—',
+        valor: Number(full.valor || 0),
+        categorias: [],
+        tiposPermitidos: extractAllowedStaffTypes(full.servico || {}),
+        profissionalId: full.profissional?._id || null,
+        profissionalNome: formatProfessionalName(full.profissional) || null,
+      }];
+    }
     const servicosStr = servicosList.map(s => s.nome).join(', ');
+    const valorTotal = servicosList.reduce((sum, svc) => sum + Number(svc.valor || 0), 0) || Number(full.valor || 0) || 0;
+    const primaryProfName = servicosList.find(s => s.profissionalId)?.profissionalNome || formatProfessionalName(full.profissional) || '—';
 
     res.status(201).json({
       _id: full._id,
       h: new Date(full.scheduledAt).toISOString(),
-      valor: Number(full.valor || 0),
+      valor: valorTotal,
       pago: !!full.pago,
       status: full.status || 'agendado',
       pet: full.pet ? full.pet.nome : '—',
       servico: servicosStr,
       servicos: servicosList,
       observacoes: full.observacoes || '',
-      profissional: full.profissional
-        ? (full.profissional.nomeCompleto || full.profissional.nomeContato || full.profissional.razaoSocial)
-        : '—',
-      profissionalId: full.profissional?._id || null
+      profissional: primaryProfName || '—',
+      profissionalId: full.profissional?._id || servicosList.find(s => s.profissionalId)?.profissionalId || null
     });
   } catch (e) {
     console.error('POST /func/agendamentos', e);

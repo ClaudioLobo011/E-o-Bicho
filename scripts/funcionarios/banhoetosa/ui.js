@@ -228,6 +228,9 @@ export function enableDragDrop() {
       }
     } catch {}
     try { ev.dataTransfer.setData('text/plain', id); } catch {}
+    const serviceIds = card.dataset.serviceItemIds || '';
+    try { ev.dataTransfer.setData('text/x-service-ids', serviceIds); } catch {}
+    card.dataset.draggingServiceIds = serviceIds;
     try { ev.dataTransfer.setDragImage(card, 10, 10); } catch {}
     ev.dataTransfer.effectAllowed = 'move';
     card.classList.add('is-dragging');
@@ -235,7 +238,10 @@ export function enableDragDrop() {
 
   body.addEventListener('dragend', (ev) => {
     const card = ev.target?.closest?.('div[data-appointment-id]');
-    if (card) card.classList.remove('is-dragging');
+    if (card) {
+      card.classList.remove('is-dragging');
+      delete card.dataset.draggingServiceIds;
+    }
     body.querySelectorAll('.agenda-drop-target').forEach(s => s.classList.remove('agenda-drop-target'));
   }, true);
 
@@ -259,6 +265,8 @@ export function enableDragDrop() {
     ev.preventDefault();
     const id = ev.dataTransfer?.getData('text/plain');
     if (!id) return;
+    const draggingCard = body.querySelector('.agenda-card.is-dragging');
+    const serviceIdsRaw = (ev.dataTransfer?.getData('text/x-service-ids') || draggingCard?.dataset.draggingServiceIds || '').trim();
     const item = state.agendamentos.find(x => String(x._id) === String(id));
     if (!item) return;
     const orig = new Date(item.h || item.scheduledAt);
@@ -267,6 +275,10 @@ export function enableDragDrop() {
     const payload = {};
     if (slot.dataset.profissionalId) payload.profissionalId = slot.dataset.profissionalId;
     payload.scheduledAt = buildLocalDateTime(day, hh).toISOString();
+    if (serviceIdsRaw) {
+      const ids = serviceIdsRaw.split(',').map(s => s.trim()).filter(Boolean);
+      if (ids.length) payload.serviceItemIds = ids;
+    }
     await moveAppointmentQuick(id, payload);
   });
 }
