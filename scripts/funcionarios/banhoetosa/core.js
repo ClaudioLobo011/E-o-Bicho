@@ -273,31 +273,50 @@ export function getFilteredAgendamentos() {
     }
 
     // resolve o profissional do agendamento pra um id
-    const resolveProfId = () => {
-      let pid = a.profissionalId ? String(a.profissionalId) : null;
-      if (!pid) {
+    const resolveProfIds = () => {
+      const ids = new Set();
+      const append = (value) => {
+        if (!value) return;
+        const str = String(value).trim();
+        if (str) ids.add(str);
+      };
+      if (Array.isArray(a.servicos)) {
+        a.servicos.forEach((svc) => {
+          if (svc && svc.profissionalId) append(svc.profissionalId);
+        });
+      }
+      if (Array.isArray(a.profissionaisServicos)) {
+        a.profissionaisServicos.forEach((entry) => {
+          if (entry && entry.profissionalId) append(entry.profissionalId);
+        });
+      }
+      if (!ids.size && a.profissionalId) {
+        append(a.profissionalId);
+      }
+      if (!ids.size) {
         let nc = '';
         if (typeof a.profissional === 'string') nc = a.profissional;
         else if (a.profissional && typeof a.profissional === 'object') {
           nc = a.profissional.nomeCompleto || a.profissional.nomeContato ||
                a.profissional.razaoSocial || a.profissional.nome || '';
         }
-        pid = byNameAll.get(String(nc).trim().toLowerCase()) || null;
+        const fallback = byNameAll.get(String(nc).trim().toLowerCase()) || null;
+        if (fallback) append(fallback);
       }
-      return pid;
+      return ids;
     };
 
     // por id específico (chips de profissionais)
     if (hasProf) {
-      const pid = resolveProfId();
-      ok = ok && !!pid && state.filters.profIds.has(pid);
+      const profIds = resolveProfIds();
+      ok = ok && Array.from(profIds).some(id => state.filters.profIds.has(id));
       if (!ok) return false;
     }
 
     // por tipo (Esteticista, Veterinário, etc.)
     if (hasTipo) {
-      const pid = resolveProfId();
-      ok = ok && !!pid && idsTipo.has(pid);
+      const profIds = resolveProfIds();
+      ok = ok && Array.from(profIds).some(id => idsTipo.has(id));
       if (!ok) return false;
     }
 

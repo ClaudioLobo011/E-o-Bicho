@@ -365,6 +365,50 @@ function extractAppointmentServices(appointment) {
   });
 }
 
+function expandAppointmentsForCards(appointments) {
+  const arr = Array.isArray(appointments) ? appointments : [];
+  const cards = [];
+  arr.forEach((appt) => {
+    const services = Array.isArray(appt.servicos) ? appt.servicos : [];
+    if (!services.length) {
+      cards.push({ ...appt, __serviceItemIds: [] });
+      return;
+    }
+    const groups = new Map();
+    services.forEach((svc) => {
+      const profIdRaw = svc && svc.profissionalId ? String(svc.profissionalId) : (appt.profissionalId ? String(appt.profissionalId) : '');
+      const key = profIdRaw || '__sem_prof__';
+      if (!groups.has(key)) {
+        groups.set(key, {
+          profissionalId: profIdRaw || null,
+          services: [],
+          total: 0,
+          itemIds: [],
+        });
+      }
+      const bucket = groups.get(key);
+      bucket.services.push(svc);
+      bucket.total += Number(svc.valor || 0);
+      if (svc.itemId) bucket.itemIds.push(String(svc.itemId));
+    });
+    if (!groups.size) {
+      cards.push({ ...appt, __serviceItemIds: [] });
+      return;
+    }
+    groups.forEach((bucket) => {
+      const clone = { ...appt };
+      const names = bucket.services.map((svc) => svc.nome).filter(Boolean);
+      clone.servico = names.length ? names.join(', ') : (appt.servico || '');
+      clone.valor = bucket.total || Number(appt.valor || 0) || 0;
+      clone.profissionalId = bucket.profissionalId || appt.profissionalId || null;
+      clone.__serviceItemIds = bucket.itemIds.length ? bucket.itemIds.slice() : bucket.services.map((svc) => svc.itemId).filter(Boolean).map(String);
+      clone.__servicesForCard = bucket.services;
+      cards.push(clone);
+    });
+  });
+  return cards;
+}
+
 async function persistFichaClinicaContext(appointment) {
   try {
     let workingAppointment = appointment || null;
@@ -610,8 +654,8 @@ export function renderGrid() {
   const counter = document.createElement('div');
   counter.className = 'agenda-grid-summary col-span-full text-right px-3 py-1 text-xs text-slate-500';
   const itemsAll = state.agendamentos || [];
-  const items    = getFilteredAgendamentos(itemsAll);
-  const filtered = (state.filters.statuses.size || state.filters.profIds.size) ? ` (filtrados: ${items.length})` : '';
+  const filteredAppointments = getFilteredAgendamentos(itemsAll);
+  const filtered = (state.filters.statuses.size || state.filters.profIds.size) ? ` (filtrados: ${filteredAppointments.length})` : '';
   counter.textContent = `Agendamentos: ${itemsAll.length}${filtered}`;
   header.appendChild(counter);
   els.agendaList.appendChild(header);
@@ -647,8 +691,9 @@ export function renderGrid() {
     });
   });
 
+  const cards = expandAppointmentsForCards(filteredAppointments);
   let placed = 0;
-  for (const a of items) {
+  for (const a of cards) {
     const when = a.h || a.scheduledAt;
     if (!when) continue;
     const d  = new Date(when);
@@ -660,6 +705,15 @@ export function renderGrid() {
       else if (a.profissional && typeof a.profissional === 'object') nameCandidate = a.profissional.nome || '';
       const normalized = String(nameCandidate || '').trim().toLowerCase();
       if (normalized && byNameAll.has(normalized)) profId = String(byNameAll.get(normalized));
+      if (!profId) {
+        const fallbackVisible = (profs || []).find(p => p && p._id);
+        if (fallbackVisible) {
+          profId = String(fallbackVisible._id);
+        } else {
+          const fallbackAny = (profsAll || []).find(p => p && p._id);
+          if (fallbackAny) profId = String(fallbackAny._id);
+        }
+      }
     }
     if (!profId) continue;
     let col = body.querySelector(`div[data-profissional-id="${profId}"][data-hh="${hh}"]`);
@@ -670,6 +724,9 @@ export function renderGrid() {
     const meta = statusMeta(a.status);
     const card = document.createElement('div');
     card.setAttribute('data-appointment-id', a._id || '');
+    if (Array.isArray(a.__serviceItemIds) && a.__serviceItemIds.length) {
+      card.dataset.serviceItemIds = a.__serviceItemIds.join(',');
+    }
     card.style.setProperty('--stripe', meta.stripe);
     card.style.setProperty('--card-max-w', '320px');
     card.className = 'agenda-card cursor-move select-none';
@@ -769,7 +826,8 @@ export function renderWeekGrid() {
     });
   });
 
-  const items = getFilteredAgendamentos(state.agendamentos || []);
+  const filteredWeek = getFilteredAgendamentos(state.agendamentos || []);
+  const items = expandAppointmentsForCards(filteredWeek);
   let placed = 0;
   for (const a of items) {
     const when = a.h || a.scheduledAt; if (!when) continue;
@@ -782,6 +840,9 @@ export function renderWeekGrid() {
     const meta = statusMeta(a.status);
     const card = document.createElement('div');
     card.setAttribute('data-appointment-id', a._id || '');
+    if (Array.isArray(a.__serviceItemIds) && a.__serviceItemIds.length) {
+      card.dataset.serviceItemIds = a.__serviceItemIds.join(',');
+    }
     card.style.setProperty('--stripe', meta.stripe);
     card.style.setProperty('--card-max-w', '100%');
     card.className = 'agenda-card agenda-card--compact cursor-pointer select-none px-2 py-1';
@@ -857,9 +918,10 @@ export function renderMonthGrid() {
   grid.className = 'agenda-grid-body agenda-grid-body--month';
   els.agendaList.appendChild(grid);
 
-  const items = getFilteredAgendamentos((state.agendamentos||[]).slice().sort((a,b)=>(new Date(a.h||a.scheduledAt))-(new Date(b.h||b.scheduledAt))));
+  const filteredMonth = getFilteredAgendamentos((state.agendamentos||[]).slice().sort((a,b)=>(new Date(a.h||a.scheduledAt))-(new Date(b.h||b.scheduledAt))));
+  const cards = expandAppointmentsForCards(filteredMonth);
   const byDay = new Map();
-  for (const a of items) {
+  for (const a of cards) {
     const d = localDateStr(new Date(a.h || a.scheduledAt));
     if (d >= m0 && d < m1) {
       if (!byDay.has(d)) byDay.set(d, []);
@@ -886,6 +948,9 @@ export function renderMonthGrid() {
       const hhmm = `${pad(when.getHours())}:${String(when.getMinutes()).padStart(2,'0')}`;
       const card = document.createElement('div');
       card.setAttribute('data-appointment-id', a._id || '');
+      if (Array.isArray(a.__serviceItemIds) && a.__serviceItemIds.length) {
+        card.dataset.serviceItemIds = a.__serviceItemIds.join(',');
+      }
       card.style.setProperty('--stripe', meta.stripe);
       card.style.setProperty('--card-max-w', '100%');
       card.className = 'agenda-card agenda-card--compact cursor-pointer select-none px-2 py-1';

@@ -114,3 +114,7 @@ export async function loadProfissionais() {
   }
   updateModalProfissionalLabel();
 }
+
+export function getModalProfissionaisList() {
+  return modalProfissionais.slice();
+}

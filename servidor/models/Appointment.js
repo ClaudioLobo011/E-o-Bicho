@@ -6,10 +6,11 @@ const AppointmentSchema = new Schema({
   cliente: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   pet: { type: Schema.Types.ObjectId, ref: 'Pet', required: true },
     servico: { type: Schema.Types.ObjectId, ref: 'Service', required: false },
-    itens: [{
+  itens: [{
     servico: { type: Schema.Types.ObjectId, ref: 'Service', required: true },
-    valor:   { type: Number, required: true, min: 0 }
-    }],
+    valor:   { type: Number, required: true, min: 0 },
+    profissional: { type: Schema.Types.ObjectId, ref: 'User' }
+  }],
   profissional: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   scheduledAt: { type: Date, required: true },
   valor: { type: Number, required: true, min: 0 },

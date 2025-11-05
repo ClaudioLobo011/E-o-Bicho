@@ -1,5 +1,5 @@
 import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole, confirmWithModal, notify } from './core.js';
-import { populateModalProfissionais, updateModalProfissionalLabel, getModalProfissionalTipo } from './profissionais.js';
+import { populateModalProfissionais, updateModalProfissionalLabel, getModalProfissionalTipo, getModalProfissionaisList } from './profissionais.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
@@ -230,8 +230,22 @@ export function openEditModal(a) {
   state.editing = a || null;
   if (!els.modal || !state.editing) return;
   state.tempServicos = Array.isArray(a.servicos)
-    ? a.servicos.map(x => ({ _id: x._id, nome: x.nome, valor: Number(x.valor || 0) }))
-    : (a.servico ? [{ _id: null, nome: a.servico, valor: Number(a.valor || 0) }] : []);
+    ? a.servicos.map(x => ({
+        _id: x._id,
+        nome: x.nome,
+        valor: Number(x.valor || 0),
+        profissionalId: x.profissionalId ? String(x.profissionalId) : '',
+        profissionalNome: x.profissionalNome || '',
+        itemId: x.itemId || null,
+      }))
+    : (a.servico ? [{
+        _id: null,
+        nome: a.servico,
+        valor: Number(a.valor || 0),
+        profissionalId: a.profissionalId ? String(a.profissionalId) : '',
+        profissionalNome: typeof a.profissional === 'string' ? a.profissional : (a.profissional?.nomeCompleto || a.profissional?.nomeContato || a.profissional?.razaoSocial || ''),
+        itemId: null,
+      }] : []);
   renderServicosLista();
   state.selectedServico = null;
   if (els.servInput) { els.servInput.value = ''; els.servInput.disabled = false; }
@@ -266,7 +280,16 @@ export function openEditModal(a) {
   }
   try {
     const sid = els.addStoreSelect?.value || a.storeId || '';
-    if (sid) { populateModalProfissionais(sid, profId); }
+    if (sid) {
+      const maybe = populateModalProfissionais(sid, profId);
+      if (maybe && typeof maybe.then === 'function') {
+        maybe.then(() => renderServicosLista()).catch(() => renderServicosLista());
+      } else {
+        renderServicosLista();
+      }
+    } else {
+      renderServicosLista();
+    }
   } catch {}
   if (els.statusSelect) {
     const keyRaw = String(a.status || 'agendado')
@@ -474,15 +497,48 @@ async function updateSelectedServicePrice() {
 export function renderServicosLista() {
   if (!els.servListUL || !els.servTotalEl) return;
   const items = state.tempServicos || [];
-  els.servListUL.innerHTML = items.map((it, idx) => `
-    <li class="flex items-center justify-between px-3 py-2 text-sm">
-      <div class="flex items-center gap-3">
-        <span class="w-20 text-right tabular-nums">${money(Number(it.valor || 0))}</span>
-        <span class="text-gray-700">${it.nome || ''}</span>
-      </div>
-      <button data-idx="${idx}" class="remove-serv px-2 py-1 rounded-md border text-gray-600 hover:bg-gray-50">Remover</button>
-    </li>
-  `).join('');
+  const profs = getModalProfissionaisList();
+  const buildOptions = (selectedId, fallbackName = '') => {
+    const opts = ['<option value="">Selecione</option>'];
+    let hasSelected = false;
+    profs.forEach((prof) => {
+      const value = String(prof._id || '');
+      const isSelected = selectedId && value === String(selectedId);
+      if (isSelected) hasSelected = true;
+      const label = String(prof.nome || '').replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch] || ch));
+      opts.push(`<option value="${value}"${isSelected ? ' selected' : ''}>${label}</option>`);
+    });
+    if (selectedId && !hasSelected) {
+      const safeName = String(fallbackName || 'Profissional').replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch] || ch));
+      const value = String(selectedId);
+      opts.push(`<option value="${value}" selected>${safeName}</option>`);
+    }
+    return opts.join('');
+  };
+  els.servListUL.innerHTML = items.map((it, idx) => {
+    const valorFmt = money(Number(it.valor || 0));
+    const nomeSafe = String(it.nome || '').replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch] || ch));
+    const profId = it.profissionalId ? String(it.profissionalId) : '';
+    const options = buildOptions(profId, it.profissionalNome || '');
+    const selectId = `serv-prof-${idx}`;
+    return `
+      <li class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(180px,auto)_auto] items-start md:items-center px-3 py-2 text-sm">
+        <div class="flex items-start md:items-center gap-3 overflow-hidden">
+          <span class="w-20 text-right tabular-nums shrink-0">${valorFmt}</span>
+          <span class="text-gray-700 break-words flex-1">${nomeSafe}</span>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label for="${selectId}" class="text-xs font-medium text-gray-600 uppercase tracking-wide">Profissional</label>
+          <select id="${selectId}" data-idx="${idx}" class="select-serv-prof rounded-md border-gray-300 focus:ring-primary focus:border-primary text-sm">
+            ${options}
+          </select>
+        </div>
+        <div class="flex md:justify-end">
+          <button data-idx="${idx}" class="remove-serv px-2 py-1 rounded-md border text-gray-600 hover:bg-gray-50">Remover</button>
+        </div>
+      </li>
+    `;
+  }).join('');
   const total = items.reduce((s, x) => s + Number(x.valor || 0), 0);
   els.servTotalEl.textContent = money(total);
   els.servListUL.querySelectorAll('.remove-serv').forEach(btn => {
@@ -494,6 +550,16 @@ export function renderServicosLista() {
       }
     });
   });
+  els.servListUL.querySelectorAll('.select-serv-prof').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      const i = parseInt(sel.getAttribute('data-idx'), 10);
+      if (Number.isNaN(i) || !state.tempServicos[i]) return;
+      const selected = sel.value || '';
+      state.tempServicos[i].profissionalId = selected;
+      const option = sel.options[sel.selectedIndex];
+      state.tempServicos[i].profissionalNome = option ? option.textContent.trim() : '';
+    });
+  });
 }
 
 export async function saveAgendamento() {
@@ -501,22 +567,43 @@ export async function saveAgendamento() {
     const dateRaw = (els.addDateInput?.value) || (els.dateInput?.value) || todayStr();
     const storeIdSelected = (els.addStoreSelect?.value) || state.selectedStoreId || els.storeSelect?.value;
     const hora = els.horaInput?.value;
-    const profissionalId = els.profSelect?.value;
+    const defaultProfissionalId = (els.profSelect?.value || '').trim();
     const status = (els.statusSelect?.value) || 'agendado';
-    if (!hora) { try { els.horaInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Informe a hora.'; els.horaInput.parentElement.appendChild(p);} catch{}; return; } if (!profissionalId) { try { els.profSelect.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Selecione o profissional.'; els.profSelect.parentElement.appendChild(p);} catch{}; return; }
+    if (!hora) { try { els.horaInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Informe a hora.'; els.horaInput.parentElement.appendChild(p);} catch{}; return; }
     if (!storeIdSelected) { try { (els.addStoreSelect||els.storeSelect).classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Selecione a empresa.'; (els.addStoreSelect||els.storeSelect).parentElement.appendChild(p);} catch{}; return; }
+
     const scheduledAt = buildLocalDateTime(dateRaw, hora).toISOString();
+    const itemsRaw = Array.isArray(state.tempServicos) ? state.tempServicos : [];
+    const normalizedServices = itemsRaw.map((svc) => {
+      const profId = svc && svc.profissionalId ? String(svc.profissionalId).trim() : '';
+      const resolvedProf = profId || defaultProfissionalId;
+      return {
+        ...svc,
+        profissionalId: resolvedProf ? String(resolvedProf) : '',
+      };
+    });
+    const missingProfessional = normalizedServices.some((svc) => !svc.profissionalId);
+    if (missingProfessional) {
+      if (window.showToast) window.showToast('Defina um profissional para cada serviço adicionado.', 'warning'); else alert('Defina um profissional para cada serviço adicionado.');
+      return;
+    }
+    const primaryProfissionalId = normalizedServices.find(svc => svc.profissionalId)?.profissionalId || defaultProfissionalId;
+
     if (state.editing && state.editing._id) {
       const id = state.editing._id;
-      const items = Array.isArray(state.tempServicos) ? state.tempServicos : [];
-      if (!items.length) { try { els.servInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Adicione pelo menos 1 serviço.'; els.servInput.parentElement.appendChild(p);} catch{}; return; }
+      if (!normalizedServices.length) { try { els.servInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Adicione pelo menos 1 serviço.'; els.servInput.parentElement.appendChild(p);} catch{}; return; }
       const body = {
         storeId: storeIdSelected,
-        profissionalId,
+        profissionalId: primaryProfissionalId,
         scheduledAt,
         status,
         observacoes: (els.obsInput?.value || '').trim(),
-        servicos: items.map(x => ({ servicoId: x._id, valor: Number(x.valor || 0) })),
+        servicos: normalizedServices.map(x => ({
+          servicoId: x._id,
+          valor: Number(x.valor || 0),
+          ...(x.profissionalId ? { profissionalId: x.profissionalId } : {}),
+          ...(x.itemId ? { itemId: x.itemId } : {}),
+        })),
         ...(state.editing.clienteId ? { clienteId: state.editing.clienteId } : {}),
         ...(els.petSelect?.value ? { petId: els.petSelect.value } : (state.editing.petId ? { petId: state.editing.petId } : {})),
         ...(typeof state.editing.pago !== 'undefined' ? { pago: state.editing.pago } : {})
@@ -535,15 +622,22 @@ export async function saveAgendamento() {
       enhanceAgendaUI();
       return;
     }
+
     const clienteId = state.selectedCliente?._id;
     const petId = els.petSelect?.value;
-    const items = state.tempServicos || [];
-    if (!(clienteId && petId && items.length)) { try { if(!clienteId){ els.cliInput.classList.add('border-red-500'); const p1=document.createElement('p'); p1.className='form-err text-xs text-red-600 mt-1'; p1.textContent='Selecione o cliente.'; els.cliInput.parentElement.appendChild(p1);} if(!petId){ els.petSelect.classList.add('border-red-500'); const p2=document.createElement('p'); p2.className='form-err text-xs text-red-600 mt-1'; p2.textContent='Selecione o pet.'; els.petSelect.parentElement.appendChild(p2);} if(!items.length){ els.servInput.classList.add('border-red-500'); const p3=document.createElement('p'); p3.className='form-err text-xs text-red-600 mt-1'; p3.textContent='Adicione pelo menos 1 serviço.'; els.servInput.parentElement.appendChild(p3);} } catch{}; return; }
+    if (!(clienteId && petId && normalizedServices.length)) { try { if(!clienteId){ els.cliInput.classList.add('border-red-500'); const p1=document.createElement('p'); p1.className='form-err text-xs text-red-600 mt-1'; p1.textContent='Selecione o cliente.'; els.cliInput.parentElement.appendChild(p1);} if(!petId){ els.petSelect.classList.add('border-red-500'); const p2=document.createElement('p'); p2.className='form-err text-xs text-red-600 mt-1'; p2.textContent='Selecione o pet.'; els.petSelect.parentElement.appendChild(p2);} if(!normalizedServices.length){ els.servInput.classList.add('border-red-500'); const p3=document.createElement('p'); p3.className='form-err text-xs text-red-600 mt-1'; p3.textContent='Adicione pelo menos 1 serviço.'; els.servInput.parentElement.appendChild(p3);} } catch{}; return; }
+
     const body = {
       storeId: storeIdSelected,
-      clienteId, petId,
-      servicos: items.map(x => ({ servicoId: x._id, valor: Number(x.valor || 0) })),
-      profissionalId, scheduledAt,
+      clienteId,
+      petId,
+      servicos: normalizedServices.map(x => ({
+        servicoId: x._id,
+        valor: Number(x.valor || 0),
+        ...(x.profissionalId ? { profissionalId: x.profissionalId } : {}),
+      })),
+      profissionalId: primaryProfissionalId,
+      scheduledAt,
       status,
       observacoes: (els.obsInput?.value || '').trim(),
       pago: false
@@ -682,7 +776,18 @@ export function bindModalAndActionsEvents() {
     const v = Number(els.valorInput?.value || 0);
     if (!s || !s._id) { try { els.servInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Escolha um serviço na busca.'; els.servInput.parentElement.appendChild(p);} catch{}; return; }
     if (!(v >= 0)) { try { els.valorInput.classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Valor inválido.'; els.valorInput.parentElement.appendChild(p);} catch{}; return; }
-    state.tempServicos.push({ _id: s._id, nome: s.nome, valor: v });
+    const currentProfId = s && s.profissionalId ? String(s.profissionalId) : (els.profSelect?.value || '').trim();
+    const profList = getModalProfissionaisList();
+    const profEntry = profList.find(p => String(p._id || '') === currentProfId);
+    const profNome = profEntry ? profEntry.nome : (s?.profissionalNome || '');
+    state.tempServicos.push({
+      _id: s._id,
+      nome: s.nome,
+      valor: v,
+      profissionalId: currentProfId,
+      profissionalNome: profNome || '',
+      itemId: s.itemId || null,
+    });
     state.selectedServico = null;
     if (els.servInput)  els.servInput.value = '';
     if (els.valorInput) els.valorInput.value = '';
