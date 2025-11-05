@@ -904,6 +904,8 @@
 
   #agenda-wrapper {
     position: relative;
+    overflow-x: auto;
+    overflow-y: visible;
     padding: clamp(1.5rem, 1vw + 1.1rem, 2.5rem);
     background:
       radial-gradient(at 18% 22%, rgba(59,130,246,0.14), transparent 55%),

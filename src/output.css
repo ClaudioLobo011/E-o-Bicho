@@ -5840,6 +5840,8 @@
   }
   #agenda-wrapper {
     position: relative;
+    overflow-x: auto;
+    overflow-y: visible;
     padding: clamp(1.5rem, 1vw + 1.1rem, 2.5rem);
     background: radial-gradient(at 18% 22%, rgba(59,130,246,0.14), transparent 55%), radial-gradient(at 82% 35%, rgba(16,185,129,0.12), transparent 52%), linear-gradient(180deg, rgba(248,250,252,0.92), rgba(255,255,255,0.98));
   }
