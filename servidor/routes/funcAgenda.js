@@ -405,6 +405,15 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       serviceItemIds,
     } = req.body || {};
 
+    const hasStatusField = Object.prototype.hasOwnProperty.call(req.body || {}, 'status');
+    let normalizedStatus = null;
+    if (hasStatusField) {
+      normalizedStatus = normalizeServiceStatus(status, null);
+      if (!normalizedStatus) {
+        return res.status(400).json({ message: 'Status inválido.' });
+      }
+    }
+
     const set = {};
     if (storeId && mongoose.Types.ObjectId.isValid(storeId)) set.store = storeId;
     if (clienteId && mongoose.Types.ObjectId.isValid(clienteId)) set.cliente = clienteId;
@@ -425,12 +434,7 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       set.scheduledAt = d;
     }
 
-    // STATUS
-    if (typeof status !== 'undefined') {
-      const normalizedStatus = normalizeServiceStatus(status, null);
-      if (!normalizedStatus) return res.status(400).json({ message: 'Status inválido.' });
-      set.status = normalizedStatus;
-    }
+    // STATUS será aplicado após tratar itens (se necessário)
     // Observações
     if (typeof observacoes !== 'undefined') set.observacoes = String(observacoes);
 
@@ -493,8 +497,17 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
           .filter(Boolean)
       : [];
 
-    if (!itensPayload && normalizedServiceItemIds.length && profissionalId && mongoose.Types.ObjectId.isValid(profissionalId)) {
-      const currentItensDoc = await Appointment.findById(id).select('itens').lean();
+    let currentItensDoc = null;
+
+    if (
+      !itensPayload
+      && normalizedServiceItemIds.length
+      && (
+        (profissionalId && mongoose.Types.ObjectId.isValid(profissionalId))
+        || hasStatusField
+      )
+    ) {
+      currentItensDoc = await Appointment.findById(id).select('itens').lean();
       if (!currentItensDoc) {
         return res.status(404).json({ message: 'Agendamento não encontrado.' });
       }
@@ -504,16 +517,23 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
           valor: Number(it.valor || 0),
         };
         const currentProf = it.profissional ? String(it.profissional) : null;
-        if (normalizedServiceItemIds.includes(String(it._id))) {
-          payload.profissional = profissionalId;
-        } else if (currentProf && mongoose.Types.ObjectId.isValid(currentProf)) {
+        const target = normalizedServiceItemIds.includes(String(it._id));
+        if (currentProf && mongoose.Types.ObjectId.isValid(currentProf)) {
           payload.profissional = currentProf;
+        }
+        if (target && profissionalId && mongoose.Types.ObjectId.isValid(profissionalId)) {
+          payload.profissional = profissionalId;
         }
         if (typeof it.hora === 'string' && it.hora.trim()) {
           payload.hora = it.hora.trim();
         }
         const existingStatus = normalizeServiceStatus(it.status, null);
-        if (existingStatus) payload.status = existingStatus;
+        if (existingStatus) {
+          payload.status = existingStatus;
+        }
+        if (target && hasStatusField && normalizedStatus) {
+          payload.status = normalizedStatus;
+        }
         const existingObs = typeof it.observacao === 'string'
           ? it.observacao.trim()
           : (typeof it.observacoes === 'string' ? it.observacoes.trim() : '');
@@ -534,6 +554,26 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         }
       } else {
         set.valor = 0;
+      }
+    }
+
+    if (hasStatusField && normalizedStatus) {
+      let applyStatusToAppointment = false;
+      if (!normalizedServiceItemIds.length) {
+        applyStatusToAppointment = true;
+      } else if (Array.isArray(itensPayload)) {
+        const total = itensPayload.length;
+        if (total === 0 || normalizedServiceItemIds.length >= total) {
+          applyStatusToAppointment = true;
+        }
+      } else if (currentItensDoc && Array.isArray(currentItensDoc.itens)) {
+        const total = currentItensDoc.itens.length;
+        if (total === 0 || normalizedServiceItemIds.length >= total) {
+          applyStatusToAppointment = true;
+        }
+      }
+      if (applyStatusToAppointment) {
+        set.status = normalizedStatus;
       }
     }
 

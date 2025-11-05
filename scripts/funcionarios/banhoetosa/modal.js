@@ -154,7 +154,7 @@ window.openVendaModal = openVendaModal;
 window.closeVendaModal = closeVendaModal;
 // Bridges globais para facilitar chamadas diretas a partir do UI sem import circular
 window.__openEditFromUI = (item) => openEditModal(item);
-window.__updateStatusQuick = (id, status) => updateStatusQuick(id, status);
+window.__updateStatusQuick = (id, status, opts) => updateStatusQuick(id, status, opts);
 
 export function openAddModal(preselectProfId) {
   let preselectedId = '';
@@ -956,8 +956,12 @@ export function bindModalAndActionsEvents() {
   els.servInput?.addEventListener('input', debounce((e) => searchServicos(e.target.value), 300));
 }
 
-export async function updateStatusQuick(id, status) {
+export async function updateStatusQuick(id, status, options = {}) {
   const idStr = id != null ? String(id) : '';
+  const opts = options || {};
+  const serviceItemIds = Array.isArray(opts.serviceItemIds)
+    ? opts.serviceItemIds.map((value) => String(value).trim()).filter(Boolean)
+    : [];
   let shouldOpenCheckin = false;
   let checkinSource = null;
   if (status === 'em_atendimento') {
@@ -1014,7 +1018,11 @@ export async function updateStatusQuick(id, status) {
     clearPendingCheckinQueue();
   }
   try {
-    const resp = await api(`/func/agendamentos/${idStr}`, { method: 'PUT', body: JSON.stringify({ status }) });
+    const bodyPayload = { status };
+    if (serviceItemIds.length) {
+      bodyPayload.serviceItemIds = serviceItemIds;
+    }
+    const resp = await api(`/func/agendamentos/${idStr}`, { method: 'PUT', body: JSON.stringify(bodyPayload) });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.message || 'Erro ao mudar status');

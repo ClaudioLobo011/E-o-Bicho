@@ -1,4 +1,4 @@
-import { els, state, isPrivilegedRole, notify, buildLocalDateTime, todayStr, normalizeDate, pad, api } from './core.js';
+import { els, state, isPrivilegedRole, notify, buildLocalDateTime, todayStr, normalizeDate, pad, api, statusMeta } from './core.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
@@ -159,11 +159,43 @@ export function decorateCards() {
           if (!current) return;
           if (e[CARD_ACTION_EVENT_FLAG]) return;
           e[CARD_ACTION_EVENT_FLAG] = true;
+          const cardEl = statusBtn.closest('div[data-appointment-id]');
           const chain = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
-          const cur = (current && current.status) || 'agendado';
-          const next = chain[(chain.indexOf(cur) + 1) % chain.length];
+          const serviceItemIds = cardEl?.dataset?.serviceItemIds
+            ? cardEl.dataset.serviceItemIds.split(',').map(v => v.trim()).filter(Boolean)
+            : [];
+          let baseStatus = cardEl?.dataset?.statusActionKey || '';
+          if (baseStatus) {
+            baseStatus = statusMeta(baseStatus).key;
+          }
+          if (serviceItemIds.length && Array.isArray(current.servicos)) {
+            const counts = new Map();
+            current.servicos.forEach((svc) => {
+              const itemId = svc?.itemId != null ? String(svc.itemId) : null;
+              if (!itemId || !serviceItemIds.includes(itemId)) return;
+              const key = statusMeta(svc?.status || svc?.situacao || current.status || 'agendado').key;
+              counts.set(key, (counts.get(key) || 0) + 1);
+            });
+            if (counts.size) {
+              let candidate = baseStatus || statusMeta(current.status || 'agendado').key;
+              let candidateCount = counts.get(candidate) || 0;
+              counts.forEach((count, key) => {
+                if (count > candidateCount) {
+                  candidate = key;
+                  candidateCount = count;
+                }
+              });
+              baseStatus = candidate;
+            }
+          }
+          if (!baseStatus) {
+            baseStatus = statusMeta(current.status || 'agendado').key;
+          }
+          let idx = chain.indexOf(baseStatus);
+          if (idx < 0) idx = 0;
+          const next = chain[(idx + 1) % chain.length];
           if (window.__updateStatusQuick) {
-            window.__updateStatusQuick(id, next);
+            window.__updateStatusQuick(id, next, { serviceItemIds });
           }
         } catch (err) { console.error('status-click', err); }
       };
