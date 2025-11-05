@@ -1,4 +1,4 @@
-import { state, isPrivilegedRole, notify } from './core.js';
+import { state, isPrivilegedRole, notify, statusMeta } from './core.js';
 
 const ACTION_CLICK_GUARD = Symbol('agendaActionClickHandled');
 const ACTION_BOUND_FLAG = '__banhoAgendaActionsBound';
@@ -41,10 +41,42 @@ function onActionClick(ev) {
     }
 
     if (btn.classList.contains('status')) {
+      const cardEl = btn.closest('div[data-appointment-id]');
       const chain = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
-      const cur = (item && item.status) || 'agendado';
-      const next = chain[(chain.indexOf(cur) + 1) % chain.length];
-      if (window.__updateStatusQuick) window.__updateStatusQuick(id, next);
+      const serviceItemIds = cardEl?.dataset?.serviceItemIds
+        ? cardEl.dataset.serviceItemIds.split(',').map(v => v.trim()).filter(Boolean)
+        : [];
+      let baseStatus = cardEl?.dataset?.statusActionKey || '';
+      if (baseStatus) {
+        baseStatus = statusMeta(baseStatus).key;
+      }
+      if (serviceItemIds.length && Array.isArray(item?.servicos)) {
+        const counts = new Map();
+        item.servicos.forEach((svc) => {
+          const itemId = svc?.itemId != null ? String(svc.itemId) : null;
+          if (!itemId || !serviceItemIds.includes(itemId)) return;
+          const key = statusMeta(svc?.status || svc?.situacao || item.status || 'agendado').key;
+          counts.set(key, (counts.get(key) || 0) + 1);
+        });
+        if (counts.size) {
+          let candidate = baseStatus || statusMeta(item.status || 'agendado').key;
+          let candidateCount = counts.get(candidate) || 0;
+          counts.forEach((count, key) => {
+            if (count > candidateCount) {
+              candidate = key;
+              candidateCount = count;
+            }
+          });
+          baseStatus = candidate;
+        }
+      }
+      if (!baseStatus) {
+        baseStatus = statusMeta(item?.status || 'agendado').key;
+      }
+      let idx = chain.indexOf(baseStatus);
+      if (idx < 0) idx = 0;
+      const next = chain[(idx + 1) % chain.length];
+      if (window.__updateStatusQuick) window.__updateStatusQuick(id, next, { serviceItemIds });
       return;
     }
   } catch (err) {

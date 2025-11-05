@@ -345,7 +345,7 @@ export function statusMeta(s) {
   const keyRaw = String(s || 'agendado')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .trim().toLowerCase().replace(/[-\s]+/g, '_');
-  const allowed = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
+  const allowed = ['agendado', 'em_espera', 'em_atendimento', 'finalizado', 'parcial'];
   const k = allowed.includes(keyRaw) ? keyRaw : 'agendado';
   const map = {
     agendado: {
@@ -363,6 +363,10 @@ export function statusMeta(s) {
     finalizado: {
       label: 'Finalizado', short: 'Fim.', stripe: '#16A34A', text: '#052E16',
       badgeClass: 'agenda-status-badge agenda-status-badge--finalizado', borderClass: 'border-green-500'
+    },
+    parcial: {
+      label: 'Parcial', short: 'Parc.', stripe: '#9333EA', text: '#3B0764',
+      badgeClass: 'agenda-status-badge agenda-status-badge--parcial', borderClass: 'border-purple-500'
     }
   };
   return { key: k, ...map[k] };

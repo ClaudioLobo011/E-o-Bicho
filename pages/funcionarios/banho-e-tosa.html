@@ -168,9 +168,24 @@
         <!-- Itens do Agendamento (lista de serviços) -->
         <div id="add-serv-list-wrap" class="border-t pt-4">
           <div class="text-sm font-medium text-gray-700 mb-2">Serviços adicionados</div>
-          <ul id="add-serv-list" class="divide-y divide-gray-200 rounded-md border border-gray-200">
-            <!-- itens criados via JS -->
-          </ul>
+          <div class="overflow-x-auto rounded-md border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50">
+                <tr class="text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                  <th class="px-3 py-2">Serviço</th>
+                  <th class="px-3 py-2 text-right">Valor</th>
+                  <th class="px-3 py-2">Hora</th>
+                  <th class="px-3 py-2">Profissional</th>
+                  <th class="px-3 py-2">Observação</th>
+                  <th class="px-3 py-2">Status</th>
+                  <th class="px-3 py-2 text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="add-serv-list" class="divide-y divide-gray-200">
+                <!-- itens criados via JS -->
+              </tbody>
+            </table>
+          </div>
           <div class="flex items-center justify-end mt-3">
             <span class="text-sm text-gray-600 mr-3">Total</span>
             <span id="add-serv-total" class="text-base font-semibold text-gray-900">R$ 0,00</span>

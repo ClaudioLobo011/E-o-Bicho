@@ -365,6 +365,83 @@ function extractAppointmentServices(appointment) {
   });
 }
 
+function extractServiceHourValue(service, appointment) {
+  if (!service && !appointment) return '';
+  const candidates = [
+    service?.hora,
+    service?.horario,
+    service?.h,
+    service?.scheduledAt,
+    service?.scheduled_at,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (candidate instanceof Date && !Number.isNaN(candidate.getTime())) {
+      return `${pad(candidate.getHours())}:${pad(candidate.getMinutes())}`;
+    }
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (!trimmed) continue;
+      const hhmm = trimmed.match(/^(\d{2}):(\d{2})/);
+      if (hhmm) return `${hhmm[1]}:${hhmm[2]}`;
+      const dateCandidate = coerceToDate(trimmed);
+      if (dateCandidate) {
+        return `${pad(dateCandidate.getHours())}:${pad(dateCandidate.getMinutes())}`;
+      }
+    }
+  }
+  const fallbackDate = coerceToDate(appointment?.h || appointment?.scheduledAt || appointment?.scheduled_at || appointment?.dataHora);
+  if (fallbackDate) {
+    return `${pad(fallbackDate.getHours())}:${pad(fallbackDate.getMinutes())}`;
+  }
+  return '';
+}
+
+function combineAppointmentDateWithHour(appointment, hourValue) {
+  const baseCandidates = [
+    appointment?.h,
+    appointment?.scheduledAt,
+    appointment?.scheduled_at,
+    appointment?.dataHora,
+  ];
+  let baseDate = null;
+  for (const candidate of baseCandidates) {
+    const parsed = coerceToDate(candidate);
+    if (parsed) {
+      baseDate = parsed;
+      break;
+    }
+  }
+  if (!baseDate) return null;
+  const date = new Date(baseDate.getTime());
+  if (typeof hourValue === 'string') {
+    const match = hourValue.trim().match(/^(\d{2}):(\d{2})$/);
+    if (match) {
+      date.setHours(Number(match[1]), Number(match[2]), 0, 0);
+    }
+  }
+  return date.toISOString();
+}
+
+function createStatusBadgeElement(appointment, options = {}) {
+  const { size = 'default' } = options || {};
+  const wrapper = document.createElement('div');
+  wrapper.className = 'agenda-status-wrapper';
+  let badgeHtml = renderStatusBadge(appointment.status);
+  if (size === 'compact') {
+    badgeHtml = badgeHtml.replace('text-xs', 'text-[10px]');
+  }
+  wrapper.insertAdjacentHTML('beforeend', badgeHtml);
+  const badgeEl = wrapper.firstElementChild;
+  if (badgeEl) {
+    badgeEl.classList.add('agenda-status-wrapper__badge');
+    if (size === 'compact') {
+      badgeEl.classList.add('agenda-status-wrapper__badge--compact');
+    }
+  }
+  return wrapper;
+}
+
 function expandAppointmentsForCards(appointments) {
   const arr = Array.isArray(appointments) ? appointments : [];
   const cards = [];
@@ -377,19 +454,39 @@ function expandAppointmentsForCards(appointments) {
     const groups = new Map();
     services.forEach((svc) => {
       const profIdRaw = svc && svc.profissionalId ? String(svc.profissionalId) : (appt.profissionalId ? String(appt.profissionalId) : '');
-      const key = profIdRaw || '__sem_prof__';
+      const horaValue = extractServiceHourValue(svc, appt);
+      const key = `${profIdRaw || '__sem_prof__'}|${horaValue || '__sem_hora__'}`;
       if (!groups.has(key)) {
         groups.set(key, {
           profissionalId: profIdRaw || null,
           services: [],
           total: 0,
           itemIds: [],
+          hora: horaValue || '',
+          statusCounts: new Map(),
+          observacoes: [],
+          statusDetails: [],
         });
       }
       const bucket = groups.get(key);
       bucket.services.push(svc);
       bucket.total += Number(svc.valor || 0);
       if (svc.itemId) bucket.itemIds.push(String(svc.itemId));
+      if (horaValue && !bucket.hora) bucket.hora = horaValue;
+      const svcStatusMeta = statusMeta(svc?.status || svc?.situacao || appt.status || 'agendado');
+      const svcStatus = svcStatusMeta.key;
+      bucket.statusCounts.set(svcStatus, (bucket.statusCounts.get(svcStatus) || 0) + 1);
+      const svcName = typeof svc?.nome === 'string' && svc.nome.trim() ? svc.nome.trim() : (appt.servico || '—');
+      bucket.statusDetails.push({
+        name: svcName,
+        status: svcStatus,
+        label: svcStatusMeta.label,
+      });
+      const obs = typeof svc?.observacao === 'string' ? svc.observacao : (typeof svc?.observacoes === 'string' ? svc.observacoes : '');
+      if (typeof obs === 'string') {
+        const trimmed = obs.trim();
+        if (trimmed) bucket.observacoes.push(trimmed);
+      }
     });
     if (!groups.size) {
       cards.push({ ...appt, __serviceItemIds: [] });
@@ -403,6 +500,45 @@ function expandAppointmentsForCards(appointments) {
       clone.profissionalId = bucket.profissionalId || appt.profissionalId || null;
       clone.__serviceItemIds = bucket.itemIds.length ? bucket.itemIds.slice() : bucket.services.map((svc) => svc.itemId).filter(Boolean).map(String);
       clone.__servicesForCard = bucket.services;
+      const statusKeys = Array.from(bucket.statusCounts.keys());
+      if (!statusKeys.length) {
+        const fallbackStatus = statusMeta(appt.status || 'agendado').key;
+        bucket.statusCounts.set(fallbackStatus, 1);
+        statusKeys.push(fallbackStatus);
+        bucket.statusDetails.push({
+          name: clone.servico || 'Serviço',
+          status: fallbackStatus,
+          label: statusMeta(fallbackStatus).label,
+        });
+      }
+      const distinctStatuses = new Set(statusKeys);
+      let cardStatusKey = statusKeys[0];
+      if (distinctStatuses.size > 1) {
+        cardStatusKey = 'parcial';
+      }
+      let actionStatusKey = statusKeys[0];
+      let maxCount = bucket.statusCounts.get(actionStatusKey) || 0;
+      bucket.statusCounts.forEach((count, key) => {
+        if (count > maxCount) {
+          maxCount = count;
+          actionStatusKey = key;
+        }
+      });
+      clone.status = cardStatusKey;
+      clone.__statusDetails = bucket.statusDetails.slice();
+      clone.__statusActionKey = actionStatusKey;
+      if (bucket.hora) {
+        const combined = combineAppointmentDateWithHour(appt, bucket.hora);
+        if (combined) {
+          clone.h = combined;
+          clone.scheduledAt = combined;
+        }
+      }
+      if (bucket.observacoes && bucket.observacoes.length) {
+        const baseObs = typeof appt.observacoes === 'string' ? appt.observacoes.trim() : '';
+        const combinedNotes = [baseObs, ...bucket.observacoes].filter(Boolean).join(' • ');
+        clone.observacoes = combinedNotes;
+      }
       cards.push(clone);
     });
   });
@@ -727,6 +863,14 @@ export function renderGrid() {
     if (Array.isArray(a.__serviceItemIds) && a.__serviceItemIds.length) {
       card.dataset.serviceItemIds = a.__serviceItemIds.join(',');
     }
+    if (a.__statusActionKey) {
+      card.dataset.statusActionKey = a.__statusActionKey;
+    } else {
+      card.dataset.statusActionKey = meta.key;
+    }
+    if (Array.isArray(a.__statusDetails) && a.__statusDetails.length) {
+      card.dataset.statusDetails = JSON.stringify(a.__statusDetails);
+    }
     card.style.setProperty('--stripe', meta.stripe);
     card.style.setProperty('--card-max-w', '320px');
     card.className = 'agenda-card cursor-move select-none';
@@ -737,10 +881,12 @@ export function renderGrid() {
     headerEl.className = 'agenda-card__head flex justify-between';
     const tutorShort = shortTutorName(a.clienteNome || '');
     const headLabel  = tutorShort ? `${tutorShort} | ${a.pet || ''}` : (a.pet || '');
-    headerEl.innerHTML = `
-      <div class="agenda-card__title font-semibold text-gray-900 truncate" title="${headLabel}">${headLabel}</div>
-      ${renderStatusBadge(a.status)}
-    `;
+    const titleEl = document.createElement('div');
+    titleEl.className = 'agenda-card__title font-semibold text-gray-900 truncate';
+    titleEl.title = headLabel;
+    titleEl.textContent = headLabel;
+    headerEl.appendChild(titleEl);
+    headerEl.appendChild(createStatusBadgeElement(a, { size: 'compact' }));
 
     const bodyEl = document.createElement('div');
     bodyEl.classList.add('agenda-card__body');
@@ -843,6 +989,14 @@ export function renderWeekGrid() {
     if (Array.isArray(a.__serviceItemIds) && a.__serviceItemIds.length) {
       card.dataset.serviceItemIds = a.__serviceItemIds.join(',');
     }
+    if (a.__statusActionKey) {
+      card.dataset.statusActionKey = a.__statusActionKey;
+    } else {
+      card.dataset.statusActionKey = meta.key;
+    }
+    if (Array.isArray(a.__statusDetails) && a.__statusDetails.length) {
+      card.dataset.statusDetails = JSON.stringify(a.__statusDetails);
+    }
     card.style.setProperty('--stripe', meta.stripe);
     card.style.setProperty('--card-max-w', '100%');
     card.className = 'agenda-card agenda-card--compact cursor-pointer select-none px-2 py-1';
@@ -873,8 +1027,7 @@ export function renderWeekGrid() {
 
     const footerEl = document.createElement('div');
     footerEl.className = 'agenda-card__footer flex items-center justify-end';
-    const statusEl = document.createElement('div');
-    statusEl.innerHTML = renderStatusBadge(a.status).replace('text-xs','text-[10px]');
+    const statusEl = createStatusBadgeElement(a, { size: 'compact' });
     const price = document.createElement('div');
     price.className = 'agenda-card__price text-gray-800 font-semibold';
     price.textContent = money(a.valor);
@@ -951,6 +1104,14 @@ export function renderMonthGrid() {
       if (Array.isArray(a.__serviceItemIds) && a.__serviceItemIds.length) {
         card.dataset.serviceItemIds = a.__serviceItemIds.join(',');
       }
+      if (a.__statusActionKey) {
+        card.dataset.statusActionKey = a.__statusActionKey;
+      } else {
+        card.dataset.statusActionKey = meta.key;
+      }
+      if (Array.isArray(a.__statusDetails) && a.__statusDetails.length) {
+        card.dataset.statusDetails = JSON.stringify(a.__statusDetails);
+      }
       card.style.setProperty('--stripe', meta.stripe);
       card.style.setProperty('--card-max-w', '100%');
       card.className = 'agenda-card agenda-card--compact cursor-pointer select-none px-2 py-1';
@@ -959,12 +1120,14 @@ export function renderMonthGrid() {
       card.title = [ a.pet || '', a.servico || '', (a.observacoes ? `Obs: ${String(a.observacoes).trim()}` : '') ].filter(Boolean).join(' • ');
       const headerEl = document.createElement('div');
       headerEl.className = 'agenda-card__head flex items-center gap-2';
-      headerEl.innerHTML = `
-        <span class="inline-flex items-center px-1.5 py-[1px] rounded bg-slate-100 text-[10px] font-medium">${hhmm}</span>
-        <div class="flex-1 flex items-center justify-center">
-          ${renderStatusBadge(a.status).replace('text-xs','text-[10px]')}
-        </div>
-      `;
+      const timeChip = document.createElement('span');
+      timeChip.className = 'inline-flex items-center px-1.5 py-[1px] rounded bg-slate-100 text-[10px] font-medium';
+      timeChip.textContent = hhmm;
+      headerEl.appendChild(timeChip);
+      const statusHolder = document.createElement('div');
+      statusHolder.className = 'flex-1 flex items-center justify-center';
+      statusHolder.appendChild(createStatusBadgeElement(a, { size: 'compact' }));
+      headerEl.appendChild(statusHolder);
       const rawTutorName = a.tutor || a.tutorNome || a.clienteNome ||
         (a.cliente && (a.cliente.nomeCompleto || a.cliente.nomeContato || a.cliente.razaoSocial || a.cliente.nome || a.cliente.name)) ||
         (a.tutor && (a.tutor.nomeCompleto || a.tutor.nomeContato || a.tutor.razaoSocial || a.tutor.nome)) ||

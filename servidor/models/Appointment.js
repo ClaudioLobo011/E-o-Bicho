@@ -9,7 +9,14 @@ const AppointmentSchema = new Schema({
   itens: [{
     servico: { type: Schema.Types.ObjectId, ref: 'Service', required: true },
     valor:   { type: Number, required: true, min: 0 },
-    profissional: { type: Schema.Types.ObjectId, ref: 'User' }
+    profissional: { type: Schema.Types.ObjectId, ref: 'User' },
+    hora: { type: String, trim: true },
+    status: {
+      type: String,
+      enum: ['agendado', 'em_espera', 'em_atendimento', 'finalizado'],
+      default: 'agendado'
+    },
+    observacao: { type: String, trim: true },
   }],
   profissional: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   scheduledAt: { type: Date, required: true },
