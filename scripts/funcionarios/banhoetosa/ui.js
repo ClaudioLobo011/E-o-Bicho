@@ -161,7 +161,7 @@ export function decorateCards() {
           console.error('status-tooltip-parse', err);
         }
       }
-      if (card.dataset.status === 'parcial' && tooltipDetails.length) {
+      if (tooltipDetails.length > 1) {
         const entries = tooltipDetails.map((detail) => {
           const meta = statusMeta(detail?.status || detail?.situacao || 'agendado');
           const name = typeof detail?.name === 'string' && detail.name.trim()
