@@ -1,4 +1,4 @@
-import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole, confirmWithModal, notify } from './core.js';
+import { api, els, state, money, debounce, todayStr, pad, buildLocalDateTime, isPrivilegedRole, confirmWithModal, notify, statusMeta } from './core.js';
 import { populateModalProfissionais, updateModalProfissionalLabel, getModalProfissionalTipo, getModalProfissionaisList } from './profissionais.js';
 import { loadAgendamentos } from './agendamentos.js';
 import { renderKpis, renderFilters } from './filters.js';
@@ -230,14 +230,20 @@ export function openEditModal(a) {
   state.editing = a || null;
   if (!els.modal || !state.editing) return;
   state.tempServicos = Array.isArray(a.servicos)
-    ? a.servicos.map(x => ({
-        _id: x._id,
-        nome: x.nome,
-        valor: Number(x.valor || 0),
-        profissionalId: x.profissionalId ? String(x.profissionalId) : '',
-        profissionalNome: x.profissionalNome || '',
-        itemId: x.itemId || null,
-      }))
+    ? a.servicos.map(x => {
+        const obsRaw = x.observacao ?? x.observacoes ?? '';
+        return {
+          _id: x._id,
+          nome: x.nome,
+          valor: Number(x.valor || 0),
+          profissionalId: x.profissionalId ? String(x.profissionalId) : '',
+          profissionalNome: x.profissionalNome || '',
+          itemId: x.itemId || null,
+          hora: normalizeHourValue(x.hora || x.horario || x.h || x.scheduledAt || a.h || a.scheduledAt || ''),
+          status: normalizeStatusValue(x.status || x.situacao || a.status || 'agendado'),
+          observacao: typeof obsRaw === 'string' ? obsRaw : '',
+        };
+      })
     : (a.servico ? [{
         _id: null,
         nome: a.servico,
@@ -245,6 +251,9 @@ export function openEditModal(a) {
         profissionalId: a.profissionalId ? String(a.profissionalId) : '',
         profissionalNome: typeof a.profissional === 'string' ? a.profissional : (a.profissional?.nomeCompleto || a.profissional?.nomeContato || a.profissional?.razaoSocial || ''),
         itemId: null,
+        hora: normalizeHourValue(a.h || a.scheduledAt || ''),
+        status: normalizeStatusValue(a.status || 'agendado'),
+        observacao: typeof a.observacoes === 'string' ? a.observacoes : '',
       }] : []);
   renderServicosLista();
   state.selectedServico = null;
@@ -474,7 +483,7 @@ async function updateVisibleServicePrices() {
   } catch {}
 }
 
-// Atualiza o valor do serviÃ§o jÃ¡ selecionado (campo de valor)
+// Atualiza o valor do serviço já selecionado (campo de valor)
 async function updateSelectedServicePrice() {
   try {
     const s = state.selectedServico;
@@ -494,6 +503,50 @@ async function updateSelectedServicePrice() {
   } catch {}
 }
 
+const STATUS_OPTIONS = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
+
+function escapeHtml(value) {
+  const replacements = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  };
+  return String(value || '').replace(/[&<>"']/g, (ch) => replacements[ch] || ch);
+}
+
+function normalizeHourValue(raw) {
+  if (!raw) return '';
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) {
+    return `${pad(raw.getHours())}:${pad(raw.getMinutes())}`;
+  }
+  const str = String(raw || '').trim();
+  if (!str) return '';
+  const directMatch = str.match(/^(\d{2}):(\d{2})/);
+  if (directMatch) {
+    return `${directMatch[1]}:${directMatch[2]}`;
+  }
+  const asDate = new Date(str);
+  if (!Number.isNaN(asDate.getTime())) {
+    return `${pad(asDate.getHours())}:${pad(asDate.getMinutes())}`;
+  }
+  return '';
+}
+
+function normalizeStatusValue(raw) {
+  return statusMeta(raw).key;
+}
+
+function buildStatusOptions(selectedKey) {
+  const normalized = normalizeStatusValue(selectedKey);
+  return STATUS_OPTIONS.map((value) => {
+    const meta = statusMeta(value);
+    const isSelected = normalized === meta.key;
+    return `<option value="${meta.key}"${isSelected ? ' selected' : ''}>${escapeHtml(meta.label)}</option>`;
+  }).join('');
+}
+
 export function renderServicosLista() {
   if (!els.servListUL || !els.servTotalEl) return;
   const items = state.tempServicos || [];
@@ -505,11 +558,11 @@ export function renderServicosLista() {
       const value = String(prof._id || '');
       const isSelected = selectedId && value === String(selectedId);
       if (isSelected) hasSelected = true;
-      const label = String(prof.nome || '').replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch] || ch));
+      const label = escapeHtml(prof.nome || '');
       opts.push(`<option value="${value}"${isSelected ? ' selected' : ''}>${label}</option>`);
     });
     if (selectedId && !hasSelected) {
-      const safeName = String(fallbackName || 'Profissional').replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch] || ch));
+      const safeName = escapeHtml(fallbackName || 'Profissional');
       const value = String(selectedId);
       opts.push(`<option value="${value}" selected>${safeName}</option>`);
     }
@@ -517,26 +570,38 @@ export function renderServicosLista() {
   };
   els.servListUL.innerHTML = items.map((it, idx) => {
     const valorFmt = money(Number(it.valor || 0));
-    const nomeSafe = String(it.nome || '').replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch] || ch));
+    const nomeSafe = escapeHtml(it.nome || '');
     const profId = it.profissionalId ? String(it.profissionalId) : '';
     const options = buildOptions(profId, it.profissionalNome || '');
-    const selectId = `serv-prof-${idx}`;
+    const horaValue = normalizeHourValue(it.hora || it.horario || it.h || '');
+    const observacaoValue = escapeHtml(it.observacao || it.observacoes || '');
+    const statusKey = normalizeStatusValue(it.status || it.situacao || 'agendado');
     return `
-      <li class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(180px,auto)_auto] items-start md:items-center px-3 py-2 text-sm">
-        <div class="flex items-start md:items-center gap-3 overflow-hidden">
-          <span class="w-20 text-right tabular-nums shrink-0">${valorFmt}</span>
-          <span class="text-gray-700 break-words flex-1">${nomeSafe}</span>
-        </div>
-        <div class="flex flex-col gap-1">
-          <label for="${selectId}" class="text-xs font-medium text-gray-600 uppercase tracking-wide">Profissional</label>
-          <select id="${selectId}" data-idx="${idx}" class="select-serv-prof rounded-md border-gray-300 focus:ring-primary focus:border-primary text-sm">
+      <tr>
+        <td class="px-3 py-2 align-top">
+          <div class="font-medium text-gray-800">${nomeSafe}</div>
+        </td>
+        <td class="px-3 py-2 align-top text-right tabular-nums text-gray-700">${valorFmt}</td>
+        <td class="px-3 py-2 align-top">
+          <input type="time" value="${horaValue}" data-idx="${idx}" class="input-serv-hora w-28 rounded-md border-gray-300 focus:border-primary focus:ring-primary" />
+        </td>
+        <td class="px-3 py-2 align-top">
+          <select data-idx="${idx}" class="select-serv-prof w-full rounded-md border-gray-300 focus:ring-primary focus:border-primary text-sm">
             ${options}
           </select>
-        </div>
-        <div class="flex md:justify-end">
-          <button data-idx="${idx}" class="remove-serv px-2 py-1 rounded-md border text-gray-600 hover:bg-gray-50">Remover</button>
-        </div>
-      </li>
+        </td>
+        <td class="px-3 py-2 align-top">
+          <input type="text" value="${observacaoValue}" data-idx="${idx}" placeholder="Observação" class="input-serv-observacao w-full rounded-md border-gray-300 focus:border-primary focus:ring-primary" />
+        </td>
+        <td class="px-3 py-2 align-top">
+          <select data-idx="${idx}" class="select-serv-status w-full rounded-md border-gray-300 focus:ring-primary focus:border-primary text-sm">
+            ${buildStatusOptions(statusKey)}
+          </select>
+        </td>
+        <td class="px-3 py-2 align-top text-center">
+          <button type="button" data-idx="${idx}" class="remove-serv inline-flex items-center justify-center rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50">Remover</button>
+        </td>
+      </tr>
     `;
   }).join('');
   const total = items.reduce((s, x) => s + Number(x.valor || 0), 0);
@@ -544,7 +609,7 @@ export function renderServicosLista() {
   els.servListUL.querySelectorAll('.remove-serv').forEach(btn => {
     btn.addEventListener('click', () => {
       const i = parseInt(btn.getAttribute('data-idx'), 10);
-      if (!isNaN(i)) {
+      if (!Number.isNaN(i)) {
         state.tempServicos.splice(i, 1);
         renderServicosLista();
       }
@@ -560,6 +625,27 @@ export function renderServicosLista() {
       state.tempServicos[i].profissionalNome = option ? option.textContent.trim() : '';
     });
   });
+  els.servListUL.querySelectorAll('.input-serv-hora').forEach((input) => {
+    input.addEventListener('input', () => {
+      const i = parseInt(input.getAttribute('data-idx'), 10);
+      if (Number.isNaN(i) || !state.tempServicos[i]) return;
+      state.tempServicos[i].hora = normalizeHourValue(input.value);
+    });
+  });
+  els.servListUL.querySelectorAll('.input-serv-observacao').forEach((input) => {
+    input.addEventListener('input', () => {
+      const i = parseInt(input.getAttribute('data-idx'), 10);
+      if (Number.isNaN(i) || !state.tempServicos[i]) return;
+      state.tempServicos[i].observacao = input.value;
+    });
+  });
+  els.servListUL.querySelectorAll('.select-serv-status').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      const i = parseInt(sel.getAttribute('data-idx'), 10);
+      if (Number.isNaN(i) || !state.tempServicos[i]) return;
+      state.tempServicos[i].status = normalizeStatusValue(sel.value);
+    });
+  });
 }
 
 export async function saveAgendamento() {
@@ -573,13 +659,21 @@ export async function saveAgendamento() {
     if (!storeIdSelected) { try { (els.addStoreSelect||els.storeSelect).classList.add('border-red-500'); const p=document.createElement('p'); p.className='form-err text-xs text-red-600 mt-1'; p.textContent='Selecione a empresa.'; (els.addStoreSelect||els.storeSelect).parentElement.appendChild(p);} catch{}; return; }
 
     const scheduledAt = buildLocalDateTime(dateRaw, hora).toISOString();
+    const baseHora = normalizeHourValue(hora);
     const itemsRaw = Array.isArray(state.tempServicos) ? state.tempServicos : [];
     const normalizedServices = itemsRaw.map((svc) => {
       const profId = svc && svc.profissionalId ? String(svc.profissionalId).trim() : '';
       const resolvedProf = profId || defaultProfissionalId;
+      const serviceHour = normalizeHourValue((svc && (svc.hora || svc.horario)) || baseHora);
+      const obsValueRaw = svc?.observacao ?? svc?.observacoes ?? '';
+      const obsValue = typeof obsValueRaw === 'string' ? obsValueRaw : '';
+      const statusValue = normalizeStatusValue(svc?.status || svc?.situacao || status);
       return {
         ...svc,
         profissionalId: resolvedProf ? String(resolvedProf) : '',
+        hora: serviceHour,
+        observacao: obsValue,
+        status: statusValue,
       };
     });
     const missingProfessional = normalizedServices.some((svc) => !svc.profissionalId);
@@ -598,12 +692,19 @@ export async function saveAgendamento() {
         scheduledAt,
         status,
         observacoes: (els.obsInput?.value || '').trim(),
-        servicos: normalizedServices.map(x => ({
-          servicoId: x._id,
-          valor: Number(x.valor || 0),
-          ...(x.profissionalId ? { profissionalId: x.profissionalId } : {}),
-          ...(x.itemId ? { itemId: x.itemId } : {}),
-        })),
+        servicos: normalizedServices.map(x => {
+          const payload = {
+            servicoId: x._id,
+            valor: Number(x.valor || 0),
+            status: normalizeStatusValue(x.status || status),
+            ...(x.profissionalId ? { profissionalId: x.profissionalId } : {}),
+            ...(x.itemId ? { itemId: x.itemId } : {}),
+          };
+          if (x.hora) payload.hora = x.hora;
+          const obs = typeof x.observacao === 'string' ? x.observacao.trim() : '';
+          if (obs) payload.observacao = obs;
+          return payload;
+        }),
         ...(state.editing.clienteId ? { clienteId: state.editing.clienteId } : {}),
         ...(els.petSelect?.value ? { petId: els.petSelect.value } : (state.editing.petId ? { petId: state.editing.petId } : {})),
         ...(typeof state.editing.pago !== 'undefined' ? { pago: state.editing.pago } : {})
@@ -631,11 +732,18 @@ export async function saveAgendamento() {
       storeId: storeIdSelected,
       clienteId,
       petId,
-      servicos: normalizedServices.map(x => ({
-        servicoId: x._id,
-        valor: Number(x.valor || 0),
-        ...(x.profissionalId ? { profissionalId: x.profissionalId } : {}),
-      })),
+      servicos: normalizedServices.map(x => {
+        const payload = {
+          servicoId: x._id,
+          valor: Number(x.valor || 0),
+          status: normalizeStatusValue(x.status || status),
+          ...(x.profissionalId ? { profissionalId: x.profissionalId } : {}),
+        };
+        if (x.hora) payload.hora = x.hora;
+        const obs = typeof x.observacao === 'string' ? x.observacao.trim() : '';
+        if (obs) payload.observacao = obs;
+        return payload;
+      }),
       profissionalId: primaryProfissionalId,
       scheduledAt,
       status,
@@ -780,6 +888,9 @@ export function bindModalAndActionsEvents() {
     const profList = getModalProfissionaisList();
     const profEntry = profList.find(p => String(p._id || '') === currentProfId);
     const profNome = profEntry ? profEntry.nome : (s?.profissionalNome || '');
+    const horaDefault = normalizeHourValue(els.horaInput?.value || state.editing?.h || state.editing?.scheduledAt || '');
+    const statusDefault = normalizeStatusValue((els.statusSelect?.value) || state.editing?.status || 'agendado');
+    const obsDefault = typeof els.obsInput?.value === 'string' ? els.obsInput.value : '';
     state.tempServicos.push({
       _id: s._id,
       nome: s.nome,
@@ -787,6 +898,9 @@ export function bindModalAndActionsEvents() {
       profissionalId: currentProfId,
       profissionalNome: profNome || '',
       itemId: s.itemId || null,
+      hora: horaDefault,
+      status: statusDefault,
+      observacao: obsDefault,
     });
     state.selectedServico = null;
     if (els.servInput)  els.servInput.value = '';

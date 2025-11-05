@@ -365,6 +365,64 @@ function extractAppointmentServices(appointment) {
   });
 }
 
+function extractServiceHourValue(service, appointment) {
+  if (!service && !appointment) return '';
+  const candidates = [
+    service?.hora,
+    service?.horario,
+    service?.h,
+    service?.scheduledAt,
+    service?.scheduled_at,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (candidate instanceof Date && !Number.isNaN(candidate.getTime())) {
+      return `${pad(candidate.getHours())}:${pad(candidate.getMinutes())}`;
+    }
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (!trimmed) continue;
+      const hhmm = trimmed.match(/^(\d{2}):(\d{2})/);
+      if (hhmm) return `${hhmm[1]}:${hhmm[2]}`;
+      const dateCandidate = coerceToDate(trimmed);
+      if (dateCandidate) {
+        return `${pad(dateCandidate.getHours())}:${pad(dateCandidate.getMinutes())}`;
+      }
+    }
+  }
+  const fallbackDate = coerceToDate(appointment?.h || appointment?.scheduledAt || appointment?.scheduled_at || appointment?.dataHora);
+  if (fallbackDate) {
+    return `${pad(fallbackDate.getHours())}:${pad(fallbackDate.getMinutes())}`;
+  }
+  return '';
+}
+
+function combineAppointmentDateWithHour(appointment, hourValue) {
+  const baseCandidates = [
+    appointment?.h,
+    appointment?.scheduledAt,
+    appointment?.scheduled_at,
+    appointment?.dataHora,
+  ];
+  let baseDate = null;
+  for (const candidate of baseCandidates) {
+    const parsed = coerceToDate(candidate);
+    if (parsed) {
+      baseDate = parsed;
+      break;
+    }
+  }
+  if (!baseDate) return null;
+  const date = new Date(baseDate.getTime());
+  if (typeof hourValue === 'string') {
+    const match = hourValue.trim().match(/^(\d{2}):(\d{2})$/);
+    if (match) {
+      date.setHours(Number(match[1]), Number(match[2]), 0, 0);
+    }
+  }
+  return date.toISOString();
+}
+
 function expandAppointmentsForCards(appointments) {
   const arr = Array.isArray(appointments) ? appointments : [];
   const cards = [];
@@ -377,19 +435,31 @@ function expandAppointmentsForCards(appointments) {
     const groups = new Map();
     services.forEach((svc) => {
       const profIdRaw = svc && svc.profissionalId ? String(svc.profissionalId) : (appt.profissionalId ? String(appt.profissionalId) : '');
-      const key = profIdRaw || '__sem_prof__';
+      const horaValue = extractServiceHourValue(svc, appt);
+      const key = `${profIdRaw || '__sem_prof__'}|${horaValue || '__sem_hora__'}`;
       if (!groups.has(key)) {
         groups.set(key, {
           profissionalId: profIdRaw || null,
           services: [],
           total: 0,
           itemIds: [],
+          hora: horaValue || '',
+          status: statusMeta(appt.status).key,
+          observacoes: [],
         });
       }
       const bucket = groups.get(key);
       bucket.services.push(svc);
       bucket.total += Number(svc.valor || 0);
       if (svc.itemId) bucket.itemIds.push(String(svc.itemId));
+      if (horaValue && !bucket.hora) bucket.hora = horaValue;
+      const svcStatus = statusMeta(svc?.status || svc?.situacao || bucket.status || appt.status).key;
+      bucket.status = svcStatus || bucket.status;
+      const obs = typeof svc?.observacao === 'string' ? svc.observacao : (typeof svc?.observacoes === 'string' ? svc.observacoes : '');
+      if (typeof obs === 'string') {
+        const trimmed = obs.trim();
+        if (trimmed) bucket.observacoes.push(trimmed);
+      }
     });
     if (!groups.size) {
       cards.push({ ...appt, __serviceItemIds: [] });
@@ -403,6 +473,21 @@ function expandAppointmentsForCards(appointments) {
       clone.profissionalId = bucket.profissionalId || appt.profissionalId || null;
       clone.__serviceItemIds = bucket.itemIds.length ? bucket.itemIds.slice() : bucket.services.map((svc) => svc.itemId).filter(Boolean).map(String);
       clone.__servicesForCard = bucket.services;
+      if (bucket.hora) {
+        const combined = combineAppointmentDateWithHour(appt, bucket.hora);
+        if (combined) {
+          clone.h = combined;
+          clone.scheduledAt = combined;
+        }
+      }
+      if (bucket.status) {
+        clone.status = bucket.status;
+      }
+      if (bucket.observacoes && bucket.observacoes.length) {
+        const baseObs = typeof appt.observacoes === 'string' ? appt.observacoes.trim() : '';
+        const combinedNotes = [baseObs, ...bucket.observacoes].filter(Boolean).join(' • ');
+        clone.observacoes = combinedNotes;
+      }
       cards.push(clone);
     });
   });
