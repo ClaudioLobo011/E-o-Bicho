@@ -150,6 +150,51 @@ export function decorateCards() {
 
     const statusBtn = actions.querySelector('.agenda-action.status');
     if (statusBtn) {
+      let tooltipDetails = [];
+      if (card.dataset.statusDetails) {
+        try {
+          const parsed = JSON.parse(card.dataset.statusDetails);
+          if (Array.isArray(parsed)) {
+            tooltipDetails = parsed.filter(Boolean);
+          }
+        } catch (err) {
+          console.error('status-tooltip-parse', err);
+        }
+      }
+      if (card.dataset.status === 'parcial' && tooltipDetails.length) {
+        const entries = tooltipDetails.map((detail) => {
+          const meta = statusMeta(detail?.status || detail?.situacao || 'agendado');
+          const name = typeof detail?.name === 'string' && detail.name.trim()
+            ? detail.name.trim()
+            : (typeof detail?.nome === 'string' ? detail.nome.trim() : 'Serviço');
+          return {
+            name: name || 'Serviço',
+            meta,
+          };
+        }).filter(item => item && item.name && item.meta);
+        if (entries.length) {
+          statusBtn.classList.add('agenda-action--has-status-tooltip');
+          const tooltip = document.createElement('div');
+          tooltip.className = 'agenda-status-tooltip';
+          const list = document.createElement('ul');
+          list.className = 'agenda-status-tooltip__list';
+          entries.forEach((entry) => {
+            const item = document.createElement('li');
+            item.className = 'agenda-status-tooltip__item';
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'agenda-status-tooltip__service';
+            nameSpan.textContent = entry.name;
+            const statusSpan = document.createElement('span');
+            statusSpan.className = `agenda-status-tooltip__state agenda-status-tooltip__state--${entry.meta.key}`;
+            statusSpan.textContent = entry.meta.label;
+            item.appendChild(nameSpan);
+            item.appendChild(statusSpan);
+            list.appendChild(item);
+          });
+          tooltip.appendChild(list);
+          statusBtn.appendChild(tooltip);
+        }
+      }
       const handlerStatus = (e) => {
         try {
           e.preventDefault();

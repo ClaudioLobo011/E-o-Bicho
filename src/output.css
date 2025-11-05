@@ -5443,6 +5443,15 @@
     padding-top: 2px;
     padding-bottom: 2px;
   }
+  .agenda-action--has-status-tooltip {
+    position: relative;
+  }
+  .agenda-action--has-status-tooltip:hover .agenda-status-tooltip,
+  .agenda-action--has-status-tooltip:focus-within .agenda-status-tooltip {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, 0);
+  }
   .agenda-status-wrapper--has-tooltip:hover .agenda-status-tooltip,
   .agenda-status-wrapper--has-tooltip:focus-within .agenda-status-tooltip {
     opacity: 1;
@@ -5466,6 +5475,11 @@
     pointer-events: none;
     transform: translateY(-4px);
     transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  .agenda-action--has-status-tooltip .agenda-status-tooltip {
+    left: 50%;
+    right: auto;
+    transform: translate(-50%, -4px);
   }
   .agenda-status-tooltip__list {
     list-style: none;

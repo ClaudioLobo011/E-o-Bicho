@@ -439,33 +439,6 @@ function createStatusBadgeElement(appointment, options = {}) {
       badgeEl.classList.add('agenda-status-wrapper__badge--compact');
     }
   }
-  const details = Array.isArray(appointment.__statusDetails)
-    ? appointment.__statusDetails.filter(Boolean)
-    : [];
-  if (appointment.status === 'parcial' && details.length) {
-    wrapper.classList.add('agenda-status-wrapper--has-tooltip');
-    wrapper.setAttribute('tabindex', '0');
-    const tooltip = document.createElement('div');
-    tooltip.className = 'agenda-status-tooltip';
-    const list = document.createElement('ul');
-    list.className = 'agenda-status-tooltip__list';
-    details.forEach((detail) => {
-      const meta = statusMeta(detail?.status || 'agendado');
-      const item = document.createElement('li');
-      item.className = 'agenda-status-tooltip__item';
-      const nameSpan = document.createElement('span');
-      nameSpan.className = 'agenda-status-tooltip__service';
-      nameSpan.textContent = detail?.name || 'Serviço';
-      const statusSpan = document.createElement('span');
-      statusSpan.className = `agenda-status-tooltip__state agenda-status-tooltip__state--${meta.key}`;
-      statusSpan.textContent = meta.label;
-      item.appendChild(nameSpan);
-      item.appendChild(statusSpan);
-      list.appendChild(item);
-    });
-    tooltip.appendChild(list);
-    wrapper.appendChild(tooltip);
-  }
   return wrapper;
 }
 
@@ -539,13 +512,8 @@ function expandAppointmentsForCards(appointments) {
         });
       }
       const distinctStatuses = new Set(statusKeys);
-      const hasMultipleServices = bucket.services.length > 1;
       let cardStatusKey = statusKeys[0];
-      if (hasMultipleServices) {
-        cardStatusKey = 'parcial';
-      } else if (distinctStatuses.size === 1) {
-        cardStatusKey = statusKeys[0];
-      } else {
+      if (distinctStatuses.size > 1) {
         cardStatusKey = 'parcial';
       }
       let actionStatusKey = statusKeys[0];
