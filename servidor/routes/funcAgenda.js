@@ -217,6 +217,17 @@ function extractAllowedStaffTypes(serviceDoc) {
   return [...new Set(raw.map(v => String(v || '').trim()).filter(Boolean))];
 }
 
+const SERVICE_STATUS_VALUES = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
+
+function normalizeServiceStatus(raw, fallback = 'agendado') {
+  if (!raw) return fallback;
+  const key = String(raw)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().toLowerCase()
+    .replace(/[-\s]+/g, '_');
+  return SERVICE_STATUS_VALUES.includes(key) ? key : fallback;
+}
+
 function formatProfessionalName(profDoc) {
   if (!profDoc) return null;
   if (typeof profDoc === 'string') return profDoc;
@@ -239,6 +250,11 @@ function mapServiceItemResponse(item) {
   const tiposPermitidos = extractAllowedStaffTypes(item.servico || {});
   const profDoc = item.profissional || null;
   const profissionalId = profDoc?._id || (typeof profDoc === 'string' ? profDoc : null);
+  const horaRaw = typeof item.hora === 'string' ? item.hora.trim() : '';
+  const observacaoRaw = typeof item.observacao === 'string'
+    ? item.observacao.trim()
+    : (typeof item.observacoes === 'string' ? item.observacoes.trim() : '');
+  const statusRaw = normalizeServiceStatus(item.status, null);
   return {
     itemId: item._id || null,
     _id: serviceId,
@@ -248,6 +264,9 @@ function mapServiceItemResponse(item) {
     tiposPermitidos,
     profissionalId,
     profissionalNome: formatProfessionalName(profDoc) || null,
+    hora: horaRaw,
+    status: statusRaw || normalizeServiceStatus(null),
+    observacao: typeof observacaoRaw === 'string' ? observacaoRaw : '',
   };
 }
 
@@ -408,10 +427,9 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
 
     // STATUS
     if (typeof status !== 'undefined') {
-      const allowed = new Set(['agendado', 'em_espera', 'em_atendimento', 'finalizado']);
-      const s = String(status);
-      if (!allowed.has(s)) return res.status(400).json({ message: 'Status inválido.' });
-      set.status = s;
+      const normalizedStatus = normalizeServiceStatus(status, null);
+      if (!normalizedStatus) return res.status(400).json({ message: 'Status inválido.' });
+      set.status = normalizedStatus;
     }
     // Observações
     if (typeof observacoes !== 'undefined') set.observacoes = String(observacoes);
@@ -454,6 +472,14 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         if (pid && mongoose.Types.ObjectId.isValid(pid)) {
           payload.profissional = pid;
         }
+        const horaRaw = typeof it?.hora === 'string' ? it.hora.trim() : '';
+        if (horaRaw) payload.hora = horaRaw;
+        const statusItem = normalizeServiceStatus(it?.status || it?.situacao, null);
+        if (statusItem) payload.status = statusItem;
+        const obsRaw = typeof it?.observacao === 'string'
+          ? it.observacao.trim()
+          : (typeof it?.observacoes === 'string' ? it.observacoes.trim() : '');
+        if (obsRaw) payload.observacao = obsRaw;
         itens.push(payload);
       }
       itensPayload = itens;
@@ -483,6 +509,15 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         } else if (currentProf && mongoose.Types.ObjectId.isValid(currentProf)) {
           payload.profissional = currentProf;
         }
+        if (typeof it.hora === 'string' && it.hora.trim()) {
+          payload.hora = it.hora.trim();
+        }
+        const existingStatus = normalizeServiceStatus(it.status, null);
+        if (existingStatus) payload.status = existingStatus;
+        const existingObs = typeof it.observacao === 'string'
+          ? it.observacao.trim()
+          : (typeof it.observacoes === 'string' ? it.observacoes.trim() : '');
+        if (existingObs) payload.observacao = existingObs;
         return payload;
       });
       itensPayload = itens;
@@ -555,6 +590,9 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         tiposPermitidos: extractAllowedStaffTypes(full.servico || {}),
         profissionalId: full.profissional?._id || null,
         profissionalNome: formatProfessionalName(full.profissional) || null,
+        hora: '',
+        status: normalizeServiceStatus(full.status || 'agendado'),
+        observacao: typeof full.observacoes === 'string' ? full.observacoes : '',
       }];
     }
     const servicosStr = servicosList.map(s => s.nome).join(', ');
@@ -1301,6 +1339,9 @@ router.get('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
           tiposPermitidos: extractAllowedStaffTypes(a.servico || {}),
           profissionalId: a.profissional?._id || null,
           profissionalNome: formatProfessionalName(a.profissional) || null,
+          hora: '',
+          status: normalizeServiceStatus(a.status || 'agendado'),
+          observacao: typeof a.observacoes === 'string' ? a.observacoes : '',
         }];
       }
       const servicosStr = servicosList.map(s => s.nome).join(', ');
@@ -1478,8 +1519,7 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       return res.status(400).json({ message: 'IDs inválidos.' });
     }
 
-    const allowed = new Set(['agendado', 'em_espera', 'em_atendimento', 'finalizado']);
-    const statusFinal = allowed.has(status) ? status : 'agendado';
+    const statusFinal = normalizeServiceStatus(status);
 
     let itens = [];
     if (Array.isArray(servicos) && servicos.length) {
@@ -1494,6 +1534,15 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         const entry = { servico: sid, valor: Number(v || 0) };
         const pid = it?.profissionalId;
         if (pid && mongoose.Types.ObjectId.isValid(pid)) entry.profissional = pid;
+        const horaRaw = typeof it?.hora === 'string' ? it.hora.trim() : '';
+        if (horaRaw) entry.hora = horaRaw;
+        const statusItem = normalizeServiceStatus(it?.status || it?.situacao, null);
+        if (statusItem) entry.status = statusItem;
+        else entry.status = normalizeServiceStatus(statusFinal);
+        const obsRaw = typeof it?.observacao === 'string'
+          ? it.observacao.trim()
+          : (typeof it?.observacoes === 'string' ? it.observacoes.trim() : '');
+        if (obsRaw) entry.observacao = obsRaw;
         itens.push(entry);
       }
       if (!itens.length) return res.status(400).json({ message: 'Lista de serviços inválida.' });
@@ -1508,6 +1557,7 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
       }
       const entry = { servico: servicoId, valor: Number(valorFinal || 0) };
       if (profissionalId && mongoose.Types.ObjectId.isValid(profissionalId)) entry.profissional = profissionalId;
+      entry.status = normalizeServiceStatus(statusFinal);
       itens = [entry];
     }
 
@@ -1550,6 +1600,9 @@ router.post('/agendamentos', authMiddleware, requireStaff, async (req, res) => {
         tiposPermitidos: extractAllowedStaffTypes(full.servico || {}),
         profissionalId: full.profissional?._id || null,
         profissionalNome: formatProfessionalName(full.profissional) || null,
+        hora: '',
+        status: normalizeServiceStatus(full.status || 'agendado'),
+        observacao: typeof full.observacoes === 'string' ? full.observacoes : '',
       }];
     }
     const servicosStr = servicosList.map(s => s.nome).join(', ');
