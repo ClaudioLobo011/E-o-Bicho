@@ -219,6 +219,10 @@ function extractAllowedStaffTypes(serviceDoc) {
 
 const SERVICE_STATUS_VALUES = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
 
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
 function normalizeServiceStatus(raw, fallback = 'agendado') {
   if (!raw) return fallback;
   const key = String(raw)
@@ -238,6 +242,24 @@ function formatProfessionalName(profDoc) {
     || profDoc.razaoSocial
     || null
   );
+}
+
+function normalizeHourString(raw) {
+  if (!raw) return null;
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) {
+    return `${pad2(raw.getHours())}:${pad2(raw.getMinutes())}`;
+  }
+  const str = String(raw).trim();
+  if (!str) return null;
+  const direct = str.match(/^(\d{2}):(\d{2})$/);
+  if (direct) {
+    return `${direct[1]}:${direct[2]}`;
+  }
+  const parsed = new Date(str);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${pad2(parsed.getHours())}:${pad2(parsed.getMinutes())}`;
+  }
+  return null;
 }
 
 function mapServiceItemResponse(item) {
@@ -402,7 +424,7 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
     const {
       storeId, clienteId, petId, servicoId,
       profissionalId, scheduledAt, valor, pago, status, servicos, observacoes, codigoVenda,
-      serviceItemIds,
+      serviceItemIds, serviceHour, serviceScheduledAt,
     } = req.body || {};
 
     const hasStatusField = Object.prototype.hasOwnProperty.call(req.body || {}, 'status');
@@ -489,6 +511,23 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
       itensPayload = itens;
     }
 
+    let serviceHourNormalized = normalizeHourString(serviceHour);
+    let serviceScheduledAtDate = null;
+    if (serviceScheduledAt) {
+      const candidate = new Date(serviceScheduledAt);
+      if (!Number.isNaN(candidate.getTime())) {
+        serviceScheduledAtDate = candidate;
+        if (!serviceHourNormalized) {
+          serviceHourNormalized = `${pad2(candidate.getHours())}:${pad2(candidate.getMinutes())}`;
+        }
+      } else {
+        const hourFromScheduled = normalizeHourString(serviceScheduledAt);
+        if (hourFromScheduled) {
+          serviceHourNormalized = hourFromScheduled;
+        }
+      }
+    }
+
     const normalizedServiceItemIds = Array.isArray(serviceItemIds)
       ? serviceItemIds
           .map(id => {
@@ -526,6 +565,13 @@ router.put('/agendamentos/:id', authMiddleware, requireStaff, async (req, res) =
         }
         if (typeof it.hora === 'string' && it.hora.trim()) {
           payload.hora = it.hora.trim();
+        }
+        if (target) {
+          if (serviceScheduledAtDate) {
+            payload.hora = serviceScheduledAtDate.toISOString();
+          } else if (serviceHourNormalized) {
+            payload.hora = serviceHourNormalized;
+          }
         }
         const existingStatus = normalizeServiceStatus(it.status, null);
         if (existingStatus) {
