@@ -34,6 +34,7 @@
     totalValue: document.getElementById('transfer-total-value'),
     totalSale: document.getElementById('transfer-total-sale'),
     saveButton: document.getElementById('transfer-save-button'),
+    clearButton: document.getElementById('transfer-clear-button'),
     transportMode: document.getElementById('transfer-transport'),
     selectedProductContainer: document.getElementById('transfer-selected-product'),
     selectedProductName: document.getElementById('transfer-selected-product-name'),
@@ -1284,6 +1285,49 @@
     }
   }
 
+  function hasTransferData() {
+    if (state.currentTransferId) {
+      return true;
+    }
+
+    if (Array.isArray(state.items) && state.items.length > 0) {
+      return true;
+    }
+
+    const fields = [
+      selectors.originCompany?.value,
+      selectors.originDeposit?.value,
+      selectors.destinationCompany?.value,
+      selectors.destinationDeposit?.value,
+      selectors.responsibleId?.value,
+      selectors.responsibleInput?.value,
+      selectors.referenceInput?.value,
+      selectors.notesInput?.value,
+      selectors.vehicleInput?.value,
+      selectors.driverInput?.value,
+    ];
+
+    return fields.some((value) => typeof value === 'string' && value.trim() !== '');
+  }
+
+  function handleClearButtonClick() {
+    if (state.isReadOnly) {
+      return;
+    }
+
+    if (hasTransferData()) {
+      const confirmed = window.confirm(
+        'Limpar os dados atuais da transferência? Esta ação apagará as informações não salvas.'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    resetForm();
+    showToast('Formulário limpo para nova transferência.', 'info', 3000);
+  }
+
   function resetForm() {
     selectors.form?.reset();
     if (selectors.numberInput) {
@@ -1474,6 +1518,7 @@
     });
 
     selectors.form?.addEventListener('submit', handleSubmit);
+    selectors.clearButton?.addEventListener('click', handleClearButtonClick);
   }
 
   function init() {
