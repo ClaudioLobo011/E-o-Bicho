@@ -5387,6 +5387,7 @@
   }
   .agenda-card {
     position: relative;
+    z-index: 1;
     --agenda-card-border: rgba(148, 163, 184, 0.35);
     --agenda-card-bg: linear-gradient(145deg, rgba(255,255,255,0.95), rgba(248,250,252,0.72));
     --agenda-card-shadow: 0 22px 44px -32px rgba(15, 23, 42, 0.45);
@@ -5405,9 +5406,10 @@
     grid-template-areas: "head" "body" "footer";
     row-gap: .35rem;
   }
-  .agenda-card:hover {
+  .agenda-card:hover, .agenda-card:focus-within {
     transform: translateY(-2px);
     box-shadow: 0 28px 58px -36px rgba(15, 23, 42, 0.55);
+    z-index: 120;
   }
   .agenda-card::before {
     content: '';
@@ -5684,11 +5686,15 @@
   }
   .agenda-action--has-status-tooltip {
     position: relative;
+    z-index: 1;
   }
   .agenda-action--has-status-tooltip:hover .agenda-status-tooltip, .agenda-action--has-status-tooltip:focus-within .agenda-status-tooltip {
     opacity: 1;
     pointer-events: auto;
     transform: translate(-50%, 0);
+  }
+  .agenda-action--has-status-tooltip:hover, .agenda-action--has-status-tooltip:focus-within {
+    z-index: 200;
   }
   .agenda-status-wrapper--has-tooltip:hover .agenda-status-tooltip, .agenda-status-wrapper--has-tooltip:focus-within .agenda-status-tooltip {
     opacity: 1;
@@ -5735,6 +5741,24 @@
     background: rgba(255,255,255,0.72);
     border-radius: 10px;
     box-shadow: 0 8px 18px -16px rgba(88,28,135,0.45);
+  }
+  .agenda-status-tooltip__item--actionable {
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  }
+  .agenda-status-tooltip__item--actionable:hover, .agenda-status-tooltip__item--actionable:focus-visible {
+    background: rgba(255,255,255,0.95);
+    box-shadow: 0 12px 24px -18px rgba(88,28,135,0.55);
+  }
+  .agenda-status-tooltip__item--actionable:active {
+    transform: translateY(1px);
+  }
+  .agenda-status-tooltip__item--actionable:focus {
+    outline: none;
+  }
+  .agenda-status-tooltip__item--actionable:focus-visible {
+    outline: 2px solid rgba(129,140,248,0.65);
+    outline-offset: 2px;
   }
   .agenda-status-tooltip__item + .agenda-status-tooltip__item {
     margin-top: 6px;

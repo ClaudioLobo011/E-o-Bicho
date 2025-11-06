@@ -4,6 +4,30 @@ import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
 
 const CARD_ACTION_EVENT_FLAG = Symbol('agendaCardActionHandled');
+const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+
+function normalizeServiceItemId(value) {
+  if (!value) return '';
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const normalized = normalizeServiceItemId(entry);
+      if (normalized) return normalized;
+    }
+    return '';
+  }
+  if (typeof value === 'object') {
+    if (value._id || value.id) {
+      return normalizeServiceItemId(value._id || value.id);
+    }
+    return '';
+  }
+  const str = String(value).trim();
+  if (!str) return '';
+  const cleaned = str
+    .replace(/^ObjectId\(["']?/, '')
+    .replace(/["']?\)$/, '');
+  return OBJECT_ID_REGEX.test(cleaned) ? cleaned : '';
+}
 
 export function enhanceAgendaUI() {
   try {
@@ -164,12 +188,18 @@ export function decorateCards() {
       if (tooltipDetails.length > 1) {
         const entries = tooltipDetails.map((detail) => {
           const meta = statusMeta(detail?.status || detail?.situacao || 'agendado');
+          const itemId = normalizeServiceItemId([
+            detail?.itemId,
+            detail?.serviceItemId,
+            detail?.serviceId,
+          ]);
           const name = typeof detail?.name === 'string' && detail.name.trim()
             ? detail.name.trim()
             : (typeof detail?.nome === 'string' ? detail.nome.trim() : 'Serviço');
           return {
             name: name || 'Serviço',
             meta,
+            itemId: itemId || null,
           };
         }).filter(item => item && item.name && item.meta);
         if (entries.length) {
@@ -185,10 +215,80 @@ export function decorateCards() {
             nameSpan.className = 'agenda-status-tooltip__service';
             nameSpan.textContent = entry.name;
             const statusSpan = document.createElement('span');
-            statusSpan.className = `agenda-status-tooltip__state agenda-status-tooltip__state--${entry.meta.key}`;
-            statusSpan.textContent = entry.meta.label;
+            const applyMetaToItem = (meta) => {
+              try {
+                const metaObj = meta && meta.key ? meta : statusMeta(entry.meta?.key || 'agendado');
+                statusSpan.className = `agenda-status-tooltip__state agenda-status-tooltip__state--${metaObj.key}`;
+                statusSpan.textContent = metaObj.label;
+                item.dataset.statusKey = metaObj.key;
+              } catch (err) {
+                console.error('status-tooltip-apply-meta', err);
+              }
+            };
+            applyMetaToItem(entry.meta);
             item.appendChild(nameSpan);
             item.appendChild(statusSpan);
+            if (entry.itemId) {
+              item.classList.add('agenda-status-tooltip__item--actionable');
+              item.dataset.serviceItemId = entry.itemId;
+              item.setAttribute('role', 'button');
+              item.tabIndex = 0;
+              item.setAttribute('aria-label', `Mudar status do serviço ${entry.name}`);
+              const handleItemActivation = (ev) => {
+                try {
+                  if (ev.type === 'keydown') {
+                    const key = ev.key || ev.code || '';
+                    if (!(key === 'Enter' || key === ' ' || key === 'Spacebar')) return;
+                    ev.preventDefault();
+                  }
+                  ev.preventDefault();
+                  if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+                  ev.stopPropagation();
+                  if (ev[CARD_ACTION_EVENT_FLAG]) return;
+                  ev[CARD_ACTION_EVENT_FLAG] = true;
+                  try {
+                    if (typeof item.focus === 'function') {
+                      item.focus({ preventScroll: true });
+                    }
+                  } catch {}
+                  const chain = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
+                  const currentKey = entry.meta?.key || item.dataset.statusKey || 'agendado';
+                  let idx = chain.indexOf(currentKey);
+                  if (idx < 0) idx = 0;
+                  const nextKey = chain[(idx + 1) % chain.length];
+                  const nextMeta = statusMeta(nextKey);
+                  const prevMeta = entry.meta;
+                  applyMetaToItem(nextMeta);
+                  entry.meta = nextMeta;
+                  const updateFn = typeof window.__updateStatusQuick === 'function'
+                    ? window.__updateStatusQuick
+                    : null;
+                  if (!updateFn) {
+                    entry.meta = prevMeta;
+                    applyMetaToItem(prevMeta);
+                    return;
+                  }
+                  const normalizedId = normalizeServiceItemId(entry.itemId);
+                  if (!normalizedId) {
+                    entry.meta = prevMeta;
+                    applyMetaToItem(prevMeta);
+                    return;
+                  }
+                  const request = updateFn(id, nextKey, { serviceItemIds: [normalizedId] });
+                  if (request && typeof request.catch === 'function') {
+                    request.catch((error) => {
+                      console.error('status-tooltip-item-update', error);
+                      entry.meta = prevMeta;
+                      applyMetaToItem(prevMeta);
+                    });
+                  }
+                } catch (error) {
+                  console.error('status-tooltip-item-activate', error);
+                }
+              };
+              item.addEventListener('click', handleItemActivation, true);
+              item.addEventListener('keydown', handleItemActivation, true);
+            }
             list.appendChild(item);
           });
           tooltip.appendChild(list);
@@ -207,7 +307,10 @@ export function decorateCards() {
           const cardEl = statusBtn.closest('div[data-appointment-id]');
           const chain = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
           const serviceItemIds = cardEl?.dataset?.serviceItemIds
-            ? cardEl.dataset.serviceItemIds.split(',').map(v => v.trim()).filter(Boolean)
+            ? cardEl.dataset.serviceItemIds
+                .split(',')
+                .map((v) => normalizeServiceItemId(v))
+                .filter(Boolean)
             : [];
           let baseStatus = cardEl?.dataset?.statusActionKey || '';
           if (baseStatus) {
