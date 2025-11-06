@@ -475,7 +475,7 @@
   .agenda-card:focus-within {
     transform: translateY(-2px);
     box-shadow: 0 28px 58px -36px rgba(15, 23, 42, 0.55);
-    z-index: 120;
+    z-index: 40;
   }
 
   .agenda-card::before {
