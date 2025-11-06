@@ -164,12 +164,15 @@ export function decorateCards() {
       if (tooltipDetails.length > 1) {
         const entries = tooltipDetails.map((detail) => {
           const meta = statusMeta(detail?.status || detail?.situacao || 'agendado');
+          const rawItemId = detail?.itemId ?? detail?.serviceItemId ?? detail?.serviceId ?? null;
+          const itemId = rawItemId != null ? String(rawItemId).trim() : '';
           const name = typeof detail?.name === 'string' && detail.name.trim()
             ? detail.name.trim()
             : (typeof detail?.nome === 'string' ? detail.nome.trim() : 'Serviço');
           return {
             name: name || 'Serviço',
             meta,
+            itemId: itemId || null,
           };
         }).filter(item => item && item.name && item.meta);
         if (entries.length) {
@@ -185,10 +188,74 @@ export function decorateCards() {
             nameSpan.className = 'agenda-status-tooltip__service';
             nameSpan.textContent = entry.name;
             const statusSpan = document.createElement('span');
-            statusSpan.className = `agenda-status-tooltip__state agenda-status-tooltip__state--${entry.meta.key}`;
-            statusSpan.textContent = entry.meta.label;
+            const applyMetaToItem = (meta) => {
+              try {
+                const metaObj = meta && meta.key ? meta : statusMeta(entry.meta?.key || 'agendado');
+                statusSpan.className = `agenda-status-tooltip__state agenda-status-tooltip__state--${metaObj.key}`;
+                statusSpan.textContent = metaObj.label;
+                item.dataset.statusKey = metaObj.key;
+              } catch (err) {
+                console.error('status-tooltip-apply-meta', err);
+              }
+            };
+            applyMetaToItem(entry.meta);
             item.appendChild(nameSpan);
             item.appendChild(statusSpan);
+            if (entry.itemId) {
+              item.classList.add('agenda-status-tooltip__item--actionable');
+              item.dataset.serviceItemId = entry.itemId;
+              item.setAttribute('role', 'button');
+              item.tabIndex = 0;
+              item.setAttribute('aria-label', `Mudar status do serviço ${entry.name}`);
+              const handleItemActivation = (ev) => {
+                try {
+                  if (ev.type === 'keydown') {
+                    const key = ev.key || ev.code || '';
+                    if (!(key === 'Enter' || key === ' ' || key === 'Spacebar')) return;
+                    ev.preventDefault();
+                  }
+                  ev.preventDefault();
+                  if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+                  ev.stopPropagation();
+                  if (ev[CARD_ACTION_EVENT_FLAG]) return;
+                  ev[CARD_ACTION_EVENT_FLAG] = true;
+                  try {
+                    if (typeof item.focus === 'function') {
+                      item.focus({ preventScroll: true });
+                    }
+                  } catch {}
+                  const chain = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
+                  const currentKey = entry.meta?.key || item.dataset.statusKey || 'agendado';
+                  let idx = chain.indexOf(currentKey);
+                  if (idx < 0) idx = 0;
+                  const nextKey = chain[(idx + 1) % chain.length];
+                  const nextMeta = statusMeta(nextKey);
+                  const prevMeta = entry.meta;
+                  applyMetaToItem(nextMeta);
+                  entry.meta = nextMeta;
+                  const updateFn = typeof window.__updateStatusQuick === 'function'
+                    ? window.__updateStatusQuick
+                    : null;
+                  if (!updateFn) {
+                    entry.meta = prevMeta;
+                    applyMetaToItem(prevMeta);
+                    return;
+                  }
+                  const request = updateFn(id, nextKey, { serviceItemIds: [entry.itemId] });
+                  if (request && typeof request.catch === 'function') {
+                    request.catch((error) => {
+                      console.error('status-tooltip-item-update', error);
+                      entry.meta = prevMeta;
+                      applyMetaToItem(prevMeta);
+                    });
+                  }
+                } catch (error) {
+                  console.error('status-tooltip-item-activate', error);
+                }
+              };
+              item.addEventListener('click', handleItemActivation, true);
+              item.addEventListener('keydown', handleItemActivation, true);
+            }
             list.appendChild(item);
           });
           tooltip.appendChild(list);

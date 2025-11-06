@@ -477,10 +477,12 @@ function expandAppointmentsForCards(appointments) {
       const svcStatus = svcStatusMeta.key;
       bucket.statusCounts.set(svcStatus, (bucket.statusCounts.get(svcStatus) || 0) + 1);
       const svcName = typeof svc?.nome === 'string' && svc.nome.trim() ? svc.nome.trim() : (appt.servico || '—');
+      const itemId = svc?.itemId != null ? String(svc.itemId).trim() : '';
       bucket.statusDetails.push({
         name: svcName,
         status: svcStatus,
         label: svcStatusMeta.label,
+        itemId: itemId || null,
       });
       const obs = typeof svc?.observacao === 'string' ? svc.observacao : (typeof svc?.observacoes === 'string' ? svc.observacoes : '');
       if (typeof obs === 'string') {
@@ -509,6 +511,7 @@ function expandAppointmentsForCards(appointments) {
           name: clone.servico || 'Serviço',
           status: fallbackStatus,
           label: statusMeta(fallbackStatus).label,
+          itemId: null,
         });
       }
       const distinctStatuses = new Set(statusKeys);
