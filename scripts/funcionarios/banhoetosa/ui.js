@@ -297,6 +297,13 @@ export function decorateCards() {
       }
       const handlerStatus = (e) => {
         try {
+          const targetEl = e?.target instanceof Element
+            ? e.target
+            : (e?.target && 'parentElement' in e.target ? e.target.parentElement : null);
+          const actionableItem = targetEl?.closest?.('.agenda-status-tooltip__item--actionable');
+          if (actionableItem && statusBtn.contains(actionableItem)) {
+            return;
+          }
           e.preventDefault();
           if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
           e.stopPropagation();
