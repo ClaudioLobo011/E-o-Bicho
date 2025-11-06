@@ -377,17 +377,17 @@ function extractServiceHourValue(service, appointment) {
   for (const candidate of candidates) {
     if (!candidate) continue;
     if (candidate instanceof Date && !Number.isNaN(candidate.getTime())) {
-      return `${pad(candidate.getHours())}:${pad(candidate.getMinutes())}`;
+      return candidate.toISOString();
     }
     if (typeof candidate === 'string') {
       const trimmed = candidate.trim();
       if (!trimmed) continue;
-      const hhmm = trimmed.match(/^(\d{2}):(\d{2})/);
-      if (hhmm) return `${hhmm[1]}:${hhmm[2]}`;
       const dateCandidate = coerceToDate(trimmed);
       if (dateCandidate) {
-        return `${pad(dateCandidate.getHours())}:${pad(dateCandidate.getMinutes())}`;
+        return dateCandidate.toISOString();
       }
+      const hhmm = trimmed.match(/^(\d{2}):(\d{2})/);
+      if (hhmm) return `${hhmm[1]}:${hhmm[2]}`;
     }
   }
   const fallbackDate = coerceToDate(appointment?.h || appointment?.scheduledAt || appointment?.scheduled_at || appointment?.dataHora);
@@ -415,7 +415,12 @@ function combineAppointmentDateWithHour(appointment, hourValue) {
   if (!baseDate) return null;
   const date = new Date(baseDate.getTime());
   if (typeof hourValue === 'string') {
-    const match = hourValue.trim().match(/^(\d{2}):(\d{2})$/);
+    const trimmed = hourValue.trim();
+    const overrideDate = coerceToDate(trimmed);
+    if (overrideDate) {
+      return overrideDate.toISOString();
+    }
+    const match = trimmed.match(/^(\d{2}):(\d{2})$/);
     if (match) {
       date.setHours(Number(match[1]), Number(match[2]), 0, 0);
     }

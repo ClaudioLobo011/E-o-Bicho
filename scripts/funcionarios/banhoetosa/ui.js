@@ -29,6 +29,30 @@ function normalizeServiceItemId(value) {
   return OBJECT_ID_REGEX.test(cleaned) ? cleaned : '';
 }
 
+function collectServiceItemIdsFromAppointment(appointment) {
+  if (!appointment || typeof appointment !== 'object') return [];
+  const ids = new Set();
+  const services = Array.isArray(appointment.servicos) ? appointment.servicos : [];
+  services.forEach((svc) => {
+    const normalized = normalizeServiceItemId([
+      svc?.itemId,
+      svc?._id,
+      svc?.id,
+    ]);
+    if (normalized) ids.add(normalized);
+  });
+  return Array.from(ids.values());
+}
+
+function getAppointmentDayISO(dateValue) {
+  if (!dateValue) return null;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  const copy = new Date(date.getTime());
+  copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
+  return copy.toISOString().slice(0, 10);
+}
+
 export function enhanceAgendaUI() {
   try {
     applyZebraAndSublines();
@@ -471,16 +495,49 @@ export function enableDragDrop() {
     const serviceIdsRaw = (ev.dataTransfer?.getData('text/x-service-ids') || draggingCard?.dataset.draggingServiceIds || '').trim();
     const item = state.agendamentos.find(x => String(x._id) === String(id));
     if (!item) return;
+
     const orig = new Date(item.h || item.scheduledAt);
     const day = slot.dataset.day || normalizeDate(els.dateInput?.value || todayStr());
-    const hh  = slot.dataset.hh || `${pad(orig.getHours())}:${String(orig.getMinutes()).padStart(2,'0')}`;
+    const hh = slot.dataset.hh || `${pad(orig.getHours())}:${String(orig.getMinutes()).padStart(2, '0')}`;
+    const targetDateIso = buildLocalDateTime(day, hh).toISOString();
+
+    const allServiceItemIds = collectServiceItemIdsFromAppointment(item);
+    const normalizedServiceIds = serviceIdsRaw
+      ? Array.from(new Set(serviceIdsRaw.split(',').map(s => normalizeServiceItemId(s)).filter(Boolean)))
+      : [];
+
+    let shouldMoveAll = false;
+    if (!allServiceItemIds.length) {
+      shouldMoveAll = true;
+    } else if (!normalizedServiceIds.length) {
+      shouldMoveAll = true;
+    } else {
+      const normalizedSet = new Set(normalizedServiceIds);
+      shouldMoveAll = allServiceItemIds.every(idCandidate => normalizedSet.has(idCandidate));
+    }
+
+    const finalServiceItemIds = shouldMoveAll
+      ? (allServiceItemIds.length ? allServiceItemIds.slice() : normalizedServiceIds.slice())
+      : normalizedServiceIds.slice();
+
     const payload = {};
     if (slot.dataset.profissionalId) payload.profissionalId = slot.dataset.profissionalId;
-    payload.scheduledAt = buildLocalDateTime(day, hh).toISOString();
-    if (serviceIdsRaw) {
-      const ids = serviceIdsRaw.split(',').map(s => s.trim()).filter(Boolean);
-      if (ids.length) payload.serviceItemIds = ids;
+
+    const originalDay = getAppointmentDayISO(item.h || item.scheduledAt);
+    const sameDay = originalDay && day ? originalDay === day : false;
+
+    if (finalServiceItemIds.length) {
+      payload.serviceItemIds = finalServiceItemIds;
+      payload.serviceHour = hh;
+      payload.serviceScheduledAt = targetDateIso;
     }
+
+    if (shouldMoveAll) {
+      payload.scheduledAt = targetDateIso;
+    } else if (!sameDay) {
+      payload.scheduledAt = targetDateIso;
+    }
+
     await moveAppointmentQuick(id, payload);
   });
 }
