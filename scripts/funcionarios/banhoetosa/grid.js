@@ -471,13 +471,22 @@ function expandAppointmentsForCards(appointments) {
       const bucket = groups.get(key);
       bucket.services.push(svc);
       bucket.total += Number(svc.valor || 0);
-      if (svc.itemId) bucket.itemIds.push(String(svc.itemId));
+      const normalizedSvcItemId = normalizeObjectId([
+        svc?.itemId,
+        svc?._id,
+        svc?.id,
+      ]);
+      if (normalizedSvcItemId) bucket.itemIds.push(normalizedSvcItemId);
       if (horaValue && !bucket.hora) bucket.hora = horaValue;
       const svcStatusMeta = statusMeta(svc?.status || svc?.situacao || appt.status || 'agendado');
       const svcStatus = svcStatusMeta.key;
       bucket.statusCounts.set(svcStatus, (bucket.statusCounts.get(svcStatus) || 0) + 1);
       const svcName = typeof svc?.nome === 'string' && svc.nome.trim() ? svc.nome.trim() : (appt.servico || '—');
-      const itemId = svc?.itemId != null ? String(svc.itemId).trim() : '';
+      const itemId = normalizeObjectId([
+        svc?.itemId,
+        svc?._id,
+        svc?.id,
+      ]);
       bucket.statusDetails.push({
         name: svcName,
         status: svcStatus,
@@ -500,7 +509,18 @@ function expandAppointmentsForCards(appointments) {
       clone.servico = names.length ? names.join(', ') : (appt.servico || '');
       clone.valor = bucket.total || Number(appt.valor || 0) || 0;
       clone.profissionalId = bucket.profissionalId || appt.profissionalId || null;
-      clone.__serviceItemIds = bucket.itemIds.length ? bucket.itemIds.slice() : bucket.services.map((svc) => svc.itemId).filter(Boolean).map(String);
+      if (bucket.itemIds.length) {
+        clone.__serviceItemIds = bucket.itemIds.slice();
+      } else {
+        const collectedIds = bucket.services
+          .map((svc) => normalizeObjectId([
+            svc?.itemId,
+            svc?._id,
+            svc?.id,
+          ]))
+          .filter(Boolean);
+        clone.__serviceItemIds = collectedIds;
+      }
       clone.__servicesForCard = bucket.services;
       const statusKeys = Array.from(bucket.statusCounts.keys());
       if (!statusKeys.length) {

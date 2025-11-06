@@ -4,6 +4,30 @@ import { renderKpis, renderFilters } from './filters.js';
 import { renderGrid } from './grid.js';
 
 const CARD_ACTION_EVENT_FLAG = Symbol('agendaCardActionHandled');
+const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+
+function normalizeServiceItemId(value) {
+  if (!value) return '';
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const normalized = normalizeServiceItemId(entry);
+      if (normalized) return normalized;
+    }
+    return '';
+  }
+  if (typeof value === 'object') {
+    if (value._id || value.id) {
+      return normalizeServiceItemId(value._id || value.id);
+    }
+    return '';
+  }
+  const str = String(value).trim();
+  if (!str) return '';
+  const cleaned = str
+    .replace(/^ObjectId\(["']?/, '')
+    .replace(/["']?\)$/, '');
+  return OBJECT_ID_REGEX.test(cleaned) ? cleaned : '';
+}
 
 export function enhanceAgendaUI() {
   try {
@@ -164,8 +188,11 @@ export function decorateCards() {
       if (tooltipDetails.length > 1) {
         const entries = tooltipDetails.map((detail) => {
           const meta = statusMeta(detail?.status || detail?.situacao || 'agendado');
-          const rawItemId = detail?.itemId ?? detail?.serviceItemId ?? detail?.serviceId ?? null;
-          const itemId = rawItemId != null ? String(rawItemId).trim() : '';
+          const itemId = normalizeServiceItemId([
+            detail?.itemId,
+            detail?.serviceItemId,
+            detail?.serviceId,
+          ]);
           const name = typeof detail?.name === 'string' && detail.name.trim()
             ? detail.name.trim()
             : (typeof detail?.nome === 'string' ? detail.nome.trim() : 'Serviço');
@@ -241,7 +268,13 @@ export function decorateCards() {
                     applyMetaToItem(prevMeta);
                     return;
                   }
-                  const request = updateFn(id, nextKey, { serviceItemIds: [entry.itemId] });
+                  const normalizedId = normalizeServiceItemId(entry.itemId);
+                  if (!normalizedId) {
+                    entry.meta = prevMeta;
+                    applyMetaToItem(prevMeta);
+                    return;
+                  }
+                  const request = updateFn(id, nextKey, { serviceItemIds: [normalizedId] });
                   if (request && typeof request.catch === 'function') {
                     request.catch((error) => {
                       console.error('status-tooltip-item-update', error);
@@ -274,7 +307,10 @@ export function decorateCards() {
           const cardEl = statusBtn.closest('div[data-appointment-id]');
           const chain = ['agendado', 'em_espera', 'em_atendimento', 'finalizado'];
           const serviceItemIds = cardEl?.dataset?.serviceItemIds
-            ? cardEl.dataset.serviceItemIds.split(',').map(v => v.trim()).filter(Boolean)
+            ? cardEl.dataset.serviceItemIds
+                .split(',')
+                .map((v) => normalizeServiceItemId(v))
+                .filter(Boolean)
             : [];
           let baseStatus = cardEl?.dataset?.statusActionKey || '';
           if (baseStatus) {
