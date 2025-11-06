@@ -159,9 +159,24 @@ export function decorateCards() {
           if (!current) return;
           if (e[CARD_ACTION_EVENT_FLAG]) return;
           e[CARD_ACTION_EVENT_FLAG] = true;
+          const cardEl = editBtn.closest?.('div[data-appointment-id]') || null;
+          const releaseFocus = () => {
+            try {
+              const active = document.activeElement;
+              if (active && cardEl?.contains?.(active) && typeof active.blur === 'function') {
+                active.blur();
+              } else if (typeof editBtn.blur === 'function') {
+                editBtn.blur();
+              }
+            } catch (err) { console.error('edit-release-focus', err); }
+          };
           if ((current.pago || current.codigoVenda) && !isPrivilegedRole()) {
             notify('Este agendamento já foi faturado. Apenas Admin/Admin Master podem editar.', 'warning');
             return;
+          }
+          releaseFocus();
+          if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(releaseFocus);
           }
           if (window.__openEditFromUI) {
             window.__openEditFromUI(current);
@@ -297,6 +312,13 @@ export function decorateCards() {
       }
       const handlerStatus = (e) => {
         try {
+          const targetEl = e?.target instanceof Element
+            ? e.target
+            : (e?.target && 'parentElement' in e.target ? e.target.parentElement : null);
+          const actionableItem = targetEl?.closest?.('.agenda-status-tooltip__item--actionable');
+          if (actionableItem && statusBtn.contains(actionableItem)) {
+            return;
+          }
           e.preventDefault();
           if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
           e.stopPropagation();
