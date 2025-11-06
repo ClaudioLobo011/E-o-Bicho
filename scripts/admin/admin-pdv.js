@@ -14143,6 +14143,12 @@
         button.addEventListener('click', handleAppointmentAction);
         return;
       }
+      if (action === 'bonificar' || action === 'solicitacao-transferencia') {
+        button.addEventListener('click', () => {
+          notify('Em desenvolvimento', 'info');
+        });
+        return;
+      }
       button.addEventListener('click', () => {
         notify('Funcionalidade em desenvolvimento.', 'info');
       });
