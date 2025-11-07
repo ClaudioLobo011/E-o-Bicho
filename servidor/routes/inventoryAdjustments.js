@@ -16,6 +16,7 @@ const {
 const router = express.Router();
 
 const allowedRoles = ['admin', 'admin_master', 'funcionario'];
+const PRODUCT_SALE_PRICE_KEYS = ['venda', 'precoVenda', 'preco', 'valorVenda', 'valor'];
 
 const sanitizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 
@@ -108,12 +109,46 @@ router.get('/search-products', requireAuth, authorizeRoles(...allowedRoles), asy
       unidade: 1,
       custo: 1,
       venda: 1,
+      precoVenda: 1,
+      preco: 1,
+      valorVenda: 1,
+      valor: 1,
     })
       .limit(20)
       .sort({ nome: 1 })
       .lean();
 
-    res.json({ products });
+    const normalizedProducts = products.map((product) => {
+      if (!product || typeof product !== 'object') {
+        return product;
+      }
+
+      const normalized = { ...product };
+      const costNumber = parseNumber(normalized.custo);
+      if (costNumber !== null) {
+        normalized.custo = costNumber;
+      }
+
+      let saleNumber = null;
+      for (const key of PRODUCT_SALE_PRICE_KEYS) {
+        if (!key) continue;
+        const parsed = parseNumber(normalized[key]);
+        if (parsed !== null) {
+          saleNumber = parsed;
+          break;
+        }
+      }
+
+      if (saleNumber !== null) {
+        normalized.venda = saleNumber;
+      } else if (typeof normalized.venda === 'undefined') {
+        normalized.venda = null;
+      }
+
+      return normalized;
+    });
+
+    res.json({ products: normalizedProducts });
   } catch (error) {
     console.error('Erro ao buscar produtos para movimentação de estoque:', error);
     res.status(500).json({ message: 'Não foi possível buscar produtos no momento.' });

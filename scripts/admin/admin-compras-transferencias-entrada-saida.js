@@ -46,6 +46,7 @@
   };
 
   const PRODUCT_SEARCH_FILTER_KEYS = ['cod', 'descricao', 'codbarras', 'custo', 'venda'];
+  const PRODUCT_SEARCH_SALE_KEYS = ['venda', 'precoVenda', 'preco', 'valorVenda', 'valor'];
   const DEFAULT_PRODUCT_SEARCH_FILTERS = PRODUCT_SEARCH_FILTER_KEYS.reduce((accumulator, key) => {
     // eslint-disable-next-line no-param-reassign
     accumulator[key] = '';
@@ -225,13 +226,24 @@
   }
 
   function getProductSearchCostNumber(product = {}) {
-    const value = Number(product?.custo);
+    const value = parseDecimal(product?.custo);
     return Number.isFinite(value) ? value : null;
   }
 
   function getProductSearchSaleNumber(product = {}) {
-    const value = Number(product?.venda);
-    return Number.isFinite(value) ? value : null;
+    if (!product || typeof product !== 'object') {
+      return null;
+    }
+
+    for (const key of PRODUCT_SEARCH_SALE_KEYS) {
+      if (!key) continue;
+      const parsed = parseDecimal(product?.[key]);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    return null;
   }
 
   function getProductSearchFilterCandidates(product = {}, key) {
@@ -261,9 +273,13 @@
           candidates.push(String(saleNumber));
           candidates.push(productSearchCurrencyFormatter.format(saleNumber));
         }
-        if (product?.venda !== null && product?.venda !== undefined && product?.venda !== '') {
-          candidates.push(String(product.venda));
-        }
+        PRODUCT_SEARCH_SALE_KEYS.forEach((saleKey) => {
+          if (!saleKey) return;
+          const rawValue = product?.[saleKey];
+          if (rawValue !== null && rawValue !== undefined && rawValue !== '') {
+            candidates.push(String(rawValue));
+          }
+        });
         return candidates.length ? candidates : [''];
       }
       default:
