@@ -42,6 +42,7 @@
       controller: null,
       timeout: null,
       lastTerm: '',
+      includeInactive: false,
     },
   };
 
@@ -142,6 +143,7 @@
     productSearchModalCancel: document.getElementById('movement-product-search-cancel'),
     productSearchModalFeedback: document.getElementById('movement-product-search-feedback'),
     productSearchModalResults: document.getElementById('movement-product-search-results'),
+    productSearchModalShowInactive: document.getElementById('movement-product-search-show-inactive'),
     totalItems: document.getElementById('movement-total-items'),
     totalQuantity: document.getElementById('movement-total-quantity'),
     totalValue: document.getElementById('movement-total-value'),
@@ -854,7 +856,8 @@
       return [];
     }
 
-    const cacheKey = normalizedTerm.toLowerCase();
+    const includeInactive = options.includeInactive === true;
+    const cacheKey = `${normalizedTerm.toLowerCase()}::${includeInactive ? 'with-inactive' : 'only-active'}`;
     if (!options.skipCache && state.productSearchCache.has(cacheKey)) {
       return state.productSearchCache.get(cacheKey);
     }
@@ -864,7 +867,11 @@
       throw new Error('Sessão expirada. Faça login novamente.');
     }
 
-    const url = `${API_CONFIG.BASE_URL}/inventory-adjustments/search-products?term=${encodeURIComponent(normalizedTerm)}`;
+    const url = new URL(`${API_CONFIG.BASE_URL}/inventory-adjustments/search-products`);
+    url.searchParams.set('term', normalizedTerm);
+    if (includeInactive) {
+      url.searchParams.set('includeInactive', 'true');
+    }
     const fetchOptions = {
       headers: { Authorization: `Bearer ${token}` },
     };
@@ -873,7 +880,7 @@
       fetchOptions.signal = options.signal;
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await fetch(url.toString(), fetchOptions);
 
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
@@ -1102,7 +1109,10 @@
     );
 
     try {
-      const products = await searchProducts(normalizedTerm, { signal: controller.signal });
+      const products = await searchProducts(normalizedTerm, {
+        signal: controller.signal,
+        includeInactive: state.productSearchModal.includeInactive,
+      });
       renderProductSearchModalResults(products);
     } catch (error) {
       if (error.name === 'AbortError') {
@@ -1134,6 +1144,10 @@
     if (!modal) return;
 
     cancelPendingModalSearch();
+    state.productSearchModal.includeInactive = false;
+    if (elements.productSearchModalShowInactive) {
+      elements.productSearchModalShowInactive.checked = false;
+    }
     resetProductSearchModal();
     setupProductSearchTableControls();
 
@@ -1173,9 +1187,13 @@
     modal.setAttribute('aria-hidden', 'true');
     state.productSearchModal.isOpen = false;
     state.productSearchModal.lastTerm = '';
+    state.productSearchModal.includeInactive = false;
 
     if (elements.productSearchModalInput) {
       elements.productSearchModalInput.value = '';
+    }
+    if (elements.productSearchModalShowInactive) {
+      elements.productSearchModalShowInactive.checked = false;
     }
     resetProductSearchModal();
 
@@ -1512,6 +1530,7 @@
     state.operation = 'saida';
     state.productSearchCache.clear();
     state.productDetailsCache.clear();
+    state.productSearchModal.includeInactive = false;
     state.selectedResponsibleId = '';
     if (elements.responsibleHidden) {
       elements.responsibleHidden.value = '';
@@ -1529,6 +1548,9 @@
     clearPendingProduct({ resetStatus: true });
     if (elements.productSearchInput) {
       elements.productSearchInput.value = '';
+    }
+    if (elements.productSearchModalShowInactive) {
+      elements.productSearchModalShowInactive.checked = false;
     }
     setDefaultDate();
     hideFeedback();
@@ -1690,6 +1712,19 @@
       if (event.key === 'Enter') {
         event.preventDefault();
         executeProductSearchModal(event.target.value);
+      }
+    });
+  }
+
+  if (elements.productSearchModalShowInactive) {
+    elements.productSearchModalShowInactive.addEventListener('change', (event) => {
+      const includeInactive = Boolean(event.target.checked);
+      state.productSearchModal.includeInactive = includeInactive;
+      cancelPendingModalSearch();
+      if (state.productSearchModal.lastTerm && state.productSearchModal.lastTerm.length >= 3) {
+        executeProductSearchModal(state.productSearchModal.lastTerm);
+      } else {
+        renderProductSearchTable();
       }
     });
   }

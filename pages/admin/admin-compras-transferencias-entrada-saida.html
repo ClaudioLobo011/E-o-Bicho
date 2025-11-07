@@ -268,19 +268,29 @@
     <div class="relative z-10 mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
       <div class="movement-product-search-modal-shell relative flex h-[520px] w-full max-w-5xl transform-gpu flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl text-[12px] leading-[1.35] max-h-[90vh] sm:h-[600px] sm:max-h-[85vh]">
         <div class="flex h-full flex-col">
-          <header class="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+          <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
             <div class="space-y-1">
               <h2 id="movement-product-search-modal-title" class="text-base font-semibold text-gray-800">Buscar produtos</h2>
               <p class="text-[11px] text-gray-500">Digite parte do nome, código interno ou EAN para localizar o item desejado.</p>
             </div>
-            <button
-              type="button"
-              id="movement-product-search-close"
-              class="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-            >
-              <span class="sr-only">Fechar</span>
-              <i class="fas fa-times"></i>
-            </button>
+            <div class="flex items-start gap-4">
+              <label for="movement-product-search-show-inactive" class="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-gray-600 shadow-sm">
+                <input
+                  type="checkbox"
+                  id="movement-product-search-show-inactive"
+                  class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                >
+                <span>Mostrar inativos</span>
+              </label>
+              <button
+                type="button"
+                id="movement-product-search-close"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+              >
+                <span class="sr-only">Fechar</span>
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
           </header>
           <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-5 py-4">
             <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">

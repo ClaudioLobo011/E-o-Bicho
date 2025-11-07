@@ -88,6 +88,8 @@ router.get('/search-products', requireAuth, authorizeRoles(...allowedRoles), asy
       return res.json({ products: [] });
     }
 
+    const includeInactive = String(req.query.includeInactive || '').toLowerCase() === 'true';
+
     const regex = new RegExp(escapeRegExp(term), 'i');
     const numericTerm = term.replace(/\D/g, '');
     const query = {
@@ -97,6 +99,10 @@ router.get('/search-products', requireAuth, authorizeRoles(...allowedRoles), asy
         { nome: regex },
       ],
     };
+
+    if (!includeInactive) {
+      query.inativo = { $ne: true };
+    }
 
     if (numericTerm) {
       query.$or.push({ codbarras: new RegExp(escapeRegExp(numericTerm), 'i') });
