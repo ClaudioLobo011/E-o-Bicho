@@ -28,6 +28,13 @@
     productSearchCache: new Map(),
     productDetailsCache: new Map(),
     isSubmitting: false,
+    pendingProduct: null,
+    productSearchModal: {
+      isOpen: false,
+      controller: null,
+      timeout: null,
+      lastTerm: '',
+    },
   };
 
   const MOVEMENT_REASONS = {
@@ -68,6 +75,11 @@
     },
   };
 
+  const LETTER_INPUT_PATTERN = /[A-Za-zÀ-ÖØ-öø-ÿ]/;
+  const LETTER_GLOBAL_PATTERN = /[A-Za-zÀ-ÖØ-öø-ÿ]+/g;
+  const DEFAULT_PRODUCT_SEARCH_STATUS =
+    'Digite o código e pressione Enter para buscar rapidamente ou comece com letras para abrir a busca avançada.';
+
   const elements = {
     operationRadios: form.querySelectorAll('input[name="movement-type"]'),
     reasonSelect: document.getElementById('movement-reason'),
@@ -83,12 +95,18 @@
     itemsBody: document.getElementById('movement-items-body'),
     emptyStateRow: document.getElementById('movement-empty-state'),
     addItemButton: document.getElementById('movement-add-item'),
-    productCodeInput: document.getElementById('movement-product-code'),
-    productNameInput: document.getElementById('movement-product-name'),
+    productSearchInput: document.getElementById('movement-product-search'),
+    productSearchButton: document.getElementById('movement-open-product-search'),
     productQuantityInput: document.getElementById('movement-product-quantity'),
     productCostInput: document.getElementById('movement-product-cost'),
     productNotesInput: document.getElementById('movement-product-notes'),
-    productSuggestions: document.getElementById('movement-product-suggestions'),
+    productSearchStatus: document.getElementById('movement-product-search-status'),
+    productSearchModal: document.getElementById('movement-product-search-modal'),
+    productSearchModalInput: document.getElementById('movement-product-search-input'),
+    productSearchModalClose: document.getElementById('movement-product-search-close'),
+    productSearchModalCancel: document.getElementById('movement-product-search-cancel'),
+    productSearchModalFeedback: document.getElementById('movement-product-search-feedback'),
+    productSearchModalResults: document.getElementById('movement-product-search-results'),
     totalItems: document.getElementById('movement-total-items'),
     totalQuantity: document.getElementById('movement-total-quantity'),
     totalValue: document.getElementById('movement-total-value'),
@@ -96,11 +114,6 @@
     dateInput: document.getElementById('movement-date'),
     referenceInput: document.getElementById('movement-reference'),
     notesInput: document.getElementById('movement-notes'),
-  };
-
-  const searchState = {
-    timeout: null,
-    lastTerm: '',
   };
 
   function parseDecimal(value) {
@@ -380,36 +393,14 @@
     }
   }
 
-  function updateProductSuggestions(products) {
-    if (!elements.productSuggestions) return;
-    elements.productSuggestions.innerHTML = '';
-
-    products.forEach((product) => {
-      const option = document.createElement('option');
-      const name = normalizeString(product?.nome);
-      const sku = normalizeString(product?.cod);
-      const barcode = normalizeString(product?.codbarras);
-      const labelParts = [name];
-      if (sku) labelParts.push(`SKU: ${sku}`);
-      if (barcode) labelParts.push(`EAN: ${barcode}`);
-      const label = labelParts.filter(Boolean).join(' • ');
-      option.value = name || label || '';
-      if (label && label !== option.value) {
-        option.label = label;
-      }
-      option.dataset.id = product?._id ? String(product._id) : '';
-      elements.productSuggestions.appendChild(option);
-    });
-  }
-
-  async function searchProducts(term) {
+  async function searchProducts(term, options = {}) {
     const normalizedTerm = normalizeString(term);
     if (!normalizedTerm) {
       return [];
     }
 
     const cacheKey = normalizedTerm.toLowerCase();
-    if (state.productSearchCache.has(cacheKey)) {
+    if (!options.skipCache && state.productSearchCache.has(cacheKey)) {
       return state.productSearchCache.get(cacheKey);
     }
 
@@ -419,9 +410,15 @@
     }
 
     const url = `${API_CONFIG.BASE_URL}/inventory-adjustments/search-products?term=${encodeURIComponent(normalizedTerm)}`;
-    const response = await fetch(url, {
+    const fetchOptions = {
       headers: { Authorization: `Bearer ${token}` },
-    });
+    };
+
+    if (options.signal) {
+      fetchOptions.signal = options.signal;
+    }
+
+    const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
@@ -430,7 +427,9 @@
 
     const data = await response.json();
     const products = Array.isArray(data?.products) ? data.products : [];
-    state.productSearchCache.set(cacheKey, products);
+    if (!options.skipCache) {
+      state.productSearchCache.set(cacheKey, products);
+    }
     return products;
   }
 
@@ -496,25 +495,383 @@
     return selected;
   }
 
-  function handleProductSearchInput() {
-    if (searchState.timeout) {
-      clearTimeout(searchState.timeout);
+  function updateProductSearchStatus(message, tone = 'muted') {
+    if (!elements.productSearchStatus) return;
+
+    const classList = ['text-xs'];
+    switch (tone) {
+      case 'success':
+        classList.push('text-emerald-600', 'font-medium');
+        break;
+      case 'warning':
+        classList.push('text-amber-600', 'font-medium');
+        break;
+      case 'error':
+        classList.push('text-red-600', 'font-medium');
+        break;
+      default:
+        classList.push('text-gray-500');
+        break;
     }
 
-    const term = normalizeString(elements.productNameInput?.value) || normalizeString(elements.productCodeInput?.value);
-    if (!term || term.length < 2) {
-      updateProductSuggestions([]);
+    elements.productSearchStatus.className = classList.join(' ');
+    elements.productSearchStatus.textContent = message;
+  }
+
+  function clearPendingProduct(options = {}) {
+    state.pendingProduct = null;
+    if (elements.productSearchInput) {
+      delete elements.productSearchInput.dataset.productId;
+    }
+    if (options.resetStatus) {
+      updateProductSearchStatus(DEFAULT_PRODUCT_SEARCH_STATUS, 'muted');
+    }
+  }
+
+  function setPendingProduct(product, options = {}) {
+    if (!product || !product._id) {
+      clearPendingProduct({ resetStatus: true });
       return;
     }
 
-    searchState.timeout = setTimeout(async () => {
-      try {
-        const products = await searchProducts(term);
-        updateProductSuggestions(products);
-      } catch (error) {
-        console.error('Erro ao carregar sugestões de produtos:', error);
+    state.pendingProduct = {
+      _id: String(product._id),
+      cod: normalizeString(product?.cod),
+      codbarras: normalizeString(product?.codbarras),
+      nome: normalizeString(product?.nome),
+    };
+
+    if (elements.productSearchInput) {
+      elements.productSearchInput.dataset.productId = state.pendingProduct._id;
+      if (!options.preserveInput) {
+        const preferredCode = state.pendingProduct.cod || state.pendingProduct.codbarras;
+        if (preferredCode) {
+          elements.productSearchInput.value = preferredCode;
+        }
       }
-    }, 400);
+    }
+
+    const description = state.pendingProduct.nome;
+    if (description) {
+      updateProductSearchStatus(`Produto selecionado: ${description}`, 'success');
+    } else {
+      updateProductSearchStatus('Produto selecionado com sucesso.', 'success');
+    }
+  }
+
+  function cancelPendingModalSearch() {
+    if (state.productSearchModal.timeout) {
+      clearTimeout(state.productSearchModal.timeout);
+      state.productSearchModal.timeout = null;
+    }
+    if (state.productSearchModal.controller) {
+      state.productSearchModal.controller.abort();
+      state.productSearchModal.controller = null;
+    }
+  }
+
+  function showProductSearchModalFeedback(message, tone = 'muted', options = {}) {
+    const element = elements.productSearchModalFeedback;
+    if (!element) return;
+
+    const { allowHtml = false } = options;
+
+    element.classList.remove('hidden', 'text-gray-500', 'text-emerald-600', 'text-red-600', 'text-amber-600');
+    element.classList.remove('border-gray-200', 'border-emerald-200', 'border-red-200', 'border-amber-200');
+
+    let textClass = 'text-gray-500';
+    let borderClass = 'border-gray-200';
+    if (tone === 'success') {
+      textClass = 'text-emerald-600';
+      borderClass = 'border-emerald-200';
+    } else if (tone === 'error') {
+      textClass = 'text-red-600';
+      borderClass = 'border-red-200';
+    } else if (tone === 'warning' || tone === 'info') {
+      textClass = 'text-amber-600';
+      borderClass = 'border-amber-200';
+    }
+
+    element.classList.add(textClass, borderClass);
+    if (allowHtml) {
+      element.innerHTML = message;
+    } else {
+      element.textContent = message;
+    }
+  }
+
+  function hideProductSearchModalFeedback() {
+    if (!elements.productSearchModalFeedback) return;
+    elements.productSearchModalFeedback.classList.add('hidden');
+  }
+
+  function resetProductSearchModal() {
+    if (elements.productSearchModalResults) {
+      elements.productSearchModalResults.innerHTML = '';
+    }
+    showProductSearchModalFeedback(
+      'Digite ao menos três caracteres para listar os produtos disponíveis.',
+    );
+  }
+
+  function renderProductSearchModalResults(products) {
+    if (!elements.productSearchModalResults) return;
+
+    elements.productSearchModalResults.innerHTML = '';
+
+    if (!products.length) {
+      showProductSearchModalFeedback('Nenhum produto encontrado com os dados informados.', 'warning');
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    products.forEach((product) => {
+      const li = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className =
+        'flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-primary/5 focus:bg-primary/5 focus:outline-none';
+      button.dataset.productId = product?._id ? String(product._id) : '';
+      button.dataset.sku = normalizeString(product?.cod);
+      button.dataset.barcode = normalizeString(product?.codbarras);
+      button.dataset.name = normalizeString(product?.nome);
+
+      const description = escapeHtml(normalizeString(product?.nome) || 'Produto sem nome');
+      const sku = escapeHtml(normalizeString(product?.cod) || '—');
+      const barcode = escapeHtml(normalizeString(product?.codbarras) || '—');
+      const unit = escapeHtml(normalizeString(product?.unidade) || '—');
+
+      button.innerHTML = `
+        <span class="flex-1">
+          <span class="block text-sm font-semibold text-gray-800">${description}</span>
+          <span class="mt-1 block text-xs text-gray-500">SKU ${sku} • EAN ${barcode} • Unidade ${unit}</span>
+        </span>
+        <span class="text-xs font-semibold text-primary-600">Selecionar</span>
+      `;
+
+      li.appendChild(button);
+      fragment.appendChild(li);
+    });
+
+    elements.productSearchModalResults.appendChild(fragment);
+    hideProductSearchModalFeedback();
+  }
+
+  async function executeProductSearchModal(term) {
+    const normalizedTerm = normalizeString(term);
+    state.productSearchModal.lastTerm = normalizedTerm;
+
+    if (!normalizedTerm || normalizedTerm.length < 3) {
+      if (!normalizedTerm) {
+        resetProductSearchModal();
+      } else {
+        showProductSearchModalFeedback(
+          'Digite ao menos três caracteres para listar os produtos disponíveis.',
+          'warning',
+        );
+      }
+      return;
+    }
+
+    cancelPendingModalSearch();
+
+    const controller = new AbortController();
+    state.productSearchModal.controller = controller;
+
+    showProductSearchModalFeedback(
+      '<div class="flex items-center gap-2"><i class="fas fa-spinner fa-spin"></i> Pesquisando produtos...</div>',
+      'info',
+      { allowHtml: true },
+    );
+
+    try {
+      const products = await searchProducts(normalizedTerm, { signal: controller.signal });
+      renderProductSearchModalResults(products);
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
+      console.error('Erro ao buscar produtos no modal de movimentação de estoque:', error);
+      showProductSearchModalFeedback(
+        error.message || 'Não foi possível buscar os produtos informados.',
+        'error',
+      );
+    } finally {
+      if (state.productSearchModal.controller === controller) {
+        state.productSearchModal.controller = null;
+      }
+    }
+  }
+
+  function scheduleProductSearchModal(term) {
+    cancelPendingModalSearch();
+    const normalizedTerm = normalizeString(term);
+    state.productSearchModal.timeout = setTimeout(() => {
+      state.productSearchModal.timeout = null;
+      executeProductSearchModal(normalizedTerm);
+    }, 300);
+  }
+
+  function openProductSearchModal(initialTerm = '') {
+    const modal = elements.productSearchModal;
+    if (!modal) return;
+
+    cancelPendingModalSearch();
+    resetProductSearchModal();
+
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    state.productSearchModal.isOpen = true;
+
+    const normalizedInitial = normalizeString(initialTerm);
+    if (elements.productSearchModalInput) {
+      elements.productSearchModalInput.value = normalizedInitial;
+      window.setTimeout(() => {
+        elements.productSearchModalInput?.focus();
+        if (elements.productSearchModalInput) {
+          const cursor = elements.productSearchModalInput.value.length;
+          elements.productSearchModalInput.setSelectionRange(cursor, cursor);
+        }
+      }, 50);
+    }
+
+    if (normalizedInitial && normalizedInitial.length >= 3) {
+      executeProductSearchModal(normalizedInitial);
+    } else if (normalizedInitial) {
+      showProductSearchModalFeedback(
+        'Digite ao menos três caracteres para listar os produtos disponíveis.',
+        'warning',
+      );
+    }
+  }
+
+  function closeProductSearchModal(options = {}) {
+    const { restoreFocus = true } = options;
+    const modal = elements.productSearchModal;
+    if (!modal) return;
+
+    cancelPendingModalSearch();
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    state.productSearchModal.isOpen = false;
+    state.productSearchModal.lastTerm = '';
+
+    if (elements.productSearchModalInput) {
+      elements.productSearchModalInput.value = '';
+    }
+    resetProductSearchModal();
+
+    if (restoreFocus && elements.productSearchInput) {
+      elements.productSearchInput.focus();
+    }
+  }
+
+  async function handleDirectCodeLookup(term) {
+    const normalizedTerm = normalizeString(term);
+    if (!normalizedTerm) {
+      updateProductSearchStatus('Informe um código válido para buscar o produto.', 'warning');
+      return;
+    }
+
+    try {
+      const product = await resolveProductByTerm(normalizedTerm, { codeTerm: normalizedTerm });
+      setPendingProduct(product, { preserveInput: true });
+      elements.productQuantityInput?.focus();
+    } catch (error) {
+      console.error('Erro ao localizar produto pelo código informado:', error);
+      clearPendingProduct();
+      updateProductSearchStatus(error.message || 'Produto não encontrado com o código informado.', 'error');
+    }
+  }
+
+  function handleProductResultSelection(button) {
+    if (!button) return;
+
+    const productId = normalizeString(button.dataset.productId);
+    if (!productId) {
+      showProductSearchModalFeedback('Não foi possível identificar o produto selecionado.', 'error');
+      return;
+    }
+
+    const product = {
+      _id: productId,
+      cod: normalizeString(button.dataset.sku),
+      codbarras: normalizeString(button.dataset.barcode),
+      nome: normalizeString(button.dataset.name),
+    };
+
+    setPendingProduct(product);
+    closeProductSearchModal();
+
+    if (elements.productSearchInput) {
+      const preferredCode = product.cod || product.codbarras;
+      if (preferredCode) {
+        elements.productSearchInput.value = preferredCode;
+      } else if (!elements.productSearchInput.value) {
+        elements.productSearchInput.value = productId;
+      }
+      elements.productSearchInput.focus();
+    }
+  }
+
+  function handleProductSearchFieldKeydown(event) {
+    if (!event || !elements.productSearchInput) return;
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const term = normalizeString(event.target.value);
+      if (!term) {
+        updateProductSearchStatus('Informe um código válido para buscar o produto.', 'warning');
+        return;
+      }
+      if (LETTER_INPUT_PATTERN.test(term)) {
+        openProductSearchModal(term);
+        return;
+      }
+      handleDirectCodeLookup(term);
+      return;
+    }
+
+    if (event.key.length === 1 && LETTER_INPUT_PATTERN.test(event.key)) {
+      event.preventDefault();
+      const currentValue = typeof event.target.value === 'string' ? event.target.value : '';
+      const initialTerm = `${currentValue}${event.key}`.trim();
+      openProductSearchModal(initialTerm);
+    }
+  }
+
+  function handleProductSearchFieldInput(event) {
+    if (!event || !elements.productSearchInput) return;
+
+    const currentValue = typeof event.target.value === 'string' ? event.target.value : '';
+    if (!currentValue) {
+      clearPendingProduct({ resetStatus: true });
+      return;
+    }
+
+    if (state.pendingProduct && state.pendingProduct._id) {
+      clearPendingProduct();
+    }
+
+    if (LETTER_INPUT_PATTERN.test(currentValue)) {
+      if (state.productSearchModal.isOpen) {
+        return;
+      }
+
+      const originalValue = currentValue;
+      const sanitizedValue = originalValue.replace(LETTER_GLOBAL_PATTERN, '').trim();
+      if (sanitizedValue !== originalValue) {
+        event.target.value = sanitizedValue;
+      }
+
+      window.setTimeout(() => {
+        openProductSearchModal(originalValue);
+      }, 0);
+      return;
+    }
+
+    updateProductSearchStatus('Pressione Enter para buscar pelo código informado.', 'muted');
   }
 
   function renderItems() {
@@ -589,12 +946,11 @@
   }
 
   function resetItemInputs() {
-    if (elements.productCodeInput) elements.productCodeInput.value = '';
-    if (elements.productNameInput) elements.productNameInput.value = '';
+    if (elements.productSearchInput) elements.productSearchInput.value = '';
+    clearPendingProduct({ resetStatus: true });
     if (elements.productQuantityInput) elements.productQuantityInput.value = '';
     if (elements.productCostInput) elements.productCostInput.value = '';
     if (elements.productNotesInput) elements.productNotesInput.value = '';
-    updateProductSuggestions([]);
   }
 
   function setDefaultDate() {
@@ -628,13 +984,12 @@
       return;
     }
 
-    const codeTerm = normalizeString(elements.productCodeInput?.value);
-    const nameTerm = normalizeString(elements.productNameInput?.value);
-    const searchTerm = codeTerm || nameTerm;
+    const searchTerm = normalizeString(elements.productSearchInput?.value);
+    const pendingProduct = state.pendingProduct && state.pendingProduct._id ? state.pendingProduct : null;
 
-    if (!searchTerm) {
-      showFeedback('Informe o código ou nome do produto para adicionar um item.', 'error');
-      (elements.productCodeInput || elements.productNameInput)?.focus();
+    if (!searchTerm && !pendingProduct) {
+      showFeedback('Informe o produto para adicionar um item.', 'error');
+      elements.productSearchInput?.focus();
       return;
     }
 
@@ -647,8 +1002,18 @@
     }
 
     try {
-      const product = await resolveProductByTerm(searchTerm, { codeTerm });
-      const details = await fetchProductDetails(product._id);
+      let product = pendingProduct;
+      if (!product) {
+        const codeTerm = searchTerm && !LETTER_INPUT_PATTERN.test(searchTerm) ? searchTerm : undefined;
+        product = await resolveProductByTerm(searchTerm, { codeTerm });
+      }
+
+      const productId = product?._id ? String(product._id) : '';
+      if (!productId) {
+        throw new Error('Não foi possível identificar o produto selecionado.');
+      }
+
+      const details = await fetchProductDetails(productId);
       const detailProduct = details?.product || {};
       const stocks = Array.isArray(details?.stocks) ? details.stocks : [];
 
@@ -690,7 +1055,7 @@
 
       const item = {
         id: Date.now() + Math.random(),
-        productId: String(product._id),
+        productId,
         sku,
         barcode,
         displayCode: displayCodeParts.join(' • ') || '—',
@@ -738,10 +1103,14 @@
     elements.operationRadios.forEach((radio) => {
       radio.checked = radio.value === 'saida';
     });
-    updateProductSuggestions([]);
+    clearPendingProduct({ resetStatus: true });
+    if (elements.productSearchInput) {
+      elements.productSearchInput.value = '';
+    }
     setDefaultDate();
     hideFeedback();
     updateOperationUI();
+    renderItems();
   }
 
   function validateBeforeSubmit() {
@@ -873,13 +1242,60 @@
     elements.responsibleInput.addEventListener('blur', handleResponsibleBlur);
   }
 
-  if (elements.productNameInput) {
-    elements.productNameInput.addEventListener('input', handleProductSearchInput);
+  if (elements.productSearchInput) {
+    elements.productSearchInput.addEventListener('keydown', handleProductSearchFieldKeydown);
+    elements.productSearchInput.addEventListener('input', handleProductSearchFieldInput);
+    elements.productSearchInput.addEventListener('focus', () => {
+      if (!elements.productSearchInput.value) {
+        updateProductSearchStatus(DEFAULT_PRODUCT_SEARCH_STATUS, 'muted');
+      }
+    });
   }
 
-  if (elements.productCodeInput) {
-    elements.productCodeInput.addEventListener('input', handleProductSearchInput);
+  if (elements.productSearchButton) {
+    elements.productSearchButton.addEventListener('click', () => {
+      const currentTerm = normalizeString(elements.productSearchInput?.value);
+      openProductSearchModal(currentTerm);
+    });
   }
+
+  if (elements.productSearchModalInput) {
+    elements.productSearchModalInput.addEventListener('input', (event) => {
+      scheduleProductSearchModal(event.target.value);
+    });
+    elements.productSearchModalInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        executeProductSearchModal(event.target.value);
+      }
+    });
+  }
+
+  elements.productSearchModalClose?.addEventListener('click', () => closeProductSearchModal());
+  elements.productSearchModalCancel?.addEventListener('click', () => closeProductSearchModal());
+
+  if (elements.productSearchModal) {
+    elements.productSearchModal.addEventListener('click', (event) => {
+      if (event.target === elements.productSearchModal) {
+        closeProductSearchModal();
+      }
+    });
+  }
+
+  if (elements.productSearchModalResults) {
+    elements.productSearchModalResults.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      handleProductResultSelection(button);
+    });
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.productSearchModal.isOpen) {
+      event.preventDefault();
+      closeProductSearchModal();
+    }
+  });
 
   if (elements.addItemButton) {
     elements.addItemButton.addEventListener('click', () => {
@@ -908,4 +1324,5 @@
   setDefaultDate();
   updateOperationUI();
   renderItems();
+  updateProductSearchStatus(DEFAULT_PRODUCT_SEARCH_STATUS, 'muted');
 })();

@@ -149,19 +149,20 @@
 
                 <div class="space-y-4 rounded-2xl border border-gray-200 bg-slate-50/70 p-4">
                   <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                    <label for="movement-product-code" class="text-sm font-medium text-gray-700">Buscar produto por código interno ou EAN</label>
+                    <label for="movement-product-search" class="text-sm font-medium text-gray-700">Buscar produto por código interno, código de barras ou nome</label>
                     <span class="hidden text-xs font-semibold uppercase tracking-wide text-primary lg:block">Busca assistida</span>
                   </div>
-                  <div class="grid gap-4 lg:grid-cols-4">
-                    <div class="lg:col-span-2">
-                      <input type="text" id="movement-product-code" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite o código interno ou código de barras" autocomplete="off">
-                    </div>
-                    <div class="lg:col-span-2">
-                      <input type="text" id="movement-product-name" list="movement-product-suggestions" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ou procure pelo nome do produto" autocomplete="off">
-                      <datalist id="movement-product-suggestions"></datalist>
-                    </div>
+                  <div class="relative">
+                    <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400"><i class="fas fa-search"></i></span>
+                    <input type="text" id="movement-product-search" class="w-full rounded-lg border border-gray-200 pl-9 pr-12 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite o código interno, código de barras ou pressione letras para abrir a busca avançada" autocomplete="off">
+                    <button type="button" id="movement-open-product-search" class="absolute inset-y-0 right-0 flex items-center gap-1 rounded-r-lg border-l border-gray-200 px-3 text-xs font-semibold text-primary transition hover:bg-primary/5">
+                      <i class="fas fa-list"></i>
+                      Buscar produtos
+                    </button>
                   </div>
-                  <p class="text-xs text-gray-500">Preencha ao menos um campo acima para identificar o item que será ajustado.</p>
+                  <p class="text-xs text-gray-500">
+                    <span id="movement-product-search-status">Digite o código e pressione Enter para buscar rapidamente ou comece com letras para abrir a busca avançada.</span>
+                  </p>
                 </div>
 
                 <div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -256,6 +257,57 @@
   </main>
 
   <div id="admin-footer-placeholder"></div>
+  <div
+    id="movement-product-search-modal"
+    class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm"
+    aria-hidden="true"
+    role="dialog"
+    aria-labelledby="movement-product-search-modal-title"
+  >
+    <div class="relative w-full max-w-4xl rounded-2xl border border-gray-200 bg-white shadow-2xl">
+      <header class="flex items-center justify-between gap-3 border-b border-gray-200 px-6 py-4">
+        <div>
+          <h2 id="movement-product-search-modal-title" class="text-lg font-semibold text-gray-800">Buscar produtos</h2>
+          <p class="text-sm text-gray-500">Digite parte do nome, código interno ou EAN para localizar o item desejado.</p>
+        </div>
+        <button
+          type="button"
+          id="movement-product-search-close"
+          class="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+        >
+          <span class="sr-only">Fechar</span>
+          <i class="fas fa-times"></i>
+        </button>
+      </header>
+      <div class="space-y-4 px-6 py-5">
+        <div class="relative">
+          <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400"><i class="fas fa-search"></i></span>
+          <input
+            type="search"
+            id="movement-product-search-input"
+            class="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+            placeholder="Digite para pesquisar produtos cadastrados"
+            autocomplete="off"
+          >
+        </div>
+        <div id="movement-product-search-feedback" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-sm text-gray-500">
+          Digite ao menos três caracteres para listar os produtos disponíveis.
+        </div>
+        <div class="max-h-80 overflow-y-auto">
+          <ul id="movement-product-search-results" class="divide-y divide-gray-100"></ul>
+        </div>
+      </div>
+      <footer class="flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-4">
+        <button
+          type="button"
+          id="movement-product-search-cancel"
+          class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+        >
+          Fechar
+        </button>
+      </footer>
+    </div>
+  </div>
   <div id="modal-placeholder"></div>
 
   <script>var basePath = '../../';</script>
