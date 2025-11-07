@@ -107,6 +107,7 @@ router.get('/search-products', requireAuth, authorizeRoles(...allowedRoles), asy
       nome: 1,
       unidade: 1,
       custo: 1,
+      venda: 1,
     })
       .limit(20)
       .sort({ nome: 1 })
