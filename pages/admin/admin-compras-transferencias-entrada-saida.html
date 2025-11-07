@@ -114,17 +114,12 @@
                     <label for="movement-company" class="block text-sm font-semibold text-gray-700">Empresa <span class="text-red-500">*</span></label>
                     <select id="movement-company" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
                       <option value="">Selecione a empresa</option>
-                      <option value="1">Matriz</option>
-                      <option value="2">Filial 01</option>
                     </select>
                   </div>
                   <div class="space-y-3">
                     <label for="movement-deposit" class="block text-sm font-semibold text-gray-700">Depósito <span class="text-red-500">*</span></label>
                     <select id="movement-deposit" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" required>
                       <option value="">Selecione o depósito</option>
-                      <option value="principal">Depósito principal</option>
-                      <option value="loja-01">Loja 01</option>
-                      <option value="loja-02">Loja 02</option>
                     </select>
                   </div>
                 </div>
@@ -162,7 +157,8 @@
                       <input type="text" id="movement-product-code" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite o código interno ou código de barras" autocomplete="off">
                     </div>
                     <div class="lg:col-span-2">
-                      <input type="text" id="movement-product-name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ou procure pelo nome do produto" autocomplete="off">
+                      <input type="text" id="movement-product-name" list="movement-product-suggestions" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ou procure pelo nome do produto" autocomplete="off">
+                      <datalist id="movement-product-suggestions"></datalist>
                     </div>
                   </div>
                   <p class="text-xs text-gray-500">Preencha ao menos um campo acima para identificar o item que será ajustado.</p>
@@ -221,7 +217,9 @@
                 <article class="rounded-xl border border-gray-100 bg-white p-5 space-y-4 shadow-sm">
                   <div class="space-y-2">
                     <label for="movement-responsible" class="block text-sm font-semibold text-gray-700">Responsável <span class="text-red-500">*</span></label>
-                    <input type="text" id="movement-responsible" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite o nome do colaborador" required autocomplete="off">
+                    <input type="text" id="movement-responsible" list="movement-responsible-options" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite o nome do colaborador" required autocomplete="off">
+                    <input type="hidden" id="movement-responsible-id">
+                    <datalist id="movement-responsible-options"></datalist>
                     <p class="text-xs text-gray-500">Somente colaboradores com permissão de estoque devem registrar ajustes.</p>
                   </div>
                   <div>
