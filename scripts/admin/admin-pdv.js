@@ -9158,7 +9158,6 @@
       });
       notify('Transferência solicitada com sucesso.', 'success');
       closeTransferModal({ force: true });
-      window.location.href = '/pages/admin/admin-compras-transferencias-solicitadas.html';
     } catch (error) {
       console.error('Erro ao solicitar transferência pelo PDV:', error);
       state.transferModal.error = error?.message || 'Não foi possível registrar a transferência.';
