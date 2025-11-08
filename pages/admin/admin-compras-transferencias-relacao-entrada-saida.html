@@ -44,119 +44,139 @@
           </div>
         </header>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-6">
-          <header class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Filtros da relação</h2>
-              <p class="text-sm text-gray-600">Combine filtros para localizar movimentações específicas e gere análises de estoque.</p>
-            </div>
-            <span id="summary-period-label" class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
-              <i class="fas fa-calendar-alt"></i>
-              Todos os períodos
-            </span>
-          </header>
+        <div class="grid gap-5 lg:grid-cols-2">
+          <section class="bg-white rounded-xl shadow-sm border border-gray-100">
+            <details open class="group">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-t-xl border-b border-gray-100 px-4 py-3 text-sm font-semibold text-gray-700 transition group-open:rounded-b-none group-open:bg-gray-50">
+                <span class="inline-flex items-center gap-2 text-gray-800">
+                  <i class="fas fa-filter text-primary"></i>
+                  Filtros da relação
+                </span>
+                <i class="fas fa-chevron-down text-xs text-gray-400 transition group-open:rotate-180"></i>
+              </summary>
 
-          <form id="report-filters-form" class="grid grid-cols-1 gap-4 text-xs text-gray-700" autocomplete="off">
-            <div class="grid gap-3 md:grid-cols-2">
-              <div>
-                <label for="filter-date-start" class="block text-xs font-semibold text-gray-700">Data inicial</label>
-                <input type="date" id="filter-date-start" name="startDate" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-              </div>
-              <div>
-                <label for="filter-date-end" class="block text-xs font-semibold text-gray-700">Data final</label>
-                <input type="date" id="filter-date-end" name="endDate" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-              </div>
-            </div>
+              <div class="space-y-5 px-5 pb-5 pt-4 text-xs text-gray-700">
+                <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p class="text-sm text-gray-600">Combine filtros para localizar movimentações específicas e gere análises de estoque.</p>
+                  <span id="summary-period-label" class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
+                    <i class="fas fa-calendar-alt"></i>
+                    Todos os períodos
+                  </span>
+                </header>
 
-            <div class="grid gap-3 md:grid-cols-3">
-              <div>
-                <label for="filter-operation" class="block text-xs font-semibold text-gray-700">Tipo de movimentação</label>
-                <select id="filter-operation" name="operation" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Todas</option>
-                  <option value="entrada">Entradas</option>
-                  <option value="saida">Saídas</option>
-                </select>
-              </div>
-              <div>
-                <label for="filter-company" class="block text-xs font-semibold text-gray-700">Empresa</label>
-                <select id="filter-company" name="company" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Todas</option>
-                </select>
-              </div>
-              <div>
-                <label for="filter-deposit" class="block text-xs font-semibold text-gray-700">Depósito</label>
-                <select id="filter-deposit" name="deposit" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Todos</option>
-                </select>
-              </div>
-            </div>
+                <form id="report-filters-form" class="grid grid-cols-1 gap-4" autocomplete="off">
+                  <div class="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <label for="filter-date-start" class="block text-xs font-semibold text-gray-700">Data inicial</label>
+                      <input type="date" id="filter-date-start" name="startDate" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    </div>
+                    <div>
+                      <label for="filter-date-end" class="block text-xs font-semibold text-gray-700">Data final</label>
+                      <input type="date" id="filter-date-end" name="endDate" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                    </div>
+                  </div>
 
-            <div class="grid gap-3 md:grid-cols-3">
-              <div>
-                <label for="filter-responsible" class="block text-xs font-semibold text-gray-700">Responsável</label>
-                <select id="filter-responsible" name="responsible" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
-                  <option value="">Todos</option>
-                </select>
-              </div>
-              <div class="md:col-span-2">
-                <label for="filter-search" class="block text-xs font-semibold text-gray-700">Busca rápida</label>
-                <input type="text" id="filter-search" name="search" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Motivo, documento, observação ou produto">
-              </div>
-            </div>
-          </form>
-        </section>
+                  <div class="grid gap-3 md:grid-cols-3">
+                    <div>
+                      <label for="filter-operation" class="block text-xs font-semibold text-gray-700">Tipo de movimentação</label>
+                      <select id="filter-operation" name="operation" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        <option value="">Todas</option>
+                        <option value="entrada">Entradas</option>
+                        <option value="saida">Saídas</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="filter-company" class="block text-xs font-semibold text-gray-700">Empresa</label>
+                      <select id="filter-company" name="company" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        <option value="">Todas</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="filter-deposit" class="block text-xs font-semibold text-gray-700">Depósito</label>
+                      <select id="filter-deposit" name="deposit" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        <option value="">Todos</option>
+                      </select>
+                    </div>
+                  </div>
 
-        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-6">
-          <div class="flex flex-col gap-2">
-            <h2 class="text-lg font-semibold text-gray-800">Indicadores gerais</h2>
-            <p class="text-sm text-gray-600">Totais calculados com base nos filtros aplicados.</p>
-          </div>
-          <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
-              <dt class="text-sm font-medium text-gray-500">Movimentações registradas</dt>
-              <dd id="summary-total-adjustments" class="mt-2 text-2xl font-bold text-gray-800">0</dd>
-            </div>
-            <div class="rounded-xl border border-gray-100 bg-emerald-50 p-4">
-              <dt class="text-sm font-medium text-emerald-700">Entradas registradas</dt>
-              <dd id="summary-total-entradas" class="mt-2 text-2xl font-bold text-emerald-700">0</dd>
-            </div>
-            <div class="rounded-xl border border-gray-100 bg-rose-50 p-4">
-              <dt class="text-sm font-medium text-rose-700">Saídas registradas</dt>
-              <dd id="summary-total-saidas" class="mt-2 text-2xl font-bold text-rose-700">0</dd>
-            </div>
-            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
-              <dt class="text-sm font-medium text-gray-500">Quantidade líquida</dt>
-              <dd id="summary-net-quantity" class="mt-2 text-2xl font-bold text-gray-800">0</dd>
-            </div>
-            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
-              <dt class="text-sm font-medium text-gray-500">Valor líquido</dt>
-              <dd id="summary-net-value" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</dd>
-            </div>
-            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
-              <dt class="text-sm font-medium text-gray-500">Filtro aplicado</dt>
-              <dd id="summary-filter-description" class="mt-2 text-sm font-medium text-gray-700">Todos os registros disponíveis</dd>
-            </div>
-          </dl>
+                  <div class="grid gap-3 md:grid-cols-3">
+                    <div>
+                      <label for="filter-responsible" class="block text-xs font-semibold text-gray-700">Responsável</label>
+                      <select id="filter-responsible" name="responsible" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                        <option value="">Todos</option>
+                      </select>
+                    </div>
+                    <div class="md:col-span-2">
+                      <label for="filter-search" class="block text-xs font-semibold text-gray-700">Busca rápida</label>
+                      <input type="text" id="filter-search" name="search" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Motivo, documento, observação ou produto">
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </details>
+          </section>
 
-          <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div class="rounded-xl border border-gray-100 bg-emerald-50 p-4">
-              <dt class="text-sm font-medium text-emerald-700">Quantidade em entradas</dt>
-              <dd id="summary-quantity-entradas" class="mt-2 text-2xl font-bold text-emerald-700">0</dd>
-            </div>
-            <div class="rounded-xl border border-gray-100 bg-rose-50 p-4">
-              <dt class="text-sm font-medium text-rose-700">Quantidade em saídas</dt>
-              <dd id="summary-quantity-saidas" class="mt-2 text-2xl font-bold text-rose-700">0</dd>
-            </div>
-            <div class="rounded-xl border border-gray-100 bg-emerald-50 p-4">
-              <dt class="text-sm font-medium text-emerald-700">Valor em entradas</dt>
-              <dd id="summary-value-entradas" class="mt-2 text-2xl font-bold text-emerald-700">R$ 0,00</dd>
-            </div>
-            <div class="rounded-xl border border-gray-100 bg-rose-50 p-4">
-              <dt class="text-sm font-medium text-rose-700">Valor em saídas</dt>
-              <dd id="summary-value-saidas" class="mt-2 text-2xl font-bold text-rose-700">R$ 0,00</dd>
-            </div>
-          </dl>
-        </section>
+          <section class="bg-white rounded-xl shadow-sm border border-gray-100">
+            <details open class="group">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-t-xl border-b border-gray-100 px-4 py-3 text-sm font-semibold text-gray-700 transition group-open:rounded-b-none group-open:bg-gray-50">
+                <span class="inline-flex items-center gap-2 text-gray-800">
+                  <i class="fas fa-chart-line text-primary"></i>
+                  Indicadores gerais
+                </span>
+                <i class="fas fa-chevron-down text-xs text-gray-400 transition group-open:rotate-180"></i>
+              </summary>
+
+              <div class="space-y-5 px-5 pb-5 pt-4">
+                <p class="text-sm text-gray-600">Totais calculados com base nos filtros aplicados.</p>
+                <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                    <dt class="text-xs font-medium text-gray-500">Movimentações registradas</dt>
+                    <dd id="summary-total-adjustments" class="mt-2 text-xl font-bold text-gray-800">0</dd>
+                  </div>
+                  <div class="rounded-lg border border-gray-100 bg-emerald-50 p-4">
+                    <dt class="text-xs font-medium text-emerald-700">Entradas registradas</dt>
+                    <dd id="summary-total-entradas" class="mt-2 text-xl font-bold text-emerald-700">0</dd>
+                  </div>
+                  <div class="rounded-lg border border-gray-100 bg-rose-50 p-4">
+                    <dt class="text-xs font-medium text-rose-700">Saídas registradas</dt>
+                    <dd id="summary-total-saidas" class="mt-2 text-xl font-bold text-rose-700">0</dd>
+                  </div>
+                  <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                    <dt class="text-xs font-medium text-gray-500">Quantidade líquida</dt>
+                    <dd id="summary-net-quantity" class="mt-2 text-xl font-bold text-gray-800">0</dd>
+                  </div>
+                  <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                    <dt class="text-xs font-medium text-gray-500">Valor líquido</dt>
+                    <dd id="summary-net-value" class="mt-2 text-xl font-bold text-gray-800">R$ 0,00</dd>
+                  </div>
+                  <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                    <dt class="text-xs font-medium text-gray-500">Filtro aplicado</dt>
+                    <dd id="summary-filter-description" class="mt-2 text-xs font-semibold text-gray-700">Todos os registros disponíveis</dd>
+                  </div>
+                </dl>
+
+                <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div class="rounded-lg border border-gray-100 bg-emerald-50 p-4">
+                    <dt class="text-xs font-medium text-emerald-700">Quantidade em entradas</dt>
+                    <dd id="summary-quantity-entradas" class="mt-2 text-xl font-bold text-emerald-700">0</dd>
+                  </div>
+                  <div class="rounded-lg border border-gray-100 bg-rose-50 p-4">
+                    <dt class="text-xs font-medium text-rose-700">Quantidade em saídas</dt>
+                    <dd id="summary-quantity-saidas" class="mt-2 text-xl font-bold text-rose-700">0</dd>
+                  </div>
+                  <div class="rounded-lg border border-gray-100 bg-emerald-50 p-4">
+                    <dt class="text-xs font-medium text-emerald-700">Valor em entradas</dt>
+                    <dd id="summary-value-entradas" class="mt-2 text-xl font-bold text-emerald-700">R$ 0,00</dd>
+                  </div>
+                  <div class="rounded-lg border border-gray-100 bg-rose-50 p-4">
+                    <dt class="text-xs font-medium text-rose-700">Valor em saídas</dt>
+                    <dd id="summary-value-saidas" class="mt-2 text-xl font-bold text-rose-700">R$ 0,00</dd>
+                  </div>
+                </dl>
+              </div>
+            </details>
+          </section>
+        </div>
 
         <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
           <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
