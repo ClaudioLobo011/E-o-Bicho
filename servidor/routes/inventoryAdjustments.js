@@ -62,6 +62,321 @@ const toISODateString = (value) => {
   return `${year}-${month}-${day}`;
 };
 
+const toISOStringOrNull = (value) => {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return date.toISOString();
+};
+
+const buildDateRangeFilter = (start, end) => {
+  if (!start && !end) {
+    return null;
+  }
+
+  const range = {};
+
+  if (start) {
+    const startDate = new Date(start);
+    startDate.setUTCHours(0, 0, 0, 0);
+    range.$gte = startDate;
+  }
+
+  if (end) {
+    const endDate = new Date(end);
+    endDate.setUTCHours(23, 59, 59, 999);
+    range.$lte = endDate;
+  }
+
+  return range;
+};
+
+const mapPerson = (doc) => {
+  if (!doc || typeof doc !== 'object') {
+    return null;
+  }
+
+  const identifier = doc._id ? String(doc._id) : '';
+  const name = sanitizeString(doc.nomeCompleto) || sanitizeString(doc.apelido) || sanitizeString(doc.email);
+  return {
+    id: identifier,
+    name: name || '',
+    email: sanitizeString(doc.email),
+  };
+};
+
+const mapCompany = (doc) => {
+  if (!doc || typeof doc !== 'object') {
+    return null;
+  }
+
+  return {
+    id: doc._id ? String(doc._id) : '',
+    name: sanitizeString(doc.nomeFantasia) || sanitizeString(doc.nome) || '',
+  };
+};
+
+const mapDeposit = (doc) => {
+  if (!doc || typeof doc !== 'object') {
+    return null;
+  }
+
+  return {
+    id: doc._id ? String(doc._id) : '',
+    name: sanitizeString(doc.nome) || '',
+  };
+};
+
+const mapItem = (item) => {
+  if (!item || typeof item !== 'object') {
+    return null;
+  }
+
+  const quantity = Number(item.quantity);
+  const unitValue = item.unitValue === null || item.unitValue === undefined ? null : Number(item.unitValue);
+
+  return {
+    productId: item.product ? String(item.product) : '',
+    sku: sanitizeString(item.sku),
+    barcode: sanitizeString(item.barcode),
+    name: sanitizeString(item.name),
+    quantity: Number.isFinite(quantity) ? quantity : 0,
+    unitValue: Number.isFinite(unitValue) ? unitValue : null,
+    notes: sanitizeString(item.notes),
+  };
+};
+
+router.get('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
+  try {
+    const startDateRaw = sanitizeString(req.query.startDate);
+    const endDateRaw = sanitizeString(req.query.endDate);
+    const operationRaw = sanitizeString(req.query.operation).toLowerCase();
+    const companyRaw = sanitizeString(req.query.company);
+    const depositRaw = sanitizeString(req.query.deposit);
+    const responsibleRaw = sanitizeString(req.query.responsible);
+    const searchRaw = sanitizeString(req.query.search);
+
+    const startDate = startDateRaw ? parseDateInput(startDateRaw) : null;
+    if (startDateRaw && !startDate) {
+      return res.status(400).json({ message: 'Informe uma data inicial válida.' });
+    }
+
+    const endDate = endDateRaw ? parseDateInput(endDateRaw) : null;
+    if (endDateRaw && !endDate) {
+      return res.status(400).json({ message: 'Informe uma data final válida.' });
+    }
+
+    if (startDate && endDate && startDate > endDate) {
+      return res.status(400).json({ message: 'O período informado é inválido. A data inicial deve ser anterior à data final.' });
+    }
+
+    const filters = {};
+
+    const dateRange = buildDateRangeFilter(startDate, endDate);
+    if (dateRange) {
+      filters.movementDate = dateRange;
+    }
+
+    if (operationRaw) {
+      if (!['entrada', 'saida'].includes(operationRaw)) {
+        return res.status(400).json({ message: 'Tipo de movimentação inválido informado.' });
+      }
+      filters.operation = operationRaw;
+    }
+
+    if (companyRaw) {
+      const companyId = toObjectIdOrNull(companyRaw);
+      if (!companyId) {
+        return res.status(400).json({ message: 'Empresa informada é inválida.' });
+      }
+      filters.company = companyId;
+    }
+
+    if (depositRaw) {
+      const depositId = toObjectIdOrNull(depositRaw);
+      if (!depositId) {
+        return res.status(400).json({ message: 'Depósito informado é inválido.' });
+      }
+      filters.deposit = depositId;
+    }
+
+    if (responsibleRaw) {
+      const responsibleId = toObjectIdOrNull(responsibleRaw);
+      if (!responsibleId) {
+        return res.status(400).json({ message: 'Responsável informado é inválido.' });
+      }
+      filters.responsible = responsibleId;
+    }
+
+    if (searchRaw) {
+      const regex = new RegExp(escapeRegExp(searchRaw), 'i');
+      filters.$or = [
+        { reason: regex },
+        { referenceDocument: regex },
+        { notes: regex },
+        { 'items.name': regex },
+        { 'items.sku': regex },
+        { 'items.barcode': regex },
+      ];
+    }
+
+    const limitParsed = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(limitParsed) ? Math.min(Math.max(limitParsed, 1), 200) : 50;
+    const pageParsed = Number.parseInt(req.query.page, 10);
+    const page = Number.isFinite(pageParsed) && pageParsed > 0 ? pageParsed : 1;
+    const skip = (page - 1) * limit;
+
+    const matchFilters = filters.$or ? { ...filters, $or: [...filters.$or] } : { ...filters };
+
+    const [adjustments, aggregateSummary] = await Promise.all([
+      InventoryAdjustment.find(filters, {
+        operation: 1,
+        reason: 1,
+        company: 1,
+        deposit: 1,
+        movementDate: 1,
+        referenceDocument: 1,
+        notes: 1,
+        responsible: 1,
+        createdBy: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        totalQuantity: 1,
+        totalValue: 1,
+        items: 1,
+      })
+        .sort({ movementDate: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('company', { nome: 1, nomeFantasia: 1 })
+        .populate('deposit', { nome: 1 })
+        .populate('responsible', { nomeCompleto: 1, apelido: 1, email: 1 })
+        .populate('createdBy', { nomeCompleto: 1, apelido: 1, email: 1 })
+        .lean(),
+      InventoryAdjustment.aggregate([
+        { $match: matchFilters },
+        {
+          $group: {
+            _id: null,
+            totalAdjustments: { $sum: 1 },
+            totalEntradas: {
+              $sum: {
+                $cond: [{ $eq: ['$operation', 'entrada'] }, 1, 0],
+              },
+            },
+            totalSaidas: {
+              $sum: {
+                $cond: [{ $eq: ['$operation', 'saida'] }, 1, 0],
+              },
+            },
+            netQuantity: { $sum: { $ifNull: ['$totalQuantity', 0] } },
+            netValue: { $sum: { $ifNull: ['$totalValue', 0] } },
+            quantityEntradas: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$operation', 'entrada'] },
+                  { $ifNull: ['$totalQuantity', 0] },
+                  0,
+                ],
+              },
+            },
+            quantitySaidas: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$operation', 'saida'] },
+                  { $abs: { $ifNull: ['$totalQuantity', 0] } },
+                  0,
+                ],
+              },
+            },
+            valueEntradas: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$operation', 'entrada'] },
+                  { $ifNull: ['$totalValue', 0] },
+                  0,
+                ],
+              },
+            },
+            valueSaidas: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$operation', 'saida'] },
+                  { $abs: { $ifNull: ['$totalValue', 0] } },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+    ]);
+
+    const summaryDoc = Array.isArray(aggregateSummary) ? aggregateSummary[0] : null;
+
+    const summary = {
+      totalAdjustments: summaryDoc?.totalAdjustments || 0,
+      totalEntradas: summaryDoc?.totalEntradas || 0,
+      totalSaidas: summaryDoc?.totalSaidas || 0,
+      netQuantity: summaryDoc?.netQuantity || 0,
+      netValue: summaryDoc?.netValue || 0,
+      quantityEntradas: summaryDoc?.quantityEntradas || 0,
+      quantitySaidas: summaryDoc?.quantitySaidas || 0,
+      valueEntradas: summaryDoc?.valueEntradas || 0,
+      valueSaidas: summaryDoc?.valueSaidas || 0,
+    };
+
+    const total = summary.totalAdjustments || 0;
+    const totalPages = Math.max(Math.ceil(total / limit), 1);
+
+    const normalizedAdjustments = adjustments.map((adjustment) => {
+      if (!adjustment || typeof adjustment !== 'object') {
+        return adjustment;
+      }
+
+      const totalQuantity = Number(adjustment.totalQuantity);
+      const totalValue = Number(adjustment.totalValue);
+
+      return {
+        id: adjustment._id ? String(adjustment._id) : '',
+        operation: adjustment.operation,
+        reason: sanitizeString(adjustment.reason),
+        movementDate: toISODateString(adjustment.movementDate),
+        movementDateTime: toISOStringOrNull(adjustment.movementDate),
+        referenceDocument: sanitizeString(adjustment.referenceDocument),
+        notes: sanitizeString(adjustment.notes),
+        totalQuantity: Number.isFinite(totalQuantity) ? totalQuantity : 0,
+        totalValue: Number.isFinite(totalValue) ? totalValue : 0,
+        company: mapCompany(adjustment.company),
+        deposit: mapDeposit(adjustment.deposit),
+        responsible: mapPerson(adjustment.responsible),
+        createdBy: mapPerson(adjustment.createdBy),
+        createdAt: toISOStringOrNull(adjustment.createdAt),
+        updatedAt: toISOStringOrNull(adjustment.updatedAt),
+        items: Array.isArray(adjustment.items)
+          ? adjustment.items.map((item) => mapItem(item)).filter(Boolean)
+          : [],
+      };
+    });
+
+    res.json({
+      adjustments: normalizedAdjustments,
+      summary,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    });
+  } catch (error) {
+    console.error('Erro ao listar movimentações de estoque:', error);
+    res.status(500).json({ message: 'Não foi possível carregar as movimentações de estoque.' });
+  }
+});
+
 router.get('/form-data', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
   try {
     const [stores, deposits, responsaveis] = await Promise.all([

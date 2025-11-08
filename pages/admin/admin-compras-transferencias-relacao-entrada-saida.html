@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Relação Entrada/Saída de Estoque - E o Bicho</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../src/output.css">
+</head>
+<body class="bg-gray-100 text-[13px] leading-relaxed">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-3 pt-1 pb-8 min-h-screen">
+    <div class="lg:grid lg:grid-cols-12 lg:gap-6">
+      <aside class="lg:col-span-3 mb-4 lg:mb-0">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <div class="lg:col-span-9 space-y-5">
+        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div class="space-y-2">
+            <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-[11px] text-gray-500 uppercase tracking-wide font-semibold">
+              <span class="inline-flex items-center gap-1 text-primary"><i class="fas fa-shopping-basket"></i> Compras</span>
+              <i class="fas fa-angle-right text-gray-400"></i>
+              <span class="text-gray-600">Transferências</span>
+              <i class="fas fa-angle-right text-gray-400"></i>
+              <span class="text-gray-800">Relação Entrada/Saída</span>
+            </nav>
+            <div>
+              <h1 class="text-2xl font-bold text-gray-800">Relação de entrada/saída do estoque</h1>
+              <p class="text-sm text-gray-600">Audite movimentações manuais de estoque com filtros avançados por período, responsável, empresa e depósitos.</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs font-semibold">
+            <button type="button" id="filters-reset" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-gray-600 hover:bg-gray-50 transition">
+              <i class="fas fa-rotate"></i>
+              Limpar filtros
+            </button>
+            <button type="submit" form="report-filters-form" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-white shadow-sm hover:bg-primary/90 transition">
+              <i class="fas fa-magnifying-glass"></i>
+              Buscar movimentações
+            </button>
+          </div>
+        </header>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-6">
+          <header class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Filtros da relação</h2>
+              <p class="text-sm text-gray-600">Combine filtros para localizar movimentações específicas e gere análises de estoque.</p>
+            </div>
+            <span id="summary-period-label" class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
+              <i class="fas fa-calendar-alt"></i>
+              Todos os períodos
+            </span>
+          </header>
+
+          <form id="report-filters-form" class="grid grid-cols-1 gap-4 text-xs text-gray-700" autocomplete="off">
+            <div class="grid gap-3 md:grid-cols-2">
+              <div>
+                <label for="filter-date-start" class="block text-xs font-semibold text-gray-700">Data inicial</label>
+                <input type="date" id="filter-date-start" name="startDate" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+              <div>
+                <label for="filter-date-end" class="block text-xs font-semibold text-gray-700">Data final</label>
+                <input type="date" id="filter-date-end" name="endDate" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+              </div>
+            </div>
+
+            <div class="grid gap-3 md:grid-cols-3">
+              <div>
+                <label for="filter-operation" class="block text-xs font-semibold text-gray-700">Tipo de movimentação</label>
+                <select id="filter-operation" name="operation" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Todas</option>
+                  <option value="entrada">Entradas</option>
+                  <option value="saida">Saídas</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-company" class="block text-xs font-semibold text-gray-700">Empresa</label>
+                <select id="filter-company" name="company" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-deposit" class="block text-xs font-semibold text-gray-700">Depósito</label>
+                <select id="filter-deposit" name="deposit" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid gap-3 md:grid-cols-3">
+              <div>
+                <label for="filter-responsible" class="block text-xs font-semibold text-gray-700">Responsável</label>
+                <select id="filter-responsible" name="responsible" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+              <div class="md:col-span-2">
+                <label for="filter-search" class="block text-xs font-semibold text-gray-700">Busca rápida</label>
+                <input type="text" id="filter-search" name="search" class="mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Motivo, documento, observação ou produto">
+              </div>
+            </div>
+          </form>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-6">
+          <div class="flex flex-col gap-2">
+            <h2 class="text-lg font-semibold text-gray-800">Indicadores gerais</h2>
+            <p class="text-sm text-gray-600">Totais calculados com base nos filtros aplicados.</p>
+          </div>
+          <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <dt class="text-sm font-medium text-gray-500">Movimentações registradas</dt>
+              <dd id="summary-total-adjustments" class="mt-2 text-2xl font-bold text-gray-800">0</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-emerald-50 p-4">
+              <dt class="text-sm font-medium text-emerald-700">Entradas registradas</dt>
+              <dd id="summary-total-entradas" class="mt-2 text-2xl font-bold text-emerald-700">0</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-rose-50 p-4">
+              <dt class="text-sm font-medium text-rose-700">Saídas registradas</dt>
+              <dd id="summary-total-saidas" class="mt-2 text-2xl font-bold text-rose-700">0</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <dt class="text-sm font-medium text-gray-500">Quantidade líquida</dt>
+              <dd id="summary-net-quantity" class="mt-2 text-2xl font-bold text-gray-800">0</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <dt class="text-sm font-medium text-gray-500">Valor líquido</dt>
+              <dd id="summary-net-value" class="mt-2 text-2xl font-bold text-gray-800">R$ 0,00</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <dt class="text-sm font-medium text-gray-500">Filtro aplicado</dt>
+              <dd id="summary-filter-description" class="mt-2 text-sm font-medium text-gray-700">Todos os registros disponíveis</dd>
+            </div>
+          </dl>
+
+          <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="rounded-xl border border-gray-100 bg-emerald-50 p-4">
+              <dt class="text-sm font-medium text-emerald-700">Quantidade em entradas</dt>
+              <dd id="summary-quantity-entradas" class="mt-2 text-2xl font-bold text-emerald-700">0</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-rose-50 p-4">
+              <dt class="text-sm font-medium text-rose-700">Quantidade em saídas</dt>
+              <dd id="summary-quantity-saidas" class="mt-2 text-2xl font-bold text-rose-700">0</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-emerald-50 p-4">
+              <dt class="text-sm font-medium text-emerald-700">Valor em entradas</dt>
+              <dd id="summary-value-entradas" class="mt-2 text-2xl font-bold text-emerald-700">R$ 0,00</dd>
+            </div>
+            <div class="rounded-xl border border-gray-100 bg-rose-50 p-4">
+              <dt class="text-sm font-medium text-rose-700">Valor em saídas</dt>
+              <dd id="summary-value-saidas" class="mt-2 text-2xl font-bold text-rose-700">R$ 0,00</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+          <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Movimentações filtradas</h2>
+              <p class="text-sm text-gray-600">Resultados limitados às 200 movimentações mais recentes que atendem aos filtros informados.</p>
+            </div>
+            <div class="flex items-center gap-2 text-xs font-medium text-gray-500">
+              <span id="report-pagination" class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1">Página 1 de 1</span>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto rounded-xl border border-gray-200" id="report-table-container">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                <tr>
+                  <th class="px-4 py-3 text-left">Data</th>
+                  <th class="px-4 py-3 text-left">Tipo</th>
+                  <th class="px-4 py-3 text-left">Resumo</th>
+                  <th class="px-4 py-3 text-left">Empresa/Depósito</th>
+                  <th class="px-4 py-3 text-left">Responsável</th>
+                  <th class="px-4 py-3 text-left">Criado por</th>
+                  <th class="px-4 py-3 text-right">Qtd. total</th>
+                  <th class="px-4 py-3 text-right">Valor total</th>
+                </tr>
+              </thead>
+              <tbody id="report-table-body" class="divide-y divide-gray-100"></tbody>
+            </table>
+            <div id="report-empty-state" class="hidden px-6 py-12 text-center text-sm text-gray-500">
+              <i class="fas fa-box-open text-2xl text-gray-300 mb-3"></i>
+              <p>Nenhuma movimentação encontrada para os filtros informados.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div id="admin-footer-placeholder"></div>
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+
+  <script>var basePath = '../../';</script>
+  <script src="../../scripts/core/config.js"></script>
+  <script src="../../scripts/core/ui.js"></script>
+  <script src="../../scripts/core/main.js"></script>
+  <script src="../../scripts/admin/admin.js"></script>
+  <script src="../../scripts/admin/admin-compras-transferencias-relacao-entrada-saida.js"></script>
+</body>
+</html>
