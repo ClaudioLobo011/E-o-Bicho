@@ -11,11 +11,14 @@ const {
   adjustProductStockForDeposit,
   resolveProductObjectId,
   toObjectIdOrNull,
+  resolveFractionalChildRatio,
 } = require('../utils/inventoryStock');
+const { recalculateFractionalStockForProduct } = require('../utils/fractionalInventory');
 
 const router = express.Router();
 
 const allowedRoles = ['admin', 'admin_master', 'funcionario'];
+const PRODUCT_SALE_PRICE_KEYS = ['venda', 'precoVenda', 'preco', 'valorVenda', 'valor'];
 
 const sanitizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 
@@ -59,6 +62,321 @@ const toISODateString = (value) => {
   return `${year}-${month}-${day}`;
 };
 
+const toISOStringOrNull = (value) => {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return date.toISOString();
+};
+
+const buildDateRangeFilter = (start, end) => {
+  if (!start && !end) {
+    return null;
+  }
+
+  const range = {};
+
+  if (start) {
+    const startDate = new Date(start);
+    startDate.setUTCHours(0, 0, 0, 0);
+    range.$gte = startDate;
+  }
+
+  if (end) {
+    const endDate = new Date(end);
+    endDate.setUTCHours(23, 59, 59, 999);
+    range.$lte = endDate;
+  }
+
+  return range;
+};
+
+const mapPerson = (doc) => {
+  if (!doc || typeof doc !== 'object') {
+    return null;
+  }
+
+  const identifier = doc._id ? String(doc._id) : '';
+  const name = sanitizeString(doc.nomeCompleto) || sanitizeString(doc.apelido) || sanitizeString(doc.email);
+  return {
+    id: identifier,
+    name: name || '',
+    email: sanitizeString(doc.email),
+  };
+};
+
+const mapCompany = (doc) => {
+  if (!doc || typeof doc !== 'object') {
+    return null;
+  }
+
+  return {
+    id: doc._id ? String(doc._id) : '',
+    name: sanitizeString(doc.nomeFantasia) || sanitizeString(doc.nome) || '',
+  };
+};
+
+const mapDeposit = (doc) => {
+  if (!doc || typeof doc !== 'object') {
+    return null;
+  }
+
+  return {
+    id: doc._id ? String(doc._id) : '',
+    name: sanitizeString(doc.nome) || '',
+  };
+};
+
+const mapItem = (item) => {
+  if (!item || typeof item !== 'object') {
+    return null;
+  }
+
+  const quantity = Number(item.quantity);
+  const unitValue = item.unitValue === null || item.unitValue === undefined ? null : Number(item.unitValue);
+
+  return {
+    productId: item.product ? String(item.product) : '',
+    sku: sanitizeString(item.sku),
+    barcode: sanitizeString(item.barcode),
+    name: sanitizeString(item.name),
+    quantity: Number.isFinite(quantity) ? quantity : 0,
+    unitValue: Number.isFinite(unitValue) ? unitValue : null,
+    notes: sanitizeString(item.notes),
+  };
+};
+
+router.get('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
+  try {
+    const startDateRaw = sanitizeString(req.query.startDate);
+    const endDateRaw = sanitizeString(req.query.endDate);
+    const operationRaw = sanitizeString(req.query.operation).toLowerCase();
+    const companyRaw = sanitizeString(req.query.company);
+    const depositRaw = sanitizeString(req.query.deposit);
+    const responsibleRaw = sanitizeString(req.query.responsible);
+    const searchRaw = sanitizeString(req.query.search);
+
+    const startDate = startDateRaw ? parseDateInput(startDateRaw) : null;
+    if (startDateRaw && !startDate) {
+      return res.status(400).json({ message: 'Informe uma data inicial válida.' });
+    }
+
+    const endDate = endDateRaw ? parseDateInput(endDateRaw) : null;
+    if (endDateRaw && !endDate) {
+      return res.status(400).json({ message: 'Informe uma data final válida.' });
+    }
+
+    if (startDate && endDate && startDate > endDate) {
+      return res.status(400).json({ message: 'O período informado é inválido. A data inicial deve ser anterior à data final.' });
+    }
+
+    const filters = {};
+
+    const dateRange = buildDateRangeFilter(startDate, endDate);
+    if (dateRange) {
+      filters.movementDate = dateRange;
+    }
+
+    if (operationRaw) {
+      if (!['entrada', 'saida'].includes(operationRaw)) {
+        return res.status(400).json({ message: 'Tipo de movimentação inválido informado.' });
+      }
+      filters.operation = operationRaw;
+    }
+
+    if (companyRaw) {
+      const companyId = toObjectIdOrNull(companyRaw);
+      if (!companyId) {
+        return res.status(400).json({ message: 'Empresa informada é inválida.' });
+      }
+      filters.company = companyId;
+    }
+
+    if (depositRaw) {
+      const depositId = toObjectIdOrNull(depositRaw);
+      if (!depositId) {
+        return res.status(400).json({ message: 'Depósito informado é inválido.' });
+      }
+      filters.deposit = depositId;
+    }
+
+    if (responsibleRaw) {
+      const responsibleId = toObjectIdOrNull(responsibleRaw);
+      if (!responsibleId) {
+        return res.status(400).json({ message: 'Responsável informado é inválido.' });
+      }
+      filters.responsible = responsibleId;
+    }
+
+    if (searchRaw) {
+      const regex = new RegExp(escapeRegExp(searchRaw), 'i');
+      filters.$or = [
+        { reason: regex },
+        { referenceDocument: regex },
+        { notes: regex },
+        { 'items.name': regex },
+        { 'items.sku': regex },
+        { 'items.barcode': regex },
+      ];
+    }
+
+    const limitParsed = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(limitParsed) ? Math.min(Math.max(limitParsed, 1), 200) : 50;
+    const pageParsed = Number.parseInt(req.query.page, 10);
+    const page = Number.isFinite(pageParsed) && pageParsed > 0 ? pageParsed : 1;
+    const skip = (page - 1) * limit;
+
+    const matchFilters = filters.$or ? { ...filters, $or: [...filters.$or] } : { ...filters };
+
+    const [adjustments, aggregateSummary] = await Promise.all([
+      InventoryAdjustment.find(filters, {
+        operation: 1,
+        reason: 1,
+        company: 1,
+        deposit: 1,
+        movementDate: 1,
+        referenceDocument: 1,
+        notes: 1,
+        responsible: 1,
+        createdBy: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        totalQuantity: 1,
+        totalValue: 1,
+        items: 1,
+      })
+        .sort({ movementDate: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('company', { nome: 1, nomeFantasia: 1 })
+        .populate('deposit', { nome: 1 })
+        .populate('responsible', { nomeCompleto: 1, apelido: 1, email: 1 })
+        .populate('createdBy', { nomeCompleto: 1, apelido: 1, email: 1 })
+        .lean(),
+      InventoryAdjustment.aggregate([
+        { $match: matchFilters },
+        {
+          $group: {
+            _id: null,
+            totalAdjustments: { $sum: 1 },
+            totalEntradas: {
+              $sum: {
+                $cond: [{ $eq: ['$operation', 'entrada'] }, 1, 0],
+              },
+            },
+            totalSaidas: {
+              $sum: {
+                $cond: [{ $eq: ['$operation', 'saida'] }, 1, 0],
+              },
+            },
+            netQuantity: { $sum: { $ifNull: ['$totalQuantity', 0] } },
+            netValue: { $sum: { $ifNull: ['$totalValue', 0] } },
+            quantityEntradas: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$operation', 'entrada'] },
+                  { $ifNull: ['$totalQuantity', 0] },
+                  0,
+                ],
+              },
+            },
+            quantitySaidas: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$operation', 'saida'] },
+                  { $abs: { $ifNull: ['$totalQuantity', 0] } },
+                  0,
+                ],
+              },
+            },
+            valueEntradas: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$operation', 'entrada'] },
+                  { $ifNull: ['$totalValue', 0] },
+                  0,
+                ],
+              },
+            },
+            valueSaidas: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$operation', 'saida'] },
+                  { $abs: { $ifNull: ['$totalValue', 0] } },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+    ]);
+
+    const summaryDoc = Array.isArray(aggregateSummary) ? aggregateSummary[0] : null;
+
+    const summary = {
+      totalAdjustments: summaryDoc?.totalAdjustments || 0,
+      totalEntradas: summaryDoc?.totalEntradas || 0,
+      totalSaidas: summaryDoc?.totalSaidas || 0,
+      netQuantity: summaryDoc?.netQuantity || 0,
+      netValue: summaryDoc?.netValue || 0,
+      quantityEntradas: summaryDoc?.quantityEntradas || 0,
+      quantitySaidas: summaryDoc?.quantitySaidas || 0,
+      valueEntradas: summaryDoc?.valueEntradas || 0,
+      valueSaidas: summaryDoc?.valueSaidas || 0,
+    };
+
+    const total = summary.totalAdjustments || 0;
+    const totalPages = Math.max(Math.ceil(total / limit), 1);
+
+    const normalizedAdjustments = adjustments.map((adjustment) => {
+      if (!adjustment || typeof adjustment !== 'object') {
+        return adjustment;
+      }
+
+      const totalQuantity = Number(adjustment.totalQuantity);
+      const totalValue = Number(adjustment.totalValue);
+
+      return {
+        id: adjustment._id ? String(adjustment._id) : '',
+        operation: adjustment.operation,
+        reason: sanitizeString(adjustment.reason),
+        movementDate: toISODateString(adjustment.movementDate),
+        movementDateTime: toISOStringOrNull(adjustment.movementDate),
+        referenceDocument: sanitizeString(adjustment.referenceDocument),
+        notes: sanitizeString(adjustment.notes),
+        totalQuantity: Number.isFinite(totalQuantity) ? totalQuantity : 0,
+        totalValue: Number.isFinite(totalValue) ? totalValue : 0,
+        company: mapCompany(adjustment.company),
+        deposit: mapDeposit(adjustment.deposit),
+        responsible: mapPerson(adjustment.responsible),
+        createdBy: mapPerson(adjustment.createdBy),
+        createdAt: toISOStringOrNull(adjustment.createdAt),
+        updatedAt: toISOStringOrNull(adjustment.updatedAt),
+        items: Array.isArray(adjustment.items)
+          ? adjustment.items.map((item) => mapItem(item)).filter(Boolean)
+          : [],
+      };
+    });
+
+    res.json({
+      adjustments: normalizedAdjustments,
+      summary,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    });
+  } catch (error) {
+    console.error('Erro ao listar movimentações de estoque:', error);
+    res.status(500).json({ message: 'Não foi possível carregar as movimentações de estoque.' });
+  }
+});
+
 router.get('/form-data', requireAuth, authorizeRoles(...allowedRoles), async (req, res) => {
   try {
     const [stores, deposits, responsaveis] = await Promise.all([
@@ -87,6 +405,8 @@ router.get('/search-products', requireAuth, authorizeRoles(...allowedRoles), asy
       return res.json({ products: [] });
     }
 
+    const includeInactive = String(req.query.includeInactive || '').toLowerCase() === 'true';
+
     const regex = new RegExp(escapeRegExp(term), 'i');
     const numericTerm = term.replace(/\D/g, '');
     const query = {
@@ -96,6 +416,10 @@ router.get('/search-products', requireAuth, authorizeRoles(...allowedRoles), asy
         { nome: regex },
       ],
     };
+
+    if (!includeInactive) {
+      query.inativo = { $ne: true };
+    }
 
     if (numericTerm) {
       query.$or.push({ codbarras: new RegExp(escapeRegExp(numericTerm), 'i') });
@@ -108,12 +432,46 @@ router.get('/search-products', requireAuth, authorizeRoles(...allowedRoles), asy
       unidade: 1,
       custo: 1,
       venda: 1,
+      precoVenda: 1,
+      preco: 1,
+      valorVenda: 1,
+      valor: 1,
     })
       .limit(20)
       .sort({ nome: 1 })
       .lean();
 
-    res.json({ products });
+    const normalizedProducts = products.map((product) => {
+      if (!product || typeof product !== 'object') {
+        return product;
+      }
+
+      const normalized = { ...product };
+      const costNumber = parseNumber(normalized.custo);
+      if (costNumber !== null) {
+        normalized.custo = costNumber;
+      }
+
+      let saleNumber = null;
+      for (const key of PRODUCT_SALE_PRICE_KEYS) {
+        if (!key) continue;
+        const parsed = parseNumber(normalized[key]);
+        if (parsed !== null) {
+          saleNumber = parsed;
+          break;
+        }
+      }
+
+      if (saleNumber !== null) {
+        normalized.venda = saleNumber;
+      } else if (typeof normalized.venda === 'undefined') {
+        normalized.venda = null;
+      }
+
+      return normalized;
+    });
+
+    res.json({ products: normalizedProducts });
   } catch (error) {
     console.error('Erro ao buscar produtos para movimentação de estoque:', error);
     res.status(500).json({ message: 'Não foi possível buscar produtos no momento.' });
@@ -255,6 +613,7 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
       codbarras: 1,
       nome: 1,
       custo: 1,
+      fracionado: 1,
     }).lean();
 
     if (products.length !== productIds.length) {
@@ -268,12 +627,126 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
       return res.status(401).json({ message: 'Sessão expirada. Faça login novamente.' });
     }
 
+    const factor = normalizedOperation === 'saida' ? -1 : 1;
+    const adjustmentMap = new Map();
+    const fractionalParents = new Set();
+
+    const normalizeProductId = (value) => {
+      if (!value) return null;
+      if (value instanceof mongoose.Types.ObjectId) {
+        return value.toString();
+      }
+      if (typeof value === 'object' && value._id) {
+        return normalizeProductId(value._id);
+      }
+      if (typeof value === 'string') {
+        return mongoose.Types.ObjectId.isValid(value) ? value : null;
+      }
+      return null;
+    };
+
+    const recordAdjustment = (productId, delta) => {
+      if (!Number.isFinite(delta) || delta === 0) {
+        return;
+      }
+      const current = adjustmentMap.get(productId) || 0;
+      const next = current + delta;
+      const normalized = Math.round(next * 1_000_000) / 1_000_000;
+      if (normalized === 0) {
+        adjustmentMap.delete(productId);
+      } else {
+        adjustmentMap.set(productId, normalized);
+      }
+    };
+
+    const ensureProductLoaded = async (productId) => {
+      if (productMap.has(productId)) {
+        return productMap.get(productId);
+      }
+
+      try {
+        const doc = await Product.findById(productId, {
+          cod: 1,
+          codbarras: 1,
+          nome: 1,
+          custo: 1,
+          fracionado: 1,
+        }).lean();
+
+        if (doc) {
+          productMap.set(productId, doc);
+          return doc;
+        }
+
+        console.warn('Produto vinculado ao fracionamento não foi encontrado.', { productId });
+      } catch (loadError) {
+        console.warn('Falha ao carregar produto vinculado ao fracionamento.', { productId }, loadError);
+      }
+
+      return null;
+    };
+
+    const accumulateAdjustments = async (productId, delta, visited = new Set()) => {
+      if (!Number.isFinite(delta) || delta === 0) {
+        return;
+      }
+
+      const normalizedId = normalizeProductId(productId);
+      if (!normalizedId) {
+        return;
+      }
+
+      if (visited.has(normalizedId)) {
+        return;
+      }
+
+      visited.add(normalizedId);
+      recordAdjustment(normalizedId, delta);
+
+      const product = await ensureProductLoaded(normalizedId);
+      if (!product) {
+        return;
+      }
+
+      const fractionalConfig = product?.fracionado || {};
+      const fractionalItems = Array.isArray(fractionalConfig?.itens) ? fractionalConfig.itens : [];
+
+      if (!fractionalConfig?.ativo || fractionalItems.length === 0) {
+        return;
+      }
+
+      fractionalParents.add(normalizedId);
+
+      for (const item of fractionalItems) {
+        const childId = normalizeProductId(item?.produto);
+        if (!childId) {
+          continue;
+        }
+
+        const ratio = resolveFractionalChildRatio(item?.quantidadeOrigem, item?.quantidadeFracionada);
+        if (!Number.isFinite(ratio) || ratio <= 0) {
+          continue;
+        }
+
+        const childDelta = delta * ratio;
+        if (!Number.isFinite(childDelta) || childDelta === 0) {
+          continue;
+        }
+
+        const branchVisited = new Set(visited);
+        await accumulateAdjustments(childId, childDelta, branchVisited);
+      }
+    };
+
+    for (const rawItem of preparedItemsInput) {
+      await accumulateAdjustments(rawItem.productId, rawItem.quantity * factor, new Set());
+    }
+
     session = await mongoose.startSession();
 
     let adjustmentRecord = null;
     await session.withTransaction(async () => {
       const preparedItems = [];
-      const factor = normalizedOperation === 'saida' ? -1 : 1;
       let totalQuantity = 0;
       let totalValue = 0;
 
@@ -290,13 +763,6 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
           : (Number.isFinite(product?.custo) ? Math.round(Number(product.custo) * 100) / 100 : null);
 
         const delta = rawItem.quantity * factor;
-        await adjustProductStockForDeposit({
-          productId: rawItem.productId,
-          depositId: deposit,
-          quantity: delta,
-          session,
-          cascadeFractional: true,
-        });
 
         preparedItems.push({
           product: product._id,
@@ -312,6 +778,20 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
         if (unitValue !== null && Number.isFinite(unitValue)) {
           totalValue += unitValue * rawItem.quantity * factor;
         }
+      }
+
+      for (const [productId, delta] of adjustmentMap.entries()) {
+        await adjustProductStockForDeposit({
+          productId,
+          depositId: deposit,
+          quantity: delta,
+          session,
+          cascadeFractional: false,
+        });
+      }
+
+      for (const parentId of fractionalParents) {
+        await recalculateFractionalStockForProduct(parentId, { session });
       }
 
       adjustmentRecord = await InventoryAdjustment.create([

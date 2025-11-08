@@ -256,5 +256,6 @@ module.exports = {
   toObjectIdOrNull,
   resolveProductObjectId,
   adjustProductStockForDeposit,
+  resolveFractionalChildRatio,
 };
 

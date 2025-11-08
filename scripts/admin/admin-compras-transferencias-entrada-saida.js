@@ -42,10 +42,12 @@
       controller: null,
       timeout: null,
       lastTerm: '',
+      includeInactive: false,
     },
   };
 
   const PRODUCT_SEARCH_FILTER_KEYS = ['cod', 'descricao', 'codbarras', 'custo', 'venda'];
+  const PRODUCT_SEARCH_SALE_KEYS = ['venda', 'precoVenda', 'preco', 'valorVenda', 'valor'];
   const DEFAULT_PRODUCT_SEARCH_FILTERS = PRODUCT_SEARCH_FILTER_KEYS.reduce((accumulator, key) => {
     // eslint-disable-next-line no-param-reassign
     accumulator[key] = '';
@@ -141,6 +143,7 @@
     productSearchModalCancel: document.getElementById('movement-product-search-cancel'),
     productSearchModalFeedback: document.getElementById('movement-product-search-feedback'),
     productSearchModalResults: document.getElementById('movement-product-search-results'),
+    productSearchModalShowInactive: document.getElementById('movement-product-search-show-inactive'),
     totalItems: document.getElementById('movement-total-items'),
     totalQuantity: document.getElementById('movement-total-quantity'),
     totalValue: document.getElementById('movement-total-value'),
@@ -225,13 +228,24 @@
   }
 
   function getProductSearchCostNumber(product = {}) {
-    const value = Number(product?.custo);
+    const value = parseDecimal(product?.custo);
     return Number.isFinite(value) ? value : null;
   }
 
   function getProductSearchSaleNumber(product = {}) {
-    const value = Number(product?.venda);
-    return Number.isFinite(value) ? value : null;
+    if (!product || typeof product !== 'object') {
+      return null;
+    }
+
+    for (const key of PRODUCT_SEARCH_SALE_KEYS) {
+      if (!key) continue;
+      const parsed = parseDecimal(product?.[key]);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    return null;
   }
 
   function getProductSearchFilterCandidates(product = {}, key) {
@@ -261,9 +275,13 @@
           candidates.push(String(saleNumber));
           candidates.push(productSearchCurrencyFormatter.format(saleNumber));
         }
-        if (product?.venda !== null && product?.venda !== undefined && product?.venda !== '') {
-          candidates.push(String(product.venda));
-        }
+        PRODUCT_SEARCH_SALE_KEYS.forEach((saleKey) => {
+          if (!saleKey) return;
+          const rawValue = product?.[saleKey];
+          if (rawValue !== null && rawValue !== undefined && rawValue !== '') {
+            candidates.push(String(rawValue));
+          }
+        });
         return candidates.length ? candidates : [''];
       }
       default:
@@ -838,7 +856,8 @@
       return [];
     }
 
-    const cacheKey = normalizedTerm.toLowerCase();
+    const includeInactive = options.includeInactive === true;
+    const cacheKey = `${normalizedTerm.toLowerCase()}::${includeInactive ? 'with-inactive' : 'only-active'}`;
     if (!options.skipCache && state.productSearchCache.has(cacheKey)) {
       return state.productSearchCache.get(cacheKey);
     }
@@ -848,7 +867,11 @@
       throw new Error('Sessão expirada. Faça login novamente.');
     }
 
-    const url = `${API_CONFIG.BASE_URL}/inventory-adjustments/search-products?term=${encodeURIComponent(normalizedTerm)}`;
+    const url = new URL(`${API_CONFIG.BASE_URL}/inventory-adjustments/search-products`);
+    url.searchParams.set('term', normalizedTerm);
+    if (includeInactive) {
+      url.searchParams.set('includeInactive', 'true');
+    }
     const fetchOptions = {
       headers: { Authorization: `Bearer ${token}` },
     };
@@ -857,7 +880,7 @@
       fetchOptions.signal = options.signal;
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await fetch(url.toString(), fetchOptions);
 
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
@@ -1086,7 +1109,10 @@
     );
 
     try {
-      const products = await searchProducts(normalizedTerm, { signal: controller.signal });
+      const products = await searchProducts(normalizedTerm, {
+        signal: controller.signal,
+        includeInactive: state.productSearchModal.includeInactive,
+      });
       renderProductSearchModalResults(products);
     } catch (error) {
       if (error.name === 'AbortError') {
@@ -1118,6 +1144,10 @@
     if (!modal) return;
 
     cancelPendingModalSearch();
+    state.productSearchModal.includeInactive = false;
+    if (elements.productSearchModalShowInactive) {
+      elements.productSearchModalShowInactive.checked = false;
+    }
     resetProductSearchModal();
     setupProductSearchTableControls();
 
@@ -1157,9 +1187,13 @@
     modal.setAttribute('aria-hidden', 'true');
     state.productSearchModal.isOpen = false;
     state.productSearchModal.lastTerm = '';
+    state.productSearchModal.includeInactive = false;
 
     if (elements.productSearchModalInput) {
       elements.productSearchModalInput.value = '';
+    }
+    if (elements.productSearchModalShowInactive) {
+      elements.productSearchModalShowInactive.checked = false;
     }
     resetProductSearchModal();
 
@@ -1496,6 +1530,7 @@
     state.operation = 'saida';
     state.productSearchCache.clear();
     state.productDetailsCache.clear();
+    state.productSearchModal.includeInactive = false;
     state.selectedResponsibleId = '';
     if (elements.responsibleHidden) {
       elements.responsibleHidden.value = '';
@@ -1513,6 +1548,9 @@
     clearPendingProduct({ resetStatus: true });
     if (elements.productSearchInput) {
       elements.productSearchInput.value = '';
+    }
+    if (elements.productSearchModalShowInactive) {
+      elements.productSearchModalShowInactive.checked = false;
     }
     setDefaultDate();
     hideFeedback();
@@ -1674,6 +1712,19 @@
       if (event.key === 'Enter') {
         event.preventDefault();
         executeProductSearchModal(event.target.value);
+      }
+    });
+  }
+
+  if (elements.productSearchModalShowInactive) {
+    elements.productSearchModalShowInactive.addEventListener('change', (event) => {
+      const includeInactive = Boolean(event.target.checked);
+      state.productSearchModal.includeInactive = includeInactive;
+      cancelPendingModalSearch();
+      if (state.productSearchModal.lastTerm && state.productSearchModal.lastTerm.length >= 3) {
+        executeProductSearchModal(state.productSearchModal.lastTerm);
+      } else {
+        renderProductSearchTable();
       }
     });
   }
