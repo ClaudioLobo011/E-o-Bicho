@@ -14,6 +14,14 @@
     crediario: 3,
   };
 
+  const getTodayIsoDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const caixaActions = [
     {
       id: 'abertura',
@@ -171,6 +179,30 @@
     fiscalEmissionModalOpen: false,
     activePdvStoreId: '',
     fullscreenActive: false,
+    transferModal: {
+      open: false,
+      formLoading: false,
+      formLoaded: false,
+      submitting: false,
+      stores: [],
+      deposits: [],
+      responsaveis: [],
+      requestDate: getTodayIsoDate(),
+      originCompanyId: '',
+      originDepositId: '',
+      destinationCompanyId: '',
+      destinationDepositId: '',
+      responsibleId: '',
+      referenceDocument: '',
+      observations: '',
+      items: [],
+      productSearchTerm: '',
+      productSearchLoading: false,
+      productSearchResults: [],
+      selectedProduct: null,
+      productQuantity: 1,
+      error: '',
+    },
   };
 
   const elements = {};
@@ -563,6 +595,8 @@
   let receivablesDetailsRequestSequence = 0;
   let paymentModalState = null;
   let appointmentsRequestId = 0;
+  let transferProductSearchTimeout = null;
+  let transferProductSearchController = null;
 
   const createUid = () => `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
@@ -2571,6 +2605,30 @@
       complemento: document.getElementById('pdv-delivery-address-complemento'),
       isDefault: document.getElementById('pdv-delivery-address-default'),
     };
+    elements.transferModal = document.getElementById('pdv-transfer-modal');
+    elements.transferBackdrop = document.getElementById('pdv-transfer-modal-backdrop');
+    elements.transferClose = document.getElementById('pdv-transfer-close');
+    elements.transferForm = document.getElementById('pdv-transfer-form');
+    elements.transferLoading = document.getElementById('pdv-transfer-loading');
+    elements.transferDate = document.getElementById('pdv-transfer-date');
+    elements.transferResponsible = document.getElementById('pdv-transfer-responsible');
+    elements.transferOriginCompany = document.getElementById('pdv-transfer-origin-company');
+    elements.transferOriginDeposit = document.getElementById('pdv-transfer-origin-deposit');
+    elements.transferDestinationCompany = document.getElementById('pdv-transfer-destination-company');
+    elements.transferDestinationDeposit = document.getElementById('pdv-transfer-destination-deposit');
+    elements.transferReference = document.getElementById('pdv-transfer-reference');
+    elements.transferObservations = document.getElementById('pdv-transfer-observations');
+    elements.transferProductSearch = document.getElementById('pdv-transfer-product-search');
+    elements.transferProductQuantity = document.getElementById('pdv-transfer-product-quantity');
+    elements.transferProductResults = document.getElementById('pdv-transfer-product-results');
+    elements.transferProductFeedback = document.getElementById('pdv-transfer-product-feedback');
+    elements.transferAddProduct = document.getElementById('pdv-transfer-add-product');
+    elements.transferItemsTable = document.getElementById('pdv-transfer-items-body');
+    elements.transferItemsEmpty = document.getElementById('pdv-transfer-items-empty');
+    elements.transferItemsCount = document.getElementById('pdv-transfer-items-count');
+    elements.transferError = document.getElementById('pdv-transfer-error');
+    elements.transferCancel = document.getElementById('pdv-transfer-cancel');
+    elements.transferSubmit = document.getElementById('pdv-transfer-submit');
 
     elements.finalizeTitle = elements.finalizeModal?.querySelector('h2') || null;
     elements.finalizeSubtitle = elements.finalizeModal?.querySelector('h2 + p') || null;
@@ -8317,6 +8375,801 @@
       .replace(/'/g, '&#39;');
   };
 
+  const normalizeTransferStore = (store) => {
+    if (!store || typeof store !== 'object') return null;
+    const id = normalizeId(store._id ?? store.id ?? store.value);
+    if (!id) return null;
+    const label =
+      store.nomeFantasia || store.nome || store.razaoSocial || store.fantasia || 'Empresa sem nome';
+    return { id, label };
+  };
+
+  const normalizeTransferDeposit = (deposit) => {
+    if (!deposit || typeof deposit !== 'object') return null;
+    const id = normalizeId(deposit._id ?? deposit.id ?? deposit.value);
+    if (!id) return null;
+    const companyId = normalizeId(deposit.empresa ?? deposit.company ?? deposit.companyId);
+    const label = deposit.nome || deposit.name || 'Depósito sem nome';
+    return { id, label, companyId };
+  };
+
+  const normalizeTransferResponsible = (user) => {
+    if (!user || typeof user !== 'object') return null;
+    const id = normalizeId(user._id ?? user.id ?? user.userId);
+    if (!id) return null;
+    const primary =
+      user.nomeCompleto || user.apelido || user.nome || user.name || user.email || 'Responsável';
+    const email = user.email && user.email !== primary ? ` (${user.email})` : '';
+    return { id, label: `${primary}${email}` };
+  };
+
+  const normalizeTransferProduct = (product) => {
+    if (!product || typeof product !== 'object') return null;
+    const id = normalizeId(product._id ?? product.id ?? product.value);
+    if (!id) return null;
+    const label = product.nome || product.name || product.descricao || 'Produto sem nome';
+    const rawCost = Number(product.custo);
+    const rawSale = Number(product.venda);
+    const unitCost = Number.isFinite(rawCost) ? Math.round(rawCost * 100) / 100 : null;
+    const unitSale = Number.isFinite(rawSale) ? Math.round(rawSale * 100) / 100 : null;
+    return {
+      id,
+      label,
+      sku: product.cod || product.codigo || product.codigoInterno || '',
+      barcode: product.codbarras || product.codigoBarras || '',
+      unit: product.unidade || product.unidadeVenda || '',
+      unitCost,
+      unitSale,
+    };
+  };
+
+  const getTransferDepositsByCompany = (companyId) => {
+    const normalized = normalizeId(companyId);
+    if (!normalized) return [];
+    return state.transferModal.deposits.filter((deposit) => deposit.companyId === normalized);
+  };
+
+  const resetTransferModalState = ({ preserveData = true } = {}) => {
+    const defaultOrigin = normalizeId(state.selectedStore || state.activePdvStoreId || '');
+    state.transferModal.open = false;
+    state.transferModal.submitting = false;
+    state.transferModal.requestDate = getTodayIsoDate();
+    state.transferModal.originCompanyId =
+      defaultOrigin && state.transferModal.stores.some((store) => store.id === defaultOrigin)
+        ? defaultOrigin
+        : '';
+    state.transferModal.originDepositId = '';
+    state.transferModal.destinationCompanyId = '';
+    state.transferModal.destinationDepositId = '';
+    state.transferModal.responsibleId = '';
+    state.transferModal.referenceDocument = '';
+    state.transferModal.observations = '';
+    state.transferModal.items = [];
+    state.transferModal.productSearchTerm = '';
+    state.transferModal.productSearchLoading = false;
+    state.transferModal.productSearchResults = [];
+    state.transferModal.selectedProduct = null;
+    state.transferModal.productQuantity = 1;
+    state.transferModal.error = '';
+    if (!preserveData) {
+      state.transferModal.formLoaded = false;
+      state.transferModal.stores = [];
+      state.transferModal.deposits = [];
+      state.transferModal.responsaveis = [];
+    }
+  };
+
+  const updateTransferModalVisibility = () => {
+    if (!elements.transferModal) return;
+    if (state.transferModal.open) {
+      elements.transferModal.classList.remove('hidden');
+    } else {
+      elements.transferModal.classList.add('hidden');
+    }
+  };
+
+  const updateTransferLoadingState = () => {
+    if (elements.transferLoading) {
+      elements.transferLoading.classList.toggle('hidden', !state.transferModal.formLoading);
+    }
+    if (elements.transferForm) {
+      elements.transferForm.classList.toggle('opacity-60', state.transferModal.formLoading);
+      elements.transferForm.classList.toggle('pointer-events-none', state.transferModal.formLoading);
+      elements.transferForm.setAttribute(
+        'aria-busy',
+        state.transferModal.formLoading ? 'true' : 'false'
+      );
+    }
+  };
+
+  const updateTransferDateInput = () => {
+    if (!elements.transferDate) return;
+    elements.transferDate.value = state.transferModal.requestDate || '';
+  };
+
+  const updateTransferResponsibleOptions = () => {
+    if (!elements.transferResponsible) return;
+    const { responsaveis, responsibleId } = state.transferModal;
+    const options = ['<option value="">Selecione o responsável</option>'];
+    responsaveis.forEach((responsible) => {
+      options.push(
+        `<option value="${escapeHtml(responsible.id)}">${escapeHtml(responsible.label)}</option>`
+      );
+    });
+    elements.transferResponsible.innerHTML = options.join('');
+    if (responsibleId && responsaveis.some((responsible) => responsible.id === responsibleId)) {
+      elements.transferResponsible.value = responsibleId;
+    } else {
+      elements.transferResponsible.value = '';
+    }
+    elements.transferResponsible.disabled = !responsaveis.length;
+  };
+
+  const updateTransferCompanyOptions = () => {
+    if (!elements.transferOriginCompany || !elements.transferDestinationCompany) return;
+    const options = ['<option value="">Selecione uma empresa</option>'];
+    state.transferModal.stores.forEach((store) => {
+      options.push(`<option value="${escapeHtml(store.id)}">${escapeHtml(store.label)}</option>`);
+    });
+    elements.transferOriginCompany.innerHTML = options.join('');
+    elements.transferDestinationCompany.innerHTML = options.join('');
+    if (
+      state.transferModal.originCompanyId &&
+      state.transferModal.stores.some((store) => store.id === state.transferModal.originCompanyId)
+    ) {
+      elements.transferOriginCompany.value = state.transferModal.originCompanyId;
+    } else {
+      elements.transferOriginCompany.value = '';
+    }
+    if (
+      state.transferModal.destinationCompanyId &&
+      state.transferModal.stores.some((store) => store.id === state.transferModal.destinationCompanyId)
+    ) {
+      elements.transferDestinationCompany.value = state.transferModal.destinationCompanyId;
+    } else {
+      elements.transferDestinationCompany.value = '';
+    }
+    elements.transferOriginCompany.disabled = !state.transferModal.stores.length;
+    elements.transferDestinationCompany.disabled = !state.transferModal.stores.length;
+    updateTransferDepositOptions('origin');
+    updateTransferDepositOptions('destination');
+  };
+
+  const updateTransferDepositOptions = (type) => {
+    const isOrigin = type === 'origin';
+    const select = isOrigin ? elements.transferOriginDeposit : elements.transferDestinationDeposit;
+    if (!select) return;
+    const companyId = isOrigin
+      ? state.transferModal.originCompanyId
+      : state.transferModal.destinationCompanyId;
+    const currentValue = isOrigin
+      ? state.transferModal.originDepositId
+      : state.transferModal.destinationDepositId;
+    const deposits = companyId ? getTransferDepositsByCompany(companyId) : [];
+    const options = ['<option value="">Selecione o depósito</option>'];
+    deposits.forEach((deposit) => {
+      options.push(`<option value="${escapeHtml(deposit.id)}">${escapeHtml(deposit.label)}</option>`);
+    });
+    select.innerHTML = options.join('');
+    if (currentValue && deposits.some((deposit) => deposit.id === currentValue)) {
+      select.value = currentValue;
+    } else {
+      select.value = '';
+      if (isOrigin) {
+        state.transferModal.originDepositId = '';
+      } else {
+        state.transferModal.destinationDepositId = '';
+      }
+    }
+    select.disabled = !deposits.length;
+  };
+
+  const updateTransferProductSelection = () => {
+    if (!elements.transferProductFeedback) return;
+    const { selectedProduct, productSearchLoading, productSearchTerm } = state.transferModal;
+    if (selectedProduct) {
+      const sku = selectedProduct.sku ? ` (${escapeHtml(selectedProduct.sku)})` : '';
+      elements.transferProductFeedback.innerHTML = `Produto selecionado: <span class="font-semibold text-gray-700">${escapeHtml(
+        selectedProduct.label
+      )}${sku}</span>`;
+      return;
+    }
+    if (productSearchLoading) {
+      elements.transferProductFeedback.textContent = 'Buscando produtos...';
+      return;
+    }
+    if (productSearchTerm.trim().length >= 2) {
+      elements.transferProductFeedback.textContent =
+        'Selecione um produto nos resultados para adicioná-lo à lista.';
+      return;
+    }
+    elements.transferProductFeedback.textContent =
+      'Digite para buscar um produto e selecione-o para adicionar na transferência.';
+  };
+
+  const updateTransferProductResults = () => {
+    if (!elements.transferProductResults) return;
+    const term = state.transferModal.productSearchTerm.trim();
+    if (!term) {
+      elements.transferProductResults.classList.add('hidden');
+      elements.transferProductResults.innerHTML = '';
+      return;
+    }
+    elements.transferProductResults.classList.remove('hidden');
+    if (state.transferModal.productSearchLoading) {
+      elements.transferProductResults.innerHTML =
+        '<div class="px-4 py-3 text-sm text-gray-500">Buscando produtos...</div>';
+      return;
+    }
+    if (!state.transferModal.productSearchResults.length) {
+      elements.transferProductResults.innerHTML = `<div class="px-4 py-3 text-sm text-gray-500">Nenhum produto encontrado para "${escapeHtml(
+        term
+      )}".</div>`;
+      return;
+    }
+    const items = state.transferModal.productSearchResults
+      .map((product) => {
+        const sku = product.sku
+          ? `<span class="text-xs text-gray-500">${escapeHtml(product.sku)}</span>`
+          : '';
+        return `
+          <button type="button" class="flex w-full flex-col items-start gap-1 px-4 py-3 text-left transition hover:bg-primary/10" data-transfer-product-id="${escapeHtml(
+            product.id
+          )}">
+            <span class="text-sm font-semibold text-gray-800">${escapeHtml(product.label)}</span>
+            ${sku}
+          </button>`;
+      })
+      .join('');
+    elements.transferProductResults.innerHTML = items;
+  };
+
+  const updateTransferItemsSummary = () => {
+    if (!elements.transferItemsCount) return;
+    const totalItems = state.transferModal.items.reduce((acc, item) => acc + item.quantity, 0);
+    const label = totalItems === 1 ? '1 item' : `${totalItems} itens`;
+    elements.transferItemsCount.textContent = label;
+  };
+
+  const updateTransferItemsList = () => {
+    if (!elements.transferItemsTable || !elements.transferItemsEmpty) return;
+    if (!state.transferModal.items.length) {
+      elements.transferItemsEmpty.classList.remove('hidden');
+      elements.transferItemsTable.innerHTML = '';
+      updateTransferItemsSummary();
+      return;
+    }
+    elements.transferItemsEmpty.classList.add('hidden');
+    const rows = state.transferModal.items
+      .map((item) => {
+        const sku = item.sku
+          ? `<span class="text-xs text-gray-500">${escapeHtml(item.sku)}</span>`
+          : '';
+        return `
+          <tr data-transfer-item-id="${escapeHtml(item.uid)}">
+            <td class="px-4 py-3">
+              <div class="flex flex-col">
+                <span class="font-semibold text-gray-800">${escapeHtml(item.label)}</span>
+                ${sku}
+              </div>
+            </td>
+            <td class="px-4 py-3 align-top">
+              <input type="number" min="1" value="${escapeHtml(String(
+                item.quantity
+              ))}" class="w-24 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-transfer-action="quantity">
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-600 align-top">${escapeHtml(item.unit || '—')}</td>
+            <td class="px-4 py-3 text-right align-top">
+              <button type="button" class="text-xs font-semibold text-rose-600 transition hover:text-rose-700" data-transfer-action="remove">
+                Remover
+              </button>
+            </td>
+          </tr>`;
+      })
+      .join('');
+    elements.transferItemsTable.innerHTML = rows;
+    updateTransferItemsSummary();
+  };
+
+  const updateTransferError = () => {
+    if (!elements.transferError) return;
+    if (state.transferModal.error) {
+      elements.transferError.textContent = state.transferModal.error;
+      elements.transferError.classList.remove('hidden');
+    } else {
+      elements.transferError.textContent = '';
+      elements.transferError.classList.add('hidden');
+    }
+  };
+
+  const updateTransferSubmitState = () => {
+    if (!elements.transferSubmit) return;
+    const { transferModal } = state;
+    const hasRequired =
+      Boolean(transferModal.requestDate) &&
+      Boolean(transferModal.originCompanyId) &&
+      Boolean(transferModal.originDepositId) &&
+      Boolean(transferModal.destinationCompanyId) &&
+      Boolean(transferModal.destinationDepositId) &&
+      Boolean(transferModal.responsibleId) &&
+      transferModal.items.length > 0;
+    const disabled = transferModal.submitting || !hasRequired;
+    const defaultLabel =
+      elements.transferSubmit.dataset.defaultLabel ||
+      elements.transferSubmit.textContent?.trim() ||
+      'Enviar solicitação';
+    elements.transferSubmit.dataset.defaultLabel = defaultLabel;
+    if (transferModal.submitting) {
+      elements.transferSubmit.innerHTML = `<i class="fas fa-circle-notch fa-sm animate-spin mr-2"></i>${escapeHtml(
+        defaultLabel
+      )}`;
+    } else {
+      elements.transferSubmit.textContent = defaultLabel;
+    }
+    elements.transferSubmit.disabled = disabled;
+    elements.transferSubmit.classList.toggle('opacity-60', disabled);
+    elements.transferSubmit.classList.toggle('cursor-not-allowed', disabled);
+    elements.transferSubmit.setAttribute('aria-busy', transferModal.submitting ? 'true' : 'false');
+  };
+
+  const clearTransferSearchState = () => {
+    if (transferProductSearchTimeout) {
+      clearTimeout(transferProductSearchTimeout);
+      transferProductSearchTimeout = null;
+    }
+    if (transferProductSearchController) {
+      transferProductSearchController.abort();
+      transferProductSearchController = null;
+    }
+    state.transferModal.productSearchTerm = '';
+    state.transferModal.productSearchResults = [];
+    state.transferModal.productSearchLoading = false;
+    state.transferModal.selectedProduct = null;
+    if (elements.transferProductSearch) {
+      elements.transferProductSearch.value = '';
+    }
+    updateTransferProductResults();
+    updateTransferProductSelection();
+  };
+
+  const applyTransferDefaultSelections = () => {
+    const { transferModal } = state;
+    if (!transferModal.formLoaded) return;
+    const defaultOrigin = normalizeId(state.selectedStore || state.activePdvStoreId || '');
+    if (
+      !transferModal.originCompanyId &&
+      defaultOrigin &&
+      transferModal.stores.some((store) => store.id === defaultOrigin)
+    ) {
+      transferModal.originCompanyId = defaultOrigin;
+    } else if (!transferModal.originCompanyId && transferModal.stores.length === 1) {
+      transferModal.originCompanyId = transferModal.stores[0].id;
+    }
+    const originDeposits = getTransferDepositsByCompany(transferModal.originCompanyId);
+    if (originDeposits.length) {
+      const hasCurrent = originDeposits.some((deposit) => deposit.id === transferModal.originDepositId);
+      if (!hasCurrent) {
+        transferModal.originDepositId = originDeposits[0].id;
+      }
+    }
+    if (transferModal.destinationCompanyId) {
+      const destinationDeposits = getTransferDepositsByCompany(transferModal.destinationCompanyId);
+      const hasCurrent = destinationDeposits.some(
+        (deposit) => deposit.id === transferModal.destinationDepositId
+      );
+      if (!hasCurrent) {
+        transferModal.destinationDepositId = destinationDeposits[0]?.id || '';
+      }
+    }
+    const loggedUser = getLoggedUserPayload();
+    const loggedId = normalizeId(
+      loggedUser?._id || loggedUser?.id || loggedUser?.usuario?._id || loggedUser?.user?._id
+    );
+    if (loggedId && transferModal.responsaveis.some((responsible) => responsible.id === loggedId)) {
+      transferModal.responsibleId = loggedId;
+    } else if (!transferModal.responsibleId && transferModal.responsaveis.length === 1) {
+      transferModal.responsibleId = transferModal.responsaveis[0].id;
+    }
+    if (!transferModal.requestDate) {
+      transferModal.requestDate = getTodayIsoDate();
+    }
+  };
+
+  const ensureTransferFormData = async () => {
+    if (state.transferModal.formLoaded || state.transferModal.formLoading) {
+      return;
+    }
+    state.transferModal.formLoading = true;
+    updateTransferLoadingState();
+    try {
+      const token = getToken();
+      const payload = await fetchWithOptionalAuth(`${API_BASE}/transfers/form-data`, {
+        token,
+        errorMessage: 'Não foi possível carregar os dados necessários para a transferência.',
+      });
+      const stores = Array.isArray(payload?.stores) ? payload.stores : [];
+      const deposits = Array.isArray(payload?.deposits) ? payload.deposits : [];
+      const responsaveis = Array.isArray(payload?.responsaveis) ? payload.responsaveis : [];
+      state.transferModal.stores = stores
+        .map((store) => normalizeTransferStore(store))
+        .filter(Boolean);
+      state.transferModal.deposits = deposits
+        .map((deposit) => normalizeTransferDeposit(deposit))
+        .filter(Boolean);
+      state.transferModal.responsaveis = responsaveis
+        .map((responsible) => normalizeTransferResponsible(responsible))
+        .filter(Boolean);
+      state.transferModal.formLoaded = true;
+      applyTransferDefaultSelections();
+    } catch (error) {
+      console.error('Erro ao carregar dados para transferência no PDV:', error);
+      state.transferModal.error =
+        error?.message || 'Não foi possível carregar os dados necessários para a transferência.';
+      throw error;
+    } finally {
+      state.transferModal.formLoading = false;
+      updateTransferLoadingState();
+      updateTransferResponsibleOptions();
+      updateTransferCompanyOptions();
+      updateTransferError();
+      updateTransferSubmitState();
+    }
+  };
+
+  const handleTransferDateChange = () => {
+    if (!elements.transferDate) return;
+    state.transferModal.requestDate = elements.transferDate.value || '';
+    updateTransferSubmitState();
+  };
+
+  const handleTransferResponsibleChange = () => {
+    if (!elements.transferResponsible) return;
+    state.transferModal.responsibleId = normalizeId(elements.transferResponsible.value || '');
+    updateTransferSubmitState();
+  };
+
+  const handleTransferCompanyChange = (type) => {
+    const isOrigin = type === 'origin';
+    const select = isOrigin ? elements.transferOriginCompany : elements.transferDestinationCompany;
+    if (!select) return;
+    const value = normalizeId(select.value || '');
+    if (isOrigin) {
+      state.transferModal.originCompanyId = value;
+      if (!getTransferDepositsByCompany(value).some((deposit) => deposit.id === state.transferModal.originDepositId)) {
+        state.transferModal.originDepositId = '';
+      }
+      updateTransferDepositOptions('origin');
+    } else {
+      state.transferModal.destinationCompanyId = value;
+      if (!getTransferDepositsByCompany(value).some((deposit) => deposit.id === state.transferModal.destinationDepositId)) {
+        state.transferModal.destinationDepositId = '';
+      }
+      updateTransferDepositOptions('destination');
+    }
+    updateTransferSubmitState();
+  };
+
+  const handleTransferDepositChange = (type) => {
+    const isOrigin = type === 'origin';
+    const select = isOrigin ? elements.transferOriginDeposit : elements.transferDestinationDeposit;
+    if (!select) return;
+    const value = normalizeId(select.value || '');
+    if (isOrigin) {
+      state.transferModal.originDepositId = value;
+    } else {
+      state.transferModal.destinationDepositId = value;
+    }
+    updateTransferSubmitState();
+  };
+
+  const handleTransferReferenceChange = () => {
+    if (!elements.transferReference) return;
+    state.transferModal.referenceDocument = elements.transferReference.value || '';
+  };
+
+  const handleTransferObservationsChange = () => {
+    if (!elements.transferObservations) return;
+    state.transferModal.observations = elements.transferObservations.value || '';
+  };
+
+  const handleTransferProductQuantityChange = () => {
+    if (!elements.transferProductQuantity) return;
+    const raw = Number(elements.transferProductQuantity.value);
+    const quantity = Math.max(1, Math.trunc(Number.isFinite(raw) ? raw : 1));
+    state.transferModal.productQuantity = quantity;
+    elements.transferProductQuantity.value = String(quantity);
+  };
+
+  const fetchTransferProducts = async (term) => {
+    if (transferProductSearchController) {
+      transferProductSearchController.abort();
+    }
+    transferProductSearchController = new AbortController();
+    state.transferModal.productSearchLoading = true;
+    updateTransferProductResults();
+    try {
+      const token = getToken();
+      const payload = await fetchWithOptionalAuth(
+        `${API_BASE}/transfers/search-products?term=${encodeURIComponent(term)}`,
+        {
+          token,
+          signal: transferProductSearchController.signal,
+          errorMessage: 'Não foi possível buscar produtos.',
+        }
+      );
+      const products = Array.isArray(payload?.products) ? payload.products : [];
+      state.transferModal.productSearchResults = products
+        .map((product) => normalizeTransferProduct(product))
+        .filter(Boolean);
+      state.transferModal.productSearchLoading = false;
+      updateTransferProductResults();
+      if (state.transferModal.productSearchResults.length === 1) {
+        state.transferModal.selectedProduct = state.transferModal.productSearchResults[0];
+        if (elements.transferProductSearch) {
+          elements.transferProductSearch.value = state.transferModal.selectedProduct.label;
+        }
+      }
+      updateTransferProductSelection();
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      console.error('Erro ao buscar produtos para transferência no PDV:', error);
+      state.transferModal.productSearchLoading = false;
+      state.transferModal.productSearchResults = [];
+      state.transferModal.selectedProduct = null;
+      state.transferModal.error = error?.message || 'Não foi possível buscar produtos no momento.';
+      updateTransferProductResults();
+      updateTransferProductSelection();
+      updateTransferError();
+    }
+  };
+
+  const handleTransferProductSearchInput = () => {
+    if (!elements.transferProductSearch) return;
+    const value = elements.transferProductSearch.value || '';
+    state.transferModal.productSearchTerm = value;
+    state.transferModal.selectedProduct = null;
+    updateTransferProductSelection();
+    if (transferProductSearchTimeout) {
+      clearTimeout(transferProductSearchTimeout);
+      transferProductSearchTimeout = null;
+    }
+    if (value.trim().length < 2) {
+      if (transferProductSearchController) {
+        transferProductSearchController.abort();
+        transferProductSearchController = null;
+      }
+      state.transferModal.productSearchResults = [];
+      state.transferModal.productSearchLoading = false;
+      updateTransferProductResults();
+      return;
+    }
+    transferProductSearchTimeout = setTimeout(() => {
+      fetchTransferProducts(value.trim());
+    }, 350);
+  };
+
+  const handleTransferProductResultsClick = (event) => {
+    const button = event.target.closest('[data-transfer-product-id]');
+    if (!button) return;
+    const { transferProductId } = button.dataset;
+    if (!transferProductId) return;
+    const product = state.transferModal.productSearchResults.find(
+      (item) => item.id === transferProductId
+    );
+    if (!product) return;
+    state.transferModal.selectedProduct = product;
+    if (elements.transferProductSearch) {
+      elements.transferProductSearch.value = product.label;
+    }
+    if (elements.transferProductResults) {
+      elements.transferProductResults.classList.add('hidden');
+    }
+    updateTransferProductSelection();
+  };
+
+  const addProductToTransfer = (product, quantity) => {
+    if (!product || !product.id) return false;
+    const qty = Math.max(1, Math.trunc(Number(quantity) || 1));
+    const existingIndex = state.transferModal.items.findIndex((item) => item.productId === product.id);
+    if (existingIndex >= 0) {
+      const existing = state.transferModal.items[existingIndex];
+      existing.quantity += qty;
+      if (existing.unitSale !== null) {
+        existing.totalSale = Math.round(existing.unitSale * existing.quantity * 100) / 100;
+      }
+      return true;
+    }
+    state.transferModal.items.push({
+      uid: createUid(),
+      productId: product.id,
+      label: product.label,
+      sku: product.sku,
+      barcode: product.barcode,
+      unit: product.unit,
+      quantity: qty,
+      unitCost: product.unitCost,
+      unitSale: product.unitSale,
+      totalSale: product.unitSale !== null ? Math.round(product.unitSale * qty * 100) / 100 : null,
+    });
+    return true;
+  };
+
+  const handleTransferAddProduct = () => {
+    const { selectedProduct, productQuantity } = state.transferModal;
+    if (!selectedProduct) {
+      notify('Selecione um produto para adicionar à transferência.', 'warning');
+      return;
+    }
+    addProductToTransfer(selectedProduct, productQuantity);
+    updateTransferItemsList();
+    updateTransferSubmitState();
+    clearTransferSearchState();
+    if (elements.transferProductQuantity) {
+      elements.transferProductQuantity.value = '1';
+    }
+    state.transferModal.productQuantity = 1;
+  };
+
+  const removeTransferItemById = (uid) => {
+    const index = state.transferModal.items.findIndex((item) => item.uid === uid);
+    if (index >= 0) {
+      state.transferModal.items.splice(index, 1);
+      updateTransferItemsList();
+      updateTransferSubmitState();
+    }
+  };
+
+  const handleTransferItemsTableInput = (event) => {
+    const input = event.target.closest('[data-transfer-action="quantity"]');
+    if (!input) return;
+    const row = input.closest('[data-transfer-item-id]');
+    if (!row) return;
+    const uid = row.dataset.transferItemId;
+    const raw = Number(input.value);
+    const quantity = Math.max(1, Math.trunc(Number.isFinite(raw) ? raw : 1));
+    input.value = String(quantity);
+    const item = state.transferModal.items.find((entry) => entry.uid === uid);
+    if (!item) return;
+    item.quantity = quantity;
+    if (item.unitSale !== null) {
+      item.totalSale = Math.round(item.unitSale * quantity * 100) / 100;
+    }
+    updateTransferItemsSummary();
+    updateTransferSubmitState();
+  };
+
+  const handleTransferItemsTableClick = (event) => {
+    const button = event.target.closest('[data-transfer-action="remove"]');
+    if (!button) return;
+    const row = button.closest('[data-transfer-item-id]');
+    if (!row) return;
+    removeTransferItemById(row.dataset.transferItemId);
+  };
+
+  const validateTransferRequest = () => {
+    if (!state.transferModal.requestDate) return 'Informe a data da solicitação.';
+    if (!state.transferModal.originCompanyId || !state.transferModal.originDepositId) {
+      return 'Informe a empresa e o depósito de origem.';
+    }
+    if (!state.transferModal.destinationCompanyId || !state.transferModal.destinationDepositId) {
+      return 'Informe a empresa e o depósito de destino.';
+    }
+    if (state.transferModal.originDepositId === state.transferModal.destinationDepositId) {
+      return 'Escolha depósitos diferentes para origem e destino.';
+    }
+    if (!state.transferModal.responsibleId) {
+      return 'Selecione o responsável pela transferência.';
+    }
+    if (!state.transferModal.items.length) {
+      return 'Adicione ao menos um produto à transferência.';
+    }
+    return '';
+  };
+
+  const buildTransferPayload = () => ({
+    requestDate: state.transferModal.requestDate,
+    originCompany: state.transferModal.originCompanyId,
+    originDeposit: state.transferModal.originDepositId,
+    destinationCompany: state.transferModal.destinationCompanyId,
+    destinationDeposit: state.transferModal.destinationDepositId,
+    responsible: state.transferModal.responsibleId,
+    referenceDocument: state.transferModal.referenceDocument || '',
+    observations: state.transferModal.observations || '',
+    transport: { mode: 'PDV', vehicle: '', driver: '' },
+    items: state.transferModal.items.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      unit: item.unit || '',
+      unitCost: item.unitCost,
+      unitSale: item.unitSale,
+      totalSale: item.totalSale,
+    })),
+  });
+
+  const closeTransferModal = ({ force = false } = {}) => {
+    if (!force && state.transferModal.submitting) {
+      return;
+    }
+    state.transferModal.open = false;
+    updateTransferModalVisibility();
+    clearTransferSearchState();
+    resetTransferModalState({ preserveData: true });
+    updateTransferDateInput();
+    updateTransferResponsibleOptions();
+    updateTransferCompanyOptions();
+    updateTransferItemsList();
+    updateTransferError();
+    updateTransferSubmitState();
+  };
+
+  const openTransferModal = async () => {
+    if (!elements.transferModal) {
+      notify('Não foi possível abrir a solicitação de transferência.', 'error');
+      return;
+    }
+    resetTransferModalState({ preserveData: true });
+    clearTransferSearchState();
+    state.transferModal.open = true;
+    updateTransferModalVisibility();
+    updateTransferLoadingState();
+    updateTransferDateInput();
+    updateTransferResponsibleOptions();
+    updateTransferCompanyOptions();
+    updateTransferItemsList();
+    updateTransferError();
+    updateTransferSubmitState();
+    try {
+      await ensureTransferFormData();
+      updateTransferDateInput();
+      updateTransferResponsibleOptions();
+      updateTransferCompanyOptions();
+      updateTransferItemsList();
+      updateTransferSubmitState();
+    } catch (error) {
+      notify(error?.message || 'Não foi possível carregar os dados de transferência.', 'error');
+    }
+    updateTransferError();
+    if (elements.transferProductSearch) {
+      elements.transferProductSearch.focus();
+    }
+  };
+
+  const submitTransferRequest = async () => {
+    const validationError = validateTransferRequest();
+    if (validationError) {
+      state.transferModal.error = validationError;
+      updateTransferError();
+      notify(validationError, 'warning');
+      return;
+    }
+    state.transferModal.error = '';
+    updateTransferError();
+    state.transferModal.submitting = true;
+    updateTransferSubmitState();
+    try {
+      const payload = buildTransferPayload();
+      const token = getToken();
+      await fetchWithOptionalAuth(`${API_BASE}/transfers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        token,
+        errorMessage: 'Não foi possível registrar a transferência.',
+      });
+      notify('Transferência solicitada com sucesso.', 'success');
+      closeTransferModal({ force: true });
+      window.location.href = '/pages/admin/admin-compras-transferencias-solicitadas.html';
+    } catch (error) {
+      console.error('Erro ao solicitar transferência pelo PDV:', error);
+      state.transferModal.error = error?.message || 'Não foi possível registrar a transferência.';
+      updateTransferError();
+      notify(state.transferModal.error, 'error');
+    } finally {
+      state.transferModal.submitting = false;
+      updateTransferSubmitState();
+    }
+  };
+
   const getReceiptStyles = (variant = 'matricial') => {
     const accent = '#000000';
     return `
@@ -12905,6 +13758,7 @@
     state.deliverySelectedAddressId = '';
     state.deliverySelectedAddress = null;
     state.activeFinalizeContext = null;
+    closeTransferModal({ force: true });
     customerAddressesCache.clear();
     appointmentCache.clear();
     appointmentsRequestId = 0;
@@ -14143,7 +14997,11 @@
         button.addEventListener('click', handleAppointmentAction);
         return;
       }
-      if (action === 'bonificar' || action === 'solicitacao-transferencia') {
+      if (action === 'solicitacao-transferencia') {
+        button.addEventListener('click', openTransferModal);
+        return;
+      }
+      if (action === 'bonificar') {
         button.addEventListener('click', () => {
           notify('Em desenvolvimento', 'info');
         });
@@ -14205,6 +15063,39 @@
     elements.appointmentReload?.addEventListener('click', handleAppointmentRefresh);
     elements.appointmentClose?.addEventListener('click', closeAppointmentModal);
     elements.appointmentBackdrop?.addEventListener('click', closeAppointmentModal);
+    elements.transferClose?.addEventListener('click', () => closeTransferModal());
+    elements.transferCancel?.addEventListener('click', () => closeTransferModal());
+    elements.transferBackdrop?.addEventListener('click', () => closeTransferModal());
+    elements.transferModal?.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeTransferModal();
+      }
+    });
+    elements.transferDate?.addEventListener('change', handleTransferDateChange);
+    elements.transferResponsible?.addEventListener('change', handleTransferResponsibleChange);
+    elements.transferOriginCompany?.addEventListener('change', () =>
+      handleTransferCompanyChange('origin')
+    );
+    elements.transferDestinationCompany?.addEventListener('change', () =>
+      handleTransferCompanyChange('destination')
+    );
+    elements.transferOriginDeposit?.addEventListener('change', () =>
+      handleTransferDepositChange('origin')
+    );
+    elements.transferDestinationDeposit?.addEventListener('change', () =>
+      handleTransferDepositChange('destination')
+    );
+    elements.transferReference?.addEventListener('input', handleTransferReferenceChange);
+    elements.transferObservations?.addEventListener('input', handleTransferObservationsChange);
+    elements.transferProductSearch?.addEventListener('input', handleTransferProductSearchInput);
+    elements.transferProductQuantity?.addEventListener('input', handleTransferProductQuantityChange);
+    elements.transferProductQuantity?.addEventListener('change', handleTransferProductQuantityChange);
+    elements.transferProductResults?.addEventListener('click', handleTransferProductResultsClick);
+    elements.transferAddProduct?.addEventListener('click', handleTransferAddProduct);
+    elements.transferItemsTable?.addEventListener('input', handleTransferItemsTableInput);
+    elements.transferItemsTable?.addEventListener('click', handleTransferItemsTableClick);
+    elements.transferSubmit?.addEventListener('click', submitTransferRequest);
     if (elements.deliveryAddressFields?.cep) {
       const cepInput = elements.deliveryAddressFields.cep;
       cepInput.addEventListener('input', () => {
