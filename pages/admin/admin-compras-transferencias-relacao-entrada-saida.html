@@ -10,14 +10,15 @@
 <body class="bg-gray-100 text-[13px] leading-relaxed">
   <div id="admin-header-placeholder"></div>
 
-  <main class="container mx-auto px-3 pt-1 pb-8 min-h-screen">
-    <div class="lg:grid lg:grid-cols-12 lg:gap-6">
-      <aside class="lg:col-span-3 mb-4 lg:mb-0">
-        <div id="admin-sidebar-placeholder"></div>
-      </aside>
+  <main class="min-h-screen bg-gray-100">
+    <div class="mx-auto w-full max-w-[1440px] px-3 sm:px-6 lg:px-10 pt-2 pb-10">
+      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] gap-6 lg:gap-8">
+        <aside class="lg:sticky lg:top-4 lg:self-start">
+          <div id="admin-sidebar-placeholder"></div>
+        </aside>
 
-      <div class="lg:col-span-9 space-y-5">
-        <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="space-y-5">
+          <header class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div class="space-y-2">
             <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-[11px] text-gray-500 uppercase tracking-wide font-semibold">
               <span class="inline-flex items-center gap-1 text-primary"><i class="fas fa-shopping-basket"></i> Compras</span>
@@ -192,6 +193,7 @@
         </section>
       </div>
     </div>
+  </div>
   </main>
 
   <div id="admin-footer-placeholder"></div>
