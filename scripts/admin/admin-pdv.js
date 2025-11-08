@@ -8643,24 +8643,24 @@
     const rows = state.transferModal.items
       .map((item) => {
         const sku = item.sku
-          ? `<span class="text-xs text-gray-500">${escapeHtml(item.sku)}</span>`
+          ? `<span class="text-[11px] text-gray-500">${escapeHtml(item.sku)}</span>`
           : '';
         return `
           <tr data-transfer-item-id="${escapeHtml(item.uid)}">
             <td class="px-4 py-3">
               <div class="flex flex-col">
-                <span class="font-semibold text-gray-800">${escapeHtml(item.label)}</span>
+                <span class="text-[12px] font-semibold text-gray-800">${escapeHtml(item.label)}</span>
                 ${sku}
               </div>
             </td>
             <td class="px-4 py-3 align-top">
               <input type="number" min="1" value="${escapeHtml(String(
                 item.quantity
-              ))}" class="w-24 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20" data-transfer-action="quantity">
+              ))}" class="w-24 rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" data-transfer-action="quantity">
             </td>
-            <td class="px-4 py-3 text-sm text-gray-600 align-top">${escapeHtml(item.unit || '—')}</td>
+            <td class="px-4 py-3 align-top text-[12px] text-gray-600">${escapeHtml(item.unit || '—')}</td>
             <td class="px-4 py-3 text-right align-top">
-              <button type="button" class="text-xs font-semibold text-rose-600 transition hover:text-rose-700" data-transfer-action="remove">
+              <button type="button" class="text-[11px] font-semibold uppercase tracking-wide text-rose-600 transition hover:text-rose-700" data-transfer-action="remove">
                 Remover
               </button>
             </td>
