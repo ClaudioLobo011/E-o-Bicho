@@ -41,5 +41,9 @@
     "xlsx": "^0.18.5",
     "xml-crypto": "^6.1.2",
     "xpath": "^0.0.34"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^10.3.0",
+    "supertest": "^7.1.4"
   }
 }

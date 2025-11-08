@@ -11,7 +11,9 @@ const {
   adjustProductStockForDeposit,
   resolveProductObjectId,
   toObjectIdOrNull,
+  resolveFractionalChildRatio,
 } = require('../utils/inventoryStock');
+const { recalculateFractionalStockForProduct } = require('../utils/fractionalInventory');
 
 const router = express.Router();
 
@@ -296,6 +298,7 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
       codbarras: 1,
       nome: 1,
       custo: 1,
+      fracionado: 1,
     }).lean();
 
     if (products.length !== productIds.length) {
@@ -309,12 +312,126 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
       return res.status(401).json({ message: 'Sessão expirada. Faça login novamente.' });
     }
 
+    const factor = normalizedOperation === 'saida' ? -1 : 1;
+    const adjustmentMap = new Map();
+    const fractionalParents = new Set();
+
+    const normalizeProductId = (value) => {
+      if (!value) return null;
+      if (value instanceof mongoose.Types.ObjectId) {
+        return value.toString();
+      }
+      if (typeof value === 'object' && value._id) {
+        return normalizeProductId(value._id);
+      }
+      if (typeof value === 'string') {
+        return mongoose.Types.ObjectId.isValid(value) ? value : null;
+      }
+      return null;
+    };
+
+    const recordAdjustment = (productId, delta) => {
+      if (!Number.isFinite(delta) || delta === 0) {
+        return;
+      }
+      const current = adjustmentMap.get(productId) || 0;
+      const next = current + delta;
+      const normalized = Math.round(next * 1_000_000) / 1_000_000;
+      if (normalized === 0) {
+        adjustmentMap.delete(productId);
+      } else {
+        adjustmentMap.set(productId, normalized);
+      }
+    };
+
+    const ensureProductLoaded = async (productId) => {
+      if (productMap.has(productId)) {
+        return productMap.get(productId);
+      }
+
+      try {
+        const doc = await Product.findById(productId, {
+          cod: 1,
+          codbarras: 1,
+          nome: 1,
+          custo: 1,
+          fracionado: 1,
+        }).lean();
+
+        if (doc) {
+          productMap.set(productId, doc);
+          return doc;
+        }
+
+        console.warn('Produto vinculado ao fracionamento não foi encontrado.', { productId });
+      } catch (loadError) {
+        console.warn('Falha ao carregar produto vinculado ao fracionamento.', { productId }, loadError);
+      }
+
+      return null;
+    };
+
+    const accumulateAdjustments = async (productId, delta, visited = new Set()) => {
+      if (!Number.isFinite(delta) || delta === 0) {
+        return;
+      }
+
+      const normalizedId = normalizeProductId(productId);
+      if (!normalizedId) {
+        return;
+      }
+
+      if (visited.has(normalizedId)) {
+        return;
+      }
+
+      visited.add(normalizedId);
+      recordAdjustment(normalizedId, delta);
+
+      const product = await ensureProductLoaded(normalizedId);
+      if (!product) {
+        return;
+      }
+
+      const fractionalConfig = product?.fracionado || {};
+      const fractionalItems = Array.isArray(fractionalConfig?.itens) ? fractionalConfig.itens : [];
+
+      if (!fractionalConfig?.ativo || fractionalItems.length === 0) {
+        return;
+      }
+
+      fractionalParents.add(normalizedId);
+
+      for (const item of fractionalItems) {
+        const childId = normalizeProductId(item?.produto);
+        if (!childId) {
+          continue;
+        }
+
+        const ratio = resolveFractionalChildRatio(item?.quantidadeOrigem, item?.quantidadeFracionada);
+        if (!Number.isFinite(ratio) || ratio <= 0) {
+          continue;
+        }
+
+        const childDelta = delta * ratio;
+        if (!Number.isFinite(childDelta) || childDelta === 0) {
+          continue;
+        }
+
+        const branchVisited = new Set(visited);
+        await accumulateAdjustments(childId, childDelta, branchVisited);
+      }
+    };
+
+    for (const rawItem of preparedItemsInput) {
+      await accumulateAdjustments(rawItem.productId, rawItem.quantity * factor, new Set());
+    }
+
     session = await mongoose.startSession();
 
     let adjustmentRecord = null;
     await session.withTransaction(async () => {
       const preparedItems = [];
-      const factor = normalizedOperation === 'saida' ? -1 : 1;
       let totalQuantity = 0;
       let totalValue = 0;
 
@@ -331,13 +448,6 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
           : (Number.isFinite(product?.custo) ? Math.round(Number(product.custo) * 100) / 100 : null);
 
         const delta = rawItem.quantity * factor;
-        await adjustProductStockForDeposit({
-          productId: rawItem.productId,
-          depositId: deposit,
-          quantity: delta,
-          session,
-          cascadeFractional: true,
-        });
 
         preparedItems.push({
           product: product._id,
@@ -353,6 +463,20 @@ router.post('/', requireAuth, authorizeRoles(...allowedRoles), async (req, res) 
         if (unitValue !== null && Number.isFinite(unitValue)) {
           totalValue += unitValue * rawItem.quantity * factor;
         }
+      }
+
+      for (const [productId, delta] of adjustmentMap.entries()) {
+        await adjustProductStockForDeposit({
+          productId,
+          depositId: deposit,
+          quantity: delta,
+          session,
+          cascadeFractional: false,
+        });
+      }
+
+      for (const parentId of fractionalParents) {
+        await recalculateFractionalStockForProduct(parentId, { session });
       }
 
       adjustmentRecord = await InventoryAdjustment.create([
