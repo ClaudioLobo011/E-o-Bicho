@@ -908,6 +908,141 @@
         </div>
     </div>
 
+    <div id="pdv-transfer-modal" class="fixed inset-0 z-[65] hidden">
+        <div id="pdv-transfer-modal-backdrop" class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-transfer-dismiss="backdrop"></div>
+        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+            <div class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl transition-all duration-200 ease-out max-h-[90vh] min-h-0">
+                <div class="flex flex-col gap-2.5 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                            <i class="fas fa-arrow-right-arrow-left"></i>
+                            Transferência de estoque
+                        </span>
+                        <h2 class="mt-1.5 text-[18px] font-semibold text-gray-900">Solicitar transferência</h2>
+                        <p class="mt-1 max-w-2xl text-[11px] text-gray-600">Defina depósitos, responsável e itens para enviar a solicitação para aprovação.</p>
+                    </div>
+                    <button type="button" id="pdv-transfer-close" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" aria-label="Fechar modal de transferência">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-y-auto px-5 py-5">
+                    <div id="pdv-transfer-loading" class="mb-5 hidden rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-[11px] font-medium text-gray-600">
+                        Carregando dados necessários para a solicitação de transferência...
+                    </div>
+                    <div id="pdv-transfer-form" class="space-y-5">
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div>
+                                <label for="pdv-transfer-date" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data da solicitação</label>
+                                <input type="date" id="pdv-transfer-date" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                            </div>
+                            <div>
+                                <label for="pdv-transfer-responsible" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Responsável</label>
+                                <select id="pdv-transfer-responsible" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                    <option value="">Selecione o responsável</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                            <div class="space-y-3">
+                                <div>
+                                    <label for="pdv-transfer-origin-company" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Empresa de origem</label>
+                                    <select id="pdv-transfer-origin-company" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                        <option value="">Selecione a empresa de origem</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="pdv-transfer-origin-deposit" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Depósito de origem</label>
+                                    <select id="pdv-transfer-origin-deposit" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                        <option value="">Selecione o depósito de origem</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <label for="pdv-transfer-destination-company" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Empresa de destino</label>
+                                    <select id="pdv-transfer-destination-company" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                        <option value="">Selecione a empresa de destino</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="pdv-transfer-destination-deposit" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Depósito de destino</label>
+                                    <select id="pdv-transfer-destination-deposit" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                        <option value="">Selecione o depósito de destino</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div>
+                                <label for="pdv-transfer-reference" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Documento de referência</label>
+                                <input type="text" id="pdv-transfer-reference" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Ordem de serviço, NF-e">
+                            </div>
+                            <div>
+                                <label for="pdv-transfer-observations" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Observações</label>
+                                <textarea id="pdv-transfer-observations" rows="2" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Informações adicionais sobre a transferência"></textarea>
+                            </div>
+                        </div>
+                        <div class="space-y-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+                            <div class="flex flex-col gap-4 lg:flex-row lg:items-end">
+                                <div class="lg:flex-1">
+                                    <label for="pdv-transfer-product-search" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Buscar produto</label>
+                                    <div class="relative mt-1">
+                                        <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><i class="fas fa-search"></i></span>
+                                        <input type="text" id="pdv-transfer-product-search" class="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="Digite nome, código ou código de barras">
+                                    </div>
+                                    <p class="mt-2 text-[11px] text-gray-500">Digite ao menos 2 caracteres para pesquisar.</p>
+                                </div>
+                                <div>
+                                    <label for="pdv-transfer-product-quantity" class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Quantidade</label>
+                                    <input type="number" min="1" id="pdv-transfer-product-quantity" class="mt-1 w-24 rounded-lg border border-gray-200 px-3 py-2 text-[12px] focus:border-primary focus:ring-2 focus:ring-primary/20" value="1">
+                                </div>
+                                <div class="flex items-end">
+                                    <button type="button" id="pdv-transfer-add-product" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90">
+                                        <i class="fas fa-plus"></i>
+                                        <span>Adicionar</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="pdv-transfer-product-feedback" class="text-[11px] text-gray-600">Selecione um produto nos resultados para adicioná-lo à lista.</div>
+                            <div id="pdv-transfer-product-results" class="hidden max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white"></div>
+                            <div class="space-y-3">
+                                <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                    <h3 class="text-[12px] font-semibold text-gray-900">Itens selecionados</h3>
+                                    <span id="pdv-transfer-items-count" class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">0 itens</span>
+                                </div>
+                                <div id="pdv-transfer-items-empty" class="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-[11px] text-gray-500">Nenhum produto adicionado até o momento.</div>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-gray-200 text-left text-[12px]">
+                                        <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                                            <tr>
+                                                <th scope="col" class="px-4 py-3 font-semibold">Produto</th>
+                                                <th scope="col" class="px-4 py-3 font-semibold">Quantidade</th>
+                                                <th scope="col" class="px-4 py-3 font-semibold">Unidade</th>
+                                                <th scope="col" class="px-4 py-3 text-right font-semibold">Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="pdv-transfer-items-body" class="divide-y divide-gray-100"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <p id="pdv-transfer-error" class="hidden rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-[11px] font-semibold text-rose-600"></p>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-5 py-4 text-[11px] sm:flex-row sm:items-center sm:justify-between">
+                    <p class="text-gray-500">Após o envio, a solicitação ficará disponível na tela de aprovações de transferências.</p>
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="pdv-transfer-cancel" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-600 transition hover:bg-gray-50">Cancelar</button>
+                        <button type="button" id="pdv-transfer-submit" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
+                            <i class="fas fa-paper-plane"></i>
+                            <span>Enviar solicitação</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="pdv-sale-cancel-modal" class="fixed inset-0 z-[60] hidden">
         <div class="absolute inset-0 bg-slate-900/60" data-sale-cancel-dismiss="backdrop"></div>
         <div class="relative mx-auto mt-20 w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
