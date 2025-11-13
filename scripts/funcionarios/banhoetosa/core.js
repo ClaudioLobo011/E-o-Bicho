@@ -87,6 +87,8 @@ export function notify(message, type = 'warning') {
 
 export { confirmWithModal };
 
+const customerRegisterModal = document.getElementById('agenda-customer-register-modal');
+
 // ----- Elements -----
 export const els = {
   agendaList: document.getElementById('agenda-list'),
@@ -121,6 +123,13 @@ export const els = {
   horaInput: document.getElementById('add-hora'),
   profSelect: document.getElementById('add-prof-select'),
   profLabel: document.getElementById('add-prof-label'),
+
+  customerRegisterButton: document.getElementById('agenda-customer-register'),
+  customerRegisterModal,
+  customerRegisterBackdrop: customerRegisterModal?.querySelector('[data-agenda-customer-register-dismiss="backdrop"]') || null,
+  customerRegisterClose: customerRegisterModal?.querySelector('[data-agenda-customer-register-dismiss="close"]') || null,
+  customerRegisterFrame: customerRegisterModal?.querySelector('[data-agenda-customer-frame]') || null,
+  customerRegisterLoading: customerRegisterModal?.querySelector('[data-agenda-customer-frame-loading]') || null,
 };
 
 // ----- State -----

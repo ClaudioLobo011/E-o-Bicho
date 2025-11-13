@@ -65,28 +65,28 @@
 
             <div id="pf-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label for="cliente-nome" class="block text-sm font-medium text-gray-700">Nome completo</label>
-                <input id="cliente-nome" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                <label for="cliente-nome" class="block text-sm font-medium text-gray-700">Nome completo <span class="text-red-500" aria-hidden="true">*</span></label>
+                <input id="cliente-nome" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required aria-required="true" />
               </div>
               <div>
                 <label for="cliente-apelido" class="block text-sm font-medium text-gray-700">Apelido</label>
                 <input id="cliente-apelido" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
               </div>
               <div>
-                <label for="cliente-cpf" class="block text-sm font-medium text-gray-700">CPF</label>
-                <input id="cliente-cpf" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="000.000.000-00" />
+                <label for="cliente-cpf" class="block text-sm font-medium text-gray-700">CPF <span class="text-red-500" aria-hidden="true">*</span></label>
+                <input id="cliente-cpf" type="text" inputmode="numeric" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="000.000.000-00" required aria-required="true" />
               </div>
               <div>
                 <label for="cliente-rg" class="block text-sm font-medium text-gray-700">RG</label>
                 <input id="cliente-rg" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
               </div>
               <div>
-                <label for="cliente-nascimento" class="block text-sm font-medium text-gray-700">Nascimento</label>
-                <input id="cliente-nascimento" type="date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                <label for="cliente-nascimento" class="block text-sm font-medium text-gray-700">Nascimento <span class="text-red-500" aria-hidden="true">*</span></label>
+                <input id="cliente-nascimento" type="date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required aria-required="true" />
               </div>
               <div>
-                <label for="cliente-sexo" class="block text-sm font-medium text-gray-700">Sexo</label>
-                <select id="cliente-sexo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <label for="cliente-sexo" class="block text-sm font-medium text-gray-700">Sexo <span class="text-red-500" aria-hidden="true">*</span></label>
+                <select id="cliente-sexo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required aria-required="true">
                   <option value="">Selecione</option>
                   <option value="masculino">Masculino</option>
                   <option value="feminino">Feminino</option>
