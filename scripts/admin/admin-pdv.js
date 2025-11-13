@@ -14,6 +14,8 @@
     crediario: 3,
   };
 
+  const CUSTOMER_REGISTRATION_RELATIVE_URL = '../funcionarios/clientes.html';
+
   const getTodayIsoDate = () => {
     const now = new Date();
     const year = now.getFullYear();
@@ -597,6 +599,9 @@
   let appointmentsRequestId = 0;
   let transferProductSearchTimeout = null;
   let transferProductSearchController = null;
+  let customerRegisterPreviousFocus = null;
+  let customerRegisterFrameUrl = '';
+  let customerRegisterFrameWindow = null;
 
   const createUid = () => `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
@@ -2415,6 +2420,18 @@
     elements.customerConfirm = document.getElementById('pdv-customer-confirm');
     elements.customerClear = document.getElementById('pdv-customer-clear');
     elements.customerCancel = document.getElementById('pdv-customer-cancel');
+    elements.customerRegisterButton = document.getElementById('pdv-customer-register');
+    elements.customerRegisterModal = document.getElementById('pdv-customer-register-modal');
+    elements.customerRegisterBackdrop =
+      elements.customerRegisterModal?.querySelector('[data-customer-register-dismiss="backdrop"]') || null;
+    elements.customerRegisterClose =
+      elements.customerRegisterModal?.querySelector('[data-customer-register-dismiss="close"]') || null;
+    elements.customerRegisterFrame =
+      elements.customerRegisterModal?.querySelector('[data-customer-frame]') || null;
+    elements.customerRegisterLoading =
+      elements.customerRegisterModal?.querySelector('[data-customer-frame-loading]') || null;
+    elements.customerRegisterShell =
+      elements.customerRegisterModal?.querySelector('[data-customer-frame-shell]') || null;
 
     elements.receivablesSearchInput = document.getElementById('pdv-receivables-search');
     elements.receivablesSearchResults = document.getElementById('pdv-receivables-search-results');
@@ -4373,12 +4390,7 @@
   const closeCustomerModal = () => {
     if (!elements.customerModal) return;
     elements.customerModal.classList.add('hidden');
-    if (
-      (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) &&
-      (!elements.paymentValueModal || elements.paymentValueModal.classList.contains('hidden'))
-    ) {
-      document.body.classList.remove('overflow-hidden');
-    }
+    releaseBodyScrollIfNoModal();
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
       customerSearchTimeout = null;
@@ -4486,6 +4498,102 @@
     if (event.key === 'Escape') {
       event.preventDefault();
       closeCustomerModal();
+    }
+  };
+
+  const buildCustomerRegistrationUrl = () => {
+    const url = new URL(CUSTOMER_REGISTRATION_RELATIVE_URL, window.location.href);
+    url.searchParams.set('from', 'pdv');
+    const storeId = normalizeId(state.selectedStore || state.activePdvStoreId || '');
+    if (storeId) {
+      url.searchParams.set('storeId', storeId);
+    }
+    return url.toString();
+  };
+
+  const setCustomerRegistrationLoading = (loading) => {
+    if (elements.customerRegisterLoading) {
+      elements.customerRegisterLoading.classList.toggle('hidden', !loading);
+    }
+    if (elements.customerRegisterFrame) {
+      elements.customerRegisterFrame.classList.toggle('hidden', loading);
+    }
+  };
+
+  const applyCustomerRegistrationFrameHeight = (height) => {
+    if (!elements.customerRegisterFrame) return;
+    const numericHeight = Number(height);
+    if (!Number.isFinite(numericHeight) || numericHeight <= 0) return;
+    const viewportLimit = Math.max(window.innerHeight - 160, 360);
+    const clamped = Math.max(420, Math.min(numericHeight, viewportLimit));
+    elements.customerRegisterFrame.style.height = `${clamped}px`;
+  };
+
+  const openCustomerRegisterModal = () => {
+    const url = buildCustomerRegistrationUrl();
+    if (!elements.customerRegisterModal || !elements.customerRegisterFrame) {
+      window.open(url, '_blank', 'noopener');
+      return;
+    }
+    const shouldReload = !customerRegisterFrameUrl || customerRegisterFrameUrl !== url;
+    customerRegisterPreviousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    elements.customerRegisterModal.classList.remove('hidden');
+    elements.customerRegisterModal.setAttribute('data-modal-open', 'true');
+    document.body.classList.add('overflow-hidden');
+    if (shouldReload) {
+      setCustomerRegistrationLoading(true);
+      try {
+        elements.customerRegisterFrame.src = url;
+        customerRegisterFrameUrl = url;
+      } catch (error) {
+        console.error('Não foi possível carregar o cadastro de cliente no iframe.', error);
+        window.open(url, '_blank', 'noopener');
+        closeCustomerRegisterModal();
+        return;
+      }
+    } else {
+      setCustomerRegistrationLoading(false);
+    }
+    window.setTimeout(() => {
+      elements.customerRegisterClose?.focus();
+    }, 120);
+  };
+
+  const closeCustomerRegisterModal = () => {
+    if (!elements.customerRegisterModal) return;
+    elements.customerRegisterModal.classList.add('hidden');
+    elements.customerRegisterModal.removeAttribute('data-modal-open');
+    releaseBodyScrollIfNoModal();
+    if (customerRegisterPreviousFocus && typeof customerRegisterPreviousFocus.focus === 'function') {
+      try {
+        customerRegisterPreviousFocus.focus();
+      } catch (error) {
+        console.debug('Não foi possível restaurar o foco após fechar o cadastro de cliente.', error);
+      }
+    }
+    customerRegisterPreviousFocus = null;
+  };
+
+  const handleCustomerRegisterFrameLoad = () => {
+    customerRegisterFrameWindow = elements.customerRegisterFrame?.contentWindow || null;
+    setCustomerRegistrationLoading(false);
+  };
+
+  const handleCustomerRegisterModalKeydown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeCustomerRegisterModal();
+    }
+  };
+
+  const handleCustomerRegisterIframeMessage = (event) => {
+    if (!event || !event.data || event.data.source !== 'eo-bicho') return;
+    if (!customerRegisterFrameWindow || event.source !== customerRegisterFrameWindow) return;
+    if (!elements.customerRegisterFrame) return;
+    if (event.data.type === 'TAB_CONTENT_RESIZE') {
+      const height = event.data.modalExtent || event.data.modalHeight || event.data.height;
+      applyCustomerRegistrationFrameHeight(height);
     }
   };
 
@@ -4855,9 +4963,7 @@
   const closeDeliveryAddressModal = () => {
     if (!elements.deliveryAddressModal) return;
     elements.deliveryAddressModal.classList.add('hidden');
-    if (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) {
-      document.body.classList.remove('overflow-hidden');
-    }
+    releaseBodyScrollIfNoModal();
   };
 
   const handleDeliveryAddressConfirm = () => {
@@ -5620,7 +5726,7 @@
     }
     paymentModalState = null;
     if (!preserveBodyScroll) {
-      document.body.classList.remove('overflow-hidden');
+      releaseBodyScrollIfNoModal();
     }
   };
 
@@ -5632,9 +5738,7 @@
     }
     elements.finalizeModal.classList.add('hidden');
     closePaymentValueModal(true);
-    if (!elements.deliveryAddressModal || elements.deliveryAddressModal.classList.contains('hidden')) {
-      document.body.classList.remove('overflow-hidden');
-    }
+    releaseBodyScrollIfNoModal();
     if (context === 'orcamento') {
       state.pendingBudgetValidityDays = null;
     }
@@ -5780,9 +5884,7 @@
     state.fiscalEmissionModalOpen = false;
     if (!elements.fiscalStatusModal) return;
     elements.fiscalStatusModal.classList.add('hidden');
-    if (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) {
-      document.body.classList.remove('overflow-hidden');
-    }
+    releaseBodyScrollIfNoModal();
   };
 
   const openPaymentValueModal = (method, parcelas) => {
@@ -6127,13 +6229,7 @@
       state.crediarioEditingPayment = null;
       state.crediarioEditingIndex = -1;
     }
-    if (
-      (!elements.finalizeModal || elements.finalizeModal.classList.contains('hidden')) &&
-      (!elements.customerModal || elements.customerModal.classList.contains('hidden')) &&
-      (!elements.paymentValueModal || elements.paymentValueModal.classList.contains('hidden'))
-    ) {
-      document.body.classList.remove('overflow-hidden');
-    }
+    releaseBodyScrollIfNoModal();
   };
 
   const handleCrediarioAddInstallment = () => {
@@ -6406,7 +6502,7 @@
     if (elements.budgetModalError) {
       elements.budgetModalError.classList.add('hidden');
     }
-    document.body.classList.remove('overflow-hidden');
+    releaseBodyScrollIfNoModal();
   };
 
   const confirmBudgetValidity = () => {
@@ -13245,6 +13341,24 @@
 
   const isModalActive = (modal) => Boolean(modal && !modal.classList.contains('hidden'));
 
+  const releaseBodyScrollIfNoModal = () => {
+    const blockers = [
+      elements.customerRegisterModal,
+      elements.customerModal,
+      elements.finalizeModal,
+      elements.paymentValueModal,
+      elements.deliveryAddressModal,
+      elements.crediarioModal,
+      elements.fiscalStatusModal,
+      elements.budgetModal,
+      elements.saleCancelModal,
+    ];
+    if (blockers.some((modal) => isModalActive(modal))) {
+      return;
+    }
+    document.body.classList.remove('overflow-hidden');
+  };
+
   const clearSaleCancelError = () => {
     if (elements.saleCancelReason) {
       elements.saleCancelReason.classList.remove('border-rose-400', 'focus:border-rose-400', 'focus:ring-rose-200');
@@ -13289,14 +13403,7 @@
       elements.saleCancelReason.value = '';
     }
     clearSaleCancelError();
-    if (
-      !isModalActive(elements.finalizeModal) &&
-      !isModalActive(elements.paymentValueModal) &&
-      !isModalActive(elements.deliveryAddressModal) &&
-      !isModalActive(elements.customerModal)
-    ) {
-      document.body.classList.remove('overflow-hidden');
-    }
+    releaseBodyScrollIfNoModal();
   };
 
   const revertSaleCashMovements = (sale) => {
@@ -15040,6 +15147,11 @@
       button.addEventListener('click', handleCustomerTabClick);
     });
     elements.customerModal?.addEventListener('keydown', handleCustomerModalKeydown);
+    elements.customerRegisterButton?.addEventListener('click', openCustomerRegisterModal);
+    elements.customerRegisterClose?.addEventListener('click', closeCustomerRegisterModal);
+    elements.customerRegisterBackdrop?.addEventListener('click', closeCustomerRegisterModal);
+    elements.customerRegisterModal?.addEventListener('keydown', handleCustomerRegisterModalKeydown);
+    elements.customerRegisterFrame?.addEventListener('load', handleCustomerRegisterFrameLoad);
     elements.deliveryAddressList?.addEventListener('change', handleDeliveryAddressSelection);
     elements.deliveryAddressConfirm?.addEventListener('click', handleDeliveryAddressConfirm);
     elements.deliveryAddressCancel?.addEventListener('click', closeDeliveryAddressModal);
@@ -15095,6 +15207,7 @@
     elements.transferItemsTable?.addEventListener('input', handleTransferItemsTableInput);
     elements.transferItemsTable?.addEventListener('click', handleTransferItemsTableClick);
     elements.transferSubmit?.addEventListener('click', submitTransferRequest);
+    window.addEventListener('message', handleCustomerRegisterIframeMessage);
     if (elements.deliveryAddressFields?.cep) {
       const cepInput = elements.deliveryAddressFields.cep;
       cepInput.addEventListener('input', () => {

@@ -553,9 +553,15 @@
                     <h2 class="text-lg font-semibold text-gray-800">Selecionar cliente</h2>
                     <p class="text-sm text-gray-500">Localize o cliente e, se desejar, associe um pet à venda.</p>
                 </div>
-                <button type="button" id="pdv-customer-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de clientes">
-                    <i class="fas fa-times"></i>
-                </button>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="pdv-customer-register" class="inline-flex items-center gap-2 rounded-lg border border-transparent bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary">
+                        <i class="fas fa-user-plus text-xs"></i>
+                        Cadastrar
+                    </button>
+                    <button type="button" id="pdv-customer-close" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600" aria-label="Fechar modal de clientes">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
             </div>
             <div class="px-6 pt-4">
                 <div class="flex flex-wrap gap-2 border-b border-gray-200 pb-3" role="tablist">
@@ -588,6 +594,34 @@
                 <div class="flex items-center gap-2">
                     <button type="button" id="pdv-customer-cancel" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancelar</button>
                     <button type="button" id="pdv-customer-confirm" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60">Vincular cliente</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pdv-customer-register-modal" class="fixed inset-0 z-[80] hidden" aria-hidden="true">
+        <div class="absolute inset-0 bg-slate-900/60" data-customer-register-dismiss="backdrop"></div>
+        <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+            <div class="relative flex w-full max-w-5xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-200 ease-out max-h-[90vh]" data-customer-frame-shell>
+                <header class="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="space-y-1">
+                        <span class="text-[11px] font-semibold uppercase tracking-wide text-primary">Cadastro de cliente</span>
+                        <h3 class="text-lg font-semibold text-gray-900">Adicionar novo cliente</h3>
+                        <p class="text-sm text-gray-500">Abra o formulário completo para cadastrar o cliente sem sair do PDV.</p>
+                    </div>
+                    <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-customer-register-dismiss="close" aria-label="Fechar cadastro de cliente">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </header>
+                <div class="flex-1 overflow-hidden bg-gray-50">
+                    <div data-customer-frame-loading class="flex h-full flex-col items-center justify-center gap-3 px-6 py-10 text-center text-sm text-gray-600">
+                        <i class="fas fa-circle-notch fa-spin text-xl text-primary"></i>
+                        <p>
+                            Carregando cadastro de cliente...
+                            <span class="mt-1 block text-xs text-gray-500">Isso pode levar alguns instantes.</span>
+                        </p>
+                    </div>
+                    <iframe data-customer-frame title="Cadastro de cliente" class="hidden h-[75vh] min-h-[420px] w-full border-0 bg-white" allow="clipboard-write"></iframe>
                 </div>
             </div>
         </div>
