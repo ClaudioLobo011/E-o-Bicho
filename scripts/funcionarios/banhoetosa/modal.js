@@ -11,6 +11,12 @@ let __pendingCheckinTimer = null;
 let __pendingCheckinPromise = null;
 
 const SALE_VIA_PDV_MESSAGE = 'Finalize a venda pelo PDV para gerar o código automaticamente.';
+const CUSTOMER_REGISTRATION_RELATIVE_URL = './clientes.html';
+
+let customerRegisterPreviousFocus = null;
+let customerRegisterFrameUrl = '';
+let customerRegisterFrameWindow = null;
+let customerRegisterMessageHandlerBound = false;
 
 function clearPendingCheckinQueue() {
   if (__pendingCheckinTimer) {
@@ -216,6 +222,102 @@ export function closeModal() {
   state.editing = null;
   [els.cliInput, els.servInput, els.valorInput, els.petSelect].forEach(el => { if (el) el.disabled = false; });
 }
+
+const buildCustomerRegistrationUrl = () => {
+  const url = new URL(CUSTOMER_REGISTRATION_RELATIVE_URL, window.location.href);
+  url.searchParams.set('from', 'agenda');
+  const storeId = state.selectedStoreId || els.addStoreSelect?.value || '';
+  if (storeId) {
+    url.searchParams.set('storeId', storeId);
+  }
+  return url.toString();
+};
+
+const setCustomerRegistrationLoading = (loading) => {
+  if (els.customerRegisterLoading) {
+    els.customerRegisterLoading.classList.toggle('hidden', !loading);
+  }
+  if (els.customerRegisterFrame) {
+    els.customerRegisterFrame.classList.toggle('hidden', loading);
+  }
+};
+
+const applyCustomerRegistrationFrameHeight = (height) => {
+  if (!els.customerRegisterFrame) return;
+  const numericHeight = Number(height);
+  if (!Number.isFinite(numericHeight) || numericHeight <= 0) return;
+  const viewportLimit = Math.max(window.innerHeight - 160, 360);
+  const clamped = Math.max(360, Math.min(numericHeight, viewportLimit));
+  els.customerRegisterFrame.style.height = `${clamped}px`;
+};
+
+const openCustomerRegisterModal = () => {
+  const url = buildCustomerRegistrationUrl();
+  if (!els.customerRegisterModal || !els.customerRegisterFrame) {
+    window.open(url, '_blank', 'noopener');
+    return;
+  }
+  const shouldReload = !customerRegisterFrameUrl || customerRegisterFrameUrl !== url;
+  customerRegisterPreviousFocus =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  els.customerRegisterModal.classList.remove('hidden');
+  els.customerRegisterModal.setAttribute('data-modal-open', 'true');
+  document.body?.classList.add('overflow-hidden');
+  if (shouldReload) {
+    setCustomerRegistrationLoading(true);
+    try {
+      els.customerRegisterFrame.src = url;
+      customerRegisterFrameUrl = url;
+    } catch (error) {
+      console.error('Não foi possível carregar o cadastro de cliente no iframe da agenda.', error);
+      window.open(url, '_blank', 'noopener');
+      closeCustomerRegisterModal();
+      return;
+    }
+  } else {
+    setCustomerRegistrationLoading(false);
+  }
+  window.setTimeout(() => {
+    els.customerRegisterClose?.focus();
+  }, 120);
+};
+
+const closeCustomerRegisterModal = () => {
+  if (!els.customerRegisterModal) return;
+  els.customerRegisterModal.classList.add('hidden');
+  els.customerRegisterModal.removeAttribute('data-modal-open');
+  document.body?.classList.remove('overflow-hidden');
+  if (customerRegisterPreviousFocus && typeof customerRegisterPreviousFocus.focus === 'function') {
+    try {
+      customerRegisterPreviousFocus.focus();
+    } catch (error) {
+      console.debug('Não foi possível restaurar o foco após fechar o cadastro de cliente da agenda.', error);
+    }
+  }
+  customerRegisterPreviousFocus = null;
+};
+
+const handleCustomerRegisterModalKeydown = (event) => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeCustomerRegisterModal();
+  }
+};
+
+const handleCustomerRegisterFrameLoad = () => {
+  customerRegisterFrameWindow = els.customerRegisterFrame?.contentWindow || null;
+  setCustomerRegistrationLoading(false);
+};
+
+const handleCustomerRegisterIframeMessage = (event) => {
+  if (!event || !event.data || event.data.source !== 'eo-bicho') return;
+  if (!customerRegisterFrameWindow || event.source !== customerRegisterFrameWindow) return;
+  if (!els.customerRegisterFrame) return;
+  if (event.data.type === 'TAB_CONTENT_RESIZE') {
+    const height = event.data.modalExtent || event.data.modalHeight || event.data.height;
+    applyCustomerRegistrationFrameHeight(height);
+  }
+};
 
 export function toDateInputValueFromISO(isoStr) {
   const d = new Date(isoStr);
@@ -844,6 +946,18 @@ export async function confirmAsync(title, message, opts = {}) {
 }
 
 export function bindModalAndActionsEvents() {
+  els.customerRegisterButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    openCustomerRegisterModal();
+  });
+  els.customerRegisterClose?.addEventListener('click', closeCustomerRegisterModal);
+  els.customerRegisterBackdrop?.addEventListener('click', closeCustomerRegisterModal);
+  els.customerRegisterModal?.addEventListener('keydown', handleCustomerRegisterModalKeydown);
+  els.customerRegisterFrame?.addEventListener('load', handleCustomerRegisterFrameLoad);
+  if (!customerRegisterMessageHandlerBound && typeof window !== 'undefined') {
+    window.addEventListener('message', handleCustomerRegisterIframeMessage);
+    customerRegisterMessageHandlerBound = true;
+  }
   // Atualiza preÃ§os da lista e do item selecionado ao mudar empresa/pet
   els.addStoreSelect?.addEventListener('change', () => { updateVisibleServicePrices(); updateSelectedServicePrice(); });
   els.petSelect?.addEventListener('change', () => { updateVisibleServicePrices(); updateSelectedServicePrice(); });
