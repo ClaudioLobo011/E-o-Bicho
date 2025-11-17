@@ -5935,32 +5935,66 @@
           product?.title ||
           '';
 
-        const PRODUCT_BARCODE_FIELDS = [
+        const PRODUCT_BARCODE_PRIMARY_FIELDS = [
           'codigoBarras',
           'codigoDeBarras',
           'barras',
           'ean',
-          'eanTrib',
+          'cEAN',
+          'gtin',
           'codbarras',
           'barcode',
           'codigo_barras',
         ];
+        const PRODUCT_BARCODE_TRIBUTARY_FIELDS = [
+          'eanTrib',
+          'cEANTrib',
+          'gtinTrib',
+          'codigoBarrasTributado',
+          'barcodeTributado',
+          'codbarrasTributado',
+        ];
+
+        const getProductBarcodesFromRecord = (product) => {
+          const results = [];
+          const appendBarcode = (value) => {
+            const normalized = normalizeBarcodeForComparison(value);
+            if (normalized && !results.includes(normalized)) {
+              results.push(normalized);
+            }
+          };
+          const collectFromSource = (source, fields) => {
+            if (!source || typeof source !== 'object') return;
+            fields.forEach((field) => appendBarcode(source[field]));
+          };
+
+          if (!product || typeof product !== 'object') {
+            return results;
+          }
+
+          collectFromSource(product, PRODUCT_BARCODE_PRIMARY_FIELDS);
+          collectFromSource(product, PRODUCT_BARCODE_TRIBUTARY_FIELDS);
+
+          if (Array.isArray(product.variacoes)) {
+            product.variacoes.forEach((variation) => {
+              collectFromSource(variation, PRODUCT_BARCODE_PRIMARY_FIELDS);
+              collectFromSource(variation, PRODUCT_BARCODE_TRIBUTARY_FIELDS);
+            });
+          }
+
+          return results;
+        };
 
         const getProductBarcodeFromRecord = (product) => {
-          if (!product || typeof product !== 'object') return '';
-          for (const field of PRODUCT_BARCODE_FIELDS) {
-            const normalized = normalizeBarcodeForComparison(product[field]);
-            if (normalized) return normalized;
-          }
-          if (Array.isArray(product.variacoes)) {
-            for (const variation of product.variacoes) {
-              const normalized = normalizeBarcodeForComparison(
-                variation?.codigoBarras || variation?.barcode || variation?.ean
-              );
-              if (normalized) return normalized;
-            }
-          }
-          return '';
+          const barcodes = getProductBarcodesFromRecord(product);
+          return barcodes.length ? barcodes[0] : '';
+        };
+
+        const productMatchesBarcode = (product, barcodeDigits) => {
+          const normalized = normalizeBarcodeForComparison(barcodeDigits);
+          if (!normalized) return false;
+          const barcodes = getProductBarcodesFromRecord(product);
+          return barcodes.includes(normalized);
         };
 
         const getOptionDocument = (option) => {
@@ -10365,8 +10399,7 @@
               : Array.isArray(payload)
               ? payload
               : [];
-            const match =
-              products.find((product) => getProductBarcodeFromRecord(product) === normalized) || null;
+            const match = products.find((product) => productMatchesBarcode(product, normalized)) || null;
             productLookupCache.set(normalized, match);
             return match;
           })();
