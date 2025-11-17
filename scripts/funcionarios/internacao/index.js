@@ -37,6 +37,9 @@ const internarModal = {
   petSummaryMetaEl: null,
   petSummaryTutorEl: null,
   petSummaryContactEl: null,
+  submitBtn: null,
+  errorEl: null,
+  onSuccess: null,
 };
 
 const boxesModal = {
@@ -119,6 +122,24 @@ function getPetInfoFromDataset(dataset, petId) {
     tutorNome: match.tutor?.nome,
     tutorDocumento: match.tutor?.documento,
     tutorContato: match.tutor?.telefone || match.tutor?.email,
+  });
+}
+
+function getPetInfoFromInternacoes(state, key) {
+  const lookupKey = String(key || '').trim();
+  if (!lookupKey || !Array.isArray(state?.internacoes)) return null;
+  const match = state.internacoes.find((registro) => registro.filterKey === lookupKey);
+  if (!match) return null;
+  return normalizePetInfo({
+    petId: match.pet?.id,
+    petNome: match.pet?.nome,
+    petEspecie: match.pet?.especie,
+    petRaca: match.pet?.raca,
+    petPeso: match.pet?.peso,
+    petIdade: match.pet?.idade,
+    tutorNome: match.tutor?.nome,
+    tutorContato: match.tutor?.contato,
+    tutorDocumento: match.tutor?.documento,
   });
 }
 
@@ -250,6 +271,145 @@ function normalizeBox(raw) {
     higienizacao,
     observacao,
   };
+}
+
+function combineDateAndTime(dateStr, timeStr) {
+  const datePart = typeof dateStr === 'string' ? dateStr.trim() : '';
+  if (!datePart) return '';
+  const timePart = typeof timeStr === 'string' && timeStr.trim() ? timeStr.trim() : '00:00';
+  const isoCandidate = `${datePart}T${timePart.length === 5 ? timePart : `${timePart}:00`}`;
+  const parsed = new Date(isoCandidate);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString();
+}
+
+function normalizeInternacaoRecord(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const codigoNumber = Number.parseInt(raw.codigo, 10);
+  const codigo = Number.isFinite(codigoNumber) ? codigoNumber : null;
+  const petId = typeof raw.petId === 'string' && raw.petId.trim() ? raw.petId.trim() : '';
+  const baseId = String(raw.id || raw._id || codigo || petId || '').trim();
+  const filterKey = petId || (codigo !== null ? `codigo-${codigo}` : baseId || `registro-${Date.now()}`);
+  const toText = (value) => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+  };
+
+  return {
+    id: baseId || filterKey,
+    filterKey,
+    codigo,
+    pet: {
+      id: petId || filterKey,
+      nome: toText(raw.petNome),
+      especie: toText(raw.petEspecie),
+      raca: toText(raw.petRaca),
+      idade: toText(raw.petIdade),
+      peso: toText(raw.petPeso),
+    },
+    tutor: {
+      nome: toText(raw.tutorNome),
+      contato: toText(raw.tutorContato),
+      documento: toText(raw.tutorDocumento),
+    },
+    situacao: toText(raw.situacao),
+    situacaoCodigo: toText(raw.situacaoCodigo),
+    risco: toText(raw.risco),
+    riscoCodigo: toText(raw.riscoCodigo),
+    veterinario: toText(raw.veterinario),
+    box: toText(raw.box),
+    altaPrevistaData: toText(raw.altaPrevistaData),
+    altaPrevistaHora: toText(raw.altaPrevistaHora),
+    altaPrevistaISO: combineDateAndTime(raw.altaPrevistaData, raw.altaPrevistaHora),
+    admissao: raw.admissao || raw.createdAt || '',
+    createdAt: raw.createdAt || '',
+    updatedAt: raw.updatedAt || '',
+  };
+}
+
+function setInternarModalError(message) {
+  if (!internarModal.errorEl) return;
+  const text = String(message || '').trim();
+  internarModal.errorEl.textContent = text;
+  internarModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setInternarModalLoading(isLoading) {
+  if (!internarModal.submitBtn) return;
+  if (!internarModal.submitBtn.dataset.defaultLabel) {
+    internarModal.submitBtn.dataset.defaultLabel = internarModal.submitBtn.textContent.trim();
+  }
+  internarModal.submitBtn.disabled = !!isLoading;
+  internarModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  internarModal.submitBtn.textContent = isLoading
+    ? 'Salvando...'
+    : internarModal.submitBtn.dataset.defaultLabel;
+}
+
+function getOptionDetails(options, value) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  const match = options.find((opt) => opt.value === normalized);
+  return {
+    value: normalized,
+    label: match?.label || '',
+  };
+}
+
+async function handleInternarModalSubmit(event) {
+  event.preventDefault();
+  if (!internarModal.form) return;
+  setInternarModalError('');
+  const petInfo = internarModal.petInfo || {};
+  const petNome = petInfo?.petNome || '';
+  if (!petNome) {
+    setInternarModalError('Selecione um paciente a partir da ficha clínica antes de salvar.');
+    return;
+  }
+
+  const formData = new FormData(internarModal.form);
+  const situacaoDetails = getOptionDetails(INTERNAR_SITUACAO_OPTIONS, formData.get('internarSituacao'));
+  const riscoDetails = getOptionDetails(INTERNAR_RISCO_OPTIONS, formData.get('internarRisco'));
+  const payload = {
+    petId: petInfo.petId || '',
+    petNome,
+    petEspecie: petInfo.petEspecie || '',
+    petRaca: petInfo.petRaca || '',
+    petPeso: petInfo.petPeso || '',
+    petIdade: petInfo.petIdade || '',
+    tutorNome: petInfo.tutorNome || '',
+    tutorContato: petInfo.tutorContato || '',
+    tutorDocumento: petInfo.tutorDocumento || '',
+    situacao: situacaoDetails.label || situacaoDetails.value,
+    situacaoCodigo: situacaoDetails.value,
+    risco: riscoDetails.label || riscoDetails.value,
+    riscoCodigo: riscoDetails.value,
+    veterinario: (formData.get('internarVeterinario') || '').toString().trim(),
+    box: (formData.get('internarBox') || '').toString().trim(),
+    altaPrevistaData: (formData.get('internarAltaPrevista') || '').toString().trim(),
+    altaPrevistaHora: (formData.get('internarAltaPrevistaHora') || '').toString().trim(),
+    queixa: (formData.get('internarQueixa') || '').toString().trim(),
+    diagnostico: (formData.get('internarDiagnostico') || '').toString().trim(),
+    prognostico: (formData.get('internarPrognostico') || '').toString().trim(),
+    alergias: [...internarModal.tags],
+    acessorios: (formData.get('internarAcessorios') || '').toString().trim(),
+    observacoes: (formData.get('internarObservacoes') || '').toString().trim(),
+  };
+
+  setInternarModalLoading(true);
+  try {
+    await requestJson('/internacao/registros', { method: 'POST', body: payload });
+    showToastMessage('Internação registrada com sucesso.', 'success');
+    const successCallback = internarModal.onSuccess;
+    closeInternarPetModal();
+    if (typeof successCallback === 'function') {
+      successCallback();
+    }
+  } catch (error) {
+    console.error('internacao: falha ao salvar internação', error);
+    setInternarModalError(error.message || 'Não foi possível salvar a internação.');
+  } finally {
+    setInternarModalLoading(false);
+  }
 }
 
 function setBoxesModalError(message) {
@@ -503,6 +663,9 @@ function closeInternarPetModal() {
   if (internarModal.tagsInput) internarModal.tagsInput.value = '';
   renderTagList();
   setInternarPetInfo(null);
+  setInternarModalError('');
+  setInternarModalLoading(false);
+  internarModal.onSuccess = null;
 }
 
 function ensureInternarPetModal() {
@@ -566,9 +729,14 @@ function ensureInternarPetModal() {
                 </select>
               </label>
             </div>
-            <label class="mt-4 block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Alta prevista
-              <input type="date" name="internarAltaPrevista" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
-            </label>
+            <div class="mt-4 grid gap-3 md:grid-cols-[2fr,1fr]">
+              <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Alta prevista (data)
+                <input type="date" name="internarAltaPrevista" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+              <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Horário previsto
+                <input type="time" name="internarAltaPrevistaHora" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+            </div>
 
             <div class="mt-5 space-y-3">
               <nav class="flex flex-wrap gap-2 border-b border-gray-100 pb-2" aria-label="Abas do modal">
@@ -609,13 +777,16 @@ function ensureInternarPetModal() {
           </div>
 
           <footer class="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex items-center gap-2 text-[11px] text-gray-500">
-              <i class="fas fa-circle-info text-primary"></i>
-              <span>Interface ilustrativa — os dados não são enviados ao servidor.</span>
+            <div class="flex flex-col gap-1 text-[11px] text-gray-500">
+              <span class="inline-flex items-center gap-2">
+                <i class="fas fa-circle-info text-primary"></i>
+                <span>Os dados são registrados no banco de dados.</span>
+              </span>
+              <p class="hidden text-[11px] font-semibold text-red-600" data-modal-error></p>
             </div>
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
               <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-modal>Cancelar</button>
-              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90">Salvar</button>
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90" data-modal-submit>Salvar</button>
             </div>
           </footer>
         </form>
@@ -628,6 +799,8 @@ function ensureInternarPetModal() {
   internarModal.overlay = overlay;
   internarModal.dialog = overlay.querySelector('[data-internar-dialog]');
   internarModal.form = overlay.querySelector('form');
+  internarModal.submitBtn = overlay.querySelector('[data-modal-submit]');
+  internarModal.errorEl = overlay.querySelector('[data-modal-error]');
   internarModal.tabButtons = Array.from(overlay.querySelectorAll('[data-tab-target]'));
   internarModal.tabPanels = Array.from(overlay.querySelectorAll('[data-tab-panel]'));
   internarModal.tagsInput = overlay.querySelector('[data-tags-input]');
@@ -689,24 +862,7 @@ function ensureInternarPetModal() {
   }
 
   if (internarModal.form) {
-    internarModal.form.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const data = {};
-      new FormData(internarModal.form).forEach((value, key) => {
-        data[key] = value;
-      });
-      data.alergias = [...internarModal.tags];
-      try {
-        if (typeof window?.showToast === 'function') {
-          window.showToast('Solicitação de internação registrada (ilustrativo).', 'success');
-        } else {
-          alert('Solicitação de internação registrada (ilustrativo).');
-        }
-      } catch (error) {
-        console.warn('internacao modal submit', error);
-      }
-      closeInternarPetModal();
-    });
+    internarModal.form.addEventListener('submit', handleInternarModalSubmit);
   }
 
   setInternarModalTab('medica');
@@ -735,6 +891,9 @@ function populateDynamicSelects(dataset) {
 function openInternarPetModal(dataset, options = {}) {
   const petInfo = options?.petInfo || null;
   ensureInternarPetModal();
+  internarModal.onSuccess = typeof options.onSuccess === 'function' ? options.onSuccess : null;
+  setInternarModalError('');
+  setInternarModalLoading(false);
   populateDynamicSelects(dataset);
   setInternarModalTab('medica');
   setInternarPetInfo(petInfo);
@@ -748,16 +907,25 @@ function openInternarPetModal(dataset, options = {}) {
   }
 }
 
-function registerInternarModalTriggers(dataset) {
+function registerInternarModalTriggers(dataset, state = {}) {
   document.querySelectorAll('[data-open-internar-modal]').forEach((button) => {
     button.addEventListener('click', (event) => {
       event.preventDefault();
-      openInternarPetModal(dataset);
+      const triggerPetId = button.dataset.petId || '';
+      const resolvedId = triggerPetId || state.petId || '';
+      let petInfo = null;
+      if (resolvedId) {
+        petInfo = getPetInfoFromDataset(dataset, resolvedId) || getPetInfoFromInternacoes(state, resolvedId);
+      }
+      openInternarPetModal(dataset, {
+        petInfo,
+        onSuccess: state.refreshInternacoes,
+      });
     });
   });
 }
 
-function maybeOpenInternarModalFromQuery(dataset) {
+function maybeOpenInternarModalFromQuery(dataset, state = {}) {
   try {
     const params = new URLSearchParams(window.location.search);
     const flag = params.get('internar');
@@ -777,9 +945,13 @@ function maybeOpenInternarModalFromQuery(dataset) {
 
     if (petInfo?.petId) {
       petInfo = mergePetInfo(petInfo, getPetInfoFromDataset(dataset, petInfo.petId));
+      petInfo = mergePetInfo(petInfo, getPetInfoFromInternacoes(state, petInfo.petId));
     }
 
-    openInternarPetModal(dataset, { petInfo });
+    openInternarPetModal(dataset, {
+      petInfo,
+      onSuccess: state.refreshInternacoes,
+    });
 
     ['internar', 'pet', 'petId', 'petNome', 'petEspecie', 'petRaca', 'petPeso', 'petIdade', 'tutorNome', 'tutorContato', 'tutorDocumento'].forEach((key) => {
       params.delete(key);
@@ -801,10 +973,34 @@ const VIEW_RENDERERS = {
   boxes: renderBoxes,
 };
 
-function fillPetFilters(dataset, currentPetId) {
-  const options = ['<option value="">Todos os pets da agenda</option>', ...dataset.pacientes.map((pet) => `<option value="${pet.id}" ${pet.id === currentPetId ? 'selected' : ''}>${pet.nome} · ${pet.tutor.nome}</option>`)];
+function fillPetFilters(dataset, currentPetId, state = {}) {
+  const baseOptions = [];
+  if (Array.isArray(state?.internacoes) && state.internacoes.length) {
+    const seen = new Set();
+    state.internacoes.forEach((registro) => {
+      const value = registro.filterKey;
+      if (!value || seen.has(value)) return;
+      seen.add(value);
+      const petNome = registro.pet?.nome || (registro.codigo ? `Registro #${registro.codigo}` : 'Paciente');
+      const tutorNome = registro.tutor?.nome;
+      const label = tutorNome ? `${petNome} · ${tutorNome}` : petNome;
+      baseOptions.push({ value, label });
+    });
+  } else {
+    (dataset.pacientes || []).forEach((pet) => {
+      baseOptions.push({ value: pet.id, label: `${pet.nome} · ${pet.tutor.nome}` });
+    });
+  }
+
+  const options = [
+    '<option value="">Todos os pets da agenda</option>',
+    ...baseOptions.map(
+      (opt) => `<option value="${escapeHtml(opt.value)}" ${opt.value === currentPetId ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`,
+    ),
+  ];
   document.querySelectorAll('[data-internacao-pet-filter]').forEach((select) => {
     select.innerHTML = options.join('');
+    select.value = currentPetId || '';
   });
 }
 
@@ -858,6 +1054,47 @@ function setupBoxesPage(dataset, state, render) {
   fetchBoxes();
 }
 
+function setupAnimaisPage(dataset, state, render) {
+  const root = document.querySelector('[data-internacao-root]');
+
+  const fetchInternacoes = async () => {
+    state.internacoesLoading = true;
+    state.internacoesError = '';
+    render();
+    try {
+      const data = await requestJson('/internacao/registros');
+      const normalized = Array.isArray(data) ? data.map(normalizeInternacaoRecord).filter(Boolean) : [];
+      dataset.internacoes = normalized;
+      state.internacoes = normalized;
+      state.internacoesLoading = false;
+      const availableKeys = new Set(normalized.map((item) => item.filterKey));
+      if (state.petId && availableKeys.size && !availableKeys.has(state.petId)) {
+        state.petId = '';
+      }
+      fillPetFilters(dataset, state.petId, state);
+      render();
+    } catch (error) {
+      console.error('internacao: falha ao carregar internações', error);
+      state.internacoesError = error.message || 'Não foi possível carregar as internações.';
+      state.internacoesLoading = false;
+      render();
+    }
+  };
+
+  state.refreshInternacoes = fetchInternacoes;
+
+  if (root) {
+    root.addEventListener('click', (event) => {
+      if (event.target.closest('[data-internacoes-retry]')) {
+        event.preventDefault();
+        fetchInternacoes();
+      }
+    });
+  }
+
+  fetchInternacoes();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const root = document.querySelector('[data-internacao-root]');
   const view = document.body?.dataset?.internacaoPage || '';
@@ -869,6 +1106,10 @@ document.addEventListener('DOMContentLoaded', () => {
     boxes: Array.isArray(dataset.boxes) ? [...dataset.boxes] : [],
     boxesLoading: false,
     boxesError: '',
+    internacoes: Array.isArray(dataset.internacoes) ? [...dataset.internacoes] : [],
+    internacoesLoading: false,
+    internacoesError: '',
+    refreshInternacoes: null,
   };
 
   try {
@@ -887,10 +1128,13 @@ document.addEventListener('DOMContentLoaded', () => {
     renderer(root, dataset, state);
   };
 
-  fillPetFilters(dataset, state.petId);
+  fillPetFilters(dataset, state.petId, state);
   updateSyncInfo(dataset);
   render();
 
+  if (view === 'animais') {
+    setupAnimaisPage(dataset, state, render);
+  }
   if (view === 'boxes') {
     setupBoxesPage(dataset, state, render);
   }
@@ -898,11 +1142,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-internacao-pet-filter]').forEach((select) => {
     select.addEventListener('change', (event) => {
       state.petId = event.target.value;
-      fillPetFilters(dataset, state.petId);
+      fillPetFilters(dataset, state.petId, state);
       render();
     });
   });
 
-  registerInternarModalTriggers(dataset);
-  maybeOpenInternarModalFromQuery(dataset);
+  registerInternarModalTriggers(dataset, state);
+  maybeOpenInternarModalFromQuery(dataset, state);
 });

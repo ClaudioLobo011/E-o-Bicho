@@ -11,10 +11,12 @@ function escapeHtml(value) {
 
 const HOURS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0'));
 
-const statusColors = {
-  'Em observação': 'bg-sky-50 text-sky-700 ring-1 ring-sky-100',
-  'Isolamento respiratório': 'bg-amber-50 text-amber-700 ring-1 ring-amber-100',
-  'Estável': 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100',
+const riscoColors = {
+  'nao-urgente': 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100',
+  'pouco-urgente': 'bg-lime-50 text-lime-700 ring-1 ring-lime-100',
+  urgente: 'bg-amber-50 text-amber-700 ring-1 ring-amber-100',
+  'muito-urgente': 'bg-orange-50 text-orange-700 ring-1 ring-orange-100',
+  emergencia: 'bg-red-50 text-red-700 ring-1 ring-red-100',
 };
 
 function formatDateTime(iso) {
@@ -51,6 +53,11 @@ function buildEmptyState(message) {
       ${message}
     </div>
   `;
+}
+
+function getRiscoBadgeClass(code) {
+  const key = String(code || '').toLowerCase();
+  return riscoColors[key] || 'bg-gray-100 text-gray-700 ring-1 ring-gray-100';
 }
 
 function openExecucaoModal(pet, hourLabel, items) {
@@ -156,77 +163,117 @@ function attachExecucaoModalHandlers(root, dataset) {
   });
 }
 
-export function renderAnimaisInternados(root, dataset, { petId } = {}) {
-  const pacientes = filterPacientes(dataset, petId);
-  if (!pacientes.length) {
-    root.innerHTML = buildEmptyState('Nenhum pet da agenda está em internação no momento.');
+export function renderAnimaisInternados(root, dataset, state = {}) {
+  const petId = state?.petId || '';
+  const internacoes = Array.isArray(state?.internacoes) ? state.internacoes : [];
+
+  if (state?.internacoesLoading) {
+    root.innerHTML = buildEmptyState('Carregando internações...');
     return;
   }
 
-  const total = pacientes.length;
-  const proximasAltas = pacientes.filter((pet) => {
-    const alta = new Date(pet.internacao.previsaoAlta);
+  if (state?.internacoesError) {
+    root.innerHTML = `
+      <div class="rounded-2xl border border-red-100 bg-red-50 px-6 py-8 text-center">
+        <p class="text-sm font-semibold text-red-700">${escapeHtml(state.internacoesError)}</p>
+        <button type="button" class="mt-4 inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-500" data-internacoes-retry>
+          Tentar novamente
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  if (!internacoes.length) {
+    root.innerHTML = buildEmptyState('Nenhuma internação registrada até o momento.');
+    return;
+  }
+
+  const total = internacoes.length;
+  const proximasAltas = internacoes.filter((registro) => {
+    if (!registro.altaPrevistaISO) return false;
+    const alta = new Date(registro.altaPrevistaISO);
     if (Number.isNaN(alta.getTime())) return false;
     const diff = (alta - Date.now()) / (1000 * 60 * 60);
     return diff <= 48;
   }).length;
-  const isolamento = pacientes.filter((pet) => pet.internacao.status.toLowerCase().includes('isolamento')).length;
+  const isolamento = internacoes.filter((registro) => (registro.situacao || '').toLowerCase().includes('isolamento')).length;
 
   const resumo = `
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <div class="rounded-2xl bg-primary/10 px-4 py-4 text-primary">
         <p class="text-xs font-semibold uppercase tracking-wide">Internados</p>
         <p class="text-3xl font-bold">${total}</p>
-        <p class="text-sm text-primary/80">Conforme agenda e fichas clínicas</p>
+        <p class="text-sm text-primary/80">Fluxo consolidado</p>
       </div>
       <div class="rounded-2xl bg-emerald-50 px-4 py-4 text-emerald-700">
         <p class="text-xs font-semibold uppercase tracking-wide">Altas em 48h</p>
         <p class="text-3xl font-bold">${proximasAltas}</p>
-        <p class="text-sm text-emerald-700/80">Planos já aprovados pela equipe</p>
+        <p class="text-sm text-emerald-700/80">Planos de alta em revisão</p>
       </div>
       <div class="rounded-2xl bg-amber-50 px-4 py-4 text-amber-700">
         <p class="text-xs font-semibold uppercase tracking-wide">Isolamentos</p>
         <p class="text-3xl font-bold">${isolamento}</p>
-        <p class="text-sm text-amber-700/80">Fluxo alinhado com protocolos</p>
+        <p class="text-sm text-amber-700/80">Monitorar EPIs e protocolos</p>
       </div>
     </div>
   `;
 
-  const cards = pacientes.map((pet) => {
-    const statusClass = statusColors[pet.internacao.status] || 'bg-gray-100 text-gray-700';
-    return `
-      <article class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
-        <div class="flex flex-wrap items-start gap-4">
-          <div class="flex-1">
-            <div class="flex items-center gap-2">
-              <h2 class="text-xl font-semibold text-gray-900">${pet.nome}</h2>
-              <span class="rounded-full px-2 py-0.5 text-xs font-semibold ${statusClass}">${pet.internacao.status}</span>
-            </div>
-            <p class="text-sm text-gray-500">${pet.especie} · ${pet.raca} · ${pet.idade} · ${pet.peso}</p>
-            <p class="text-sm text-gray-500">Tutor: <span class="font-medium text-gray-700">${pet.tutor.nome}</span></p>
-          </div>
-          <div class="text-right text-sm text-gray-500">
-            <p>Admissão: <span class="font-semibold text-gray-800">${formatDateTime(pet.internacao.admissao)}</span></p>
-            <p>Previsão de alta: <span class="font-semibold text-gray-800">${formatDateTime(pet.internacao.previsaoAlta)}</span></p>
-            <p>Box: <span class="font-semibold text-gray-800">${pet.internacao.box}</span></p>
-          </div>
-        </div>
-        <div class="mt-4 grid gap-4 md:grid-cols-3">
-          <div class="rounded-xl bg-gray-50 p-3">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Equipe</p>
-            <p class="text-sm text-gray-800">${pet.internacao.equipeMedica}</p>
-            <p class="text-sm text-gray-800">${pet.internacao.equipeEnfermagem}</p>
-          </div>
-          <div class="rounded-xl bg-gray-50 p-3 md:col-span-2">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Pendências da agenda</p>
-            ${buildPendencias(pet.internacao.pendencias)}
-          </div>
-        </div>
-      </article>
-    `;
-  }).join('');
+  const registrosFiltrados = petId ? internacoes.filter((registro) => registro.filterKey === petId) : internacoes;
 
-  root.innerHTML = `${resumo}<div class="space-y-4">${cards}</div>`;
+  const cardsContent = registrosFiltrados.length
+    ? registrosFiltrados
+        .map((registro) => {
+          const meta = [registro.pet?.especie, registro.pet?.raca, registro.pet?.peso || registro.pet?.idade]
+            .filter(Boolean)
+            .join(' · ');
+          const admissao = formatDateTime(registro.admissao);
+          let altaPrevista = '—';
+          if (registro.altaPrevistaISO) {
+            altaPrevista = formatDateTime(registro.altaPrevistaISO);
+          } else if (registro.altaPrevistaData) {
+            const iso = `${registro.altaPrevistaData}T${registro.altaPrevistaHora || '00:00'}`;
+            altaPrevista = formatDateTime(iso);
+          }
+          const riscoClass = getRiscoBadgeClass(registro.riscoCodigo);
+          const tutorContato = [registro.tutor?.contato, registro.tutor?.documento].filter(Boolean).join(' · ');
+          return `
+            <article class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
+              <div class="flex flex-wrap items-start gap-4">
+                <div class="flex-1 space-y-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="text-xl font-semibold text-gray-900">${escapeHtml(registro.pet?.nome || 'Paciente')}</h2>
+                    ${registro.situacao ? `<span class="rounded-full px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-700 ring-1 ring-gray-100">Situação: ${escapeHtml(registro.situacao)}</span>` : ''}
+                    ${registro.risco ? `<span class="rounded-full px-2 py-0.5 text-xs font-semibold ${riscoClass}">Risco: ${escapeHtml(registro.risco)}</span>` : ''}
+                  </div>
+                  <p class="text-sm text-gray-500">${meta ? escapeHtml(meta) : 'Sem detalhes do paciente'}</p>
+                  <p class="text-sm text-gray-500">Tutor: <span class="font-medium text-gray-700">${escapeHtml(registro.tutor?.nome || '—')}</span></p>
+                  ${tutorContato ? `<p class="text-xs text-gray-400">${escapeHtml(tutorContato)}</p>` : ''}
+                </div>
+                <div class="text-right text-sm text-gray-500 space-y-1">
+                  <p>Código interno: <span class="font-semibold text-gray-900">${registro.codigo !== null ? `#${registro.codigo}` : '—'}</span></p>
+                  <p>Admissão: <span class="font-semibold text-gray-900">${admissao}</span></p>
+                  <p>Previsão de alta: <span class="font-semibold text-gray-900">${altaPrevista}</span></p>
+                  <p>Box: <span class="font-semibold text-gray-900">${escapeHtml(registro.box || '—')}</span></p>
+                </div>
+              </div>
+              <div class="mt-4 grid gap-4 md:grid-cols-3">
+                <div class="rounded-xl bg-gray-50 p-3">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Equipe</p>
+                  <p class="text-sm text-gray-500">Em desenvolvimento</p>
+                </div>
+                <div class="rounded-xl bg-gray-50 p-3 md:col-span-2">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Pendências da agenda</p>
+                  <p class="text-sm text-gray-500">Em desenvolvimento</p>
+                </div>
+              </div>
+            </article>
+          `;
+        })
+        .join('')
+    : buildEmptyState('Nenhuma internação encontrada para o filtro aplicado.');
+
+  root.innerHTML = `${resumo}<div class="space-y-4">${cardsContent}</div>`;
 }
 
 export function renderMapaExecucao(root, dataset, { petId } = {}) {
