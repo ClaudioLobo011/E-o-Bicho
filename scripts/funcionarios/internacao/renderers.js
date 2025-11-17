@@ -114,11 +114,9 @@ function openExecucaoModal(pet, hourLabel, items) {
           )
           .join('')}
       </div>
-      <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-        <div class="flex flex-wrap items-center gap-2 sm:gap-2">
-          ${actionButtons}
-        </div>
-        <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 sm:ml-2" data-close-modal>
+      <div class="mt-6 flex flex-wrap items-center justify-end gap-2">
+        ${actionButtons}
+        <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50" data-close-modal>
           Fechar
         </button>
       </div>
