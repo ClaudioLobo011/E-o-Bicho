@@ -191,12 +191,11 @@ export function renderMapaExecucao(root, dataset, { petId } = {}) {
     return;
   }
 
-  const headerRow = `
-    <div class="grid grid-cols-[160px_repeat(${HOURS.length},minmax(44px,1fr))] items-center gap-2 rounded-xl bg-gray-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-      <div>Pet / Box</div>
-      ${HOURS.map((hour) => `<div class="text-center">${hour}:00</div>`).join('')}
-    </div>
-  `;
+  const headerCells = HOURS.map(
+    (hour) => `
+      <th class="min-w-[56px] px-2 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500">${hour}:00</th>
+    `,
+  ).join('');
 
   const rows = pacientes
     .map((pet) => {
@@ -204,36 +203,38 @@ export function renderMapaExecucao(root, dataset, { petId } = {}) {
       const hourCells = HOURS.map((hour) => {
         const atividades = execucoes.filter((acao) => acao.horario?.startsWith(hour));
         if (!atividades.length) {
-          return '<div class="flex h-10 w-full items-center justify-center"><div class="h-10 w-10 rounded-xl border border-dashed border-gray-200 bg-white"></div></div>';
+          return `
+            <td class="border border-gray-100 px-2 py-2 text-center">
+              <div class="mx-auto h-8 w-8 rounded-full border border-dashed border-gray-300"></div>
+            </td>
+          `;
         }
         return `
-          <div class="flex h-10 w-full items-center justify-center">
-            <div class="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/40 bg-primary/5">
-              <button
-                type="button"
-                class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white shadow-sm"
-                title="${atividades.length} procedimentos"
-                aria-label="Ver ${atividades.length} procedimentos de ${pet.nome} às ${hour}:00"
-                data-exec-trigger
-                data-pet-id="${pet.id}"
-                data-hour="${hour}"
-              >
-                ${atividades.length}
-              </button>
-            </div>
-          </div>
+          <td class="border border-gray-100 px-2 py-2 text-center">
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white shadow-sm"
+              title="${atividades.length} procedimentos"
+              aria-label="Ver ${atividades.length} procedimentos de ${pet.nome} às ${hour}:00"
+              data-exec-trigger
+              data-pet-id="${pet.id}"
+              data-hour="${hour}"
+            >
+              ${atividades.length}
+            </button>
+          </td>
         `;
       }).join('');
 
       return `
-        <div class="grid grid-cols-[160px_repeat(${HOURS.length},minmax(44px,1fr))] items-center gap-2 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm">
-          <div>
-            <p class="text-sm font-semibold text-gray-900">${pet.nome}</p>
+        <tr class="bg-white text-sm text-gray-700 shadow-sm">
+          <td class="min-w-[220px] rounded-l-2xl border border-gray-100 px-4 py-3 align-top">
+            <p class="text-base font-semibold text-gray-900">${pet.nome}</p>
             <p class="text-xs text-gray-500">${pet.internacao.box} · ${pet.agenda.servico}</p>
             <p class="text-[11px] text-gray-400">Equipe: ${pet.internacao.equipeMedica}</p>
-          </div>
+          </td>
           ${hourCells}
-        </div>
+        </tr>
       `;
     })
     .join('');
@@ -249,14 +250,21 @@ export function renderMapaExecucao(root, dataset, { petId } = {}) {
           </div>
           <div class="flex items-center gap-3 text-xs text-gray-500">
             <span class="inline-flex items-center gap-2"><span class="inline-flex h-3 w-3 rounded-full bg-primary/70"></span>Círculo = quantidade</span>
-            <span class="inline-flex items-center gap-2"><span class="h-4 w-4 rounded-lg border border-dashed border-gray-300"></span>Sem ações</span>
+            <span class="inline-flex items-center gap-2"><span class="h-4 w-4 rounded-full border border-dashed border-gray-300"></span>Sem ações</span>
           </div>
         </div>
         <div class="mt-6 overflow-x-auto">
-          <div class="min-w-[960px] space-y-3">
-            ${headerRow}
-            ${rows}
-          </div>
+          <table class="min-w-[960px] border-separate border-spacing-y-3">
+            <thead>
+              <tr>
+                <th class="min-w-[220px] rounded-l-2xl bg-gray-50 px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">Pet / Box</th>
+                ${headerCells}
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
