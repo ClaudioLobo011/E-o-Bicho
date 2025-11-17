@@ -339,13 +339,13 @@ function getBoxOptions(dataset) {
 function renderTagList() {
   if (!internarModal.tagsList) return;
   if (!internarModal.tags.length) {
-    internarModal.tagsList.innerHTML = '<span class="text-xs text-gray-400">Nenhuma marcação adicionada.</span>';
+    internarModal.tagsList.innerHTML = '<span class="text-[11px] text-gray-400">Nenhuma marcação adicionada.</span>';
     return;
   }
   internarModal.tagsList.innerHTML = internarModal.tags
     .map(
       (tag) =>
-        `<span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">${escapeHtml(
+        `<span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">${escapeHtml(
           tag,
         )}<button type="button" class="text-primary/80 hover:text-primary" data-remove-tag="${escapeHtml(tag)}"><i class="fas fa-xmark text-[10px]"></i></button></span>`,
     )
@@ -368,6 +368,9 @@ function setInternarModalTab(targetId) {
 
 function closeInternarPetModal() {
   if (!internarModal.overlay) return;
+  if (internarModal.dialog) {
+    internarModal.dialog.classList.add('opacity-0', 'scale-95');
+  }
   internarModal.overlay.classList.add('hidden');
   delete internarModal.overlay.dataset.modalOpen;
   if (internarModal.form) {
@@ -382,95 +385,103 @@ function ensureInternarPetModal() {
   if (internarModal.overlay) return internarModal.overlay;
 
   const overlay = document.createElement('div');
-  overlay.className = 'internar-pet-modal fixed inset-0 z-[999] hidden flex items-center justify-center bg-black/50 px-4 py-6';
+  overlay.className = 'internar-pet-modal fixed inset-0 z-[999] hidden';
   const situacaoOptions = createOptionsMarkup(INTERNAR_SITUACAO_OPTIONS);
   const riscoOptions = createOptionsMarkup(INTERNAR_RISCO_OPTIONS);
   overlay.innerHTML = `
-    <div class="modal-shell w-full max-w-4xl rounded-2xl bg-white shadow-2xl ring-1 ring-black/10" role="dialog" aria-modal="true" aria-labelledby="internar-pet-modal-title" data-internar-dialog tabindex="-1">
-      <header class="flex flex-col gap-2 border-b border-gray-100 px-6 py-4 sm:flex-row sm:items-start">
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-primary">Internação</p>
-          <h2 id="internar-pet-modal-title" class="text-xl font-bold text-gray-900">Internar pet</h2>
-          <p class="text-sm text-gray-500">Preencha os dados clínicos e administrativos para encaminhar o paciente.</p>
-        </div>
-        <button type="button" class="ml-auto text-gray-400 transition hover:text-gray-600" data-close-modal aria-label="Fechar modal">
-          <i class="fas fa-xmark text-lg"></i>
-        </button>
-      </header>
-      <form class="space-y-6 px-6 pb-6 pt-4" novalidate>
-        <div class="grid gap-4 md:grid-cols-2">
-          <label class="text-sm font-medium text-gray-700">Situação
-            <select name="internarSituacao" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:ring-primary">
-              ${situacaoOptions}
-            </select>
-          </label>
-          <label class="text-sm font-medium text-gray-700">Risco
-            <select name="internarRisco" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:ring-primary">
-              <option value="">Selecione</option>
-              ${riscoOptions}
-            </select>
-          </label>
-          <label class="text-sm font-medium text-gray-700">Veterinário
-            <select name="internarVeterinario" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:ring-primary">
-              <option value="">Selecione</option>
-            </select>
-          </label>
-          <label class="text-sm font-medium text-gray-700">Box
-            <select name="internarBox" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:ring-primary">
-              <option value="">Selecione</option>
-            </select>
-          </label>
-        </div>
-        <label class="text-sm font-medium text-gray-700">Alta prevista
-          <input type="date" name="internarAltaPrevista" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:ring-primary" />
-        </label>
-
-        <div class="space-y-3">
-          <div class="flex flex-wrap gap-2 text-sm font-semibold text-gray-600">
-            <button type="button" class="rounded-xl px-4 py-2 text-primary" data-tab-target="medica">Informações médicas</button>
-            <button type="button" class="rounded-xl px-4 py-2 text-gray-600" data-tab-target="observacoes">Acessórios e observações</button>
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div class="modal-shell relative flex w-full max-w-4xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200" role="dialog" aria-modal="true" aria-labelledby="internar-pet-modal-title" data-internar-dialog tabindex="-1">
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-hospital"></i>
+              Internação
+            </span>
+            <h2 id="internar-pet-modal-title" class="mt-1.5 text-lg font-semibold text-gray-900">Internar pet</h2>
+            <p class="mt-1 max-w-2xl text-[11px] text-gray-600">Preencha os dados clínicos e administrativos para encaminhar o paciente para o box escolhido.</p>
           </div>
-          <div class="space-y-4" data-tab-panel="medica">
-            <label class="text-sm font-medium text-gray-700">Queixa
-              <textarea name="internarQueixa" rows="3" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:ring-primary" placeholder="Descreva a queixa principal"></textarea>
+          <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-modal aria-label="Fechar modal">
+            <i class="fas fa-times text-base"></i>
+          </button>
+        </header>
+        <form class="flex max-h-[80vh] flex-col overflow-hidden" novalidate>
+          <div class="flex-1 overflow-y-auto px-4 py-4">
+            <div class="grid gap-4 md:grid-cols-2">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Situação
+                <select name="internarSituacao" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                  ${situacaoOptions}
+                </select>
+              </label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Risco
+                <select name="internarRisco" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                  <option value="">Selecione</option>
+                  ${riscoOptions}
+                </select>
+              </label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Veterinário
+                <select name="internarVeterinario" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                  <option value="">Selecione</option>
+                </select>
+              </label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Box
+                <select name="internarBox" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                  <option value="">Selecione</option>
+                </select>
+              </label>
+            </div>
+            <label class="mt-4 block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Alta prevista
+              <input type="date" name="internarAltaPrevista" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
             </label>
-            <label class="text-sm font-medium text-gray-700">Diagnóstico
-              <textarea name="internarDiagnostico" rows="3" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:ring-primary" placeholder="Informe o diagnóstico clínico"></textarea>
-            </label>
-            <label class="text-sm font-medium text-gray-700">Prognóstico
-              <textarea name="internarPrognostico" rows="3" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:ring-primary" placeholder="Indique o prognóstico esperado"></textarea>
-            </label>
-            <div>
-              <p class="text-sm font-medium text-gray-700">Alergias e marcações</p>
-              <div class="mt-2 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-4">
-                <div class="flex flex-wrap gap-2" data-tags-list>
-                  <span class="text-xs text-gray-400">Nenhuma marcação adicionada.</span>
+
+            <div class="mt-5 space-y-3">
+              <nav class="flex flex-wrap gap-2 border-b border-gray-100 pb-2" aria-label="Abas do modal">
+                <button type="button" class="rounded-full border border-transparent px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-600 transition" data-tab-target="medica">Informações médicas</button>
+                <button type="button" class="rounded-full border border-transparent px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-600 transition" data-tab-target="observacoes">Acessórios e observações</button>
+              </nav>
+              <div class="space-y-4" data-tab-panel="medica">
+                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Queixa
+                  <textarea name="internarQueixa" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Descreva a queixa principal"></textarea>
+                </label>
+                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Diagnóstico
+                  <textarea name="internarDiagnostico" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Informe o diagnóstico clínico"></textarea>
+                </label>
+                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Prognóstico
+                  <textarea name="internarPrognostico" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Indique o prognóstico esperado"></textarea>
+                </label>
+                <div>
+                  <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Alergias e marcações</p>
+                  <div class="mt-2 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-4">
+                    <div class="flex flex-wrap gap-2" data-tags-list>
+                      <span class="text-[11px] text-gray-400">Nenhuma marcação adicionada.</span>
+                    </div>
+                    <input type="text" data-tags-input class="mt-3 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Digite e pressione Enter" />
+                  </div>
                 </div>
-                <input type="text" data-tags-input class="mt-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:ring-primary" placeholder="Digite e pressione Enter" />
+              </div>
+              <div class="space-y-4 hidden" data-tab-panel="observacoes">
+                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Acessórios
+                  <textarea name="internarAcessorios" rows="4" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Coleiras, colares elisabetanos, cateteres, etc."></textarea>
+                </label>
+                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Observações
+                  <textarea name="internarObservacoes" rows="4" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Informações administrativas ou recados à enfermagem"></textarea>
+                </label>
               </div>
             </div>
           </div>
-          <div class="space-y-4 hidden" data-tab-panel="observacoes">
-            <label class="text-sm font-medium text-gray-700">Acessórios
-              <textarea name="internarAcessorios" rows="4" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:ring-primary" placeholder="Coleiras, colares elisabetanos, cateteres, etc."></textarea>
-            </label>
-            <label class="text-sm font-medium text-gray-700">Observações
-              <textarea name="internarObservacoes" rows="4" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-primary focus:ring-primary" placeholder="Informações administrativas ou recados à enfermagem"></textarea>
-            </label>
-          </div>
-        </div>
 
-        <div class="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <div class="flex items-center gap-2 text-xs text-gray-500">
-            <i class="fas fa-circle-info text-primary"></i>
-            <span>Interface ilustrativa — os dados não são enviados ao servidor.</span>
-          </div>
-          <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <button type="button" class="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50" data-close-modal>Cancelar</button>
-            <button type="submit" class="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90">Salvar</button>
-          </div>
-        </div>
-      </form>
+          <footer class="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex items-center gap-2 text-[11px] text-gray-500">
+              <i class="fas fa-circle-info text-primary"></i>
+              <span>Interface ilustrativa — os dados não são enviados ao servidor.</span>
+            </div>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-modal>Cancelar</button>
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90">Salvar</button>
+            </div>
+          </footer>
+        </form>
+      </div>
     </div>
   `;
 
@@ -584,7 +595,10 @@ function openInternarPetModal(dataset) {
   internarModal.overlay.classList.remove('hidden');
   internarModal.overlay.dataset.modalOpen = 'true';
   if (internarModal.dialog) {
-    internarModal.dialog.focus();
+    requestAnimationFrame(() => {
+      internarModal.dialog.classList.remove('opacity-0', 'scale-95');
+      internarModal.dialog.focus();
+    });
   }
 }
 
