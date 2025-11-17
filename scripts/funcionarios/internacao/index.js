@@ -214,8 +214,8 @@ async function handleBoxesModalSubmit(event) {
   const payload = {
     box: (formData.get('box') || '').toString().trim(),
     especialidade: (formData.get('especialidade') || '').toString().trim(),
-    status: (formData.get('status') || '').toString().trim(),
-    ocupante: (formData.get('ocupante') || '').toString().trim(),
+    status: 'Disponível',
+    ocupante: 'Livre',
     higienizacao: (formData.get('higienizacao') || '').toString().trim(),
     observacao: (formData.get('observacao') || '').toString().trim(),
   };
@@ -225,7 +225,6 @@ async function handleBoxesModalSubmit(event) {
     return;
   }
 
-  if (!payload.ocupante) payload.ocupante = 'Livre';
   if (!payload.higienizacao) payload.higienizacao = '—';
 
   setBoxesModalLoading(true);
@@ -248,7 +247,7 @@ function ensureCreateBoxModal() {
   if (boxesModal.overlay) return boxesModal.overlay;
 
   const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-[9999] hidden items-center justify-center bg-black/50 px-4 py-6';
+  overlay.className = 'fixed inset-0 z-[9999] hidden flex items-center justify-center bg-black/50 px-4 py-6';
   overlay.innerHTML = `
     <div class="w-full max-w-xl rounded-2xl bg-white shadow-2xl ring-1 ring-black/10" data-boxes-modal-dialog tabindex="-1">
       <header class="flex items-start justify-between gap-4 border-b border-gray-100 px-6 py-4">
@@ -268,12 +267,6 @@ function ensureCreateBoxModal() {
           </label>
           <label class="text-sm font-medium text-gray-700">Especialidade
             <input type="text" name="especialidade" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Clínico, Cirúrgico..." />
-          </label>
-          <label class="text-sm font-medium text-gray-700">Status
-            <input type="text" name="status" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Disponível, Em observação..." />
-          </label>
-          <label class="text-sm font-medium text-gray-700">Ocupante
-            <input type="text" name="ocupante" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Livre ou nome do pet" />
           </label>
         </div>
         <label class="text-sm font-medium text-gray-700">Higienização programada
