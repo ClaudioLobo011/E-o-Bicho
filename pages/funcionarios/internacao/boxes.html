@@ -25,15 +25,21 @@
               <h1 class="text-2xl font-bold text-gray-800">Mapa de boxes</h1>
               <p class="text-sm text-gray-500">Distribuição dos leitos sincronizada com os apontamentos da agenda e da ficha clínica.</p>
             </div>
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
               <label class="flex flex-col text-sm font-medium text-gray-700">
                 Pet/Tutor
                 <select data-internacao-pet-filter class="mt-1 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary"></select>
               </label>
-              <button class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-primary/40 hover:text-primary">
-                <i class="fas fa-qrcode"></i>
-                Etiquetas dos boxes
-              </button>
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-primary/40 hover:text-primary">
+                  <i class="fas fa-qrcode"></i>
+                  Etiquetas dos boxes
+                </button>
+                <button type="button" data-boxes-create class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90">
+                  <i class="fas fa-plus"></i>
+                  Criar box
+                </button>
+              </div>
             </div>
           </header>
 

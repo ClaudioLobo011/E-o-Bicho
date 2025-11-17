@@ -1,5 +1,14 @@
 import { internacaoDataset } from './data.js';
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const HOURS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0'));
 
 const statusColors = {
@@ -454,28 +463,65 @@ export function renderModelosPrescricao(root, dataset, { petId } = {}) {
   `;
 }
 
-export function renderBoxes(root, dataset, { petId } = {}) {
+export function renderBoxes(root, dataset, { petId, boxesLoading, boxesError, boxes } = {}) {
   const highlightNome = petId ? dataset.pacientes.find((pet) => pet.id === petId)?.nome : null;
+  const resolvedBoxes = Array.isArray(boxes) ? boxes : Array.isArray(dataset.boxes) ? dataset.boxes : [];
 
-  const cards = dataset.boxes.map((box) => {
-    const isTarget = highlightNome && box.ocupante === highlightNome;
-    return `
-      <article class="rounded-2xl border ${isTarget ? 'border-primary ring-1 ring-primary/30' : 'border-gray-100'} p-5 shadow-sm">
-        <header class="flex items-center justify-between">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">${box.especialidade}</p>
-            <h2 class="text-xl font-semibold text-gray-900">${box.box}</h2>
-          </div>
-          <span class="rounded-full px-3 py-1 text-xs font-semibold ${box.ocupante === 'Livre' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-700'}">${box.status}</span>
-        </header>
-        <div class="mt-4 text-sm text-gray-600">
-          <p>Ocupante: <span class="font-semibold text-gray-900">${box.ocupante}</span></p>
-          <p>Higienização: ${box.higienizacao}</p>
-          <p>Observação: ${box.observacao}</p>
-        </div>
-      </article>
+  if (boxesLoading) {
+    root.innerHTML = `
+      <div class="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-gray-200 bg-white/60 px-6 py-12 text-center text-sm text-gray-500">
+        <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary/5 text-primary">
+          <i class="fas fa-spinner animate-spin"></i>
+        </span>
+        Carregando boxes cadastrados...
+      </div>
     `;
-  }).join('');
+    return;
+  }
+
+  if (boxesError) {
+    root.innerHTML = `
+      <div class="rounded-2xl border border-red-100 bg-red-50 px-6 py-10 text-center text-sm text-red-700">
+        <p class="font-semibold">${escapeHtml(boxesError)}</p>
+        <p class="mt-2 text-red-600/80">Tente novamente ou contate o suporte.</p>
+        <button type="button" data-boxes-retry class="mt-4 inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-white">
+          <i class="fas fa-rotate"></i>
+          Tentar novamente
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  if (!resolvedBoxes.length) {
+    root.innerHTML = buildEmptyState('Nenhum box cadastrado até o momento. Utilize o botão “Criar box” para começar.');
+    return;
+  }
+
+  const cards = resolvedBoxes
+    .map((box) => {
+      const ocupante = box?.ocupante || 'Livre';
+      const isTarget = highlightNome && ocupante === highlightNome;
+      const observacao = box?.observacao?.trim() ? box.observacao : 'Sem observações registradas.';
+      const especialidade = box?.especialidade?.trim() ? box.especialidade : 'Sem especialidade definida';
+      return `
+        <article class="rounded-2xl border ${isTarget ? 'border-primary ring-1 ring-primary/30' : 'border-gray-100'} p-5 shadow-sm transition hover:-translate-y-0.5">
+          <header class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">${escapeHtml(especialidade)}</p>
+              <h2 class="text-xl font-semibold text-gray-900">${escapeHtml(box?.box || 'Box')}</h2>
+            </div>
+            <span class="rounded-full px-3 py-1 text-xs font-semibold ${ocupante === 'Livre' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-700'}">${escapeHtml(box?.status || (ocupante === 'Livre' ? 'Disponível' : 'Em uso'))}</span>
+          </header>
+          <div class="mt-4 space-y-1 text-sm text-gray-600">
+            <p>Ocupante: <span class="font-semibold text-gray-900">${escapeHtml(ocupante)}</span></p>
+            <p>Higienização: ${escapeHtml(box?.higienizacao || '—')}</p>
+            <p>Observação: ${escapeHtml(observacao)}</p>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
 
   root.innerHTML = `<div class="grid grid-cols-1 gap-4 md:grid-cols-2">${cards}</div>`;
 }

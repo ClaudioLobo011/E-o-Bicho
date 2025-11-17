@@ -33,6 +33,17 @@ const internarModal = {
   tags: [],
 };
 
+const boxesModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  errorEl: null,
+  submitBtn: null,
+  onSuccess: null,
+};
+
+let boxesAuthRedirecting = false;
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -44,6 +55,278 @@ function escapeHtml(value) {
 
 function createOptionsMarkup(options) {
   return options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
+}
+
+function getAuthToken() {
+  try {
+    const cached = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+    return cached?.token || null;
+  } catch (error) {
+    console.error('internacao: falha ao ler token do usuário logado', error);
+    return null;
+  }
+}
+
+function showToastMessage(message, type = 'info') {
+  const text = String(message || '').trim();
+  if (!text) return;
+  if (typeof window?.showToast === 'function') {
+    window.showToast(text, type);
+    return;
+  }
+  if (typeof window?.alert === 'function') {
+    window.alert(text);
+  } else {
+    console.log(text);
+  }
+}
+
+function handleUnauthorizedRedirect() {
+  if (boxesAuthRedirecting) return;
+  boxesAuthRedirecting = true;
+  showToastMessage('Sua sessão expirou. Faça login novamente.', 'warning');
+  setTimeout(() => {
+    window.location.replace('/pages/login.html');
+  }, 1200);
+}
+
+async function requestJson(path, options = {}) {
+  const token = getAuthToken();
+  const headers = { Accept: 'application/json', ...(options.headers || {}) };
+  let body = options.body;
+
+  if (body && !(body instanceof FormData)) {
+    if (typeof body === 'object' && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+    if (headers['Content-Type']?.includes('application/json') && typeof body === 'object') {
+      body = JSON.stringify(body);
+    }
+  }
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  let response;
+  try {
+    response = await fetch(`${API_CONFIG.BASE_URL}${path}`, {
+      ...options,
+      headers,
+      body,
+    });
+  } catch (error) {
+    console.error('internacao: falha ao acessar a API', error);
+    throw new Error('Não foi possível se conectar ao servidor.');
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    handleUnauthorizedRedirect();
+    throw new Error('Sua sessão expirou. Faça login novamente.');
+  }
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (error) {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const message = data?.message || 'Erro ao comunicar com o servidor.';
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+function normalizeBox(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const boxLabel = typeof raw.box === 'string' && raw.box.trim() ? raw.box.trim() : 'Box';
+  const ocupante = typeof raw.ocupante === 'string' && raw.ocupante.trim() ? raw.ocupante.trim() : 'Livre';
+  const status = typeof raw.status === 'string' && raw.status.trim()
+    ? raw.status.trim()
+    : ocupante === 'Livre'
+      ? 'Disponível'
+      : 'Em uso';
+  const especialidade = typeof raw.especialidade === 'string' ? raw.especialidade.trim() : '';
+  const higienizacao = typeof raw.higienizacao === 'string' && raw.higienizacao.trim() ? raw.higienizacao.trim() : '—';
+  const observacao = typeof raw.observacao === 'string' ? raw.observacao.trim() : '';
+
+  return {
+    id: String(raw.id || raw._id || boxLabel).trim() || boxLabel,
+    box: boxLabel,
+    ocupante,
+    status,
+    especialidade,
+    higienizacao,
+    observacao,
+  };
+}
+
+function setBoxesModalError(message) {
+  if (!boxesModal.errorEl) return;
+  const text = String(message || '').trim();
+  boxesModal.errorEl.textContent = text;
+  boxesModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setBoxesModalLoading(isLoading) {
+  if (!boxesModal.submitBtn) return;
+  if (!boxesModal.submitBtn.dataset.defaultLabel) {
+    boxesModal.submitBtn.dataset.defaultLabel = boxesModal.submitBtn.textContent.trim();
+  }
+  boxesModal.submitBtn.disabled = !!isLoading;
+  boxesModal.submitBtn.classList.toggle('opacity-70', !!isLoading);
+  boxesModal.submitBtn.textContent = isLoading ? 'Salvando...' : boxesModal.submitBtn.dataset.defaultLabel;
+}
+
+function closeCreateBoxModal() {
+  if (!boxesModal.overlay) return;
+  boxesModal.overlay.classList.add('hidden');
+  boxesModal.overlay.removeAttribute('data-modal-open');
+  if (boxesModal.form) {
+    boxesModal.form.reset();
+  }
+  setBoxesModalError('');
+}
+
+function openCreateBoxModal() {
+  ensureCreateBoxModal();
+  if (!boxesModal.overlay) return;
+  boxesModal.overlay.classList.remove('hidden');
+  boxesModal.overlay.dataset.modalOpen = 'true';
+  setBoxesModalError('');
+  if (boxesModal.dialog) {
+    boxesModal.dialog.focus();
+  }
+  if (boxesModal.form) {
+    const firstInput = boxesModal.form.querySelector('input[name="box"]');
+    if (firstInput) firstInput.focus();
+  }
+}
+
+async function handleBoxesModalSubmit(event) {
+  event.preventDefault();
+  if (!boxesModal.form) return;
+  setBoxesModalError('');
+  const formData = new FormData(boxesModal.form);
+  const payload = {
+    box: (formData.get('box') || '').toString().trim(),
+    especialidade: (formData.get('especialidade') || '').toString().trim(),
+    status: (formData.get('status') || '').toString().trim(),
+    ocupante: (formData.get('ocupante') || '').toString().trim(),
+    higienizacao: (formData.get('higienizacao') || '').toString().trim(),
+    observacao: (formData.get('observacao') || '').toString().trim(),
+  };
+
+  if (!payload.box) {
+    setBoxesModalError('Informe o nome do box.');
+    return;
+  }
+
+  if (!payload.ocupante) payload.ocupante = 'Livre';
+  if (!payload.higienizacao) payload.higienizacao = '—';
+
+  setBoxesModalLoading(true);
+  try {
+    await requestJson('/internacao/boxes', { method: 'POST', body: payload });
+    showToastMessage('Box criado com sucesso.', 'success');
+    closeCreateBoxModal();
+    if (typeof boxesModal.onSuccess === 'function') {
+      boxesModal.onSuccess();
+    }
+  } catch (error) {
+    console.error('internacao: falha ao salvar box', error);
+    setBoxesModalError(error.message || 'Não foi possível salvar o box.');
+  } finally {
+    setBoxesModalLoading(false);
+  }
+}
+
+function ensureCreateBoxModal() {
+  if (boxesModal.overlay) return boxesModal.overlay;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-[9999] hidden items-center justify-center bg-black/50 px-4 py-6';
+  overlay.innerHTML = `
+    <div class="w-full max-w-xl rounded-2xl bg-white shadow-2xl ring-1 ring-black/10" data-boxes-modal-dialog tabindex="-1">
+      <header class="flex items-start justify-between gap-4 border-b border-gray-100 px-6 py-4">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-primary">Internação</p>
+          <h2 class="text-xl font-bold text-gray-900">Criar novo box</h2>
+          <p class="text-sm text-gray-500">Organize os leitos disponíveis antes de iniciar uma internação.</p>
+        </div>
+        <button type="button" class="text-gray-400 transition hover:text-gray-600" data-close-boxes-modal>
+          <i class="fas fa-xmark text-lg"></i>
+        </button>
+      </header>
+      <form class="space-y-4 px-6 py-5" novalidate>
+        <div class="grid gap-4 md:grid-cols-2">
+          <label class="text-sm font-medium text-gray-700">Nome do box
+            <input type="text" name="box" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Ex.: Box 07" required />
+          </label>
+          <label class="text-sm font-medium text-gray-700">Especialidade
+            <input type="text" name="especialidade" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Clínico, Cirúrgico..." />
+          </label>
+          <label class="text-sm font-medium text-gray-700">Status
+            <input type="text" name="status" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Disponível, Em observação..." />
+          </label>
+          <label class="text-sm font-medium text-gray-700">Ocupante
+            <input type="text" name="ocupante" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Livre ou nome do pet" />
+          </label>
+        </div>
+        <label class="text-sm font-medium text-gray-700">Higienização programada
+          <input type="text" name="higienizacao" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Ex.: 09h30" />
+        </label>
+        <label class="text-sm font-medium text-gray-700">Observações
+          <textarea name="observacao" rows="3" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary" placeholder="Detalhes adicionais para a equipe"></textarea>
+        </label>
+        <div class="hidden rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700" data-boxes-modal-error></div>
+        <div class="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-end">
+          <button type="button" class="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50" data-close-boxes-modal>Cancelar</button>
+          <button type="submit" class="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90" data-boxes-modal-submit>Salvar</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  boxesModal.overlay = overlay;
+  boxesModal.dialog = overlay.querySelector('[data-boxes-modal-dialog]');
+  boxesModal.form = overlay.querySelector('form');
+  boxesModal.errorEl = overlay.querySelector('[data-boxes-modal-error]');
+  boxesModal.submitBtn = overlay.querySelector('[data-boxes-modal-submit]');
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeCreateBoxModal();
+    }
+  });
+
+  overlay.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeCreateBoxModal();
+    }
+  });
+
+  overlay.querySelectorAll('[data-close-boxes-modal]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      closeCreateBoxModal();
+    });
+  });
+
+  if (boxesModal.form) {
+    boxesModal.form.addEventListener('submit', handleBoxesModalSubmit);
+  }
+
+  return overlay;
+}
+
+function initCreateBoxModal(onSuccess) {
+  boxesModal.onSuccess = onSuccess;
+  ensureCreateBoxModal();
 }
 
 function getEquipeOptions(dataset) {
@@ -359,13 +642,61 @@ function updateSyncInfo(dataset) {
   el.textContent = `${texto} · ${fichaAtualizada}`;
 }
 
+function setupBoxesPage(dataset, state, render) {
+  const root = document.querySelector('[data-internacao-root]');
+
+  const fetchBoxes = async () => {
+    state.boxesLoading = true;
+    state.boxesError = '';
+    render();
+    try {
+      const data = await requestJson('/internacao/boxes');
+      const normalized = Array.isArray(data) ? data.map(normalizeBox).filter(Boolean) : [];
+      dataset.boxes = normalized;
+      state.boxes = normalized;
+      state.boxesLoading = false;
+      render();
+    } catch (error) {
+      console.error('internacao: falha ao carregar boxes', error);
+      state.boxesError = error.message || 'Não foi possível carregar os boxes.';
+      state.boxesLoading = false;
+      render();
+    }
+  };
+
+  const createBtn = document.querySelector('[data-boxes-create]');
+  if (createBtn) {
+    createBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      openCreateBoxModal();
+    });
+  }
+
+  if (root) {
+    root.addEventListener('click', (event) => {
+      if (event.target.closest('[data-boxes-retry]')) {
+        event.preventDefault();
+        fetchBoxes();
+      }
+    });
+  }
+
+  initCreateBoxModal(fetchBoxes);
+  fetchBoxes();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const root = document.querySelector('[data-internacao-root]');
   const view = document.body?.dataset?.internacaoPage || '';
   if (!root || !view) return;
 
   const dataset = getDataset();
-  const state = { petId: '' };
+  const state = {
+    petId: '',
+    boxes: Array.isArray(dataset.boxes) ? [...dataset.boxes] : [],
+    boxesLoading: false,
+    boxesError: '',
+  };
 
   const render = () => {
     const renderer = VIEW_RENDERERS[view];
@@ -376,6 +707,10 @@ document.addEventListener('DOMContentLoaded', () => {
   fillPetFilters(dataset, state.petId);
   updateSyncInfo(dataset);
   render();
+
+  if (view === 'boxes') {
+    setupBoxesPage(dataset, state, render);
+  }
 
   document.querySelectorAll('[data-internacao-pet-filter]').forEach((select) => {
     select.addEventListener('change', (event) => {
