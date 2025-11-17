@@ -9101,13 +9101,20 @@
           }
 
           if (!Array.isArray(item?.barcodeCandidates) || item.barcodeCandidates.length === 0) {
-            cell.appendChild(
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex flex-col gap-1';
+            wrapper.appendChild(
               createStatusBadge(
                 ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
                 'fas fa-barcode',
                 'Sem GTIN'
               )
             );
+            const button = createProductActionButton('Cadastrar', 'fas fa-plus');
+            button.dataset.productBarcode = '';
+            button.addEventListener('click', () => openProductRegistration(item));
+            wrapper.appendChild(button);
+            cell.appendChild(wrapper);
             return cell;
           }
 
