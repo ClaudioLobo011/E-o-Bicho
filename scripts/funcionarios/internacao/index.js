@@ -1235,40 +1235,44 @@ function ensureFichaInternacaoModal() {
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
       <div
-        class="relative flex w-full max-w-5xl transform-gpu flex-col overflow-hidden rounded-3xl bg-white text-sm text-gray-700 shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200"
+        class="relative flex w-full max-w-[1352px] transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] text-gray-700 shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95 max-h-[90vh]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="ficha-internacao-title"
         data-ficha-dialog
         tabindex="-1"
       >
-        <header class="flex items-start justify-between gap-4 border-b border-gray-100 px-6 py-4">
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p class="text-[10px] font-semibold uppercase tracking-wide text-primary">Internação</p>
-            <h2 id="ficha-internacao-title" class="text-xl font-semibold text-gray-900">Ficha de internação</h2>
-            <p class="text-xs text-gray-500" data-ficha-subtitle>Detalhes completos da internação.</p>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-stethoscope"></i>
+              Internação ativa
+            </span>
+            <h2 id="ficha-internacao-title" class="mt-1.5 text-lg font-semibold text-gray-900">Ficha de internação</h2>
+            <p class="mt-1 text-[11px] text-gray-600" data-ficha-subtitle>Detalhes completos da internação.</p>
           </div>
-          <button type="button" class="rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-modal>
-            <i class="fas fa-xmark text-base"></i>
+          <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-modal>
+            <span class="sr-only">Fechar modal</span>
+            <i class="fas fa-xmark text-sm"></i>
           </button>
         </header>
-        <div class="flex max-h-[90vh] flex-col overflow-hidden">
-          <div class="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+        <div class="flex flex-1 flex-col overflow-hidden">
+          <div class="flex-1 overflow-y-auto px-4 py-4">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div class="space-y-1">
                 <div class="flex flex-wrap items-center gap-2">
-                  <h3 class="text-lg font-semibold text-gray-900" data-ficha-pet-nome>Paciente</h3>
-                  <span class="rounded-full border border-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-600" data-ficha-situacao-badge>—</span>
-                  <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-gray-200" data-ficha-risco-badge>—</span>
+                  <h3 class="text-[15px] font-semibold text-gray-900" data-ficha-pet-nome>Paciente</h3>
+                  <span class="rounded-full border border-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600" data-ficha-situacao-badge>—</span>
+                  <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-gray-200" data-ficha-risco-badge>—</span>
                 </div>
-                <p class="text-sm text-gray-500" data-ficha-pet-meta>—</p>
-                <p class="text-xs text-gray-400" data-ficha-tutor-resumo>—</p>
+                <p class="text-[11px] text-gray-500" data-ficha-pet-meta>—</p>
+                <p class="text-[10px] text-gray-400" data-ficha-tutor-resumo>—</p>
               </div>
               <div class="flex flex-wrap items-center justify-end gap-2" data-ficha-actions>
                 ${['Editar', 'Alta', 'Óbito', 'Box', 'Cancelar']
                   .map(
                     (acao) => `
-                      <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-primary/40 hover:text-primary" data-ficha-action="${acao.toLowerCase()}">
+                      <button type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-gray-600 transition hover:border-primary/40 hover:text-primary" data-ficha-action="${acao.toLowerCase()}">
                         ${acao}
                       </button>
                     `,
@@ -1277,64 +1281,64 @@ function ensureFichaInternacaoModal() {
               </div>
             </div>
 
-            <div>
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Marcações clínicas</p>
-              <div class="mt-2 flex flex-wrap gap-2" data-ficha-tags></div>
+            <div class="mt-4">
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Marcações clínicas</p>
+              <div class="mt-2 flex flex-wrap gap-1.5" data-ficha-tags></div>
             </div>
 
-            <div class="rounded-2xl border border-gray-100 p-4">
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Informações do tutor</p>
-              <p class="mt-2 text-sm font-semibold text-gray-900" data-ficha-tutor-nome>—</p>
-              <p class="text-xs text-gray-500" data-ficha-tutor-contatos>—</p>
+            <div class="mt-4 rounded-xl border border-gray-200 px-4 py-3">
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Informações do tutor</p>
+              <p class="mt-1.5 text-[13px] font-semibold text-gray-900" data-ficha-tutor-nome>—</p>
+              <p class="text-[11px] text-gray-500" data-ficha-tutor-contatos>—</p>
             </div>
 
-            <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-              <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+            <div class="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              <div class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
                 <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Status</p>
-                <p class="text-sm font-semibold text-gray-900" data-ficha-status>—</p>
+                <p class="text-[13px] font-semibold text-gray-900" data-ficha-status>—</p>
               </div>
-              <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+              <div class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
                 <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Box internado</p>
-                <p class="text-sm font-semibold text-gray-900" data-ficha-box>—</p>
+                <p class="text-[13px] font-semibold text-gray-900" data-ficha-box>—</p>
               </div>
-              <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+              <div class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
                 <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Alta prevista</p>
-                <p class="text-sm font-semibold text-gray-900" data-ficha-alta>—</p>
+                <p class="text-[13px] font-semibold text-gray-900" data-ficha-alta>—</p>
               </div>
-              <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+              <div class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
                 <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Duração</p>
-                <p class="text-sm font-semibold text-gray-900" data-ficha-duracao>—</p>
+                <p class="text-[13px] font-semibold text-gray-900" data-ficha-duracao>—</p>
               </div>
-              <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+              <div class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
                 <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Veterinário responsável</p>
-                <p class="text-sm font-semibold text-gray-900" data-ficha-veterinario>—</p>
+                <p class="text-[13px] font-semibold text-gray-900" data-ficha-veterinario>—</p>
               </div>
             </div>
 
-            <div class="grid gap-3 md:grid-cols-2">
-              <div class="rounded-xl border border-gray-100 px-3 py-3">
+            <div class="mt-4 grid gap-3 md:grid-cols-2">
+              <div class="rounded-xl border border-gray-200 px-3 py-2.5">
                 <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Código interno</p>
-                <p class="text-sm font-semibold text-gray-900" data-ficha-codigo>—</p>
+                <p class="text-[13px] font-semibold text-gray-900" data-ficha-codigo>—</p>
               </div>
-              <div class="rounded-xl border border-gray-100 px-3 py-3">
+              <div class="rounded-xl border border-gray-200 px-3 py-2.5">
                 <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Admissão</p>
-                <p class="text-sm font-semibold text-gray-900" data-ficha-admissao>—</p>
+                <p class="text-[13px] font-semibold text-gray-900" data-ficha-admissao>—</p>
               </div>
             </div>
 
-            <div>
-              <div class="flex flex-wrap gap-2 border-b border-gray-100 pb-2 text-[13px] font-semibold text-gray-500">
-                <button type="button" class="rounded-xl px-4 py-2 text-sm text-gray-500 transition" data-ficha-tab="historico">Histórico</button>
-                <button type="button" class="rounded-xl px-4 py-2 text-sm text-gray-500 transition" data-ficha-tab="prescricao">Prescrição médica</button>
+            <div class="mt-4">
+              <div class="flex flex-wrap gap-2 border-b border-gray-100 pb-2 text-[11px] font-semibold text-gray-500">
+                <button type="button" class="rounded-lg px-3 py-1.5 text-[11px] text-gray-500 transition" data-ficha-tab="historico">Histórico</button>
+                <button type="button" class="rounded-lg px-3 py-1.5 text-[11px] text-gray-500 transition" data-ficha-tab="prescricao">Prescrição médica</button>
               </div>
               <div class="pt-4" data-ficha-panel="historico">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                  <div class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</div>
-                  <div class="flex flex-wrap gap-2">
+                  <div class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</div>
+                  <div class="flex flex-wrap gap-1.5">
                     ${['Ocorrência', 'Peso', 'Relatório médico']
                       .map(
                         (acao) => `
-                          <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary/40 hover:text-primary" data-ficha-hist-action="${acao.toLowerCase()}">
+                          <button type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-gray-600 transition hover:border-primary/40 hover:text-primary" data-ficha-hist-action="${acao.toLowerCase()}">
                             ${acao}
                           </button>
                         `,
@@ -1343,17 +1347,17 @@ function ensureFichaInternacaoModal() {
                   </div>
                 </div>
                 <div class="mt-4 space-y-3" data-ficha-historico-list>
-                  <p class="text-sm text-gray-500">Carregando histórico...</p>
+                  <p class="text-[12px] text-gray-500">Carregando histórico...</p>
                 </div>
               </div>
               <div class="hidden pt-4" data-ficha-panel="prescricao">
-                <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+                <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-[12px] text-gray-500">
                   Em desenvolvimento
                 </div>
               </div>
             </div>
           </div>
-          <footer class="border-t border-gray-100 px-6 py-4 text-[11px] text-gray-500">Atualizado em tempo real conforme registros da internação.</footer>
+          <footer class="border-t border-gray-100 px-4 py-3 text-[11px] text-gray-500">Atualizado em tempo real conforme registros da internação.</footer>
         </div>
       </div>
     </div>
