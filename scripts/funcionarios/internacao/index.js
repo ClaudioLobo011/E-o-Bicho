@@ -1330,72 +1330,110 @@ function renderFichaHistorico(record) {
     record.observacoes ? { label: 'Observações', value: record.observacoes } : null,
   ].filter(Boolean);
 
-  const metaSection = metaBlocks.length
-    ? `
-        <div class="mt-3 grid gap-3 md:grid-cols-2">
-          ${metaBlocks
-            .map(
-              (item) => `
-                <div class="rounded-xl bg-gray-50 px-3 py-2">
-                  <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">${escapeHtml(item.label)}</p>
-                  <p class="text-sm font-medium text-gray-900">${escapeHtml(item.value)}</p>
-                </div>
-              `,
-            )
-            .join('')}
-        </div>
-      `
-    : '<p class="mt-3 text-sm text-gray-500">Sem dados administrativos adicionais.</p>';
-
-  const admissionCard = `
-    <article class="rounded-2xl border border-gray-100 p-4 shadow-sm">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-primary">Admissão em internação</p>
-          <h3 class="text-base font-semibold text-gray-900">${escapeHtml(record.pet?.nome || record.petNome || 'Paciente')}</h3>
-        </div>
-        <p class="text-xs text-gray-500">${escapeHtml(admissaoLabel)}</p>
+  const buildMetaGrid = (items = []) => {
+    if (!items.length) {
+      return '<p class="mt-3 text-sm text-gray-500">Sem dados administrativos adicionais.</p>';
+    }
+    return `
+      <div class="mt-3 grid gap-3 md:grid-cols-2">
+        ${items
+          .map(
+            (item) => `
+              <div class="rounded-xl bg-gray-50 px-3 py-2">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">${escapeHtml(item.label)}</p>
+                <p class="text-sm font-medium text-gray-900">${escapeHtml(item.value)}</p>
+              </div>
+            `,
+          )
+          .join('')}
       </div>
-      ${metaSection}
+    `;
+  };
+
+  const buildDetailList = (items = []) => {
+    if (!items.length) {
+      return '<p class="mt-3 text-sm text-gray-500">Sem informações clínicas adicionais registradas.</p>';
+    }
+    return `
       <div class="mt-3 space-y-2 text-sm text-gray-600">
-        ${detalhes
+        ${items
           .map(
             (info) => `
               <p><span class="font-semibold text-gray-800">${escapeHtml(info.label)}:</span> ${escapeHtml(info.value)}</p>
             `,
           )
           .join('')}
-        ${detalhes.length === 0 ? '<p class="text-sm text-gray-500">Sem informações clínicas adicionais registradas.</p>' : ''}
       </div>
-    </article>
-  `;
+    `;
+  };
+
+  const timelineEntries = [];
+  const admissaoTimestamp = record.admissao || record.createdAt || '';
+  timelineEntries.push({
+    id: 'admissao',
+    badge: 'Admissão',
+    title: 'Admissão em internação',
+    subtitle: record.pet?.nome || record.petNome || 'Paciente registrado',
+    timestamp: admissaoTimestamp,
+    timestampLabel: admissaoLabel,
+    extraMarkup: `${buildMetaGrid(metaBlocks)}${buildDetailList(detalhes)}`,
+  });
 
   const updates = Array.isArray(record.historico) ? [...record.historico] : [];
-  const updatesMarkup = updates
+  updates.forEach((entry) => {
+    timelineEntries.push({
+      id: entry.id || entry.criadoEm || `hist-${Date.now()}-${Math.random()}`,
+      badge: entry.tipo || 'Atualização',
+      title: entry.descricao || 'Registro atualizado.',
+      subtitle: entry.criadoPor ? `Responsável: ${entry.criadoPor}` : '',
+      timestamp: entry.criadoEm || entry.createdAt || Date.now(),
+      timestampLabel: formatDateTimeLabel(entry.criadoEm),
+      extraMarkup: '',
+    });
+  });
+
+  const sortedEntries = timelineEntries
+    .filter((entry) => entry && entry.title)
     .sort((a, b) => {
-      const aTime = new Date(a.criadoEm || 0).getTime();
-      const bTime = new Date(b.criadoEm || 0).getTime();
+      const aTime = new Date(a.timestamp || 0).getTime();
+      const bTime = new Date(b.timestamp || 0).getTime();
       return bTime - aTime;
-    })
-    .map((entry) => {
-      const dataLabel = formatDateTimeLabel(entry.criadoEm);
-      const autorLabel = entry.criadoPor ? `Responsável: ${escapeHtml(entry.criadoPor)}` : '';
+    });
+
+  if (!sortedEntries.length) {
+    fichaInternacaoModal.historicoListEl.innerHTML = '<p class="text-sm text-gray-500">Nenhum histórico disponível.</p>';
+    return;
+  }
+
+  const timelineMarkup = sortedEntries
+    .map((entry, index) => {
+      const isLast = index === sortedEntries.length - 1;
+      const lineMarkup = !isLast
+        ? '<span class="absolute left-[7px] top-6 block h-full w-px bg-gray-200" aria-hidden="true"></span>'
+        : '';
       return `
-        <article class="rounded-2xl border border-gray-100 p-4 shadow-sm">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-primary/80">${escapeHtml(entry.tipo || 'Atualização')}</p>
-              <h3 class="text-base font-semibold text-gray-900">${escapeHtml(entry.descricao || 'Registro atualizado.')}</h3>
+        <li class="relative pl-6 sm:pl-8">
+          ${lineMarkup}
+          <span class="absolute left-0 top-4 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold text-primary ring-2 ring-primary/20" aria-hidden="true">
+            <span class="h-2 w-2 rounded-full bg-primary"></span>
+          </span>
+          <article class="rounded-2xl border border-gray-100 p-4 shadow-sm">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-primary/80">${escapeHtml(entry.badge)}</p>
+                <h3 class="text-base font-semibold text-gray-900">${escapeHtml(entry.title)}</h3>
+                ${entry.subtitle ? `<p class="text-xs text-gray-500">${escapeHtml(entry.subtitle)}</p>` : ''}
+              </div>
+              <p class="text-xs text-gray-500">${escapeHtml(entry.timestampLabel || 'Sem data')}</p>
             </div>
-            <p class="text-xs text-gray-500">${escapeHtml(dataLabel)}</p>
-          </div>
-          ${autorLabel ? `<p class="mt-2 text-xs text-gray-500">${autorLabel}</p>` : ''}
-        </article>
+            ${entry.extraMarkup || ''}
+          </article>
+        </li>
       `;
     })
     .join('');
 
-  fichaInternacaoModal.historicoListEl.innerHTML = `${admissionCard}${updatesMarkup}`;
+  fichaInternacaoModal.historicoListEl.innerHTML = `<ol class="relative space-y-4">${timelineMarkup}</ol>`;
 }
 
 function ensureFichaInternacaoModal() {
@@ -1839,10 +1877,15 @@ function setupAnimaisPage(dataset, state, render) {
     try {
       const data = await requestJson('/internacao/registros');
       const normalized = Array.isArray(data) ? data.map(normalizeInternacaoRecord).filter(Boolean) : [];
-      dataset.internacoes = normalized;
-      state.internacoes = normalized;
+      const sorted = [...normalized].sort((a, b) => {
+        const aTime = new Date(a.admissao || a.createdAt || 0).getTime();
+        const bTime = new Date(b.admissao || b.createdAt || 0).getTime();
+        return bTime - aTime;
+      });
+      dataset.internacoes = sorted;
+      state.internacoes = sorted;
       state.internacoesLoading = false;
-      const availableKeys = new Set(normalized.map((item) => item.filterKey));
+      const availableKeys = new Set(sorted.map((item) => item.filterKey));
       if (state.petId && availableKeys.size && !availableKeys.has(state.petId)) {
         state.petId = '';
       }
