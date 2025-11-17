@@ -50,6 +50,45 @@ function openExecucaoModal(pet, hourLabel, items) {
   const existing = document.getElementById('internacao-exec-modal');
   if (existing) existing.remove();
 
+  const actionButtons = [
+    {
+      label: 'Prescrição Médica',
+      icon: 'fa-file-medical',
+      tone: 'text-primary border-primary/20 bg-primary/5',
+    },
+    {
+      label: 'Ocorrência',
+      icon: 'fa-comment-medical',
+      tone: 'text-amber-600 border-amber-200 bg-amber-50/70',
+    },
+    {
+      label: 'Peso',
+      icon: 'fa-weight',
+      tone: 'text-emerald-600 border-emerald-200 bg-emerald-50/70',
+    },
+    {
+      label: 'Parâmetros Clínicos',
+      icon: 'fa-heartbeat',
+      tone: 'text-sky-600 border-sky-200 bg-sky-50/70',
+    },
+  ]
+    .map(
+      (action) => `
+        <button
+          type="button"
+          class="flex items-center gap-3 rounded-2xl border px-3 py-2 text-left text-sm font-semibold text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:shadow"
+          title="${action.label}"
+          data-quick-action
+        >
+          <span class="flex h-9 w-9 items-center justify-center rounded-full ${action.tone}">
+            <i class="fas ${action.icon}"></i>
+          </span>
+          <span>${action.label}</span>
+        </button>
+      `,
+    )
+    .join('');
+
   const overlay = document.createElement('div');
   overlay.id = 'internacao-exec-modal';
   overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4 py-6';
@@ -65,6 +104,12 @@ function openExecucaoModal(pet, hourLabel, items) {
         <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
           <i class="fas fa-xmark text-lg"></i>
         </button>
+      </div>
+      <div class="mt-4">
+        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</p>
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          ${actionButtons}
+        </div>
       </div>
       <div class="mt-4 space-y-3">
         ${items
