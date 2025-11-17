@@ -94,23 +94,17 @@ function openExecucaoModal(pet, hourLabel, items) {
   overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4 py-6';
   overlay.innerHTML = `
     <div class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
-      <div class="flex flex-col gap-4 border-b border-gray-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-primary">Mapa de execução</p>
-          <h2 class="text-lg font-bold text-gray-900">${pet.nome}</h2>
-          <p class="text-sm text-gray-500">${pet.internacao.box} · ${pet.agenda.servico}</p>
-          <p class="text-xs text-gray-400">Horário: ${hourLabel}</p>
-        </div>
-        <div class="flex flex-col items-end gap-2">
-          <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</p>
-          <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div class="flex flex-wrap gap-2 sm:gap-3">
-              ${actionButtons}
-            </div>
-            <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
-              <i class="fas fa-xmark text-lg"></i>
-            </button>
+      <div class="border-b border-gray-100 pb-4">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-primary">Mapa de execução</p>
+            <h2 class="text-lg font-bold text-gray-900">${pet.nome}</h2>
+            <p class="text-sm text-gray-500">${pet.internacao.box} · ${pet.agenda.servico}</p>
+            <p class="text-xs text-gray-400">Horário: ${hourLabel}</p>
           </div>
+          <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
+            <i class="fas fa-xmark text-lg"></i>
+          </button>
         </div>
       </div>
       <div class="mt-4 space-y-3">
@@ -126,8 +120,11 @@ function openExecucaoModal(pet, hourLabel, items) {
           )
           .join('')}
       </div>
-      <div class="mt-6 flex justify-end">
-        <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50" data-close-modal>
+      <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+          ${actionButtons}
+        </div>
+        <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 sm:ml-2" data-close-modal>
           Fechar
         </button>
       </div>
