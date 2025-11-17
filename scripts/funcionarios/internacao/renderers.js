@@ -93,22 +93,22 @@ function openExecucaoModal(pet, hourLabel, items) {
   overlay.id = 'internacao-exec-modal';
   overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4 py-6';
   overlay.innerHTML = `
-    <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-      <div class="flex items-start justify-between gap-4 border-b border-gray-100 pb-4">
+    <div class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
+      <div class="flex flex-col gap-4 border-b border-gray-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-xs font-semibold uppercase tracking-wide text-primary">Mapa de execução</p>
           <h2 class="text-lg font-bold text-gray-900">${pet.nome}</h2>
           <p class="text-sm text-gray-500">${pet.internacao.box} · ${pet.agenda.servico}</p>
           <p class="text-xs text-gray-400">Horário: ${hourLabel}</p>
         </div>
-        <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
-          <i class="fas fa-xmark text-lg"></i>
-        </button>
-      </div>
-      <div class="mt-4">
-        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</p>
-        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          ${actionButtons}
+        <div class="flex flex-col items-end gap-3">
+          <button type="button" class="self-end rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
+            <i class="fas fa-xmark text-lg"></i>
+          </button>
+          <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</p>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            ${actionButtons}
+          </div>
         </div>
       </div>
       <div class="mt-4 space-y-3">
