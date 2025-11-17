@@ -54,35 +54,29 @@ function openExecucaoModal(pet, hourLabel, items) {
     {
       label: 'Prescrição Médica',
       icon: 'fa-file-medical',
-      tone: 'text-primary border-primary/20 bg-primary/5',
     },
     {
       label: 'Ocorrência',
       icon: 'fa-comment-medical',
-      tone: 'text-amber-600 border-amber-200 bg-amber-50/70',
     },
     {
       label: 'Peso',
       icon: 'fa-weight',
-      tone: 'text-emerald-600 border-emerald-200 bg-emerald-50/70',
     },
     {
       label: 'Parâmetros Clínicos',
       icon: 'fa-heartbeat',
-      tone: 'text-sky-600 border-sky-200 bg-sky-50/70',
     },
   ]
     .map(
       (action) => `
         <button
           type="button"
-          class="flex items-center gap-3 rounded-2xl border px-3 py-2 text-left text-sm font-semibold text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:shadow"
+          class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
           title="${action.label}"
           data-quick-action
         >
-          <span class="flex h-9 w-9 items-center justify-center rounded-full ${action.tone}">
-            <i class="fas ${action.icon}"></i>
-          </span>
+          <i class="text-base fas ${action.icon}"></i>
           <span>${action.label}</span>
         </button>
       `,
@@ -121,7 +115,7 @@ function openExecucaoModal(pet, hourLabel, items) {
           .join('')}
       </div>
       <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-2">
           ${actionButtons}
         </div>
         <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 sm:ml-2" data-close-modal>
