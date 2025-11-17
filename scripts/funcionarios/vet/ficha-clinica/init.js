@@ -302,8 +302,23 @@ function initInternacaoShortcut() {
     const params = new URLSearchParams();
     params.set('internar', '1');
     params.set('petId', petId);
-    if (petNome) params.set('petNome', petNome);
-    if (tutorNome) params.set('tutorNome', tutorNome);
+
+    const payloadForQuery = {
+      petNome,
+      petEspecie,
+      petRaca,
+      petPeso,
+      petIdade,
+      tutorNome,
+      tutorDocumento,
+      tutorContato,
+    };
+
+    Object.entries(payloadForQuery).forEach(([key, value]) => {
+      if (value) {
+        params.set(key, value);
+      }
+    });
 
     const baseUrl = './internacao/animais-internados.html';
     const url = `${baseUrl}?${params.toString()}`;
