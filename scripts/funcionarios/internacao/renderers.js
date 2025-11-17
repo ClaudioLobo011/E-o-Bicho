@@ -1,15 +1,11 @@
 import { internacaoDataset } from './data.js';
 
+const HOURS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0'));
+
 const statusColors = {
   'Em observação': 'bg-sky-50 text-sky-700 ring-1 ring-sky-100',
   'Isolamento respiratório': 'bg-amber-50 text-amber-700 ring-1 ring-amber-100',
   'Estável': 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100',
-};
-
-const execColors = {
-  Concluída: 'bg-emerald-50 text-emerald-700',
-  'Em execução': 'bg-amber-50 text-amber-700',
-  Agendado: 'bg-gray-100 text-gray-600',
 };
 
 function formatDateTime(iso) {
@@ -46,6 +42,73 @@ function buildEmptyState(message) {
       ${message}
     </div>
   `;
+}
+
+function openExecucaoModal(pet, hourLabel, items) {
+  if (!pet || !items?.length) return;
+
+  const existing = document.getElementById('internacao-exec-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'internacao-exec-modal';
+  overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4 py-6';
+  overlay.innerHTML = `
+    <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+      <div class="flex items-start justify-between gap-4 border-b border-gray-100 pb-4">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-primary">Mapa de execução</p>
+          <h2 class="text-lg font-bold text-gray-900">${pet.nome}</h2>
+          <p class="text-sm text-gray-500">${pet.internacao.box} · ${pet.agenda.servico}</p>
+          <p class="text-xs text-gray-400">Horário: ${hourLabel}</p>
+        </div>
+        <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
+          <i class="fas fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div class="mt-4 space-y-3">
+        ${items
+          .map(
+            (item) => `
+              <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <p class="text-sm font-semibold text-gray-900">${item.descricao}</p>
+                <p class="text-xs text-gray-500">Responsável: ${item.responsavel}</p>
+                <p class="text-xs text-gray-400">Status: ${item.status}</p>
+              </div>
+            `,
+          )
+          .join('')}
+      </div>
+      <div class="mt-6 flex justify-end">
+        <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50" data-close-modal>
+          Fechar
+        </button>
+      </div>
+    </div>
+  `;
+
+  const closeModal = () => overlay.remove();
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) closeModal();
+  });
+  overlay.querySelectorAll('[data-close-modal]').forEach((btn) => {
+    btn.addEventListener('click', closeModal);
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function attachExecucaoModalHandlers(root, dataset) {
+  root.querySelectorAll('[data-exec-trigger]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const { petId, hour } = btn.dataset;
+      const pet = dataset.pacientes.find((p) => p.id === petId);
+      if (!pet) return;
+      const items = (pet.internacao.execucoes || []).filter((acao) => acao.horario?.startsWith(hour));
+      if (!items.length) return;
+      openExecucaoModal(pet, `${hour}:00`, items);
+    });
+  });
 }
 
 export function renderAnimaisInternados(root, dataset, { petId } = {}) {
@@ -128,37 +191,78 @@ export function renderMapaExecucao(root, dataset, { petId } = {}) {
     return;
   }
 
-  const timeline = pacientes.map((pet) => `
-    <article class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
-      <header class="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 pb-3">
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">${pet.internacao.box}</p>
-          <h2 class="text-lg font-semibold text-gray-900">${pet.nome}</h2>
-          <p class="text-sm text-gray-500">${pet.agenda.servico}</p>
-        </div>
-        <div class="text-right text-sm text-gray-500">
-          <p>Responsável: <span class="font-semibold text-gray-800">${pet.internacao.equipeMedica}</span></p>
-          <p class="text-xs text-gray-400">Agenda: ${pet.agenda.origem}</p>
-        </div>
-      </header>
-      <ul class="mt-4 space-y-3">
-        ${pet.internacao.execucoes.map((acao) => `
-          <li class="flex flex-col gap-1 rounded-xl bg-gray-50 p-3 md:flex-row md:items-center md:justify-between">
-            <div class="flex items-center gap-3 text-sm text-gray-700">
-              <span class="font-semibold text-gray-900">${acao.horario}</span>
-              <span>${acao.descricao}</span>
-            </div>
-            <div class="flex items-center gap-3 text-sm text-gray-500">
-              <span class="text-gray-700">${acao.responsavel}</span>
-              <span class="rounded-full px-2 py-0.5 text-xs font-semibold ${execColors[acao.status] || 'bg-gray-200 text-gray-700'}">${acao.status}</span>
-            </div>
-          </li>
-        `).join('')}
-      </ul>
-    </article>
-  `).join('');
+  const headerRow = `
+    <div class="grid grid-cols-[160px_repeat(${HOURS.length},minmax(44px,1fr))] items-center gap-2 rounded-xl bg-gray-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+      <div>Pet / Box</div>
+      ${HOURS.map((hour) => `<div class="text-center">${hour}:00</div>`).join('')}
+    </div>
+  `;
 
-  root.innerHTML = `<div class="space-y-5">${timeline}</div>`;
+  const rows = pacientes
+    .map((pet) => {
+      const execucoes = pet.internacao.execucoes || [];
+      const hourCells = HOURS.map((hour) => {
+        const atividades = execucoes.filter((acao) => acao.horario?.startsWith(hour));
+        if (!atividades.length) {
+          return '<div class="flex h-10 w-full items-center justify-center"><div class="h-10 w-10 rounded-xl border border-dashed border-gray-200 bg-white"></div></div>';
+        }
+        return `
+          <div class="flex h-10 w-full items-center justify-center">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/40 bg-primary/5">
+              <button
+                type="button"
+                class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white shadow-sm"
+                title="${atividades.length} procedimentos"
+                aria-label="Ver ${atividades.length} procedimentos de ${pet.nome} às ${hour}:00"
+                data-exec-trigger
+                data-pet-id="${pet.id}"
+                data-hour="${hour}"
+              >
+                ${atividades.length}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="grid grid-cols-[160px_repeat(${HOURS.length},minmax(44px,1fr))] items-center gap-2 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm">
+          <div>
+            <p class="text-sm font-semibold text-gray-900">${pet.nome}</p>
+            <p class="text-xs text-gray-500">${pet.internacao.box} · ${pet.agenda.servico}</p>
+            <p class="text-[11px] text-gray-400">Equipe: ${pet.internacao.equipeMedica}</p>
+          </div>
+          ${hourCells}
+        </div>
+      `;
+    })
+    .join('');
+
+  root.innerHTML = `
+    <div class="space-y-5">
+      <div class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Pet | Horário</p>
+            <h2 class="text-xl font-bold text-gray-900">Mapa de execução</h2>
+            <p class="text-sm text-gray-500">Clique no círculo para ver os procedimentos daquele horário.</p>
+          </div>
+          <div class="flex items-center gap-3 text-xs text-gray-500">
+            <span class="inline-flex items-center gap-2"><span class="inline-flex h-3 w-3 rounded-full bg-primary/70"></span>Círculo = quantidade</span>
+            <span class="inline-flex items-center gap-2"><span class="h-4 w-4 rounded-lg border border-dashed border-gray-300"></span>Sem ações</span>
+          </div>
+        </div>
+        <div class="mt-6 overflow-x-auto">
+          <div class="min-w-[960px] space-y-3">
+            ${headerRow}
+            ${rows}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  attachExecucaoModalHandlers(root, dataset);
 }
 
 export function renderHistoricoInternacoes(root, dataset, { petId } = {}) {
