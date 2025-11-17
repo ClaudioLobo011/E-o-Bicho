@@ -440,15 +440,17 @@ function ensureInternarPetModal() {
                 <button type="button" class="rounded-full border border-transparent px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-600 transition" data-tab-target="observacoes">Acessórios e observações</button>
               </nav>
               <div class="space-y-4" data-tab-panel="medica">
-                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Queixa
-                  <textarea name="internarQueixa" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Descreva a queixa principal"></textarea>
-                </label>
-                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Diagnóstico
-                  <textarea name="internarDiagnostico" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Informe o diagnóstico clínico"></textarea>
-                </label>
-                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Prognóstico
-                  <textarea name="internarPrognostico" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Indique o prognóstico esperado"></textarea>
-                </label>
+                <div class="grid gap-4 md:grid-cols-3">
+                  <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Queixa
+                    <textarea name="internarQueixa" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Descreva a queixa principal"></textarea>
+                  </label>
+                  <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Diagnóstico
+                    <textarea name="internarDiagnostico" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Informe o diagnóstico clínico"></textarea>
+                  </label>
+                  <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Prognóstico
+                    <textarea name="internarPrognostico" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Indique o prognóstico esperado"></textarea>
+                  </label>
+                </div>
                 <div>
                   <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Alergias e marcações</p>
                   <div class="mt-2 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-4">
