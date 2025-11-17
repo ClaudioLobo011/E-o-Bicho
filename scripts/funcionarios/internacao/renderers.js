@@ -237,12 +237,17 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
           }
           const riscoClass = getRiscoBadgeClass(registro.riscoCodigo);
           const tutorContato = [registro.tutor?.contato, registro.tutor?.documento].filter(Boolean).join(' · ');
+          const recordIdentifier = escapeHtml(registro.id || registro.filterKey || String(registro.codigo || ''));
           return `
             <article class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
               <div class="flex flex-wrap items-start gap-4">
                 <div class="flex-1 space-y-1">
                   <div class="flex flex-wrap items-center gap-2">
-                    <h2 class="text-xl font-semibold text-gray-900">${escapeHtml(registro.pet?.nome || 'Paciente')}</h2>
+                    <h2 class="text-xl font-semibold text-gray-900">
+                      <button type="button" class="text-left font-semibold text-gray-900 transition hover:text-primary focus:outline-none" data-open-ficha data-record-id="${recordIdentifier}">
+                        ${escapeHtml(registro.pet?.nome || 'Paciente')}
+                      </button>
+                    </h2>
                     ${registro.situacao ? `<span class="rounded-full px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-700 ring-1 ring-gray-100">Situação: ${escapeHtml(registro.situacao)}</span>` : ''}
                     ${registro.risco ? `<span class="rounded-full px-2 py-0.5 text-xs font-semibold ${riscoClass}">Risco: ${escapeHtml(registro.risco)}</span>` : ''}
                   </div>

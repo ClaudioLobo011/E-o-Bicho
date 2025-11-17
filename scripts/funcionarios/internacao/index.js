@@ -53,6 +53,41 @@ const boxesModal = {
   onSuccess: null,
 };
 
+const fichaInternacaoModal = {
+  overlay: null,
+  dialog: null,
+  record: null,
+  subtitleEl: null,
+  petNameEl: null,
+  petMetaEl: null,
+  tutorResumoEl: null,
+  tutorNomeEl: null,
+  tutorContatoEl: null,
+  situacaoBadgeEl: null,
+  riscoBadgeEl: null,
+  tagsContainer: null,
+  statusEl: null,
+  boxEl: null,
+  altaEl: null,
+  duracaoEl: null,
+  vetEl: null,
+  codigoEl: null,
+  admissaoEl: null,
+  historicoListEl: null,
+  tabButtons: [],
+  tabPanels: [],
+};
+
+const RISCO_BADGE_CLASSES = {
+  'nao-urgente': 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+  'pouco-urgente': 'bg-lime-50 text-lime-700 ring-lime-100',
+  urgente: 'bg-amber-50 text-amber-700 ring-amber-100',
+  'muito-urgente': 'bg-orange-50 text-orange-700 ring-orange-100',
+  emergencia: 'bg-red-50 text-red-700 ring-red-100',
+};
+
+const FICHA_TAB_IDS = ['historico', 'prescricao'];
+
 let boxesAuthRedirecting = false;
 
 function escapeHtml(value) {
@@ -66,6 +101,51 @@ function escapeHtml(value) {
 
 function createOptionsMarkup(options) {
   return options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
+}
+
+function getRiscoBadgeClass(code) {
+  const key = String(code || '').toLowerCase();
+  return RISCO_BADGE_CLASSES[key] || 'bg-gray-100 text-gray-700 ring-gray-100';
+}
+
+function formatDateTimeLabel(iso) {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatDurationSince(dateInput) {
+  if (!dateInput) return '—';
+  const date = new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return '—';
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs <= 0) return 'Menos de 1 hora';
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [];
+  if (days) parts.push(`${days} ${days === 1 ? 'dia' : 'dias'}`);
+  if (hours) parts.push(`${hours} ${hours === 1 ? 'hora' : 'horas'}`);
+  if (!parts.length) parts.push(`${Math.max(minutes, 1)} min`);
+  return parts.slice(0, 2).join(' e ');
+}
+
+function normalizeTagList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter((item, index, arr) => item && arr.indexOf(item) === index);
+  }
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text ? [text] : [];
 }
 
 function normalizePetInfo(raw) {
@@ -347,6 +427,12 @@ function normalizeInternacaoRecord(raw) {
     altaPrevistaData: toText(raw.altaPrevistaData),
     altaPrevistaHora: toText(raw.altaPrevistaHora),
     altaPrevistaISO: combineDateAndTime(raw.altaPrevistaData, raw.altaPrevistaHora),
+    queixa: toText(raw.queixa),
+    diagnostico: toText(raw.diagnostico),
+    prognostico: toText(raw.prognostico),
+    acessorios: toText(raw.acessorios),
+    observacoes: toText(raw.observacoes),
+    alergias: normalizeTagList(raw.alergias),
     admissao: raw.admissao || raw.createdAt || '',
     createdAt: raw.createdAt || '',
     updatedAt: raw.updatedAt || '',
@@ -1035,6 +1121,361 @@ function maybeOpenInternarModalFromQuery(dataset, state = {}) {
   }
 }
 
+function closeFichaInternacaoModal() {
+  if (!fichaInternacaoModal.overlay) return;
+  if (fichaInternacaoModal.dialog) {
+    fichaInternacaoModal.dialog.classList.add('opacity-0', 'scale-95');
+  }
+  fichaInternacaoModal.overlay.classList.add('hidden');
+  fichaInternacaoModal.overlay.removeAttribute('data-modal-open');
+  fichaInternacaoModal.record = null;
+}
+
+function setFichaModalTab(targetId) {
+  const activeId = FICHA_TAB_IDS.includes(targetId) ? targetId : FICHA_TAB_IDS[0];
+  fichaInternacaoModal.tabButtons.forEach((button) => {
+    const isActive = button.dataset.fichaTab === activeId;
+    button.classList.toggle('bg-primary/10', isActive);
+    button.classList.toggle('text-primary', isActive);
+    button.classList.toggle('text-gray-500', !isActive);
+  });
+  fichaInternacaoModal.tabPanels.forEach((panel) => {
+    panel.classList.toggle('hidden', panel.dataset.fichaPanel !== activeId);
+  });
+}
+
+function renderFichaTags(tags = []) {
+  if (!fichaInternacaoModal.tagsContainer) return;
+  const hasTags = Array.isArray(tags) && tags.length;
+  if (!hasTags) {
+    fichaInternacaoModal.tagsContainer.innerHTML = '<span class="text-[11px] text-gray-400">Nenhuma marcação registrada.</span>';
+    return;
+  }
+  fichaInternacaoModal.tagsContainer.innerHTML = tags
+    .map(
+      (tag) =>
+        `<span class="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">${escapeHtml(
+          tag,
+        )}</span>`,
+    )
+    .join('');
+}
+
+function renderFichaHistorico(record) {
+  if (!fichaInternacaoModal.historicoListEl) return;
+  if (!record) {
+    fichaInternacaoModal.historicoListEl.innerHTML = '<p class="text-sm text-gray-500">Nenhum histórico disponível.</p>';
+    return;
+  }
+
+  const admissaoLabel = formatDateTimeLabel(record.admissao);
+  const metaBlocks = [
+    record.box ? { label: 'Box', value: record.box } : null,
+    record.veterinario ? { label: 'Veterinário responsável', value: record.veterinario } : null,
+    record.situacao ? { label: 'Situação inicial', value: record.situacao } : null,
+    record.risco ? { label: 'Risco', value: record.risco } : null,
+    record.altaPrevistaISO ? { label: 'Alta prevista', value: formatDateTimeLabel(record.altaPrevistaISO) } : null,
+  ].filter(Boolean);
+
+  const detalhes = [
+    record.queixa ? { label: 'Queixa', value: record.queixa } : null,
+    record.diagnostico ? { label: 'Diagnóstico', value: record.diagnostico } : null,
+    record.prognostico ? { label: 'Prognóstico', value: record.prognostico } : null,
+    record.acessorios ? { label: 'Acessórios', value: record.acessorios } : null,
+    record.observacoes ? { label: 'Observações', value: record.observacoes } : null,
+  ].filter(Boolean);
+
+  const metaSection = metaBlocks.length
+    ? `
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          ${metaBlocks
+            .map(
+              (item) => `
+                <div class="rounded-xl bg-gray-50 px-3 py-2">
+                  <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">${escapeHtml(item.label)}</p>
+                  <p class="text-sm font-medium text-gray-900">${escapeHtml(item.value)}</p>
+                </div>
+              `,
+            )
+            .join('')}
+        </div>
+      `
+    : '<p class="mt-3 text-sm text-gray-500">Sem dados administrativos adicionais.</p>';
+
+  fichaInternacaoModal.historicoListEl.innerHTML = `
+    <article class="rounded-2xl border border-gray-100 p-4 shadow-sm">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-primary">Admissão em internação</p>
+          <h3 class="text-base font-semibold text-gray-900">${escapeHtml(record.pet?.nome || record.petNome || 'Paciente')}</h3>
+        </div>
+        <p class="text-xs text-gray-500">${escapeHtml(admissaoLabel)}</p>
+      </div>
+      ${metaSection}
+      <div class="mt-3 space-y-2 text-sm text-gray-600">
+        ${detalhes
+          .map(
+            (info) => `
+              <p><span class="font-semibold text-gray-800">${escapeHtml(info.label)}:</span> ${escapeHtml(info.value)}</p>
+            `,
+          )
+          .join('')}
+        ${detalhes.length === 0 ? '<p class="text-sm text-gray-500">Sem informações clínicas adicionais registradas.</p>' : ''}
+      </div>
+    </article>
+  `;
+}
+
+function ensureFichaInternacaoModal() {
+  if (fichaInternacaoModal.overlay) return fichaInternacaoModal.overlay;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'ficha-internacao-modal fixed inset-0 z-[1000] hidden';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div
+        class="relative flex w-full max-w-5xl transform-gpu flex-col overflow-hidden rounded-3xl bg-white text-sm text-gray-700 shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ficha-internacao-title"
+        data-ficha-dialog
+        tabindex="-1"
+      >
+        <header class="flex items-start justify-between gap-4 border-b border-gray-100 px-6 py-4">
+          <div>
+            <p class="text-[10px] font-semibold uppercase tracking-wide text-primary">Internação</p>
+            <h2 id="ficha-internacao-title" class="text-xl font-semibold text-gray-900">Ficha de internação</h2>
+            <p class="text-xs text-gray-500" data-ficha-subtitle>Detalhes completos da internação.</p>
+          </div>
+          <button type="button" class="rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-modal>
+            <i class="fas fa-xmark text-base"></i>
+          </button>
+        </header>
+        <div class="flex max-h-[90vh] flex-col overflow-hidden">
+          <div class="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div class="space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="text-lg font-semibold text-gray-900" data-ficha-pet-nome>Paciente</h3>
+                  <span class="rounded-full border border-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-600" data-ficha-situacao-badge>—</span>
+                  <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-gray-200" data-ficha-risco-badge>—</span>
+                </div>
+                <p class="text-sm text-gray-500" data-ficha-pet-meta>—</p>
+                <p class="text-xs text-gray-400" data-ficha-tutor-resumo>—</p>
+              </div>
+              <div class="flex flex-wrap items-center justify-end gap-2" data-ficha-actions>
+                ${['Editar', 'Alta', 'Óbito', 'Box', 'Cancelar']
+                  .map(
+                    (acao) => `
+                      <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:border-primary/40 hover:text-primary" data-ficha-action="${acao.toLowerCase()}">
+                        ${acao}
+                      </button>
+                    `,
+                  )
+                  .join('')}
+              </div>
+            </div>
+
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Marcações clínicas</p>
+              <div class="mt-2 flex flex-wrap gap-2" data-ficha-tags></div>
+            </div>
+
+            <div class="rounded-2xl border border-gray-100 p-4">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Informações do tutor</p>
+              <p class="mt-2 text-sm font-semibold text-gray-900" data-ficha-tutor-nome>—</p>
+              <p class="text-xs text-gray-500" data-ficha-tutor-contatos>—</p>
+            </div>
+
+            <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Status</p>
+                <p class="text-sm font-semibold text-gray-900" data-ficha-status>—</p>
+              </div>
+              <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Box internado</p>
+                <p class="text-sm font-semibold text-gray-900" data-ficha-box>—</p>
+              </div>
+              <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Alta prevista</p>
+                <p class="text-sm font-semibold text-gray-900" data-ficha-alta>—</p>
+              </div>
+              <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Duração</p>
+                <p class="text-sm font-semibold text-gray-900" data-ficha-duracao>—</p>
+              </div>
+              <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Veterinário responsável</p>
+                <p class="text-sm font-semibold text-gray-900" data-ficha-veterinario>—</p>
+              </div>
+            </div>
+
+            <div class="grid gap-3 md:grid-cols-2">
+              <div class="rounded-xl border border-gray-100 px-3 py-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Código interno</p>
+                <p class="text-sm font-semibold text-gray-900" data-ficha-codigo>—</p>
+              </div>
+              <div class="rounded-xl border border-gray-100 px-3 py-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Admissão</p>
+                <p class="text-sm font-semibold text-gray-900" data-ficha-admissao>—</p>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex flex-wrap gap-2 border-b border-gray-100 pb-2 text-[13px] font-semibold text-gray-500">
+                <button type="button" class="rounded-xl px-4 py-2 text-sm text-gray-500 transition" data-ficha-tab="historico">Histórico</button>
+                <button type="button" class="rounded-xl px-4 py-2 text-sm text-gray-500 transition" data-ficha-tab="prescricao">Prescrição médica</button>
+              </div>
+              <div class="pt-4" data-ficha-panel="historico">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</div>
+                  <div class="flex flex-wrap gap-2">
+                    ${['Ocorrência', 'Peso', 'Relatório médico']
+                      .map(
+                        (acao) => `
+                          <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-primary/40 hover:text-primary" data-ficha-hist-action="${acao.toLowerCase()}">
+                            ${acao}
+                          </button>
+                        `,
+                      )
+                      .join('')}
+                  </div>
+                </div>
+                <div class="mt-4 space-y-3" data-ficha-historico-list>
+                  <p class="text-sm text-gray-500">Carregando histórico...</p>
+                </div>
+              </div>
+              <div class="hidden pt-4" data-ficha-panel="prescricao">
+                <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+                  Em desenvolvimento
+                </div>
+              </div>
+            </div>
+          </div>
+          <footer class="border-t border-gray-100 px-6 py-4 text-[11px] text-gray-500">Atualizado em tempo real conforme registros da internação.</footer>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  fichaInternacaoModal.overlay = overlay;
+  fichaInternacaoModal.dialog = overlay.querySelector('[data-ficha-dialog]');
+  fichaInternacaoModal.subtitleEl = overlay.querySelector('[data-ficha-subtitle]');
+  fichaInternacaoModal.petNameEl = overlay.querySelector('[data-ficha-pet-nome]');
+  fichaInternacaoModal.petMetaEl = overlay.querySelector('[data-ficha-pet-meta]');
+  fichaInternacaoModal.tutorResumoEl = overlay.querySelector('[data-ficha-tutor-resumo]');
+  fichaInternacaoModal.tutorNomeEl = overlay.querySelector('[data-ficha-tutor-nome]');
+  fichaInternacaoModal.tutorContatoEl = overlay.querySelector('[data-ficha-tutor-contatos]');
+  fichaInternacaoModal.situacaoBadgeEl = overlay.querySelector('[data-ficha-situacao-badge]');
+  fichaInternacaoModal.riscoBadgeEl = overlay.querySelector('[data-ficha-risco-badge]');
+  fichaInternacaoModal.tagsContainer = overlay.querySelector('[data-ficha-tags]');
+  fichaInternacaoModal.statusEl = overlay.querySelector('[data-ficha-status]');
+  fichaInternacaoModal.boxEl = overlay.querySelector('[data-ficha-box]');
+  fichaInternacaoModal.altaEl = overlay.querySelector('[data-ficha-alta]');
+  fichaInternacaoModal.duracaoEl = overlay.querySelector('[data-ficha-duracao]');
+  fichaInternacaoModal.vetEl = overlay.querySelector('[data-ficha-veterinario]');
+  fichaInternacaoModal.codigoEl = overlay.querySelector('[data-ficha-codigo]');
+  fichaInternacaoModal.admissaoEl = overlay.querySelector('[data-ficha-admissao]');
+  fichaInternacaoModal.historicoListEl = overlay.querySelector('[data-ficha-historico-list]');
+  fichaInternacaoModal.tabButtons = Array.from(overlay.querySelectorAll('[data-ficha-tab]'));
+  fichaInternacaoModal.tabPanels = Array.from(overlay.querySelectorAll('[data-ficha-panel]'));
+
+  overlay.addEventListener('click', (event) => {
+    const closeTrigger = event.target.closest('[data-close-modal]');
+    if (closeTrigger) {
+      event.preventDefault();
+      closeFichaInternacaoModal();
+      return;
+    }
+    const actionTrigger = event.target.closest('[data-ficha-action], [data-ficha-hist-action]');
+    if (actionTrigger) {
+      event.preventDefault();
+      showToastMessage('Funcionalidade em desenvolvimento.', 'info');
+    }
+    const tabTrigger = event.target.closest('[data-ficha-tab]');
+    if (tabTrigger) {
+      event.preventDefault();
+      setFichaModalTab(tabTrigger.dataset.fichaTab);
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !overlay.classList.contains('hidden')) {
+      closeFichaInternacaoModal();
+    }
+  });
+
+  setFichaModalTab('historico');
+  renderFichaTags([]);
+  renderFichaHistorico(null);
+
+  return overlay;
+}
+
+function fillFichaInternacaoModal(record) {
+  if (!record) return;
+  ensureFichaInternacaoModal();
+  const petNome = record.pet?.nome || record.petNome || 'Paciente';
+  const meta = [record.pet?.especie, record.pet?.raca, record.pet?.peso || record.pet?.idade].filter(Boolean).join(' · ');
+  const tutorNome = record.tutor?.nome || 'Tutor não informado';
+  const tutorContato = [record.tutor?.contato, record.tutor?.documento].filter(Boolean).join(' · ');
+  const tutorResumo = tutorNome ? `Tutor: ${tutorNome}` : 'Tutor não informado';
+  const subtitleParts = [];
+  if (record.codigo !== null && record.codigo !== undefined) {
+    subtitleParts.push(`Código interno #${record.codigo}`);
+  }
+  if (record.admissao) {
+    subtitleParts.push(`Admissão: ${formatDateTimeLabel(record.admissao)}`);
+  }
+
+  if (fichaInternacaoModal.petNameEl) fichaInternacaoModal.petNameEl.textContent = petNome;
+  if (fichaInternacaoModal.petMetaEl) fichaInternacaoModal.petMetaEl.textContent = meta || '—';
+  if (fichaInternacaoModal.subtitleEl) fichaInternacaoModal.subtitleEl.textContent = subtitleParts.join(' · ') || 'Detalhes completos da internação.';
+  if (fichaInternacaoModal.tutorResumoEl) fichaInternacaoModal.tutorResumoEl.textContent = tutorResumo;
+  if (fichaInternacaoModal.tutorNomeEl) fichaInternacaoModal.tutorNomeEl.textContent = tutorNome;
+  if (fichaInternacaoModal.tutorContatoEl) fichaInternacaoModal.tutorContatoEl.textContent = tutorContato || '—';
+
+  if (fichaInternacaoModal.situacaoBadgeEl) {
+    fichaInternacaoModal.situacaoBadgeEl.textContent = record.situacao ? `Situação: ${record.situacao}` : 'Situação não informada';
+  }
+  if (fichaInternacaoModal.riscoBadgeEl) {
+    fichaInternacaoModal.riscoBadgeEl.textContent = record.risco ? `Risco: ${record.risco}` : 'Risco não informado';
+    fichaInternacaoModal.riscoBadgeEl.className = `inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${getRiscoBadgeClass(
+      record.riscoCodigo,
+    )}`;
+  }
+
+  if (fichaInternacaoModal.statusEl) fichaInternacaoModal.statusEl.textContent = record.situacao || '—';
+  if (fichaInternacaoModal.boxEl) fichaInternacaoModal.boxEl.textContent = record.box || '—';
+  if (fichaInternacaoModal.altaEl) fichaInternacaoModal.altaEl.textContent = formatDateTimeLabel(record.altaPrevistaISO);
+  if (fichaInternacaoModal.duracaoEl) fichaInternacaoModal.duracaoEl.textContent = formatDurationSince(record.admissao);
+  if (fichaInternacaoModal.vetEl) fichaInternacaoModal.vetEl.textContent = record.veterinario || '—';
+  if (fichaInternacaoModal.codigoEl) fichaInternacaoModal.codigoEl.textContent = record.codigo !== null && record.codigo !== undefined ? `#${record.codigo}` : '—';
+  if (fichaInternacaoModal.admissaoEl) fichaInternacaoModal.admissaoEl.textContent = formatDateTimeLabel(record.admissao);
+
+  renderFichaTags(record.alergias || []);
+  renderFichaHistorico(record);
+}
+
+function openFichaInternacaoModal(record) {
+  if (!record) return;
+  ensureFichaInternacaoModal();
+  fichaInternacaoModal.record = record;
+  fillFichaInternacaoModal(record);
+  setFichaModalTab('historico');
+  fichaInternacaoModal.overlay.classList.remove('hidden');
+  fichaInternacaoModal.overlay.dataset.modalOpen = 'true';
+  if (fichaInternacaoModal.dialog) {
+    requestAnimationFrame(() => {
+      fichaInternacaoModal.dialog.classList.remove('opacity-0', 'scale-95');
+      fichaInternacaoModal.dialog.focus();
+    });
+  }
+}
+
 const VIEW_RENDERERS = {
   animais: renderAnimaisInternados,
   mapa: renderMapaExecucao,
@@ -1204,6 +1645,23 @@ function setupAnimaisPage(dataset, state, render) {
       if (event.target.closest('[data-internacoes-retry]')) {
         event.preventDefault();
         fetchInternacoes();
+        return;
+      }
+      const fichaTrigger = event.target.closest('[data-open-ficha]');
+      if (fichaTrigger) {
+        event.preventDefault();
+        const recordId = fichaTrigger.dataset.recordId || '';
+        let registro = null;
+        if (recordId) {
+          registro = state.internacoes.find(
+            (item) => item.id === recordId || item.filterKey === recordId || String(item.codigo) === recordId,
+          );
+        }
+        if (!registro) {
+          showToastMessage('Não foi possível carregar os detalhes dessa internação.', 'warning');
+          return;
+        }
+        openFichaInternacaoModal(registro);
       }
     });
   }
