@@ -308,6 +308,9 @@ function initInternacaoShortcut() {
     const baseUrl = './internacao/animais-internados.html';
     const url = `${baseUrl}?${params.toString()}`;
     event.preventDefault();
-    window.location.assign(url);
+    const novaGuia = window.open(url, '_blank', 'noopener');
+    if (novaGuia) {
+      novaGuia.focus();
+    }
   });
 }
