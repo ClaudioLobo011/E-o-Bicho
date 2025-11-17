@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PetShop — Internação — Boxes</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="../../../src/output.css">
+</head>
+<body class="bg-gray-100" data-internacao-page="boxes">
+  <div id="admin-header-placeholder"></div>
+
+  <main class="container mx-auto px-4 pt-1 pb-8 min-h-screen">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+
+      <aside class="md:col-span-4">
+        <div id="admin-sidebar-placeholder"></div>
+      </aside>
+
+      <section class="md:col-span-4 space-y-4">
+        <div class="rounded-2xl bg-white shadow ring-1 ring-black/5">
+          <header class="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-primary">Internação</p>
+              <h1 class="text-2xl font-bold text-gray-800">Mapa de boxes</h1>
+              <p class="text-sm text-gray-500">Distribuição dos leitos sincronizada com os apontamentos da agenda e da ficha clínica.</p>
+            </div>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <label class="flex flex-col text-sm font-medium text-gray-700">
+                Pet/Tutor
+                <select data-internacao-pet-filter class="mt-1 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:ring-primary"></select>
+              </label>
+              <button class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-primary/40 hover:text-primary">
+                <i class="fas fa-qrcode"></i>
+                Etiquetas dos boxes
+              </button>
+            </div>
+          </header>
+
+          <div class="space-y-6 px-6 py-6" data-internacao-root></div>
+          <footer class="rounded-b-2xl border-t border-gray-100 bg-gray-50 px-6 py-4 text-xs text-gray-500" data-sync-info>
+            —
+          </footer>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="modal-placeholder"></div>
+  <div id="confirm-modal-placeholder"></div>
+  <div id="admin-footer-placeholder"></div>
+
+  <script>var basePath = '../../../';</script>
+  <script src="../../../scripts/core/config.js"></script>
+  <script src="../../../scripts/core/ui.js"></script>
+  <script src="../../../scripts/core/main.js"></script>
+  <script src="../../../scripts/admin/admin.js"></script>
+  <script type="module" src="../../../scripts/funcionarios/internacao/index.js"></script>
+</body>
+</html>
