@@ -101,13 +101,15 @@ function openExecucaoModal(pet, hourLabel, items) {
           <p class="text-sm text-gray-500">${pet.internacao.box} · ${pet.agenda.servico}</p>
           <p class="text-xs text-gray-400">Horário: ${hourLabel}</p>
         </div>
-        <div class="flex flex-col items-end gap-3">
-          <button type="button" class="self-end rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
-            <i class="fas fa-xmark text-lg"></i>
-          </button>
+        <div class="flex flex-col items-end gap-2">
           <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Ações rápidas</p>
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            ${actionButtons}
+          <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div class="flex flex-wrap gap-2 sm:gap-3">
+              ${actionButtons}
+            </div>
+            <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
+              <i class="fas fa-xmark text-lg"></i>
+            </button>
           </div>
         </div>
       </div>
