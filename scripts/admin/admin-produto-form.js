@@ -3956,8 +3956,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const primaryBarcodeCandidate = Array.isArray(item.barcodeCandidates)
             ? item.barcodeCandidates.find((code) => typeof code === 'string' && code.trim())
             : null;
+        const sanitizeDraftBarcode = (value) => {
+            if (typeof value !== 'string') return '';
+            const trimmed = value.trim();
+            if (!trimmed) return '';
+            return /sem\s*gtin/i.test(trimmed) ? '' : trimmed;
+        };
         if (barcodeInput) {
-            barcodeInput.value = primaryBarcodeCandidate || item.barcodeDisplay || '';
+            const candidateValue = sanitizeDraftBarcode(primaryBarcodeCandidate || '');
+            const displayValue = sanitizeDraftBarcode(item.barcodeDisplay || '');
+            barcodeInput.value = candidateValue || displayValue;
         }
 
         if (detailedDescriptionInput) {
