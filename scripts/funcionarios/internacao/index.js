@@ -40,6 +40,8 @@ const internarModal = {
   submitBtn: null,
   errorEl: null,
   onSuccess: null,
+  dataset: null,
+  state: null,
 };
 
 const boxesModal = {
@@ -422,9 +424,26 @@ async function handleInternarModalSubmit(event) {
   setInternarModalLoading(true);
   try {
     await requestJson('/internacao/registros', { method: 'POST', body: payload });
+    const datasetRef = internarModal.dataset || null;
+    const stateRef = internarModal.state || null;
+    let boxesRefreshPromise = null;
+    try {
+      if (stateRef && typeof stateRef.refreshBoxes === 'function') {
+        boxesRefreshPromise = Promise.resolve(stateRef.refreshBoxes());
+      } else if (datasetRef) {
+        boxesRefreshPromise = fetchBoxesData(datasetRef, stateRef, { quiet: true });
+      }
+    } catch (refreshError) {
+      console.warn('internacao: falha ao agendar atualização dos boxes', refreshError);
+    }
     showToastMessage('Internação registrada com sucesso.', 'success');
     const successCallback = internarModal.onSuccess;
     closeInternarPetModal();
+    if (boxesRefreshPromise && typeof boxesRefreshPromise.catch === 'function') {
+      boxesRefreshPromise.catch((error) => {
+        console.warn('internacao: falha ao atualizar boxes após internação', error);
+      });
+    }
     if (typeof successCallback === 'function') {
       successCallback();
     }
@@ -700,6 +719,8 @@ function closeInternarPetModal() {
   setInternarModalError('');
   setInternarModalLoading(false);
   internarModal.onSuccess = null;
+  internarModal.dataset = null;
+  internarModal.state = null;
 }
 
 function ensureInternarPetModal() {
@@ -926,6 +947,8 @@ function openInternarPetModal(dataset, options = {}) {
   const petInfo = options?.petInfo || null;
   ensureInternarPetModal();
   internarModal.onSuccess = typeof options.onSuccess === 'function' ? options.onSuccess : null;
+  internarModal.dataset = dataset || null;
+  internarModal.state = options?.state || null;
   setInternarModalError('');
   setInternarModalLoading(false);
   populateDynamicSelects(dataset);
@@ -963,6 +986,7 @@ function registerInternarModalTriggers(dataset, state = {}) {
       openInternarPetModal(dataset, {
         petInfo,
         onSuccess: state.refreshInternacoes,
+        state,
       });
     });
   });
@@ -997,6 +1021,7 @@ function maybeOpenInternarModalFromQuery(dataset, state = {}) {
     openInternarPetModal(dataset, {
       petInfo,
       onSuccess: state.refreshInternacoes,
+      state,
     });
 
     ['internar', 'pet', 'petId', 'petNome', 'petEspecie', 'petRaca', 'petPeso', 'petIdade', 'tutorNome', 'tutorContato', 'tutorDocumento'].forEach((key) => {
@@ -1122,6 +1147,7 @@ function setupBoxesPage(dataset, state, render) {
   const root = document.querySelector('[data-internacao-root]');
 
   const fetchBoxes = () => fetchBoxesData(dataset, state, { quiet: true, onUpdate: render });
+  state.refreshBoxes = fetchBoxes;
 
   const createBtn = document.querySelector('[data-boxes-create]');
   if (createBtn) {
@@ -1203,6 +1229,7 @@ document.addEventListener('DOMContentLoaded', () => {
     internacoesLoading: false,
     internacoesError: '',
     refreshInternacoes: null,
+    refreshBoxes: null,
   };
 
   try {
@@ -1221,6 +1248,8 @@ document.addEventListener('DOMContentLoaded', () => {
     renderer(root, dataset, state);
   };
 
+  state.refreshBoxes = () => fetchBoxesData(dataset, state, { quiet: true });
+
   fillPetFilters(dataset, state.petId, state);
   updateSyncInfo(dataset);
   render();
@@ -1231,7 +1260,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (view === 'boxes') {
     setupBoxesPage(dataset, state, render);
   } else {
-    fetchBoxesData(dataset, state, { quiet: true });
+    state.refreshBoxes();
   }
 
   fetchVeterinariosData(dataset, state, { quiet: true });

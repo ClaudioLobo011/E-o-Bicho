@@ -164,6 +164,16 @@ router.post('/registros', async (req, res) => {
     const nextCodigo = (lastRegistro?.codigo || 0) + 1;
 
     const record = await InternacaoRegistro.create({ ...payload, codigo: nextCodigo });
+    if (payload.box) {
+      try {
+        await InternacaoBox.findOneAndUpdate(
+          { box: payload.box },
+          { ocupante: payload.petNome || 'Ocupado', status: 'Ocupado' },
+        );
+      } catch (boxUpdateError) {
+        console.warn('internacao: falha ao atualizar box vinculado', boxUpdateError);
+      }
+    }
     return res.status(201).json(formatRegistro(record));
   } catch (error) {
     console.error('internacao: falha ao salvar internação', error);
