@@ -31,6 +31,12 @@ const internarModal = {
   tagsInput: null,
   tagsList: null,
   tags: [],
+  petInfo: null,
+  petSummaryEl: null,
+  petSummaryNameEl: null,
+  petSummaryMetaEl: null,
+  petSummaryTutorEl: null,
+  petSummaryContactEl: null,
 };
 
 const boxesModal = {
@@ -55,6 +61,88 @@ function escapeHtml(value) {
 
 function createOptionsMarkup(options) {
   return options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
+}
+
+function normalizePetInfo(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const allowedKeys = [
+    'petId',
+    'petNome',
+    'petEspecie',
+    'petRaca',
+    'petPeso',
+    'petIdade',
+    'tutorId',
+    'tutorNome',
+    'tutorDocumento',
+    'tutorContato',
+  ];
+  const result = {};
+  allowedKeys.forEach((key) => {
+    if (!(key in raw)) return;
+    const value = raw[key];
+    if (value === null || value === undefined) return;
+    const str = typeof value === 'string' ? value.trim() : String(value).trim();
+    if (!str) return;
+    result[key] = str;
+  });
+  return Object.keys(result).length ? result : null;
+}
+
+function mergePetInfo(base, incoming) {
+  const normalizedBase = normalizePetInfo(base) || {};
+  const normalizedIncoming = normalizePetInfo(incoming);
+  if (!normalizedIncoming) {
+    return Object.keys(normalizedBase).length ? normalizedBase : null;
+  }
+  const result = { ...normalizedBase };
+  Object.entries(normalizedIncoming).forEach(([key, value]) => {
+    if (!result[key]) {
+      result[key] = value;
+    }
+  });
+  return result;
+}
+
+function getPetInfoFromDataset(dataset, petId) {
+  const id = String(petId || '').trim();
+  if (!id || !dataset?.pacientes?.length) return null;
+  const match = dataset.pacientes.find((pet) => pet.id === id);
+  if (!match) return null;
+  return normalizePetInfo({
+    petId: match.id,
+    petNome: match.nome,
+    petEspecie: match.especie,
+    petRaca: match.raca,
+    petPeso: match.peso,
+    petIdade: match.idade,
+    tutorNome: match.tutor?.nome,
+    tutorDocumento: match.tutor?.documento,
+    tutorContato: match.tutor?.telefone || match.tutor?.email,
+  });
+}
+
+function getPetInfoFromParams(params) {
+  if (!(params instanceof URLSearchParams)) return null;
+  const payload = {};
+  ['petId', 'petNome', 'petEspecie', 'petRaca', 'petPeso', 'petIdade', 'tutorNome', 'tutorContato', 'tutorDocumento'].forEach((key) => {
+    const value = params.get(key);
+    if (value) payload[key] = value;
+  });
+  return normalizePetInfo(payload);
+}
+
+function consumeInternacaoPreselectPayload() {
+  try {
+    const raw = sessionStorage.getItem('internacaoPreselect');
+    if (!raw) return null;
+    sessionStorage.removeItem('internacaoPreselect');
+    const parsed = JSON.parse(raw);
+    return normalizePetInfo(parsed);
+  } catch (error) {
+    console.warn('internacao: falha ao consumir preselect da sessão', error);
+    return null;
+  }
 }
 
 function getAuthToken() {
@@ -352,6 +440,41 @@ function renderTagList() {
     .join('');
 }
 
+function setInternarPetInfo(info) {
+  const normalized = normalizePetInfo(info);
+  internarModal.petInfo = normalized;
+  if (!internarModal.petSummaryEl) return;
+  const hasInfo = !!normalized;
+  internarModal.petSummaryEl.classList.toggle('hidden', !hasInfo);
+  if (!hasInfo) {
+    if (internarModal.petSummaryNameEl) internarModal.petSummaryNameEl.textContent = '';
+    if (internarModal.petSummaryMetaEl) internarModal.petSummaryMetaEl.textContent = '';
+    if (internarModal.petSummaryTutorEl) internarModal.petSummaryTutorEl.textContent = '';
+    if (internarModal.petSummaryContactEl) {
+      internarModal.petSummaryContactEl.textContent = '';
+      internarModal.petSummaryContactEl.classList.add('hidden');
+    }
+    return;
+  }
+
+  const { petNome, petEspecie, petRaca, petPeso, petIdade, tutorNome, tutorContato, tutorDocumento } = normalized;
+  if (internarModal.petSummaryNameEl) {
+    internarModal.petSummaryNameEl.textContent = petNome || 'Pet não identificado';
+  }
+  if (internarModal.petSummaryMetaEl) {
+    const details = [petEspecie, petRaca, petPeso || petIdade].filter(Boolean);
+    internarModal.petSummaryMetaEl.textContent = details.length ? details.join(' · ') : '—';
+  }
+  if (internarModal.petSummaryTutorEl) {
+    internarModal.petSummaryTutorEl.textContent = tutorNome ? `Tutor: ${tutorNome}` : 'Tutor não informado';
+  }
+  if (internarModal.petSummaryContactEl) {
+    const contact = [tutorContato, tutorDocumento].filter(Boolean).join(' · ');
+    internarModal.petSummaryContactEl.textContent = contact;
+    internarModal.petSummaryContactEl.classList.toggle('hidden', !contact);
+  }
+}
+
 function setInternarModalTab(targetId) {
   const fallback = internarModal.tabButtons[0]?.dataset.tabTarget || '';
   const resolved = internarModal.tabButtons.some((btn) => btn.dataset.tabTarget === targetId) ? targetId : fallback;
@@ -379,6 +502,7 @@ function closeInternarPetModal() {
   internarModal.tags = [];
   if (internarModal.tagsInput) internarModal.tagsInput.value = '';
   renderTagList();
+  setInternarPetInfo(null);
 }
 
 function ensureInternarPetModal() {
@@ -407,6 +531,18 @@ function ensureInternarPetModal() {
         </header>
         <form class="flex max-h-[80vh] flex-col overflow-hidden" novalidate>
           <div class="flex-1 overflow-y-auto px-4 py-4">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-600 hidden" data-pet-summary>
+              <div class="flex flex-wrap items-center gap-2 text-gray-700">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Paciente</span>
+                <span class="text-sm font-semibold text-gray-900" data-pet-summary-name>—</span>
+                <span class="text-[10px] text-gray-400" data-pet-summary-meta>—</span>
+              </div>
+              <div class="mt-1 flex flex-wrap items-center gap-2 text-gray-600">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Tutor</span>
+                <span class="font-semibold text-gray-900" data-pet-summary-tutor>—</span>
+                <span class="text-gray-400" data-pet-summary-contact></span>
+              </div>
+            </div>
             <div class="grid gap-4 md:grid-cols-2">
               <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Situação
                 <select name="internarSituacao" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
@@ -496,6 +632,11 @@ function ensureInternarPetModal() {
   internarModal.tabPanels = Array.from(overlay.querySelectorAll('[data-tab-panel]'));
   internarModal.tagsInput = overlay.querySelector('[data-tags-input]');
   internarModal.tagsList = overlay.querySelector('[data-tags-list]');
+  internarModal.petSummaryEl = overlay.querySelector('[data-pet-summary]');
+  internarModal.petSummaryNameEl = overlay.querySelector('[data-pet-summary-name]');
+  internarModal.petSummaryMetaEl = overlay.querySelector('[data-pet-summary-meta]');
+  internarModal.petSummaryTutorEl = overlay.querySelector('[data-pet-summary-tutor]');
+  internarModal.petSummaryContactEl = overlay.querySelector('[data-pet-summary-contact]');
 
   overlay.addEventListener('click', (event) => {
     if (event.target === overlay) {
@@ -570,6 +711,7 @@ function ensureInternarPetModal() {
 
   setInternarModalTab('medica');
   renderTagList();
+  setInternarPetInfo(null);
 
   return overlay;
 }
@@ -590,10 +732,12 @@ function populateDynamicSelects(dataset) {
   }
 }
 
-function openInternarPetModal(dataset) {
+function openInternarPetModal(dataset, options = {}) {
+  const petInfo = options?.petInfo || null;
   ensureInternarPetModal();
   populateDynamicSelects(dataset);
   setInternarModalTab('medica');
+  setInternarPetInfo(petInfo);
   internarModal.overlay.classList.remove('hidden');
   internarModal.overlay.dataset.modalOpen = 'true';
   if (internarModal.dialog) {
@@ -617,9 +761,29 @@ function maybeOpenInternarModalFromQuery(dataset) {
   try {
     const params = new URLSearchParams(window.location.search);
     const flag = params.get('internar');
-    if (!flag) return;
-    openInternarPetModal(dataset);
-    params.delete('internar');
+    if (!flag) {
+      consumeInternacaoPreselectPayload();
+      return;
+    }
+
+    let petInfo = consumeInternacaoPreselectPayload();
+    const fromParams = getPetInfoFromParams(params);
+    petInfo = mergePetInfo(petInfo, fromParams);
+
+    const paramPetId = params.get('petId') || params.get('pet');
+    if (paramPetId) {
+      petInfo = mergePetInfo(petInfo, { petId: paramPetId });
+    }
+
+    if (petInfo?.petId) {
+      petInfo = mergePetInfo(petInfo, getPetInfoFromDataset(dataset, petInfo.petId));
+    }
+
+    openInternarPetModal(dataset, { petInfo });
+
+    ['internar', 'pet', 'petId', 'petNome', 'petEspecie', 'petRaca', 'petPeso', 'petIdade', 'tutorNome', 'tutorContato', 'tutorDocumento'].forEach((key) => {
+      params.delete(key);
+    });
     const query = params.toString();
     const newUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
     window.history.replaceState({}, document.title, `${newUrl}${window.location.hash || ''}`);
@@ -706,6 +870,16 @@ document.addEventListener('DOMContentLoaded', () => {
     boxesLoading: false,
     boxesError: '',
   };
+
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    const initialPetFilter = searchParams.get('pet') || searchParams.get('petId');
+    if (initialPetFilter) {
+      state.petId = initialPetFilter;
+    }
+  } catch (error) {
+    console.warn('internacao: falha ao aplicar filtro inicial', error);
+  }
 
   const render = () => {
     const renderer = VIEW_RENDERERS[view];

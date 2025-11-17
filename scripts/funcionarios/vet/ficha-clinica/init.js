@@ -1,5 +1,5 @@
 // Entry initialization for the Vet ficha clínica
-import { els, debounce } from './core.js';
+import { els, debounce, state, normalizeId, pickFirst, formatPhone, notify } from './core.js';
 import { openConsultaModal, loadConsultasFromServer, loadWaitingAppointments } from './consultas.js';
 import { openVacinaModal, loadVacinasForSelection, handleVacinaRealTimeEvent } from './vacinas.js';
 import {
@@ -228,6 +228,8 @@ export function initFichaClinica() {
     });
   }
 
+  initInternacaoShortcut();
+
   if (els.consultaTab) {
     els.consultaTab.addEventListener('click', (event) => {
       event.preventDefault();
@@ -246,4 +248,66 @@ export function initFichaClinica() {
   updateCardDisplay();
   restorePersistedSelection();
   updatePageVisibility();
+}
+
+function initInternacaoShortcut() {
+  if (!els.openInternacaoBtn) return;
+  els.openInternacaoBtn.addEventListener('click', (event) => {
+    const petId = normalizeId(state.selectedPetId);
+    const tutor = state.selectedCliente || {};
+    const pet = (petId && state.petsById && state.petsById[petId]) || null;
+
+    if (!petId || !pet) {
+      event.preventDefault();
+      notify('Selecione um pet na ficha clínica antes de encaminhar para a internação.', 'warning');
+      return;
+    }
+
+    const petNome = pickFirst(pet?.nome, pet?.petNome, pet?.apelido, pet?.nomePet);
+    const petEspecie = pickFirst(pet?.especie, pet?.tipoPet, pet?.tipo, pet?.categoria);
+    const petRaca = pickFirst(pet?.raca, pet?.racaPrincipal, pet?.racaPet);
+    const petPeso = pickFirst(pet?.peso, pet?.pesoAtual, pet?.pesoKg, pet?.pesoAtualKg);
+    const petIdade = pickFirst(pet?.idade, pet?.idadeFormatada, pet?.idadePet);
+    const tutorNome = pickFirst(tutor?.nome, tutor?.razaoSocial);
+    const tutorId = normalizeId(tutor?._id || tutor?.id || tutor?.clienteId);
+    const tutorDocumento = pickFirst(
+      tutor?.documento,
+      tutor?.documentoPrincipal,
+      tutor?.cpf,
+      tutor?.cpfCnpj,
+      tutor?.cnpj,
+      tutor?.doc,
+    );
+    const tutorContato = pickFirst(formatPhone(tutor?.celular), formatPhone(tutor?.telefone), tutor?.email);
+
+    const payload = {
+      petId,
+      petNome,
+      petEspecie,
+      petRaca,
+      petPeso,
+      petIdade,
+      tutorId,
+      tutorNome,
+      tutorDocumento,
+      tutorContato,
+    };
+
+    try {
+      sessionStorage.setItem('internacaoPreselect', JSON.stringify(payload));
+    } catch (error) {
+      console.warn('internacao preselect storage', error);
+    }
+
+    const params = new URLSearchParams();
+    params.set('internar', '1');
+    params.set('petId', petId);
+    if (petNome) params.set('petNome', petNome);
+    if (tutorNome) params.set('tutorNome', tutorNome);
+
+    const baseUrl = './internacao/animais-internados.html';
+    const url = `${baseUrl}?${params.toString()}`;
+    event.preventDefault();
+    window.location.assign(url);
+  });
 }

@@ -132,6 +132,7 @@ export const els = {
   addExameBtn: document.getElementById('vet-add-exame-btn'),
   addPesoBtn: document.getElementById('vet-add-peso-btn'),
   addObservacaoBtn: document.getElementById('vet-add-observacao-btn'),
+  openInternacaoBtn: document.getElementById('vet-open-internacao-btn'),
   colocarEmEsperaBtn: document.getElementById('vet-colocar-em-espera'),
   finalizarAtendimentoBtn: document.getElementById('vet-finalizar-atendimento'),
   limparConsultaBtn: document.getElementById('vet-clear-consulta'),
