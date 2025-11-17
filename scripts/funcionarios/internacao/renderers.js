@@ -87,7 +87,7 @@ function openExecucaoModal(pet, hourLabel, items) {
   overlay.id = 'internacao-exec-modal';
   overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4 py-6';
   overlay.innerHTML = `
-    <div class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
+    <div class="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
       <div class="border-b border-gray-100 pb-4">
         <div class="flex items-start justify-between gap-4">
           <div>
@@ -114,7 +114,7 @@ function openExecucaoModal(pet, hourLabel, items) {
           )
           .join('')}
       </div>
-      <div class="mt-6 flex flex-wrap items-center justify-end gap-2">
+      <div class="mt-6 flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
         ${actionButtons}
         <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50" data-close-modal>
           Fechar
