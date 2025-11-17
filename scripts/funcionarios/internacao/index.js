@@ -25,6 +25,7 @@ const INTERNAR_RISCO_OPTIONS = [
 const internarModal = {
   overlay: null,
   dialog: null,
+  titleEl: null,
   form: null,
   tabButtons: [],
   tabPanels: [],
@@ -42,6 +43,9 @@ const internarModal = {
   onSuccess: null,
   dataset: null,
   state: null,
+  mode: 'create',
+  recordId: null,
+  currentRecord: null,
 };
 
 const boxesModal = {
@@ -57,6 +61,8 @@ const fichaInternacaoModal = {
   overlay: null,
   dialog: null,
   record: null,
+  dataset: null,
+  state: null,
   subtitleEl: null,
   petNameEl: null,
   petMetaEl: null,
@@ -225,6 +231,21 @@ function getPetInfoFromInternacoes(state, key) {
   });
 }
 
+function getPetInfoFromInternacaoRecord(record) {
+  if (!record) return null;
+  return normalizePetInfo({
+    petId: record.pet?.id || record.petId || record.filterKey,
+    petNome: record.pet?.nome || record.petNome,
+    petEspecie: record.pet?.especie,
+    petRaca: record.pet?.raca,
+    petPeso: record.pet?.peso,
+    petIdade: record.pet?.idade,
+    tutorNome: record.tutor?.nome || record.tutorNome,
+    tutorContato: record.tutor?.contato || record.tutorContato,
+    tutorDocumento: record.tutor?.documento || record.tutorDocumento,
+  });
+}
+
 function getPetInfoFromParams(params) {
   if (!(params instanceof URLSearchParams)) return null;
   const payload = {};
@@ -389,6 +410,22 @@ function combineDateAndTime(dateStr, timeStr) {
   return parsed.toISOString();
 }
 
+function normalizeHistoricoEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const toText = (value) => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+  };
+  const baseId = toText(entry.id) || toText(entry._id) || toText(entry.criadoEm);
+  return {
+    id: baseId || `hist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    tipo: toText(entry.tipo) || 'Atualização',
+    descricao: toText(entry.descricao) || 'Atualização registrada.',
+    criadoPor: toText(entry.criadoPor) || 'Sistema',
+    criadoEm: entry.criadoEm || entry.createdAt || entry.data || '',
+  };
+}
+
 function normalizeInternacaoRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const codigoNumber = Number.parseInt(raw.codigo, 10);
@@ -400,6 +437,10 @@ function normalizeInternacaoRecord(raw) {
     if (value === undefined || value === null) return '';
     return String(value).trim();
   };
+
+  const historico = Array.isArray(raw.historico)
+    ? raw.historico.map(normalizeHistoricoEntry).filter(Boolean)
+    : [];
 
   return {
     id: baseId || filterKey,
@@ -436,6 +477,7 @@ function normalizeInternacaoRecord(raw) {
     admissao: raw.admissao || raw.createdAt || '',
     createdAt: raw.createdAt || '',
     updatedAt: raw.updatedAt || '',
+    historico,
   };
 }
 
@@ -509,7 +551,14 @@ async function handleInternarModalSubmit(event) {
 
   setInternarModalLoading(true);
   try {
-    await requestJson('/internacao/registros', { method: 'POST', body: payload });
+    const isEditMode = internarModal.mode === 'edit';
+    const recordId = internarModal.recordId;
+    if (isEditMode && !recordId) {
+      throw new Error('Não foi possível identificar a internação selecionada para edição.');
+    }
+    const url = isEditMode ? `/internacao/registros/${encodeURIComponent(recordId)}` : '/internacao/registros';
+    const method = isEditMode ? 'PUT' : 'POST';
+    await requestJson(url, { method, body: payload });
     const datasetRef = internarModal.dataset || null;
     const stateRef = internarModal.state || null;
     let boxesRefreshPromise = null;
@@ -522,7 +571,7 @@ async function handleInternarModalSubmit(event) {
     } catch (refreshError) {
       console.warn('internacao: falha ao agendar atualização dos boxes', refreshError);
     }
-    showToastMessage('Internação registrada com sucesso.', 'success');
+    showToastMessage(isEditMode ? 'Internação atualizada com sucesso.' : 'Internação registrada com sucesso.', 'success');
     const successCallback = internarModal.onSuccess;
     closeInternarPetModal();
     if (boxesRefreshPromise && typeof boxesRefreshPromise.catch === 'function') {
@@ -739,6 +788,65 @@ function renderTagList() {
     .join('');
 }
 
+function resetInternarModalForm() {
+  if (internarModal.form) {
+    internarModal.form.reset();
+  }
+  internarModal.tags = [];
+  if (internarModal.tagsInput) {
+    internarModal.tagsInput.value = '';
+  }
+  renderTagList();
+}
+
+function setInternarModalMode(mode) {
+  const resolved = mode === 'edit' ? 'edit' : 'create';
+  internarModal.mode = resolved;
+  if (internarModal.dialog) {
+    internarModal.dialog.dataset.modalMode = resolved;
+  }
+  const title = resolved === 'edit' ? 'Editar internação' : 'Internar pet';
+  if (internarModal.titleEl) {
+    internarModal.titleEl.textContent = title;
+  }
+  if (internarModal.submitBtn) {
+    const label = resolved === 'edit' ? 'Salvar alterações' : 'Salvar';
+    internarModal.submitBtn.dataset.defaultLabel = label;
+    if (!internarModal.submitBtn.disabled) {
+      internarModal.submitBtn.textContent = label;
+    }
+  }
+}
+
+function fillInternarModalFormFromRecord(record) {
+  if (!internarModal.form || !record) return;
+  const setValue = (name, value) => {
+    const field = internarModal.form.querySelector(`[name="${name}"]`);
+    if (!field) return;
+    field.value = value || '';
+  };
+
+  const situacaoValue = record.situacaoCodigo || record.situacao || '';
+  const riscoValue = record.riscoCodigo || record.risco || '';
+  const altaData = record.altaPrevistaData || (record.altaPrevistaISO ? record.altaPrevistaISO.slice(0, 10) : '');
+  const altaHora = record.altaPrevistaHora || (record.altaPrevistaISO ? record.altaPrevistaISO.slice(11, 16) : '');
+
+  setValue('internarSituacao', situacaoValue);
+  setValue('internarRisco', riscoValue);
+  setValue('internarVeterinario', record.veterinario || '');
+  setValue('internarBox', record.box || '');
+  setValue('internarAltaPrevista', altaData || '');
+  setValue('internarAltaPrevistaHora', altaHora || '');
+  setValue('internarQueixa', record.queixa || '');
+  setValue('internarDiagnostico', record.diagnostico || '');
+  setValue('internarPrognostico', record.prognostico || '');
+  setValue('internarAcessorios', record.acessorios || '');
+  setValue('internarObservacoes', record.observacoes || '');
+
+  internarModal.tags = Array.isArray(record.alergias) ? [...record.alergias] : [];
+  renderTagList();
+}
+
 function setInternarPetInfo(info) {
   const normalized = normalizePetInfo(info);
   internarModal.petInfo = normalized;
@@ -795,18 +903,16 @@ function closeInternarPetModal() {
   }
   internarModal.overlay.classList.add('hidden');
   delete internarModal.overlay.dataset.modalOpen;
-  if (internarModal.form) {
-    internarModal.form.reset();
-  }
-  internarModal.tags = [];
-  if (internarModal.tagsInput) internarModal.tagsInput.value = '';
-  renderTagList();
+  resetInternarModalForm();
   setInternarPetInfo(null);
   setInternarModalError('');
   setInternarModalLoading(false);
   internarModal.onSuccess = null;
   internarModal.dataset = null;
   internarModal.state = null;
+  internarModal.recordId = null;
+  internarModal.currentRecord = null;
+  setInternarModalMode('create');
 }
 
 function ensureInternarPetModal() {
@@ -939,6 +1045,7 @@ function ensureInternarPetModal() {
 
   internarModal.overlay = overlay;
   internarModal.dialog = overlay.querySelector('[data-internar-dialog]');
+  internarModal.titleEl = overlay.querySelector('#internar-pet-modal-title');
   internarModal.form = overlay.querySelector('form');
   internarModal.submitBtn = overlay.querySelector('[data-modal-submit]');
   internarModal.errorEl = overlay.querySelector('[data-modal-error]');
@@ -1013,7 +1120,17 @@ function ensureInternarPetModal() {
   return overlay;
 }
 
-function populateDynamicSelects(dataset) {
+function ensureSelectOption(select, option) {
+  if (!select || !option?.value) return;
+  const exists = Array.from(select.options).some((opt) => opt.value === option.value);
+  if (exists) return;
+  const opt = document.createElement('option');
+  opt.value = option.value;
+  opt.textContent = option.label || option.value;
+  select.appendChild(opt);
+}
+
+function populateDynamicSelects(dataset, extraOptions = {}) {
   if (!internarModal.form) return;
   const vetSelect = internarModal.form.querySelector('select[name="internarVeterinario"]');
   const boxSelect = internarModal.form.querySelector('select[name="internarBox"]');
@@ -1021,23 +1138,51 @@ function populateDynamicSelects(dataset) {
     const options = ['<option value="">Selecione</option>', ...getEquipeOptions(dataset).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
       .join('');
     vetSelect.innerHTML = options;
+    if (extraOptions.forceVeterinario) {
+      ensureSelectOption(vetSelect, extraOptions.forceVeterinario);
+    }
   }
   if (boxSelect) {
     const options = ['<option value="">Selecione</option>', ...getBoxOptions(dataset).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
       .join('');
     boxSelect.innerHTML = options;
+    if (extraOptions.forceBox) {
+      ensureSelectOption(boxSelect, extraOptions.forceBox);
+    }
   }
 }
 
 function openInternarPetModal(dataset, options = {}) {
-  const petInfo = options?.petInfo || null;
   ensureInternarPetModal();
+  const wantsEdit = options?.mode === 'edit';
+  const record = wantsEdit && options?.record ? options.record : null;
+  const mode = wantsEdit && record ? 'edit' : 'create';
+  let petInfo = options?.petInfo || null;
+  if (!petInfo && record) {
+    petInfo = getPetInfoFromInternacaoRecord(record);
+  }
   internarModal.onSuccess = typeof options.onSuccess === 'function' ? options.onSuccess : null;
   internarModal.dataset = dataset || null;
   internarModal.state = options?.state || null;
+  internarModal.currentRecord = record;
+  internarModal.recordId = mode === 'edit' && record ? record.id || record.filterKey || '' : null;
+  setInternarModalMode(mode);
   setInternarModalError('');
   setInternarModalLoading(false);
-  populateDynamicSelects(dataset);
+  resetInternarModalForm();
+  const selectOverrides = {};
+  if (mode === 'edit' && record) {
+    if (record.veterinario) {
+      selectOverrides.forceVeterinario = { value: record.veterinario, label: record.veterinario };
+    }
+    if (record.box) {
+      selectOverrides.forceBox = { value: record.box, label: record.box };
+    }
+  }
+  populateDynamicSelects(dataset, selectOverrides);
+  if (mode === 'edit' && record) {
+    fillInternarModalFormFromRecord(record);
+  }
   setInternarModalTab('medica');
   setInternarPetInfo(petInfo);
   internarModal.overlay.classList.remove('hidden');
@@ -1202,7 +1347,7 @@ function renderFichaHistorico(record) {
       `
     : '<p class="mt-3 text-sm text-gray-500">Sem dados administrativos adicionais.</p>';
 
-  fichaInternacaoModal.historicoListEl.innerHTML = `
+  const admissionCard = `
     <article class="rounded-2xl border border-gray-100 p-4 shadow-sm">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -1224,6 +1369,33 @@ function renderFichaHistorico(record) {
       </div>
     </article>
   `;
+
+  const updates = Array.isArray(record.historico) ? [...record.historico] : [];
+  const updatesMarkup = updates
+    .sort((a, b) => {
+      const aTime = new Date(a.criadoEm || 0).getTime();
+      const bTime = new Date(b.criadoEm || 0).getTime();
+      return bTime - aTime;
+    })
+    .map((entry) => {
+      const dataLabel = formatDateTimeLabel(entry.criadoEm);
+      const autorLabel = entry.criadoPor ? `Responsável: ${escapeHtml(entry.criadoPor)}` : '';
+      return `
+        <article class="rounded-2xl border border-gray-100 p-4 shadow-sm">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-primary/80">${escapeHtml(entry.tipo || 'Atualização')}</p>
+              <h3 class="text-base font-semibold text-gray-900">${escapeHtml(entry.descricao || 'Registro atualizado.')}</h3>
+            </div>
+            <p class="text-xs text-gray-500">${escapeHtml(dataLabel)}</p>
+          </div>
+          ${autorLabel ? `<p class="mt-2 text-xs text-gray-500">${autorLabel}</p>` : ''}
+        </article>
+      `;
+    })
+    .join('');
+
+  fichaInternacaoModal.historicoListEl.innerHTML = `${admissionCard}${updatesMarkup}`;
 }
 
 function ensureFichaInternacaoModal() {
@@ -1387,17 +1559,29 @@ function ensureFichaInternacaoModal() {
   fichaInternacaoModal.tabButtons = Array.from(overlay.querySelectorAll('[data-ficha-tab]'));
   fichaInternacaoModal.tabPanels = Array.from(overlay.querySelectorAll('[data-ficha-panel]'));
 
-  overlay.addEventListener('click', (event) => {
+  overlay.addEventListener('click', async (event) => {
     const closeTrigger = event.target.closest('[data-close-modal]');
     if (closeTrigger) {
       event.preventDefault();
       closeFichaInternacaoModal();
       return;
     }
-    const actionTrigger = event.target.closest('[data-ficha-action], [data-ficha-hist-action]');
+    const actionTrigger = event.target.closest('[data-ficha-action]');
     if (actionTrigger) {
       event.preventDefault();
+      const actionType = actionTrigger.dataset.fichaAction;
+      if (actionType === 'editar') {
+        await handleFichaEditarAction();
+      } else {
+        showToastMessage('Funcionalidade em desenvolvimento.', 'info');
+      }
+      return;
+    }
+    const quickActionTrigger = event.target.closest('[data-ficha-hist-action]');
+    if (quickActionTrigger) {
+      event.preventDefault();
       showToastMessage('Funcionalidade em desenvolvimento.', 'info');
+      return;
     }
     const tabTrigger = event.target.closest('[data-ficha-tab]');
     if (tabTrigger) {
@@ -1417,6 +1601,34 @@ function ensureFichaInternacaoModal() {
   renderFichaHistorico(null);
 
   return overlay;
+}
+
+async function handleFichaEditarAction() {
+  const record = fichaInternacaoModal.record;
+  if (!record) {
+    showToastMessage('Não foi possível carregar os dados dessa internação.', 'warning');
+    return;
+  }
+  const dataset = fichaInternacaoModal.dataset || getDataset();
+  const state = fichaInternacaoModal.state || {};
+  try {
+    await fetchVeterinariosData(dataset, state, { quiet: true });
+  } catch (error) {
+    console.warn('internacao: falha ao atualizar veterinários antes de editar', error);
+  }
+  try {
+    await fetchBoxesData(dataset, state, { quiet: true });
+  } catch (error) {
+    console.warn('internacao: falha ao atualizar boxes antes de editar', error);
+  }
+  closeFichaInternacaoModal();
+  openInternarPetModal(dataset, {
+    petInfo: getPetInfoFromInternacaoRecord(record),
+    onSuccess: state.refreshInternacoes,
+    state,
+    mode: 'edit',
+    record,
+  });
 }
 
 function fillFichaInternacaoModal(record) {
@@ -1464,10 +1676,12 @@ function fillFichaInternacaoModal(record) {
   renderFichaHistorico(record);
 }
 
-function openFichaInternacaoModal(record) {
+function openFichaInternacaoModal(record, options = {}) {
   if (!record) return;
   ensureFichaInternacaoModal();
   fichaInternacaoModal.record = record;
+  fichaInternacaoModal.dataset = options.dataset || fichaInternacaoModal.dataset || null;
+  fichaInternacaoModal.state = options.state || fichaInternacaoModal.state || null;
   fillFichaInternacaoModal(record);
   setFichaModalTab('historico');
   fichaInternacaoModal.overlay.classList.remove('hidden');
@@ -1665,7 +1879,7 @@ function setupAnimaisPage(dataset, state, render) {
           showToastMessage('Não foi possível carregar os detalhes dessa internação.', 'warning');
           return;
         }
-        openFichaInternacaoModal(registro);
+        openFichaInternacaoModal(registro, { dataset, state });
       }
     });
   }

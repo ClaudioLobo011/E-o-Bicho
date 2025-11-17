@@ -23,6 +23,107 @@ const sanitizeArray = (value) => {
   return text ? [text] : [];
 };
 
+const formatHistoricoItem = (entry) => {
+  if (!entry) return null;
+  const plain = typeof entry.toObject === 'function' ? entry.toObject() : entry;
+  const identifier = plain._id || plain.id || plain.criadoEm || Date.now();
+  return {
+    id: String(identifier).trim(),
+    tipo: sanitizeText(plain.tipo, { fallback: 'Atualização' }),
+    descricao: sanitizeText(plain.descricao, { fallback: 'Atualização registrada.' }),
+    criadoPor: sanitizeText(plain.criadoPor, { fallback: 'Sistema' }),
+    criadoEm: plain.criadoEm || plain.createdAt || null,
+  };
+};
+
+const buildRegistroPayload = (body = {}) => ({
+  petId: sanitizeText(body.petId),
+  petNome: sanitizeText(body.petNome),
+  petEspecie: sanitizeText(body.petEspecie),
+  petRaca: sanitizeText(body.petRaca),
+  petPeso: sanitizeText(body.petPeso),
+  petIdade: sanitizeText(body.petIdade),
+  tutorNome: sanitizeText(body.tutorNome),
+  tutorDocumento: sanitizeText(body.tutorDocumento),
+  tutorContato: sanitizeText(body.tutorContato),
+  situacao: sanitizeText(body.situacao),
+  situacaoCodigo: sanitizeText(body.situacaoCodigo),
+  risco: sanitizeText(body.risco),
+  riscoCodigo: sanitizeText(body.riscoCodigo),
+  veterinario: sanitizeText(body.veterinario),
+  box: sanitizeText(body.box),
+  altaPrevistaData: sanitizeText(body.altaPrevistaData),
+  altaPrevistaHora: sanitizeText(body.altaPrevistaHora),
+  queixa: sanitizeText(body.queixa),
+  diagnostico: sanitizeText(body.diagnostico),
+  prognostico: sanitizeText(body.prognostico),
+  alergias: sanitizeArray(body.alergias),
+  acessorios: sanitizeText(body.acessorios),
+  observacoes: sanitizeText(body.observacoes),
+});
+
+const describeRegistroChanges = (before, after) => {
+  const changes = [];
+  const compareTextField = (field, label) => {
+    const previous = sanitizeText(before[field]);
+    const next = sanitizeText(after[field]);
+    if (previous === next) return;
+    if (!previous && next) {
+      changes.push(`${label} definido como "${next}".`);
+      return;
+    }
+    if (previous && !next) {
+      changes.push(`${label} removido (antes: "${previous}").`);
+      return;
+    }
+    changes.push(`${label} alterado de "${previous}" para "${next}".`);
+  };
+
+  compareTextField('situacao', 'Situação');
+  compareTextField('risco', 'Risco');
+  compareTextField('veterinario', 'Veterinário responsável');
+  compareTextField('box', 'Box');
+  compareTextField('queixa', 'Queixa');
+  compareTextField('diagnostico', 'Diagnóstico');
+  compareTextField('prognostico', 'Prognóstico');
+  compareTextField('acessorios', 'Acessórios');
+  compareTextField('observacoes', 'Observações');
+
+  const beforeAlta = [sanitizeText(before.altaPrevistaData), sanitizeText(before.altaPrevistaHora)]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  const afterAlta = [sanitizeText(after.altaPrevistaData), sanitizeText(after.altaPrevistaHora)]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  if (beforeAlta !== afterAlta) {
+    if (!beforeAlta && afterAlta) {
+      changes.push(`Alta prevista definida para ${afterAlta}.`);
+    } else if (beforeAlta && !afterAlta) {
+      changes.push('Alta prevista removida.');
+    } else {
+      changes.push(`Alta prevista alterada de ${beforeAlta} para ${afterAlta}.`);
+    }
+  }
+
+  const beforeTags = sanitizeArray(before.alergias).sort();
+  const afterTags = Array.isArray(after.alergias) ? [...after.alergias].sort() : [];
+  if (beforeTags.join('|') !== afterTags.join('|')) {
+    if (!beforeTags.length && afterTags.length) {
+      changes.push(`Alergias e marcações adicionadas (${afterTags.join(', ')}).`);
+    } else if (beforeTags.length && !afterTags.length) {
+      changes.push('Alergias e marcações removidas.');
+    } else {
+      changes.push(
+        `Alergias e marcações ajustadas (${beforeTags.join(', ')} → ${afterTags.join(', ')}).`,
+      );
+    }
+  }
+
+  return changes;
+};
+
 const formatBox = (doc) => {
   if (!doc) return null;
   const plain = typeof doc.toObject === 'function' ? doc.toObject() : doc;
@@ -43,6 +144,16 @@ const formatBox = (doc) => {
 const formatRegistro = (doc) => {
   if (!doc) return null;
   const plain = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+  const historico = Array.isArray(plain.historico)
+    ? plain.historico
+        .map(formatHistoricoItem)
+        .filter(Boolean)
+        .sort((a, b) => {
+          const aTime = new Date(a.criadoEm || 0).getTime();
+          const bTime = new Date(b.criadoEm || 0).getTime();
+          return bTime - aTime;
+        })
+    : [];
   return {
     id: String(plain._id || plain.id || '').trim(),
     codigo: plain.codigo || null,
@@ -72,6 +183,7 @@ const formatRegistro = (doc) => {
     admissao: plain.createdAt || null,
     createdAt: plain.createdAt || null,
     updatedAt: plain.updatedAt || null,
+    historico,
   };
 };
 
@@ -130,31 +242,7 @@ router.get('/registros', async (req, res) => {
 
 router.post('/registros', async (req, res) => {
   try {
-    const payload = {
-      petId: sanitizeText(req.body?.petId),
-      petNome: sanitizeText(req.body?.petNome),
-      petEspecie: sanitizeText(req.body?.petEspecie),
-      petRaca: sanitizeText(req.body?.petRaca),
-      petPeso: sanitizeText(req.body?.petPeso),
-      petIdade: sanitizeText(req.body?.petIdade),
-      tutorNome: sanitizeText(req.body?.tutorNome),
-      tutorDocumento: sanitizeText(req.body?.tutorDocumento),
-      tutorContato: sanitizeText(req.body?.tutorContato),
-      situacao: sanitizeText(req.body?.situacao),
-      situacaoCodigo: sanitizeText(req.body?.situacaoCodigo),
-      risco: sanitizeText(req.body?.risco),
-      riscoCodigo: sanitizeText(req.body?.riscoCodigo),
-      veterinario: sanitizeText(req.body?.veterinario),
-      box: sanitizeText(req.body?.box),
-      altaPrevistaData: sanitizeText(req.body?.altaPrevistaData),
-      altaPrevistaHora: sanitizeText(req.body?.altaPrevistaHora),
-      queixa: sanitizeText(req.body?.queixa),
-      diagnostico: sanitizeText(req.body?.diagnostico),
-      prognostico: sanitizeText(req.body?.prognostico),
-      alergias: sanitizeArray(req.body?.alergias),
-      acessorios: sanitizeText(req.body?.acessorios),
-      observacoes: sanitizeText(req.body?.observacoes),
-    };
+    const payload = buildRegistroPayload(req.body);
 
     if (!payload.petNome) {
       return res.status(400).json({ message: 'Selecione um paciente válido antes de salvar.' });
@@ -184,6 +272,75 @@ router.post('/registros', async (req, res) => {
       return res.status(409).json({ message: 'Não foi possível gerar o código interno da internação. Tente novamente.' });
     }
     return res.status(500).json({ message: 'Não foi possível registrar a internação.' });
+  }
+});
+
+router.put('/registros/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Informe o registro que deseja atualizar.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    const payload = buildRegistroPayload(req.body);
+    if (!payload.petNome) {
+      return res.status(400).json({ message: 'Selecione um paciente válido antes de salvar.' });
+    }
+
+    const changes = describeRegistroChanges(record, payload);
+    if (!changes.length) {
+      return res.status(400).json({ message: 'Nenhuma alteração foi identificada para salvar.' });
+    }
+
+    const previousBox = record.box;
+    Object.assign(record, payload);
+    const autor = req.user?.email || 'Sistema';
+    const descricao = `Atualização realizada: ${changes.join(' ')}`;
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    record.historico.push({
+      tipo: 'Atualização',
+      descricao,
+      criadoPor: autor,
+      criadoEm: new Date(),
+    });
+
+    await record.save();
+
+    if (previousBox && previousBox !== record.box) {
+      try {
+        await InternacaoBox.findOneAndUpdate(
+          { box: previousBox },
+          { ocupante: 'Livre', status: 'Disponível' },
+        );
+      } catch (boxReleaseError) {
+        console.warn('internacao: falha ao liberar box anterior', boxReleaseError);
+      }
+    }
+
+    if (record.box) {
+      try {
+        await InternacaoBox.findOneAndUpdate(
+          { box: record.box },
+          { ocupante: record.petNome || 'Ocupado', status: 'Ocupado' },
+        );
+      } catch (boxAssignError) {
+        console.warn('internacao: falha ao atualizar box atual', boxAssignError);
+      }
+    }
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    return res.json(formatRegistro(updated));
+  } catch (error) {
+    console.error('internacao: falha ao atualizar internação', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar.' });
+    }
+    return res.status(500).json({ message: 'Não foi possível atualizar a internação.' });
   }
 });
 

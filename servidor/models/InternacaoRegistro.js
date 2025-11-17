@@ -26,6 +26,14 @@ const internacaoRegistroSchema = new mongoose.Schema(
     alergias: [{ type: String, trim: true }],
     acessorios: { type: String, trim: true },
     observacoes: { type: String, trim: true },
+    historico: [
+      {
+        tipo: { type: String, trim: true },
+        descricao: { type: String, trim: true },
+        criadoPor: { type: String, trim: true },
+        criadoEm: { type: Date, default: Date.now },
+      },
+    ],
   },
   {
     timestamps: true,
