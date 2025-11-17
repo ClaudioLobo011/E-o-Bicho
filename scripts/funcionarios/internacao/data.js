@@ -164,4 +164,5 @@ export const internacaoDataset = {
     { box: 'Box 04', ocupante: 'Livre', status: 'Manutenção', especialidade: 'UTI', higienizacao: '—', observacao: 'Equipamentos em calibração' },
     { box: 'Box 05', ocupante: 'Amora', status: 'Isolamento respiratório', especialidade: 'Infectologia', higienizacao: '08h30', observacao: 'Acesso restrito com EPIs' },
   ],
+  veterinarios: [],
 };

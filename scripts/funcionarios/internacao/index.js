@@ -273,6 +273,30 @@ function normalizeBox(raw) {
   };
 }
 
+function normalizeVeterinario(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const nome = typeof raw.nome === 'string' && raw.nome.trim() ? raw.nome.trim() : '';
+  const id = typeof raw._id === 'string' && raw._id.trim()
+    ? raw._id.trim()
+    : typeof raw.id === 'string' && raw.id.trim()
+      ? raw.id.trim()
+      : nome;
+  if (!id && !nome) return null;
+  return {
+    id,
+    nome: nome || 'Veterinário(a)',
+  };
+}
+
+function isBoxAvailable(box) {
+  const ocupante = String(box?.ocupante || '').trim().toLowerCase();
+  const status = String(box?.status || '').trim().toLowerCase();
+  if (!ocupante && !status) return true;
+  if (ocupante && ocupante !== 'livre') return false;
+  if (status && !['disponível', 'disponivel'].includes(status)) return false;
+  return true;
+}
+
 function combineDateAndTime(dateStr, timeStr) {
   const datePart = typeof dateStr === 'string' ? dateStr.trim() : '';
   if (!datePart) return '';
@@ -571,6 +595,14 @@ function initCreateBoxModal(onSuccess) {
 }
 
 function getEquipeOptions(dataset) {
+  const veterinarios = Array.isArray(dataset?.veterinarios) ? dataset.veterinarios : [];
+  if (veterinarios.length) {
+    return veterinarios.map((vet) => ({
+      value: vet.nome || vet.id,
+      label: vet.nome || vet.id || 'Veterinário(a)',
+    }));
+  }
+
   const set = new Set();
   (dataset?.pacientes || []).forEach((pet) => {
     const nome = pet?.internacao?.equipeMedica;
@@ -581,7 +613,9 @@ function getEquipeOptions(dataset) {
 
 function getBoxOptions(dataset) {
   const boxes = Array.isArray(dataset?.boxes) ? dataset.boxes : [];
-  return boxes.map((item) => ({ value: item.box, label: `${item.box}${item.ocupante ? ` · ${item.ocupante}` : ''}` }));
+  return boxes
+    .filter((item) => isBoxAvailable(item))
+    .map((item) => ({ value: item.box, label: `${item.box}${item.ocupante ? ` · ${item.ocupante}` : ''}` }));
 }
 
 function renderTagList() {
@@ -909,8 +943,17 @@ function openInternarPetModal(dataset, options = {}) {
 
 function registerInternarModalTriggers(dataset, state = {}) {
   document.querySelectorAll('[data-open-internar-modal]').forEach((button) => {
-    button.addEventListener('click', (event) => {
+    button.addEventListener('click', async (event) => {
       event.preventDefault();
+
+      if (!Array.isArray(dataset?.veterinarios) || !dataset.veterinarios.length) {
+        await fetchVeterinariosData(dataset, state, { quiet: false });
+      }
+
+      if (!Array.isArray(dataset?.boxes) || !dataset.boxes.length) {
+        await fetchBoxesData(dataset, state, { quiet: false });
+      }
+
       const triggerPetId = button.dataset.petId || '';
       const resolvedId = triggerPetId || state.petId || '';
       let petInfo = null;
@@ -947,6 +990,9 @@ function maybeOpenInternarModalFromQuery(dataset, state = {}) {
       petInfo = mergePetInfo(petInfo, getPetInfoFromDataset(dataset, petInfo.petId));
       petInfo = mergePetInfo(petInfo, getPetInfoFromInternacoes(state, petInfo.petId));
     }
+
+    fetchVeterinariosData(dataset, state, { quiet: true });
+    fetchBoxesData(dataset, state, { quiet: true });
 
     openInternarPetModal(dataset, {
       petInfo,
@@ -1011,27 +1057,71 @@ function updateSyncInfo(dataset) {
   el.textContent = `${texto} · ${fichaAtualizada}`;
 }
 
+async function fetchBoxesData(dataset, state = {}, { quiet = false, onUpdate } = {}) {
+  if (state) {
+    state.boxesLoading = true;
+    state.boxesError = '';
+  }
+  if (typeof onUpdate === 'function') onUpdate();
+
+  try {
+    const data = await requestJson('/internacao/boxes');
+    const normalized = Array.isArray(data) ? data.map(normalizeBox).filter(Boolean) : [];
+    if (dataset) dataset.boxes = normalized;
+    if (state) {
+      state.boxes = normalized;
+      state.boxesLoading = false;
+    }
+    populateDynamicSelects(dataset);
+    if (typeof onUpdate === 'function') onUpdate();
+    return normalized;
+  } catch (error) {
+    console.error('internacao: falha ao carregar boxes', error);
+    if (state) {
+      state.boxesError = error.message || 'Não foi possível carregar os boxes.';
+      state.boxesLoading = false;
+    }
+    if (!quiet) {
+      showToastMessage(state?.boxesError || 'Não foi possível carregar os boxes.', 'warning');
+    }
+    if (typeof onUpdate === 'function') onUpdate();
+    return [];
+  }
+}
+
+async function fetchVeterinariosData(dataset, state = {}, { quiet = false } = {}) {
+  if (state) {
+    state.veterinariosLoading = true;
+    state.veterinariosError = '';
+  }
+
+  try {
+    const data = await requestJson('/func/profissionais?tipos=veterinario');
+    const normalized = Array.isArray(data) ? data.map(normalizeVeterinario).filter(Boolean) : [];
+    if (dataset) dataset.veterinarios = normalized;
+    if (state) {
+      state.veterinarios = normalized;
+      state.veterinariosLoading = false;
+    }
+    populateDynamicSelects(dataset);
+    return normalized;
+  } catch (error) {
+    console.error('internacao: falha ao carregar veterinários', error);
+    if (state) {
+      state.veterinariosError = error.message || 'Não foi possível carregar os veterinários.';
+      state.veterinariosLoading = false;
+    }
+    if (!quiet) {
+      showToastMessage(state?.veterinariosError || 'Não foi possível carregar os veterinários.', 'warning');
+    }
+    return [];
+  }
+}
+
 function setupBoxesPage(dataset, state, render) {
   const root = document.querySelector('[data-internacao-root]');
 
-  const fetchBoxes = async () => {
-    state.boxesLoading = true;
-    state.boxesError = '';
-    render();
-    try {
-      const data = await requestJson('/internacao/boxes');
-      const normalized = Array.isArray(data) ? data.map(normalizeBox).filter(Boolean) : [];
-      dataset.boxes = normalized;
-      state.boxes = normalized;
-      state.boxesLoading = false;
-      render();
-    } catch (error) {
-      console.error('internacao: falha ao carregar boxes', error);
-      state.boxesError = error.message || 'Não foi possível carregar os boxes.';
-      state.boxesLoading = false;
-      render();
-    }
-  };
+  const fetchBoxes = () => fetchBoxesData(dataset, state, { quiet: true, onUpdate: render });
 
   const createBtn = document.querySelector('[data-boxes-create]');
   if (createBtn) {
@@ -1106,6 +1196,9 @@ document.addEventListener('DOMContentLoaded', () => {
     boxes: Array.isArray(dataset.boxes) ? [...dataset.boxes] : [],
     boxesLoading: false,
     boxesError: '',
+    veterinarios: Array.isArray(dataset.veterinarios) ? [...dataset.veterinarios] : [],
+    veterinariosLoading: false,
+    veterinariosError: '',
     internacoes: Array.isArray(dataset.internacoes) ? [...dataset.internacoes] : [],
     internacoesLoading: false,
     internacoesError: '',
@@ -1137,7 +1230,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if (view === 'boxes') {
     setupBoxesPage(dataset, state, render);
+  } else {
+    fetchBoxesData(dataset, state, { quiet: true });
   }
+
+  fetchVeterinariosData(dataset, state, { quiet: true });
 
   document.querySelectorAll('[data-internacao-pet-filter]').forEach((select) => {
     select.addEventListener('change', (event) => {
