@@ -3335,13 +3335,15 @@ function updatePrescricaoDescricaoLabel(tipoValue) {
 function shouldShowMedicamentoDetails(values = {}) {
   const tipoKey = normalizeActionKey(values.tipo || '');
   const freqKey = normalizeActionKey(values.frequencia || '');
-  return tipoKey === 'medicamento' && freqKey === 'recorrente';
+  if (tipoKey !== 'medicamento') return false;
+  return freqKey === 'recorrente' || freqKey === 'unica';
 }
 
 function shouldShowFluidoterapiaDetails(values = {}) {
   const tipoKey = normalizeActionKey(values.tipo || '');
   const freqKey = normalizeActionKey(values.frequencia || '');
-  return tipoKey === 'fluidoterapia' && freqKey === 'recorrente';
+  if (tipoKey !== 'fluidoterapia') return false;
+  return freqKey === 'recorrente' || freqKey === 'unica';
 }
 
 function shouldShowRecorrenciaFields(values = {}) {
@@ -3680,7 +3682,7 @@ function ensurePrescricaoModal() {
               <textarea name="prescDescricao" rows="1" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Descreva o procedimento, medicamento ou fluidoterapia"></textarea>
             </label>
             <div class="rounded-xl border border-gray-100 px-3 py-3 hidden" data-prescricao-medicamento>
-              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Detalhes do medicamento recorrente</p>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Detalhes do medicamento</p>
               <div class="mt-3 grid gap-3 md:grid-cols-4">
                 <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Unidade*
                   <select name="prescMedUnidade" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
@@ -3706,7 +3708,7 @@ function ensurePrescricaoModal() {
               </div>
             </div>
             <div class="rounded-xl border border-gray-100 px-3 py-3 hidden" data-prescricao-fluidoterapia>
-              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Detalhes da fluidoterapia recorrente</p>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Detalhes da fluidoterapia</p>
               <div class="mt-3 grid gap-3 lg:grid-cols-4">
                 <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Fluído*
                   <input type="text" name="prescFluidFluido" data-prescricao-fluid-input class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Ringer com lactato" />
