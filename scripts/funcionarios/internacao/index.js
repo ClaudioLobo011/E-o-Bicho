@@ -206,6 +206,8 @@ const prescricaoModal = {
   recorrenciaFields: null,
   medicamentoFields: null,
   fluidFields: null,
+  descricaoWrapper: null,
+  descricaoField: null,
   tipoSelect: null,
   frequenciaSelect: null,
   petSummaryEl: null,
@@ -3303,6 +3305,15 @@ function togglePrescricaoFluidoterapiaFields(show) {
   prescricaoModal.fluidFields.setAttribute('aria-hidden', show ? 'false' : 'true');
 }
 
+function togglePrescricaoDescricaoField(show) {
+  if (!prescricaoModal.descricaoWrapper) return;
+  prescricaoModal.descricaoWrapper.classList.toggle('hidden', !show);
+  prescricaoModal.descricaoWrapper.setAttribute('aria-hidden', show ? 'false' : 'true');
+  if (!show && prescricaoModal.descricaoField) {
+    prescricaoModal.descricaoField.value = '';
+  }
+}
+
 function updatePrescricaoDescricaoLabel(tipoValue) {
   if (!prescricaoModal.descricaoLabelEl) return;
   const tipoKey = normalizeActionKey(tipoValue || prescricaoModal.tipoSelect?.value || '');
@@ -3319,6 +3330,10 @@ function shouldShowFluidoterapiaDetails(values = {}) {
   const tipoKey = normalizeActionKey(values.tipo || '');
   const freqKey = normalizeActionKey(values.frequencia || '');
   return tipoKey === 'fluidoterapia' && freqKey === 'recorrente';
+}
+
+function shouldHidePrescricaoDescricaoField(values = {}) {
+  return shouldShowFluidoterapiaDetails(values);
 }
 
 function readPrescricaoFormValues() {
@@ -3479,6 +3494,7 @@ function resetPrescricaoModalForm() {
   togglePrescricaoRecorrenciaFields(true);
   togglePrescricaoMedicamentoFields(false);
   togglePrescricaoFluidoterapiaFields(false);
+  togglePrescricaoDescricaoField(true);
   const fluidInputs = prescricaoModal.form?.querySelectorAll('[data-prescricao-fluid-input]');
   if (fluidInputs) {
     fluidInputs.forEach((input) => {
@@ -3551,6 +3567,7 @@ function handlePrescricaoFormChange(event) {
     cachedValues = cachedValues || readPrescricaoFormValues();
     togglePrescricaoMedicamentoFields(shouldShowMedicamentoDetails(cachedValues));
     togglePrescricaoFluidoterapiaFields(shouldShowFluidoterapiaDetails(cachedValues));
+    togglePrescricaoDescricaoField(!shouldHidePrescricaoDescricaoField(cachedValues));
     updatePrescricaoDescricaoLabel(cachedValues.tipo);
   }
   updatePrescricaoResumoFromForm();
@@ -3633,7 +3650,7 @@ function ensurePrescricaoModal() {
                 </label>
               </div>
             </div>
-            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500" data-prescricao-descricao-wrapper>
               <span data-prescricao-descricao-label>Procedimento*</span>
               <textarea name="prescDescricao" rows="1" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Descreva o procedimento, medicamento ou fluidoterapia"></textarea>
             </label>
@@ -3744,6 +3761,8 @@ function ensurePrescricaoModal() {
   prescricaoModal.petSummaryTutorEl = overlay.querySelector('[data-prescricao-summary-tutor]');
   prescricaoModal.medPesoField = overlay.querySelector('input[name="prescMedPeso"]');
   prescricaoModal.medPesoMetaEl = overlay.querySelector('[data-prescricao-peso-meta]');
+  prescricaoModal.descricaoWrapper = overlay.querySelector('[data-prescricao-descricao-wrapper]');
+  prescricaoModal.descricaoField = overlay.querySelector('textarea[name="prescDescricao"]');
   prescricaoModal.descricaoLabelEl = overlay.querySelector('[data-prescricao-descricao-label]');
 
   overlay.addEventListener('click', (event) => {
@@ -3780,6 +3799,7 @@ function openPrescricaoModal(record, options = {}) {
   const initialValues = readPrescricaoFormValues();
   togglePrescricaoMedicamentoFields(shouldShowMedicamentoDetails(initialValues));
   togglePrescricaoFluidoterapiaFields(shouldShowFluidoterapiaDetails(initialValues));
+  togglePrescricaoDescricaoField(!shouldHidePrescricaoDescricaoField(initialValues));
   updatePrescricaoDescricaoLabel(initialValues.tipo);
   prescricaoModal.overlay.classList.remove('hidden');
   prescricaoModal.overlay.classList.add('flex');
