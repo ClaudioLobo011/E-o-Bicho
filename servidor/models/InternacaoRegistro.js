@@ -34,6 +34,13 @@ const internacaoRegistroSchema = new mongoose.Schema(
         criadoEm: { type: Date, default: Date.now },
       },
     ],
+    obitoRegistrado: { type: Boolean, default: false },
+    obitoVeterinario: { type: String, trim: true },
+    obitoData: { type: String, trim: true },
+    obitoHora: { type: String, trim: true },
+    obitoCausa: { type: String, trim: true },
+    obitoRelatorio: { type: String, trim: true },
+    obitoConfirmadoEm: { type: Date },
   },
   {
     timestamps: true,

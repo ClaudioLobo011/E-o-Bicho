@@ -62,6 +62,14 @@ const buildRegistroPayload = (body = {}) => ({
   observacoes: sanitizeText(body.observacoes),
 });
 
+const buildObitoPayload = (body = {}) => ({
+  veterinario: sanitizeText(body.veterinario),
+  data: sanitizeText(body.data),
+  hora: sanitizeText(body.hora),
+  causa: sanitizeText(body.causa),
+  relatorio: sanitizeText(body.relatorio),
+});
+
 const describeRegistroChanges = (before, after) => {
   const changes = [];
   const compareTextField = (field, label) => {
@@ -180,6 +188,13 @@ const formatRegistro = (doc) => {
     alergias: sanitizeArray(plain.alergias),
     acessorios: sanitizeText(plain.acessorios),
     observacoes: sanitizeText(plain.observacoes),
+    obitoRegistrado: Boolean(plain.obitoRegistrado),
+    obitoVeterinario: sanitizeText(plain.obitoVeterinario),
+    obitoData: sanitizeText(plain.obitoData),
+    obitoHora: sanitizeText(plain.obitoHora),
+    obitoCausa: sanitizeText(plain.obitoCausa),
+    obitoRelatorio: sanitizeText(plain.obitoRelatorio),
+    obitoConfirmadoEm: plain.obitoConfirmadoEm || null,
     admissao: plain.createdAt || null,
     createdAt: plain.createdAt || null,
     updatedAt: plain.updatedAt || null,
@@ -341,6 +356,86 @@ router.put('/registros/:id', async (req, res) => {
       return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar.' });
     }
     return res.status(500).json({ message: 'Não foi possível atualizar a internação.' });
+  }
+});
+
+router.post('/registros/:id/obito', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Informe o registro que deseja atualizar.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.obitoRegistrado) {
+      return res.status(409).json({ message: 'O óbito desse paciente já foi registrado.' });
+    }
+
+    const payload = buildObitoPayload(req.body);
+    if (!payload.veterinario) {
+      payload.veterinario = sanitizeText(record.veterinario);
+    }
+    const now = new Date();
+    if (!payload.data) {
+      payload.data = now.toISOString().slice(0, 10);
+    }
+    if (!payload.hora) {
+      payload.hora = now.toISOString().slice(11, 16);
+    }
+
+    if (!payload.veterinario || !payload.data || !payload.hora || !payload.causa || !payload.relatorio) {
+      return res.status(400).json({ message: 'Preencha todos os campos obrigatórios antes de confirmar o óbito.' });
+    }
+
+    record.obitoRegistrado = true;
+    record.obitoVeterinario = payload.veterinario;
+    record.obitoData = payload.data;
+    record.obitoHora = payload.hora;
+    record.obitoCausa = payload.causa;
+    record.obitoRelatorio = payload.relatorio;
+    record.obitoConfirmadoEm = now;
+    record.situacao = 'Óbito';
+    record.situacaoCodigo = 'obito';
+
+    const autor = req.user?.email || payload.veterinario || 'Sistema';
+    const horarioTexto = payload.hora ? ` às ${payload.hora}` : '';
+    const detalhes = [`Data: ${payload.data}${horarioTexto}.`, `Causa: ${payload.causa}.`, `Relatório: ${payload.relatorio}`]
+      .filter(Boolean)
+      .join(' ');
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    record.historico.push({
+      tipo: 'Óbito',
+      descricao: `Óbito registrado. ${detalhes}`,
+      criadoPor: autor,
+      criadoEm: now,
+    });
+
+    await record.save();
+
+    if (record.box) {
+      try {
+        await InternacaoBox.findOneAndUpdate(
+          { box: record.box },
+          { ocupante: 'Livre', status: 'Disponível' },
+        );
+      } catch (boxReleaseError) {
+        console.warn('internacao: falha ao liberar box após óbito', boxReleaseError);
+      }
+    }
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    return res.json(formatRegistro(updated));
+  } catch (error) {
+    console.error('internacao: falha ao registrar óbito', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Revise os dados informados antes de confirmar o óbito.' });
+    }
+    return res.status(500).json({ message: 'Não foi possível registrar o óbito do paciente.' });
   }
 });
 

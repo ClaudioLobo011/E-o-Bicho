@@ -48,6 +48,26 @@ const internarModal = {
   currentRecord: null,
 };
 
+const obitoModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  submitBtn: null,
+  errorEl: null,
+  petSummaryEl: null,
+  petSummaryNameEl: null,
+  petSummaryMetaEl: null,
+  petSummaryTutorEl: null,
+  confirmInput: null,
+  confirmLabelEl: null,
+  dataset: null,
+  state: null,
+  onSuccess: null,
+  record: null,
+  recordId: null,
+  petInfo: null,
+};
+
 const boxesModal = {
   overlay: null,
   dialog: null,
@@ -82,6 +102,7 @@ const fichaInternacaoModal = {
   historicoListEl: null,
   tabButtons: [],
   tabPanels: [],
+  actionsContainer: null,
 };
 
 const RISCO_BADGE_CLASSES = {
@@ -142,6 +163,20 @@ function formatDurationSince(dateInput) {
   if (hours) parts.push(`${hours} ${hours === 1 ? 'hora' : 'horas'}`);
   if (!parts.length) parts.push(`${Math.max(minutes, 1)} min`);
   return parts.slice(0, 2).join(' e ');
+}
+
+function getLocalDateInputValue(dateInput = new Date()) {
+  const date = new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return '';
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function getLocalTimeInputValue(dateInput = new Date()) {
+  const date = new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return '';
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(11, 16);
 }
 
 function normalizeTagList(value) {
@@ -474,11 +509,50 @@ function normalizeInternacaoRecord(raw) {
     acessorios: toText(raw.acessorios),
     observacoes: toText(raw.observacoes),
     alergias: normalizeTagList(raw.alergias),
+    obitoRegistrado: Boolean(raw.obitoRegistrado),
+    obitoVeterinario: toText(raw.obitoVeterinario),
+    obitoData: toText(raw.obitoData),
+    obitoHora: toText(raw.obitoHora),
+    obitoISO: combineDateAndTime(raw.obitoData, raw.obitoHora),
+    obitoCausa: toText(raw.obitoCausa),
+    obitoRelatorio: toText(raw.obitoRelatorio),
+    obitoConfirmadoEm: raw.obitoConfirmadoEm || '',
     admissao: raw.admissao || raw.createdAt || '',
     createdAt: raw.createdAt || '',
     updatedAt: raw.updatedAt || '',
     historico,
   };
+}
+
+function applyInternacaoRecordUpdate(record, dataset, state) {
+  if (!record || !record.id) return;
+  const isSameRecord = (item) => {
+    if (!item) return false;
+    if (item.id && item.id === record.id) return true;
+    if (item.filterKey && record.filterKey && item.filterKey === record.filterKey) return true;
+    if (
+      record.codigo !== null &&
+      record.codigo !== undefined &&
+      item.codigo !== null &&
+      item.codigo !== undefined &&
+      item.codigo === record.codigo
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  if (dataset && Array.isArray(dataset.internacoes)) {
+    dataset.internacoes = dataset.internacoes.map((item) => (isSameRecord(item) ? record : item));
+  }
+
+  if (state && Array.isArray(state.internacoes)) {
+    state.internacoes = state.internacoes.map((item) => (isSameRecord(item) ? record : item));
+  }
+
+  if (state?.render && typeof state.render === 'function') {
+    state.render();
+  }
 }
 
 function setInternarModalError(message) {
@@ -587,6 +661,375 @@ async function handleInternarModalSubmit(event) {
     setInternarModalError(error.message || 'Não foi possível salvar a internação.');
   } finally {
     setInternarModalLoading(false);
+  }
+}
+
+function setObitoModalError(message) {
+  if (!obitoModal.errorEl) return;
+  const text = String(message || '').trim();
+  obitoModal.errorEl.textContent = text;
+  obitoModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setObitoModalLoading(isLoading) {
+  if (!obitoModal.submitBtn) return;
+  if (!obitoModal.submitBtn.dataset.defaultLabel) {
+    obitoModal.submitBtn.dataset.defaultLabel = obitoModal.submitBtn.textContent.trim();
+  }
+  obitoModal.submitBtn.disabled = !!isLoading;
+  obitoModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  obitoModal.submitBtn.textContent = isLoading ? 'Salvando...' : obitoModal.submitBtn.dataset.defaultLabel;
+}
+
+function resetObitoModalForm() {
+  if (obitoModal.form) {
+    obitoModal.form.reset();
+  }
+  if (obitoModal.confirmInput) {
+    obitoModal.confirmInput.checked = false;
+  }
+}
+
+function setObitoModalPetInfo(info) {
+  const normalized = normalizePetInfo(info);
+  obitoModal.petInfo = normalized;
+  if (!obitoModal.petSummaryEl) return;
+  const hasInfo = !!normalized;
+  obitoModal.petSummaryEl.classList.toggle('hidden', !hasInfo);
+  const petName = normalized?.petNome || 'Paciente';
+  const meta = normalized
+    ? [normalized.petEspecie, normalized.petRaca, normalized.petPeso || normalized.petIdade].filter(Boolean).join(' · ')
+    : '';
+  const tutorNome = normalized?.tutorNome || '';
+  const tutorContato = [normalized?.tutorDocumento, normalized?.tutorContato]
+    .filter(Boolean)
+    .join(' · ');
+  const tutorLabel = tutorNome && tutorContato ? `${tutorNome} · ${tutorContato}` : tutorNome || tutorContato || 'Tutor não informado';
+
+  if (obitoModal.petSummaryNameEl) obitoModal.petSummaryNameEl.textContent = hasInfo ? petName : 'Paciente';
+  if (obitoModal.petSummaryMetaEl) obitoModal.petSummaryMetaEl.textContent = meta || '—';
+  if (obitoModal.petSummaryTutorEl) obitoModal.petSummaryTutorEl.textContent = tutorLabel;
+  if (obitoModal.confirmLabelEl) {
+    const targetName = petName || 'o paciente selecionado';
+    obitoModal.confirmLabelEl.textContent = `Confirmo que o animal ${targetName} veio a óbito.`;
+  }
+}
+
+function fillObitoModalForm(record) {
+  if (!obitoModal.form) return;
+  const vetSelect = obitoModal.form.querySelector('select[name="obitoVeterinario"]');
+  const dateField = obitoModal.form.querySelector('input[name="obitoData"]');
+  const timeField = obitoModal.form.querySelector('input[name="obitoHora"]');
+  const causaField = obitoModal.form.querySelector('textarea[name="obitoCausa"]');
+  const relatorioField = obitoModal.form.querySelector('textarea[name="obitoRelatorio"]');
+  const now = new Date();
+  const vetValue = record?.obitoVeterinario || record?.veterinario || '';
+  if (vetSelect) {
+    if (vetValue) {
+      ensureSelectOption(vetSelect, { value: vetValue, label: vetValue });
+      vetSelect.value = vetValue;
+    } else {
+      vetSelect.value = '';
+    }
+  }
+  if (dateField) {
+    dateField.value = record?.obitoData || getLocalDateInputValue(now) || '';
+  }
+  if (timeField) {
+    timeField.value = record?.obitoHora || getLocalTimeInputValue(now) || '';
+  }
+  if (causaField) {
+    causaField.value = record?.obitoCausa || '';
+  }
+  if (relatorioField) {
+    relatorioField.value = record?.obitoRelatorio || '';
+  }
+  if (obitoModal.confirmInput) {
+    obitoModal.confirmInput.checked = false;
+  }
+}
+
+function closeObitoModal() {
+  if (!obitoModal.overlay) return;
+  if (obitoModal.dialog) {
+    obitoModal.dialog.classList.add('opacity-0', 'scale-95');
+  }
+  obitoModal.overlay.classList.add('hidden');
+  delete obitoModal.overlay.dataset.modalOpen;
+  resetObitoModalForm();
+  setObitoModalError('');
+  setObitoModalLoading(false);
+  setObitoModalPetInfo(null);
+  obitoModal.dataset = null;
+  obitoModal.state = null;
+  obitoModal.onSuccess = null;
+  obitoModal.record = null;
+  obitoModal.recordId = null;
+}
+
+function ensureObitoModal() {
+  if (obitoModal.overlay) return obitoModal.overlay;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'internacao-obito-modal fixed inset-0 z-[1005] hidden';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div class="relative flex w-full max-w-3xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200" role="dialog" aria-modal="true" aria-labelledby="obito-modal-title" data-obito-dialog tabindex="-1">
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600">
+              <i class="fas fa-heart-pulse"></i>
+              Óbito
+            </span>
+            <h2 id="obito-modal-title" class="mt-1.5 text-lg font-semibold text-gray-900">Registrar óbito</h2>
+            <p class="mt-1 max-w-2xl text-[11px] text-gray-600">Confirme os dados clínicos e administrativos do registro.</p>
+          </div>
+          <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-modal>
+            <span class="sr-only">Fechar modal</span>
+            <i class="fas fa-xmark text-sm"></i>
+          </button>
+        </header>
+        <form class="flex max-h-[80vh] flex-col overflow-hidden" novalidate>
+          <div class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-600" data-obito-summary>
+              <div class="flex flex-wrap items-center gap-2 text-gray-700">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Paciente</span>
+                <span class="text-[13px] font-semibold text-gray-900" data-obito-summary-name>—</span>
+                <span class="text-[10px] text-gray-400" data-obito-summary-meta>—</span>
+              </div>
+              <div class="mt-1 flex flex-wrap items-center gap-2 text-gray-600">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Tutor</span>
+                <span data-obito-summary-tutor>—</span>
+              </div>
+            </div>
+            <div class="grid gap-3 md:grid-cols-2">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Veterinário*
+                <select name="obitoVeterinario" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                  <option value="">Selecione</option>
+                </select>
+              </label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data*
+                <input type="date" name="obitoData" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Hora*
+                <input type="time" name="obitoHora" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+            </div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Causa do óbito*
+              <textarea name="obitoCausa" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Descreva a causa identificada"></textarea>
+            </label>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Relatório do óbito*
+              <textarea name="obitoRelatorio" rows="4" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Detalhe os acontecimentos, procedimentos e responsáveis"></textarea>
+            </label>
+            <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-[11px] text-amber-900">
+              <p class="font-semibold">Atenção</p>
+              <p class="mt-1">Ao confirmar o óbito o paciente não receberá novas prescrições ou parâmetros, e todas as pendências ainda não executadas serão canceladas automaticamente.</p>
+            </div>
+            <label class="inline-flex items-start gap-2 text-[11px] font-medium text-gray-700">
+              <input type="checkbox" name="obitoConfirm" class="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
+              <span data-obito-confirm-label>Confirmo que o animal veio a óbito.</span>
+            </label>
+            <p class="hidden rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700" data-obito-error></p>
+          </div>
+          <footer class="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <span class="text-[11px] text-gray-500">As informações ficam registradas na ficha de internação.</span>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-modal>Cancelar</button>
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-red-600 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-red-500" data-obito-submit>Salvar</button>
+            </div>
+          </footer>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  obitoModal.overlay = overlay;
+  obitoModal.dialog = overlay.querySelector('[data-obito-dialog]');
+  obitoModal.form = overlay.querySelector('form');
+  obitoModal.submitBtn = overlay.querySelector('[data-obito-submit]');
+  obitoModal.errorEl = overlay.querySelector('[data-obito-error]');
+  obitoModal.petSummaryEl = overlay.querySelector('[data-obito-summary]');
+  obitoModal.petSummaryNameEl = overlay.querySelector('[data-obito-summary-name]');
+  obitoModal.petSummaryMetaEl = overlay.querySelector('[data-obito-summary-meta]');
+  obitoModal.petSummaryTutorEl = overlay.querySelector('[data-obito-summary-tutor]');
+  obitoModal.confirmInput = overlay.querySelector('input[name="obitoConfirm"]');
+  obitoModal.confirmLabelEl = overlay.querySelector('[data-obito-confirm-label]');
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeObitoModal();
+      return;
+    }
+    const closeTrigger = event.target.closest('[data-close-modal]');
+    if (closeTrigger) {
+      event.preventDefault();
+      closeObitoModal();
+    }
+  });
+
+  overlay.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !overlay.classList.contains('hidden')) {
+      event.preventDefault();
+      closeObitoModal();
+    }
+  });
+
+  if (obitoModal.form) {
+    obitoModal.form.addEventListener('submit', handleObitoModalSubmit);
+  }
+
+  setObitoModalPetInfo(null);
+
+  return overlay;
+}
+
+function openObitoModal(record, options = {}) {
+  if (!record) return;
+  ensureObitoModal();
+  const datasetRef = options.dataset || obitoModal.dataset || getDataset();
+  const stateRef = options.state || obitoModal.state || {};
+  const successHandler =
+    typeof options.onSuccess === 'function'
+      ? options.onSuccess
+      : typeof stateRef?.refreshInternacoes === 'function'
+        ? stateRef.refreshInternacoes
+        : null;
+  const recordId = record.id || '';
+  if (!recordId) {
+    showToastMessage('Não foi possível identificar essa internação para registrar o óbito.', 'warning');
+    return;
+  }
+
+  obitoModal.dataset = datasetRef || null;
+  obitoModal.state = stateRef || null;
+  obitoModal.onSuccess = successHandler || null;
+  obitoModal.record = record;
+  obitoModal.recordId = recordId;
+
+  setObitoModalError('');
+  setObitoModalLoading(false);
+  resetObitoModalForm();
+  const petInfo = getPetInfoFromInternacaoRecord(record);
+  setObitoModalPetInfo(petInfo);
+
+  const selectOverrides = {};
+  if (record.obitoVeterinario || record.veterinario) {
+    const value = record.obitoVeterinario || record.veterinario;
+    selectOverrides.forceObitoVeterinario = { value, label: value };
+  }
+  populateDynamicSelects(datasetRef, selectOverrides);
+  fillObitoModalForm(record);
+
+  obitoModal.overlay.classList.remove('hidden');
+  obitoModal.overlay.dataset.modalOpen = 'true';
+  if (obitoModal.dialog) {
+    requestAnimationFrame(() => {
+      obitoModal.dialog.classList.remove('opacity-0', 'scale-95');
+      obitoModal.dialog.focus();
+    });
+  }
+}
+
+async function handleObitoModalSubmit(event) {
+  event.preventDefault();
+  if (!obitoModal.form) return;
+  setObitoModalError('');
+  const recordId = obitoModal.recordId;
+  if (!recordId) {
+    setObitoModalError('Não foi possível identificar a internação selecionada.');
+    return;
+  }
+
+  const formData = new FormData(obitoModal.form);
+  const payload = {
+    veterinario: (formData.get('obitoVeterinario') || '').toString().trim(),
+    data: (formData.get('obitoData') || '').toString().trim(),
+    hora: (formData.get('obitoHora') || '').toString().trim(),
+    causa: (formData.get('obitoCausa') || '').toString().trim(),
+    relatorio: (formData.get('obitoRelatorio') || '').toString().trim(),
+  };
+
+  if (!payload.veterinario) {
+    setObitoModalError('Informe o veterinário responsável.');
+    return;
+  }
+  if (!payload.data) {
+    setObitoModalError('Informe a data do óbito.');
+    return;
+  }
+  if (!payload.hora) {
+    setObitoModalError('Informe o horário do óbito.');
+    return;
+  }
+  if (!payload.causa) {
+    setObitoModalError('Descreva a causa do óbito.');
+    return;
+  }
+  if (!payload.relatorio) {
+    setObitoModalError('Preencha o relatório do óbito.');
+    return;
+  }
+  if (!obitoModal.confirmInput || !obitoModal.confirmInput.checked) {
+    setObitoModalError('Confirme que o paciente veio a óbito para continuar.');
+    return;
+  }
+
+  setObitoModalLoading(true);
+  const datasetRef = obitoModal.dataset || getDataset();
+  const stateRef = obitoModal.state || {};
+  try {
+    const updatedRecord = await requestJson(`/internacao/registros/${encodeURIComponent(recordId)}/obito`, {
+      method: 'POST',
+      body: payload,
+    });
+    const normalized = normalizeInternacaoRecord(updatedRecord);
+    if (normalized) {
+      applyInternacaoRecordUpdate(normalized, datasetRef, stateRef);
+      const fichaRecord = fichaInternacaoModal.record;
+      if (fichaRecord) {
+        const sameRecord =
+          fichaRecord.id === normalized.id ||
+          fichaRecord.filterKey === normalized.filterKey ||
+          (normalized.codigo !== null && fichaRecord.codigo === normalized.codigo);
+        if (sameRecord) {
+          fichaInternacaoModal.record = normalized;
+          fillFichaInternacaoModal(normalized);
+        }
+      }
+    }
+
+    let boxesRefreshPromise = null;
+    try {
+      if (stateRef && typeof stateRef.refreshBoxes === 'function') {
+        boxesRefreshPromise = Promise.resolve(stateRef.refreshBoxes());
+      } else if (datasetRef) {
+        boxesRefreshPromise = fetchBoxesData(datasetRef, stateRef, { quiet: true });
+      }
+    } catch (refreshError) {
+      console.warn('internacao: falha ao agendar atualização dos boxes após óbito', refreshError);
+    }
+
+    showToastMessage('Óbito registrado com sucesso.', 'success');
+    const successCallback = obitoModal.onSuccess;
+    closeObitoModal();
+
+    if (boxesRefreshPromise && typeof boxesRefreshPromise.catch === 'function') {
+      boxesRefreshPromise.catch((error) => {
+        console.warn('internacao: falha ao atualizar boxes após óbito', error);
+      });
+    }
+
+    if (typeof successCallback === 'function') {
+      successCallback();
+    }
+  } catch (error) {
+    console.error('internacao: falha ao registrar óbito', error);
+    setObitoModalError(error.message || 'Não foi possível registrar o óbito.');
+  } finally {
+    setObitoModalLoading(false);
   }
 }
 
@@ -1131,23 +1574,39 @@ function ensureSelectOption(select, option) {
 }
 
 function populateDynamicSelects(dataset, extraOptions = {}) {
-  if (!internarModal.form) return;
-  const vetSelect = internarModal.form.querySelector('select[name="internarVeterinario"]');
-  const boxSelect = internarModal.form.querySelector('select[name="internarBox"]');
-  if (vetSelect) {
-    const options = ['<option value="">Selecione</option>', ...getEquipeOptions(dataset).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
-      .join('');
-    vetSelect.innerHTML = options;
-    if (extraOptions.forceVeterinario) {
-      ensureSelectOption(vetSelect, extraOptions.forceVeterinario);
+  const vetOptionsMarkup = ['<option value="">Selecione</option>', ...getEquipeOptions(dataset).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
+    .join('');
+
+  if (internarModal.form) {
+    const vetSelect = internarModal.form.querySelector('select[name="internarVeterinario"]');
+    const boxSelect = internarModal.form.querySelector('select[name="internarBox"]');
+    if (vetSelect) {
+      vetSelect.innerHTML = vetOptionsMarkup;
+      if (extraOptions.forceVeterinario) {
+        ensureSelectOption(vetSelect, extraOptions.forceVeterinario);
+        vetSelect.value = extraOptions.forceVeterinario.value || '';
+      }
+    }
+    if (boxSelect) {
+      const boxOptionsMarkup = ['<option value="">Selecione</option>', ...getBoxOptions(dataset).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
+        .join('');
+      boxSelect.innerHTML = boxOptionsMarkup;
+      if (extraOptions.forceBox) {
+        ensureSelectOption(boxSelect, extraOptions.forceBox);
+        boxSelect.value = extraOptions.forceBox.value || '';
+      }
     }
   }
-  if (boxSelect) {
-    const options = ['<option value="">Selecione</option>', ...getBoxOptions(dataset).map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`)]
-      .join('');
-    boxSelect.innerHTML = options;
-    if (extraOptions.forceBox) {
-      ensureSelectOption(boxSelect, extraOptions.forceBox);
+
+  if (obitoModal.form) {
+    const obitoVetSelect = obitoModal.form.querySelector('select[name="obitoVeterinario"]');
+    if (obitoVetSelect) {
+      obitoVetSelect.innerHTML = vetOptionsMarkup;
+      const forced = extraOptions.forceObitoVeterinario || extraOptions.forceVeterinario;
+      if (forced) {
+        ensureSelectOption(obitoVetSelect, forced);
+        obitoVetSelect.value = forced.value || '';
+      }
     }
   }
 }
@@ -1596,6 +2055,7 @@ function ensureFichaInternacaoModal() {
   fichaInternacaoModal.historicoListEl = overlay.querySelector('[data-ficha-historico-list]');
   fichaInternacaoModal.tabButtons = Array.from(overlay.querySelectorAll('[data-ficha-tab]'));
   fichaInternacaoModal.tabPanels = Array.from(overlay.querySelectorAll('[data-ficha-panel]'));
+  fichaInternacaoModal.actionsContainer = overlay.querySelector('[data-ficha-actions]');
 
   overlay.addEventListener('click', async (event) => {
     const closeTrigger = event.target.closest('[data-close-modal]');
@@ -1610,6 +2070,8 @@ function ensureFichaInternacaoModal() {
       const actionType = actionTrigger.dataset.fichaAction;
       if (actionType === 'editar') {
         await handleFichaEditarAction();
+      } else if (actionType === 'obito') {
+        await handleFichaObitoAction();
       } else {
         showToastMessage('Funcionalidade em desenvolvimento.', 'info');
       }
@@ -1669,6 +2131,30 @@ async function handleFichaEditarAction() {
   });
 }
 
+async function handleFichaObitoAction() {
+  const record = fichaInternacaoModal.record;
+  if (!record) {
+    showToastMessage('Não foi possível carregar os dados dessa internação.', 'warning');
+    return;
+  }
+  if (record.obitoRegistrado) {
+    showToastMessage('O óbito desse paciente já foi registrado.', 'info');
+    return;
+  }
+  const dataset = fichaInternacaoModal.dataset || getDataset();
+  const state = fichaInternacaoModal.state || {};
+  try {
+    await fetchVeterinariosData(dataset, state, { quiet: true });
+  } catch (error) {
+    console.warn('internacao: falha ao atualizar veterinários antes do óbito', error);
+  }
+  openObitoModal(record, {
+    dataset,
+    state,
+    onSuccess: state.refreshInternacoes,
+  });
+}
+
 function fillFichaInternacaoModal(record) {
   if (!record) return;
   ensureFichaInternacaoModal();
@@ -1709,6 +2195,16 @@ function fillFichaInternacaoModal(record) {
   if (fichaInternacaoModal.vetEl) fichaInternacaoModal.vetEl.textContent = record.veterinario || '—';
   if (fichaInternacaoModal.codigoEl) fichaInternacaoModal.codigoEl.textContent = record.codigo !== null && record.codigo !== undefined ? `#${record.codigo}` : '—';
   if (fichaInternacaoModal.admissaoEl) fichaInternacaoModal.admissaoEl.textContent = formatDateTimeLabel(record.admissao);
+  if (fichaInternacaoModal.actionsContainer) {
+    const obitoBtn = fichaInternacaoModal.actionsContainer.querySelector('[data-ficha-action="obito"]');
+    if (obitoBtn) {
+      const disabled = !!record.obitoRegistrado;
+      obitoBtn.disabled = disabled;
+      obitoBtn.classList.toggle('opacity-60', disabled);
+      obitoBtn.classList.toggle('cursor-not-allowed', disabled);
+      obitoBtn.textContent = disabled ? 'Óbito registrado' : 'Óbito';
+    }
+  }
 
   renderFichaTags(record.alergias || []);
   renderFichaHistorico(record);
@@ -1949,6 +2445,7 @@ document.addEventListener('DOMContentLoaded', () => {
     internacoesError: '',
     refreshInternacoes: null,
     refreshBoxes: null,
+    render: null,
   };
 
   try {
@@ -1966,6 +2463,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!renderer) return;
     renderer(root, dataset, state);
   };
+
+  state.render = render;
 
   state.refreshBoxes = () => fetchBoxesData(dataset, state, { quiet: true });
 
