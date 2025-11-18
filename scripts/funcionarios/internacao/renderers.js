@@ -55,16 +55,50 @@ function buildEmptyState(message) {
   `;
 }
 
+function normalizeExecucaoItems(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const horario = typeof item.horario === 'string' ? item.horario.trim() : '';
+      const hourKey = horario ? horario.slice(0, 2).padStart(2, '0') : '';
+      if (!hourKey) return null;
+      return {
+        horario,
+        hourKey,
+        descricao: item.descricao ? String(item.descricao).trim() : '',
+        responsavel: item.responsavel ? String(item.responsavel).trim() : '',
+        status: item.status ? String(item.status).trim() : '',
+      };
+    })
+    .filter(Boolean);
+}
+
 function getRiscoBadgeClass(code) {
   const key = String(code || '').toLowerCase();
   return riscoColors[key] || 'bg-gray-100 text-gray-700 ring-1 ring-gray-100';
 }
 
-function openExecucaoModal(pet, hourLabel, items) {
-  if (!pet || !items?.length) return;
+function openExecucaoModal(paciente, hourLabel, items = []) {
+  if (!paciente) return;
 
   const existing = document.getElementById('internacao-exec-modal');
   if (existing) existing.remove();
+
+  const nome = paciente.nome || paciente.pet?.nome || 'Paciente';
+  const boxLabel =
+    paciente.boxLabel ||
+    paciente.box ||
+    paciente.internacao?.box ||
+    paciente.registro?.box ||
+    'Sem box definido';
+  const servicoLabel =
+    paciente.servicoLabel ||
+    paciente.servico ||
+    paciente.registro?.queixa ||
+    paciente.registro?.diagnostico ||
+    paciente.agenda?.servico ||
+    'Internação em andamento';
 
   const actionButtons = [
     {
@@ -102,14 +136,28 @@ function openExecucaoModal(pet, hourLabel, items) {
   const overlay = document.createElement('div');
   overlay.id = 'internacao-exec-modal';
   overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4 py-6';
+  const procedimentosMarkup = items.length
+    ? items
+        .map(
+          (item) => `
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
+              <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.descricao || 'Procedimento')}</p>
+              <p class="text-xs text-gray-500">Responsável: ${escapeHtml(item.responsavel || 'Equipe a definir')}</p>
+              <p class="text-xs text-gray-400">Status: ${escapeHtml(item.status || '—')}</p>
+            </div>
+          `,
+        )
+        .join('')
+    : '<p class="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum procedimento registrado para este horário.</p>';
+
   overlay.innerHTML = `
     <div class="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
       <div class="border-b border-gray-100 pb-4">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="text-xs font-semibold uppercase tracking-wide text-primary">Mapa de execução</p>
-            <h2 class="text-lg font-bold text-gray-900">${pet.nome}</h2>
-            <p class="text-sm text-gray-500">${pet.internacao.box} · ${pet.agenda.servico}</p>
+            <h2 class="text-lg font-bold text-gray-900">${escapeHtml(nome)}</h2>
+            <p class="text-sm text-gray-500">${escapeHtml(boxLabel)} · ${escapeHtml(servicoLabel)}</p>
             <p class="text-xs text-gray-400">Horário: ${hourLabel}</p>
           </div>
           <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
@@ -117,19 +165,7 @@ function openExecucaoModal(pet, hourLabel, items) {
           </button>
         </div>
       </div>
-      <div class="mt-4 space-y-3">
-        ${items
-          .map(
-            (item) => `
-              <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                <p class="text-sm font-semibold text-gray-900">${item.descricao}</p>
-                <p class="text-xs text-gray-500">Responsável: ${item.responsavel}</p>
-                <p class="text-xs text-gray-400">Status: ${item.status}</p>
-              </div>
-            `,
-          )
-          .join('')}
-      </div>
+      <div class="mt-4 space-y-3">${procedimentosMarkup}</div>
       <div class="mt-6 flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
         ${actionButtons}
         <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50" data-close-modal>
@@ -150,15 +186,22 @@ function openExecucaoModal(pet, hourLabel, items) {
   document.body.appendChild(overlay);
 }
 
-function attachExecucaoModalHandlers(root, dataset) {
+function attachExecucaoModalHandlers(root, pacientes = []) {
+  const map = new Map();
+  pacientes.forEach((paciente) => {
+    if (paciente && paciente.key) {
+      map.set(paciente.key, paciente);
+    }
+  });
   root.querySelectorAll('[data-exec-trigger]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const { petId, hour } = btn.dataset;
-      const pet = dataset.pacientes.find((p) => p.id === petId);
-      if (!pet) return;
-      const items = (pet.internacao.execucoes || []).filter((acao) => acao.horario?.startsWith(hour));
-      if (!items.length) return;
-      openExecucaoModal(pet, `${hour}:00`, items);
+      const petKey = btn.dataset.petKey || btn.dataset.petId;
+      const { hour } = btn.dataset;
+      if (!petKey || !hour) return;
+      const paciente = map.get(petKey);
+      if (!paciente) return;
+      const items = (paciente.execucoes || []).filter((acao) => acao.hourKey === hour);
+      openExecucaoModal(paciente, `${hour}:00`, items);
     });
   });
 }
@@ -281,12 +324,48 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
   root.innerHTML = `${resumo}<div class="space-y-4">${cardsContent}</div>`;
 }
 
-export function renderMapaExecucao(root, dataset, { petId } = {}) {
-  const pacientes = filterPacientes(dataset, petId);
-  if (!pacientes.length) {
-    root.innerHTML = buildEmptyState('Nenhum procedimento programado para o filtro informado.');
+export function renderMapaExecucao(root, dataset, state = {}) {
+  const petId = state?.petId || '';
+  const internacoes = Array.isArray(state?.internacoes) ? state.internacoes : [];
+
+  if (state?.internacoesLoading && !internacoes.length) {
+    root.innerHTML = buildEmptyState('Carregando mapa de execução...');
     return;
   }
+
+  if (state?.internacoesError) {
+    root.innerHTML = `
+      <div class="rounded-2xl border border-red-100 bg-red-50 px-6 py-8 text-center">
+        <p class="text-sm font-semibold text-red-700">${escapeHtml(state.internacoesError)}</p>
+        <button type="button" class="mt-4 inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-500" data-internacoes-retry>
+          Tentar novamente
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  const ativos = internacoes.filter((registro) => !registro.cancelado && !registro.obitoRegistrado);
+  const filtrados = petId ? ativos.filter((registro) => registro.filterKey === petId) : ativos;
+
+  if (!filtrados.length) {
+    root.innerHTML = buildEmptyState(
+      petId ? 'Nenhum paciente encontrado para o filtro selecionado.' : 'Nenhum paciente internado no momento.',
+    );
+    return;
+  }
+
+  const pacientes = filtrados.map((registro) => {
+    const nome = registro.pet?.nome || (registro.codigo ? `Registro #${registro.codigo}` : 'Paciente');
+    return {
+      key: registro.filterKey || registro.id || nome,
+      nome,
+      boxLabel: registro.box || 'Sem box definido',
+      servicoLabel: registro.queixa || registro.diagnostico || 'Internação em andamento',
+      equipeLabel: registro.veterinario || 'Equipe em definição',
+      execucoes: normalizeExecucaoItems(registro.execucoes),
+    };
+  });
 
   const headerCells = HOURS.map(
     (hour) => `
@@ -295,14 +374,22 @@ export function renderMapaExecucao(root, dataset, { petId } = {}) {
   ).join('');
 
   const rows = pacientes
-    .map((pet) => {
-      const execucoes = pet.internacao.execucoes || [];
+    .map((paciente) => {
       const hourCells = HOURS.map((hour) => {
-        const atividades = execucoes.filter((acao) => acao.horario?.startsWith(hour));
+        const atividades = (paciente.execucoes || []).filter((acao) => acao.hourKey === hour);
         if (!atividades.length) {
           return `
             <td class="border border-gray-100 px-2 py-2 text-center">
-              <div class="mx-auto h-8 w-8 rounded-full border border-dashed border-gray-300"></div>
+              <button
+                type="button"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-gray-300 text-transparent transition hover:border-gray-400"
+                aria-label="Registrar procedimentos de ${escapeHtml(paciente.nome)} às ${hour}:00"
+                data-exec-trigger
+                data-pet-key="${escapeHtml(paciente.key)}"
+                data-hour="${hour}"
+              >
+                <span class="sr-only">Sem procedimentos</span>
+              </button>
             </td>
           `;
         }
@@ -310,11 +397,11 @@ export function renderMapaExecucao(root, dataset, { petId } = {}) {
           <td class="border border-gray-100 px-2 py-2 text-center">
             <button
               type="button"
-              class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white shadow-sm"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white shadow-sm transition hover:bg-primary/90"
               title="${atividades.length} procedimentos"
-              aria-label="Ver ${atividades.length} procedimentos de ${pet.nome} às ${hour}:00"
+              aria-label="Ver ${atividades.length} procedimentos de ${escapeHtml(paciente.nome)} às ${hour}:00"
               data-exec-trigger
-              data-pet-id="${pet.id}"
+              data-pet-key="${escapeHtml(paciente.key)}"
               data-hour="${hour}"
             >
               ${atividades.length}
@@ -326,9 +413,9 @@ export function renderMapaExecucao(root, dataset, { petId } = {}) {
       return `
         <tr class="bg-white text-sm text-gray-700 shadow-sm">
           <td class="min-w-[220px] rounded-l-2xl border border-gray-100 px-4 py-3 align-top">
-            <p class="text-base font-semibold text-gray-900">${pet.nome}</p>
-            <p class="text-xs text-gray-500">${pet.internacao.box} · ${pet.agenda.servico}</p>
-            <p class="text-[11px] text-gray-400">Equipe: ${pet.internacao.equipeMedica}</p>
+            <p class="text-base font-semibold text-gray-900">${escapeHtml(paciente.nome)}</p>
+            <p class="text-xs text-gray-500">${escapeHtml(paciente.boxLabel)} · ${escapeHtml(paciente.servicoLabel)}</p>
+            <p class="text-[11px] text-gray-400">Equipe: ${escapeHtml(paciente.equipeLabel)}</p>
           </td>
           ${hourCells}
         </tr>
@@ -343,7 +430,7 @@ export function renderMapaExecucao(root, dataset, { petId } = {}) {
           <div>
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Pet | Horário</p>
             <h2 class="text-xl font-bold text-gray-900">Mapa de execução</h2>
-            <p class="text-sm text-gray-500">Clique no círculo para ver os procedimentos daquele horário.</p>
+            <p class="text-sm text-gray-500">Clique no círculo para ver ou registrar os procedimentos daquele horário.</p>
           </div>
           <div class="flex items-center gap-3 text-xs text-gray-500">
             <span class="inline-flex items-center gap-2"><span class="inline-flex h-3 w-3 rounded-full bg-primary/70"></span>Círculo = quantidade</span>
@@ -367,7 +454,7 @@ export function renderMapaExecucao(root, dataset, { petId } = {}) {
     </div>
   `;
 
-  attachExecucaoModalHandlers(root, dataset);
+  attachExecucaoModalHandlers(root, pacientes);
 }
 
 export function renderHistoricoInternacoes(root, dataset, { petId } = {}) {

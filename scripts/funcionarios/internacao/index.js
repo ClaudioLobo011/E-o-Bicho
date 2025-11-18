@@ -203,6 +203,24 @@ function formatDurationSince(dateInput) {
   return parts.slice(0, 2).join(' e ');
 }
 
+function normalizeExecucaoItem(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const horario = typeof raw.horario === 'string' ? raw.horario.trim() : '';
+  const hourKey = horario ? horario.slice(0, 2).padStart(2, '0') : '';
+  return {
+    horario,
+    hourKey,
+    descricao: raw.descricao ? String(raw.descricao).trim() : '',
+    responsavel: raw.responsavel ? String(raw.responsavel).trim() : '',
+    status: raw.status ? String(raw.status).trim() : '',
+  };
+}
+
+function normalizeExecucoes(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map(normalizeExecucaoItem).filter((item) => item && item.hourKey);
+}
+
 function getLocalDateInputValue(dateInput = new Date()) {
   const date = new Date(dateInput);
   if (Number.isNaN(date.getTime())) return '';
@@ -549,6 +567,7 @@ function normalizeInternacaoRecord(raw) {
     acessorios: toText(raw.acessorios),
     observacoes: toText(raw.observacoes),
     alergias: normalizeTagList(raw.alergias),
+    execucoes: normalizeExecucoes(raw.execucoes),
     cancelado: canceladoFlag,
     canceladoResponsavel: toText(raw.canceladoResponsavel),
     canceladoData: toText(raw.canceladoData),
@@ -3062,6 +3081,49 @@ function updateSyncInfo(dataset) {
   el.textContent = `${texto} · ${fichaAtualizada}`;
 }
 
+async function fetchInternacoesData(dataset, state = {}, { quiet = false, onUpdate } = {}) {
+  if (state) {
+    state.internacoesLoading = true;
+    state.internacoesError = '';
+  }
+  if (typeof onUpdate === 'function') onUpdate();
+
+  try {
+    const data = await requestJson('/internacao/registros');
+    const normalized = Array.isArray(data) ? data.map(normalizeInternacaoRecord).filter(Boolean) : [];
+    const sorted = [...normalized].sort((a, b) => {
+      const aTime = new Date(a.admissao || a.createdAt || 0).getTime();
+      const bTime = new Date(b.admissao || b.createdAt || 0).getTime();
+      return bTime - aTime;
+    });
+    if (dataset) dataset.internacoes = sorted;
+    if (state) {
+      state.internacoes = sorted;
+      state.internacoesLoading = false;
+    }
+    if (state && state.petId) {
+      const availableKeys = new Set(sorted.map((item) => item.filterKey));
+      if (availableKeys.size && !availableKeys.has(state.petId)) {
+        state.petId = '';
+      }
+    }
+    fillPetFilters(dataset, state?.petId, state);
+    if (typeof onUpdate === 'function') onUpdate();
+    return sorted;
+  } catch (error) {
+    console.error('internacao: falha ao carregar internações', error);
+    if (state) {
+      state.internacoesError = error.message || 'Não foi possível carregar as internações.';
+      state.internacoesLoading = false;
+    }
+    if (typeof onUpdate === 'function') onUpdate();
+    if (!quiet) {
+      showToastMessage(state?.internacoesError || 'Não foi possível carregar as internações.', 'warning');
+    }
+    return [];
+  }
+}
+
 async function fetchBoxesData(dataset, state = {}, { quiet = false, onUpdate } = {}) {
   if (state) {
     state.boxesLoading = true;
@@ -3150,45 +3212,20 @@ function setupBoxesPage(dataset, state, render) {
   fetchBoxes();
 }
 
-function setupAnimaisPage(dataset, state, render) {
+function setupAnimaisPage(dataset, state, render, fetchInternacoes) {
   const root = document.querySelector('[data-internacao-root]');
-
-  const fetchInternacoes = async () => {
-    state.internacoesLoading = true;
-    state.internacoesError = '';
-    render();
-    try {
-      const data = await requestJson('/internacao/registros');
-      const normalized = Array.isArray(data) ? data.map(normalizeInternacaoRecord).filter(Boolean) : [];
-      const sorted = [...normalized].sort((a, b) => {
-        const aTime = new Date(a.admissao || a.createdAt || 0).getTime();
-        const bTime = new Date(b.admissao || b.createdAt || 0).getTime();
-        return bTime - aTime;
-      });
-      dataset.internacoes = sorted;
-      state.internacoes = sorted;
-      state.internacoesLoading = false;
-      const availableKeys = new Set(sorted.map((item) => item.filterKey));
-      if (state.petId && availableKeys.size && !availableKeys.has(state.petId)) {
-        state.petId = '';
-      }
-      fillPetFilters(dataset, state.petId, state);
-      render();
-    } catch (error) {
-      console.error('internacao: falha ao carregar internações', error);
-      state.internacoesError = error.message || 'Não foi possível carregar as internações.';
-      state.internacoesLoading = false;
-      render();
+  const loadInternacoes = (options = {}) => {
+    if (typeof fetchInternacoes === 'function') {
+      return fetchInternacoes(options);
     }
+    return Promise.resolve([]);
   };
-
-  state.refreshInternacoes = fetchInternacoes;
 
   if (root) {
     root.addEventListener('click', (event) => {
       if (event.target.closest('[data-internacoes-retry]')) {
         event.preventDefault();
-        fetchInternacoes();
+        loadInternacoes({ quiet: false });
         return;
       }
       const fichaTrigger = event.target.closest('[data-open-ficha]');
@@ -3210,7 +3247,28 @@ function setupAnimaisPage(dataset, state, render) {
     });
   }
 
-  fetchInternacoes();
+  loadInternacoes();
+}
+
+function setupMapaPage(dataset, state, render, fetchInternacoes) {
+  const root = document.querySelector('[data-internacao-root]');
+  const loadInternacoes = (options = {}) => {
+    if (typeof fetchInternacoes === 'function') {
+      return fetchInternacoes(options);
+    }
+    return Promise.resolve([]);
+  };
+
+  if (root) {
+    root.addEventListener('click', (event) => {
+      if (event.target.closest('[data-internacoes-retry]')) {
+        event.preventDefault();
+        loadInternacoes({ quiet: false });
+      }
+    });
+  }
+
+  loadInternacoes();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -3253,6 +3311,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   state.render = render;
 
+  const fetchInternacoes = (options = {}) =>
+    fetchInternacoesData(dataset, state, { onUpdate: render, ...options });
+  state.refreshInternacoes = () => fetchInternacoes({ quiet: true });
+
   state.refreshBoxes = () => fetchBoxesData(dataset, state, { quiet: true });
 
   fillPetFilters(dataset, state.petId, state);
@@ -3260,7 +3322,10 @@ document.addEventListener('DOMContentLoaded', () => {
   render();
 
   if (view === 'animais') {
-    setupAnimaisPage(dataset, state, render);
+    setupAnimaisPage(dataset, state, render, fetchInternacoes);
+  }
+  if (view === 'mapa') {
+    setupMapaPage(dataset, state, render, fetchInternacoes);
   }
   if (view === 'boxes') {
     setupBoxesPage(dataset, state, render);
