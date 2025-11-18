@@ -3265,7 +3265,7 @@ function ensurePrescricaoModal() {
   if (prescricaoModal.overlay) return prescricaoModal.overlay;
 
   const overlay = document.createElement('div');
-  overlay.className = 'internacao-prescricao-modal fixed inset-0 z-[1010] hidden';
+  overlay.className = 'internacao-prescricao-modal fixed inset-0 z-[1200] hidden';
   overlay.innerHTML = `
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-prescricao-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
@@ -3393,8 +3393,14 @@ function ensurePrescricaoModal() {
   return overlay;
 }
 
+function bringModalOverlayToFront(overlay) {
+  if (!overlay || !overlay.parentElement) return;
+  overlay.parentElement.appendChild(overlay);
+}
+
 function openPrescricaoModal(record, options = {}) {
   ensurePrescricaoModal();
+  bringModalOverlayToFront(prescricaoModal.overlay);
   prescricaoModal.dataset = options.dataset || prescricaoModal.dataset || getDataset();
   prescricaoModal.state = options.state || prescricaoModal.state || {};
   prescricaoModal.record = record;
