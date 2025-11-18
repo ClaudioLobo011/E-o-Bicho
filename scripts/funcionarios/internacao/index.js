@@ -45,6 +45,58 @@ const PRESCRICAO_POR_OPTIONS = [
   { value: 'vezes', label: 'Vez(es)' },
 ];
 
+const PRESCRICAO_MED_UNIDADE_GROUPS = [
+  {
+    label: 'Absolutos',
+    options: [
+      { value: 'borrifada', label: 'Borrifada' },
+      { value: 'capsula', label: 'Cápsula' },
+      { value: 'cm', label: 'cm' },
+      { value: 'comprimidos', label: 'Comprimido(s)' },
+      { value: 'dragea', label: 'Drágea' },
+      { value: 'g', label: 'g' },
+      { value: 'gotas', label: 'Gota(s)' },
+      { value: 'l', label: 'l' },
+      { value: 'mcg', label: 'mcg' },
+      { value: 'medida', label: 'Medida' },
+      { value: 'mg', label: 'mg' },
+      { value: 'ml', label: 'ml' },
+      { value: 'sache', label: 'Sachê' },
+      { value: 'ui', label: 'UI' },
+      { value: 'un', label: 'UN' },
+    ],
+  },
+  {
+    label: 'Relativos',
+    options: [
+      { value: 'gkg', label: 'g/kg' },
+      { value: 'gotaskg', label: 'Gotas/kg' },
+      { value: 'mcgkg', label: 'mcg/kg' },
+      { value: 'mgkg', label: 'mg/kg' },
+      { value: 'mlkg', label: 'ml/kg' },
+      { value: 'uikg', label: 'UI/kg' },
+    ],
+  },
+];
+
+const PRESCRICAO_MED_UNIDADE_OPTIONS = PRESCRICAO_MED_UNIDADE_GROUPS.flatMap((group) => group.options);
+
+const PRESCRICAO_MED_VIA_OPTIONS = [
+  { value: 'enema', label: 'Enema' },
+  { value: 'epidural', label: 'Epidural' },
+  { value: 'inalatoria', label: 'Inalatória' },
+  { value: 'intramuscular', label: 'Intramuscular' },
+  { value: 'intraossea', label: 'Intraóssea' },
+  { value: 'intraperitoneal', label: 'Intraperitoneal' },
+  { value: 'intravenosa', label: 'Intravenosa' },
+  { value: 'oftalmica', label: 'Oftálmica' },
+  { value: 'oral', label: 'Oral' },
+  { value: 'otologica', label: 'Otológica' },
+  { value: 'sonda', label: 'Sonda' },
+  { value: 'subcutanea', label: 'Subcutânea' },
+  { value: 'topica', label: 'Tópica' },
+];
+
 const internarModal = {
   overlay: null,
   dialog: null,
@@ -141,12 +193,15 @@ const prescricaoModal = {
   petInfo: null,
   resumoField: null,
   recorrenciaFields: null,
+  medicamentoFields: null,
   tipoSelect: null,
   frequenciaSelect: null,
   petSummaryEl: null,
   petSummaryNameEl: null,
   petSummaryMetaEl: null,
   petSummaryTutorEl: null,
+  medPesoField: null,
+  medPesoMetaEl: null,
 };
 
 const boxesModal = {
@@ -210,6 +265,18 @@ function escapeHtml(value) {
 
 function createOptionsMarkup(options) {
   return options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
+}
+
+function createGroupedOptionsMarkup(groups) {
+  if (!Array.isArray(groups)) return '';
+  return groups
+    .map((group) => {
+      const optionsMarkup = createOptionsMarkup(group?.options || []);
+      if (!optionsMarkup) return '';
+      const label = escapeHtml(group?.label || 'Opções');
+      return `<optgroup label="${label}">${optionsMarkup}</optgroup>`;
+    })
+    .join('');
 }
 
 function getRiscoBadgeClass(code) {
@@ -297,6 +364,7 @@ function normalizePetInfo(raw) {
     'petEspecie',
     'petRaca',
     'petPeso',
+    'petPesoAtualizadoEm',
     'petIdade',
     'tutorId',
     'tutorNome',
@@ -342,6 +410,7 @@ function getPetInfoFromDataset(dataset, petId) {
     petRaca: match.raca,
     petPeso: match.peso,
     petIdade: match.idade,
+    petPesoAtualizadoEm: match.pesoAtualizadoEm,
     tutorNome: match.tutor?.nome,
     tutorDocumento: match.tutor?.documento,
     tutorContato: match.tutor?.telefone || match.tutor?.email,
@@ -359,6 +428,7 @@ function getPetInfoFromInternacoes(state, key) {
     petEspecie: match.pet?.especie,
     petRaca: match.pet?.raca,
     petPeso: match.pet?.peso,
+    petPesoAtualizadoEm: match.pet?.pesoAtualizadoEm,
     petIdade: match.pet?.idade,
     tutorNome: match.tutor?.nome,
     tutorContato: match.tutor?.contato,
@@ -368,6 +438,10 @@ function getPetInfoFromInternacoes(state, key) {
 
 function getPetInfoFromInternacaoRecord(record) {
   if (!record) return null;
+  const pesoAtualizadoEm =
+    record.pet?.pesoAtualizadoEm ||
+    record.petPesoAtualizadoEm ||
+    getLatestPesoHistoricoTimestamp(record);
   return normalizePetInfo({
     petId: record.pet?.id || record.petId || record.filterKey,
     petNome: record.pet?.nome || record.petNome,
@@ -375,6 +449,7 @@ function getPetInfoFromInternacaoRecord(record) {
     petRaca: record.pet?.raca,
     petPeso: record.pet?.peso,
     petIdade: record.pet?.idade,
+    petPesoAtualizadoEm: pesoAtualizadoEm,
     tutorNome: record.tutor?.nome || record.tutorNome,
     tutorContato: record.tutor?.contato || record.tutorContato,
     tutorDocumento: record.tutor?.documento || record.tutorDocumento,
@@ -384,7 +459,18 @@ function getPetInfoFromInternacaoRecord(record) {
 function getPetInfoFromParams(params) {
   if (!(params instanceof URLSearchParams)) return null;
   const payload = {};
-  ['petId', 'petNome', 'petEspecie', 'petRaca', 'petPeso', 'petIdade', 'tutorNome', 'tutorContato', 'tutorDocumento'].forEach((key) => {
+  [
+    'petId',
+    'petNome',
+    'petEspecie',
+    'petRaca',
+    'petPeso',
+    'petPesoAtualizadoEm',
+    'petIdade',
+    'tutorNome',
+    'tutorContato',
+    'tutorDocumento',
+  ].forEach((key) => {
     const value = params.get(key);
     if (value) payload[key] = value;
   });
@@ -578,6 +664,13 @@ function normalizePrescricaoItem(entry) {
   const dataInicio = toText(entry.dataInicio);
   const horaInicio = toText(entry.horaInicio);
   const resumo = toText(entry.resumo);
+  const medUnidade = toText(entry.medUnidade);
+  const medDose = toText(entry.medDose);
+  const medVia = toText(entry.medVia);
+  const medPeso = toText(entry.medPeso);
+  const medPesoAtualizadoEm = toText(entry.medPesoAtualizadoEm);
+  const { label: medUnidadeLabel } = getOptionDetails(PRESCRICAO_MED_UNIDADE_OPTIONS, medUnidade);
+  const { label: medViaLabel } = getOptionDetails(PRESCRICAO_MED_VIA_OPTIONS, medVia);
   return {
     id:
       toText(entry.id) ||
@@ -597,6 +690,13 @@ function normalizePrescricaoItem(entry) {
     horaInicio,
     inicioISO: combineDateAndTime(dataInicio, horaInicio),
     criadoEm: entry.criadoEm || entry.createdAt || new Date().toISOString(),
+    medUnidade,
+    medUnidadeLabel: medUnidadeLabel || '',
+    medDose,
+    medVia,
+    medViaLabel: medViaLabel || '',
+    medPeso,
+    medPesoAtualizadoEm,
   };
 }
 
@@ -617,6 +717,11 @@ function normalizeInternacaoRecord(raw) {
     : [];
   const situacaoCodigo = toText(raw.situacaoCodigo);
   const canceladoFlag = Boolean(raw.cancelado) || normalizeActionKey(situacaoCodigo) === 'cancelado';
+  const ultimoPesoHistorico = historico.find((entry) =>
+    normalizeActionKey(entry.tipo).includes('peso'),
+  );
+  const petPesoAtualizadoEm =
+    toText(raw.petPesoAtualizadoEm) || toText(raw.pesoAtualizadoEm) || ultimoPesoHistorico?.criadoEm || '';
 
   return {
     id: baseId || filterKey,
@@ -629,6 +734,7 @@ function normalizeInternacaoRecord(raw) {
       raca: toText(raw.petRaca),
       idade: toText(raw.petIdade),
       peso: toText(raw.petPeso),
+      pesoAtualizadoEm: petPesoAtualizadoEm,
     },
     tutor: {
       nome: toText(raw.tutorNome),
@@ -674,6 +780,7 @@ function normalizeInternacaoRecord(raw) {
     prescricoes: Array.isArray(raw.prescricoes)
       ? raw.prescricoes.map(normalizePrescricaoItem).filter(Boolean)
       : [],
+    petPesoAtualizadoEm,
   };
 }
 
@@ -2745,6 +2852,12 @@ function normalizeActionKey(value) {
   return normalized.replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
+function getLatestPesoHistoricoTimestamp(record) {
+  if (!record || !Array.isArray(record.historico)) return '';
+  const entry = record.historico.find((item) => normalizeActionKey(item.tipo).includes('peso'));
+  return entry?.criadoEm || '';
+}
+
 function ensureFichaInternacaoModal() {
   if (fichaInternacaoModal.overlay) return fichaInternacaoModal.overlay;
 
@@ -3143,6 +3256,18 @@ function togglePrescricaoRecorrenciaFields(show) {
   prescricaoModal.recorrenciaFields.setAttribute('aria-hidden', show ? 'false' : 'true');
 }
 
+function togglePrescricaoMedicamentoFields(show) {
+  if (!prescricaoModal.medicamentoFields) return;
+  prescricaoModal.medicamentoFields.classList.toggle('hidden', !show);
+  prescricaoModal.medicamentoFields.setAttribute('aria-hidden', show ? 'false' : 'true');
+}
+
+function shouldShowMedicamentoDetails(values = {}) {
+  const tipoKey = normalizeActionKey(values.tipo || '');
+  const freqKey = normalizeActionKey(values.frequencia || '');
+  return tipoKey === 'medicamento' && freqKey === 'recorrente';
+}
+
 function readPrescricaoFormValues() {
   if (!prescricaoModal.form) return {};
   const formData = new FormData(prescricaoModal.form);
@@ -3156,6 +3281,11 @@ function readPrescricaoFormValues() {
     dataInicio: (formData.get('prescDataInicio') || '').toString().trim(),
     horaInicio: (formData.get('prescHoraInicio') || '').toString().trim(),
     descricao: (formData.get('prescDescricao') || '').toString().trim(),
+    medUnidade: (formData.get('prescMedUnidade') || '').toString().trim(),
+    medDose: (formData.get('prescMedDose') || '').toString().trim(),
+    medVia: (formData.get('prescMedVia') || '').toString().trim(),
+    medPeso: (formData.get('prescMedPeso') || '').toString().trim(),
+    medPesoAtualizadoEm: prescricaoModal.petInfo?.petPesoAtualizadoEm || '',
   };
 }
 
@@ -3165,9 +3295,12 @@ function buildPrescricaoResumo(values = {}) {
   const freqDetails = getOptionDetails(PRESCRICAO_FREQUENCIA_OPTIONS, frequencia);
   const intervaloDetails = getOptionDetails(PRESCRICAO_INTERVALO_OPTIONS, aCadaUnidade);
   const periodoDetails = getOptionDetails(PRESCRICAO_POR_OPTIONS, porUnidade);
+  const medUnidadeDetails = getOptionDetails(PRESCRICAO_MED_UNIDADE_OPTIONS, values.medUnidade);
+  const medViaDetails = getOptionDetails(PRESCRICAO_MED_VIA_OPTIONS, values.medVia);
   const inicioISO = combineDateAndTime(dataInicio, horaInicio);
   const inicioLabel = inicioISO ? formatDateTimeLabel(inicioISO) : '';
   const descricaoLabel = descricao ? ' · ' + descricao : '';
+  let resumo = '';
   if (freqDetails.value === 'recorrente') {
     const intervalo = aCadaValor && intervaloDetails.label
       ? aCadaValor + ' ' + intervaloDetails.label.toLowerCase()
@@ -3175,15 +3308,36 @@ function buildPrescricaoResumo(values = {}) {
     const periodo = porValor && periodoDetails.label
       ? porValor + ' ' + periodoDetails.label.toLowerCase()
       : 'período informado';
-    return (tipoDetails.label || 'Procedimento') + descricaoLabel + ' recorrente a cada ' + intervalo + ' por ' + periodo +
+    resumo = (tipoDetails.label || 'Procedimento') + descricaoLabel + ' recorrente a cada ' + intervalo + ' por ' + periodo +
       (inicioLabel ? ', iniciando em ' + inicioLabel : '') + '.';
-  }
-  if (freqDetails.value === 'necessario') {
-    return (tipoDetails.label || 'Procedimento') + descricaoLabel + ' quando necessário' +
+  } else if (freqDetails.value === 'necessario') {
+    resumo = (tipoDetails.label || 'Procedimento') + descricaoLabel + ' quando necessário' +
       (inicioLabel ? ', referência ' + inicioLabel : '') + '.';
+  } else {
+    resumo = (tipoDetails.label || 'Procedimento') + descricaoLabel + ' aplicado apenas uma vez' +
+      (inicioLabel ? ' em ' + inicioLabel : '') + '.';
   }
-  return (tipoDetails.label || 'Procedimento') + descricaoLabel + ' aplicado apenas uma vez' +
-    (inicioLabel ? ' em ' + inicioLabel : '') + '.';
+  if (shouldShowMedicamentoDetails(values)) {
+    const medParts = [];
+    if (values.medDose) {
+      const unidadeLabel = medUnidadeDetails.label ? medUnidadeDetails.label.toLowerCase() : '';
+      medParts.push(unidadeLabel ? `${values.medDose} ${unidadeLabel}` : values.medDose);
+    }
+    if (medViaDetails.label) {
+      medParts.push(`via ${medViaDetails.label.toLowerCase()}`);
+    }
+    if (values.medPeso) {
+      const pesoAtualLabel = values.medPesoAtualizadoEm
+        ? formatDateTimeLabel(values.medPesoAtualizadoEm)
+        : '';
+      const pesoDetalhe = pesoAtualLabel ? `em ${pesoAtualLabel}` : 'em —';
+      medParts.push(`peso ref.: ${values.medPeso} (${pesoDetalhe})`);
+    }
+    if (medParts.length) {
+      resumo += ' Detalhes: ' + medParts.join(' · ') + '.';
+    }
+  }
+  return resumo;
 }
 
 function updatePrescricaoResumoFromForm() {
@@ -3216,7 +3370,16 @@ function resetPrescricaoModalForm() {
   if (porField) porField.value = '6';
   if (aCadaSelect) aCadaSelect.value = PRESCRICAO_INTERVALO_OPTIONS[0]?.value || '';
   if (porSelect) porSelect.value = PRESCRICAO_POR_OPTIONS[2]?.value || '';
+  const medUnidadeSelect = prescricaoModal.form?.querySelector('select[name="prescMedUnidade"]');
+  const medDoseInput = prescricaoModal.form?.querySelector('input[name="prescMedDose"]');
+  const medViaSelect = prescricaoModal.form?.querySelector('select[name="prescMedVia"]');
+  if (medUnidadeSelect) medUnidadeSelect.value = '';
+  if (medDoseInput) medDoseInput.value = '';
+  if (medViaSelect) medViaSelect.value = '';
+  if (prescricaoModal.medPesoField) prescricaoModal.medPesoField.value = '';
+  if (prescricaoModal.medPesoMetaEl) prescricaoModal.medPesoMetaEl.textContent = 'em —';
   togglePrescricaoRecorrenciaFields(true);
+  togglePrescricaoMedicamentoFields(false);
   updatePrescricaoResumoFromForm();
 }
 
@@ -3235,6 +3398,15 @@ function setPrescricaoModalPetInfo(info) {
   if (prescricaoModal.petSummaryNameEl) prescricaoModal.petSummaryNameEl.textContent = petName;
   if (prescricaoModal.petSummaryMetaEl) prescricaoModal.petSummaryMetaEl.textContent = meta || '—';
   if (prescricaoModal.petSummaryTutorEl) prescricaoModal.petSummaryTutorEl.textContent = tutor || 'Tutor não informado';
+  if (prescricaoModal.medPesoField) {
+    prescricaoModal.medPesoField.value = normalized?.petPeso || '';
+  }
+  if (prescricaoModal.medPesoMetaEl) {
+    const pesoAtualLabel = normalized?.petPesoAtualizadoEm
+      ? formatDateTimeLabel(normalized.petPesoAtualizadoEm)
+      : '';
+    prescricaoModal.medPesoMetaEl.textContent = pesoAtualLabel ? `em ${pesoAtualLabel}` : 'em —';
+  }
 }
 
 function closePrescricaoModal() {
@@ -3255,9 +3427,19 @@ function closePrescricaoModal() {
 }
 
 function handlePrescricaoFormChange(event) {
+  let cachedValues = null;
   if (event && event.target && event.target.name === 'prescFrequencia') {
     const value = event.target.value ? event.target.value.trim() : '';
     togglePrescricaoRecorrenciaFields(value === 'recorrente');
+    cachedValues = readPrescricaoFormValues();
+  }
+  const shouldToggleMedicamento =
+    event &&
+    event.target &&
+    (event.target.name === 'prescFrequencia' || event.target.name === 'prescTipo');
+  if (shouldToggleMedicamento) {
+    cachedValues = cachedValues || readPrescricaoFormValues();
+    togglePrescricaoMedicamentoFields(shouldShowMedicamentoDetails(cachedValues));
   }
   updatePrescricaoResumoFromForm();
 }
@@ -3342,6 +3524,32 @@ function ensurePrescricaoModal() {
             <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Procedimento*
               <textarea name="prescDescricao" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Descreva o procedimento, medicamento ou fluidoterapia"></textarea>
             </label>
+            <div class="rounded-xl border border-gray-100 px-3 py-3 hidden" data-prescricao-medicamento>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Detalhes do medicamento recorrente</p>
+              <div class="mt-3 grid gap-3 md:grid-cols-2">
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Unidade*
+                  <select name="prescMedUnidade" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione</option>
+                    ${createGroupedOptionsMarkup(PRESCRICAO_MED_UNIDADE_GROUPS)}
+                  </select>
+                </label>
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Dose*
+                  <input type="text" name="prescMedDose" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 5" />
+                </label>
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Via*
+                  <select name="prescMedVia" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione</option>
+                    ${createOptionsMarkup(PRESCRICAO_MED_VIA_OPTIONS)}
+                  </select>
+                </label>
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Peso
+                  <div class="mt-1 space-y-1">
+                    <input type="text" name="prescMedPeso" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 18,4 kg" />
+                    <p class="text-[10px] text-gray-500" data-prescricao-peso-meta>em —</p>
+                  </div>
+                </label>
+              </div>
+            </div>
             <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Resumo (automático)
               <textarea name="prescResumo" data-prescricao-resumo rows="3" readonly class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[12px] text-gray-600"></textarea>
             </label>
@@ -3370,12 +3578,15 @@ function ensurePrescricaoModal() {
   prescricaoModal.errorEl = overlay.querySelector('[data-prescricao-error]');
   prescricaoModal.resumoField = overlay.querySelector('[data-prescricao-resumo]');
   prescricaoModal.recorrenciaFields = overlay.querySelector('[data-prescricao-recorrencia]');
+  prescricaoModal.medicamentoFields = overlay.querySelector('[data-prescricao-medicamento]');
   prescricaoModal.tipoSelect = overlay.querySelector('select[name="prescTipo"]');
   prescricaoModal.frequenciaSelect = overlay.querySelector('select[name="prescFrequencia"]');
   prescricaoModal.petSummaryEl = overlay.querySelector('[data-prescricao-summary]');
   prescricaoModal.petSummaryNameEl = overlay.querySelector('[data-prescricao-summary-name]');
   prescricaoModal.petSummaryMetaEl = overlay.querySelector('[data-prescricao-summary-meta]');
   prescricaoModal.petSummaryTutorEl = overlay.querySelector('[data-prescricao-summary-tutor]');
+  prescricaoModal.medPesoField = overlay.querySelector('input[name="prescMedPeso"]');
+  prescricaoModal.medPesoMetaEl = overlay.querySelector('[data-prescricao-peso-meta]');
 
   overlay.addEventListener('click', (event) => {
     const closeTrigger = event.target.closest('[data-close-prescricao-modal]');
@@ -3408,6 +3619,7 @@ function openPrescricaoModal(record, options = {}) {
   setPrescricaoModalError('');
   resetPrescricaoModalForm();
   setPrescricaoModalPetInfo(getPetInfoFromInternacaoRecord(record));
+  togglePrescricaoMedicamentoFields(shouldShowMedicamentoDetails(readPrescricaoFormValues()));
   prescricaoModal.overlay.classList.remove('hidden');
   prescricaoModal.overlay.classList.add('flex');
   prescricaoModal.overlay.dataset.modalOpen = 'true';
@@ -3466,6 +3678,20 @@ function handlePrescricaoModalSubmit(event) {
   if (!values.descricao) {
     setPrescricaoModalError('Descreva o procedimento ou medicamento.');
     return;
+  }
+  if (shouldShowMedicamentoDetails(values)) {
+    if (!values.medUnidade) {
+      setPrescricaoModalError('Selecione a unidade do medicamento.');
+      return;
+    }
+    if (!values.medDose) {
+      setPrescricaoModalError('Informe a dose do medicamento.');
+      return;
+    }
+    if (!values.medVia) {
+      setPrescricaoModalError('Selecione a via de administração.');
+      return;
+    }
   }
 
   const resumo = buildPrescricaoResumo(values);

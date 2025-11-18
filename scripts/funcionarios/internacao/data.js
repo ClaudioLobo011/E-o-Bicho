@@ -15,6 +15,7 @@ export const internacaoDataset = {
       sexo: 'Macho',
       idade: '4 anos',
       peso: '18,4 kg',
+      pesoAtualizadoEm: '2024-03-13T10:50:00',
       tutor: {
         nome: 'Ana Lima',
         documento: '***.123.788-10',
@@ -65,6 +66,7 @@ export const internacaoDataset = {
       sexo: 'Fêmea',
       idade: '2 anos',
       peso: '3,2 kg',
+      pesoAtualizadoEm: '2024-03-13T12:20:00',
       tutor: {
         nome: 'Rafael Campos',
         documento: '***.551.024-81',
@@ -114,6 +116,7 @@ export const internacaoDataset = {
       sexo: 'Macho',
       idade: '8 anos',
       peso: '7,1 kg',
+      pesoAtualizadoEm: '2024-03-13T08:40:00',
       tutor: {
         nome: 'Juliana Souza',
         documento: '***.882.214-09',
