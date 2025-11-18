@@ -97,6 +97,17 @@ const PRESCRICAO_MED_VIA_OPTIONS = [
   { value: 'topica', label: 'Tópica' },
 ];
 
+const PRESCRICAO_FLUID_EQUIPO_OPTIONS = [
+  { value: 'macro', label: 'Macro gotas' },
+  { value: 'micro', label: 'Micro gotas' },
+];
+
+const PRESCRICAO_FLUID_VELOCIDADE_OPTIONS = [
+  { value: 'gotasmin', label: 'Gotas/m' },
+  { value: 'mlhora', label: 'ml/h' },
+  { value: 'mldia', label: 'ml/dia' },
+];
+
 const internarModal = {
   overlay: null,
   dialog: null,
@@ -194,6 +205,7 @@ const prescricaoModal = {
   resumoField: null,
   recorrenciaFields: null,
   medicamentoFields: null,
+  fluidFields: null,
   tipoSelect: null,
   frequenciaSelect: null,
   petSummaryEl: null,
@@ -202,6 +214,7 @@ const prescricaoModal = {
   petSummaryTutorEl: null,
   medPesoField: null,
   medPesoMetaEl: null,
+  descricaoLabelEl: null,
 };
 
 const boxesModal = {
@@ -671,6 +684,17 @@ function normalizePrescricaoItem(entry) {
   const medPesoAtualizadoEm = toText(entry.medPesoAtualizadoEm);
   const { label: medUnidadeLabel } = getOptionDetails(PRESCRICAO_MED_UNIDADE_OPTIONS, medUnidade);
   const { label: medViaLabel } = getOptionDetails(PRESCRICAO_MED_VIA_OPTIONS, medVia);
+  const fluidFluido = toText(entry.fluidFluido);
+  const fluidEquipo = toText(entry.fluidEquipo);
+  const fluidUnidade = toText(entry.fluidUnidade);
+  const fluidDose = toText(entry.fluidDose);
+  const fluidVia = toText(entry.fluidVia);
+  const fluidVelocidadeValor = toText(entry.fluidVelocidadeValor);
+  const fluidVelocidadeUnidade = toText(entry.fluidVelocidadeUnidade);
+  const fluidSuplemento = toText(entry.fluidSuplemento);
+  const { label: fluidEquipoLabel } = getOptionDetails(PRESCRICAO_FLUID_EQUIPO_OPTIONS, fluidEquipo);
+  const { label: fluidVelocidadeLabel } = getOptionDetails(PRESCRICAO_FLUID_VELOCIDADE_OPTIONS, fluidVelocidadeUnidade);
+  const { label: fluidViaLabel } = getOptionDetails(PRESCRICAO_MED_VIA_OPTIONS, fluidVia);
   return {
     id:
       toText(entry.id) ||
@@ -697,6 +721,17 @@ function normalizePrescricaoItem(entry) {
     medViaLabel: medViaLabel || '',
     medPeso,
     medPesoAtualizadoEm,
+    fluidFluido,
+    fluidEquipo,
+    fluidEquipoLabel: fluidEquipoLabel || '',
+    fluidUnidade,
+    fluidDose,
+    fluidVia,
+    fluidViaLabel: fluidViaLabel || '',
+    fluidVelocidadeValor,
+    fluidVelocidadeUnidade,
+    fluidVelocidadeLabel: fluidVelocidadeLabel || '',
+    fluidSuplemento: fluidSuplemento || 'Sem suplemento',
   };
 }
 
@@ -3262,16 +3297,34 @@ function togglePrescricaoMedicamentoFields(show) {
   prescricaoModal.medicamentoFields.setAttribute('aria-hidden', show ? 'false' : 'true');
 }
 
+function togglePrescricaoFluidoterapiaFields(show) {
+  if (!prescricaoModal.fluidFields) return;
+  prescricaoModal.fluidFields.classList.toggle('hidden', !show);
+  prescricaoModal.fluidFields.setAttribute('aria-hidden', show ? 'false' : 'true');
+}
+
+function updatePrescricaoDescricaoLabel(tipoValue) {
+  if (!prescricaoModal.descricaoLabelEl) return;
+  const tipoKey = normalizeActionKey(tipoValue || prescricaoModal.tipoSelect?.value || '');
+  prescricaoModal.descricaoLabelEl.textContent = tipoKey === 'fluidoterapia' ? 'Fluído*' : 'Procedimento*';
+}
+
 function shouldShowMedicamentoDetails(values = {}) {
   const tipoKey = normalizeActionKey(values.tipo || '');
   const freqKey = normalizeActionKey(values.frequencia || '');
   return tipoKey === 'medicamento' && freqKey === 'recorrente';
 }
 
+function shouldShowFluidoterapiaDetails(values = {}) {
+  const tipoKey = normalizeActionKey(values.tipo || '');
+  const freqKey = normalizeActionKey(values.frequencia || '');
+  return tipoKey === 'fluidoterapia' && freqKey === 'recorrente';
+}
+
 function readPrescricaoFormValues() {
   if (!prescricaoModal.form) return {};
   const formData = new FormData(prescricaoModal.form);
-  return {
+  const values = {
     tipo: (formData.get('prescTipo') || '').toString().trim(),
     frequencia: (formData.get('prescFrequencia') || '').toString().trim(),
     aCadaValor: (formData.get('prescACadaValor') || '').toString().trim(),
@@ -3286,7 +3339,23 @@ function readPrescricaoFormValues() {
     medVia: (formData.get('prescMedVia') || '').toString().trim(),
     medPeso: (formData.get('prescMedPeso') || '').toString().trim(),
     medPesoAtualizadoEm: prescricaoModal.petInfo?.petPesoAtualizadoEm || '',
+    fluidFluido: (formData.get('prescFluidFluido') || '').toString().trim(),
+    fluidEquipo: (formData.get('prescFluidEquipo') || '').toString().trim(),
+    fluidUnidade: (formData.get('prescFluidUnidade') || '').toString().trim(),
+    fluidDose: (formData.get('prescFluidDose') || '').toString().trim(),
+    fluidVia: (formData.get('prescFluidVia') || '').toString().trim(),
+    fluidVelocidadeValor: (formData.get('prescFluidVelocidadeValor') || '').toString().trim(),
+    fluidVelocidadeUnidade: (formData.get('prescFluidVelocidadeUnidade') || '').toString().trim(),
+    fluidSuplemento: (formData.get('prescFluidSuplemento') || '').toString().trim(),
   };
+  const tipoKey = normalizeActionKey(values.tipo);
+  if (!values.fluidFluido && tipoKey === 'fluidoterapia') {
+    values.fluidFluido = values.descricao;
+  }
+  if (!values.descricao && values.fluidFluido) {
+    values.descricao = values.fluidFluido;
+  }
+  return values;
 }
 
 function buildPrescricaoResumo(values = {}) {
@@ -3337,6 +3406,35 @@ function buildPrescricaoResumo(values = {}) {
       resumo += ' Detalhes: ' + medParts.join(' · ') + '.';
     }
   }
+  if (shouldShowFluidoterapiaDetails(values)) {
+    const fluidParts = [];
+    if (values.fluidFluido) {
+      fluidParts.push(`fluído ${values.fluidFluido}`);
+    }
+    if (values.fluidEquipo) {
+      const equipoOption = getOptionDetails(PRESCRICAO_FLUID_EQUIPO_OPTIONS, values.fluidEquipo);
+      fluidParts.push(`equipo ${equipoOption.label.toLowerCase()}`);
+    }
+    if (values.fluidDose) {
+      const unidadeOption = getOptionDetails(PRESCRICAO_MED_UNIDADE_OPTIONS, values.fluidUnidade);
+      const unidadeLabel = unidadeOption.label ? unidadeOption.label.toLowerCase() : '';
+      fluidParts.push(unidadeLabel ? `${values.fluidDose} ${unidadeLabel}` : values.fluidDose);
+    }
+    if (values.fluidVia) {
+      const viaOption = getOptionDetails(PRESCRICAO_MED_VIA_OPTIONS, values.fluidVia);
+      if (viaOption.label) {
+        fluidParts.push(`via ${viaOption.label.toLowerCase()}`);
+      }
+    }
+    if (values.fluidVelocidadeValor && values.fluidVelocidadeUnidade) {
+      const velocidadeOption = getOptionDetails(PRESCRICAO_FLUID_VELOCIDADE_OPTIONS, values.fluidVelocidadeUnidade);
+      const velocidadeLabel = velocidadeOption.label || 'unidade';
+      fluidParts.push(`velocidade ${values.fluidVelocidadeValor} ${velocidadeLabel.toLowerCase()}`);
+    }
+    const suplementoLabel = values.fluidSuplemento || 'Sem suplemento';
+    fluidParts.push(`suplemento: ${suplementoLabel}`);
+    resumo += ' Detalhes da fluidoterapia: ' + fluidParts.join(' · ') + '.';
+  }
   return resumo;
 }
 
@@ -3380,6 +3478,18 @@ function resetPrescricaoModalForm() {
   if (prescricaoModal.medPesoMetaEl) prescricaoModal.medPesoMetaEl.textContent = 'em —';
   togglePrescricaoRecorrenciaFields(true);
   togglePrescricaoMedicamentoFields(false);
+  togglePrescricaoFluidoterapiaFields(false);
+  const fluidInputs = prescricaoModal.form?.querySelectorAll('[data-prescricao-fluid-input]');
+  if (fluidInputs) {
+    fluidInputs.forEach((input) => {
+      if (input.tagName === 'SELECT') {
+        input.value = '';
+      } else {
+        input.value = '';
+      }
+    });
+  }
+  updatePrescricaoDescricaoLabel();
   updatePrescricaoResumoFromForm();
 }
 
@@ -3440,6 +3550,8 @@ function handlePrescricaoFormChange(event) {
   if (shouldToggleMedicamento) {
     cachedValues = cachedValues || readPrescricaoFormValues();
     togglePrescricaoMedicamentoFields(shouldShowMedicamentoDetails(cachedValues));
+    togglePrescricaoFluidoterapiaFields(shouldShowFluidoterapiaDetails(cachedValues));
+    updatePrescricaoDescricaoLabel(cachedValues.tipo);
   }
   updatePrescricaoResumoFromForm();
 }
@@ -3521,7 +3633,8 @@ function ensurePrescricaoModal() {
                 </label>
               </div>
             </div>
-            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Procedimento*
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <span data-prescricao-descricao-label>Procedimento*</span>
               <textarea name="prescDescricao" rows="1" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Descreva o procedimento, medicamento ou fluidoterapia"></textarea>
             </label>
             <div class="rounded-xl border border-gray-100 px-3 py-3 hidden" data-prescricao-medicamento>
@@ -3547,6 +3660,49 @@ function ensurePrescricaoModal() {
                     <input type="text" name="prescMedPeso" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 18,4 kg" />
                     <p class="text-[10px] text-gray-500" data-prescricao-peso-meta>em —</p>
                   </div>
+                </label>
+              </div>
+            </div>
+            <div class="rounded-xl border border-gray-100 px-3 py-3 hidden" data-prescricao-fluidoterapia>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Detalhes da fluidoterapia recorrente</p>
+              <div class="mt-3 grid gap-3 lg:grid-cols-4">
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Fluído*
+                  <input type="text" name="prescFluidFluido" data-prescricao-fluid-input class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Ex.: Ringer com lactato" />
+                </label>
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Equipo*
+                  <select name="prescFluidEquipo" data-prescricao-fluid-input class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione</option>
+                    ${createOptionsMarkup(PRESCRICAO_FLUID_EQUIPO_OPTIONS)}
+                  </select>
+                </label>
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Unidade*
+                  <select name="prescFluidUnidade" data-prescricao-fluid-input class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione</option>
+                    ${createGroupedOptionsMarkup(PRESCRICAO_MED_UNIDADE_GROUPS)}
+                  </select>
+                </label>
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Dose*
+                  <input type="text" name="prescFluidDose" data-prescricao-fluid-input class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Ex.: 30" />
+                </label>
+              </div>
+              <div class="mt-3 grid gap-3 md:grid-cols-3">
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Via*
+                  <select name="prescFluidVia" data-prescricao-fluid-input class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <option value="">Selecione</option>
+                    ${createOptionsMarkup(PRESCRICAO_MED_VIA_OPTIONS)}
+                  </select>
+                </label>
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Velocidade*
+                  <div class="mt-1 flex items-center gap-2">
+                    <input type="number" name="prescFluidVelocidadeValor" min="0" step="0.1" data-prescricao-fluid-input class="w-24 rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                    <select name="prescFluidVelocidadeUnidade" data-prescricao-fluid-input class="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                      <option value="">Selecione</option>
+                      ${createOptionsMarkup(PRESCRICAO_FLUID_VELOCIDADE_OPTIONS)}
+                    </select>
+                  </div>
+                </label>
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Suplemento
+                  <input type="text" name="prescFluidSuplemento" data-prescricao-fluid-input class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[12px] text-gray-700 placeholder:text-gray-400 focus:border-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Sem suplemento" />
                 </label>
               </div>
             </div>
@@ -3579,6 +3735,7 @@ function ensurePrescricaoModal() {
   prescricaoModal.resumoField = overlay.querySelector('[data-prescricao-resumo]');
   prescricaoModal.recorrenciaFields = overlay.querySelector('[data-prescricao-recorrencia]');
   prescricaoModal.medicamentoFields = overlay.querySelector('[data-prescricao-medicamento]');
+  prescricaoModal.fluidFields = overlay.querySelector('[data-prescricao-fluidoterapia]');
   prescricaoModal.tipoSelect = overlay.querySelector('select[name="prescTipo"]');
   prescricaoModal.frequenciaSelect = overlay.querySelector('select[name="prescFrequencia"]');
   prescricaoModal.petSummaryEl = overlay.querySelector('[data-prescricao-summary]');
@@ -3587,6 +3744,7 @@ function ensurePrescricaoModal() {
   prescricaoModal.petSummaryTutorEl = overlay.querySelector('[data-prescricao-summary-tutor]');
   prescricaoModal.medPesoField = overlay.querySelector('input[name="prescMedPeso"]');
   prescricaoModal.medPesoMetaEl = overlay.querySelector('[data-prescricao-peso-meta]');
+  prescricaoModal.descricaoLabelEl = overlay.querySelector('[data-prescricao-descricao-label]');
 
   overlay.addEventListener('click', (event) => {
     const closeTrigger = event.target.closest('[data-close-prescricao-modal]');
@@ -3619,7 +3777,10 @@ function openPrescricaoModal(record, options = {}) {
   setPrescricaoModalError('');
   resetPrescricaoModalForm();
   setPrescricaoModalPetInfo(getPetInfoFromInternacaoRecord(record));
-  togglePrescricaoMedicamentoFields(shouldShowMedicamentoDetails(readPrescricaoFormValues()));
+  const initialValues = readPrescricaoFormValues();
+  togglePrescricaoMedicamentoFields(shouldShowMedicamentoDetails(initialValues));
+  togglePrescricaoFluidoterapiaFields(shouldShowFluidoterapiaDetails(initialValues));
+  updatePrescricaoDescricaoLabel(initialValues.tipo);
   prescricaoModal.overlay.classList.remove('hidden');
   prescricaoModal.overlay.classList.add('flex');
   prescricaoModal.overlay.dataset.modalOpen = 'true';
@@ -3690,6 +3851,36 @@ function handlePrescricaoModalSubmit(event) {
     }
     if (!values.medVia) {
       setPrescricaoModalError('Selecione a via de administração.');
+      return;
+    }
+  }
+  if (shouldShowFluidoterapiaDetails(values)) {
+    if (!values.fluidFluido) {
+      setPrescricaoModalError('Informe qual fluído será administrado.');
+      return;
+    }
+    if (!values.descricao) {
+      setPrescricaoModalError('Descreva o fluído que será aplicado.');
+      return;
+    }
+    if (!values.fluidEquipo) {
+      setPrescricaoModalError('Informe o equipo da fluidoterapia.');
+      return;
+    }
+    if (!values.fluidUnidade) {
+      setPrescricaoModalError('Selecione a unidade do fluído.');
+      return;
+    }
+    if (!values.fluidDose) {
+      setPrescricaoModalError('Informe a dose da fluidoterapia.');
+      return;
+    }
+    if (!values.fluidVia) {
+      setPrescricaoModalError('Informe a via da fluidoterapia.');
+      return;
+    }
+    if (!values.fluidVelocidadeValor || !values.fluidVelocidadeUnidade) {
+      setPrescricaoModalError('Preencha a velocidade de aplicação.');
       return;
     }
   }
