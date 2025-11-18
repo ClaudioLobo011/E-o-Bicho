@@ -3336,14 +3336,14 @@ function shouldShowMedicamentoDetails(values = {}) {
   const tipoKey = normalizeActionKey(values.tipo || '');
   const freqKey = normalizeActionKey(values.frequencia || '');
   if (tipoKey !== 'medicamento') return false;
-  return freqKey === 'recorrente' || freqKey === 'unica';
+  return freqKey === 'recorrente' || freqKey === 'unica' || freqKey === 'necessario';
 }
 
 function shouldShowFluidoterapiaDetails(values = {}) {
   const tipoKey = normalizeActionKey(values.tipo || '');
   const freqKey = normalizeActionKey(values.frequencia || '');
   if (tipoKey !== 'fluidoterapia') return false;
-  return freqKey === 'recorrente' || freqKey === 'unica';
+  return freqKey === 'recorrente' || freqKey === 'unica' || freqKey === 'necessario';
 }
 
 function shouldShowRecorrenciaFields(values = {}) {
