@@ -68,6 +68,24 @@ const obitoModal = {
   petInfo: null,
 };
 
+const cancelarModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  submitBtn: null,
+  errorEl: null,
+  petSummaryEl: null,
+  petSummaryNameEl: null,
+  petSummaryMetaEl: null,
+  petSummaryTutorEl: null,
+  dataset: null,
+  state: null,
+  onSuccess: null,
+  record: null,
+  recordId: null,
+  petInfo: null,
+};
+
 const boxesModal = {
   overlay: null,
   dialog: null,
@@ -476,6 +494,8 @@ function normalizeInternacaoRecord(raw) {
   const historico = Array.isArray(raw.historico)
     ? raw.historico.map(normalizeHistoricoEntry).filter(Boolean)
     : [];
+  const situacaoCodigo = toText(raw.situacaoCodigo);
+  const canceladoFlag = Boolean(raw.cancelado) || normalizeActionKey(situacaoCodigo) === 'cancelado';
 
   return {
     id: baseId || filterKey,
@@ -495,7 +515,7 @@ function normalizeInternacaoRecord(raw) {
       documento: toText(raw.tutorDocumento),
     },
     situacao: toText(raw.situacao),
-    situacaoCodigo: toText(raw.situacaoCodigo),
+    situacaoCodigo,
     risco: toText(raw.risco),
     riscoCodigo: toText(raw.riscoCodigo),
     veterinario: toText(raw.veterinario),
@@ -509,6 +529,14 @@ function normalizeInternacaoRecord(raw) {
     acessorios: toText(raw.acessorios),
     observacoes: toText(raw.observacoes),
     alergias: normalizeTagList(raw.alergias),
+    cancelado: canceladoFlag,
+    canceladoResponsavel: toText(raw.canceladoResponsavel),
+    canceladoData: toText(raw.canceladoData),
+    canceladoHora: toText(raw.canceladoHora),
+    canceladoISO: combineDateAndTime(raw.canceladoData, raw.canceladoHora),
+    canceladoJustificativa: toText(raw.canceladoJustificativa),
+    canceladoObservacoes: toText(raw.canceladoObservacoes),
+    canceladoRegistradoEm: raw.canceladoRegistradoEm || '',
     obitoRegistrado: Boolean(raw.obitoRegistrado),
     obitoVeterinario: toText(raw.obitoVeterinario),
     obitoData: toText(raw.obitoData),
@@ -1030,6 +1058,339 @@ async function handleObitoModalSubmit(event) {
     setObitoModalError(error.message || 'Não foi possível registrar o óbito.');
   } finally {
     setObitoModalLoading(false);
+  }
+}
+
+function setCancelarModalError(message) {
+  if (!cancelarModal.errorEl) return;
+  const text = String(message || '').trim();
+  cancelarModal.errorEl.textContent = text;
+  cancelarModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setCancelarModalLoading(isLoading) {
+  if (!cancelarModal.submitBtn) return;
+  if (!cancelarModal.submitBtn.dataset.defaultLabel) {
+    cancelarModal.submitBtn.dataset.defaultLabel = cancelarModal.submitBtn.textContent.trim();
+  }
+  cancelarModal.submitBtn.disabled = !!isLoading;
+  cancelarModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  cancelarModal.submitBtn.textContent = isLoading
+    ? 'Salvando...'
+    : cancelarModal.submitBtn.dataset.defaultLabel;
+}
+
+function resetCancelarModalForm() {
+  if (cancelarModal.form) {
+    cancelarModal.form.reset();
+  }
+}
+
+function setCancelarModalPetInfo(info) {
+  const normalized = normalizePetInfo(info);
+  cancelarModal.petInfo = normalized;
+  const hasInfo = !!normalized;
+  const metaParts = hasInfo ? [normalized.petEspecie, normalized.petRaca, normalized.petPeso].filter(Boolean) : [];
+  const tutorParts = hasInfo
+    ? [normalized.tutorNome, normalized.tutorContato, normalized.tutorDocumento].filter(Boolean)
+    : [];
+  if (cancelarModal.petSummaryEl) {
+    cancelarModal.petSummaryEl.classList.toggle('hidden', !hasInfo);
+  }
+  if (cancelarModal.petSummaryNameEl) {
+    cancelarModal.petSummaryNameEl.textContent = hasInfo ? normalized.petNome || 'Paciente' : 'Paciente';
+  }
+  if (cancelarModal.petSummaryMetaEl) {
+    cancelarModal.petSummaryMetaEl.textContent = hasInfo && metaParts.length ? metaParts.join(' · ') : '—';
+  }
+  if (cancelarModal.petSummaryTutorEl) {
+    cancelarModal.petSummaryTutorEl.textContent = tutorParts.length ? tutorParts.join(' · ') : '—';
+  }
+}
+
+function fillCancelarModalForm(record) {
+  if (!cancelarModal.form) return;
+  const now = new Date();
+  const responsavelField = cancelarModal.form.querySelector('input[name="cancelResponsavel"]');
+  const dataField = cancelarModal.form.querySelector('input[name="cancelData"]');
+  const horaField = cancelarModal.form.querySelector('input[name="cancelHora"]');
+  const justificativaField = cancelarModal.form.querySelector('textarea[name="cancelJustificativa"]');
+  const observacoesField = cancelarModal.form.querySelector('textarea[name="cancelObservacoes"]');
+
+  if (responsavelField) {
+    responsavelField.value = record?.canceladoResponsavel || record?.veterinario || '';
+  }
+  if (dataField) {
+    dataField.value = record?.canceladoData || getLocalDateInputValue(now) || '';
+  }
+  if (horaField) {
+    horaField.value = record?.canceladoHora || getLocalTimeInputValue(now) || '';
+  }
+  if (justificativaField) {
+    justificativaField.value = record?.canceladoJustificativa || '';
+  }
+  if (observacoesField) {
+    observacoesField.value = record?.canceladoObservacoes || '';
+  }
+}
+
+function closeCancelarModal() {
+  if (!cancelarModal.overlay) return;
+  if (cancelarModal.dialog) {
+    cancelarModal.dialog.classList.add('opacity-0', 'scale-95');
+  }
+  cancelarModal.overlay.classList.add('hidden');
+  cancelarModal.overlay.removeAttribute('data-modal-open');
+  resetCancelarModalForm();
+  setCancelarModalError('');
+  setCancelarModalLoading(false);
+  setCancelarModalPetInfo(null);
+  cancelarModal.dataset = null;
+  cancelarModal.state = null;
+  cancelarModal.onSuccess = null;
+  cancelarModal.record = null;
+  cancelarModal.recordId = null;
+}
+
+function ensureCancelarModal() {
+  if (cancelarModal.overlay) return cancelarModal.overlay;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'internacao-cancelar-modal fixed inset-0 z-[1005] hidden';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-cancel-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div
+        class="relative flex w-full max-w-3xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] text-gray-700 shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cancelar-modal-title"
+        data-cancel-dialog
+        tabindex="-1"
+      >
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+              <i class="fas fa-ban"></i>
+              Cancelamento
+            </span>
+            <h2 id="cancelar-modal-title" class="mt-1.5 text-lg font-semibold text-gray-900">Cancelar internação</h2>
+            <p class="mt-1 text-[11px] text-gray-600">Revise o motivo do cancelamento antes de confirmar.</p>
+          </div>
+          <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-cancel-modal>
+            <span class="sr-only">Fechar modal</span>
+            <i class="fas fa-xmark text-sm"></i>
+          </button>
+        </header>
+        <form class="flex max-h-[80vh] flex-col overflow-hidden" novalidate>
+          <div class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-600" data-cancel-summary>
+              <div class="flex flex-wrap items-center gap-2 text-gray-700">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Paciente</span>
+                <span class="text-[13px] font-semibold text-gray-900" data-cancel-summary-name>—</span>
+                <span class="text-[10px] text-gray-400" data-cancel-summary-meta>—</span>
+              </div>
+              <p class="mt-1 text-[11px] text-gray-500" data-cancel-summary-tutor>—</p>
+            </div>
+            <div class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-[11px] text-amber-900">
+              <p class="font-semibold">Atenção</p>
+              <p class="mt-1">Ao cancelar você encerra a internação com status de cancelada, interrompe prescrições futuras e libera o box ocupado.</p>
+            </div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Responsável*
+              <input type="text" name="cancelResponsavel" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Nome do responsável" />
+            </label>
+            <div class="grid gap-3 md:grid-cols-2">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Data*
+                <input type="date" name="cancelData" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Hora*
+                <input type="time" name="cancelHora" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </label>
+            </div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Justificativa*
+              <textarea name="cancelJustificativa" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Descreva o motivo do cancelamento"></textarea>
+            </label>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Observações
+              <textarea name="cancelObservacoes" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Informe detalhes adicionais, se necessário"></textarea>
+            </label>
+            <p class="hidden rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700" data-cancel-error></p>
+          </div>
+          <footer class="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <span class="text-[11px] text-gray-500">O histórico completo fica disponível na ficha de internação.</span>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-cancel-modal>Cancelar</button>
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-amber-600 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-amber-500" data-cancel-submit>Salvar</button>
+            </div>
+          </footer>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  cancelarModal.overlay = overlay;
+  cancelarModal.dialog = overlay.querySelector('[data-cancel-dialog]');
+  cancelarModal.form = overlay.querySelector('form');
+  cancelarModal.submitBtn = overlay.querySelector('[data-cancel-submit]');
+  cancelarModal.errorEl = overlay.querySelector('[data-cancel-error]');
+  cancelarModal.petSummaryEl = overlay.querySelector('[data-cancel-summary]');
+  cancelarModal.petSummaryNameEl = overlay.querySelector('[data-cancel-summary-name]');
+  cancelarModal.petSummaryMetaEl = overlay.querySelector('[data-cancel-summary-meta]');
+  cancelarModal.petSummaryTutorEl = overlay.querySelector('[data-cancel-summary-tutor]');
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeCancelarModal();
+      return;
+    }
+    const closeTrigger = event.target.closest('[data-close-cancel-modal]');
+    if (closeTrigger) {
+      event.preventDefault();
+      closeCancelarModal();
+    }
+  });
+
+  overlay.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !overlay.classList.contains('hidden')) {
+      event.preventDefault();
+      closeCancelarModal();
+    }
+  });
+
+  if (cancelarModal.form) {
+    cancelarModal.form.addEventListener('submit', handleCancelarModalSubmit);
+  }
+
+  return overlay;
+}
+
+function openCancelarModal(record, options = {}) {
+  if (!record) {
+    showToastMessage('Não foi possível carregar essa internação.', 'warning');
+    return;
+  }
+  ensureCancelarModal();
+  const datasetRef = options.dataset || cancelarModal.dataset || getDataset();
+  const stateRef = options.state || cancelarModal.state || {};
+  const successHandler = options.onSuccess || cancelarModal.onSuccess;
+  const recordId = record.id || record._id || '';
+  if (!recordId) {
+    showToastMessage('Não foi possível identificar essa internação para cancelar.', 'warning');
+    return;
+  }
+
+  cancelarModal.dataset = datasetRef || null;
+  cancelarModal.state = stateRef || null;
+  cancelarModal.onSuccess = successHandler || null;
+  cancelarModal.record = record;
+  cancelarModal.recordId = recordId;
+
+  setCancelarModalError('');
+  setCancelarModalLoading(false);
+  resetCancelarModalForm();
+  setCancelarModalPetInfo(getPetInfoFromInternacaoRecord(record));
+  fillCancelarModalForm(record);
+
+  cancelarModal.overlay.classList.remove('hidden');
+  cancelarModal.overlay.dataset.modalOpen = 'true';
+  if (cancelarModal.dialog) {
+    requestAnimationFrame(() => {
+      cancelarModal.dialog.classList.remove('opacity-0', 'scale-95');
+      cancelarModal.dialog.focus();
+    });
+  }
+}
+
+async function handleCancelarModalSubmit(event) {
+  event.preventDefault();
+  if (!cancelarModal.form) return;
+  setCancelarModalError('');
+  const recordId = cancelarModal.recordId;
+  if (!recordId) {
+    setCancelarModalError('Não foi possível identificar a internação selecionada.');
+    return;
+  }
+
+  const formData = new FormData(cancelarModal.form);
+  const payload = {
+    responsavel: (formData.get('cancelResponsavel') || '').toString().trim(),
+    data: (formData.get('cancelData') || '').toString().trim(),
+    hora: (formData.get('cancelHora') || '').toString().trim(),
+    justificativa: (formData.get('cancelJustificativa') || '').toString().trim(),
+    observacoes: (formData.get('cancelObservacoes') || '').toString().trim(),
+  };
+
+  if (!payload.responsavel) {
+    setCancelarModalError('Informe o responsável pelo cancelamento.');
+    return;
+  }
+  if (!payload.data) {
+    setCancelarModalError('Informe a data do cancelamento.');
+    return;
+  }
+  if (!payload.hora) {
+    setCancelarModalError('Informe o horário do cancelamento.');
+    return;
+  }
+  if (!payload.justificativa) {
+    setCancelarModalError('Descreva a justificativa do cancelamento.');
+    return;
+  }
+
+  setCancelarModalLoading(true);
+  const datasetRef = cancelarModal.dataset || getDataset();
+  const stateRef = cancelarModal.state || {};
+  try {
+    const updatedRecord = await requestJson(`/internacao/registros/${encodeURIComponent(recordId)}/cancelar`, {
+      method: 'POST',
+      body: payload,
+    });
+    const normalized = normalizeInternacaoRecord(updatedRecord);
+    if (normalized) {
+      applyInternacaoRecordUpdate(normalized, datasetRef, stateRef);
+      const fichaRecord = fichaInternacaoModal.record;
+      if (fichaRecord) {
+        const sameRecord =
+          fichaRecord.id === normalized.id ||
+          fichaRecord.filterKey === normalized.filterKey ||
+          (normalized.codigo !== null && fichaRecord.codigo === normalized.codigo);
+        if (sameRecord) {
+          fichaInternacaoModal.record = normalized;
+          fillFichaInternacaoModal(normalized);
+        }
+      }
+    }
+
+    let boxesRefreshPromise = null;
+    try {
+      if (stateRef && typeof stateRef.refreshBoxes === 'function') {
+        boxesRefreshPromise = Promise.resolve(stateRef.refreshBoxes());
+      } else if (datasetRef) {
+        boxesRefreshPromise = fetchBoxesData(datasetRef, stateRef, { quiet: true });
+      }
+    } catch (refreshError) {
+      console.warn('internacao: falha ao agendar atualização dos boxes após cancelamento', refreshError);
+    }
+
+    showToastMessage('Internação cancelada com sucesso.', 'success');
+    const successCallback = cancelarModal.onSuccess;
+    closeCancelarModal();
+
+    if (boxesRefreshPromise && typeof boxesRefreshPromise.catch === 'function') {
+      boxesRefreshPromise.catch((error) => {
+        console.warn('internacao: falha ao atualizar boxes após cancelamento', error);
+      });
+    }
+
+    if (typeof successCallback === 'function') {
+      successCallback();
+    }
+  } catch (error) {
+    console.error('internacao: falha ao cancelar internação', error);
+    setCancelarModalError(error.message || 'Não foi possível cancelar a internação.');
+  } finally {
+    setCancelarModalLoading(false);
   }
 }
 
@@ -2078,6 +2439,8 @@ function ensureFichaInternacaoModal() {
         await handleFichaEditarAction();
       } else if (actionType === 'obito') {
         await handleFichaObitoAction();
+      } else if (actionType === 'cancelar') {
+        await handleFichaCancelarAction();
       } else {
         showToastMessage('Funcionalidade em desenvolvimento.', 'info');
       }
@@ -2162,6 +2525,32 @@ async function handleFichaObitoAction() {
   });
 }
 
+async function handleFichaCancelarAction() {
+  const record = fichaInternacaoModal.record;
+  if (!record) {
+    showToastMessage('Não foi possível carregar os dados dessa internação.', 'warning');
+    return;
+  }
+  const isCancelado =
+    record.cancelado || normalizeActionKey(record.situacaoCodigo) === 'cancelado';
+  if (isCancelado) {
+    showToastMessage('Essa internação já está cancelada.', 'info');
+    return;
+  }
+  if (record.obitoRegistrado) {
+    showToastMessage('Não é possível cancelar uma internação com óbito registrado.', 'warning');
+    return;
+  }
+  const dataset = fichaInternacaoModal.dataset || getDataset();
+  const state = fichaInternacaoModal.state || {};
+  closeFichaInternacaoModal();
+  openCancelarModal(record, {
+    dataset,
+    state,
+    onSuccess: state.refreshInternacoes,
+  });
+}
+
 function fillFichaInternacaoModal(record) {
   if (!record) return;
   ensureFichaInternacaoModal();
@@ -2210,6 +2599,15 @@ function fillFichaInternacaoModal(record) {
       obitoBtn.classList.toggle('opacity-60', disabled);
       obitoBtn.classList.toggle('cursor-not-allowed', disabled);
       obitoBtn.textContent = disabled ? 'Óbito registrado' : 'Óbito';
+    }
+    const cancelBtn = fichaInternacaoModal.actionsContainer.querySelector('[data-ficha-action="cancelar"]');
+    if (cancelBtn) {
+      const cancelado = record.cancelado || normalizeActionKey(record.situacaoCodigo) === 'cancelado';
+      const disabled = cancelado || !!record.obitoRegistrado;
+      cancelBtn.disabled = disabled;
+      cancelBtn.classList.toggle('opacity-60', disabled);
+      cancelBtn.classList.toggle('cursor-not-allowed', disabled);
+      cancelBtn.textContent = cancelado ? 'Cancelada' : 'Cancelar';
     }
   }
 

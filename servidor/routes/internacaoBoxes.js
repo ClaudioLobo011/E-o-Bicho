@@ -70,6 +70,14 @@ const buildObitoPayload = (body = {}) => ({
   relatorio: sanitizeText(body.relatorio),
 });
 
+const buildCancelamentoPayload = (body = {}) => ({
+  responsavel: sanitizeText(body.responsavel),
+  data: sanitizeText(body.data),
+  hora: sanitizeText(body.hora),
+  justificativa: sanitizeText(body.justificativa),
+  observacoes: sanitizeText(body.observacoes),
+});
+
 const describeRegistroChanges = (before, after) => {
   const changes = [];
   const compareTextField = (field, label) => {
@@ -195,6 +203,13 @@ const formatRegistro = (doc) => {
     obitoCausa: sanitizeText(plain.obitoCausa),
     obitoRelatorio: sanitizeText(plain.obitoRelatorio),
     obitoConfirmadoEm: plain.obitoConfirmadoEm || null,
+    cancelado: Boolean(plain.cancelado),
+    canceladoResponsavel: sanitizeText(plain.canceladoResponsavel),
+    canceladoData: sanitizeText(plain.canceladoData),
+    canceladoHora: sanitizeText(plain.canceladoHora),
+    canceladoJustificativa: sanitizeText(plain.canceladoJustificativa),
+    canceladoObservacoes: sanitizeText(plain.canceladoObservacoes),
+    canceladoRegistradoEm: plain.canceladoRegistradoEm || null,
     admissao: plain.createdAt || null,
     createdAt: plain.createdAt || null,
     updatedAt: plain.updatedAt || null,
@@ -436,6 +451,94 @@ router.post('/registros/:id/obito', async (req, res) => {
       return res.status(400).json({ message: 'Revise os dados informados antes de confirmar o óbito.' });
     }
     return res.status(500).json({ message: 'Não foi possível registrar o óbito do paciente.' });
+  }
+});
+
+router.post('/registros/:id/cancelar', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Informe o registro que deseja atualizar.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.cancelado || sanitizeText(record.situacaoCodigo).toLowerCase() === 'cancelado') {
+      return res.status(409).json({ message: 'Essa internação já foi cancelada anteriormente.' });
+    }
+
+    if (record.obitoRegistrado) {
+      return res.status(409).json({ message: 'Não é possível cancelar uma internação com óbito registrado.' });
+    }
+
+    const payload = buildCancelamentoPayload(req.body);
+    const now = new Date();
+    if (!payload.data) {
+      payload.data = now.toISOString().slice(0, 10);
+    }
+    if (!payload.hora) {
+      payload.hora = now.toISOString().slice(11, 16);
+    }
+
+    if (!payload.responsavel || !payload.data || !payload.hora || !payload.justificativa) {
+      return res.status(400).json({ message: 'Preencha os campos obrigatórios antes de cancelar a internação.' });
+    }
+
+    record.cancelado = true;
+    record.canceladoResponsavel = payload.responsavel;
+    record.canceladoData = payload.data;
+    record.canceladoHora = payload.hora;
+    record.canceladoJustificativa = payload.justificativa;
+    record.canceladoObservacoes = payload.observacoes;
+    record.canceladoRegistradoEm = now;
+    record.situacao = 'Cancelado';
+    record.situacaoCodigo = 'cancelado';
+
+    const autor = req.user?.email || payload.responsavel || 'Sistema';
+    const detalhes = [
+      `Responsável: ${payload.responsavel}.`,
+      `Cancelado em ${payload.data}${payload.hora ? ` às ${payload.hora}` : ''}.`,
+      payload.justificativa ? `Justificativa: ${payload.justificativa}.` : '',
+      payload.observacoes ? `Observações: ${payload.observacoes}.` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    record.historico.push({
+      tipo: 'Cancelamento',
+      descricao: `Internação cancelada. ${detalhes}`,
+      criadoPor: autor,
+      criadoEm: now,
+    });
+
+    const previousBox = sanitizeText(record.box);
+    record.box = '';
+
+    await record.save();
+
+    if (previousBox) {
+      try {
+        await InternacaoBox.findOneAndUpdate(
+          { box: previousBox },
+          { ocupante: 'Livre', status: 'Disponível' },
+        );
+      } catch (boxReleaseError) {
+        console.warn('internacao: falha ao liberar box após cancelamento', boxReleaseError);
+      }
+    }
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    return res.json(formatRegistro(updated));
+  } catch (error) {
+    console.error('internacao: falha ao cancelar internação', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Revise os dados informados antes de cancelar.' });
+    }
+    return res.status(500).json({ message: 'Não foi possível cancelar essa internação.' });
   }
 });
 
