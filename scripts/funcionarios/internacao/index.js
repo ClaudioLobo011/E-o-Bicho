@@ -293,9 +293,9 @@ function createCardOptionsMarkup(name, options) {
       const label = escapeHtml(opt.label);
       const defaultAttr = index === 0 ? 'checked' : '';
       return `
-        <label class="group relative cursor-pointer text-center" data-prescricao-card>
+        <label class="group relative block" data-prescricao-card>
           <input type="radio" name="${fieldName}" value="${value}" class="peer sr-only" ${defaultAttr} />
-          <span class="flex h-full items-center justify-center rounded-lg border border-gray-200 bg-white px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 transition peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary">
+          <span class="flex min-h-[32px] w-full items-center justify-center rounded-lg border border-gray-200 bg-white px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-gray-600 transition peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary">
             ${label}
           </span>
         </label>
