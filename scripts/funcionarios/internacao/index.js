@@ -22,6 +22,29 @@ const INTERNAR_RISCO_OPTIONS = [
   { value: 'emergencia', label: 'Emergência' },
 ];
 
+const PRESCRICAO_TIPO_OPTIONS = [
+  { value: 'procedimento', label: 'Procedimento' },
+  { value: 'medicamento', label: 'Medicamento' },
+  { value: 'fluidoterapia', label: 'Fluidoterapia' },
+];
+
+const PRESCRICAO_FREQUENCIA_OPTIONS = [
+  { value: 'recorrente', label: 'Recorrente' },
+  { value: 'unica', label: 'Apenas 1 vez' },
+  { value: 'necessario', label: 'Quando necessário' },
+];
+
+const PRESCRICAO_INTERVALO_OPTIONS = [
+  { value: 'horas', label: 'Hora(s)' },
+  { value: 'dias', label: 'Dia(s)' },
+];
+
+const PRESCRICAO_POR_OPTIONS = [
+  { value: 'horas', label: 'Hora(s)' },
+  { value: 'dias', label: 'Dia(s)' },
+  { value: 'vezes', label: 'Vez(es)' },
+];
+
 const internarModal = {
   overlay: null,
   dialog: null,
@@ -106,6 +129,26 @@ const moverBoxModal = {
   petInfo: null,
 };
 
+const prescricaoModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  submitBtn: null,
+  errorEl: null,
+  dataset: null,
+  state: null,
+  record: null,
+  petInfo: null,
+  resumoField: null,
+  recorrenciaFields: null,
+  tipoSelect: null,
+  frequenciaSelect: null,
+  petSummaryEl: null,
+  petSummaryNameEl: null,
+  petSummaryMetaEl: null,
+  petSummaryTutorEl: null,
+};
+
 const boxesModal = {
   overlay: null,
   dialog: null,
@@ -138,6 +181,7 @@ const fichaInternacaoModal = {
   codigoEl: null,
   admissaoEl: null,
   historicoListEl: null,
+  prescricoesListEl: null,
   tabButtons: [],
   tabPanels: [],
   actionsContainer: null,
@@ -517,6 +561,45 @@ function normalizeHistoricoEntry(entry) {
   };
 }
 
+function normalizePrescricaoItem(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const toText = (value) => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+  };
+  const tipo = toText(entry.tipo) || 'procedimento';
+  const frequencia = toText(entry.frequencia) || 'recorrente';
+  const { label: tipoLabel } = getOptionDetails(PRESCRICAO_TIPO_OPTIONS, tipo);
+  const { label: frequenciaLabel } = getOptionDetails(PRESCRICAO_FREQUENCIA_OPTIONS, frequencia);
+  const aCadaValor = toText(entry.aCadaValor);
+  const aCadaUnidade = toText(entry.aCadaUnidade);
+  const porValor = toText(entry.porValor);
+  const porUnidade = toText(entry.porUnidade);
+  const dataInicio = toText(entry.dataInicio);
+  const horaInicio = toText(entry.horaInicio);
+  const resumo = toText(entry.resumo);
+  return {
+    id:
+      toText(entry.id) ||
+      toText(entry._id) ||
+      `presc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    tipo,
+    tipoLabel: tipoLabel || 'Procedimento',
+    frequencia,
+    frequenciaLabel: frequenciaLabel || 'Recorrente',
+    descricao: toText(entry.descricao),
+    resumo: resumo || 'Prescrição registrada.',
+    aCadaValor,
+    aCadaUnidade,
+    porValor,
+    porUnidade,
+    dataInicio,
+    horaInicio,
+    inicioISO: combineDateAndTime(dataInicio, horaInicio),
+    criadoEm: entry.criadoEm || entry.createdAt || new Date().toISOString(),
+  };
+}
+
 function normalizeInternacaoRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const codigoNumber = Number.parseInt(raw.codigo, 10);
@@ -588,6 +671,9 @@ function normalizeInternacaoRecord(raw) {
     createdAt: raw.createdAt || '',
     updatedAt: raw.updatedAt || '',
     historico,
+    prescricoes: Array.isArray(raw.prescricoes)
+      ? raw.prescricoes.map(normalizePrescricaoItem).filter(Boolean)
+      : [],
   };
 }
 
@@ -2614,6 +2700,45 @@ function renderFichaHistorico(record) {
   fichaInternacaoModal.historicoListEl.innerHTML = `<ol class="relative space-y-4">${timelineMarkup}</ol>`;
 }
 
+function renderFichaPrescricoes(record) {
+  if (!fichaInternacaoModal.prescricoesListEl) return;
+  const prescricoes = Array.isArray(record?.prescricoes) ? record.prescricoes : [];
+  if (!prescricoes.length) {
+    fichaInternacaoModal.prescricoesListEl.innerHTML =
+      '<p class="text-[12px] text-gray-500">Nenhuma prescrição cadastrada para essa internação.</p>';
+    return;
+  }
+
+  const cards = prescricoes
+    .map((item) => {
+      const tipo = escapeHtml(item.tipoLabel || 'Prescrição');
+      const descricao = escapeHtml(item.descricao || 'Sem descrição');
+      const freq = escapeHtml(item.frequenciaLabel || '—');
+      const resumo = escapeHtml(item.resumo || '—');
+      const criadoLabel = formatDateTimeLabel(item.criadoEm);
+      const inicioLabel = item.inicioISO ? formatDateTimeLabel(item.inicioISO) : '';
+      return `
+        <li class="rounded-2xl border border-gray-100 bg-white px-3 py-3 shadow-sm shadow-gray-100/60">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">${tipo}</p>
+              <p class="text-[13px] font-semibold text-gray-900">${descricao}</p>
+            </div>
+            <span class="rounded-full bg-primary/5 px-2 py-0.5 text-[10px] font-semibold text-primary">${freq}</span>
+          </div>
+          <p class="mt-2 text-[12px] text-gray-600">${resumo}</p>
+          <div class="mt-2 flex flex-wrap gap-3 text-[10px] text-gray-500">
+            <span>Registrado em ${escapeHtml(criadoLabel)}</span>
+            ${inicioLabel ? `<span>Início previsto: ${escapeHtml(inicioLabel)}</span>` : ''}
+          </div>
+        </li>
+      `;
+    })
+    .join('');
+
+  fichaInternacaoModal.prescricoesListEl.innerHTML = `<ol class="space-y-3">${cards}</ol>`;
+}
+
 function normalizeActionKey(value) {
   if (!value) return '';
   const normalized = typeof value.normalize === 'function' ? value.normalize('NFD') : value;
@@ -2745,8 +2870,22 @@ function ensureFichaInternacaoModal() {
                 </div>
               </div>
               <div class="hidden pt-4" data-ficha-panel="prescricao">
-                <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-[12px] text-gray-500">
-                  Em desenvolvimento
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Prescrições médicas</p>
+                    <p class="text-[11px] text-gray-500">Cadastre novas prescrições ou revise as existentes.</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-primary/90"
+                    data-ficha-prescricao-action="nova"
+                  >
+                    <i class="fas fa-plus"></i>
+                    Prescrição médica
+                  </button>
+                </div>
+                <div class="mt-4 space-y-3" data-ficha-prescricoes-list>
+                  <p class="text-[12px] text-gray-500">Nenhuma prescrição cadastrada para essa internação.</p>
                 </div>
               </div>
             </div>
@@ -2778,6 +2917,7 @@ function ensureFichaInternacaoModal() {
   fichaInternacaoModal.codigoEl = overlay.querySelector('[data-ficha-codigo]');
   fichaInternacaoModal.admissaoEl = overlay.querySelector('[data-ficha-admissao]');
   fichaInternacaoModal.historicoListEl = overlay.querySelector('[data-ficha-historico-list]');
+  fichaInternacaoModal.prescricoesListEl = overlay.querySelector('[data-ficha-prescricoes-list]');
   fichaInternacaoModal.tabButtons = Array.from(overlay.querySelectorAll('[data-ficha-tab]'));
   fichaInternacaoModal.tabPanels = Array.from(overlay.querySelectorAll('[data-ficha-panel]'));
   fichaInternacaoModal.actionsContainer = overlay.querySelector('[data-ficha-actions]');
@@ -2812,6 +2952,12 @@ function ensureFichaInternacaoModal() {
       showToastMessage('Funcionalidade em desenvolvimento.', 'info');
       return;
     }
+    const prescricaoTrigger = event.target.closest('[data-ficha-prescricao-action]');
+    if (prescricaoTrigger) {
+      event.preventDefault();
+      await handleFichaPrescricaoAction(prescricaoTrigger.dataset.fichaPrescricaoAction);
+      return;
+    }
     const tabTrigger = event.target.closest('[data-ficha-tab]');
     if (tabTrigger) {
       event.preventDefault();
@@ -2828,6 +2974,7 @@ function ensureFichaInternacaoModal() {
   setFichaModalTab('historico');
   renderFichaTags([]);
   renderFichaHistorico(null);
+  renderFichaPrescricoes(null);
 
   return overlay;
 }
@@ -2941,6 +3088,409 @@ async function handleFichaBoxAction() {
   });
 }
 
+async function handleFichaPrescricaoAction(actionValue) {
+  const actionType = normalizeActionKey(actionValue);
+  if (!actionType) {
+    showToastMessage('Selecione uma ação válida para prescrição.', 'warning');
+    return;
+  }
+  if (actionType !== 'nova' && actionType !== 'prescricao' && actionType !== 'novaprescricao') {
+    showToastMessage('Funcionalidade de prescrição ainda em desenvolvimento.', 'info');
+    return;
+  }
+  const record = fichaInternacaoModal.record;
+  if (!record) {
+    showToastMessage('Abra uma ficha de internação antes de registrar prescrições.', 'warning');
+    return;
+  }
+  if (record.obitoRegistrado) {
+    showToastMessage('Não é possível registrar prescrições após o óbito.', 'warning');
+    return;
+  }
+  const isCancelado = record.cancelado || normalizeActionKey(record.situacaoCodigo) === 'cancelado';
+  if (isCancelado) {
+    showToastMessage('Essa internação está cancelada e não permite novas prescrições.', 'info');
+    return;
+  }
+  ensurePrescricaoModal();
+  const dataset = fichaInternacaoModal.dataset || getDataset();
+  const state = fichaInternacaoModal.state || {};
+  openPrescricaoModal(record, { dataset, state });
+}
+
+function setPrescricaoModalError(message) {
+  if (!prescricaoModal.errorEl) return;
+  const text = String(message || '').trim();
+  prescricaoModal.errorEl.textContent = text;
+  prescricaoModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setPrescricaoModalLoading(isLoading) {
+  if (!prescricaoModal.submitBtn) return;
+  if (!prescricaoModal.submitBtn.dataset.defaultLabel) {
+    prescricaoModal.submitBtn.dataset.defaultLabel = prescricaoModal.submitBtn.textContent.trim();
+  }
+  prescricaoModal.submitBtn.disabled = !!isLoading;
+  prescricaoModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  prescricaoModal.submitBtn.textContent = isLoading
+    ? 'Salvando...'
+    : prescricaoModal.submitBtn.dataset.defaultLabel;
+}
+
+function togglePrescricaoRecorrenciaFields(show) {
+  if (!prescricaoModal.recorrenciaFields) return;
+  prescricaoModal.recorrenciaFields.classList.toggle('hidden', !show);
+  prescricaoModal.recorrenciaFields.setAttribute('aria-hidden', show ? 'false' : 'true');
+}
+
+function readPrescricaoFormValues() {
+  if (!prescricaoModal.form) return {};
+  const formData = new FormData(prescricaoModal.form);
+  return {
+    tipo: (formData.get('prescTipo') || '').toString().trim(),
+    frequencia: (formData.get('prescFrequencia') || '').toString().trim(),
+    aCadaValor: (formData.get('prescACadaValor') || '').toString().trim(),
+    aCadaUnidade: (formData.get('prescACadaUnidade') || '').toString().trim(),
+    porValor: (formData.get('prescPorValor') || '').toString().trim(),
+    porUnidade: (formData.get('prescPorUnidade') || '').toString().trim(),
+    dataInicio: (formData.get('prescDataInicio') || '').toString().trim(),
+    horaInicio: (formData.get('prescHoraInicio') || '').toString().trim(),
+    descricao: (formData.get('prescDescricao') || '').toString().trim(),
+  };
+}
+
+function buildPrescricaoResumo(values = {}) {
+  const { tipo, frequencia, descricao, aCadaValor, aCadaUnidade, porValor, porUnidade, dataInicio, horaInicio } = values;
+  const tipoDetails = getOptionDetails(PRESCRICAO_TIPO_OPTIONS, tipo);
+  const freqDetails = getOptionDetails(PRESCRICAO_FREQUENCIA_OPTIONS, frequencia);
+  const intervaloDetails = getOptionDetails(PRESCRICAO_INTERVALO_OPTIONS, aCadaUnidade);
+  const periodoDetails = getOptionDetails(PRESCRICAO_POR_OPTIONS, porUnidade);
+  const inicioISO = combineDateAndTime(dataInicio, horaInicio);
+  const inicioLabel = inicioISO ? formatDateTimeLabel(inicioISO) : '';
+  const descricaoLabel = descricao ? ' · ' + descricao : '';
+  if (freqDetails.value === 'recorrente') {
+    const intervalo = aCadaValor && intervaloDetails.label
+      ? aCadaValor + ' ' + intervaloDetails.label.toLowerCase()
+      : 'intervalo definido';
+    const periodo = porValor && periodoDetails.label
+      ? porValor + ' ' + periodoDetails.label.toLowerCase()
+      : 'período informado';
+    return (tipoDetails.label || 'Procedimento') + descricaoLabel + ' recorrente a cada ' + intervalo + ' por ' + periodo +
+      (inicioLabel ? ', iniciando em ' + inicioLabel : '') + '.';
+  }
+  if (freqDetails.value === 'necessario') {
+    return (tipoDetails.label || 'Procedimento') + descricaoLabel + ' quando necessário' +
+      (inicioLabel ? ', referência ' + inicioLabel : '') + '.';
+  }
+  return (tipoDetails.label || 'Procedimento') + descricaoLabel + ' aplicado apenas uma vez' +
+    (inicioLabel ? ' em ' + inicioLabel : '') + '.';
+}
+
+function updatePrescricaoResumoFromForm() {
+  const resumo = buildPrescricaoResumo(readPrescricaoFormValues());
+  if (prescricaoModal.resumoField) {
+    prescricaoModal.resumoField.value = resumo;
+  }
+}
+
+function resetPrescricaoModalForm() {
+  if (prescricaoModal.form) {
+    prescricaoModal.form.reset();
+  }
+  const now = new Date();
+  if (prescricaoModal.tipoSelect) {
+    prescricaoModal.tipoSelect.value = PRESCRICAO_TIPO_OPTIONS[0]?.value || '';
+  }
+  if (prescricaoModal.frequenciaSelect) {
+    prescricaoModal.frequenciaSelect.value = 'recorrente';
+  }
+  const dataField = prescricaoModal.form?.querySelector('input[name="prescDataInicio"]');
+  const horaField = prescricaoModal.form?.querySelector('input[name="prescHoraInicio"]');
+  const aCadaField = prescricaoModal.form?.querySelector('input[name="prescACadaValor"]');
+  const porField = prescricaoModal.form?.querySelector('input[name="prescPorValor"]');
+  const aCadaSelect = prescricaoModal.form?.querySelector('select[name="prescACadaUnidade"]');
+  const porSelect = prescricaoModal.form?.querySelector('select[name="prescPorUnidade"]');
+  if (dataField) dataField.value = getLocalDateInputValue(now);
+  if (horaField) horaField.value = getLocalTimeInputValue(now);
+  if (aCadaField) aCadaField.value = '1';
+  if (porField) porField.value = '6';
+  if (aCadaSelect) aCadaSelect.value = PRESCRICAO_INTERVALO_OPTIONS[0]?.value || '';
+  if (porSelect) porSelect.value = PRESCRICAO_POR_OPTIONS[2]?.value || '';
+  togglePrescricaoRecorrenciaFields(true);
+  updatePrescricaoResumoFromForm();
+}
+
+function setPrescricaoModalPetInfo(info) {
+  const normalized = normalizePetInfo(info);
+  prescricaoModal.petInfo = normalized;
+  const hasInfo = !!normalized;
+  if (prescricaoModal.petSummaryEl) prescricaoModal.petSummaryEl.classList.toggle('hidden', !hasInfo);
+  const petName = normalized?.petNome || 'Paciente';
+  const meta = normalized
+    ? [normalized.petEspecie, normalized.petRaca, normalized.petPeso || normalized.petIdade].filter(Boolean).join(' · ')
+    : '';
+  const tutor = normalized
+    ? [normalized.tutorNome, normalized.tutorContato, normalized.tutorDocumento].filter(Boolean).join(' · ')
+    : '';
+  if (prescricaoModal.petSummaryNameEl) prescricaoModal.petSummaryNameEl.textContent = petName;
+  if (prescricaoModal.petSummaryMetaEl) prescricaoModal.petSummaryMetaEl.textContent = meta || '—';
+  if (prescricaoModal.petSummaryTutorEl) prescricaoModal.petSummaryTutorEl.textContent = tutor || 'Tutor não informado';
+}
+
+function closePrescricaoModal() {
+  if (!prescricaoModal.overlay) return;
+  if (prescricaoModal.dialog) {
+    prescricaoModal.dialog.classList.add('opacity-0', 'scale-95');
+  }
+  prescricaoModal.overlay.classList.add('hidden');
+  prescricaoModal.overlay.removeAttribute('data-modal-open');
+  setPrescricaoModalError('');
+  setPrescricaoModalLoading(false);
+  resetPrescricaoModalForm();
+  setPrescricaoModalPetInfo(null);
+  prescricaoModal.dataset = null;
+  prescricaoModal.state = null;
+  prescricaoModal.record = null;
+}
+
+function handlePrescricaoFormChange(event) {
+  if (event && event.target && event.target.name === 'prescFrequencia') {
+    const value = event.target.value ? event.target.value.trim() : '';
+    togglePrescricaoRecorrenciaFields(value === 'recorrente');
+  }
+  updatePrescricaoResumoFromForm();
+}
+
+function ensurePrescricaoModal() {
+  if (prescricaoModal.overlay) return prescricaoModal.overlay;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'internacao-prescricao-modal fixed inset-0 z-[1010] hidden';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-prescricao-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div
+        class="relative flex w-full max-w-3xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] text-gray-700 shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="prescricao-modal-title"
+        data-prescricao-dialog
+        tabindex="-1"
+      >
+        <header class="flex flex-col gap-2.5 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-prescription"></i>
+              Prescrição
+            </span>
+            <h2 id="prescricao-modal-title" class="mt-1.5 text-lg font-semibold text-gray-900">Nova prescrição médica</h2>
+            <p class="mt-1 text-[11px] text-gray-600">Registre o procedimento, medicamento ou fluidoterapia da internação.</p>
+          </div>
+          <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-prescricao-modal>
+            <span class="sr-only">Fechar</span>
+            <i class="fas fa-xmark text-sm"></i>
+          </button>
+        </header>
+        <form class="flex max-h-[80vh] flex-col" novalidate>
+          <div class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2" data-prescricao-summary>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Paciente</p>
+              <p class="text-[13px] font-semibold text-gray-900" data-prescricao-summary-name>Paciente</p>
+              <p class="text-[11px] text-gray-500" data-prescricao-summary-meta>—</p>
+              <p class="text-[11px] text-gray-500" data-prescricao-summary-tutor>—</p>
+            </div>
+            <div class="grid gap-3 md:grid-cols-2">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Tipo*
+                <select name="prescTipo" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                  ${createOptionsMarkup(PRESCRICAO_TIPO_OPTIONS)}
+                </select>
+              </label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Frequência*
+                <select name="prescFrequencia" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                  ${createOptionsMarkup(PRESCRICAO_FREQUENCIA_OPTIONS)}
+                </select>
+              </label>
+            </div>
+            <div class="rounded-xl border border-gray-100 px-3 py-3" data-prescricao-recorrencia>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Intervalo recorrente</p>
+              <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">A cada*
+                  <div class="mt-1 flex items-center gap-2">
+                    <input type="number" name="prescACadaValor" min="1" class="w-20 rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                    <select name="prescACadaUnidade" class="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                      ${createOptionsMarkup(PRESCRICAO_INTERVALO_OPTIONS)}
+                    </select>
+                  </div>
+                </label>
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Por*
+                  <div class="mt-1 flex items-center gap-2">
+                    <input type="number" name="prescPorValor" min="1" class="w-20 rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                    <select name="prescPorUnidade" class="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                      ${createOptionsMarkup(PRESCRICAO_POR_OPTIONS)}
+                    </select>
+                  </div>
+                </label>
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Iniciar em*
+                  <input type="date" name="prescDataInicio" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                </label>
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Hora*
+                  <input type="time" name="prescHoraInicio" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                </label>
+              </div>
+            </div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Procedimento*
+              <textarea name="prescDescricao" rows="3" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Descreva o procedimento, medicamento ou fluidoterapia"></textarea>
+            </label>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Resumo (automático)
+              <textarea name="prescResumo" data-prescricao-resumo rows="3" readonly class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[12px] text-gray-600"></textarea>
+            </label>
+            <p class="text-[11px] text-gray-500">O resumo descreve por extenso o que será aplicado.</p>
+            <p class="hidden rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700" data-prescricao-error></p>
+          </div>
+          <div class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
+            <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-prescricao-modal>
+              Cancelar
+            </button>
+            <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90" data-prescricao-submit>
+              Salvar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  prescricaoModal.overlay = overlay;
+  prescricaoModal.dialog = overlay.querySelector('[data-prescricao-dialog]');
+  prescricaoModal.form = overlay.querySelector('form');
+  prescricaoModal.submitBtn = overlay.querySelector('[data-prescricao-submit]');
+  prescricaoModal.errorEl = overlay.querySelector('[data-prescricao-error]');
+  prescricaoModal.resumoField = overlay.querySelector('[data-prescricao-resumo]');
+  prescricaoModal.recorrenciaFields = overlay.querySelector('[data-prescricao-recorrencia]');
+  prescricaoModal.tipoSelect = overlay.querySelector('select[name="prescTipo"]');
+  prescricaoModal.frequenciaSelect = overlay.querySelector('select[name="prescFrequencia"]');
+  prescricaoModal.petSummaryEl = overlay.querySelector('[data-prescricao-summary]');
+  prescricaoModal.petSummaryNameEl = overlay.querySelector('[data-prescricao-summary-name]');
+  prescricaoModal.petSummaryMetaEl = overlay.querySelector('[data-prescricao-summary-meta]');
+  prescricaoModal.petSummaryTutorEl = overlay.querySelector('[data-prescricao-summary-tutor]');
+
+  overlay.addEventListener('click', (event) => {
+    const closeTrigger = event.target.closest('[data-close-prescricao-modal]');
+    if (closeTrigger) {
+      event.preventDefault();
+      closePrescricaoModal();
+    }
+  });
+
+  if (prescricaoModal.form) {
+    prescricaoModal.form.addEventListener('submit', handlePrescricaoModalSubmit);
+    prescricaoModal.form.addEventListener('input', handlePrescricaoFormChange);
+    prescricaoModal.form.addEventListener('change', handlePrescricaoFormChange);
+  }
+
+  return overlay;
+}
+
+function openPrescricaoModal(record, options = {}) {
+  ensurePrescricaoModal();
+  prescricaoModal.dataset = options.dataset || prescricaoModal.dataset || getDataset();
+  prescricaoModal.state = options.state || prescricaoModal.state || {};
+  prescricaoModal.record = record;
+  setPrescricaoModalError('');
+  resetPrescricaoModalForm();
+  setPrescricaoModalPetInfo(getPetInfoFromInternacaoRecord(record));
+  prescricaoModal.overlay.classList.remove('hidden');
+  prescricaoModal.overlay.dataset.modalOpen = 'true';
+  if (prescricaoModal.dialog) {
+    requestAnimationFrame(() => {
+      prescricaoModal.dialog.classList.remove('opacity-0', 'scale-95');
+      prescricaoModal.dialog.focus();
+    });
+  }
+}
+
+function handlePrescricaoModalSubmit(event) {
+  event.preventDefault();
+  setPrescricaoModalError('');
+  if (!prescricaoModal.form) return;
+  const values = readPrescricaoFormValues();
+  if (!values.tipo) {
+    setPrescricaoModalError('Selecione o tipo da prescrição.');
+    return;
+  }
+  if (!values.frequencia) {
+    setPrescricaoModalError('Informe a frequência da aplicação.');
+    return;
+  }
+  if (values.frequencia === 'recorrente') {
+    if (!values.aCadaValor) {
+      setPrescricaoModalError('Preencha o intervalo "A cada".');
+      return;
+    }
+    if (!values.aCadaUnidade) {
+      setPrescricaoModalError('Selecione a unidade do intervalo.');
+      return;
+    }
+    if (!values.porValor) {
+      setPrescricaoModalError('Informe o campo "Por".');
+      return;
+    }
+    if (!values.porUnidade) {
+      setPrescricaoModalError('Selecione a unidade do campo "Por".');
+      return;
+    }
+    if (!values.dataInicio) {
+      setPrescricaoModalError('Defina a data de início.');
+      return;
+    }
+    if (!values.horaInicio) {
+      setPrescricaoModalError('Informe o horário inicial.');
+      return;
+    }
+  } else if (values.frequencia === 'unica') {
+    if (!values.dataInicio || !values.horaInicio) {
+      setPrescricaoModalError('Defina a data e hora para aplicação única.');
+      return;
+    }
+  }
+  if (!values.descricao) {
+    setPrescricaoModalError('Descreva o procedimento ou medicamento.');
+    return;
+  }
+
+  const resumo = buildPrescricaoResumo(values);
+  if (prescricaoModal.resumoField) {
+    prescricaoModal.resumoField.value = resumo;
+  }
+  const payload = {
+    ...values,
+    resumo,
+    criadoEm: new Date().toISOString(),
+  };
+  const normalizedItem = normalizePrescricaoItem(payload);
+  const record = prescricaoModal.record;
+  if (!record) {
+    setPrescricaoModalError('Não foi possível identificar a internação.');
+    return;
+  }
+  const currentList = Array.isArray(record.prescricoes) ? record.prescricoes : [];
+  const nextList = [normalizedItem, ...currentList];
+  const updatedRecord = { ...record, prescricoes: nextList };
+  prescricaoModal.record = updatedRecord;
+  const datasetRef = prescricaoModal.dataset || getDataset();
+  const stateRef = prescricaoModal.state || {};
+  applyInternacaoRecordUpdate(updatedRecord, datasetRef, stateRef);
+  if (fichaInternacaoModal.record && fichaInternacaoModal.record.id === updatedRecord.id) {
+    fichaInternacaoModal.record = updatedRecord;
+    fillFichaInternacaoModal(updatedRecord);
+    setFichaModalTab('prescricao');
+  }
+  closePrescricaoModal();
+  showToastMessage('Prescrição registrada localmente. Integração definitiva em desenvolvimento.', 'success');
+}
+
 function fillFichaInternacaoModal(record) {
   if (!record) return;
   ensureFichaInternacaoModal();
@@ -3014,6 +3564,7 @@ function fillFichaInternacaoModal(record) {
 
   renderFichaTags(record.alergias || []);
   renderFichaHistorico(record);
+  renderFichaPrescricoes(record);
 }
 
 function openFichaInternacaoModal(record, options = {}) {
