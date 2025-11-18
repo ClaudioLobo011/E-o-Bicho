@@ -208,10 +208,10 @@ const prescricaoModal = {
   intervaloDetalheFields: null,
   medicamentoFields: null,
   fluidFields: null,
+  tipoInputs: null,
+  frequenciaInputs: null,
   descricaoWrapper: null,
   descricaoField: null,
-  tipoSelect: null,
-  frequenciaSelect: null,
   petSummaryEl: null,
   petSummaryNameEl: null,
   petSummaryMetaEl: null,
@@ -282,6 +282,26 @@ function escapeHtml(value) {
 
 function createOptionsMarkup(options) {
   return options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
+}
+
+function createCardOptionsMarkup(name, options) {
+  if (!name || !Array.isArray(options)) return '';
+  const fieldName = escapeHtml(name);
+  return options
+    .map((opt, index) => {
+      const value = escapeHtml(opt.value);
+      const label = escapeHtml(opt.label);
+      const defaultAttr = index === 0 ? 'checked' : '';
+      return `
+        <label class="group relative cursor-pointer text-center" data-prescricao-card>
+          <input type="radio" name="${fieldName}" value="${value}" class="peer sr-only" ${defaultAttr} />
+          <span class="flex h-full items-center justify-center rounded-lg border border-gray-200 bg-white px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600 transition peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary">
+            ${label}
+          </span>
+        </label>
+      `;
+    })
+    .join('');
 }
 
 function createGroupedOptionsMarkup(groups) {
@@ -3297,9 +3317,51 @@ function togglePrescricaoRecorrenciaFields(show) {
 
 function updatePrescricaoRecorrenciaTitle(freqValue) {
   if (!prescricaoModal.recorrenciaTitleEl) return;
-  const freqKey = normalizeActionKey(freqValue || prescricaoModal.frequenciaSelect?.value || '');
+  const freqKey = normalizeActionKey(freqValue || getSelectedPrescricaoFrequenciaValue() || '');
   const title = freqKey === 'unica' ? 'Intervalo' : 'Intervalo recorrente';
   prescricaoModal.recorrenciaTitleEl.textContent = title;
+}
+
+function getSelectedRadioValue(nodeList) {
+  if (!nodeList) return '';
+  const nodes = Array.from(nodeList);
+  const checked = nodes.find((input) => input.checked);
+  return checked ? checked.value : '';
+}
+
+function setRadioValue(nodeList, value) {
+  if (!nodeList) return;
+  const nodes = Array.from(nodeList);
+  if (!nodes.length) return;
+  let matched = false;
+  nodes.forEach((input, index) => {
+    const shouldCheck = value ? input.value === value : index === 0;
+    if (shouldCheck) {
+      matched = true;
+    }
+    input.checked = shouldCheck;
+    input.setAttribute('aria-checked', shouldCheck ? 'true' : 'false');
+  });
+  if (!matched) {
+    nodes[0].checked = true;
+    nodes[0].setAttribute('aria-checked', 'true');
+  }
+}
+
+function getSelectedPrescricaoTipoValue() {
+  return getSelectedRadioValue(prescricaoModal.tipoInputs);
+}
+
+function getSelectedPrescricaoFrequenciaValue() {
+  return getSelectedRadioValue(prescricaoModal.frequenciaInputs);
+}
+
+function setPrescricaoTipoValue(value) {
+  setRadioValue(prescricaoModal.tipoInputs, value);
+}
+
+function setPrescricaoFrequenciaValue(value) {
+  setRadioValue(prescricaoModal.frequenciaInputs, value);
 }
 
 function togglePrescricaoIntervaloDetalhes(show) {
@@ -3336,7 +3398,7 @@ function togglePrescricaoDescricaoField(show) {
 
 function updatePrescricaoDescricaoLabel(tipoValue) {
   if (!prescricaoModal.descricaoLabelEl) return;
-  const tipoKey = normalizeActionKey(tipoValue || prescricaoModal.tipoSelect?.value || '');
+  const tipoKey = normalizeActionKey(tipoValue || getSelectedPrescricaoTipoValue() || '');
   prescricaoModal.descricaoLabelEl.textContent = tipoKey === 'fluidoterapia' ? 'Fluído*' : 'Procedimento*';
 }
 
@@ -3499,12 +3561,8 @@ function resetPrescricaoModalForm() {
     prescricaoModal.form.reset();
   }
   const now = new Date();
-  if (prescricaoModal.tipoSelect) {
-    prescricaoModal.tipoSelect.value = PRESCRICAO_TIPO_OPTIONS[0]?.value || '';
-  }
-  if (prescricaoModal.frequenciaSelect) {
-    prescricaoModal.frequenciaSelect.value = 'recorrente';
-  }
+  setPrescricaoTipoValue(PRESCRICAO_TIPO_OPTIONS[0]?.value || '');
+  setPrescricaoFrequenciaValue('recorrente');
   const dataField = prescricaoModal.form?.querySelector('input[name="prescDataInicio"]');
   const horaField = prescricaoModal.form?.querySelector('input[name="prescHoraInicio"]');
   const aCadaField = prescricaoModal.form?.querySelector('input[name="prescACadaValor"]');
@@ -3649,16 +3707,18 @@ function ensurePrescricaoModal() {
               <p class="text-[11px] text-gray-500" data-prescricao-summary-tutor>—</p>
             </div>
             <div class="grid gap-3 md:grid-cols-2">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Tipo*
-                <select name="prescTipo" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
-                  ${createOptionsMarkup(PRESCRICAO_TIPO_OPTIONS)}
-                </select>
-              </label>
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Frequência*
-                <select name="prescFrequencia" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
-                  ${createOptionsMarkup(PRESCRICAO_FREQUENCIA_OPTIONS)}
-                </select>
-              </label>
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Tipo*</p>
+                <div class="mt-2 grid grid-cols-3 gap-1.5 text-[11px]" data-prescricao-tipo-cards>
+                  ${createCardOptionsMarkup('prescTipo', PRESCRICAO_TIPO_OPTIONS)}
+                </div>
+              </div>
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Frequência*</p>
+                <div class="mt-2 grid grid-cols-3 gap-1.5 text-[11px]" data-prescricao-frequencia-cards>
+                  ${createCardOptionsMarkup('prescFrequencia', PRESCRICAO_FREQUENCIA_OPTIONS)}
+                </div>
+              </div>
             </div>
             <div class="rounded-xl border border-gray-100 px-3 py-3" data-prescricao-recorrencia>
               <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500" data-prescricao-recorrencia-title>Intervalo recorrente</p>
@@ -3792,8 +3852,8 @@ function ensurePrescricaoModal() {
   prescricaoModal.intervaloDetalheFields = overlay.querySelectorAll('[data-prescricao-intervalo]');
   prescricaoModal.medicamentoFields = overlay.querySelector('[data-prescricao-medicamento]');
   prescricaoModal.fluidFields = overlay.querySelector('[data-prescricao-fluidoterapia]');
-  prescricaoModal.tipoSelect = overlay.querySelector('select[name="prescTipo"]');
-  prescricaoModal.frequenciaSelect = overlay.querySelector('select[name="prescFrequencia"]');
+  prescricaoModal.tipoInputs = overlay.querySelectorAll('input[name="prescTipo"]');
+  prescricaoModal.frequenciaInputs = overlay.querySelectorAll('input[name="prescFrequencia"]');
   prescricaoModal.petSummaryEl = overlay.querySelector('[data-prescricao-summary]');
   prescricaoModal.petSummaryNameEl = overlay.querySelector('[data-prescricao-summary-name]');
   prescricaoModal.petSummaryMetaEl = overlay.querySelector('[data-prescricao-summary-meta]');
