@@ -295,7 +295,7 @@ function createCardOptionsMarkup(name, options) {
       return `
         <label class="group relative block" data-prescricao-card>
           <input type="radio" name="${fieldName}" value="${value}" class="peer sr-only" ${defaultAttr} />
-          <span class="flex min-h-[32px] w-full items-center justify-center rounded-lg border border-gray-200 bg-white px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-gray-600 transition-colors duration-150 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-white">
+          <span class="flex min-h-[32px] w-full items-center justify-center rounded-lg border border-gray-200 bg-white px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-gray-600 transition-colors duration-150" data-prescricao-card-visual>
             ${label}
           </span>
         </label>
@@ -3322,6 +3322,34 @@ function updatePrescricaoRecorrenciaTitle(freqValue) {
   prescricaoModal.recorrenciaTitleEl.textContent = title;
 }
 
+function getPrescricaoCardVisualFromInput(input) {
+  if (!input) return null;
+  const label = input.closest('[data-prescricao-card]');
+  if (!label) return null;
+  return label.querySelector('[data-prescricao-card-visual]');
+}
+
+function applyPrescricaoCardVisualState(input, isChecked) {
+  const visual = getPrescricaoCardVisualFromInput(input);
+  if (!visual) return;
+  visual.classList.toggle('bg-primary', isChecked);
+  visual.classList.toggle('text-white', isChecked);
+  visual.classList.toggle('border-primary', isChecked);
+  visual.classList.toggle('shadow-sm', isChecked);
+  visual.classList.toggle('bg-white', !isChecked);
+  visual.classList.toggle('text-gray-600', !isChecked);
+  visual.classList.toggle('border-gray-200', !isChecked);
+}
+
+function syncPrescricaoCardVisuals(nodeList) {
+  if (!nodeList) return;
+  const nodes = Array.from(nodeList);
+  if (!nodes.length) return;
+  nodes.forEach((input) => {
+    applyPrescricaoCardVisualState(input, Boolean(input?.checked));
+  });
+}
+
 function getSelectedRadioValue(nodeList) {
   if (!nodeList) return '';
   const nodes = Array.from(nodeList);
@@ -3341,10 +3369,13 @@ function setRadioValue(nodeList, value) {
     }
     input.checked = shouldCheck;
     input.setAttribute('aria-checked', shouldCheck ? 'true' : 'false');
+    applyPrescricaoCardVisualState(input, shouldCheck);
   });
   if (!matched) {
     nodes[0].checked = true;
     nodes[0].setAttribute('aria-checked', 'true');
+    applyPrescricaoCardVisualState(nodes[0], true);
+    nodes.slice(1).forEach((input) => applyPrescricaoCardVisualState(input, false));
   }
 }
 
@@ -3653,6 +3684,7 @@ function handlePrescricaoFormChange(event) {
     togglePrescricaoRecorrenciaFields(shouldShowRecorrenciaFields(cachedValues));
     togglePrescricaoIntervaloDetalhes(shouldShowRecorrenciaIntervaloDetalhes(cachedValues));
     updatePrescricaoRecorrenciaTitle(cachedValues.frequencia);
+    syncPrescricaoCardVisuals(prescricaoModal.frequenciaInputs);
   }
   const shouldToggleMedicamento =
     event &&
@@ -3664,6 +3696,9 @@ function handlePrescricaoFormChange(event) {
     togglePrescricaoFluidoterapiaFields(shouldShowFluidoterapiaDetails(cachedValues));
     togglePrescricaoDescricaoField(!shouldHidePrescricaoDescricaoField(cachedValues));
     updatePrescricaoDescricaoLabel(cachedValues.tipo);
+  }
+  if (event && event.target && event.target.name === 'prescTipo') {
+    syncPrescricaoCardVisuals(prescricaoModal.tipoInputs);
   }
   updatePrescricaoResumoFromForm();
 }
@@ -3863,6 +3898,8 @@ function ensurePrescricaoModal() {
   prescricaoModal.descricaoWrapper = overlay.querySelector('[data-prescricao-descricao-wrapper]');
   prescricaoModal.descricaoField = overlay.querySelector('textarea[name="prescDescricao"]');
   prescricaoModal.descricaoLabelEl = overlay.querySelector('[data-prescricao-descricao-label]');
+  syncPrescricaoCardVisuals(prescricaoModal.tipoInputs);
+  syncPrescricaoCardVisuals(prescricaoModal.frequenciaInputs);
 
   overlay.addEventListener('click', (event) => {
     const closeTrigger = event.target.closest('[data-close-prescricao-modal]');
