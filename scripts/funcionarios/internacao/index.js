@@ -1895,6 +1895,12 @@ function renderFichaHistorico(record) {
   fichaInternacaoModal.historicoListEl.innerHTML = `<ol class="relative space-y-4">${timelineMarkup}</ol>`;
 }
 
+function normalizeActionKey(value) {
+  if (!value) return '';
+  const normalized = typeof value.normalize === 'function' ? value.normalize('NFD') : value;
+  return normalized.replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
 function ensureFichaInternacaoModal() {
   if (fichaInternacaoModal.overlay) return fichaInternacaoModal.overlay;
 
@@ -2067,7 +2073,7 @@ function ensureFichaInternacaoModal() {
     const actionTrigger = event.target.closest('[data-ficha-action]');
     if (actionTrigger) {
       event.preventDefault();
-      const actionType = actionTrigger.dataset.fichaAction;
+      const actionType = normalizeActionKey(actionTrigger.dataset.fichaAction);
       if (actionType === 'editar') {
         await handleFichaEditarAction();
       } else if (actionType === 'obito') {
