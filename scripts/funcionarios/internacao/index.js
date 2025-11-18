@@ -2154,6 +2154,7 @@ async function handleFichaObitoAction() {
   } catch (error) {
     console.warn('internacao: falha ao atualizar veterinários antes do óbito', error);
   }
+  closeFichaInternacaoModal();
   openObitoModal(record, {
     dataset,
     state,
