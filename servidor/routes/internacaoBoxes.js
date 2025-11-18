@@ -78,6 +78,10 @@ const buildCancelamentoPayload = (body = {}) => ({
   observacoes: sanitizeText(body.observacoes),
 });
 
+const buildBoxTransferPayload = (body = {}) => ({
+  box: sanitizeText(body.box),
+});
+
 const describeRegistroChanges = (before, after) => {
   const changes = [];
   const compareTextField = (field, label) => {
@@ -539,6 +543,90 @@ router.post('/registros/:id/cancelar', async (req, res) => {
       return res.status(400).json({ message: 'Revise os dados informados antes de cancelar.' });
     }
     return res.status(500).json({ message: 'Não foi possível cancelar essa internação.' });
+  }
+});
+
+router.post('/registros/:id/box', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Informe o registro que deseja atualizar.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.cancelado || record.situacaoCodigo === 'cancelado') {
+      return res.status(400).json({ message: 'Essa internação está cancelada e não pode ser alterada.' });
+    }
+
+    if (record.obitoRegistrado || record.situacaoCodigo === 'obito') {
+      return res.status(400).json({ message: 'Não é possível alterar o box após o registro de óbito.' });
+    }
+
+    const payload = buildBoxTransferPayload(req.body);
+    const previousBox = sanitizeText(record.box);
+    const nextBox = payload.box;
+
+    if (!previousBox && !nextBox) {
+      return res.status(400).json({ message: 'Nenhuma alteração foi identificada para salvar.' });
+    }
+
+    if (previousBox && nextBox && previousBox === nextBox) {
+      return res.status(400).json({ message: 'Selecione um box diferente antes de salvar.' });
+    }
+
+    record.box = nextBox;
+
+    const autor = req.user?.email || 'Sistema';
+    const descricao = !previousBox && nextBox
+      ? `Box atribuído (${nextBox}).`
+      : previousBox && !nextBox
+        ? `Box removido (anterior: ${previousBox}).`
+        : `Box alterado de ${previousBox} para ${nextBox}.`;
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    record.historico.push({
+      tipo: 'Box',
+      descricao,
+      criadoPor: autor,
+      criadoEm: new Date(),
+    });
+
+    await record.save();
+
+    if (previousBox && previousBox !== nextBox) {
+      try {
+        await InternacaoBox.findOneAndUpdate(
+          { box: previousBox },
+          { ocupante: 'Livre', status: 'Disponível' },
+        );
+      } catch (boxReleaseError) {
+        console.warn('internacao: falha ao liberar box durante movimentação', boxReleaseError);
+      }
+    }
+
+    if (nextBox) {
+      try {
+        await InternacaoBox.findOneAndUpdate(
+          { box: nextBox },
+          { ocupante: record.petNome || 'Ocupado', status: 'Ocupado' },
+        );
+      } catch (boxAssignError) {
+        console.warn('internacao: falha ao atribuir box durante movimentação', boxAssignError);
+      }
+    }
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    return res.json(formatRegistro(updated));
+  } catch (error) {
+    console.error('internacao: falha ao atualizar box da internação', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar.' });
+    }
+    return res.status(500).json({ message: 'Não foi possível atualizar o box do paciente.' });
   }
 });
 

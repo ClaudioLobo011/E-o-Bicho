@@ -86,6 +86,26 @@ const cancelarModal = {
   petInfo: null,
 };
 
+const moverBoxModal = {
+  overlay: null,
+  dialog: null,
+  form: null,
+  submitBtn: null,
+  errorEl: null,
+  selectEl: null,
+  noOptionsEl: null,
+  petSummaryEl: null,
+  petSummaryNameEl: null,
+  petSummaryMetaEl: null,
+  petSummaryTutorEl: null,
+  dataset: null,
+  state: null,
+  onSuccess: null,
+  record: null,
+  recordId: null,
+  petInfo: null,
+};
+
 const boxesModal = {
   overlay: null,
   dialog: null,
@@ -1394,6 +1414,325 @@ async function handleCancelarModalSubmit(event) {
   }
 }
 
+function setMoverBoxModalError(message) {
+  if (!moverBoxModal.errorEl) return;
+  const text = String(message || '').trim();
+  moverBoxModal.errorEl.textContent = text;
+  moverBoxModal.errorEl.classList.toggle('hidden', !text);
+}
+
+function setMoverBoxModalLoading(isLoading) {
+  if (!moverBoxModal.submitBtn) return;
+  if (!moverBoxModal.submitBtn.dataset.defaultLabel) {
+    moverBoxModal.submitBtn.dataset.defaultLabel = moverBoxModal.submitBtn.textContent.trim();
+  }
+  moverBoxModal.submitBtn.disabled = !!isLoading;
+  moverBoxModal.submitBtn.classList.toggle('opacity-60', !!isLoading);
+  moverBoxModal.submitBtn.textContent = isLoading
+    ? 'Salvando...'
+    : moverBoxModal.submitBtn.dataset.defaultLabel;
+}
+
+function resetMoverBoxModalForm() {
+  if (moverBoxModal.form) {
+    moverBoxModal.form.reset();
+  }
+}
+
+function setMoverBoxModalPetInfo(info) {
+  const normalized = normalizePetInfo(info);
+  moverBoxModal.petInfo = normalized;
+  const hasInfo = !!normalized;
+  const metaParts = hasInfo ? [normalized.petEspecie, normalized.petRaca, normalized.petPeso].filter(Boolean) : [];
+  const tutorParts = hasInfo
+    ? [normalized.tutorNome, normalized.tutorContato, normalized.tutorDocumento].filter(Boolean)
+    : [];
+
+  if (moverBoxModal.petSummaryEl) {
+    moverBoxModal.petSummaryEl.classList.toggle('hidden', !hasInfo);
+  }
+  if (moverBoxModal.petSummaryNameEl) {
+    moverBoxModal.petSummaryNameEl.textContent = hasInfo ? normalized.petNome || 'Paciente' : 'Paciente';
+  }
+  if (moverBoxModal.petSummaryMetaEl) {
+    moverBoxModal.petSummaryMetaEl.textContent = metaParts.length ? metaParts.join(' · ') : '—';
+  }
+  if (moverBoxModal.petSummaryTutorEl) {
+    moverBoxModal.petSummaryTutorEl.textContent = tutorParts.length ? tutorParts.join(' · ') : '—';
+  }
+}
+
+function updateMoverBoxOptions(record, dataset) {
+  if (!moverBoxModal.selectEl) return;
+  const boxes = Array.isArray(dataset?.boxes) ? dataset.boxes : [];
+  const currentValue = typeof record?.box === 'string' ? record.box.trim() : '';
+  const available = boxes.filter((box) => isBoxAvailable(box));
+  const seen = new Set(['']);
+  const options = [{ value: '', label: 'Não atribuído' }];
+  const sorted = available
+    .slice()
+    .sort((a, b) => a.box.localeCompare(b.box, 'pt-BR', { numeric: true, sensitivity: 'base' }));
+  sorted.forEach((box) => {
+    const value = box.box;
+    if (!value || seen.has(value)) return;
+    const detail = box.especialidade ? ` · ${box.especialidade}` : '';
+    options.push({ value, label: `${value}${detail}` });
+    seen.add(value);
+  });
+
+  if (currentValue) {
+    if (!seen.has(currentValue)) {
+      options.push({ value: currentValue, label: `${currentValue} (atual)` });
+      seen.add(currentValue);
+    } else {
+      options.forEach((option) => {
+        if (option.value === currentValue) {
+          option.label = `${option.label} (atual)`;
+        }
+      });
+    }
+  }
+
+  moverBoxModal.selectEl.innerHTML = options
+    .map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`)
+    .join('');
+  moverBoxModal.selectEl.value = currentValue || '';
+
+  if (moverBoxModal.noOptionsEl) {
+    moverBoxModal.noOptionsEl.classList.toggle('hidden', sorted.length > 0);
+  }
+}
+
+function ensureMoverBoxModal() {
+  if (moverBoxModal.overlay) return moverBoxModal.overlay;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'mover-box-modal fixed inset-0 z-[1000] hidden';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-modal></div>
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+      <div
+        class="relative flex w-full max-w-xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] text-gray-700 shadow-2xl opacity-0 transition-all duration-200 ease-out scale-95"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mover-box-title"
+        data-mover-box-dialog
+        tabindex="-1"
+      >
+        <header class="flex items-start justify-between border-b border-gray-100 px-4 py-3">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <i class="fas fa-box"></i>
+              Ajustar box
+            </span>
+            <h2 id="mover-box-title" class="mt-1 text-lg font-semibold text-gray-900">Mover paciente de box</h2>
+            <p class="text-[11px] text-gray-500">Selecione o destino do paciente internado.</p>
+          </div>
+          <button type="button" class="inline-flex items-center justify-center rounded-full border border-gray-200 p-1.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700" data-close-modal>
+            <span class="sr-only">Fechar modal</span>
+            <i class="fas fa-xmark text-sm"></i>
+          </button>
+        </header>
+        <form class="flex flex-col" novalidate>
+          <div class="space-y-4 px-4 py-4">
+            <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-600" data-mover-box-summary>
+              <div class="flex flex-wrap items-center gap-2 text-gray-700">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Paciente</span>
+                <span class="text-[13px] font-semibold text-gray-900" data-mover-box-summary-name>Paciente</span>
+                <span class="text-[10px] text-gray-400" data-mover-box-summary-meta>—</span>
+              </div>
+              <p class="mt-1 text-[11px] text-gray-500" data-mover-box-summary-tutor>—</p>
+            </div>
+            <div class="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+              <p class="font-semibold">O que posso fazer aqui?</p>
+              <p class="mt-1">Você pode mover o paciente para outro box disponível ou definir que ele ainda não possui box atribuído.</p>
+            </div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-600">Destino
+              <select name="moverBoxDestino" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
+                <option value="">Carregando opções...</option>
+              </select>
+            </label>
+            <p class="hidden rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] text-gray-600" data-mover-box-empty>
+              Nenhum box livre no momento. É possível manter o paciente sem box selecionando "Não atribuído".
+            </p>
+            <p class="hidden rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700" data-mover-box-error></p>
+          </div>
+          <footer class="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <span class="text-[11px] text-gray-500">A movimentação fica registrada no histórico da internação.</span>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-modal>Cancelar</button>
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90" data-mover-box-submit>Salvar</button>
+            </div>
+          </footer>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  moverBoxModal.overlay = overlay;
+  moverBoxModal.dialog = overlay.querySelector('[data-mover-box-dialog]');
+  moverBoxModal.form = overlay.querySelector('form');
+  moverBoxModal.submitBtn = overlay.querySelector('[data-mover-box-submit]');
+  moverBoxModal.errorEl = overlay.querySelector('[data-mover-box-error]');
+  moverBoxModal.selectEl = overlay.querySelector('select[name="moverBoxDestino"]');
+  moverBoxModal.noOptionsEl = overlay.querySelector('[data-mover-box-empty]');
+  moverBoxModal.petSummaryEl = overlay.querySelector('[data-mover-box-summary]');
+  moverBoxModal.petSummaryNameEl = overlay.querySelector('[data-mover-box-summary-name]');
+  moverBoxModal.petSummaryMetaEl = overlay.querySelector('[data-mover-box-summary-meta]');
+  moverBoxModal.petSummaryTutorEl = overlay.querySelector('[data-mover-box-summary-tutor]');
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeMoverBoxModal();
+      return;
+    }
+    const closeTrigger = event.target.closest('[data-close-modal]');
+    if (closeTrigger) {
+      event.preventDefault();
+      closeMoverBoxModal();
+    }
+  });
+
+  overlay.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !overlay.classList.contains('hidden')) {
+      event.preventDefault();
+      closeMoverBoxModal();
+    }
+  });
+
+  if (moverBoxModal.form) {
+    moverBoxModal.form.addEventListener('submit', handleMoverBoxModalSubmit);
+  }
+
+  setMoverBoxModalPetInfo(null);
+
+  return overlay;
+}
+
+function closeMoverBoxModal() {
+  if (!moverBoxModal.overlay) return;
+  if (moverBoxModal.dialog) {
+    moverBoxModal.dialog.classList.add('opacity-0', 'scale-95');
+  }
+  moverBoxModal.overlay.classList.add('hidden');
+  moverBoxModal.overlay.removeAttribute('data-modal-open');
+  setMoverBoxModalError('');
+  setMoverBoxModalLoading(false);
+  resetMoverBoxModalForm();
+  setMoverBoxModalPetInfo(null);
+  moverBoxModal.dataset = null;
+  moverBoxModal.state = null;
+  moverBoxModal.onSuccess = null;
+  moverBoxModal.record = null;
+  moverBoxModal.recordId = null;
+}
+
+function openMoverBoxModal(record, options = {}) {
+  if (!record) {
+    showToastMessage('Não foi possível carregar os dados desse paciente.', 'warning');
+    return;
+  }
+  ensureMoverBoxModal();
+  const datasetRef = options.dataset || moverBoxModal.dataset || getDataset();
+  const stateRef = options.state || moverBoxModal.state || {};
+  const successHandler =
+    typeof options.onSuccess === 'function'
+      ? options.onSuccess
+      : typeof stateRef?.refreshInternacoes === 'function'
+        ? stateRef.refreshInternacoes
+        : null;
+  const recordId = record.id || record._id || '';
+  if (!recordId) {
+    showToastMessage('Não foi possível identificar essa internação para mover.', 'warning');
+    return;
+  }
+
+  moverBoxModal.dataset = datasetRef || null;
+  moverBoxModal.state = stateRef || null;
+  moverBoxModal.onSuccess = successHandler || null;
+  moverBoxModal.record = record;
+  moverBoxModal.recordId = recordId;
+
+  setMoverBoxModalError('');
+  setMoverBoxModalLoading(false);
+  resetMoverBoxModalForm();
+  setMoverBoxModalPetInfo(getPetInfoFromInternacaoRecord(record));
+  updateMoverBoxOptions(record, datasetRef || {});
+
+  moverBoxModal.overlay.classList.remove('hidden');
+  moverBoxModal.overlay.dataset.modalOpen = 'true';
+  if (moverBoxModal.dialog) {
+    requestAnimationFrame(() => {
+      moverBoxModal.dialog.classList.remove('opacity-0', 'scale-95');
+      moverBoxModal.dialog.focus();
+    });
+  }
+}
+
+async function handleMoverBoxModalSubmit(event) {
+  event.preventDefault();
+  if (!moverBoxModal.form) return;
+  setMoverBoxModalError('');
+  const recordId = moverBoxModal.recordId;
+  if (!recordId) {
+    setMoverBoxModalError('Não foi possível identificar a internação selecionada.');
+    return;
+  }
+
+  const selectValue = moverBoxModal.selectEl ? moverBoxModal.selectEl.value.trim() : '';
+  const currentValue = typeof moverBoxModal.record?.box === 'string' ? moverBoxModal.record.box.trim() : '';
+  if (selectValue === currentValue) {
+    setMoverBoxModalError('Selecione um destino diferente para continuar.');
+    return;
+  }
+
+  setMoverBoxModalLoading(true);
+  const datasetRef = moverBoxModal.dataset || getDataset();
+  const stateRef = moverBoxModal.state || {};
+  try {
+    const updatedRecord = await requestJson(`/internacao/registros/${encodeURIComponent(recordId)}/box`, {
+      method: 'POST',
+      body: { box: selectValue },
+    });
+    const normalized = normalizeInternacaoRecord(updatedRecord);
+    if (normalized) {
+      applyInternacaoRecordUpdate(normalized, datasetRef, stateRef);
+    }
+
+    let boxesRefreshPromise = null;
+    try {
+      if (stateRef && typeof stateRef.refreshBoxes === 'function') {
+        boxesRefreshPromise = Promise.resolve(stateRef.refreshBoxes());
+      } else if (datasetRef) {
+        boxesRefreshPromise = fetchBoxesData(datasetRef, stateRef, { quiet: true });
+      }
+    } catch (refreshError) {
+      console.warn('internacao: falha ao atualizar boxes após movimentação', refreshError);
+    }
+
+    showToastMessage('Box atualizado com sucesso.', 'success');
+    const successCallback = moverBoxModal.onSuccess;
+    closeMoverBoxModal();
+
+    if (boxesRefreshPromise && typeof boxesRefreshPromise.catch === 'function') {
+      boxesRefreshPromise.catch((error) => {
+        console.warn('internacao: falha ao atualizar boxes após movimentação', error);
+      });
+    }
+
+    if (typeof successCallback === 'function') {
+      successCallback();
+    }
+  } catch (error) {
+    console.error('internacao: falha ao mover paciente de box', error);
+    setMoverBoxModalError(error.message || 'Não foi possível atualizar o box.');
+  } finally {
+    setMoverBoxModalLoading(false);
+  }
+}
+
 function setBoxesModalError(message) {
   if (!boxesModal.errorEl) return;
   const text = String(message || '').trim();
@@ -2441,6 +2780,8 @@ function ensureFichaInternacaoModal() {
         await handleFichaObitoAction();
       } else if (actionType === 'cancelar') {
         await handleFichaCancelarAction();
+      } else if (actionType === 'box') {
+        await handleFichaBoxAction();
       } else {
         showToastMessage('Funcionalidade em desenvolvimento.', 'info');
       }
@@ -2551,6 +2892,36 @@ async function handleFichaCancelarAction() {
   });
 }
 
+async function handleFichaBoxAction() {
+  const record = fichaInternacaoModal.record;
+  if (!record) {
+    showToastMessage('Não foi possível carregar os dados dessa internação.', 'warning');
+    return;
+  }
+  if (record.obitoRegistrado) {
+    showToastMessage('Não é possível alterar o box após o registro de óbito.', 'warning');
+    return;
+  }
+  const isCancelado = record.cancelado || normalizeActionKey(record.situacaoCodigo) === 'cancelado';
+  if (isCancelado) {
+    showToastMessage('Essa internação está cancelada e não permite movimentação de box.', 'info');
+    return;
+  }
+  const dataset = fichaInternacaoModal.dataset || getDataset();
+  const state = fichaInternacaoModal.state || {};
+  try {
+    await fetchBoxesData(dataset, state, { quiet: true });
+  } catch (error) {
+    console.warn('internacao: falha ao atualizar boxes antes da movimentação', error);
+  }
+  closeFichaInternacaoModal();
+  openMoverBoxModal(record, {
+    dataset,
+    state,
+    onSuccess: state.refreshInternacoes,
+  });
+}
+
 function fillFichaInternacaoModal(record) {
   if (!record) return;
   ensureFichaInternacaoModal();
@@ -2585,7 +2956,9 @@ function fillFichaInternacaoModal(record) {
   }
 
   if (fichaInternacaoModal.statusEl) fichaInternacaoModal.statusEl.textContent = record.situacao || '—';
-  if (fichaInternacaoModal.boxEl) fichaInternacaoModal.boxEl.textContent = record.box || '—';
+  if (fichaInternacaoModal.boxEl) {
+    fichaInternacaoModal.boxEl.textContent = record.box || 'Não atribuído';
+  }
   if (fichaInternacaoModal.altaEl) fichaInternacaoModal.altaEl.textContent = formatDateTimeLabel(record.altaPrevistaISO);
   if (fichaInternacaoModal.duracaoEl) fichaInternacaoModal.duracaoEl.textContent = formatDurationSince(record.admissao);
   if (fichaInternacaoModal.vetEl) fichaInternacaoModal.vetEl.textContent = record.veterinario || '—';
@@ -2608,6 +2981,15 @@ function fillFichaInternacaoModal(record) {
       cancelBtn.classList.toggle('opacity-60', disabled);
       cancelBtn.classList.toggle('cursor-not-allowed', disabled);
       cancelBtn.textContent = cancelado ? 'Cancelada' : 'Cancelar';
+    }
+    const boxBtn = fichaInternacaoModal.actionsContainer.querySelector('[data-ficha-action="box"]');
+    if (boxBtn) {
+      const disabled =
+        !!record.obitoRegistrado || record.cancelado || normalizeActionKey(record.situacaoCodigo) === 'cancelado';
+      boxBtn.disabled = disabled;
+      boxBtn.classList.toggle('opacity-60', disabled);
+      boxBtn.classList.toggle('cursor-not-allowed', disabled);
+      boxBtn.textContent = disabled ? 'Box indisponível' : 'Box';
     }
   }
 
