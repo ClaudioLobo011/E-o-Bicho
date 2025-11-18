@@ -204,6 +204,7 @@ const prescricaoModal = {
   petInfo: null,
   resumoField: null,
   recorrenciaFields: null,
+  recorrenciaTitleEl: null,
   intervaloDetalheFields: null,
   medicamentoFields: null,
   fluidFields: null,
@@ -3294,6 +3295,13 @@ function togglePrescricaoRecorrenciaFields(show) {
   prescricaoModal.recorrenciaFields.setAttribute('aria-hidden', show ? 'false' : 'true');
 }
 
+function updatePrescricaoRecorrenciaTitle(freqValue) {
+  if (!prescricaoModal.recorrenciaTitleEl) return;
+  const freqKey = normalizeActionKey(freqValue || prescricaoModal.frequenciaSelect?.value || '');
+  const title = freqKey === 'unica' ? 'Intervalo' : 'Intervalo recorrente';
+  prescricaoModal.recorrenciaTitleEl.textContent = title;
+}
+
 function togglePrescricaoIntervaloDetalhes(show) {
   const fields = prescricaoModal.intervaloDetalheFields
     ? Array.from(prescricaoModal.intervaloDetalheFields)
@@ -3519,6 +3527,7 @@ function resetPrescricaoModalForm() {
   if (prescricaoModal.medPesoMetaEl) prescricaoModal.medPesoMetaEl.textContent = 'em —';
   togglePrescricaoRecorrenciaFields(true);
   togglePrescricaoIntervaloDetalhes(true);
+  updatePrescricaoRecorrenciaTitle('recorrente');
   togglePrescricaoMedicamentoFields(false);
   togglePrescricaoFluidoterapiaFields(false);
   togglePrescricaoDescricaoField(true);
@@ -3585,6 +3594,7 @@ function handlePrescricaoFormChange(event) {
     cachedValues = readPrescricaoFormValues();
     togglePrescricaoRecorrenciaFields(shouldShowRecorrenciaFields(cachedValues));
     togglePrescricaoIntervaloDetalhes(shouldShowRecorrenciaIntervaloDetalhes(cachedValues));
+    updatePrescricaoRecorrenciaTitle(cachedValues.frequencia);
   }
   const shouldToggleMedicamento =
     event &&
@@ -3651,7 +3661,7 @@ function ensurePrescricaoModal() {
               </label>
             </div>
             <div class="rounded-xl border border-gray-100 px-3 py-3" data-prescricao-recorrencia>
-              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Intervalo recorrente</p>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500" data-prescricao-recorrencia-title>Intervalo recorrente</p>
               <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                 <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500" data-prescricao-intervalo>A cada*
                   <div class="mt-1 flex items-center gap-2">
@@ -3778,6 +3788,7 @@ function ensurePrescricaoModal() {
   prescricaoModal.errorEl = overlay.querySelector('[data-prescricao-error]');
   prescricaoModal.resumoField = overlay.querySelector('[data-prescricao-resumo]');
   prescricaoModal.recorrenciaFields = overlay.querySelector('[data-prescricao-recorrencia]');
+  prescricaoModal.recorrenciaTitleEl = overlay.querySelector('[data-prescricao-recorrencia-title]');
   prescricaoModal.intervaloDetalheFields = overlay.querySelectorAll('[data-prescricao-intervalo]');
   prescricaoModal.medicamentoFields = overlay.querySelector('[data-prescricao-medicamento]');
   prescricaoModal.fluidFields = overlay.querySelector('[data-prescricao-fluidoterapia]');
@@ -3827,6 +3838,7 @@ function openPrescricaoModal(record, options = {}) {
   const initialValues = readPrescricaoFormValues();
   togglePrescricaoRecorrenciaFields(shouldShowRecorrenciaFields(initialValues));
   togglePrescricaoIntervaloDetalhes(shouldShowRecorrenciaIntervaloDetalhes(initialValues));
+  updatePrescricaoRecorrenciaTitle(initialValues.frequencia);
   togglePrescricaoMedicamentoFields(shouldShowMedicamentoDetails(initialValues));
   togglePrescricaoFluidoterapiaFields(shouldShowFluidoterapiaDetails(initialValues));
   togglePrescricaoDescricaoField(!shouldHidePrescricaoDescricaoField(initialValues));
