@@ -3243,6 +3243,7 @@ function closePrescricaoModal() {
     prescricaoModal.dialog.classList.add('opacity-0', 'scale-95');
   }
   prescricaoModal.overlay.classList.add('hidden');
+  prescricaoModal.overlay.classList.remove('flex');
   prescricaoModal.overlay.removeAttribute('data-modal-open');
   setPrescricaoModalError('');
   setPrescricaoModalLoading(false);
@@ -3265,7 +3266,7 @@ function ensurePrescricaoModal() {
   if (prescricaoModal.overlay) return prescricaoModal.overlay;
 
   const overlay = document.createElement('div');
-  overlay.className = 'internacao-prescricao-modal fixed inset-0 z-[1200] hidden';
+  overlay.className = 'internacao-prescricao-modal fixed inset-0 z-[1050] hidden flex items-center justify-center';
   overlay.innerHTML = `
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-prescricao-modal></div>
     <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
@@ -3408,6 +3409,7 @@ function openPrescricaoModal(record, options = {}) {
   resetPrescricaoModalForm();
   setPrescricaoModalPetInfo(getPetInfoFromInternacaoRecord(record));
   prescricaoModal.overlay.classList.remove('hidden');
+  prescricaoModal.overlay.classList.add('flex');
   prescricaoModal.overlay.dataset.modalOpen = 'true';
   if (prescricaoModal.dialog) {
     requestAnimationFrame(() => {
