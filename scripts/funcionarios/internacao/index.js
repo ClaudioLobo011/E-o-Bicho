@@ -204,6 +204,7 @@ const prescricaoModal = {
   petInfo: null,
   resumoField: null,
   recorrenciaFields: null,
+  intervaloDetalheFields: null,
   medicamentoFields: null,
   fluidFields: null,
   descricaoWrapper: null,
@@ -3293,6 +3294,17 @@ function togglePrescricaoRecorrenciaFields(show) {
   prescricaoModal.recorrenciaFields.setAttribute('aria-hidden', show ? 'false' : 'true');
 }
 
+function togglePrescricaoIntervaloDetalhes(show) {
+  const fields = prescricaoModal.intervaloDetalheFields
+    ? Array.from(prescricaoModal.intervaloDetalheFields)
+    : [];
+  if (!fields.length) return;
+  fields.forEach((field) => {
+    field.classList.toggle('hidden', !show);
+    field.setAttribute('aria-hidden', show ? 'false' : 'true');
+  });
+}
+
 function togglePrescricaoMedicamentoFields(show) {
   if (!prescricaoModal.medicamentoFields) return;
   prescricaoModal.medicamentoFields.classList.toggle('hidden', !show);
@@ -3336,6 +3348,12 @@ function shouldShowRecorrenciaFields(values = {}) {
   const freqKey = normalizeActionKey(values.frequencia || '');
   if (!freqKey) return true;
   return freqKey === 'recorrente' || freqKey === 'unica';
+}
+
+function shouldShowRecorrenciaIntervaloDetalhes(values = {}) {
+  const freqKey = normalizeActionKey(values.frequencia || '');
+  if (!freqKey) return true;
+  return freqKey !== 'unica';
 }
 
 function shouldHidePrescricaoDescricaoField(values = {}) {
@@ -3498,6 +3516,7 @@ function resetPrescricaoModalForm() {
   if (prescricaoModal.medPesoField) prescricaoModal.medPesoField.value = '';
   if (prescricaoModal.medPesoMetaEl) prescricaoModal.medPesoMetaEl.textContent = 'em —';
   togglePrescricaoRecorrenciaFields(true);
+  togglePrescricaoIntervaloDetalhes(true);
   togglePrescricaoMedicamentoFields(false);
   togglePrescricaoFluidoterapiaFields(false);
   togglePrescricaoDescricaoField(true);
@@ -3563,6 +3582,7 @@ function handlePrescricaoFormChange(event) {
   if (event && event.target && event.target.name === 'prescFrequencia') {
     cachedValues = readPrescricaoFormValues();
     togglePrescricaoRecorrenciaFields(shouldShowRecorrenciaFields(cachedValues));
+    togglePrescricaoIntervaloDetalhes(shouldShowRecorrenciaIntervaloDetalhes(cachedValues));
   }
   const shouldToggleMedicamento =
     event &&
@@ -3631,7 +3651,7 @@ function ensurePrescricaoModal() {
             <div class="rounded-xl border border-gray-100 px-3 py-3" data-prescricao-recorrencia>
               <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Intervalo recorrente</p>
               <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">A cada*
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500" data-prescricao-intervalo>A cada*
                   <div class="mt-1 flex items-center gap-2">
                     <input type="number" name="prescACadaValor" min="1" class="w-20 rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
                     <select name="prescACadaUnidade" class="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
@@ -3639,7 +3659,7 @@ function ensurePrescricaoModal() {
                     </select>
                   </div>
                 </label>
-                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Por*
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500" data-prescricao-intervalo>Por*
                   <div class="mt-1 flex items-center gap-2">
                     <input type="number" name="prescPorValor" min="1" class="w-20 rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
                     <select name="prescPorUnidade" class="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
@@ -3756,6 +3776,7 @@ function ensurePrescricaoModal() {
   prescricaoModal.errorEl = overlay.querySelector('[data-prescricao-error]');
   prescricaoModal.resumoField = overlay.querySelector('[data-prescricao-resumo]');
   prescricaoModal.recorrenciaFields = overlay.querySelector('[data-prescricao-recorrencia]');
+  prescricaoModal.intervaloDetalheFields = overlay.querySelectorAll('[data-prescricao-intervalo]');
   prescricaoModal.medicamentoFields = overlay.querySelector('[data-prescricao-medicamento]');
   prescricaoModal.fluidFields = overlay.querySelector('[data-prescricao-fluidoterapia]');
   prescricaoModal.tipoSelect = overlay.querySelector('select[name="prescTipo"]');
@@ -3803,6 +3824,7 @@ function openPrescricaoModal(record, options = {}) {
   setPrescricaoModalPetInfo(getPetInfoFromInternacaoRecord(record));
   const initialValues = readPrescricaoFormValues();
   togglePrescricaoRecorrenciaFields(shouldShowRecorrenciaFields(initialValues));
+  togglePrescricaoIntervaloDetalhes(shouldShowRecorrenciaIntervaloDetalhes(initialValues));
   togglePrescricaoMedicamentoFields(shouldShowMedicamentoDetails(initialValues));
   togglePrescricaoFluidoterapiaFields(shouldShowFluidoterapiaDetails(initialValues));
   togglePrescricaoDescricaoField(!shouldHidePrescricaoDescricaoField(initialValues));
