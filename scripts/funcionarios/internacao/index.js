@@ -3710,7 +3710,7 @@ function ensurePrescricaoModal() {
   overlay.className = 'internacao-prescricao-modal fixed inset-0 z-[1050] hidden flex items-center justify-center';
   overlay.innerHTML = `
     <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" data-close-prescricao-modal></div>
-    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-center">
+    <div class="relative mx-auto flex min-h-full w-full items-start justify-center px-3 py-6 sm:items-start sm:pt-12">
       <div
         class="relative flex w-full max-w-3xl transform-gpu flex-col overflow-hidden rounded-2xl bg-white text-[12px] leading-[1.35] text-gray-700 shadow-2xl ring-1 ring-black/10 opacity-0 scale-95 transition-all duration-200"
         role="dialog"
