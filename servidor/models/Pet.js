@@ -18,6 +18,7 @@ const petSchema = new Schema({
   pelagemCor: { type: String },
   rga: { type: String },
   peso: { type: String },
+  obito: { type: Boolean, default: false },
 }, { timestamps: true }); // timestamps adiciona os campos createdAt e updatedAt automaticamente
 
 
