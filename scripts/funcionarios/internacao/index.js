@@ -204,6 +204,7 @@ const prescricaoModal = {
   petInfo: null,
   resumoField: null,
   recorrenciaFields: null,
+  inicioFields: null,
   medicamentoFields: null,
   fluidFields: null,
   descricaoWrapper: null,
@@ -3293,6 +3294,12 @@ function togglePrescricaoRecorrenciaFields(show) {
   prescricaoModal.recorrenciaFields.setAttribute('aria-hidden', show ? 'false' : 'true');
 }
 
+function togglePrescricaoInicioFields(show) {
+  if (!prescricaoModal.inicioFields) return;
+  prescricaoModal.inicioFields.classList.toggle('hidden', !show);
+  prescricaoModal.inicioFields.setAttribute('aria-hidden', show ? 'false' : 'true');
+}
+
 function togglePrescricaoMedicamentoFields(show) {
   if (!prescricaoModal.medicamentoFields) return;
   prescricaoModal.medicamentoFields.classList.toggle('hidden', !show);
@@ -3330,6 +3337,11 @@ function shouldShowFluidoterapiaDetails(values = {}) {
   const tipoKey = normalizeActionKey(values.tipo || '');
   const freqKey = normalizeActionKey(values.frequencia || '');
   return tipoKey === 'fluidoterapia' && freqKey === 'recorrente';
+}
+
+function shouldShowInicioFields(values = {}) {
+  const freqKey = normalizeActionKey(values.frequencia || '');
+  return freqKey === 'recorrente' || freqKey === 'unica';
 }
 
 function shouldHidePrescricaoDescricaoField(values = {}) {
@@ -3492,6 +3504,7 @@ function resetPrescricaoModalForm() {
   if (prescricaoModal.medPesoField) prescricaoModal.medPesoField.value = '';
   if (prescricaoModal.medPesoMetaEl) prescricaoModal.medPesoMetaEl.textContent = 'em —';
   togglePrescricaoRecorrenciaFields(true);
+  togglePrescricaoInicioFields(true);
   togglePrescricaoMedicamentoFields(false);
   togglePrescricaoFluidoterapiaFields(false);
   togglePrescricaoDescricaoField(true);
@@ -3558,6 +3571,7 @@ function handlePrescricaoFormChange(event) {
     const value = event.target.value ? event.target.value.trim() : '';
     togglePrescricaoRecorrenciaFields(value === 'recorrente');
     cachedValues = readPrescricaoFormValues();
+    togglePrescricaoInicioFields(shouldShowInicioFields(cachedValues));
   }
   const shouldToggleMedicamento =
     event &&
@@ -3642,6 +3656,11 @@ function ensurePrescricaoModal() {
                     </select>
                   </div>
                 </label>
+              </div>
+            </div>
+            <div class="rounded-xl border border-gray-100 px-3 py-3" data-prescricao-inicio>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Agendamento da aplicação</p>
+              <div class="mt-3 grid gap-3 md:grid-cols-2">
                 <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Iniciar em*
                   <input type="date" name="prescDataInicio" class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
                 </label>
@@ -3751,6 +3770,7 @@ function ensurePrescricaoModal() {
   prescricaoModal.errorEl = overlay.querySelector('[data-prescricao-error]');
   prescricaoModal.resumoField = overlay.querySelector('[data-prescricao-resumo]');
   prescricaoModal.recorrenciaFields = overlay.querySelector('[data-prescricao-recorrencia]');
+  prescricaoModal.inicioFields = overlay.querySelector('[data-prescricao-inicio]');
   prescricaoModal.medicamentoFields = overlay.querySelector('[data-prescricao-medicamento]');
   prescricaoModal.fluidFields = overlay.querySelector('[data-prescricao-fluidoterapia]');
   prescricaoModal.tipoSelect = overlay.querySelector('select[name="prescTipo"]');
@@ -3797,6 +3817,7 @@ function openPrescricaoModal(record, options = {}) {
   resetPrescricaoModalForm();
   setPrescricaoModalPetInfo(getPetInfoFromInternacaoRecord(record));
   const initialValues = readPrescricaoFormValues();
+  togglePrescricaoInicioFields(shouldShowInicioFields(initialValues));
   togglePrescricaoMedicamentoFields(shouldShowMedicamentoDetails(initialValues));
   togglePrescricaoFluidoterapiaFields(shouldShowFluidoterapiaDetails(initialValues));
   togglePrescricaoDescricaoField(!shouldHidePrescricaoDescricaoField(initialValues));
