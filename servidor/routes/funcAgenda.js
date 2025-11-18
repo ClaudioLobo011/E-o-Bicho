@@ -94,6 +94,17 @@ function parseNumber(value, fallback = 0) {
   return fallback;
 }
 
+function parseBooleanFlag(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return false;
+    return ['1', 'true', 'sim', 'yes', 'on'].includes(normalized);
+  }
+  return false;
+}
+
 async function buildClientePayload(body = {}, opts = {}) {
   const { isUpdate = false, currentUser = null } = opts;
   const tipoConta = normalizeTipoConta(body.tipoConta || currentUser?.tipoConta);
@@ -1059,6 +1070,7 @@ router.post('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res)
       pelagemCor: sanitizeString(req.body.pelagem || req.body.pelagemCor || req.body.cor),
       rga: sanitizeString(req.body.rga),
       peso: sanitizeString(req.body.peso),
+      obito: parseBooleanFlag(req.body.obito),
     };
 
     const created = await Pet.create(doc);
@@ -1095,6 +1107,10 @@ router.put('/clientes/:id/pets/:petId', authMiddleware, requireStaff, async (req
       rga: sanitizeString(req.body.rga),
       peso: sanitizeString(req.body.peso),
     };
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'obito')) {
+      update.obito = parseBooleanFlag(req.body.obito);
+    }
 
     const updated = await Pet.findByIdAndUpdate(petId, update, { new: true });
     res.json(updated);
@@ -1168,8 +1184,15 @@ router.get('/clientes/:id/pets', authMiddleware, requireStaff, async (req, res) 
   try {
     const ownerId = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(ownerId)) return res.json([]);
-    const pets = await Pet.find({ owner: ownerId })
-      .select('_id nome tipo raca porte sexo dataNascimento peso microchip pelagemCor rga')
+    const includeDeceased = String(req.query.includeDeceased || '')
+      .trim().toLowerCase();
+    const includeFlag = ['1', 'true', 'sim'].includes(includeDeceased);
+    const filter = { owner: ownerId };
+    if (!includeFlag) {
+      filter.obito = { $ne: true };
+    }
+    const pets = await Pet.find(filter)
+      .select('_id nome tipo raca porte sexo dataNascimento peso microchip pelagemCor rga obito')
       .sort({ nome: 1 })
       .lean();
     res.json(pets);

@@ -1,0 +1,57 @@
+const mongoose = require('mongoose');
+
+const internacaoRegistroSchema = new mongoose.Schema(
+  {
+    codigo: { type: Number, required: true, unique: true, index: true },
+    petId: { type: String, trim: true },
+    petNome: { type: String, required: true, trim: true },
+    petEspecie: { type: String, trim: true },
+    petRaca: { type: String, trim: true },
+    petPeso: { type: String, trim: true },
+    petIdade: { type: String, trim: true },
+    tutorNome: { type: String, trim: true },
+    tutorDocumento: { type: String, trim: true },
+    tutorContato: { type: String, trim: true },
+    situacao: { type: String, trim: true },
+    situacaoCodigo: { type: String, trim: true },
+    risco: { type: String, trim: true },
+    riscoCodigo: { type: String, trim: true },
+    veterinario: { type: String, trim: true },
+    box: { type: String, trim: true },
+    altaPrevistaData: { type: String, trim: true },
+    altaPrevistaHora: { type: String, trim: true },
+    queixa: { type: String, trim: true },
+    diagnostico: { type: String, trim: true },
+    prognostico: { type: String, trim: true },
+    alergias: [{ type: String, trim: true }],
+    acessorios: { type: String, trim: true },
+    observacoes: { type: String, trim: true },
+    historico: [
+      {
+        tipo: { type: String, trim: true },
+        descricao: { type: String, trim: true },
+        criadoPor: { type: String, trim: true },
+        criadoEm: { type: Date, default: Date.now },
+      },
+    ],
+    cancelado: { type: Boolean, default: false },
+    canceladoResponsavel: { type: String, trim: true },
+    canceladoData: { type: String, trim: true },
+    canceladoHora: { type: String, trim: true },
+    canceladoJustificativa: { type: String, trim: true },
+    canceladoObservacoes: { type: String, trim: true },
+    canceladoRegistradoEm: { type: Date },
+    obitoRegistrado: { type: Boolean, default: false },
+    obitoVeterinario: { type: String, trim: true },
+    obitoData: { type: String, trim: true },
+    obitoHora: { type: String, trim: true },
+    obitoCausa: { type: String, trim: true },
+    obitoRelatorio: { type: String, trim: true },
+    obitoConfirmadoEm: { type: Date },
+  },
+  {
+    timestamps: true,
+  },
+);
+
+module.exports = mongoose.model('InternacaoRegistro', internacaoRegistroSchema);

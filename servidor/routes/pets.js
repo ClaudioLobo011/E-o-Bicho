@@ -44,7 +44,7 @@ router.get('/user/:userId', requireAuth, async (req, res) => {
       return res.status(403).json({ message: 'Acesso negado.' });
     }
 
-    const pets = await Pet.find({ owner: req.params.userId });
+    const pets = await Pet.find({ owner: req.params.userId, obito: { $ne: true } });
     res.json(pets);
   } catch (error) {
     res.status(500).json({ message: 'Erro ao buscar pets.' });

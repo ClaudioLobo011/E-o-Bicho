@@ -219,6 +219,7 @@
         sexo: document.getElementById('pet-sexo'),
         rga: document.getElementById('pet-rga'),
         microchip: document.getElementById('pet-microchip'),
+        obito: document.getElementById('pet-obito'),
       },
       btnPetSalvar: document.getElementById('btn-pet-salvar'),
       btnPetCancelar: document.getElementById('btn-pet-cancelar'),
@@ -694,7 +695,12 @@
     function clearPetForm() {
       state.petEditandoId = null;
       Object.values(elements.pets).forEach((input) => {
-        if (input) input.value = '';
+        if (!input) return;
+        if (input.type === 'checkbox') {
+          input.checked = false;
+        } else {
+          input.value = '';
+        }
       });
       elements.btnPetCancelar.classList.add('hidden');
       elements.btnPetSalvar.textContent = 'Adicionar pet';
@@ -798,6 +804,9 @@
         const peso = fixEncoding(pet.peso || '');
         const rga = fixEncoding(pet.rga || '');
         const microchip = fixEncoding(pet.microchip || '');
+        const statusBadge = pet.obito
+          ? '<span class="inline-flex items-center rounded bg-rose-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-rose-600">Óbito</span>'
+          : '';
         const detalhes = [
           tipo ? `Tipo: ${tipo}` : '',
           raca ? `Raça: ${raca}` : '',
@@ -811,7 +820,7 @@
         ].filter(Boolean);
         card.innerHTML = `
           <div class="flex flex-col gap-1 text-sm text-gray-700">
-            <div class="text-base font-semibold text-gray-800">${nome || 'Sem nome'}</div>
+            <div class="text-base font-semibold text-gray-800 flex flex-wrap items-center gap-2">${nome || 'Sem nome'}${statusBadge ? ` ${statusBadge}` : ''}</div>
             ${detalhes.map((linha) => `<div>${linha}</div>`).join('')}
           </div>
           <div class="mt-3 flex items-center gap-2">
@@ -879,9 +888,13 @@
     }
 
     async function loadPets() {
-      if (!state.currentClienteId) return;
+      if (!state.currentClienteId) {
+        state.pets = [];
+        renderPets();
+        return;
+      }
       try {
-        const data = await apiFetch(`/func/clientes/${state.currentClienteId}/pets`);
+        const data = await apiFetch(`/func/clientes/${state.currentClienteId}/pets?includeDeceased=1`);
         state.pets = Array.isArray(data) ? data : [];
         renderPets();
       } catch (err) {
@@ -1060,6 +1073,7 @@
         sexo: elements.pets.sexo.value,
         rga: elements.pets.rga.value.trim(),
         microchip: elements.pets.microchip.value.trim(),
+        obito: Boolean(elements.pets.obito?.checked),
       };
       const isEdicao = !!state.petEditandoId;
       const path = isEdicao
@@ -1238,6 +1252,9 @@
         setSelectValue(elements.pets.sexo, pet.sexo || '');
         elements.pets.rga.value = fixEncoding(pet.rga || '');
         elements.pets.microchip.value = fixEncoding(pet.microchip || '');
+        if (elements.pets.obito) {
+          elements.pets.obito.checked = Boolean(pet.obito);
+        }
         elements.btnPetCancelar.classList.remove('hidden');
         elements.btnPetSalvar.textContent = 'Atualizar pet';
         syncPorteDisabled();
