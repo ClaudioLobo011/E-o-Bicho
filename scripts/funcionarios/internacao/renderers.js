@@ -69,6 +69,7 @@ function normalizeExecucaoItems(list) {
         descricao: item.descricao ? String(item.descricao).trim() : '',
         responsavel: item.responsavel ? String(item.responsavel).trim() : '',
         status: item.status ? String(item.status).trim() : '',
+        prescricaoId: item.prescricaoId ? String(item.prescricaoId).trim() : '',
       };
     })
     .filter(Boolean);

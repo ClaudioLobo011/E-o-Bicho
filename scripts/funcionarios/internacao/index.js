@@ -361,6 +361,7 @@ function normalizeExecucaoItem(raw) {
     descricao: raw.descricao ? String(raw.descricao).trim() : '',
     responsavel: raw.responsavel ? String(raw.responsavel).trim() : '',
     status: raw.status ? String(raw.status).trim() : '',
+    prescricaoId: raw.prescricaoId ? String(raw.prescricaoId).trim() : '',
   };
 }
 
@@ -759,6 +760,13 @@ function normalizePrescricaoItem(entry) {
   };
 }
 
+function findPrescricaoById(record, prescricaoId) {
+  if (!record || !Array.isArray(record.prescricoes)) return null;
+  const targetId = String(prescricaoId || '').trim();
+  if (!targetId) return null;
+  return record.prescricoes.find((item) => item && item.id === targetId) || null;
+}
+
 function normalizeInternacaoRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const codigoNumber = Number.parseInt(raw.codigo, 10);
@@ -872,6 +880,42 @@ function applyInternacaoRecordUpdate(record, dataset, state) {
   if (state?.render && typeof state.render === 'function') {
     state.render();
   }
+}
+
+function isSameInternacaoRecord(a, b) {
+  if (!a || !b) return false;
+  if (a.id && b.id && a.id === b.id) return true;
+  if (a.filterKey && b.filterKey && a.filterKey === b.filterKey) return true;
+  const aCodigoValido = a.codigo !== null && a.codigo !== undefined;
+  const bCodigoValido = b.codigo !== null && b.codigo !== undefined;
+  if (aCodigoValido && bCodigoValido && a.codigo === b.codigo) {
+    return true;
+  }
+  return false;
+}
+
+function getSharedDatasetRef() {
+  return prescricaoModal.dataset || fichaInternacaoModal.dataset || getDataset();
+}
+
+function getSharedStateRef() {
+  return prescricaoModal.state || fichaInternacaoModal.state || {};
+}
+
+function syncInternacaoRecordState(updatedRecord) {
+  const normalized = normalizeInternacaoRecord(updatedRecord);
+  if (!normalized) return null;
+  const datasetRef = getSharedDatasetRef();
+  const stateRef = getSharedStateRef();
+  applyInternacaoRecordUpdate(normalized, datasetRef, stateRef);
+  if (fichaInternacaoModal.record && isSameInternacaoRecord(fichaInternacaoModal.record, normalized)) {
+    fichaInternacaoModal.record = normalized;
+    fillFichaInternacaoModal(normalized);
+  }
+  if (prescricaoModal.record && isSameInternacaoRecord(prescricaoModal.record, normalized)) {
+    prescricaoModal.record = normalized;
+  }
+  return normalized;
 }
 
 function setInternarModalError(message) {
@@ -2883,6 +2927,8 @@ function renderFichaPrescricoes(record) {
       const resumo = escapeHtml(item.resumo || '—');
       const criadoLabel = formatDateTimeLabel(item.criadoEm);
       const inicioLabel = item.inicioISO ? formatDateTimeLabel(item.inicioISO) : '';
+      const prescricaoId = escapeHtml(item.id || '');
+      const prescricaoAttr = prescricaoId ? ` data-prescricao-id="${prescricaoId}"` : '';
       return `
         <li class="rounded-2xl border border-gray-100 bg-white px-3 py-3 shadow-sm shadow-gray-100/60">
           <div class="flex flex-wrap items-center justify-between gap-2">
@@ -2896,6 +2942,32 @@ function renderFichaPrescricoes(record) {
           <div class="mt-2 flex flex-wrap gap-3 text-[10px] text-gray-500">
             <span>Registrado em ${escapeHtml(criadoLabel)}</span>
             ${inicioLabel ? `<span>Início previsto: ${escapeHtml(inicioLabel)}</span>` : ''}
+          </div>
+          <div class="mt-3 flex flex-wrap gap-1.5 text-[10px] font-semibold">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-primary/40 px-2.5 py-1 text-primary transition hover:bg-primary/5"
+              data-ficha-prescricao-action="interromperreprogramar"${prescricaoAttr}
+            >
+              <i class="fas fa-rotate"></i>
+              Interromper e reprogramar
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-amber-200 px-2.5 py-1 text-amber-700 transition hover:bg-amber-50"
+              data-ficha-prescricao-action="interromper"${prescricaoAttr}
+            >
+              <i class="fas fa-pause"></i>
+              Interromper pendentes
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-red-700 transition hover:bg-red-50"
+              data-ficha-prescricao-action="excluir"${prescricaoAttr}
+            >
+              <i class="fas fa-trash"></i>
+              Excluir
+            </button>
           </div>
         </li>
       `;
@@ -3127,7 +3199,10 @@ function ensureFichaInternacaoModal() {
     const prescricaoTrigger = event.target.closest('[data-ficha-prescricao-action]');
     if (prescricaoTrigger) {
       event.preventDefault();
-      await handleFichaPrescricaoAction(prescricaoTrigger.dataset.fichaPrescricaoAction);
+      await handleFichaPrescricaoAction(
+        prescricaoTrigger.dataset.fichaPrescricaoAction,
+        prescricaoTrigger.dataset.prescricaoId,
+      );
       return;
     }
     const tabTrigger = event.target.closest('[data-ficha-tab]');
@@ -3260,34 +3335,134 @@ async function handleFichaBoxAction() {
   });
 }
 
-async function handleFichaPrescricaoAction(actionValue) {
+async function handleFichaPrescricaoAction(actionValue, prescricaoId) {
   const actionType = normalizeActionKey(actionValue);
   if (!actionType) {
     showToastMessage('Selecione uma ação válida para prescrição.', 'warning');
     return;
   }
-  if (actionType !== 'nova' && actionType !== 'prescricao' && actionType !== 'novaprescricao') {
-    showToastMessage('Funcionalidade de prescrição ainda em desenvolvimento.', 'info');
-    return;
-  }
   const record = fichaInternacaoModal.record;
   if (!record) {
-    showToastMessage('Abra uma ficha de internação antes de registrar prescrições.', 'warning');
+    showToastMessage('Abra uma ficha de internação antes de gerenciar prescrições.', 'warning');
     return;
   }
-  if (record.obitoRegistrado) {
-    showToastMessage('Não é possível registrar prescrições após o óbito.', 'warning');
-    return;
-  }
+  const hasObito = record.obitoRegistrado || normalizeActionKey(record.situacaoCodigo) === 'obito';
   const isCancelado = record.cancelado || normalizeActionKey(record.situacaoCodigo) === 'cancelado';
-  if (isCancelado) {
-    showToastMessage('Essa internação está cancelada e não permite novas prescrições.', 'info');
+
+  if (actionType === 'nova' || actionType === 'prescricao' || actionType === 'novaprescricao') {
+    if (hasObito) {
+      showToastMessage('Não é possível registrar prescrições após o óbito.', 'warning');
+      return;
+    }
+    if (isCancelado) {
+      showToastMessage('Essa internação está cancelada e não permite novas prescrições.', 'info');
+      return;
+    }
+    ensurePrescricaoModal();
+    const dataset = fichaInternacaoModal.dataset || getDataset();
+    const state = fichaInternacaoModal.state || {};
+    openPrescricaoModal(record, { dataset, state });
     return;
   }
-  ensurePrescricaoModal();
-  const dataset = fichaInternacaoModal.dataset || getDataset();
-  const state = fichaInternacaoModal.state || {};
-  openPrescricaoModal(record, { dataset, state });
+
+  if (hasObito) {
+    showToastMessage('Atualizações de prescrição não são permitidas após o óbito.', 'warning');
+    return;
+  }
+  if (isCancelado) {
+    showToastMessage('Essa internação está cancelada e não permite alterações em prescrições.', 'info');
+    return;
+  }
+
+  if (!prescricaoId) {
+    showToastMessage('Não foi possível identificar a prescrição selecionada.', 'warning');
+    return;
+  }
+
+  if (actionType === 'interromper') {
+    await handlePrescricaoInterrupcao(prescricaoId, { reprogramar: false });
+    return;
+  }
+  if (actionType === 'interromperreprogramar' || actionType === 'interrompereprogramar') {
+    await handlePrescricaoInterrupcao(prescricaoId, { reprogramar: true });
+    return;
+  }
+  if (actionType === 'excluir') {
+    await handlePrescricaoExclusao(prescricaoId);
+    return;
+  }
+
+  showToastMessage('Funcionalidade de prescrição ainda em desenvolvimento.', 'info');
+}
+
+async function handlePrescricaoInterrupcao(prescricaoId, { reprogramar = false } = {}) {
+  const record = fichaInternacaoModal.record;
+  if (!record || !record.id) {
+    showToastMessage('Não foi possível identificar a internação selecionada.', 'warning');
+    return;
+  }
+  const confirmMessage = reprogramar
+    ? 'Interromper os procedimentos pendentes e reabrir o modal para reagendar?'
+    : 'Interromper todos os procedimentos pendentes desta prescrição?';
+  const confirmed = typeof window?.confirm === 'function' ? window.confirm(confirmMessage) : true;
+  if (!confirmed) return;
+  try {
+    const updated = await requestJson(
+      `/internacao/registros/${encodeURIComponent(record.id)}/prescricoes/${encodeURIComponent(prescricaoId)}/interromper`,
+      { method: 'POST' },
+    );
+    const normalized = syncInternacaoRecordState(updated);
+    if (!normalized) {
+      throw new Error('Não foi possível atualizar a ficha após a interrupção.');
+    }
+    if (fichaInternacaoModal.record && isSameInternacaoRecord(fichaInternacaoModal.record, normalized)) {
+      setFichaModalTab('prescricao');
+    }
+    showToastMessage('Procedimentos pendentes interrompidos com sucesso.', 'success');
+    if (reprogramar) {
+      const alvo = findPrescricaoById(normalized, prescricaoId);
+      if (!alvo) {
+        showToastMessage('Prescrição interrompida, mas não foi possível carregar os dados para reprogramar.', 'warning');
+        return;
+      }
+      ensurePrescricaoModal();
+      const dataset = fichaInternacaoModal.dataset || getDataset();
+      const state = fichaInternacaoModal.state || {};
+      openPrescricaoModal(normalized, { dataset, state, initialValues: alvo });
+    }
+  } catch (error) {
+    console.error('internacao: falha ao interromper prescricao', error);
+    showToastMessage(error.message || 'Não foi possível interromper essa prescrição.', 'error');
+  }
+}
+
+async function handlePrescricaoExclusao(prescricaoId) {
+  const record = fichaInternacaoModal.record;
+  if (!record || !record.id) {
+    showToastMessage('Não foi possível identificar a internação selecionada.', 'warning');
+    return;
+  }
+  const confirmMessage =
+    'Excluir essa prescrição remove todas as execuções, inclusive as já realizadas. Deseja continuar?';
+  const confirmed = typeof window?.confirm === 'function' ? window.confirm(confirmMessage) : true;
+  if (!confirmed) return;
+  try {
+    const updated = await requestJson(
+      `/internacao/registros/${encodeURIComponent(record.id)}/prescricoes/${encodeURIComponent(prescricaoId)}/excluir`,
+      { method: 'POST' },
+    );
+    const normalized = syncInternacaoRecordState(updated);
+    if (!normalized) {
+      throw new Error('Não foi possível atualizar a ficha após a exclusão.');
+    }
+    if (fichaInternacaoModal.record && isSameInternacaoRecord(fichaInternacaoModal.record, normalized)) {
+      setFichaModalTab('prescricao');
+    }
+    showToastMessage('Prescrição excluída e mapa de execução atualizado.', 'success');
+  } catch (error) {
+    console.error('internacao: falha ao excluir prescricao', error);
+    showToastMessage(error.message || 'Não foi possível excluir essa prescrição.', 'error');
+  }
 }
 
 function setPrescricaoModalError(message) {
@@ -3634,6 +3809,51 @@ function resetPrescricaoModalForm() {
   updatePrescricaoResumoFromForm();
 }
 
+function fillPrescricaoForm(values = {}) {
+  if (!prescricaoModal.form || !values || typeof values !== 'object') return;
+  if (values.tipo) {
+    setPrescricaoTipoValue(values.tipo);
+  }
+  if (values.frequencia) {
+    setPrescricaoFrequenciaValue(values.frequencia);
+  }
+  const mappings = [
+    ['prescACadaValor', 'aCadaValor'],
+    ['prescACadaUnidade', 'aCadaUnidade'],
+    ['prescPorValor', 'porValor'],
+    ['prescPorUnidade', 'porUnidade'],
+    ['prescDataInicio', 'dataInicio'],
+    ['prescHoraInicio', 'horaInicio'],
+    ['prescDescricao', 'descricao'],
+    ['prescMedUnidade', 'medUnidade'],
+    ['prescMedDose', 'medDose'],
+    ['prescMedVia', 'medVia'],
+    ['prescMedPeso', 'medPeso'],
+    ['prescFluidFluido', 'fluidFluido'],
+    ['prescFluidEquipo', 'fluidEquipo'],
+    ['prescFluidUnidade', 'fluidUnidade'],
+    ['prescFluidDose', 'fluidDose'],
+    ['prescFluidVia', 'fluidVia'],
+    ['prescFluidVelocidadeValor', 'fluidVelocidadeValor'],
+    ['prescFluidVelocidadeUnidade', 'fluidVelocidadeUnidade'],
+    ['prescFluidSuplemento', 'fluidSuplemento'],
+  ];
+  mappings.forEach(([fieldName, key]) => {
+    if (!(key in values)) return;
+    const input = prescricaoModal.form.querySelector(`[name="${fieldName}"]`);
+    if (input) {
+      input.value = values[key] ?? '';
+    }
+  });
+  if (prescricaoModal.medPesoField && values.medPeso !== undefined) {
+    prescricaoModal.medPesoField.value = values.medPeso;
+  }
+  if (prescricaoModal.resumoField && values.resumo) {
+    prescricaoModal.resumoField.value = values.resumo;
+  }
+  updatePrescricaoResumoFromForm();
+}
+
 function setPrescricaoModalPetInfo(info) {
   const normalized = normalizePetInfo(info);
   prescricaoModal.petInfo = normalized;
@@ -3932,6 +4152,9 @@ function openPrescricaoModal(record, options = {}) {
   setPrescricaoModalError('');
   resetPrescricaoModalForm();
   setPrescricaoModalPetInfo(getPetInfoFromInternacaoRecord(record));
+  if (options.initialValues) {
+    fillPrescricaoForm(options.initialValues);
+  }
   const initialValues = readPrescricaoFormValues();
   togglePrescricaoRecorrenciaFields(shouldShowRecorrenciaFields(initialValues));
   togglePrescricaoIntervaloDetalhes(shouldShowRecorrenciaIntervaloDetalhes(initialValues));
@@ -4063,25 +4286,12 @@ async function handlePrescricaoModalSubmit(event) {
       method: 'POST',
       body: payload,
     });
-    const normalized = normalizeInternacaoRecord(updatedRecord);
+    const normalized = syncInternacaoRecordState(updatedRecord);
     if (!normalized) {
       throw new Error('Não foi possível interpretar a resposta do servidor.');
     }
-    prescricaoModal.record = normalized;
-    const datasetRef = prescricaoModal.dataset || getDataset();
-    const stateRef = prescricaoModal.state || {};
-    applyInternacaoRecordUpdate(normalized, datasetRef, stateRef);
-    const fichaRecord = fichaInternacaoModal.record;
-    if (fichaRecord) {
-      const sameRecord =
-        fichaRecord.id === normalized.id ||
-        fichaRecord.filterKey === normalized.filterKey ||
-        (normalized.codigo !== null && fichaRecord.codigo === normalized.codigo);
-      if (sameRecord) {
-        fichaInternacaoModal.record = normalized;
-        fillFichaInternacaoModal(normalized);
-        setFichaModalTab('prescricao');
-      }
+    if (fichaInternacaoModal.record && isSameInternacaoRecord(fichaInternacaoModal.record, normalized)) {
+      setFichaModalTab('prescricao');
     }
     closePrescricaoModal();
     showToastMessage('Prescrição registrada com sucesso!', 'success');

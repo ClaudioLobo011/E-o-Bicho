@@ -32,6 +32,7 @@ const internacaoRegistroSchema = new mongoose.Schema(
         descricao: { type: String, trim: true },
         responsavel: { type: String, trim: true },
         status: { type: String, trim: true },
+        prescricaoId: { type: String, trim: true },
       },
     ],
     prescricoes: [

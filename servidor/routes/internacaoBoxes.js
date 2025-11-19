@@ -29,6 +29,88 @@ const normalizeKey = (value) =>
     .replace(/[^\p{L}\p{N}]/gu, '')
     .toLowerCase();
 
+const isExecucaoConcluida = (status) => {
+  const key = normalizeKey(status);
+  if (!key) return false;
+  const finishedStatuses = [
+    'executado',
+    'executada',
+    'realizado',
+    'realizada',
+    'concluido',
+    'concluida',
+    'finalizado',
+    'finalizada',
+    'aplicado',
+    'aplicada',
+    'administrado',
+    'administrada',
+    'feito',
+    'feita',
+  ];
+  return finishedStatuses.includes(key);
+};
+
+const removeExecucoesFromPrescricao = (record, prescricaoId, { pendingOnly = false } = {}) => {
+  if (!record || !Array.isArray(record.execucoes) || !record.execucoes.length) {
+    record.execucoes = [];
+    return 0;
+  }
+  const targetId = sanitizeText(prescricaoId);
+  if (!targetId) return 0;
+  let removed = 0;
+  record.execucoes = record.execucoes.filter((execucao) => {
+    const samePrescricao = sanitizeText(execucao?.prescricaoId) === targetId;
+    if (!samePrescricao) return true;
+    if (!pendingOnly) {
+      removed += 1;
+      return false;
+    }
+    const pendente = !isExecucaoConcluida(execucao?.status);
+    if (pendente) {
+      removed += 1;
+      return false;
+    }
+    return true;
+  });
+  return removed;
+};
+
+const findPrescricaoById = (record, prescricaoId) => {
+  if (!record || !Array.isArray(record.prescricoes)) return null;
+  const targetId = sanitizeText(prescricaoId);
+  if (!targetId) return null;
+  if (typeof record.prescricoes.id === 'function') {
+    const doc = record.prescricoes.id(targetId);
+    if (doc) return doc;
+  }
+  return record.prescricoes.find((item) => sanitizeText(item?._id || item?.id) === targetId) || null;
+};
+
+const pullPrescricaoById = (record, prescricaoId) => {
+  if (!record || !Array.isArray(record.prescricoes)) return null;
+  const targetId = sanitizeText(prescricaoId);
+  if (!targetId) return null;
+  let removed = null;
+  if (typeof record.prescricoes.id === 'function') {
+    const doc = record.prescricoes.id(targetId);
+    if (doc) {
+      removed = doc.toObject();
+      doc.remove();
+      return removed;
+    }
+  }
+  record.prescricoes = record.prescricoes.filter((item) => {
+    const same = sanitizeText(item?._id || item?.id) === targetId;
+    if (same && !removed) {
+      removed = typeof item.toObject === 'function' ? item.toObject() : item;
+      return false;
+    }
+    return true;
+  });
+  return removed;
+};
+
 const formatExecucaoItem = (entry) => {
   if (!entry) return null;
   const plain = typeof entry.toObject === 'function' ? entry.toObject() : entry;
@@ -39,6 +121,7 @@ const formatExecucaoItem = (entry) => {
     descricao: sanitizeText(plain.descricao),
     responsavel: sanitizeText(plain.responsavel),
     status: sanitizeText(plain.status, { fallback: 'Agendado' }),
+    prescricaoId: sanitizeText(plain.prescricaoId),
   };
 };
 
@@ -115,15 +198,17 @@ const getIntervalInMinutes = (value, unidade) => {
   return null;
 };
 
-const buildExecucaoEntriesFromPrescricao = (payload, autor, resumo, status) => {
+const buildExecucaoEntriesFromPrescricao = (payload, autor, resumo, status, prescricaoId) => {
   const startMinutes = timeStringToMinutes(payload.horaInicio);
   if (startMinutes === null) return [];
   const freqKey = normalizeKey(payload.frequencia);
+  const vinculoId = sanitizeText(prescricaoId);
   const baseEntry = (horario) => ({
     horario,
     descricao: resumo,
     responsavel: autor,
     status,
+    prescricaoId: vinculoId,
   });
 
   if (freqKey !== 'recorrente') {
@@ -917,12 +1002,14 @@ router.post('/registros/:id/prescricoes', async (req, res) => {
 
     record.prescricoes = Array.isArray(record.prescricoes) ? record.prescricoes : [];
     record.prescricoes.unshift(storedPrescricao);
+    const prescricaoDoc = record.prescricoes[0];
+    const prescricaoId = prescricaoDoc?._id ? String(prescricaoDoc._id).trim() : '';
 
     const hasHorario = Boolean(payload.horaInicio);
     if (hasHorario) {
       record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
       const status = normalizeKey(payload.frequencia) === 'necessario' ? 'Sob demanda' : 'Agendado';
-      const novasExecucoes = buildExecucaoEntriesFromPrescricao(payload, autor, resumo, status);
+      const novasExecucoes = buildExecucaoEntriesFromPrescricao(payload, autor, resumo, status, prescricaoId);
       if (novasExecucoes.length) {
         record.execucoes.unshift(...novasExecucoes);
       }
@@ -968,6 +1055,137 @@ router.post('/registros/:id/prescricoes', async (req, res) => {
       return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar.' });
     }
     return res.status(500).json({ message: 'Não foi possível registrar a prescrição.' });
+  }
+});
+
+router.post('/registros/:id/prescricoes/:prescricaoId/interromper', async (req, res) => {
+  try {
+    const { id, prescricaoId } = req.params;
+    if (!id || !prescricaoId) {
+      return res.status(400).json({ message: 'Informe a prescrição que deseja interromper.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.obitoRegistrado || normalizeKey(record.situacaoCodigo) === 'obito') {
+      return res.status(409).json({ message: 'Não é possível alterar prescrições após o óbito.' });
+    }
+
+    if (record.cancelado || normalizeKey(record.situacaoCodigo) === 'cancelado') {
+      return res.status(409).json({ message: 'Essa internação está cancelada e não permite alterações.' });
+    }
+
+    const prescricao = findPrescricaoById(record, prescricaoId);
+    if (!prescricao) {
+      return res.status(404).json({ message: 'Prescrição não encontrada para interrupção.' });
+    }
+
+    record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
+    const removidos = removeExecucoesFromPrescricao(record, prescricaoId, { pendingOnly: true });
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    const resumoPrescricao = sanitizeText(prescricao.descricao) || sanitizeText(prescricao.resumo) || 'Prescrição';
+    const detalhes = removidos
+      ? `${removidos} execução(ões) pendente(s) removida(s).`
+      : 'Nenhuma execução pendente foi encontrada.';
+    record.historico.unshift({
+      tipo: 'Prescrição',
+      descricao: `Execuções da prescrição "${resumoPrescricao}" interrompidas. ${detalhes}`,
+      criadoPor: req.user?.email || 'Sistema',
+      criadoEm: new Date(),
+    });
+
+    await record.save();
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    const formatted = formatRegistro(updated);
+    if (!formatted) {
+      return res.status(500).json({ message: 'Não foi possível atualizar a ficha após a interrupção.' });
+    }
+
+    const io = req.app?.get('socketio');
+    if (io && formatted.id) {
+      const room = `vet:ficha:${formatted.id}`;
+      io.to(room).emit('vet:ficha:update', {
+        room,
+        timestamp: Date.now(),
+        payload: { registro: formatted },
+      });
+    }
+
+    return res.json(formatted);
+  } catch (error) {
+    console.error('internacao: falha ao interromper prescricao', error);
+    return res.status(500).json({ message: 'Não foi possível interromper os procedimentos dessa prescrição.' });
+  }
+});
+
+router.post('/registros/:id/prescricoes/:prescricaoId/excluir', async (req, res) => {
+  try {
+    const { id, prescricaoId } = req.params;
+    if (!id || !prescricaoId) {
+      return res.status(400).json({ message: 'Informe a prescrição que deseja excluir.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.obitoRegistrado || normalizeKey(record.situacaoCodigo) === 'obito') {
+      return res.status(409).json({ message: 'Não é possível excluir prescrições após o óbito.' });
+    }
+
+    if (record.cancelado || normalizeKey(record.situacaoCodigo) === 'cancelado') {
+      return res.status(409).json({ message: 'Essa internação está cancelada e não permite alterações.' });
+    }
+
+    record.prescricoes = Array.isArray(record.prescricoes) ? record.prescricoes : [];
+    const removida = pullPrescricaoById(record, prescricaoId);
+    if (!removida) {
+      return res.status(404).json({ message: 'Prescrição não encontrada para exclusão.' });
+    }
+
+    record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
+    const execucoesRemovidas = removeExecucoesFromPrescricao(record, prescricaoId, { pendingOnly: false });
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    const resumoPrescricao = sanitizeText(removida.descricao) || sanitizeText(removida.resumo) || 'Prescrição';
+    const execucaoDetalhe = execucoesRemovidas
+      ? `${execucoesRemovidas} execução(ões) removida(s) do mapa de execução.`
+      : 'Nenhuma execução estava vinculada no mapa de execução.';
+    record.historico.unshift({
+      tipo: 'Prescrição',
+      descricao: `Prescrição "${resumoPrescricao}" excluída. ${execucaoDetalhe}`,
+      criadoPor: req.user?.email || 'Sistema',
+      criadoEm: new Date(),
+    });
+
+    await record.save();
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    const formatted = formatRegistro(updated);
+    if (!formatted) {
+      return res.status(500).json({ message: 'Não foi possível atualizar a ficha após a exclusão.' });
+    }
+
+    const io = req.app?.get('socketio');
+    if (io && formatted.id) {
+      const room = `vet:ficha:${formatted.id}`;
+      io.to(room).emit('vet:ficha:update', {
+        room,
+        timestamp: Date.now(),
+        payload: { registro: formatted },
+      });
+    }
+
+    return res.json(formatted);
+  } catch (error) {
+    console.error('internacao: falha ao excluir prescricao', error);
+    return res.status(500).json({ message: 'Não foi possível excluir essa prescrição.' });
   }
 });
 
