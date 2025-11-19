@@ -28,11 +28,19 @@ const internacaoRegistroSchema = new mongoose.Schema(
     observacoes: { type: String, trim: true },
     execucoes: [
       {
+        programadoData: { type: String, trim: true },
+        programadoHora: { type: String, trim: true },
+        programadoEm: { type: String, trim: true },
         horario: { type: String, trim: true },
         descricao: { type: String, trim: true },
         responsavel: { type: String, trim: true },
         status: { type: String, trim: true },
         prescricaoId: { type: String, trim: true },
+        realizadoData: { type: String, trim: true },
+        realizadoHora: { type: String, trim: true },
+        realizadoEm: { type: String, trim: true },
+        realizadoPor: { type: String, trim: true },
+        observacoes: { type: String, trim: true },
       },
     ],
     prescricoes: [

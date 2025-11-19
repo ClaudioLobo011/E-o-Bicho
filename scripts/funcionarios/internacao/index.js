@@ -108,6 +108,23 @@ const PRESCRICAO_FLUID_VELOCIDADE_OPTIONS = [
   { value: 'mldia', label: 'ml/dia' },
 ];
 
+const EXECUCAO_STATUS_FINISHED = [
+  'executado',
+  'executada',
+  'realizado',
+  'realizada',
+  'concluido',
+  'concluida',
+  'finalizado',
+  'finalizada',
+  'aplicado',
+  'aplicada',
+  'administrado',
+  'administrada',
+  'feito',
+  'feita',
+];
+
 const internarModal = {
   overlay: null,
   dialog: null,
@@ -351,17 +368,80 @@ function formatDurationSince(dateInput) {
   return parts.slice(0, 2).join(' e ');
 }
 
+function normalizeExecucaoStatusKey(status) {
+  const key = normalizeActionKey(status);
+  if (!key) return '';
+  if (EXECUCAO_STATUS_FINISHED.includes(key)) return 'concluida';
+  if (key.includes('agend')) return 'agendada';
+  if (key.includes('demanda')) return 'sob-demanda';
+  return key;
+}
+
+function buildExecucaoProgramadoLabel(programadoEm, programadoData, programadoHora, fallbackHora) {
+  if (programadoEm) {
+    return formatDateTimeLabel(programadoEm);
+  }
+  if (programadoData && programadoHora) {
+    const combined = combineDateAndTime(programadoData, programadoHora);
+    if (combined) {
+      return formatDateTimeLabel(combined);
+    }
+  }
+  if (programadoData) {
+    const combined = combineDateAndTime(programadoData, fallbackHora || '00:00');
+    if (combined) {
+      return formatDateTimeLabel(combined);
+    }
+  }
+  if (programadoHora || fallbackHora) {
+    return `Horário ${programadoHora || fallbackHora}`;
+  }
+  return '—';
+}
+
 function normalizeExecucaoItem(raw) {
   if (!raw || typeof raw !== 'object') return null;
-  const horario = typeof raw.horario === 'string' ? raw.horario.trim() : '';
+  const toText = (value) => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+  };
+  const horario = toText(raw.horario);
   const hourKey = horario ? horario.slice(0, 2).padStart(2, '0') : '';
+  const id = toText(raw.id) || toText(raw._id) || `${horario || 'exec'}-${Math.random().toString(36).slice(2, 8)}`;
+  const descricao = toText(raw.descricao);
+  const responsavel = toText(raw.responsavel);
+  const status = toText(raw.status) || 'Agendado';
+  const statusKey = normalizeExecucaoStatusKey(status);
+  const prescricaoId = toText(raw.prescricaoId);
+  const programadoData = toText(raw.programadoData);
+  const programadoHora = toText(raw.programadoHora) || horario;
+  const programadoEm = raw.programadoEm || combineDateAndTime(programadoData, programadoHora);
+  const programadoLabel = buildExecucaoProgramadoLabel(programadoEm, programadoData, programadoHora, horario);
+  const realizadoData = toText(raw.realizadoData);
+  const realizadoHora = toText(raw.realizadoHora);
+  const realizadoEm = raw.realizadoEm || combineDateAndTime(realizadoData, realizadoHora);
+  const realizadoLabel = realizadoEm ? formatDateTimeLabel(realizadoEm) : '';
+  const observacoes = toText(raw.observacoes);
+  const realizadoPor = toText(raw.realizadoPor);
   return {
+    id,
     horario,
     hourKey,
-    descricao: raw.descricao ? String(raw.descricao).trim() : '',
-    responsavel: raw.responsavel ? String(raw.responsavel).trim() : '',
-    status: raw.status ? String(raw.status).trim() : '',
-    prescricaoId: raw.prescricaoId ? String(raw.prescricaoId).trim() : '',
+    descricao,
+    responsavel,
+    status,
+    statusKey,
+    prescricaoId,
+    programadoData,
+    programadoHora,
+    programadoEm,
+    programadoLabel,
+    realizadoData,
+    realizadoHora,
+    realizadoEm,
+    realizadoLabel,
+    observacoes,
+    realizadoPor,
   };
 }
 
@@ -3465,6 +3545,53 @@ async function handlePrescricaoExclusao(prescricaoId) {
   }
 }
 
+function handleExecucaoSubmitEvent(event) {
+  const detail = event?.detail || {};
+  if (!detail) return;
+  detail.handled = true;
+  const { recordId, execucaoId, payload, close, onError, onComplete } = detail;
+  const emitError = (message) => {
+    if (typeof onError === 'function') {
+      onError(message);
+    } else {
+      showToastMessage(message, 'error');
+    }
+  };
+  if (!recordId || !execucaoId) {
+    emitError('Não foi possível identificar o procedimento selecionado.');
+    if (typeof onComplete === 'function') {
+      onComplete();
+    }
+    return;
+  }
+  (async () => {
+    try {
+      const updated = await requestJson(
+        `/internacao/registros/${encodeURIComponent(recordId)}/execucoes/${encodeURIComponent(execucaoId)}/concluir`,
+        {
+          method: 'POST',
+          body: payload,
+        },
+      );
+      const normalized = syncInternacaoRecordState(updated);
+      if (!normalized) {
+        throw new Error('Não foi possível atualizar o mapa de execução.');
+      }
+      if (typeof close === 'function') {
+        close();
+      }
+      showToastMessage('Procedimento concluído e mapa de execução atualizado.', 'success');
+    } catch (error) {
+      console.error('internacao: falha ao concluir execucao', error);
+      emitError(error.message || 'Não foi possível concluir esse procedimento.');
+    } finally {
+      if (typeof onComplete === 'function') {
+        onComplete();
+      }
+    }
+  })();
+}
+
 function setPrescricaoModalError(message) {
   if (!prescricaoModal.errorEl) return;
   const text = String(message || '').trim();
@@ -4633,6 +4760,8 @@ function setupMapaPage(dataset, state, render, fetchInternacoes) {
 
   loadInternacoes();
 }
+
+window.addEventListener('internacao:execucao:submit', handleExecucaoSubmitEvent);
 
 document.addEventListener('DOMContentLoaded', () => {
   const root = document.querySelector('[data-internacao-root]');

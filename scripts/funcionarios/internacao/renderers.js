@@ -64,12 +64,9 @@ function normalizeExecucaoItems(list) {
       const hourKey = horario ? horario.slice(0, 2).padStart(2, '0') : '';
       if (!hourKey) return null;
       return {
+        ...item,
         horario,
         hourKey,
-        descricao: item.descricao ? String(item.descricao).trim() : '',
-        responsavel: item.responsavel ? String(item.responsavel).trim() : '',
-        status: item.status ? String(item.status).trim() : '',
-        prescricaoId: item.prescricaoId ? String(item.prescricaoId).trim() : '',
       };
     })
     .filter(Boolean);
@@ -101,58 +98,72 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
     paciente.agenda?.servico ||
     'Internação em andamento';
 
-  const actionButtons = [
-    {
-      label: 'Prescrição Médica',
-      icon: 'fa-file-medical',
-    },
-    {
-      label: 'Ocorrência',
-      icon: 'fa-comment-medical',
-    },
-    {
-      label: 'Peso',
-      icon: 'fa-weight',
-    },
-    {
-      label: 'Parâmetros Clínicos',
-      icon: 'fa-heartbeat',
-    },
-  ]
-    .map(
-      (action) => `
-        <button
-          type="button"
-          class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
-          title="${action.label}"
-          data-quick-action
-        >
-          <i class="text-base fas ${action.icon}"></i>
-          <span>${action.label}</span>
-        </button>
-      `,
-    )
-    .join('');
-
   const overlay = document.createElement('div');
   overlay.id = 'internacao-exec-modal';
   overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4 py-6';
-  const procedimentosMarkup = items.length
-    ? items
-        .map(
-          (item) => `
-            <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
-              <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.descricao || 'Procedimento')}</p>
-              <p class="text-xs text-gray-500">Responsável: ${escapeHtml(item.responsavel || 'Equipe a definir')}</p>
-              <p class="text-xs text-gray-400">Status: ${escapeHtml(item.status || '—')}</p>
+
+  const hasItens = Array.isArray(items) && items.length > 0;
+  const selectorMarkup = hasItens && items.length > 1
+    ? `
+      <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+        Procedimentos (${items.length})
+        <select class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-selector>
+          ${items
+            .map(
+              (item, index) => `
+                <option value="${index}">${escapeHtml(item.descricao || `Procedimento ${index + 1}`)}</option>
+              `,
+            )
+            .join('')}
+        </select>
+      </label>
+    `
+    : '';
+
+  const formMarkup = hasItens
+    ? `
+      <form class="mt-5 flex flex-col gap-5" data-execucao-form>
+        ${selectorMarkup}
+        <input type="hidden" data-execucao-id />
+        <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Procedimento*
+          <textarea rows="2" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[12px] text-gray-600" data-execucao-descricao readonly></textarea>
+        </label>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Situação
+            <select class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] font-medium text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-status>
+              <option value="Agendada">Agendada</option>
+              <option value="Concluída">Concluída</option>
+            </select>
+          </label>
+          <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Programado para
+            <input type="text" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[12px] text-gray-600" data-execucao-programado readonly />
+          </label>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Realizado em*
+            <input type="date" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-data required />
+          </label>
+          <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Hora*
+            <div class="mt-1 flex items-center gap-2">
+              <input type="time" class="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-hora required />
+              <button type="button" class="rounded-lg border border-primary/30 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary transition hover:bg-primary/5" data-execucao-now>Agora</button>
             </div>
-          `,
-        )
-        .join('')
-    : '<p class="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum procedimento registrado para este horário.</p>';
+          </label>
+        </div>
+        <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Observações
+          <textarea rows="3" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-observacoes placeholder="Registrar observações sobre a aplicação"></textarea>
+        </label>
+        <p class="hidden rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700" data-execucao-error></p>
+        <div class="flex flex-col gap-2 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-end">
+          <button type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 transition hover:bg-gray-50" data-close-modal>Cancelar</button>
+          <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90" data-execucao-submit>Salvar</button>
+        </div>
+      </form>
+    `
+    : '<p class="mt-5 rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum procedimento foi encontrado para este horário.</p>';
 
   overlay.innerHTML = `
-    <div class="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
+    <div class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
       <div class="border-b border-gray-100 pb-4">
         <div class="flex items-start justify-between gap-4">
           <div>
@@ -166,13 +177,7 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
           </button>
         </div>
       </div>
-      <div class="mt-4 space-y-3">${procedimentosMarkup}</div>
-      <div class="mt-6 flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
-        ${actionButtons}
-        <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50" data-close-modal>
-          Fechar
-        </button>
-      </div>
+      ${formMarkup}
     </div>
   `;
 
@@ -183,6 +188,125 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
   overlay.querySelectorAll('[data-close-modal]').forEach((btn) => {
     btn.addEventListener('click', closeModal);
   });
+
+  const form = overlay.querySelector('[data-execucao-form]');
+  if (form && hasItens) {
+    const selector = form.querySelector('[data-execucao-selector]');
+    const descricaoField = form.querySelector('[data-execucao-descricao]');
+    const statusField = form.querySelector('[data-execucao-status]');
+    const programadoField = form.querySelector('[data-execucao-programado]');
+    const dataField = form.querySelector('[data-execucao-data]');
+    const horaField = form.querySelector('[data-execucao-hora]');
+    const obsField = form.querySelector('[data-execucao-observacoes]');
+    const idField = form.querySelector('[data-execucao-id]');
+    const errorBox = form.querySelector('[data-execucao-error]');
+    const submitBtn = form.querySelector('[data-execucao-submit]');
+    let selectedIndex = 0;
+
+    const setError = (message) => {
+      if (!errorBox) return;
+      const text = String(message || '').trim();
+      errorBox.textContent = text;
+      errorBox.classList.toggle('hidden', !text);
+    };
+
+    const setLoading = (isLoading) => {
+      if (!submitBtn) return;
+      if (!submitBtn.dataset.defaultLabel) {
+        submitBtn.dataset.defaultLabel = submitBtn.textContent.trim();
+      }
+      submitBtn.disabled = !!isLoading;
+      submitBtn.classList.toggle('opacity-60', !!isLoading);
+      submitBtn.textContent = isLoading ? 'Salvando...' : submitBtn.dataset.defaultLabel;
+    };
+
+    const fillNow = () => {
+      const now = new Date();
+      const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+      dataField.value = local.toISOString().slice(0, 10);
+      horaField.value = local.toISOString().slice(11, 16);
+      statusField.value = 'Concluída';
+    };
+
+    const applyItem = (index) => {
+      const item = items[index];
+      if (!item) return;
+      selectedIndex = index;
+      idField.value = item.id || '';
+      descricaoField.value = item.descricao || item.resumo || 'Procedimento registrado.';
+      statusField.value = item.statusKey === 'concluida' ? 'Concluída' : 'Agendada';
+      programadoField.value = item.programadoLabel || hourLabel || '—';
+      dataField.value = item.realizadoData || item.programadoData || '';
+      horaField.value = item.realizadoHora || item.programadoHora || '';
+      obsField.value = item.observacoes || '';
+      setError('');
+    };
+
+    if (selector) {
+      selector.addEventListener('change', (event) => {
+        const index = Number(event.target.value);
+        if (Number.isFinite(index)) {
+          applyItem(index);
+        }
+      });
+    }
+
+    const nowBtn = form.querySelector('[data-execucao-now]');
+    if (nowBtn) {
+      nowBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        fillNow();
+      });
+    }
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      setError('');
+      const current = items[selectedIndex];
+      if (!current || !current.id) {
+        setError('Não foi possível identificar o procedimento selecionado.');
+        return;
+      }
+      const recordId = paciente.recordId || paciente.id || '';
+      if (!recordId) {
+        setError('Não foi possível identificar a internação deste procedimento.');
+        return;
+      }
+      const realizadoData = (dataField.value || '').trim();
+      const realizadoHora = (horaField.value || '').trim();
+      if (!realizadoData || !realizadoHora) {
+        setError('Preencha a data e a hora de realização antes de salvar.');
+        return;
+      }
+      statusField.value = 'Concluída';
+      const detail = {
+        recordId,
+        execucaoId: current.id,
+        payload: {
+          status: 'Concluída',
+          realizadoData,
+          realizadoHora,
+          observacoes: (obsField.value || '').trim(),
+        },
+        handled: false,
+        close: closeModal,
+        onError: (message) => {
+          setError(message);
+        },
+        onComplete: () => {
+          setLoading(false);
+        },
+      };
+      setLoading(true);
+      window.dispatchEvent(new CustomEvent('internacao:execucao:submit', { detail }));
+      if (!detail.handled) {
+        setLoading(false);
+        setError('Não foi possível enviar a atualização. Tente novamente.');
+      }
+    });
+
+    applyItem(0);
+  }
 
   document.body.appendChild(overlay);
 }
@@ -360,6 +484,7 @@ export function renderMapaExecucao(root, dataset, state = {}) {
     const nome = registro.pet?.nome || (registro.codigo ? `Registro #${registro.codigo}` : 'Paciente');
     return {
       key: registro.filterKey || registro.id || nome,
+      recordId: registro.id || registro._id || registro.filterKey || nome,
       nome,
       boxLabel: registro.box || 'Sem box definido',
       servicoLabel: registro.queixa || registro.diagnostico || 'Internação em andamento',
