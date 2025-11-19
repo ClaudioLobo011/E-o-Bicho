@@ -78,6 +78,97 @@ const formatPrescricaoItem = (entry) => {
   };
 };
 
+const parseNumberValue = (value) => {
+  if (value === undefined || value === null) return null;
+  const text = String(value).replace(',', '.').trim();
+  if (!text) return null;
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const timeStringToMinutes = (value) => {
+  const text = sanitizeText(value);
+  if (!text) return null;
+  const [hourPart = '0', minutePart = '0'] = text.split(':');
+  const hours = Number(hourPart);
+  const minutes = Number(minutePart);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+};
+
+const MINUTES_IN_DAY = 24 * 60;
+
+const minutesToTimeString = (totalMinutes) => {
+  if (!Number.isFinite(totalMinutes)) return '00:00';
+  const normalized = ((Math.floor(totalMinutes) % MINUTES_IN_DAY) + MINUTES_IN_DAY) % MINUTES_IN_DAY;
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+};
+
+const getIntervalInMinutes = (value, unidade) => {
+  const amount = parseNumberValue(value);
+  if (!amount || amount <= 0) return null;
+  const key = normalizeKey(unidade);
+  if (key === 'horas') return amount * 60;
+  if (key === 'dias') return amount * 60 * 24;
+  return null;
+};
+
+const buildExecucaoEntriesFromPrescricao = (payload, autor, resumo, status) => {
+  const startMinutes = timeStringToMinutes(payload.horaInicio);
+  if (startMinutes === null) return [];
+  const freqKey = normalizeKey(payload.frequencia);
+  const baseEntry = (horario) => ({
+    horario,
+    descricao: resumo,
+    responsavel: autor,
+    status,
+  });
+
+  if (freqKey !== 'recorrente') {
+    return [baseEntry(minutesToTimeString(startMinutes))];
+  }
+
+  const intervalo = getIntervalInMinutes(payload.aCadaValor, payload.aCadaUnidade);
+  if (!intervalo) {
+    return [baseEntry(minutesToTimeString(startMinutes))];
+  }
+
+  const porKey = normalizeKey(payload.porUnidade);
+  const porValue = parseNumberValue(payload.porValor);
+  const horarios = [];
+  const MAX_OCCURRENCES = 48;
+
+  const pushHorario = (minutes) => {
+    horarios.push(minutesToTimeString(minutes));
+  };
+
+  if (porKey === 'vezes' && porValue) {
+    const total = Math.max(1, Math.round(porValue));
+    for (let index = 0; index < total && index < MAX_OCCURRENCES; index += 1) {
+      pushHorario(startMinutes + intervalo * index);
+    }
+  } else if ((porKey === 'horas' || porKey === 'dias') && porValue) {
+    const limite = getIntervalInMinutes(porValue, porKey) || intervalo;
+    let occurrence = 0;
+    while (occurrence < MAX_OCCURRENCES) {
+      const currentMinutes = startMinutes + intervalo * occurrence;
+      if (occurrence > 0 && currentMinutes - startMinutes > limite) break;
+      pushHorario(currentMinutes);
+      occurrence += 1;
+    }
+  } else {
+    pushHorario(startMinutes);
+  }
+
+  if (!horarios.length) {
+    pushHorario(startMinutes);
+  }
+
+  return horarios.map((horario) => baseEntry(horario));
+};
+
 const buildPrescricaoPayload = (body = {}) => ({
   tipo: sanitizeText(body.tipo, { fallback: 'procedimento' }),
   frequencia: sanitizeText(body.frequencia, { fallback: 'recorrente' }),
@@ -831,12 +922,10 @@ router.post('/registros/:id/prescricoes', async (req, res) => {
     if (hasHorario) {
       record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
       const status = normalizeKey(payload.frequencia) === 'necessario' ? 'Sob demanda' : 'Agendado';
-      record.execucoes.unshift({
-        horario: payload.horaInicio,
-        descricao: resumo,
-        responsavel: autor,
-        status,
-      });
+      const novasExecucoes = buildExecucaoEntriesFromPrescricao(payload, autor, resumo, status);
+      if (novasExecucoes.length) {
+        record.execucoes.unshift(...novasExecucoes);
+      }
     }
 
     record.historico = Array.isArray(record.historico) ? record.historico : [];
