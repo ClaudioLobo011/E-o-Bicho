@@ -72,10 +72,35 @@ function normalizeExecucaoItems(list) {
     .filter(Boolean);
 }
 
+function formatExecucaoProgramadaLabel(item) {
+  if (!item || typeof item !== 'object') return '—';
+  if (item.programadoLabel) return String(item.programadoLabel).trim() || '—';
+  if (item.programadoISO) return formatDateTime(item.programadoISO);
+  if (item.programadoData && item.programadoHora) {
+    const parts = String(item.programadoData).split('-');
+    if (parts.length === 3) {
+      const [ano, mes, dia] = parts;
+      return `${dia}/${mes}/${ano} às ${item.programadoHora}`;
+    }
+    return `${item.programadoData} às ${item.programadoHora}`;
+  }
+  if (item.programadoData) {
+    const parts = String(item.programadoData).split('-');
+    if (parts.length === 3) {
+      const [ano, mes, dia] = parts;
+      return `${dia}/${mes}/${ano}`;
+    }
+    return String(item.programadoData);
+  }
+  if (item.horario) return String(item.horario);
+  return '—';
+}
+
 function getRiscoBadgeClass(code) {
   const key = String(code || '').toLowerCase();
   return riscoColors[key] || 'bg-gray-100 text-gray-700 ring-1 ring-gray-100';
 }
+
 
 function openExecucaoModal(paciente, hourLabel, items = []) {
   if (!paciente) return;
@@ -98,33 +123,152 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
     paciente.agenda?.servico ||
     'Internação em andamento';
 
+  const actionButtons = [
+    {
+      label: 'Prescrição Médica',
+      icon: 'fa-file-medical',
+    },
+    {
+      label: 'Ocorrência',
+      icon: 'fa-comment-medical',
+    },
+    {
+      label: 'Peso',
+      icon: 'fa-weight',
+    },
+    {
+      label: 'Parâmetros Clínicos',
+      icon: 'fa-heartbeat',
+    },
+  ]
+    .map(
+      (action) => `
+        <button
+          type="button"
+          class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+          title="${action.label}"
+          data-quick-action
+        >
+          <i class="text-base fas ${action.icon}"></i>
+          <span>${action.label}</span>
+        </button>
+      `,
+    )
+    .join('');
+
   const overlay = document.createElement('div');
   overlay.id = 'internacao-exec-modal';
   overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4 py-6';
+  const procedimentosMarkup = items.length
+    ? items
+        .map((item, index) => {
+          const responsavel = item.responsavel || 'Equipe a definir';
+          const status = item.status || 'Agendado';
+          const programado = formatExecucaoProgramadaLabel(item);
+          return `
+            <button
+              type="button"
+              class="group w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-left transition hover:border-primary/50 hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              data-execucao-item
+              data-execucao-index="${index}"
+            >
+              <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.descricao || 'Procedimento')}</p>
+              <p class="text-xs text-gray-500">Responsável: ${escapeHtml(responsavel)}</p>
+              <p class="text-xs text-gray-400">Status: ${escapeHtml(status)} · Programado: ${escapeHtml(programado)}</p>
+              <p class="mt-1 text-[11px] font-semibold uppercase tracking-wide text-primary opacity-0 transition group-hover:opacity-100">Clique para atualizar</p>
+            </button>
+          `;
+        })
+        .join('')
+    : '<p class="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum procedimento registrado para este horário.</p>';
 
-  const hasItens = Array.isArray(items) && items.length > 0;
-  const selectorMarkup = hasItens && items.length > 1
-    ? `
-      <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-        Procedimentos (${items.length})
-        <select class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" data-execucao-selector>
-          ${items
-            .map(
-              (item, index) => `
-                <option value="${index}">${escapeHtml(item.descricao || `Procedimento ${index + 1}`)}</option>
-              `,
-            )
-            .join('')}
-        </select>
-      </label>
-    `
-    : '';
+  overlay.innerHTML = `
+    <div class="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
+      <div class="border-b border-gray-100 pb-4">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-primary">Mapa de execução</p>
+            <h2 class="text-lg font-bold text-gray-900">${escapeHtml(nome)}</h2>
+            <p class="text-sm text-gray-500">${escapeHtml(boxLabel)} · ${escapeHtml(servicoLabel)}</p>
+            <p class="text-xs text-gray-400">Horário: ${hourLabel}</p>
+          </div>
+          <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
+            <i class="fas fa-xmark text-lg"></i>
+          </button>
+        </div>
+      </div>
+      <div class="mt-4 space-y-3">${procedimentosMarkup}</div>
+      <div class="mt-6 flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
+        ${actionButtons}
+        <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50" data-close-modal>
+          Fechar
+        </button>
+      </div>
+    </div>
+  `;
 
-  const formMarkup = hasItens
-    ? `
+  const closeModal = () => overlay.remove();
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) closeModal();
+  });
+  overlay.querySelectorAll('[data-close-modal]').forEach((btn) => {
+    btn.addEventListener('click', closeModal);
+  });
+
+  overlay.querySelectorAll('[data-execucao-item]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const index = Number(btn.dataset.execucaoIndex);
+      if (!Number.isFinite(index)) return;
+      const current = items[index];
+      if (!current) return;
+      openExecucaoDetalheModal(paciente, current);
+    });
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function openExecucaoDetalheModal(paciente, item) {
+  if (!paciente || !item) return;
+
+  const existing = document.getElementById('internacao-exec-detalhe-modal');
+  if (existing) existing.remove();
+
+  const nome = paciente.nome || paciente.pet?.nome || 'Paciente';
+  const boxLabel =
+    paciente.boxLabel ||
+    paciente.box ||
+    paciente.internacao?.box ||
+    paciente.registro?.box ||
+    'Sem box definido';
+  const servicoLabel =
+    paciente.servicoLabel ||
+    paciente.servico ||
+    paciente.registro?.queixa ||
+    paciente.registro?.diagnostico ||
+    paciente.agenda?.servico ||
+    'Internação em andamento';
+  const programadoLabel = formatExecucaoProgramadaLabel(item);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'internacao-exec-detalhe-modal';
+  overlay.className = 'fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 px-4 py-6';
+  overlay.innerHTML = `
+    <div class="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
+      <div class="border-b border-gray-100 pb-4">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-primary">Atualizar procedimento</p>
+            <h2 class="text-lg font-bold text-gray-900">${escapeHtml(nome)}</h2>
+            <p class="text-sm text-gray-500">${escapeHtml(boxLabel)} · ${escapeHtml(servicoLabel)}</p>
+            <p class="text-xs text-gray-400">Programado para ${escapeHtml(programadoLabel)}</p>
+          </div>
+          <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
+            <i class="fas fa-xmark text-lg"></i>
+          </button>
+        </div>
+      </div>
       <form class="mt-5 flex flex-col gap-5" data-execucao-form>
-        ${selectorMarkup}
-        <input type="hidden" data-execucao-id />
         <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Procedimento*
           <textarea rows="2" class="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[12px] text-gray-600" data-execucao-descricao readonly></textarea>
         </label>
@@ -159,25 +303,6 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
           <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-primary/90" data-execucao-submit>Salvar</button>
         </div>
       </form>
-    `
-    : '<p class="mt-5 rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum procedimento foi encontrado para este horário.</p>';
-
-  overlay.innerHTML = `
-    <div class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
-      <div class="border-b border-gray-100 pb-4">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-primary">Mapa de execução</p>
-            <h2 class="text-lg font-bold text-gray-900">${escapeHtml(nome)}</h2>
-            <p class="text-sm text-gray-500">${escapeHtml(boxLabel)} · ${escapeHtml(servicoLabel)}</p>
-            <p class="text-xs text-gray-400">Horário: ${hourLabel}</p>
-          </div>
-          <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" data-close-modal>
-            <i class="fas fa-xmark text-lg"></i>
-          </button>
-        </div>
-      </div>
-      ${formMarkup}
     </div>
   `;
 
@@ -190,18 +315,34 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
   });
 
   const form = overlay.querySelector('[data-execucao-form]');
-  if (form && hasItens) {
-    const selector = form.querySelector('[data-execucao-selector]');
+  if (form) {
     const descricaoField = form.querySelector('[data-execucao-descricao]');
     const statusField = form.querySelector('[data-execucao-status]');
     const programadoField = form.querySelector('[data-execucao-programado]');
     const dataField = form.querySelector('[data-execucao-data]');
     const horaField = form.querySelector('[data-execucao-hora]');
     const obsField = form.querySelector('[data-execucao-observacoes]');
-    const idField = form.querySelector('[data-execucao-id]');
     const errorBox = form.querySelector('[data-execucao-error]');
     const submitBtn = form.querySelector('[data-execucao-submit]');
-    let selectedIndex = 0;
+
+    if (descricaoField) {
+      descricaoField.value = item.descricao || item.resumo || 'Procedimento registrado.';
+    }
+    if (statusField) {
+      statusField.value = item.status && /conclu/i.test(item.status) ? 'Concluída' : 'Agendada';
+    }
+    if (programadoField) {
+      programadoField.value = programadoLabel;
+    }
+    if (dataField) {
+      dataField.value = item.realizadoData || item.programadoData || (item.realizadoISO ? item.realizadoISO.slice(0, 10) : '');
+    }
+    if (horaField) {
+      horaField.value = item.realizadoHora || item.programadoHora || (item.realizadoISO ? item.realizadoISO.slice(11, 16) : '');
+    }
+    if (obsField) {
+      obsField.value = item.observacoes || '';
+    }
 
     const setError = (message) => {
       if (!errorBox) return;
@@ -223,33 +364,16 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
     const fillNow = () => {
       const now = new Date();
       const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-      dataField.value = local.toISOString().slice(0, 10);
-      horaField.value = local.toISOString().slice(11, 16);
-      statusField.value = 'Concluída';
+      if (dataField) {
+        dataField.value = local.toISOString().slice(0, 10);
+      }
+      if (horaField) {
+        horaField.value = local.toISOString().slice(11, 16);
+      }
+      if (statusField) {
+        statusField.value = 'Concluída';
+      }
     };
-
-    const applyItem = (index) => {
-      const item = items[index];
-      if (!item) return;
-      selectedIndex = index;
-      idField.value = item.id || '';
-      descricaoField.value = item.descricao || item.resumo || 'Procedimento registrado.';
-      statusField.value = item.statusKey === 'concluida' ? 'Concluída' : 'Agendada';
-      programadoField.value = item.programadoLabel || hourLabel || '—';
-      dataField.value = item.realizadoData || item.programadoData || '';
-      horaField.value = item.realizadoHora || item.programadoHora || '';
-      obsField.value = item.observacoes || '';
-      setError('');
-    };
-
-    if (selector) {
-      selector.addEventListener('change', (event) => {
-        const index = Number(event.target.value);
-        if (Number.isFinite(index)) {
-          applyItem(index);
-        }
-      });
-    }
 
     const nowBtn = form.querySelector('[data-execucao-now]');
     if (nowBtn) {
@@ -262,31 +386,32 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       setError('');
-      const current = items[selectedIndex];
-      if (!current || !current.id) {
-        setError('Não foi possível identificar o procedimento selecionado.');
-        return;
-      }
       const recordId = paciente.recordId || paciente.id || '';
       if (!recordId) {
         setError('Não foi possível identificar a internação deste procedimento.');
         return;
       }
-      const realizadoData = (dataField.value || '').trim();
-      const realizadoHora = (horaField.value || '').trim();
+      if (!item.id) {
+        setError('Não foi possível identificar o procedimento selecionado.');
+        return;
+      }
+      const realizadoData = (dataField?.value || '').trim();
+      const realizadoHora = (horaField?.value || '').trim();
       if (!realizadoData || !realizadoHora) {
         setError('Preencha a data e a hora de realização antes de salvar.');
         return;
       }
-      statusField.value = 'Concluída';
+      if (statusField) {
+        statusField.value = 'Concluída';
+      }
       const detail = {
         recordId,
-        execucaoId: current.id,
+        execucaoId: item.id,
         payload: {
           status: 'Concluída',
           realizadoData,
           realizadoHora,
-          observacoes: (obsField.value || '').trim(),
+          observacoes: (obsField?.value || '').trim(),
         },
         handled: false,
         close: closeModal,
@@ -304,12 +429,11 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
         setError('Não foi possível enviar a atualização. Tente novamente.');
       }
     });
-
-    applyItem(0);
   }
 
   document.body.appendChild(overlay);
 }
+
 
 function attachExecucaoModalHandlers(root, pacientes = []) {
   const map = new Map();
