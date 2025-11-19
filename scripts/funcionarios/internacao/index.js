@@ -3951,7 +3951,7 @@ function openPrescricaoModal(record, options = {}) {
   }
 }
 
-function handlePrescricaoModalSubmit(event) {
+async function handlePrescricaoModalSubmit(event) {
   event.preventDefault();
   setPrescricaoModalError('');
   if (!prescricaoModal.form) return;
@@ -4051,28 +4051,46 @@ function handlePrescricaoModalSubmit(event) {
   const payload = {
     ...values,
     resumo,
-    criadoEm: new Date().toISOString(),
   };
-  const normalizedItem = normalizePrescricaoItem(payload);
   const record = prescricaoModal.record;
-  if (!record) {
+  if (!record || !record.id) {
     setPrescricaoModalError('Não foi possível identificar a internação.');
     return;
   }
-  const currentList = Array.isArray(record.prescricoes) ? record.prescricoes : [];
-  const nextList = [normalizedItem, ...currentList];
-  const updatedRecord = { ...record, prescricoes: nextList };
-  prescricaoModal.record = updatedRecord;
-  const datasetRef = prescricaoModal.dataset || getDataset();
-  const stateRef = prescricaoModal.state || {};
-  applyInternacaoRecordUpdate(updatedRecord, datasetRef, stateRef);
-  if (fichaInternacaoModal.record && fichaInternacaoModal.record.id === updatedRecord.id) {
-    fichaInternacaoModal.record = updatedRecord;
-    fillFichaInternacaoModal(updatedRecord);
-    setFichaModalTab('prescricao');
+  try {
+    setPrescricaoModalLoading(true);
+    const updatedRecord = await requestJson(`/internacao/registros/${encodeURIComponent(record.id)}/prescricoes`, {
+      method: 'POST',
+      body: payload,
+    });
+    const normalized = normalizeInternacaoRecord(updatedRecord);
+    if (!normalized) {
+      throw new Error('Não foi possível interpretar a resposta do servidor.');
+    }
+    prescricaoModal.record = normalized;
+    const datasetRef = prescricaoModal.dataset || getDataset();
+    const stateRef = prescricaoModal.state || {};
+    applyInternacaoRecordUpdate(normalized, datasetRef, stateRef);
+    const fichaRecord = fichaInternacaoModal.record;
+    if (fichaRecord) {
+      const sameRecord =
+        fichaRecord.id === normalized.id ||
+        fichaRecord.filterKey === normalized.filterKey ||
+        (normalized.codigo !== null && fichaRecord.codigo === normalized.codigo);
+      if (sameRecord) {
+        fichaInternacaoModal.record = normalized;
+        fillFichaInternacaoModal(normalized);
+        setFichaModalTab('prescricao');
+      }
+    }
+    closePrescricaoModal();
+    showToastMessage('Prescrição registrada com sucesso!', 'success');
+  } catch (error) {
+    console.error('internacao: falha ao salvar prescricao', error);
+    setPrescricaoModalError(error.message || 'Não foi possível salvar a prescrição.');
+  } finally {
+    setPrescricaoModalLoading(false);
   }
-  closePrescricaoModal();
-  showToastMessage('Prescrição registrada localmente. Integração definitiva em desenvolvimento.', 'success');
 }
 
 function fillFichaInternacaoModal(record) {

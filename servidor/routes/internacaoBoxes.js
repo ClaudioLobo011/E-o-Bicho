@@ -23,6 +23,147 @@ const sanitizeArray = (value) => {
   return text ? [text] : [];
 };
 
+const normalizeKey = (value) =>
+  sanitizeText(value)
+    .normalize('NFD')
+    .replace(/[^\p{L}\p{N}]/gu, '')
+    .toLowerCase();
+
+const formatExecucaoItem = (entry) => {
+  if (!entry) return null;
+  const plain = typeof entry.toObject === 'function' ? entry.toObject() : entry;
+  const horario = sanitizeText(plain.horario);
+  if (!horario) return null;
+  return {
+    horario,
+    descricao: sanitizeText(plain.descricao),
+    responsavel: sanitizeText(plain.responsavel),
+    status: sanitizeText(plain.status, { fallback: 'Agendado' }),
+  };
+};
+
+const formatPrescricaoItem = (entry) => {
+  if (!entry) return null;
+  const plain = typeof entry.toObject === 'function' ? entry.toObject() : entry;
+  const descricao = sanitizeText(plain.descricao) || sanitizeText(plain.fluidFluido);
+  const tipo = sanitizeText(plain.tipo, { fallback: 'procedimento' });
+  const frequencia = sanitizeText(plain.frequencia, { fallback: 'recorrente' });
+  return {
+    id: String(plain._id || plain.id || plain.criadoEm || Date.now()).trim(),
+    tipo,
+    frequencia,
+    descricao,
+    resumo: sanitizeText(plain.resumo, { fallback: 'Prescrição registrada.' }),
+    aCadaValor: sanitizeText(plain.aCadaValor),
+    aCadaUnidade: sanitizeText(plain.aCadaUnidade),
+    porValor: sanitizeText(plain.porValor),
+    porUnidade: sanitizeText(plain.porUnidade),
+    dataInicio: sanitizeText(plain.dataInicio),
+    horaInicio: sanitizeText(plain.horaInicio),
+    medUnidade: sanitizeText(plain.medUnidade),
+    medDose: sanitizeText(plain.medDose),
+    medVia: sanitizeText(plain.medVia),
+    medPeso: sanitizeText(plain.medPeso),
+    medPesoAtualizadoEm: sanitizeText(plain.medPesoAtualizadoEm),
+    fluidFluido: sanitizeText(plain.fluidFluido),
+    fluidEquipo: sanitizeText(plain.fluidEquipo),
+    fluidUnidade: sanitizeText(plain.fluidUnidade),
+    fluidDose: sanitizeText(plain.fluidDose),
+    fluidVia: sanitizeText(plain.fluidVia),
+    fluidVelocidadeValor: sanitizeText(plain.fluidVelocidadeValor),
+    fluidVelocidadeUnidade: sanitizeText(plain.fluidVelocidadeUnidade),
+    fluidSuplemento: sanitizeText(plain.fluidSuplemento, { fallback: 'Sem suplemento' }),
+    criadoPor: sanitizeText(plain.criadoPor, { fallback: 'Sistema' }),
+    criadoEm: plain.criadoEm || plain.createdAt || null,
+  };
+};
+
+const buildPrescricaoPayload = (body = {}) => ({
+  tipo: sanitizeText(body.tipo, { fallback: 'procedimento' }),
+  frequencia: sanitizeText(body.frequencia, { fallback: 'recorrente' }),
+  descricao: sanitizeText(body.descricao),
+  resumo: sanitizeText(body.resumo),
+  aCadaValor: sanitizeText(body.aCadaValor),
+  aCadaUnidade: sanitizeText(body.aCadaUnidade),
+  porValor: sanitizeText(body.porValor),
+  porUnidade: sanitizeText(body.porUnidade),
+  dataInicio: sanitizeText(body.dataInicio),
+  horaInicio: sanitizeText(body.horaInicio),
+  medUnidade: sanitizeText(body.medUnidade),
+  medDose: sanitizeText(body.medDose),
+  medVia: sanitizeText(body.medVia),
+  medPeso: sanitizeText(body.medPeso),
+  medPesoAtualizadoEm: sanitizeText(body.medPesoAtualizadoEm),
+  fluidFluido: sanitizeText(body.fluidFluido),
+  fluidEquipo: sanitizeText(body.fluidEquipo),
+  fluidUnidade: sanitizeText(body.fluidUnidade),
+  fluidDose: sanitizeText(body.fluidDose),
+  fluidVia: sanitizeText(body.fluidVia),
+  fluidVelocidadeValor: sanitizeText(body.fluidVelocidadeValor),
+  fluidVelocidadeUnidade: sanitizeText(body.fluidVelocidadeUnidade),
+  fluidSuplemento: sanitizeText(body.fluidSuplemento),
+});
+
+const ensurePrescricaoPayload = (payload = {}) => {
+  if (!payload.tipo) {
+    throw new Error('Selecione o tipo da prescrição.');
+  }
+  if (!payload.frequencia) {
+    throw new Error('Informe a frequência da aplicação.');
+  }
+  const freqKey = normalizeKey(payload.frequencia);
+  if (freqKey === 'recorrente') {
+    if (!payload.aCadaValor || !payload.aCadaUnidade) {
+      throw new Error('Preencha o intervalo "A cada" e sua unidade.');
+    }
+    if (!payload.porValor || !payload.porUnidade) {
+      throw new Error('Informe o campo "Por" e sua unidade.');
+    }
+    if (!payload.dataInicio || !payload.horaInicio) {
+      throw new Error('Defina data e hora de início para prescrições recorrentes.');
+    }
+  } else if (freqKey === 'unica') {
+    if (!payload.dataInicio || !payload.horaInicio) {
+      throw new Error('Defina data e hora para aplicação única.');
+    }
+  }
+  if (!payload.descricao && !payload.fluidFluido) {
+    throw new Error('Descreva o procedimento ou medicamento.');
+  }
+  const tipoKey = normalizeKey(payload.tipo);
+  if (tipoKey === 'medicamento') {
+    if (!payload.medUnidade) {
+      throw new Error('Selecione a unidade do medicamento.');
+    }
+    if (!payload.medDose) {
+      throw new Error('Informe a dose do medicamento.');
+    }
+    if (!payload.medVia) {
+      throw new Error('Selecione a via do medicamento.');
+    }
+  }
+  if (tipoKey === 'fluidoterapia') {
+    if (!payload.fluidFluido) {
+      throw new Error('Informe o fluído da prescrição.');
+    }
+    if (!payload.fluidEquipo) {
+      throw new Error('Informe o equipo da fluidoterapia.');
+    }
+    if (!payload.fluidUnidade) {
+      throw new Error('Informe a unidade do fluído.');
+    }
+    if (!payload.fluidDose) {
+      throw new Error('Informe a dose do fluído.');
+    }
+    if (!payload.fluidVia) {
+      throw new Error('Informe a via de administração do fluído.');
+    }
+    if (!payload.fluidVelocidadeValor || !payload.fluidVelocidadeUnidade) {
+      throw new Error('Informe a velocidade da fluidoterapia.');
+    }
+  }
+};
+
 const formatHistoricoItem = (entry) => {
   if (!entry) return null;
   const plain = typeof entry.toObject === 'function' ? entry.toObject() : entry;
@@ -174,6 +315,19 @@ const formatRegistro = (doc) => {
           return bTime - aTime;
         })
     : [];
+  const execucoes = Array.isArray(plain.execucoes)
+    ? plain.execucoes.map(formatExecucaoItem).filter(Boolean)
+    : [];
+  const prescricoes = Array.isArray(plain.prescricoes)
+    ? plain.prescricoes
+        .map(formatPrescricaoItem)
+        .filter(Boolean)
+        .sort((a, b) => {
+          const aTime = new Date(a.criadoEm || 0).getTime();
+          const bTime = new Date(b.criadoEm || 0).getTime();
+          return bTime - aTime;
+        })
+    : [];
   return {
     id: String(plain._id || plain.id || '').trim(),
     codigo: plain.codigo || null,
@@ -218,6 +372,8 @@ const formatRegistro = (doc) => {
     createdAt: plain.createdAt || null,
     updatedAt: plain.updatedAt || null,
     historico,
+    execucoes,
+    prescricoes,
   };
 };
 
@@ -627,6 +783,102 @@ router.post('/registros/:id/box', async (req, res) => {
       return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar.' });
     }
     return res.status(500).json({ message: 'Não foi possível atualizar o box do paciente.' });
+  }
+});
+
+router.post('/registros/:id/prescricoes', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Informe a internação que deseja atualizar.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.obitoRegistrado || normalizeKey(record.situacaoCodigo) === 'obito') {
+      return res.status(409).json({ message: 'Não é possível registrar prescrições após o óbito.' });
+    }
+
+    if (record.cancelado || normalizeKey(record.situacaoCodigo) === 'cancelado') {
+      return res.status(409).json({ message: 'Essa internação está cancelada e não permite novas prescrições.' });
+    }
+
+    const payload = buildPrescricaoPayload(req.body);
+    try {
+      ensurePrescricaoPayload(payload);
+    } catch (validationError) {
+      return res.status(400).json({ message: validationError.message || 'Revise os dados informados.' });
+    }
+
+    const autor = req.user?.email || 'Sistema';
+    const now = new Date();
+    const resumo = payload.resumo || payload.descricao || payload.fluidFluido || 'Prescrição registrada.';
+
+    const storedPrescricao = {
+      ...payload,
+      resumo,
+      criadoPor: autor,
+      criadoEm: now,
+    };
+
+    record.prescricoes = Array.isArray(record.prescricoes) ? record.prescricoes : [];
+    record.prescricoes.unshift(storedPrescricao);
+
+    const hasHorario = Boolean(payload.horaInicio);
+    if (hasHorario) {
+      record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
+      const status = normalizeKey(payload.frequencia) === 'necessario' ? 'Sob demanda' : 'Agendado';
+      record.execucoes.unshift({
+        horario: payload.horaInicio,
+        descricao: resumo,
+        responsavel: autor,
+        status,
+      });
+    }
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    const historicoDescricao = [
+      payload.descricao ? `Prescrição: ${payload.descricao}.` : '',
+      payload.dataInicio ? `Início previsto: ${payload.dataInicio}${payload.horaInicio ? ` às ${payload.horaInicio}` : ''}.` : '',
+      resumo ? `Resumo: ${resumo}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    record.historico.unshift({
+      tipo: 'Prescrição',
+      descricao: historicoDescricao || 'Nova prescrição registrada.',
+      criadoPor: autor,
+      criadoEm: now,
+    });
+
+    await record.save();
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    const formatted = formatRegistro(updated);
+    if (!formatted) {
+      return res.status(500).json({ message: 'Não foi possível atualizar a ficha com a nova prescrição.' });
+    }
+
+    const io = req.app?.get('socketio');
+    if (io && formatted.id) {
+      const room = `vet:ficha:${formatted.id}`;
+      io.to(room).emit('vet:ficha:update', {
+        room,
+        timestamp: Date.now(),
+        payload: { registro: formatted },
+      });
+    }
+
+    return res.status(201).json(formatted);
+  } catch (error) {
+    console.error('internacao: falha ao registrar prescricao', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar.' });
+    }
+    return res.status(500).json({ message: 'Não foi possível registrar a prescrição.' });
   }
 });
 
