@@ -20,7 +20,8 @@ function getLocalISODate(dateInput = new Date()) {
 
 function formatMapaDateLabel(isoDate) {
   if (!isoDate) return 'Data não informada';
-  const date = new Date(isoDate);
+  const match = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const date = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date(isoDate);
   if (Number.isNaN(date.getTime())) return isoDate;
   return date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
 }
@@ -71,17 +72,19 @@ function buildEmptyState(message) {
 
 function resolveExecucaoDayKey(item, fallbackDate) {
   if (!item || typeof item !== 'object') return fallbackDate || getLocalISODate();
-  const normalizeISODate = (value) => {
+  const normalizeDateKey = (value) => {
     if (!value) return '';
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '';
     return getLocalISODate(date);
   };
   return (
-    (typeof item.programadoData === 'string' && item.programadoData.trim()) ||
-    normalizeISODate(item.programadoEm) ||
-    (typeof item.realizadoData === 'string' && item.realizadoData.trim()) ||
-    normalizeISODate(item.realizadoEm) ||
+    normalizeDateKey(item.programadoData) ||
+    normalizeDateKey(item.programadoEm) ||
+    normalizeDateKey(item.realizadoData) ||
+    normalizeDateKey(item.realizadoEm) ||
     fallbackDate ||
     getLocalISODate()
   );

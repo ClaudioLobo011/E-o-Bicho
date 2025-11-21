@@ -400,18 +400,20 @@ function buildExecucaoProgramadoLabel(programadoEm, programadoData, programadoHo
 }
 
 function resolveExecucaoDayKey(programadoData, programadoEm, realizadoData, realizadoEm) {
-  const normalizeISODate = (value) => {
+  const normalizeDateKey = (value) => {
     if (!value) return '';
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '';
     return getLocalDateInputValue(date);
   };
 
   return (
-    programadoData ||
-    normalizeISODate(programadoEm) ||
-    realizadoData ||
-    normalizeISODate(realizadoEm) ||
+    normalizeDateKey(programadoData) ||
+    normalizeDateKey(programadoEm) ||
+    normalizeDateKey(realizadoData) ||
+    normalizeDateKey(realizadoEm) ||
     getLocalDateInputValue()
   );
 }
