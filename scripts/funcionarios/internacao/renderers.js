@@ -764,18 +764,18 @@ export function renderMapaExecucao(root, dataset, state = {}) {
   root.innerHTML = `
     <div class="space-y-5">
       <div class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
-        <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="flex flex-wrap items-start gap-4">
           <div>
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Pet | Horário</p>
             <h2 class="text-xl font-bold text-gray-900">Mapa de execução</h2>
             <p class="text-sm text-gray-500">Clique no círculo para ver ou registrar os procedimentos daquele horário.</p>
           </div>
-          <div class="flex flex-col items-end gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <div class="flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-center sm:gap-4">
             <div class="flex items-center gap-3 text-xs text-gray-500">
               <span class="inline-flex items-center gap-2"><span class="inline-flex h-3 w-3 rounded-full bg-primary/70"></span>Círculo = quantidade</span>
               <span class="inline-flex items-center gap-2"><span class="h-4 w-4 rounded-full border border-dashed border-gray-300"></span>Sem ações</span>
             </div>
-            <div class="flex items-center gap-2" data-mapa-dia-selector>
+            <div class="mx-auto flex items-center gap-3 sm:gap-4" data-mapa-dia-selector>
               <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-prev aria-label="Dia anterior">
                 <i class="fas fa-chevron-left"></i>
               </button>
