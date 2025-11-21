@@ -688,7 +688,7 @@ export function renderMapaExecucao(root, dataset, state = {}) {
 
   const pacientes = filtrados.map((registro) => {
     const nome = registro.pet?.nome || (registro.codigo ? `Registro #${registro.codigo}` : 'Paciente');
-    const execucoesDoDia = normalizeExecucaoItems(registro.execucoes, selectedDate).filter(
+    const execucoesDoDia = normalizeExecucaoItems(registro.execucoes).filter(
       (item) => item.dayKey === selectedDate,
     );
     return {
