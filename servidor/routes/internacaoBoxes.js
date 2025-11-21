@@ -51,6 +51,28 @@ const isExecucaoConcluida = (status) => {
   return finishedStatuses.includes(key);
 };
 
+const isExecucaoPendente = (execucao) => {
+  const statusTexto =
+    execucao?.status?.descricao ||
+    execucao?.status?.label ||
+    execucao?.status ||
+    execucao?.situacao ||
+    execucao?.situacaoCodigo ||
+    execucao?.statusCodigo;
+  const statusKey = normalizeKey(statusTexto);
+  if (!statusKey) return true;
+  if (isExecucaoConcluida(statusKey)) return false;
+  if (
+    statusKey.includes('agend') ||
+    statusKey.includes('pend') ||
+    statusKey.includes('program') ||
+    statusKey.includes('demanda')
+  ) {
+    return true;
+  }
+  return !isExecucaoConcluida(statusTexto);
+};
+
 const removeExecucoesFromPrescricao = (
   record,
   prescricaoId,
@@ -74,7 +96,7 @@ const removeExecucoesFromPrescricao = (
       removed += 1;
       return false;
     }
-    const pendente = !isExecucaoConcluida(execucao?.status);
+    const pendente = isExecucaoPendente(execucao);
     if (pendente) {
       removed += 1;
       return false;
