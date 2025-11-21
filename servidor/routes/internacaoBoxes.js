@@ -51,16 +51,24 @@ const isExecucaoConcluida = (status) => {
   return finishedStatuses.includes(key);
 };
 
-const removeExecucoesFromPrescricao = (record, prescricaoId, { pendingOnly = false } = {}) => {
+const removeExecucoesFromPrescricao = (
+  record,
+  prescricaoId,
+  { pendingOnly = false, prescricao = null } = {},
+) => {
   if (!record || !Array.isArray(record.execucoes) || !record.execucoes.length) {
     record.execucoes = [];
     return 0;
   }
   const targetId = sanitizeText(prescricaoId);
-  if (!targetId) return 0;
+  const prescricaoKey = normalizeKey(prescricao?.descricao || prescricao?.resumo);
+  if (!targetId && !prescricaoKey) return 0;
   let removed = 0;
   record.execucoes = record.execucoes.filter((execucao) => {
-    const samePrescricao = sanitizeText(execucao?.prescricaoId) === targetId;
+    const execucaoId = sanitizeText(execucao?.prescricaoId);
+    const samePrescricao =
+      (targetId && execucaoId && execucaoId === targetId) ||
+      (!execucaoId && prescricaoKey && prescricaoKey === normalizeKey(execucao?.descricao));
     if (!samePrescricao) return true;
     if (!pendingOnly) {
       removed += 1;
@@ -1163,7 +1171,10 @@ router.post('/registros/:id/prescricoes/:prescricaoId/interromper', async (req, 
     }
 
     record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
-    const removidos = removeExecucoesFromPrescricao(record, prescricaoId, { pendingOnly: true });
+    const removidos = removeExecucoesFromPrescricao(record, prescricaoId, {
+      pendingOnly: true,
+      prescricao,
+    });
 
     record.historico = Array.isArray(record.historico) ? record.historico : [];
     const resumoPrescricao = sanitizeText(prescricao.descricao) || sanitizeText(prescricao.resumo) || 'Prescrição';
@@ -1229,7 +1240,10 @@ router.post('/registros/:id/prescricoes/:prescricaoId/excluir', async (req, res)
     }
 
     record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
-    const execucoesRemovidas = removeExecucoesFromPrescricao(record, prescricaoId, { pendingOnly: false });
+    const execucoesRemovidas = removeExecucoesFromPrescricao(record, prescricaoId, {
+      pendingOnly: false,
+      prescricao: removida,
+    });
 
     record.historico = Array.isArray(record.historico) ? record.historico : [];
     const resumoPrescricao = sanitizeText(removida.descricao) || sanitizeText(removida.resumo) || 'Prescrição';
