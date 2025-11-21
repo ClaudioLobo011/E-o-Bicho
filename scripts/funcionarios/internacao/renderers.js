@@ -779,7 +779,7 @@ export function renderMapaExecucao(root, dataset, state = {}) {
               <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-prev aria-label="Dia anterior">
                 <i class="fas fa-chevron-left"></i>
               </button>
-              <div class="min-w-[190px] rounded-lg bg-gray-50 px-3 py-2 text-center text-sm font-semibold text-gray-800" data-mapa-dia-label>
+              <div class="w-[220px] truncate rounded-lg bg-gray-50 px-3 py-2 text-center text-sm font-semibold text-gray-800" data-mapa-dia-label>
                 ${escapeHtml(formatMapaDateLabel(selectedDate))}
               </div>
               <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-next aria-label="Próximo dia">
