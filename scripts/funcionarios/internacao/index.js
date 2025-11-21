@@ -4775,15 +4775,29 @@ function setupMapaPage(dataset, state, render, fetchInternacoes) {
     return Promise.resolve([]);
   };
 
+  const parseLocalDate = (value) => {
+    if (!value) return null;
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+      const parsed = new Date(year, month - 1, day);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
   const shiftMapaDate = (delta) => {
     const current = state.execucaoData || getLocalDateInputValue();
-    const base = new Date(current);
-    if (Number.isNaN(base.getTime())) {
+    const base = parseLocalDate(current) || parseLocalDate(getLocalDateInputValue());
+    if (!base) {
       state.execucaoData = getLocalDateInputValue();
-    } else {
-      base.setDate(base.getDate() + delta);
-      state.execucaoData = getLocalDateInputValue(base);
+      if (typeof render === 'function') render();
+      return;
     }
+
+    base.setDate(base.getDate() + delta);
+    state.execucaoData = getLocalDateInputValue(base);
     if (typeof render === 'function') {
       render();
     }
