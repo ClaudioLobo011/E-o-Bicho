@@ -101,6 +101,33 @@ function getRiscoBadgeClass(code) {
   return riscoColors[key] || 'bg-gray-100 text-gray-700 ring-1 ring-gray-100';
 }
 
+function ensureOverlayOnTop(modal) {
+  if (!modal || typeof document === 'undefined') return;
+
+  const adjust = () => {
+    try {
+      const all = Array.from(document.querySelectorAll('body *'));
+      const overlays = all.filter((element) => {
+        const style = getComputedStyle(element);
+        if (style.position !== 'fixed') return false;
+        const rect = element.getBoundingClientRect();
+        return rect.width >= window.innerWidth * 0.95 && rect.height >= window.innerHeight * 0.95;
+      });
+      const overlay = modal || overlays.at(-1);
+      if (overlay) {
+        overlay.style.zIndex = '9999';
+        overlay.style.pointerEvents = 'auto';
+      }
+    } catch (_) {}
+  };
+
+  if (typeof window !== 'undefined') {
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(adjust);
+    }
+    setTimeout(adjust, 0);
+  }
+}
 
 function openExecucaoModal(paciente, hourLabel, items = []) {
   if (!paciente) return;
@@ -234,6 +261,16 @@ function openExecucaoDetalheModal(paciente, item) {
   const existing = document.getElementById('internacao-exec-detalhe-modal');
   if (existing) existing.remove();
 
+  const parentOverlay = document.getElementById('internacao-exec-modal');
+  let prevVisibility;
+  let prevPointerEvents;
+  if (parentOverlay) {
+    prevVisibility = parentOverlay.style.visibility;
+    prevPointerEvents = parentOverlay.style.pointerEvents;
+    parentOverlay.style.visibility = 'hidden';
+    parentOverlay.style.pointerEvents = 'none';
+  }
+
   const nome = paciente.nome || paciente.pet?.nome || 'Paciente';
   const boxLabel =
     paciente.boxLabel ||
@@ -306,7 +343,14 @@ function openExecucaoDetalheModal(paciente, item) {
     </div>
   `;
 
-  const closeModal = () => overlay.remove();
+  const closeModal = () => {
+    overlay.remove();
+    if (parentOverlay) {
+      parentOverlay.style.visibility = prevVisibility || '';
+      parentOverlay.style.pointerEvents = prevPointerEvents || '';
+      ensureOverlayOnTop(parentOverlay);
+    }
+  };
   overlay.addEventListener('click', (event) => {
     if (event.target === overlay) closeModal();
   });
@@ -432,6 +476,7 @@ function openExecucaoDetalheModal(paciente, item) {
   }
 
   document.body.appendChild(overlay);
+  ensureOverlayOnTop(overlay);
 }
 
 
