@@ -106,8 +106,18 @@ const pullPrescricaoById = (record, prescricaoId) => {
   if (typeof record.prescricoes.id === 'function') {
     const doc = record.prescricoes.id(targetId);
     if (doc) {
-      removed = doc.toObject();
-      doc.remove();
+      removed = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+      if (typeof doc.remove === 'function') {
+        doc.remove();
+      } else if (typeof doc.deleteOne === 'function') {
+        doc.deleteOne();
+      } else if (typeof record.prescricoes.pull === 'function') {
+        record.prescricoes.pull(doc._id || doc.id || targetId);
+      } else {
+        record.prescricoes = record.prescricoes.filter(
+          (item) => sanitizeText(item?._id || item?.id) !== targetId,
+        );
+      }
       return removed;
     }
   }
