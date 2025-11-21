@@ -23,6 +23,385 @@ const sanitizeArray = (value) => {
   return text ? [text] : [];
 };
 
+const normalizeKey = (value) =>
+  sanitizeText(value)
+    .normalize('NFD')
+    .replace(/[^\p{L}\p{N}]/gu, '')
+    .toLowerCase();
+
+const isExecucaoConcluida = (status) => {
+  const key = normalizeKey(status);
+  if (!key) return false;
+  const finishedStatuses = [
+    'executado',
+    'executada',
+    'realizado',
+    'realizada',
+    'concluido',
+    'concluida',
+    'finalizado',
+    'finalizada',
+    'aplicado',
+    'aplicada',
+    'administrado',
+    'administrada',
+    'feito',
+    'feita',
+  ];
+  return finishedStatuses.includes(key);
+};
+
+const removeExecucoesFromPrescricao = (record, prescricaoId, { pendingOnly = false } = {}) => {
+  if (!record || !Array.isArray(record.execucoes) || !record.execucoes.length) {
+    record.execucoes = [];
+    return 0;
+  }
+  const targetId = sanitizeText(prescricaoId);
+  if (!targetId) return 0;
+  let removed = 0;
+  record.execucoes = record.execucoes.filter((execucao) => {
+    const samePrescricao = sanitizeText(execucao?.prescricaoId) === targetId;
+    if (!samePrescricao) return true;
+    if (!pendingOnly) {
+      removed += 1;
+      return false;
+    }
+    const pendente = !isExecucaoConcluida(execucao?.status);
+    if (pendente) {
+      removed += 1;
+      return false;
+    }
+    return true;
+  });
+  return removed;
+};
+
+const findPrescricaoById = (record, prescricaoId) => {
+  if (!record || !Array.isArray(record.prescricoes)) return null;
+  const targetId = sanitizeText(prescricaoId);
+  if (!targetId) return null;
+  if (typeof record.prescricoes.id === 'function') {
+    const doc = record.prescricoes.id(targetId);
+    if (doc) return doc;
+  }
+  return record.prescricoes.find((item) => sanitizeText(item?._id || item?.id) === targetId) || null;
+};
+
+const findExecucaoById = (record, execucaoId) => {
+  if (!record || !Array.isArray(record.execucoes)) return null;
+  const targetId = sanitizeText(execucaoId);
+  if (!targetId) return null;
+  if (typeof record.execucoes.id === 'function') {
+    const doc = record.execucoes.id(targetId);
+    if (doc) return doc;
+  }
+  return record.execucoes.find((item) => sanitizeText(item?._id || item?.id) === targetId) || null;
+};
+
+const pullPrescricaoById = (record, prescricaoId) => {
+  if (!record || !Array.isArray(record.prescricoes)) return null;
+  const targetId = sanitizeText(prescricaoId);
+  if (!targetId) return null;
+  let removed = null;
+  if (typeof record.prescricoes.id === 'function') {
+    const doc = record.prescricoes.id(targetId);
+    if (doc) {
+      removed = doc.toObject();
+      doc.remove();
+      return removed;
+    }
+  }
+  record.prescricoes = record.prescricoes.filter((item) => {
+    const same = sanitizeText(item?._id || item?.id) === targetId;
+    if (same && !removed) {
+      removed = typeof item.toObject === 'function' ? item.toObject() : item;
+      return false;
+    }
+    return true;
+  });
+  return removed;
+};
+
+const formatExecucaoItem = (entry) => {
+  if (!entry) return null;
+  const plain = typeof entry.toObject === 'function' ? entry.toObject() : entry;
+  const horario = sanitizeText(plain.horario);
+  if (!horario) return null;
+  const programadoData = sanitizeText(plain.programadoData);
+  const programadoHora = sanitizeText(plain.programadoHora, { fallback: horario });
+  const programadoEm = sanitizeText(plain.programadoEm) || combineDateAndTimeParts(programadoData, programadoHora);
+  const realizadoData = sanitizeText(plain.realizadoData);
+  const realizadoHora = sanitizeText(plain.realizadoHora);
+  const realizadoEm = sanitizeText(plain.realizadoEm) || combineDateAndTimeParts(realizadoData, realizadoHora);
+  return {
+    id: String(plain._id || plain.id || `${horario}-${plain.prescricaoId || Date.now()}`).trim(),
+    horario,
+    descricao: sanitizeText(plain.descricao),
+    responsavel: sanitizeText(plain.responsavel),
+    status: sanitizeText(plain.status, { fallback: 'Agendado' }),
+    prescricaoId: sanitizeText(plain.prescricaoId),
+    programadoData,
+    programadoHora,
+    programadoEm,
+    realizadoData,
+    realizadoHora,
+    realizadoEm,
+    realizadoPor: sanitizeText(plain.realizadoPor),
+    observacoes: sanitizeText(plain.observacoes),
+  };
+};
+
+const formatPrescricaoItem = (entry) => {
+  if (!entry) return null;
+  const plain = typeof entry.toObject === 'function' ? entry.toObject() : entry;
+  const descricao = sanitizeText(plain.descricao) || sanitizeText(plain.fluidFluido);
+  const tipo = sanitizeText(plain.tipo, { fallback: 'procedimento' });
+  const frequencia = sanitizeText(plain.frequencia, { fallback: 'recorrente' });
+  return {
+    id: String(plain._id || plain.id || plain.criadoEm || Date.now()).trim(),
+    tipo,
+    frequencia,
+    descricao,
+    resumo: sanitizeText(plain.resumo, { fallback: 'Prescrição registrada.' }),
+    aCadaValor: sanitizeText(plain.aCadaValor),
+    aCadaUnidade: sanitizeText(plain.aCadaUnidade),
+    porValor: sanitizeText(plain.porValor),
+    porUnidade: sanitizeText(plain.porUnidade),
+    dataInicio: sanitizeText(plain.dataInicio),
+    horaInicio: sanitizeText(plain.horaInicio),
+    medUnidade: sanitizeText(plain.medUnidade),
+    medDose: sanitizeText(plain.medDose),
+    medVia: sanitizeText(plain.medVia),
+    medPeso: sanitizeText(plain.medPeso),
+    medPesoAtualizadoEm: sanitizeText(plain.medPesoAtualizadoEm),
+    fluidFluido: sanitizeText(plain.fluidFluido),
+    fluidEquipo: sanitizeText(plain.fluidEquipo),
+    fluidUnidade: sanitizeText(plain.fluidUnidade),
+    fluidDose: sanitizeText(plain.fluidDose),
+    fluidVia: sanitizeText(plain.fluidVia),
+    fluidVelocidadeValor: sanitizeText(plain.fluidVelocidadeValor),
+    fluidVelocidadeUnidade: sanitizeText(plain.fluidVelocidadeUnidade),
+    fluidSuplemento: sanitizeText(plain.fluidSuplemento, { fallback: 'Sem suplemento' }),
+    criadoPor: sanitizeText(plain.criadoPor, { fallback: 'Sistema' }),
+    criadoEm: plain.criadoEm || plain.createdAt || null,
+  };
+};
+
+const parseNumberValue = (value) => {
+  if (value === undefined || value === null) return null;
+  const text = String(value).replace(',', '.').trim();
+  if (!text) return null;
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const timeStringToMinutes = (value) => {
+  const text = sanitizeText(value);
+  if (!text) return null;
+  const [hourPart = '0', minutePart = '0'] = text.split(':');
+  const hours = Number(hourPart);
+  const minutes = Number(minutePart);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+};
+
+const MINUTES_IN_DAY = 24 * 60;
+
+const minutesToTimeString = (totalMinutes) => {
+  if (!Number.isFinite(totalMinutes)) return '00:00';
+  const normalized = ((Math.floor(totalMinutes) % MINUTES_IN_DAY) + MINUTES_IN_DAY) % MINUTES_IN_DAY;
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+};
+
+const combineDateAndTimeParts = (dateStr, timeStr) => {
+  const datePart = sanitizeText(dateStr);
+  if (!datePart) return '';
+  const timePart = sanitizeText(timeStr) || '00:00';
+  const isoCandidate = `${datePart}T${timePart.length === 5 ? timePart : `${timePart}:00`}`;
+  const parsed = new Date(isoCandidate);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString();
+};
+
+const getIntervalInMinutes = (value, unidade) => {
+  const amount = parseNumberValue(value);
+  if (!amount || amount <= 0) return null;
+  const key = normalizeKey(unidade);
+  if (key === 'horas') return amount * 60;
+  if (key === 'dias') return amount * 60 * 24;
+  return null;
+};
+
+const buildExecucaoEntriesFromPrescricao = (payload, autor, resumo, status, prescricaoId) => {
+  const startMinutes = timeStringToMinutes(payload.horaInicio);
+  if (startMinutes === null) return [];
+  const freqKey = normalizeKey(payload.frequencia);
+  const vinculoId = sanitizeText(prescricaoId);
+  const baseDateOnly = sanitizeText(payload.dataInicio);
+  const baseDate = baseDateOnly ? new Date(`${baseDateOnly}T00:00:00`) : null;
+  const baseDateMs = baseDate && !Number.isNaN(baseDate.getTime()) ? baseDate.getTime() : null;
+  const pushDateByDays = (days) => {
+    if (baseDateMs === null) return baseDateOnly;
+    const scheduled = new Date(baseDateMs + days * MINUTES_IN_DAY * 60000);
+    if (Number.isNaN(scheduled.getTime())) return baseDateOnly;
+    return scheduled.toISOString().slice(0, 10);
+  };
+  const baseEntry = (horario) => ({
+    horario,
+    descricao: resumo,
+    responsavel: autor,
+    status,
+    prescricaoId: vinculoId,
+  });
+
+  const buildEntryWithSchedule = (horario, offsetMinutes = 0) => {
+    const totalMinutes = startMinutes + offsetMinutes;
+    const dayOffset = Math.floor(totalMinutes / MINUTES_IN_DAY);
+    const programadoData = pushDateByDays(dayOffset);
+    const programadoHora = horario;
+    const programadoEm = combineDateAndTimeParts(programadoData, programadoHora);
+    return {
+      ...baseEntry(horario),
+      programadoData,
+      programadoHora,
+      programadoEm,
+    };
+  };
+
+  if (freqKey !== 'recorrente') {
+    return [buildEntryWithSchedule(minutesToTimeString(startMinutes), 0)];
+  }
+
+  const intervalo = getIntervalInMinutes(payload.aCadaValor, payload.aCadaUnidade);
+  if (!intervalo) {
+    return [buildEntryWithSchedule(minutesToTimeString(startMinutes), 0)];
+  }
+
+  const porKey = normalizeKey(payload.porUnidade);
+  const porValue = parseNumberValue(payload.porValor);
+  const horarios = [];
+  const MAX_OCCURRENCES = 48;
+
+  const pushHorario = (minutes, offsetMinutes = 0) => {
+    horarios.push({
+      horario: minutesToTimeString(minutes),
+      offsetMinutes,
+    });
+  };
+
+  if (porKey === 'vezes' && porValue) {
+    const total = Math.max(1, Math.round(porValue));
+    for (let index = 0; index < total && index < MAX_OCCURRENCES; index += 1) {
+      pushHorario(startMinutes + intervalo * index, intervalo * index);
+    }
+  } else if ((porKey === 'horas' || porKey === 'dias') && porValue) {
+    const limite = getIntervalInMinutes(porValue, porKey) || intervalo;
+    let occurrence = 0;
+    while (occurrence < MAX_OCCURRENCES) {
+      const currentMinutes = startMinutes + intervalo * occurrence;
+      if (occurrence > 0 && currentMinutes - startMinutes > limite) break;
+      pushHorario(currentMinutes, intervalo * occurrence);
+      occurrence += 1;
+    }
+  } else {
+    pushHorario(startMinutes, 0);
+  }
+
+  if (!horarios.length) {
+    pushHorario(startMinutes, 0);
+  }
+
+  return horarios.map(({ horario, offsetMinutes = 0 }) => buildEntryWithSchedule(horario, offsetMinutes));
+};
+
+const buildPrescricaoPayload = (body = {}) => ({
+  tipo: sanitizeText(body.tipo, { fallback: 'procedimento' }),
+  frequencia: sanitizeText(body.frequencia, { fallback: 'recorrente' }),
+  descricao: sanitizeText(body.descricao),
+  resumo: sanitizeText(body.resumo),
+  aCadaValor: sanitizeText(body.aCadaValor),
+  aCadaUnidade: sanitizeText(body.aCadaUnidade),
+  porValor: sanitizeText(body.porValor),
+  porUnidade: sanitizeText(body.porUnidade),
+  dataInicio: sanitizeText(body.dataInicio),
+  horaInicio: sanitizeText(body.horaInicio),
+  medUnidade: sanitizeText(body.medUnidade),
+  medDose: sanitizeText(body.medDose),
+  medVia: sanitizeText(body.medVia),
+  medPeso: sanitizeText(body.medPeso),
+  medPesoAtualizadoEm: sanitizeText(body.medPesoAtualizadoEm),
+  fluidFluido: sanitizeText(body.fluidFluido),
+  fluidEquipo: sanitizeText(body.fluidEquipo),
+  fluidUnidade: sanitizeText(body.fluidUnidade),
+  fluidDose: sanitizeText(body.fluidDose),
+  fluidVia: sanitizeText(body.fluidVia),
+  fluidVelocidadeValor: sanitizeText(body.fluidVelocidadeValor),
+  fluidVelocidadeUnidade: sanitizeText(body.fluidVelocidadeUnidade),
+  fluidSuplemento: sanitizeText(body.fluidSuplemento),
+});
+
+const ensurePrescricaoPayload = (payload = {}) => {
+  if (!payload.tipo) {
+    throw new Error('Selecione o tipo da prescrição.');
+  }
+  if (!payload.frequencia) {
+    throw new Error('Informe a frequência da aplicação.');
+  }
+  const freqKey = normalizeKey(payload.frequencia);
+  if (freqKey === 'recorrente') {
+    if (!payload.aCadaValor || !payload.aCadaUnidade) {
+      throw new Error('Preencha o intervalo "A cada" e sua unidade.');
+    }
+    if (!payload.porValor || !payload.porUnidade) {
+      throw new Error('Informe o campo "Por" e sua unidade.');
+    }
+    if (!payload.dataInicio || !payload.horaInicio) {
+      throw new Error('Defina data e hora de início para prescrições recorrentes.');
+    }
+  } else if (freqKey === 'unica') {
+    if (!payload.dataInicio || !payload.horaInicio) {
+      throw new Error('Defina data e hora para aplicação única.');
+    }
+  }
+  if (!payload.descricao && !payload.fluidFluido) {
+    throw new Error('Descreva o procedimento ou medicamento.');
+  }
+  const tipoKey = normalizeKey(payload.tipo);
+  if (tipoKey === 'medicamento') {
+    if (!payload.medUnidade) {
+      throw new Error('Selecione a unidade do medicamento.');
+    }
+    if (!payload.medDose) {
+      throw new Error('Informe a dose do medicamento.');
+    }
+    if (!payload.medVia) {
+      throw new Error('Selecione a via do medicamento.');
+    }
+  }
+  if (tipoKey === 'fluidoterapia') {
+    if (!payload.fluidFluido) {
+      throw new Error('Informe o fluído da prescrição.');
+    }
+    if (!payload.fluidEquipo) {
+      throw new Error('Informe o equipo da fluidoterapia.');
+    }
+    if (!payload.fluidUnidade) {
+      throw new Error('Informe a unidade do fluído.');
+    }
+    if (!payload.fluidDose) {
+      throw new Error('Informe a dose do fluído.');
+    }
+    if (!payload.fluidVia) {
+      throw new Error('Informe a via de administração do fluído.');
+    }
+    if (!payload.fluidVelocidadeValor || !payload.fluidVelocidadeUnidade) {
+      throw new Error('Informe a velocidade da fluidoterapia.');
+    }
+  }
+};
+
 const formatHistoricoItem = (entry) => {
   if (!entry) return null;
   const plain = typeof entry.toObject === 'function' ? entry.toObject() : entry;
@@ -80,6 +459,13 @@ const buildCancelamentoPayload = (body = {}) => ({
 
 const buildBoxTransferPayload = (body = {}) => ({
   box: sanitizeText(body.box),
+});
+
+const buildExecucaoConclusaoPayload = (body = {}) => ({
+  status: sanitizeText(body.status, { fallback: 'Concluída' }),
+  realizadoData: sanitizeText(body.realizadoData),
+  realizadoHora: sanitizeText(body.realizadoHora),
+  observacoes: sanitizeText(body.observacoes),
 });
 
 const describeRegistroChanges = (before, after) => {
@@ -174,6 +560,19 @@ const formatRegistro = (doc) => {
           return bTime - aTime;
         })
     : [];
+  const execucoes = Array.isArray(plain.execucoes)
+    ? plain.execucoes.map(formatExecucaoItem).filter(Boolean)
+    : [];
+  const prescricoes = Array.isArray(plain.prescricoes)
+    ? plain.prescricoes
+        .map(formatPrescricaoItem)
+        .filter(Boolean)
+        .sort((a, b) => {
+          const aTime = new Date(a.criadoEm || 0).getTime();
+          const bTime = new Date(b.criadoEm || 0).getTime();
+          return bTime - aTime;
+        })
+    : [];
   return {
     id: String(plain._id || plain.id || '').trim(),
     codigo: plain.codigo || null,
@@ -218,6 +617,8 @@ const formatRegistro = (doc) => {
     createdAt: plain.createdAt || null,
     updatedAt: plain.updatedAt || null,
     historico,
+    execucoes,
+    prescricoes,
   };
 };
 
@@ -627,6 +1028,318 @@ router.post('/registros/:id/box', async (req, res) => {
       return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar.' });
     }
     return res.status(500).json({ message: 'Não foi possível atualizar o box do paciente.' });
+  }
+});
+
+router.post('/registros/:id/prescricoes', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Informe a internação que deseja atualizar.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.obitoRegistrado || normalizeKey(record.situacaoCodigo) === 'obito') {
+      return res.status(409).json({ message: 'Não é possível registrar prescrições após o óbito.' });
+    }
+
+    if (record.cancelado || normalizeKey(record.situacaoCodigo) === 'cancelado') {
+      return res.status(409).json({ message: 'Essa internação está cancelada e não permite novas prescrições.' });
+    }
+
+    const payload = buildPrescricaoPayload(req.body);
+    try {
+      ensurePrescricaoPayload(payload);
+    } catch (validationError) {
+      return res.status(400).json({ message: validationError.message || 'Revise os dados informados.' });
+    }
+
+    const autor = req.user?.email || 'Sistema';
+    const now = new Date();
+    const resumo = payload.resumo || payload.descricao || payload.fluidFluido || 'Prescrição registrada.';
+
+    const storedPrescricao = {
+      ...payload,
+      resumo,
+      criadoPor: autor,
+      criadoEm: now,
+    };
+
+    record.prescricoes = Array.isArray(record.prescricoes) ? record.prescricoes : [];
+    record.prescricoes.unshift(storedPrescricao);
+    const prescricaoDoc = record.prescricoes[0];
+    const prescricaoId = prescricaoDoc?._id ? String(prescricaoDoc._id).trim() : '';
+
+    const hasHorario = Boolean(payload.horaInicio);
+    if (hasHorario) {
+      record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
+      const status = normalizeKey(payload.frequencia) === 'necessario' ? 'Sob demanda' : 'Agendado';
+      const novasExecucoes = buildExecucaoEntriesFromPrescricao(payload, autor, resumo, status, prescricaoId);
+      if (novasExecucoes.length) {
+        record.execucoes.unshift(...novasExecucoes);
+      }
+    }
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    const historicoDescricao = [
+      payload.descricao ? `Prescrição: ${payload.descricao}.` : '',
+      payload.dataInicio ? `Início previsto: ${payload.dataInicio}${payload.horaInicio ? ` às ${payload.horaInicio}` : ''}.` : '',
+      resumo ? `Resumo: ${resumo}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    record.historico.unshift({
+      tipo: 'Prescrição',
+      descricao: historicoDescricao || 'Nova prescrição registrada.',
+      criadoPor: autor,
+      criadoEm: now,
+    });
+
+    await record.save();
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    const formatted = formatRegistro(updated);
+    if (!formatted) {
+      return res.status(500).json({ message: 'Não foi possível atualizar a ficha com a nova prescrição.' });
+    }
+
+    const io = req.app?.get('socketio');
+    if (io && formatted.id) {
+      const room = `vet:ficha:${formatted.id}`;
+      io.to(room).emit('vet:ficha:update', {
+        room,
+        timestamp: Date.now(),
+        payload: { registro: formatted },
+      });
+    }
+
+    return res.status(201).json(formatted);
+  } catch (error) {
+    console.error('internacao: falha ao registrar prescricao', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Revise as informações preenchidas antes de salvar.' });
+    }
+    return res.status(500).json({ message: 'Não foi possível registrar a prescrição.' });
+  }
+});
+
+router.post('/registros/:id/prescricoes/:prescricaoId/interromper', async (req, res) => {
+  try {
+    const { id, prescricaoId } = req.params;
+    if (!id || !prescricaoId) {
+      return res.status(400).json({ message: 'Informe a prescrição que deseja interromper.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.obitoRegistrado || normalizeKey(record.situacaoCodigo) === 'obito') {
+      return res.status(409).json({ message: 'Não é possível alterar prescrições após o óbito.' });
+    }
+
+    if (record.cancelado || normalizeKey(record.situacaoCodigo) === 'cancelado') {
+      return res.status(409).json({ message: 'Essa internação está cancelada e não permite alterações.' });
+    }
+
+    const prescricao = findPrescricaoById(record, prescricaoId);
+    if (!prescricao) {
+      return res.status(404).json({ message: 'Prescrição não encontrada para interrupção.' });
+    }
+
+    record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
+    const removidos = removeExecucoesFromPrescricao(record, prescricaoId, { pendingOnly: true });
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    const resumoPrescricao = sanitizeText(prescricao.descricao) || sanitizeText(prescricao.resumo) || 'Prescrição';
+    const detalhes = removidos
+      ? `${removidos} execução(ões) pendente(s) removida(s).`
+      : 'Nenhuma execução pendente foi encontrada.';
+    record.historico.unshift({
+      tipo: 'Prescrição',
+      descricao: `Execuções da prescrição "${resumoPrescricao}" interrompidas. ${detalhes}`,
+      criadoPor: req.user?.email || 'Sistema',
+      criadoEm: new Date(),
+    });
+
+    await record.save();
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    const formatted = formatRegistro(updated);
+    if (!formatted) {
+      return res.status(500).json({ message: 'Não foi possível atualizar a ficha após a interrupção.' });
+    }
+
+    const io = req.app?.get('socketio');
+    if (io && formatted.id) {
+      const room = `vet:ficha:${formatted.id}`;
+      io.to(room).emit('vet:ficha:update', {
+        room,
+        timestamp: Date.now(),
+        payload: { registro: formatted },
+      });
+    }
+
+    return res.json(formatted);
+  } catch (error) {
+    console.error('internacao: falha ao interromper prescricao', error);
+    return res.status(500).json({ message: 'Não foi possível interromper os procedimentos dessa prescrição.' });
+  }
+});
+
+router.post('/registros/:id/prescricoes/:prescricaoId/excluir', async (req, res) => {
+  try {
+    const { id, prescricaoId } = req.params;
+    if (!id || !prescricaoId) {
+      return res.status(400).json({ message: 'Informe a prescrição que deseja excluir.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.obitoRegistrado || normalizeKey(record.situacaoCodigo) === 'obito') {
+      return res.status(409).json({ message: 'Não é possível excluir prescrições após o óbito.' });
+    }
+
+    if (record.cancelado || normalizeKey(record.situacaoCodigo) === 'cancelado') {
+      return res.status(409).json({ message: 'Essa internação está cancelada e não permite alterações.' });
+    }
+
+    record.prescricoes = Array.isArray(record.prescricoes) ? record.prescricoes : [];
+    const removida = pullPrescricaoById(record, prescricaoId);
+    if (!removida) {
+      return res.status(404).json({ message: 'Prescrição não encontrada para exclusão.' });
+    }
+
+    record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
+    const execucoesRemovidas = removeExecucoesFromPrescricao(record, prescricaoId, { pendingOnly: false });
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    const resumoPrescricao = sanitizeText(removida.descricao) || sanitizeText(removida.resumo) || 'Prescrição';
+    const execucaoDetalhe = execucoesRemovidas
+      ? `${execucoesRemovidas} execução(ões) removida(s) do mapa de execução.`
+      : 'Nenhuma execução estava vinculada no mapa de execução.';
+    record.historico.unshift({
+      tipo: 'Prescrição',
+      descricao: `Prescrição "${resumoPrescricao}" excluída. ${execucaoDetalhe}`,
+      criadoPor: req.user?.email || 'Sistema',
+      criadoEm: new Date(),
+    });
+
+    await record.save();
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    const formatted = formatRegistro(updated);
+    if (!formatted) {
+      return res.status(500).json({ message: 'Não foi possível atualizar a ficha após a exclusão.' });
+    }
+
+    const io = req.app?.get('socketio');
+    if (io && formatted.id) {
+      const room = `vet:ficha:${formatted.id}`;
+      io.to(room).emit('vet:ficha:update', {
+        room,
+        timestamp: Date.now(),
+        payload: { registro: formatted },
+      });
+    }
+
+    return res.json(formatted);
+  } catch (error) {
+    console.error('internacao: falha ao excluir prescricao', error);
+    return res.status(500).json({ message: 'Não foi possível excluir essa prescrição.' });
+  }
+});
+
+router.post('/registros/:id/execucoes/:execucaoId/concluir', async (req, res) => {
+  try {
+    const { id, execucaoId } = req.params;
+    if (!id || !execucaoId) {
+      return res.status(400).json({ message: 'Informe o procedimento que deseja atualizar.' });
+    }
+
+    const record = await InternacaoRegistro.findById(id);
+    if (!record) {
+      return res.status(404).json({ message: 'Internação não encontrada.' });
+    }
+
+    if (record.obitoRegistrado || normalizeKey(record.situacaoCodigo) === 'obito') {
+      return res.status(409).json({ message: 'Não é possível concluir procedimentos após o óbito.' });
+    }
+
+    if (record.cancelado || normalizeKey(record.situacaoCodigo) === 'cancelado') {
+      return res.status(409).json({ message: 'Essa internação está cancelada e não permite atualizações.' });
+    }
+
+    record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
+    const execucao = findExecucaoById(record, execucaoId);
+    if (!execucao) {
+      return res.status(404).json({ message: 'Procedimento não encontrado para atualização.' });
+    }
+
+    const payload = buildExecucaoConclusaoPayload(req.body);
+    if (!payload.realizadoData || !payload.realizadoHora) {
+      return res.status(400).json({ message: 'Informe data e hora de realização do procedimento.' });
+    }
+
+    const statusKey = normalizeKey(payload.status);
+    const finalStatus = statusKey && statusKey.includes('agend') ? 'Agendada' : payload.status || 'Concluída';
+
+    execucao.status = finalStatus || 'Concluída';
+    execucao.realizadoData = payload.realizadoData;
+    execucao.realizadoHora = payload.realizadoHora;
+    execucao.realizadoEm = combineDateAndTimeParts(payload.realizadoData, payload.realizadoHora);
+    execucao.realizadoPor = req.user?.email || 'Sistema';
+    execucao.observacoes = payload.observacoes;
+    if (!execucao.programadoData && payload.realizadoData) {
+      execucao.programadoData = payload.realizadoData;
+    }
+    if (!execucao.programadoHora && payload.realizadoHora) {
+      execucao.programadoHora = payload.realizadoHora;
+    }
+    if (!execucao.programadoEm) {
+      execucao.programadoEm = combineDateAndTimeParts(execucao.programadoData, execucao.programadoHora);
+    }
+
+    record.historico = Array.isArray(record.historico) ? record.historico : [];
+    const descricaoProcedimento = sanitizeText(execucao.descricao) || 'Procedimento';
+    const realizadoLabel = `${payload.realizadoData} ${payload.realizadoHora}`.trim();
+    record.historico.unshift({
+      tipo: 'Execução',
+      descricao: `Procedimento "${descricaoProcedimento}" marcado como ${execucao.status || 'Concluído'} (${realizadoLabel}).`,
+      criadoPor: req.user?.email || 'Sistema',
+      criadoEm: new Date(),
+    });
+
+    await record.save();
+
+    const updated = await InternacaoRegistro.findById(record._id).lean();
+    const formatted = formatRegistro(updated);
+    if (!formatted) {
+      return res.status(500).json({ message: 'Não foi possível atualizar o mapa de execução.' });
+    }
+
+    const io = req.app?.get('socketio');
+    if (io && formatted.id) {
+      const room = `vet:ficha:${formatted.id}`;
+      io.to(room).emit('vet:ficha:update', {
+        room,
+        timestamp: Date.now(),
+        payload: { registro: formatted },
+      });
+    }
+
+    return res.json(formatted);
+  } catch (error) {
+    console.error('internacao: falha ao concluir execucao', error);
+    return res.status(500).json({ message: 'Não foi possível atualizar o procedimento selecionado.' });
   }
 });
 
