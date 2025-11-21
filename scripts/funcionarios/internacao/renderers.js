@@ -11,6 +11,20 @@ function escapeHtml(value) {
 
 const HOURS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0'));
 
+function getLocalISODate(dateInput = new Date()) {
+  const date = new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return '';
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function formatMapaDateLabel(isoDate) {
+  if (!isoDate) return 'Data não informada';
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return isoDate;
+  return date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 const riscoColors = {
   'nao-urgente': 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100',
   'pouco-urgente': 'bg-lime-50 text-lime-700 ring-1 ring-lime-100',
@@ -55,18 +69,38 @@ function buildEmptyState(message) {
   `;
 }
 
-function normalizeExecucaoItems(list) {
+function resolveExecucaoDayKey(item, fallbackDate) {
+  if (!item || typeof item !== 'object') return fallbackDate || getLocalISODate();
+  const normalizeISODate = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return getLocalISODate(date);
+  };
+  return (
+    (typeof item.programadoData === 'string' && item.programadoData.trim()) ||
+    normalizeISODate(item.programadoEm) ||
+    (typeof item.realizadoData === 'string' && item.realizadoData.trim()) ||
+    normalizeISODate(item.realizadoEm) ||
+    fallbackDate ||
+    getLocalISODate()
+  );
+}
+
+function normalizeExecucaoItems(list, fallbackDate) {
   if (!Array.isArray(list)) return [];
   return list
     .map((item) => {
       if (!item || typeof item !== 'object') return null;
       const horario = typeof item.horario === 'string' ? item.horario.trim() : '';
       const hourKey = horario ? horario.slice(0, 2).padStart(2, '0') : '';
+      const dayKey = resolveExecucaoDayKey(item, fallbackDate);
       if (!hourKey) return null;
       return {
         ...item,
         horario,
         hourKey,
+        dayKey,
       };
     })
     .filter(Boolean);
@@ -480,7 +514,7 @@ function openExecucaoDetalheModal(paciente, item) {
 }
 
 
-function attachExecucaoModalHandlers(root, pacientes = []) {
+function attachExecucaoModalHandlers(root, pacientes = [], selectedDate = '') {
   const map = new Map();
   pacientes.forEach((paciente) => {
     if (paciente && paciente.key) {
@@ -494,7 +528,9 @@ function attachExecucaoModalHandlers(root, pacientes = []) {
       if (!petKey || !hour) return;
       const paciente = map.get(petKey);
       if (!paciente) return;
-      const items = (paciente.execucoes || []).filter((acao) => acao.hourKey === hour);
+      const items = (paciente.execucoes || []).filter(
+        (acao) => acao.hourKey === hour && (!selectedDate || acao.dayKey === selectedDate),
+      );
       openExecucaoModal(paciente, `${hour}:00`, items);
     });
   });
@@ -621,6 +657,7 @@ export function renderAnimaisInternados(root, dataset, state = {}) {
 export function renderMapaExecucao(root, dataset, state = {}) {
   const petId = state?.petId || '';
   const internacoes = Array.isArray(state?.internacoes) ? state.internacoes : [];
+  const selectedDate = state?.execucaoData || getLocalISODate();
 
   if (state?.internacoesLoading && !internacoes.length) {
     root.innerHTML = buildEmptyState('Carregando mapa de execução...');
@@ -651,6 +688,9 @@ export function renderMapaExecucao(root, dataset, state = {}) {
 
   const pacientes = filtrados.map((registro) => {
     const nome = registro.pet?.nome || (registro.codigo ? `Registro #${registro.codigo}` : 'Paciente');
+    const execucoesDoDia = normalizeExecucaoItems(registro.execucoes, selectedDate).filter(
+      (item) => item.dayKey === selectedDate,
+    );
     return {
       key: registro.filterKey || registro.id || nome,
       recordId: registro.id || registro._id || registro.filterKey || nome,
@@ -658,7 +698,7 @@ export function renderMapaExecucao(root, dataset, state = {}) {
       boxLabel: registro.box || 'Sem box definido',
       servicoLabel: registro.queixa || registro.diagnostico || 'Internação em andamento',
       equipeLabel: registro.veterinario || 'Equipe em definição',
-      execucoes: normalizeExecucaoItems(registro.execucoes),
+      execucoes: execucoesDoDia,
     };
   });
 
@@ -721,15 +761,28 @@ export function renderMapaExecucao(root, dataset, state = {}) {
   root.innerHTML = `
     <div class="space-y-5">
       <div class="rounded-2xl border border-gray-100 px-5 py-5 shadow-sm">
-        <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Pet | Horário</p>
             <h2 class="text-xl font-bold text-gray-900">Mapa de execução</h2>
             <p class="text-sm text-gray-500">Clique no círculo para ver ou registrar os procedimentos daquele horário.</p>
           </div>
-          <div class="flex items-center gap-3 text-xs text-gray-500">
-            <span class="inline-flex items-center gap-2"><span class="inline-flex h-3 w-3 rounded-full bg-primary/70"></span>Círculo = quantidade</span>
-            <span class="inline-flex items-center gap-2"><span class="h-4 w-4 rounded-full border border-dashed border-gray-300"></span>Sem ações</span>
+          <div class="flex flex-col items-end gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <div class="flex items-center gap-3 text-xs text-gray-500">
+              <span class="inline-flex items-center gap-2"><span class="inline-flex h-3 w-3 rounded-full bg-primary/70"></span>Círculo = quantidade</span>
+              <span class="inline-flex items-center gap-2"><span class="h-4 w-4 rounded-full border border-dashed border-gray-300"></span>Sem ações</span>
+            </div>
+            <div class="flex items-center gap-2" data-mapa-dia-selector>
+              <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-prev aria-label="Dia anterior">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <div class="min-w-[190px] rounded-lg bg-gray-50 px-3 py-2 text-center text-sm font-semibold text-gray-800" data-mapa-dia-label>
+                ${escapeHtml(formatMapaDateLabel(selectedDate))}
+              </div>
+              <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-next aria-label="Próximo dia">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
           </div>
         </div>
         <div class="mt-6 overflow-x-auto">
@@ -749,7 +802,7 @@ export function renderMapaExecucao(root, dataset, state = {}) {
     </div>
   `;
 
-  attachExecucaoModalHandlers(root, pacientes);
+  attachExecucaoModalHandlers(root, pacientes, selectedDate);
 }
 
 export function renderHistoricoInternacoes(root, dataset, { petId } = {}) {

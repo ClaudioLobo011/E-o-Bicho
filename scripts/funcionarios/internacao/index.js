@@ -399,6 +399,23 @@ function buildExecucaoProgramadoLabel(programadoEm, programadoData, programadoHo
   return '—';
 }
 
+function resolveExecucaoDayKey(programadoData, programadoEm, realizadoData, realizadoEm) {
+  const normalizeISODate = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return getLocalDateInputValue(date);
+  };
+
+  return (
+    programadoData ||
+    normalizeISODate(programadoEm) ||
+    realizadoData ||
+    normalizeISODate(realizadoEm) ||
+    getLocalDateInputValue()
+  );
+}
+
 function normalizeExecucaoItem(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const toText = (value) => {
@@ -423,6 +440,7 @@ function normalizeExecucaoItem(raw) {
   const realizadoLabel = realizadoEm ? formatDateTimeLabel(realizadoEm) : '';
   const observacoes = toText(raw.observacoes);
   const realizadoPor = toText(raw.realizadoPor);
+  const dayKey = resolveExecucaoDayKey(programadoData, programadoEm, realizadoData, realizadoEm);
   return {
     id,
     horario,
@@ -442,6 +460,7 @@ function normalizeExecucaoItem(raw) {
     realizadoLabel,
     observacoes,
     realizadoPor,
+    dayKey,
   };
 }
 
@@ -4749,11 +4768,35 @@ function setupMapaPage(dataset, state, render, fetchInternacoes) {
     return Promise.resolve([]);
   };
 
+  const shiftMapaDate = (delta) => {
+    const current = state.execucaoData || getLocalDateInputValue();
+    const base = new Date(current);
+    if (Number.isNaN(base.getTime())) {
+      state.execucaoData = getLocalDateInputValue();
+    } else {
+      base.setDate(base.getDate() + delta);
+      state.execucaoData = getLocalDateInputValue(base);
+    }
+    if (typeof render === 'function') {
+      render();
+    }
+  };
+
   if (root) {
     root.addEventListener('click', (event) => {
       if (event.target.closest('[data-internacoes-retry]')) {
         event.preventDefault();
         loadInternacoes({ quiet: false });
+        return;
+      }
+      if (event.target.closest('[data-mapa-dia-prev]')) {
+        event.preventDefault();
+        shiftMapaDate(-1);
+        return;
+      }
+      if (event.target.closest('[data-mapa-dia-next]')) {
+        event.preventDefault();
+        shiftMapaDate(1);
       }
     });
   }
@@ -4771,6 +4814,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const dataset = getDataset();
   const state = {
     petId: '',
+    execucaoData: getLocalDateInputValue(),
     boxes: Array.isArray(dataset.boxes) ? [...dataset.boxes] : [],
     boxesLoading: false,
     boxesError: '',
