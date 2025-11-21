@@ -3502,9 +3502,13 @@ async function handlePrescricaoInterrupcao(prescricaoId, { reprogramar = false }
     showToastMessage('Não foi possível identificar a internação selecionada.', 'warning');
     return;
   }
+  const prescricaoSelecionada = reprogramar ? findPrescricaoById(record, prescricaoId) : null;
+  const prescricaoParaReprogramar = prescricaoSelecionada
+    ? JSON.parse(JSON.stringify(prescricaoSelecionada))
+    : null;
   const confirmMessage = reprogramar
-    ? 'Interromper os procedimentos pendentes e reabrir o modal para reagendar?'
-    : 'Interromper todos os procedimentos pendentes desta prescrição?';
+    ? 'Interromper as execuções agendadas e reabrir o modal para reagendar?'
+    : 'Interromper todas as execuções agendadas desta prescrição?';
   const confirmed = typeof window?.confirm === 'function' ? window.confirm(confirmMessage) : true;
   if (!confirmed) return;
   try {
@@ -3519,9 +3523,9 @@ async function handlePrescricaoInterrupcao(prescricaoId, { reprogramar = false }
     if (fichaInternacaoModal.record && isSameInternacaoRecord(fichaInternacaoModal.record, normalized)) {
       setFichaModalTab('prescricao');
     }
-    showToastMessage('Procedimentos pendentes interrompidos com sucesso.', 'success');
+    showToastMessage('Execuções agendadas interrompidas com sucesso.', 'success');
     if (reprogramar) {
-      const alvo = findPrescricaoById(normalized, prescricaoId);
+      const alvo = findPrescricaoById(normalized, prescricaoId) || prescricaoParaReprogramar;
       if (!alvo) {
         showToastMessage('Prescrição interrompida, mas não foi possível carregar os dados para reprogramar.', 'warning');
         return;
@@ -3529,7 +3533,8 @@ async function handlePrescricaoInterrupcao(prescricaoId, { reprogramar = false }
       ensurePrescricaoModal();
       const dataset = fichaInternacaoModal.dataset || getDataset();
       const state = fichaInternacaoModal.state || {};
-      openPrescricaoModal(normalized, { dataset, state, initialValues: alvo });
+      const initialValues = normalizePrescricaoItem(alvo) || alvo;
+      openPrescricaoModal(normalized, { dataset, state, initialValues });
     }
   } catch (error) {
     console.error('internacao: falha ao interromper prescricao', error);
