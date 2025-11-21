@@ -88,9 +88,18 @@ const removeExecucoesFromPrescricao = (
   let removed = 0;
   record.execucoes = record.execucoes.filter((execucao) => {
     const execucaoId = sanitizeText(execucao?.prescricaoId);
+    const execucaoDescricaoKey = normalizeKey(execucao?.descricao);
+    const descricaoCombina = Boolean(
+      prescricaoKey &&
+        execucaoDescricaoKey &&
+        (execucaoDescricaoKey === prescricaoKey ||
+          execucaoDescricaoKey.includes(prescricaoKey) ||
+          prescricaoKey.includes(execucaoDescricaoKey)),
+    );
     const samePrescricao =
       (targetId && execucaoId && execucaoId === targetId) ||
-      (!execucaoId && prescricaoKey && prescricaoKey === normalizeKey(execucao?.descricao));
+      (!execucaoId && descricaoCombina) ||
+      (!execucaoId && execucaoDescricaoKey && prescricaoKey && execucaoDescricaoKey === prescricaoKey);
     if (!samePrescricao) return true;
     if (!pendingOnly) {
       removed += 1;
