@@ -51,22 +51,85 @@ const isExecucaoConcluida = (status) => {
   return finishedStatuses.includes(key);
 };
 
-const removeExecucoesFromPrescricao = (record, prescricaoId, { pendingOnly = false } = {}) => {
+const isExecucaoAgendada = (execucao) => {
+  const statusTexto =
+    execucao?.status?.descricao ||
+    execucao?.status?.label ||
+    execucao?.status ||
+    execucao?.situacao ||
+    execucao?.situacaoCodigo ||
+    execucao?.statusCodigo;
+  const statusKey = normalizeKey(statusTexto);
+  if (!statusKey) return false;
+  return statusKey.includes('agend');
+};
+
+const isExecucaoPendente = (execucao) => {
+  const statusTexto =
+    execucao?.status?.descricao ||
+    execucao?.status?.label ||
+    execucao?.status ||
+    execucao?.situacao ||
+    execucao?.situacaoCodigo ||
+    execucao?.statusCodigo;
+  const statusKey = normalizeKey(statusTexto);
+  if (!statusKey) return true;
+  if (isExecucaoConcluida(statusKey)) return false;
+  if (isExecucaoAgendada(execucao)) return true;
+  if (statusKey.includes('pend') || statusKey.includes('program') || statusKey.includes('demanda')) {
+    return true;
+  }
+  return !isExecucaoConcluida(statusTexto);
+};
+
+const buildPrescricaoMatcher = (prescricaoId, prescricao) => ({
+  targetId: sanitizeText(prescricaoId),
+  prescricaoKey: normalizeKey(prescricao?.descricao || prescricao?.resumo),
+});
+
+const execucaoMatchesPrescricao = (execucao, matcher) => {
+  const targetId = matcher?.targetId;
+  const prescricaoKey = matcher?.prescricaoKey;
+  if (!targetId && !prescricaoKey) return false;
+  const execucaoId = sanitizeText(execucao?.prescricaoId);
+  const execucaoDescricaoKey = normalizeKey(execucao?.descricao);
+  const descricaoCombina = Boolean(
+    prescricaoKey &&
+      execucaoDescricaoKey &&
+      (execucaoDescricaoKey === prescricaoKey ||
+        execucaoDescricaoKey.includes(prescricaoKey) ||
+        prescricaoKey.includes(execucaoDescricaoKey)),
+  );
+  return (
+    (targetId && execucaoId && execucaoId === targetId) ||
+    (!execucaoId && descricaoCombina) ||
+    (!execucaoId && execucaoDescricaoKey && prescricaoKey && execucaoDescricaoKey === prescricaoKey)
+  );
+};
+
+const removeExecucoesFromPrescricao = (
+  record,
+  prescricaoId,
+  { pendingOnly = false, prescricao = null, matcher = null, agendadaOnly = false } = {},
+) => {
   if (!record || !Array.isArray(record.execucoes) || !record.execucoes.length) {
     record.execucoes = [];
     return 0;
   }
-  const targetId = sanitizeText(prescricaoId);
-  if (!targetId) return 0;
+  const { targetId, prescricaoKey } = matcher || buildPrescricaoMatcher(prescricaoId, prescricao);
+  if (!targetId && !prescricaoKey) return 0;
   let removed = 0;
   record.execucoes = record.execucoes.filter((execucao) => {
-    const samePrescricao = sanitizeText(execucao?.prescricaoId) === targetId;
+    const samePrescricao = execucaoMatchesPrescricao(execucao, { targetId, prescricaoKey });
     if (!samePrescricao) return true;
+    if (agendadaOnly && !isExecucaoAgendada(execucao)) {
+      return true;
+    }
     if (!pendingOnly) {
       removed += 1;
       return false;
     }
-    const pendente = !isExecucaoConcluida(execucao?.status);
+    const pendente = isExecucaoPendente(execucao);
     if (pendente) {
       removed += 1;
       return false;
@@ -74,6 +137,13 @@ const removeExecucoesFromPrescricao = (record, prescricaoId, { pendingOnly = fal
     return true;
   });
   return removed;
+};
+
+const countExecucoesFromPrescricao = (record, { matcher = null, prescricaoId, prescricao } = {}) => {
+  if (!record || !Array.isArray(record.execucoes) || !record.execucoes.length) return 0;
+  const { targetId, prescricaoKey } = matcher || buildPrescricaoMatcher(prescricaoId, prescricao);
+  if (!targetId && !prescricaoKey) return 0;
+  return record.execucoes.filter((execucao) => execucaoMatchesPrescricao(execucao, { targetId, prescricaoKey })).length;
 };
 
 const findPrescricaoById = (record, prescricaoId) => {
@@ -106,8 +176,18 @@ const pullPrescricaoById = (record, prescricaoId) => {
   if (typeof record.prescricoes.id === 'function') {
     const doc = record.prescricoes.id(targetId);
     if (doc) {
-      removed = doc.toObject();
-      doc.remove();
+      removed = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+      if (typeof doc.remove === 'function') {
+        doc.remove();
+      } else if (typeof doc.deleteOne === 'function') {
+        doc.deleteOne();
+      } else if (typeof record.prescricoes.pull === 'function') {
+        record.prescricoes.pull(doc._id || doc.id || targetId);
+      } else {
+        record.prescricoes = record.prescricoes.filter(
+          (item) => sanitizeText(item?._id || item?.id) !== targetId,
+        );
+      }
       return removed;
     }
   }
@@ -1153,16 +1233,37 @@ router.post('/registros/:id/prescricoes/:prescricaoId/interromper', async (req, 
     }
 
     record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
-    const removidos = removeExecucoesFromPrescricao(record, prescricaoId, { pendingOnly: true });
+    const matcher = buildPrescricaoMatcher(prescricaoId, prescricao);
+    const removidos = removeExecucoesFromPrescricao(record, prescricaoId, {
+      pendingOnly: true,
+      agendadaOnly: true,
+      prescricao,
+      matcher,
+    });
+    const execucoesRestantes = countExecucoesFromPrescricao(record, { matcher });
+
+    record.prescricoes = Array.isArray(record.prescricoes) ? record.prescricoes : [];
+    pullPrescricaoById(record, prescricaoId);
 
     record.historico = Array.isArray(record.historico) ? record.historico : [];
     const resumoPrescricao = sanitizeText(prescricao.descricao) || sanitizeText(prescricao.resumo) || 'Prescrição';
     const detalhes = removidos
-      ? `${removidos} execução(ões) pendente(s) removida(s).`
-      : 'Nenhuma execução pendente foi encontrada.';
+      ? `${removidos} execução(ões) agendada(s) removida(s).`
+      : 'Nenhuma execução agendada foi encontrada.';
+    const detalhesPrescricao = 'Prescrição removida da aba de Prescrição Médica.';
+    const detalhesExecucoesConcluidas = execucoesRestantes
+      ? `${execucoesRestantes} execução(ões) concluída(s) permanecem no mapa de execução.`
+      : '';
     record.historico.unshift({
       tipo: 'Prescrição',
-      descricao: `Execuções da prescrição "${resumoPrescricao}" interrompidas. ${detalhes}`,
+      descricao: [
+        `Execuções da prescrição "${resumoPrescricao}" interrompidas.`,
+        detalhes,
+        detalhesPrescricao,
+        detalhesExecucoesConcluidas,
+      ]
+        .filter(Boolean)
+        .join(' '),
       criadoPor: req.user?.email || 'Sistema',
       criadoEm: new Date(),
     });
@@ -1219,7 +1320,10 @@ router.post('/registros/:id/prescricoes/:prescricaoId/excluir', async (req, res)
     }
 
     record.execucoes = Array.isArray(record.execucoes) ? record.execucoes : [];
-    const execucoesRemovidas = removeExecucoesFromPrescricao(record, prescricaoId, { pendingOnly: false });
+    const execucoesRemovidas = removeExecucoesFromPrescricao(record, prescricaoId, {
+      pendingOnly: false,
+      prescricao: removida,
+    });
 
     record.historico = Array.isArray(record.historico) ? record.historico : [];
     const resumoPrescricao = sanitizeText(removida.descricao) || sanitizeText(removida.resumo) || 'Prescrição';

@@ -3502,9 +3502,13 @@ async function handlePrescricaoInterrupcao(prescricaoId, { reprogramar = false }
     showToastMessage('Não foi possível identificar a internação selecionada.', 'warning');
     return;
   }
+  const prescricaoSelecionada = reprogramar ? findPrescricaoById(record, prescricaoId) : null;
+  const prescricaoParaReprogramar = prescricaoSelecionada
+    ? JSON.parse(JSON.stringify(prescricaoSelecionada))
+    : null;
   const confirmMessage = reprogramar
-    ? 'Interromper os procedimentos pendentes e reabrir o modal para reagendar?'
-    : 'Interromper todos os procedimentos pendentes desta prescrição?';
+    ? 'Interromper as execuções agendadas e reabrir o modal para reagendar?'
+    : 'Interromper todas as execuções agendadas desta prescrição?';
   const confirmed = typeof window?.confirm === 'function' ? window.confirm(confirmMessage) : true;
   if (!confirmed) return;
   try {
@@ -3519,9 +3523,9 @@ async function handlePrescricaoInterrupcao(prescricaoId, { reprogramar = false }
     if (fichaInternacaoModal.record && isSameInternacaoRecord(fichaInternacaoModal.record, normalized)) {
       setFichaModalTab('prescricao');
     }
-    showToastMessage('Procedimentos pendentes interrompidos com sucesso.', 'success');
+    showToastMessage('Execuções agendadas interrompidas com sucesso.', 'success');
     if (reprogramar) {
-      const alvo = findPrescricaoById(normalized, prescricaoId);
+      const alvo = findPrescricaoById(normalized, prescricaoId) || prescricaoParaReprogramar;
       if (!alvo) {
         showToastMessage('Prescrição interrompida, mas não foi possível carregar os dados para reprogramar.', 'warning');
         return;
@@ -3529,7 +3533,8 @@ async function handlePrescricaoInterrupcao(prescricaoId, { reprogramar = false }
       ensurePrescricaoModal();
       const dataset = fichaInternacaoModal.dataset || getDataset();
       const state = fichaInternacaoModal.state || {};
-      openPrescricaoModal(normalized, { dataset, state, initialValues: alvo });
+      const initialValues = normalizePrescricaoItem(alvo) || alvo;
+      openPrescricaoModal(normalized, { dataset, state, initialValues });
     }
   } catch (error) {
     console.error('internacao: falha ao interromper prescricao', error);
@@ -4770,15 +4775,29 @@ function setupMapaPage(dataset, state, render, fetchInternacoes) {
     return Promise.resolve([]);
   };
 
+  const parseLocalDate = (value) => {
+    if (!value) return null;
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+      const parsed = new Date(year, month - 1, day);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
   const shiftMapaDate = (delta) => {
     const current = state.execucaoData || getLocalDateInputValue();
-    const base = new Date(current);
-    if (Number.isNaN(base.getTime())) {
+    const base = parseLocalDate(current) || parseLocalDate(getLocalDateInputValue());
+    if (!base) {
       state.execucaoData = getLocalDateInputValue();
-    } else {
-      base.setDate(base.getDate() + delta);
-      state.execucaoData = getLocalDateInputValue(base);
+      if (typeof render === 'function') render();
+      return;
     }
+
+    base.setDate(base.getDate() + delta);
+    state.execucaoData = getLocalDateInputValue(base);
     if (typeof render === 'function') {
       render();
     }
