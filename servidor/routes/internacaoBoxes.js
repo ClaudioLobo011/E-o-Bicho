@@ -1229,24 +1229,25 @@ router.post('/registros/:id/prescricoes/:prescricaoId/interromper', async (req, 
     });
     const execucoesRestantes = countExecucoesFromPrescricao(record, { matcher });
 
-    if (execucoesRestantes === 0) {
-      record.prescricoes = Array.isArray(record.prescricoes) ? record.prescricoes : [];
-      pullPrescricaoById(record, prescricaoId);
-    }
+    record.prescricoes = Array.isArray(record.prescricoes) ? record.prescricoes : [];
+    pullPrescricaoById(record, prescricaoId);
 
     record.historico = Array.isArray(record.historico) ? record.historico : [];
     const resumoPrescricao = sanitizeText(prescricao.descricao) || sanitizeText(prescricao.resumo) || 'Prescrição';
     const detalhes = removidos
       ? `${removidos} execução(ões) pendente(s) removida(s).`
       : 'Nenhuma execução pendente foi encontrada.';
-    const detalhesPrescricao =
-      execucoesRestantes === 0 ? 'Prescrição removida da ficha por não possuir execuções ativas.' : '';
+    const detalhesPrescricao = 'Prescrição removida da aba de Prescrição Médica.';
+    const detalhesExecucoesConcluidas = execucoesRestantes
+      ? `${execucoesRestantes} execução(ões) concluída(s) permanecem no mapa de execução.`
+      : '';
     record.historico.unshift({
       tipo: 'Prescrição',
       descricao: [
         `Execuções da prescrição "${resumoPrescricao}" interrompidas.`,
         detalhes,
         detalhesPrescricao,
+        detalhesExecucoesConcluidas,
       ]
         .filter(Boolean)
         .join(' '),
