@@ -771,14 +771,14 @@ export function renderMapaExecucao(root, dataset, state = {}) {
             <p class="text-sm text-gray-500">Clique no círculo para ver ou registrar os procedimentos daquele horário.</p>
           </div>
           <div class="order-3 flex basis-full items-center justify-center sm:order-none sm:flex-1" data-mapa-dia-selector>
-            <div class="flex min-w-[320px] max-w-[360px] items-center justify-center gap-4">
-              <button type="button" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-prev aria-label="Dia anterior">
+            <div class="grid w-full max-w-[420px] grid-cols-[56px,1fr,56px] items-center gap-2 px-2">
+              <button type="button" class="inline-flex h-9 w-9 place-self-center items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-prev aria-label="Dia anterior">
                 <i class="fas fa-chevron-left"></i>
               </button>
-              <div class="min-w-[240px] max-w-[240px] shrink-0 truncate rounded-lg bg-gray-50 px-4 py-2 text-center text-sm font-semibold text-gray-800" data-mapa-dia-label>
+              <div class="min-w-[260px] max-w-[260px] justify-self-center truncate whitespace-nowrap rounded-lg bg-gray-50 px-4 py-2 text-center text-sm font-semibold text-gray-800" data-mapa-dia-label>
                 ${escapeHtml(formatMapaDateLabel(selectedDate))}
               </div>
-              <button type="button" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-next aria-label="Próximo dia">
+              <button type="button" class="inline-flex h-9 w-9 place-self-center items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-next aria-label="Próximo dia">
                 <i class="fas fa-chevron-right"></i>
               </button>
             </div>
