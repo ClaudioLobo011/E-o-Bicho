@@ -381,6 +381,8 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
       openExecucaoDetalheModal(paciente, current, {
         forceStatus: 'Concluída',
         clearRealizado: true,
+        defaultDate: selectedDate,
+        defaultHour: selectedHour,
       });
     });
   });
@@ -815,7 +817,9 @@ export function renderMapaExecucao(root, dataset, state = {}) {
         (!isExecucaoSobDemanda(item) || (isExecucaoConcluida(item) && !isExecucaoInterrompida(item))),
     );
     const quandoNecessarios = Array.isArray(registro.execucoes)
-      ? registro.execucoes.filter((item) => isExecucaoSobDemanda(item) && !isExecucaoInterrompida(item))
+      ? registro.execucoes.filter(
+          (item) => isExecucaoSobDemanda(item) && !isExecucaoInterrompida(item) && !isExecucaoConcluida(item),
+        )
       : [];
     return {
       key: registro.filterKey || registro.id || nome,
