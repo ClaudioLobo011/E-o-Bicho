@@ -445,21 +445,22 @@ function resolveExecucaoDayKey(programadoData, programadoEm, realizadoData, real
   );
 }
 
-function normalizeExecucaoItem(raw) {
+function normalizeExecucaoItem(raw, { quandoNecessarioPrescricaoIds } = {}) {
   if (!raw || typeof raw !== 'object') return null;
   const toText = (value) => {
     if (value === undefined || value === null) return '';
     return String(value).trim();
   };
   const horario = toText(raw.horario) || toText(raw.programadoHora) || toText(raw.realizadoHora);
-  const sobDemanda = Boolean(raw.sobDemanda) || isExecucaoSobDemanda(raw);
+  const prescricaoId = toText(raw.prescricaoId);
+  const sobDemandaPrescricao = prescricaoId && quandoNecessarioPrescricaoIds?.has(prescricaoId);
+  const sobDemanda = Boolean(raw.sobDemanda) || isExecucaoSobDemanda(raw) || sobDemandaPrescricao;
   const hourKey = horario ? horario.slice(0, 2).padStart(2, '0') : sobDemanda ? '00' : '';
   const id = toText(raw.id) || toText(raw._id) || `${horario || 'exec'}-${Math.random().toString(36).slice(2, 8)}`;
   const descricao = toText(raw.descricao);
   const responsavel = toText(raw.responsavel);
   const status = toText(raw.status) || 'Agendado';
   const statusKey = normalizeExecucaoStatusKey(status);
-  const prescricaoId = toText(raw.prescricaoId);
   const programadoData = toText(raw.programadoData);
   const programadoHora = toText(raw.programadoHora) || horario;
   const programadoEm = raw.programadoEm || combineDateAndTime(programadoData, programadoHora);
@@ -495,9 +496,11 @@ function normalizeExecucaoItem(raw) {
   };
 }
 
-function normalizeExecucoes(list) {
+function normalizeExecucoes(list, options = {}) {
   if (!Array.isArray(list)) return [];
-  return list.map(normalizeExecucaoItem).filter((item) => item && (item.hourKey || item.sobDemanda));
+  return list
+    .map((raw) => normalizeExecucaoItem(raw, options))
+    .filter((item) => item && (item.hourKey || item.sobDemanda));
 }
 
 function getLocalDateInputValue(dateInput = new Date()) {
@@ -920,6 +923,18 @@ function normalizeInternacaoRecord(raw) {
   const petPesoAtualizadoEm =
     toText(raw.petPesoAtualizadoEm) || toText(raw.pesoAtualizadoEm) || ultimoPesoHistorico?.criadoEm || '';
 
+  const prescricoes = Array.isArray(raw.prescricoes)
+    ? raw.prescricoes.map(normalizePrescricaoItem).filter(Boolean)
+    : [];
+
+  const quandoNecessarioPrescricaoIds = new Set(
+    prescricoes
+      .filter((presc) => normalizeActionKey(presc.frequencia) === 'necessario' && presc.id)
+      .map((presc) => presc.id),
+  );
+
+  const execucoes = normalizeExecucoes(raw.execucoes, { quandoNecessarioPrescricaoIds });
+
   return {
     id: baseId || filterKey,
     filterKey,
@@ -953,7 +968,7 @@ function normalizeInternacaoRecord(raw) {
     acessorios: toText(raw.acessorios),
     observacoes: toText(raw.observacoes),
     alergias: normalizeTagList(raw.alergias),
-    execucoes: normalizeExecucoes(raw.execucoes),
+    execucoes,
     cancelado: canceladoFlag,
     canceladoResponsavel: toText(raw.canceladoResponsavel),
     canceladoData: toText(raw.canceladoData),
@@ -974,9 +989,7 @@ function normalizeInternacaoRecord(raw) {
     createdAt: raw.createdAt || '',
     updatedAt: raw.updatedAt || '',
     historico,
-    prescricoes: Array.isArray(raw.prescricoes)
-      ? raw.prescricoes.map(normalizePrescricaoItem).filter(Boolean)
-      : [],
+    prescricoes,
     petPesoAtualizadoEm,
   };
 }
