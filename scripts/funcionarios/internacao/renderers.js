@@ -23,7 +23,7 @@ function formatMapaDateLabel(isoDate) {
   const match = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
   const date = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date(isoDate);
   if (Number.isNaN(date.getTime())) return isoDate;
-  return date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 const riscoColors = {
