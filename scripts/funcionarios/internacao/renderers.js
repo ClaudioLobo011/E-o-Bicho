@@ -23,7 +23,7 @@ function formatMapaDateLabel(isoDate) {
   const match = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
   const date = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date(isoDate);
   if (Number.isNaN(date.getTime())) return isoDate;
-  return date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 const riscoColors = {
@@ -109,6 +109,37 @@ function normalizeExecucaoItems(list, fallbackDate) {
     .filter(Boolean);
 }
 
+function isExecucaoConcluida(item) {
+  const status = String(item?.status || '').toLowerCase();
+  return status.includes('conclu') || status.includes('finaliz') || status.includes('realiz');
+}
+
+function hasNecessarioFlag(value) {
+  if (!value) return false;
+  return String(value)
+    .normalize('NFD')
+    .replace(/[^\w\s]/g, '')
+    .toLowerCase()
+    .includes('necess');
+}
+
+function isExecucaoSobDemanda(item) {
+  if (!item || typeof item !== 'object') return false;
+
+  const status = String(item?.status || '').toLowerCase();
+  if (status.includes('sob demanda') || status.includes('necess')) return true;
+
+  return [
+    item.frequencia,
+    item.freq,
+    item.tipoFrequencia,
+    item.prescricaoFrequencia,
+    item.prescricaoTipo,
+    item.programadoLabel,
+    item.tipo,
+  ].some((value) => hasNecessarioFlag(value));
+}
+
 function formatExecucaoProgramadaLabel(item) {
   if (!item || typeof item !== 'object') return '—';
   if (item.programadoLabel) return String(item.programadoLabel).trim() || '—';
@@ -166,11 +197,15 @@ function ensureOverlayOnTop(modal) {
   }
 }
 
-function openExecucaoModal(paciente, hourLabel, items = []) {
+function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
   if (!paciente) return;
 
   const existing = document.getElementById('internacao-exec-modal');
   if (existing) existing.remove();
+
+  const quandoNecessarios = Array.isArray(options.quandoNecessarios) ? options.quandoNecessarios : [];
+  const selectedDate = options.selectedDate || '';
+  const selectedHour = options.selectedHour || hourLabel;
 
   const nome = paciente.nome || paciente.pet?.nome || 'Paciente';
   const boxLabel =
@@ -246,6 +281,33 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
         .join('')
     : '<p class="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">Nenhum procedimento registrado para este horário.</p>';
 
+  const quandoNecessarioMarkup = quandoNecessarios.length
+    ? quandoNecessarios
+        .map((item, index) => {
+          const responsavel = item.responsavel || 'Equipe a definir';
+          const status = 'Sob demanda';
+          const programado = formatExecucaoProgramadaLabel(item);
+          return `
+            <button
+              type="button"
+              class="group w-full rounded-lg border border-primary/30 bg-primary/5 p-3 text-left transition hover:border-primary/60 hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              data-quando-necessario-item
+              data-quando-necessario-index="${index}"
+            >
+              <div class="flex flex-col gap-1">
+                <div>
+                  <p class="text-sm font-semibold text-gray-900">${escapeHtml(item.descricao || 'Procedimento')}</p>
+                  <p class="text-xs text-gray-500">Responsável: ${escapeHtml(responsavel)}</p>
+                  <p class="text-xs text-gray-400">Status: ${escapeHtml(status)} · Referência: ${escapeHtml(programado)}</p>
+                </div>
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-primary">Registrar horário e observação</p>
+              </div>
+            </button>
+          `;
+        })
+        .join('')
+    : '';
+
   overlay.innerHTML = `
     <div class="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
       <div class="border-b border-gray-100 pb-4">
@@ -262,6 +324,19 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
         </div>
       </div>
       <div class="mt-4 space-y-3">${procedimentosMarkup}</div>
+      ${
+        quandoNecessarioMarkup
+          ? `<div class="mt-5 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <p class="text-[11px] font-semibold uppercase tracking-wide text-primary">Quando necessário</p>
+                  <p class="text-xs text-gray-600">Selecione para concluir em qualquer horário.</p>
+                </div>
+              </div>
+              <div class="mt-3 space-y-2">${quandoNecessarioMarkup}</div>
+            </div>`
+          : ''
+      }
       <div class="mt-6 flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
         ${actionButtons}
         <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50" data-close-modal>
@@ -289,10 +364,23 @@ function openExecucaoModal(paciente, hourLabel, items = []) {
     });
   });
 
+  overlay.querySelectorAll('[data-quando-necessario-item]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const index = Number(btn.dataset.quandoNecessarioIndex);
+      if (!Number.isFinite(index)) return;
+      const current = quandoNecessarios[index];
+      if (!current) return;
+      openExecucaoDetalheModal(paciente, current, {
+        forceStatus: 'Concluída',
+        clearRealizado: true,
+      });
+    });
+  });
+
   document.body.appendChild(overlay);
 }
 
-function openExecucaoDetalheModal(paciente, item) {
+function openExecucaoDetalheModal(paciente, item, options = {}) {
   if (!paciente || !item) return;
 
   const existing = document.getElementById('internacao-exec-detalhe-modal');
@@ -396,6 +484,8 @@ function openExecucaoDetalheModal(paciente, item) {
   });
 
   const form = overlay.querySelector('[data-execucao-form]');
+  const { defaultDate, defaultHour, forceStatus } = options || {};
+
   if (form) {
     const descricaoField = form.querySelector('[data-execucao-descricao]');
     const statusField = form.querySelector('[data-execucao-status]');
@@ -423,6 +513,21 @@ function openExecucaoDetalheModal(paciente, item) {
     }
     if (obsField) {
       obsField.value = item.observacoes || '';
+    }
+
+    if (statusField && forceStatus) {
+      statusField.value = forceStatus;
+    }
+    if (dataField && defaultDate) {
+      dataField.value = defaultDate;
+    }
+    if (horaField && defaultHour) {
+      horaField.value = defaultHour;
+    }
+    if (options.clearRealizado) {
+      if (dataField) dataField.value = '';
+      if (horaField) horaField.value = '';
+      if (obsField) obsField.value = '';
     }
 
     const setError = (message) => {
@@ -534,7 +639,11 @@ function attachExecucaoModalHandlers(root, pacientes = [], selectedDate = '') {
       const items = (paciente.execucoes || []).filter(
         (acao) => acao.hourKey === hour && (!selectedDate || acao.dayKey === selectedDate),
       );
-      openExecucaoModal(paciente, `${hour}:00`, items);
+      openExecucaoModal(paciente, `${hour}:00`, items, {
+        quandoNecessarios: paciente.quandoNecessarios || [],
+        selectedDate,
+        selectedHour: `${hour}:00`,
+      });
     });
   });
 }
@@ -691,9 +800,13 @@ export function renderMapaExecucao(root, dataset, state = {}) {
 
   const pacientes = filtrados.map((registro) => {
     const nome = registro.pet?.nome || (registro.codigo ? `Registro #${registro.codigo}` : 'Paciente');
-    const execucoesDoDia = normalizeExecucaoItems(registro.execucoes).filter(
-      (item) => item.dayKey === selectedDate,
+    const execucoesNormalizadas = normalizeExecucaoItems(registro.execucoes);
+    const execucoesDoDia = execucoesNormalizadas.filter(
+      (item) => item.dayKey === selectedDate && !isExecucaoSobDemanda(item),
     );
+    const quandoNecessarios = Array.isArray(registro.execucoes)
+      ? registro.execucoes.filter((item) => isExecucaoSobDemanda(item))
+      : [];
     return {
       key: registro.filterKey || registro.id || nome,
       recordId: registro.id || registro._id || registro.filterKey || nome,
@@ -702,6 +815,7 @@ export function renderMapaExecucao(root, dataset, state = {}) {
       servicoLabel: registro.queixa || registro.diagnostico || 'Internação em andamento',
       equipeLabel: registro.veterinario || 'Equipe em definição',
       execucoes: execucoesDoDia,
+      quandoNecessarios,
     };
   });
 
@@ -771,14 +885,14 @@ export function renderMapaExecucao(root, dataset, state = {}) {
             <p class="text-sm text-gray-500">Clique no círculo para ver ou registrar os procedimentos daquele horário.</p>
           </div>
           <div class="order-3 flex basis-full items-center justify-center sm:order-none sm:flex-1" data-mapa-dia-selector>
-            <div class="relative flex min-w-[320px] max-w-[360px] items-center justify-center px-12">
-              <button type="button" class="absolute left-0 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-prev aria-label="Dia anterior">
+            <div class="flex w-full max-w-[440px] flex-nowrap items-center justify-center gap-3 px-2">
+              <button type="button" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-prev aria-label="Dia anterior">
                 <i class="fas fa-chevron-left"></i>
               </button>
-              <div class="w-[240px] shrink-0 truncate rounded-lg bg-gray-50 px-4 py-2 text-center text-sm font-semibold text-gray-800" data-mapa-dia-label>
+              <div class="w-[260px] shrink-0 truncate whitespace-nowrap rounded-lg bg-gray-50 px-4 py-2 text-center text-sm font-semibold text-gray-800" data-mapa-dia-label>
                 ${escapeHtml(formatMapaDateLabel(selectedDate))}
               </div>
-              <button type="button" class="absolute right-0 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-next aria-label="Próximo dia">
+              <button type="button" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-600 shadow-sm transition hover:bg-gray-50" data-mapa-dia-next aria-label="Próximo dia">
                 <i class="fas fa-chevron-right"></i>
               </button>
             </div>
