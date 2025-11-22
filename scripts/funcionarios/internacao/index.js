@@ -3067,11 +3067,44 @@ function renderFichaPrescricoes(record) {
       const tipo = escapeHtml(item.tipoLabel || 'Prescrição');
       const descricao = escapeHtml(item.descricao || 'Sem descrição');
       const freq = escapeHtml(item.frequenciaLabel || '—');
+      const isQuandoNecessario = normalizeActionKey(item.frequencia) === 'necessario';
       const resumo = escapeHtml(item.resumo || '—');
       const criadoLabel = formatDateTimeLabel(item.criadoEm);
       const inicioLabel = item.inicioISO ? formatDateTimeLabel(item.inicioISO) : '';
       const prescricaoId = escapeHtml(item.id || '');
       const prescricaoAttr = prescricaoId ? ` data-prescricao-id="${prescricaoId}"` : '';
+      const interrupcaoLabel = isQuandoNecessario ? 'Interromper' : 'Interromper pendentes';
+      const acaoInterromper = `
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-amber-200 px-2.5 py-1 text-amber-700 transition hover:bg-amber-50"
+              data-ficha-prescricao-action="interromper"${prescricaoAttr}
+            >
+              <i class="fas fa-pause"></i>
+              ${interrupcaoLabel}
+            </button>`;
+      const acaoReprogramar = !isQuandoNecessario
+        ? `
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-primary/40 px-2.5 py-1 text-primary transition hover:bg-primary/5"
+              data-ficha-prescricao-action="interromperreprogramar"${prescricaoAttr}
+            >
+              <i class="fas fa-rotate"></i>
+              Interromper e reprogramar
+            </button>`
+        : '';
+      const acoesMarkup = `
+            ${acaoReprogramar}
+            ${acaoInterromper}
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-red-700 transition hover:bg-red-50"
+              data-ficha-prescricao-action="excluir"${prescricaoAttr}
+            >
+              <i class="fas fa-trash"></i>
+              Excluir
+            </button>`;
       return `
         <li class="rounded-2xl border border-gray-100 bg-white px-3 py-3 shadow-sm shadow-gray-100/60">
           <div class="flex flex-wrap items-center justify-between gap-2">
@@ -3087,30 +3120,7 @@ function renderFichaPrescricoes(record) {
             ${inicioLabel ? `<span>Início previsto: ${escapeHtml(inicioLabel)}</span>` : ''}
           </div>
           <div class="mt-3 flex flex-wrap gap-1.5 text-[10px] font-semibold">
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-primary/40 px-2.5 py-1 text-primary transition hover:bg-primary/5"
-              data-ficha-prescricao-action="interromperreprogramar"${prescricaoAttr}
-            >
-              <i class="fas fa-rotate"></i>
-              Interromper e reprogramar
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-amber-200 px-2.5 py-1 text-amber-700 transition hover:bg-amber-50"
-              data-ficha-prescricao-action="interromper"${prescricaoAttr}
-            >
-              <i class="fas fa-pause"></i>
-              Interromper pendentes
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-red-700 transition hover:bg-red-50"
-              data-ficha-prescricao-action="excluir"${prescricaoAttr}
-            >
-              <i class="fas fa-trash"></i>
-              Excluir
-            </button>
+            ${acoesMarkup}
           </div>
         </li>
       `;

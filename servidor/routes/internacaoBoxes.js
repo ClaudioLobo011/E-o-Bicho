@@ -29,6 +29,15 @@ const normalizeKey = (value) =>
     .replace(/[^\p{L}\p{N}]/gu, '')
     .toLowerCase();
 
+const hasNecessarioFlag = (value) => {
+  if (value === undefined || value === null) return false;
+  const normalized = sanitizeText(value)
+    .normalize('NFD')
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    .toLowerCase();
+  return normalized.includes('necess');
+};
+
 const isExecucaoConcluida = (status) => {
   const key = normalizeKey(status);
   if (!key) return false;
@@ -1389,6 +1398,20 @@ router.post('/registros/:id/execucoes/:execucaoId/concluir', async (req, res) =>
     }
 
     const payload = buildExecucaoConclusaoPayload(req.body);
+    const originalStatusKey = normalizeKey(execucao.status);
+    const execucaoSobDemanda =
+      originalStatusKey.includes('sobdemanda') ||
+      originalStatusKey.includes('necess') ||
+      execucao.sobDemanda === true ||
+      String(execucao.sobDemanda).toLowerCase() === 'true' ||
+      hasNecessarioFlag(execucao.frequencia) ||
+      hasNecessarioFlag(execucao.freq) ||
+      hasNecessarioFlag(execucao.tipoFrequencia) ||
+      hasNecessarioFlag(execucao.prescricaoFrequencia) ||
+      hasNecessarioFlag(execucao.prescricaoTipo) ||
+      hasNecessarioFlag(execucao.programadoLabel) ||
+      hasNecessarioFlag(execucao.resumo) ||
+      hasNecessarioFlag(execucao.tipo);
     if (!payload.realizadoData || !payload.realizadoHora) {
       return res.status(400).json({ message: 'Informe data e hora de realização do procedimento.' });
     }
@@ -1396,20 +1419,55 @@ router.post('/registros/:id/execucoes/:execucaoId/concluir', async (req, res) =>
     const statusKey = normalizeKey(payload.status);
     const finalStatus = statusKey && statusKey.includes('agend') ? 'Agendada' : payload.status || 'Concluída';
 
-    execucao.status = finalStatus || 'Concluída';
-    execucao.realizadoData = payload.realizadoData;
-    execucao.realizadoHora = payload.realizadoHora;
-    execucao.realizadoEm = combineDateAndTimeParts(payload.realizadoData, payload.realizadoHora);
-    execucao.realizadoPor = req.user?.email || 'Sistema';
-    execucao.observacoes = payload.observacoes;
-    if (!execucao.programadoData && payload.realizadoData) {
-      execucao.programadoData = payload.realizadoData;
-    }
-    if (!execucao.programadoHora && payload.realizadoHora) {
-      execucao.programadoHora = payload.realizadoHora;
-    }
-    if (!execucao.programadoEm) {
-      execucao.programadoEm = combineDateAndTimeParts(execucao.programadoData, execucao.programadoHora);
+    let statusHistorico = execucao.status;
+
+    if (execucaoSobDemanda) {
+      const execucaoSnapshot =
+        typeof execucao.toObject === 'function' ? execucao.toObject() : { ...execucao };
+
+      const programadoData = execucaoSnapshot.programadoData || payload.realizadoData;
+      const programadoHora = execucaoSnapshot.programadoHora || payload.realizadoHora;
+      const programadoEm =
+        execucaoSnapshot.programadoEm || combineDateAndTimeParts(programadoData, programadoHora);
+
+      const novaExecucao = {
+        ...execucaoSnapshot,
+        _id: undefined,
+        id: undefined,
+        status: finalStatus || 'Concluída',
+        horario: payload.realizadoHora || execucaoSnapshot.horario,
+        programadoData,
+        programadoHora,
+        programadoEm,
+        realizadoData: payload.realizadoData,
+        realizadoHora: payload.realizadoHora,
+        realizadoEm: combineDateAndTimeParts(payload.realizadoData, payload.realizadoHora),
+        realizadoPor: req.user?.email || 'Sistema',
+        observacoes: payload.observacoes,
+      };
+
+      record.execucoes.unshift(novaExecucao);
+      statusHistorico = novaExecucao.status;
+    } else {
+      execucao.status = finalStatus || 'Concluída';
+      if (payload.realizadoHora) {
+        execucao.horario = payload.realizadoHora;
+      }
+      execucao.realizadoData = payload.realizadoData;
+      execucao.realizadoHora = payload.realizadoHora;
+      execucao.realizadoEm = combineDateAndTimeParts(payload.realizadoData, payload.realizadoHora);
+      execucao.realizadoPor = req.user?.email || 'Sistema';
+      execucao.observacoes = payload.observacoes;
+      if (!execucao.programadoData && payload.realizadoData) {
+        execucao.programadoData = payload.realizadoData;
+      }
+      if (!execucao.programadoHora && payload.realizadoHora) {
+        execucao.programadoHora = payload.realizadoHora;
+      }
+      if (!execucao.programadoEm) {
+        execucao.programadoEm = combineDateAndTimeParts(execucao.programadoData, execucao.programadoHora);
+      }
+      statusHistorico = execucao.status;
     }
 
     record.historico = Array.isArray(record.historico) ? record.historico : [];
@@ -1417,7 +1475,7 @@ router.post('/registros/:id/execucoes/:execucaoId/concluir', async (req, res) =>
     const realizadoLabel = `${payload.realizadoData} ${payload.realizadoHora}`.trim();
     record.historico.unshift({
       tipo: 'Execução',
-      descricao: `Procedimento "${descricaoProcedimento}" marcado como ${execucao.status || 'Concluído'} (${realizadoLabel}).`,
+      descricao: `Procedimento "${descricaoProcedimento}" marcado como ${statusHistorico || 'Concluído'} (${realizadoLabel}).`,
       criadoPor: req.user?.email || 'Sistema',
       criadoEm: new Date(),
     });
