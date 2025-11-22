@@ -264,7 +264,7 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
     ? quandoNecessarios
         .map((item, index) => {
           const responsavel = item.responsavel || 'Equipe a definir';
-          const status = item.status || 'Sob demanda';
+          const status = 'Sob demanda';
           const programado = formatExecucaoProgramadaLabel(item);
           return `
             <button
@@ -351,6 +351,7 @@ function openExecucaoModal(paciente, hourLabel, items = [], options = {}) {
       if (!current) return;
       openExecucaoDetalheModal(paciente, current, {
         forceStatus: 'Concluída',
+        clearRealizado: true,
       });
     });
   });
@@ -501,6 +502,11 @@ function openExecucaoDetalheModal(paciente, item, options = {}) {
     }
     if (horaField && defaultHour) {
       horaField.value = defaultHour;
+    }
+    if (options.clearRealizado) {
+      if (dataField) dataField.value = '';
+      if (horaField) horaField.value = '';
+      if (obsField) obsField.value = '';
     }
 
     const setError = (message) => {
@@ -777,9 +783,9 @@ export function renderMapaExecucao(root, dataset, state = {}) {
     const execucoesDoDia = execucoesNormalizadas.filter(
       (item) => item.dayKey === selectedDate && !isExecucaoSobDemanda(item),
     );
-    const quandoNecessarios = execucoesNormalizadas.filter(
-      (item) => isExecucaoSobDemanda(item) && !isExecucaoConcluida(item),
-    );
+    const quandoNecessarios = Array.isArray(registro.execucoes)
+      ? registro.execucoes.filter((item) => isExecucaoSobDemanda(item))
+      : [];
     return {
       key: registro.filterKey || registro.id || nome,
       recordId: registro.id || registro._id || registro.filterKey || nome,
